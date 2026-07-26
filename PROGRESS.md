@@ -1,7 +1,7 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-26 17:33 +08:00  
-**Current branch:** `main` (local repository, no commits yet)  
+**Last updated:** 2026-07-26 22:54 +08:00
+**Current branch:** `feat/landing-login-demo-portal` at `d3d0fa6`, isolated worktree
 **Current PRD version:** v3.1  
 **Current phase:** Phase 0 — Discovery, Policy Confirmation, and Foundations  
 **Completed slice:** Phase 0A — Contract-first runnable service shells  
@@ -16,11 +16,9 @@
 
 ## Current Objective
 
-Preserve the verified Phase 0A foundation while the environment owner provides a
-supported MySQL 8.4 LTS instance and upgrades the local PHP runtime. The next
-implementation slice is the reversible identity/organization schema and the
-deterministic seeder for the nine PRD roles; it must not be marked verified
-against XAMPP's bundled MariaDB.
+Preserve and hand off the completed demo-first landing, login, all-role
+credential documentation, and role portal slice while real MySQL/Sanctum
+authentication remains explicitly deferred.
 
 ## Completed
 
@@ -74,6 +72,102 @@ against XAMPP's bundled MariaDB.
 
 ## In Progress and Deferred
 
+- The user-approved landing, login, documented synthetic test accounts, and
+  role-correct portal design is implemented in the isolated feature worktree.
+  The complete design
+  is at
+  `docs/superpowers/specs/2026-07-26-landing-login-demo-portal-design.md`;
+  its status now records approval for implementation planning.
+- The detailed ten-task red-green-refactor plan is complete at
+  `docs/superpowers/plans/2026-07-26-landing-login-demo-portal.md`. It defines
+  exact files, interfaces, narrow failure/pass commands, all-nine-role
+  credential synchronization, safe routing, demo-session isolation,
+  production disablement, portal navigation, static boundary scans, browser QA,
+  the full frontend gate, and continuous `PROGRESS.md` checkpoints.
+- The user selected inline execution. The executing-plans workflow confirmed
+  consent to create an isolated feature worktree. The worktree is ready at
+  `.worktrees/landing-login-demo-portal` on
+  `feat/landing-login-demo-portal`; hash checks confirmed that `PROGRESS.md`,
+  the approved design, and the implementation plan were transferred
+  byte-for-byte.
+- The isolated frontend baseline is verified: `npm ci --ignore-scripts`
+  installed 339 packages with 0 vulnerabilities, and `npm test` passed the
+  existing 3 files/9 tests.
+- Task 1 is complete through red-green verification. The missing auth-mode
+  module produced the expected failing test; the production-safe selector now
+  passes 4 focused tests, strict TypeScript passes, and the dependency audit
+  reports 0 vulnerabilities after installing `react-router@8.3.0` and
+  `@hookform/resolvers@5.5.7`.
+- Task 2 is complete. Current shadcn and official component documentation were
+  reviewed; dry runs exposed existing Button/Separator overwrites, so both
+  repository files were preserved while Input, Field, Sheet, Empty, Avatar,
+  and the required Label source were added. Format, ESLint, Oxlint, strict
+  TypeScript, and audit all pass.
+- Task 3 is complete. Exact typed fixtures and
+  `docs/testing/DEMO_CREDENTIALS.md` now cover all nine PRD roles with the
+  shared local-demo password and explicit safety/testing instructions. The
+  fixture/document contract, auth-mode contract, formatting, and strict
+  TypeScript pass (2 files/7 focused tests).
+- Task 4 is complete. The demo/disabled gateways, strict Zod session store,
+  browser-storage adapter, auth provider, and production wiring are
+  implemented. Five auth files/25 tests pass along with formatting, ESLint,
+  Oxlint, and strict TypeScript. The storage scan finds `sessionStorage` only in
+  `demo-session-store.ts`.
+- Task 5 safe routing/guards is complete. Its known-module return-path
+  contract requires the role-capability catalog that was originally scheduled
+  in Task 8, so the catalog's TDD subtask was pulled forward. The exact
+  nine-role matrix, 23-case safe return parser, protected/public guards,
+  corruption cleanup, anonymous/authenticated redirects, and branded
+  not-found route now pass 3 files/34 focused tests. Formatting, ESLint,
+  Oxlint, and strict TypeScript pass. Task 8 still owns the portal shell and
+  overview UI.
+- Task 6 institutional landing page and embedded public-readiness work is in
+  complete using the approved registrar-ledger visual direction. The public
+  header/footer, hero, three audience pathways, four-stage journey, and
+  extracted readiness component preserve the existing health loading, success,
+  connection failure, and retry states. Three page/route files/15 focused tests
+  pass with formatting, ESLint, Oxlint, and strict TypeScript.
+- Task 7 is complete. The split institutional login, React Hook Form/Zod
+  validation, focused error summary, password visibility, generic credential
+  failure, pending state, safe/unsafe return handling, and disabled-production
+  state pass 2 files/16 login/router tests. Formatting, ESLint, Oxlint, and
+  strict TypeScript pass.
+- Task 8 is complete. The responsive desktop/mobile shell, accessible Sheet,
+  exact role navigation for all nine identities, profile context, disabled
+  preview controls, persistence warning, sign-out flow, demo boundary,
+  disconnected-term/API states, and role-filtered module cards pass 2 files/16
+  focused tests. Formatting, ESLint, Oxlint, and strict TypeScript pass.
+- Task 9 is complete. All catalog-assigned module routes render their exact
+  role-owned label and description in an accessible Empty preview state. Unknown
+  and cross-role module IDs render a scoped portal not-found state without
+  foreign navigation/content, direct protected URLs return through login, and
+  the overview action remains inside the signed-in role. Two files/52 focused
+  tests, formatting, ESLint, Oxlint, and strict TypeScript pass.
+- Task 10 documentation and static boundary review are complete. The frontend
+  README now documents all route classes, `VITE_AUTH_MODE=demo`, the all-role
+  credential guide, production disablement, client-fixture limits, source/test
+  layout, and the Sanctum replacement path. Reviewed scans confirm
+  `sessionStorage` only in `demo-session-store.ts`, the only raw `fetch(` in
+  `api-client.ts`, and no bearer/fake-token/ML endpoint or unfinished-marker
+  matches in delivered frontend/testing content.
+- Task 10's complete frontend gate passes: Prettier, ESLint, Oxlint, strict
+  TypeScript, 16 Vitest files/140 tests, and the Vite production build all exit
+  successfully; `npm audit --audit-level=moderate` reports 0 vulnerabilities.
+  A fresh completion rerun again passed all 16 files/140 tests.
+- Browser visual/interaction QA remains an explicit gap. The app started
+  successfully on `http://127.0.0.1:5174`, but the supported browser discovery
+  and recovery flow returned an empty browser list. The temporary server was
+  stopped and port 5174 was verified closed; no visual, zoom, reduced-motion,
+  or live keyboard QA pass is claimed.
+- Planning-time package metadata confirmed that `react-router@8.3.0` supports
+  the installed Node/React baseline and that `@hookform/resolvers@5.5.7`
+  supports the installed React Hook Form and Zod versions. Current shadcn
+  metadata confirms a Vite, strict-TypeScript, Tailwind 4, non-RSC
+  `radix-nova` project. No dependency was installed during planning.
+- Design-spec self-review passed: no `TBD`/`TODO`/`FIXME` flags, nine unique
+  `.test` credential emails, and the approved shared synthetic password is
+  present. The review separated gateway validation from session persistence and
+  removed ambiguous demo-expiration wording.
 - Phase 0 overall remains open.
 - MySQL connection, reversible base migrations, deterministic role seeders,
   migration rollback/fresh verification, and database integration tests are
@@ -87,16 +181,16 @@ against XAMPP's bundled MariaDB.
 
 ## Next Exact Actions
 
-1. Provision a local or approved remote MySQL 8.4 LTS development database and
-   a least-privileged `grc_app` account; do not reuse XAMPP MariaDB.
-2. Update PHP to a current supported patch (prefer PHP 8.4+), then re-evaluate
-   the documented Laravel 13 upgrade trigger before locking the production
-   framework baseline.
-3. Implement reversible migrations for PRD §10.1 `users`, `programs`, and
-   `academic_terms`, plus a deterministic seeder for the nine PRD roles.
-4. Run `migrate:fresh`, rollback, constraint, and deterministic-seed checks only
-   against MySQL 8.4 LTS, then add the synchronized data dictionary.
-5. Add the Phase 0 CI pipeline and require the already-verified local gates.
+1. Merge `feat/landing-login-demo-portal` into local `main`, run the full
+   verification gate on the merged tree, then clean up the feature worktree and
+   branch if verification passes. The user selected this local merge on
+   2026-07-26; no push or pull request is authorized.
+2. Re-run the documented browser visual/interaction matrix when a connected
+   browser becomes available.
+3. Provision a least-privileged MySQL 8.4 LTS development database before
+   implementing real Sanctum login, users, role seeders, or credential testing.
+4. Update PHP to a current supported patch and re-evaluate the documented
+   Laravel 13 upgrade trigger before locking the production framework baseline.
 
 ## PRD Phase Checklist
 
@@ -138,20 +232,23 @@ against XAMPP's bundled MariaDB.
 
 ## Frontend Status
 
-- Page: one Phase 0A service-readiness page; client routing is intentionally
-  deferred because no second route exists.
-- Components: service-boundary cards plus reviewed shadcn Alert, Badge, Button,
-  Card, Separator, and Skeleton sources.
+- Pages: institutional landing, service readiness, local-demo login, role-aware
+  portal overview, catalog-authorized module preview/denial, and branded
+  not-found route.
+- Components: public and portal shells plus reviewed shadcn Alert, Avatar,
+  Badge, Button, Card, Empty, Field, Input, Label, Separator, Sheet, and
+  Skeleton sources.
 - Data layer: typed API client, strict Zod success/error parsing, TanStack Query
   client and health hook.
-- Forms: none; React Hook Form is installed for future PRD slices.
+- Forms: React Hook Form/Zod local-demo login with generic credential errors,
+  summary focus, pending state, and password visibility.
 - States: loading, success, connection, HTTP, configuration, contract, and retry.
 - Boundary: source scan confirms the sole browser `fetch` call is in
   `src/app/services/api-client.ts`; no ML URL/call is present.
 - Accessibility/responsiveness: source and component tests pass; interactive
   browser visual QA remains unverified because no browser session was available.
-- Router decision: React Router is absent until a supported release resolves
-  the reviewed RSC advisory and Phase 1 needs multiple routes.
+- Router status: patched `react-router@8.3.0` now provides public, anonymous,
+  protected, safe-return, all-role portal, module-preview, and not-found routes.
 
 ## Database and Migrations
 
@@ -223,6 +320,10 @@ successfully.
 | 2026-07-26 | Rate-limit public health at 60 requests/minute per Laravel throttle key. | Makes the documented 429 contract truthful without database state. Business routes need use-case-specific policies later. |
 | 2026-07-26 | Mark licensing as pending authorized GRC approval. | The generated framework license was not adopted as the product's license. |
 | 2026-07-26 | Use a modern registrar-ledger visual direction. | Provides a distinctive institutional Phase 0 surface without inventing workflow policy. |
+| 2026-07-26 | Document synthetic demo credentials for all nine PRD roles. | The user needs to test every role portal; the file and UI must label them local-demo-only and never imply production authentication. |
+| 2026-07-26 | Use React Router 8.3.0 in client-library mode for the demo routes. | The current patched release resolves the recorded RSC advisory; this SPA will not use RSC, server actions, or framework-mode packages. |
+| 2026-07-26 | Enable synthetic authentication only in development/test modes. | Production builds may show the public landing page but must not accept committed demo credentials. |
+| 2026-07-26 | Plan `react-router@8.3.0` and `@hookform/resolvers@5.5.7`. | Registry metadata confirms compatibility with Node 24, React 19.2.7, React Hook Form 7.83, and Zod 4.4; the plan retains client-library/non-RSC routing only. |
 
 ## Blockers and Clarifications Needed
 
@@ -302,6 +403,68 @@ successfully.
   completed the audit. Recursive cleanup of that verified temporary directory
   was also blocked, so the non-project tool environment remains under the user
   temp directory at `grc-pip-audit-20260726-1719`; no workspace file is affected.
+- The first combined design-spec/progress patch failed atomically because one
+  expected `PROGRESS.md` line did not match its wrapped form. No partial file was
+  created; the specification and progress changes were reapplied as smaller
+  exact patches.
+- The first Task 2 source-review `rg` expression used lookahead without
+  `--pcre2`; the corrected scan ran with PCRE2 and found no forbidden import,
+  remote asset, or RSC directive after review.
+- The isolated worktree's first format check flagged 44 files because global
+  Git `core.autocrlf=true` checked tracked files out as CRLF while Prettier
+  requires LF. Byte/line-ending evidence confirmed the root cause.
+  `.gitattributes` now fixes the repository policy at LF (PDF remains binary);
+  formatting was normalized and the rerun passes.
+- The upstream generated Field source used `Array<T>`, which the repository
+  ESLint policy forbids. It was changed to the equivalent `T[]`; ESLint and all
+  other Task 2 checks now pass. Existing Button and Separator sources were not
+  overwritten.
+- The first credential-document test used `new URL(..., import.meta.url)`;
+  Vite rewrote the static asset URL, so Node rejected the resulting non-file
+  scheme. A raw import was also correctly denied because the document is above
+  Vite's frontend root. The test now uses Node file access with a file-local
+  Node type reference, preserving the browser project's restricted global type
+  set; focused tests and typecheck pass.
+- Running Vitest, TypeScript, and Prettier concurrently in the Windows worktree
+  starved Vitest's two fork workers until their startup timeout. The same tests
+  pass in 1.90 seconds when checks run sequentially, so resource-sensitive
+  frontend checks will remain sequential for this worktree.
+- Task 4's first ESLint run found seven integration-policy issues: unbound
+  method destructuring in the probe, synchronous effect state updates, a
+  component/hook Fast Refresh split, `async` functions without `await`, and an
+  unused storage initialization. The provider now restores in a cancellable
+  microtask, context/hook exports are separated, promise boundaries are
+  explicit, and the browser store returns directly; focused tests and both
+  linters pass.
+- Strict TypeScript then rejected the gateway error's constructor parameter
+  property under `erasableSyntaxOnly`. It now uses an explicit declared field
+  and assignment; typecheck passes without relaxing configuration.
+- Task 5's first lint pass rejected a control-character regular expression and
+  mixed component/helper Fast Refresh files. The parser now checks Unicode code
+  points explicitly, and the route location probe is isolated in its own
+  component file; route tests and both linters pass.
+- Task 7 tests found that React Hook Form's default field autofocus overrode the
+  required error-summary focus and that the anonymous-only guard could redirect
+  to `/portal` before the login page applied a safe module return path. The form
+  now focuses its committed summary in an effect, and the guard uses the same
+  safe return parser; all login and router tests pass.
+- Task 8 tests found that clearing the demo session synchronously could let the
+  protected-route guard redirect to login before the explicit home navigation
+  settled. The sign-out handler now awaits navigation before clearing session
+  state; its route and persistence assertions pass.
+- Task 8's first quality command used the wrong local Oxlint script name
+  (`lint:oxlint` instead of `lint:fast`) and the format check found two newly
+  added test files. No application defect was hidden; the files are being
+  normalized and the exact repository scripts will be used for the rerun.
+- Task 9's first unknown-module assertion scanned the entire test document and
+  saw the route only because the test-only location probe intentionally prints
+  the current URL. The assertion now scopes the no-leak check to the rendered
+  unavailable-module region; all 52 focused tests pass.
+- Task 10's first raw-fetch scan passed an over-escaped regular expression to
+  PowerShell and `rg` rejected the unclosed group. A fixed-string scan exposed
+  one intentional `refetch()` name plus the raw call; a reviewed PCRE2
+  identifier-boundary rerun confirms the sole raw browser `fetch(` remains in
+  `src/app/services/api-client.ts`.
 
 ## Files Changed in the Current Session
 
@@ -319,6 +482,12 @@ successfully.
   README.
 - Documentation: six ADRs, version-compatibility matrix, public OpenAPI
   document, and shared error contract.
+- Current demo-portal session: approved specification and ten-task TDD plan
+  under `docs/superpowers/`; nine-account credential guide under
+  `docs/testing/`; React Router/auth/session/catalog layers; institutional
+  landing and login; responsive all-role portal shell, overview, and module
+  preview/denial states; focused and full regression coverage; continuously
+  updated `PROGRESS.md`.
 - Supplied artifact preserved unchanged: `Casuncad, Westlie.pdf`.
 
 ## Session Handoff Log
@@ -349,3 +518,74 @@ institutional PRD §17 values remain open; no browser session was connected.
 **Next exact step:** Provision a least-privileged MySQL 8.4 LTS development
 database, then implement and verify reversible PRD §10.1 base migrations and the
 nine-role deterministic seeder.
+
+### 2026-07-26 18:41 +08:00
+
+**Goal:** Design the requested landing page, login, all-role demo credentials,
+and role-aware portal without misrepresenting frontend fixtures as real
+authentication.
+**Completed:** Current code/PRD review, approach comparison, user-approved
+architecture, screen content, all-nine-role credential matrix, portal
+navigation, demo-session boundaries, failure behavior, accessibility, and test
+acceptance criteria. The written specification is
+`docs/superpowers/specs/2026-07-26-landing-login-demo-portal-design.md`.
+**Not completed:** Implementation plan, frontend implementation, real Laravel
+authentication, MySQL users/seeders, or browser visual verification.
+**Tests run:** No application code changed in this design stage, so application
+tests were not rerun. The design self-check found zero placeholder flags,
+exactly nine unique credential emails, and the required shared password.
+**Known issues:** MySQL 8.4 and real Sanctum authentication remain blocked; the
+design document is intentionally uncommitted because `AGENTS.md` prohibits
+committing without explicit user authorization.
+**Next exact step:** User reviews the written design, then a TDD implementation
+plan is created.
+
+### 2026-07-26 18:57 +08:00
+
+**Goal:** Convert the approved landing/login/demo-portal design into an
+executable red-green-refactor plan.
+**Completed:** Verified planned dependency compatibility and current shadcn
+configuration; advanced the approved design status; created and self-reviewed
+the ten-task implementation plan at
+`docs/superpowers/plans/2026-07-26-landing-login-demo-portal.md`. The plan
+includes exact source/test/documentation files, all-nine-role credentials,
+safe-route and storage boundaries, UI requirements, static scans, browser QA,
+and the full frontend gate.
+**Not completed:** Frontend implementation, dependency installation, demo
+credential fixture/document creation, real Laravel authentication, MySQL
+users/seeders, or browser visual verification.
+**Tests run:** No application code or dependency changed in planning, so
+application tests were not rerun. Plan inspection confirmed 10 task headings
+and 1,050 lines; placeholder-scan matches were only the plan's explicit
+prohibition and its future scan command.
+**Known issues:** MySQL 8.4 and real Sanctum authentication remain blocked; no
+browser session is currently known to be available; implementation remains
+uncommitted because `AGENTS.md` prohibits commits without explicit user
+authorization.
+**Next exact step:** Select the execution workflow, then begin Task 1 with a
+failing auth-mode test and exact dependency installation.
+
+### 2026-07-26 22:42 +08:00
+
+**Goal:** Execute the approved landing/login/demo-portal plan and provide
+testable credentials for every user role.
+**Completed:** All ten tasks through TDD; production-safe demo-mode selection;
+nine synchronized synthetic accounts and `docs/testing/DEMO_CREDENTIALS.md`;
+strict session persistence; safe return paths and route guards; institutional
+landing, login, responsive all-role portal, role catalog, overview cards,
+module previews, scoped denial states, operator documentation, and reviewed
+static safety boundaries.
+**Not completed:** Real Laravel/Sanctum authentication, MySQL users/role
+seeders, backend authorization policies, business workflow APIs, CI, or
+interactive visual/browser QA. No commit, push, merge, or pull request was
+created.
+**Tests run:** Final frontend gate passed Prettier, ESLint, Oxlint, strict
+TypeScript, 16 Vitest files/140 tests, Vite production build, and audit with 0
+vulnerabilities. A fresh completion rerun again passed 16 files/140 tests.
+**Known issues:** Browser discovery returned no available browser, so mobile,
+wide-screen, keyboard, zoom, and reduced-motion visual QA remain unverified.
+MySQL 8.4, real Sanctum authentication/authorization, institutional policy
+values, and CI remain deferred.
+**Next exact step:** Choose the feature-branch integration option, then
+provision the supported MySQL 8.4 identity baseline before implementing the
+real Sanctum vertical slice.

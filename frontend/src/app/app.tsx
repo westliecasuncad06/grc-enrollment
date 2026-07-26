@@ -1,5 +1,11 @@
-import { ServiceReadinessPage } from "@/app/components/pages/service-readiness-page"
+import { BrowserRouter } from "react-router"
+
+import { AppRouter } from "@/app/router/app-router"
 
 export function App() {
-  return <ServiceReadinessPage />
+  return (
+    <BrowserRouter>
+      <AppRouter />
+    </BrowserRouter>
+  )
 }
