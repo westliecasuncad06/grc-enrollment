@@ -1,7 +1,7 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-26 22:54 +08:00
-**Current branch:** `feat/landing-login-demo-portal` at `d3d0fa6`, isolated worktree
+**Last updated:** 2026-07-26 23:01 +08:00
+**Current branch:** `main`, locally merged, verified, and worktree-cleaned
 **Current PRD version:** v3.1  
 **Current phase:** Phase 0 — Discovery, Policy Confirmation, and Foundations  
 **Completed slice:** Phase 0A — Contract-first runnable service shells  
@@ -16,9 +16,9 @@
 
 ## Current Objective
 
-Preserve and hand off the completed demo-first landing, login, all-role
-credential documentation, and role portal slice while real MySQL/Sanctum
-authentication remains explicitly deferred.
+Preserve the verified demo-first landing, login, all-role credential
+documentation, and role portal slice on local `main` while preparing the real
+MySQL/Sanctum identity foundation.
 
 ## Completed
 
@@ -154,6 +154,14 @@ authentication remains explicitly deferred.
   TypeScript, 16 Vitest files/140 tests, and the Vite production build all exit
   successfully; `npm audit --audit-level=moderate` reports 0 vulnerabilities.
   A fresh completion rerun again passed all 16 files/140 tests.
+- The local `main` fast-forward to `292e3c4` is independently verified after a
+  clean locked-dependency install: Prettier, ESLint, Oxlint, strict TypeScript,
+  16 Vitest files/140 tests, Vite production build, and the moderate-level
+  dependency audit all pass; the audit reports 0 vulnerabilities.
+- Local integration cleanup is complete: the verified feature worktree was
+  removed and `feat/landing-login-demo-portal` was deleted after its commit
+  became reachable from `main`. The earlier root-only records remain
+  recoverable in the named `pre-merge root progress backup 2026-07-26` stash.
 - Browser visual/interaction QA remains an explicit gap. The app started
   successfully on `http://127.0.0.1:5174`, but the supported browser discovery
   and recovery flow returned an empty browser list. The temporary server was
@@ -181,15 +189,11 @@ authentication remains explicitly deferred.
 
 ## Next Exact Actions
 
-1. Merge `feat/landing-login-demo-portal` into local `main`, run the full
-   verification gate on the merged tree, then clean up the feature worktree and
-   branch if verification passes. The user selected this local merge on
-   2026-07-26; no push or pull request is authorized.
-2. Re-run the documented browser visual/interaction matrix when a connected
+1. Re-run the documented browser visual/interaction matrix when a connected
    browser becomes available.
-3. Provision a least-privileged MySQL 8.4 LTS development database before
+2. Provision a least-privileged MySQL 8.4 LTS development database before
    implementing real Sanctum login, users, role seeders, or credential testing.
-4. Update PHP to a current supported patch and re-evaluate the documented
+3. Update PHP to a current supported patch and re-evaluate the documented
    Laravel 13 upgrade trigger before locking the production framework baseline.
 
 ## PRD Phase Checklist
@@ -465,6 +469,15 @@ successfully.
   one intentional `refetch()` name plus the raw call; a reviewed PCRE2
   identifier-boundary rerun confirms the sole raw browser `fetch(` remains in
   `src/app/services/api-client.ts`.
+- The first post-merge `npm ci --ignore-scripts` on `main` stopped with Windows
+  `EPERM` while replacing Rolldown's native binding. This indicates the existing
+  binary is open by a local process. Two exact workspace Vite PIDs were found on
+  ports 5173/5174, stopped, and both ports confirmed closed. The clean-install
+  retry then passed.
+- A post-merge command orchestrator yielded partial Vitest/build output without
+  completion status and advanced conservatively. Those partial results were
+  discarded; no related processes remained, and direct isolated reruns
+  completed with 140/140 tests and a successful production build.
 
 ## Files Changed in the Current Session
 
@@ -589,3 +602,24 @@ values, and CI remain deferred.
 **Next exact step:** Choose the feature-branch integration option, then
 provision the supported MySQL 8.4 identity baseline before implementing the
 real Sanctum vertical slice.
+
+### 2026-07-26 23:01 +08:00
+
+**Goal:** Merge the completed demo-portal feature back to local `main`.
+**Completed:** Created local feature commit `292e3c4`, preserved the earlier
+root records in a named stash, fast-forwarded `main`, completed the full merged
+frontend gate, removed the verified feature worktree, and deleted the merged
+feature branch.
+**Not completed:** No push or pull request was created. Real MySQL/Sanctum
+authentication, server authorization, business workflow APIs, CI, and
+interactive browser visual QA remain deferred.
+**Tests run:** On merged `main`, `npm ci --ignore-scripts` completed with 0
+vulnerabilities; Prettier, ESLint, Oxlint, strict TypeScript, 16 Vitest
+files/140 tests, Vite production build, and the moderate-level dependency audit
+all passed.
+**Known issues:** The first clean install was blocked by two verified workspace
+Vite processes holding the native Rolldown binary; both processes were stopped,
+ports 5173/5174 confirmed closed, and the retry passed. Browser discovery still
+returns no available browser.
+**Next exact step:** Re-run browser QA when available, then provision the
+supported MySQL 8.4 identity baseline before the real Sanctum vertical slice.
