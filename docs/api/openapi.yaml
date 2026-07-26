@@ -1,0 +1,171 @@
+openapi: 3.1.0
+info:
+  title: GRC Automated Enrollment API
+  version: 0.1.0
+  license:
+    name: License pending authorized GRC approval
+    identifier: LicenseRef-GRC-Pending
+  description: >
+    Public, versioned Laravel API for the GRC Automated Enrollment System.
+    Phase 0A documents only the database-independent health contract. Later
+    endpoint groups must be added as their complete vertical slices ship.
+servers:
+  - url: /
+    description: Deployment-relative Laravel API origin
+tags:
+  - name: System
+    description: Database-independent service liveness
+paths:
+  /api/v1/health:
+    get:
+      operationId: getApiHealth
+      summary: Read API liveness
+      description: Returns no database, environment, dependency, credential, or user details.
+      security: []
+      tags:
+        - System
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The API process is healthy.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                healthy:
+                  value:
+                    data:
+                      type: service-health
+                      service: grc-enrollment-api
+                      status: ok
+                      api_version: v1
+                      generated_at: "2026-07-26T08:42:53Z"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: >
+        Optional caller correlation ID containing 1–128 ASCII letters, digits,
+        dots, underscores, or hyphens. Invalid values are replaced.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9._-]{1,128}$"
+        maxLength: 128
+  headers:
+    RequestId:
+      description: The validated caller ID or a server-generated correlation ID.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9._-]{1,128}$"
+        maxLength: 128
+    NoStore:
+      description: The response contains a no-store cache directive.
+      schema:
+        type: string
+        pattern: '(^|.*,\s*)no-store(\s*,.*|$)'
+  responses:
+    TooManyRequests:
+      description: The caller has exceeded the applicable request rate.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+        Retry-After:
+          description: Seconds until the caller should retry.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: The API could not complete the request.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/HealthResource"
+    HealthResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - service
+        - status
+        - api_version
+        - generated_at
+      properties:
+        type:
+          type: string
+          const: service-health
+        service:
+          type: string
+          const: grc-enrollment-api
+        status:
+          type: string
+          const: ok
+        api_version:
+          type: string
+          const: v1
+        generated_at:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          $ref: "#/components/schemas/ApiError"
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - errors
+        - request_id
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z0-9_]+$"
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        request_id:
+          type: string
+          pattern: "^[A-Za-z0-9._-]{1,128}$"
