@@ -53,6 +53,14 @@ tags:
       closed. One `action` field drives six transitions, each requiring a
       different role — see ADR 0011. `publish` also bulk-transitions the
       term's `planned` sections to `published`.
+  - name: Student Records
+    description: >
+      Student account provisioning and self-service profile reads (PRD §5.2,
+      DFD 2.1). Admission Staff provisions the User and StudentProfile
+      together in one transaction (§3.2); a student may read only their own
+      profile, with no broader role-based visibility. `admission_status` and
+      `academic_standing` vocabularies are provisional pending PRD §17
+      approval.
 paths:
   /api/v1/health:
     get:
@@ -1055,6 +1063,95 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles:
+    post:
+      operationId: postStudentProfile
+      summary: Provision a student account and initial profile
+      description: >
+        Admission Staff only. Creates the User (role student, active) and
+        StudentProfile together in one transaction — a profile never exists
+        without its account, or vice versa. Always created with
+        admission_status admitted and academic_standing good. The response
+        never includes the submitted password.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreStudentProfileRequest"
+      responses:
+        "201":
+          description: The student account and profile were created.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            The submitted data is invalid, the email or student number is
+            already taken, or the curriculum does not belong to the given
+            program.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profile:
+    get:
+      operationId: getStudentProfile
+      summary: Read the authenticated user's own student profile
+      description: >
+        Own-record only, the same "whoever is authenticated" shape as
+        `/api/v1/auth/me` — no role sees another student's profile, and this
+        slice grants no planning role broad visibility either.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The authenticated user's own student profile.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: The authenticated user has no student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -1988,3 +2085,99 @@ components:
         decision_reason:
           type: ["string", "null"]
           description: Required exactly when action is dean_return or executive_return.
+    StudentProfileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/StudentProfileResource"
+    StudentProfileResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - user_id
+        - student_number
+        - program_id
+        - curriculum_id
+        - year_level
+        - admission_status
+        - admission_status_label
+        - academic_standing
+        - academic_standing_label
+      properties:
+        type:
+          type: string
+          const: student_profile
+        id:
+          type: integer
+        user_id:
+          type: integer
+        student_number:
+          type: string
+        program_id:
+          type: integer
+        curriculum_id:
+          type: integer
+        year_level:
+          type: integer
+        admission_status:
+          type: string
+          description: >
+            Provisional vocabulary pending PRD §17 approval — see
+            App\Domain\Identity\AdmissionStatus.
+          enum:
+            - pending
+            - admitted
+            - enrolled
+            - graduated
+            - withdrawn
+        admission_status_label:
+          type: string
+        academic_standing:
+          type: string
+          description: >
+            Provisional vocabulary pending PRD §17 approval — see
+            App\Domain\Identity\AcademicStanding.
+          enum:
+            - good
+            - probation
+            - warning
+        academic_standing_label:
+          type: string
+    StoreStudentProfileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - email
+        - password
+        - student_number
+        - program_id
+        - curriculum_id
+        - year_level
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+        student_number:
+          type: string
+          maxLength: 255
+        program_id:
+          type: integer
+        curriculum_id:
+          type: integer
+          description: Must belong to the given program_id.
+        year_level:
+          type: integer
+          minimum: 1

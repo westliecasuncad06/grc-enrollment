@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
+use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +53,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // ADR 0011.
         Route::patch('/schedule-proposals/{scheduleProposal}', [ScheduleProposalController::class, 'update'])->name('schedule-proposals.update');
 
+        // Own-record only — no role gate beyond authentication, since the
+        // Policy resolves "whose profile is this" the same way auth/me does.
+        Route::get('/student-profile', [StudentProfileController::class, 'show'])->name('student-profile.show');
+
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's
         // existing "curriculum"/"subjects-prerequisites" module ownership.
@@ -82,6 +87,12 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'store'])->name('faculty-subject-preferences.store');
             Route::patch('/faculty-subject-preferences/{facultySubjectPreference}', [FacultySubjectPreferenceController::class, 'update'])->name('faculty-subject-preferences.update');
             Route::delete('/faculty-subject-preferences/{facultySubjectPreference}', [FacultySubjectPreferenceController::class, 'destroy'])->name('faculty-subject-preferences.destroy');
+        });
+
+        // PRD §3.2: "Create new student accounts and initial profiles" —
+        // first production consumer of the admission_staff role.
+        Route::middleware('role:admission_staff')->group(function (): void {
+            Route::post('/student-profiles', [StudentProfileController::class, 'store'])->name('student-profiles.store');
         });
     });
 });

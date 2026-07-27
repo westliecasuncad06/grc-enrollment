@@ -292,17 +292,29 @@ order:
     §5.1 sub-project besides cross-cutting audit logging.
   - [ ] Audit logging (FR-SCH-010) — cross-cutting, deferred to the audit
     slice rather than any single sub-project above.
-- [ ] Enrollment and digital advising
+- [ ] Enrollment and digital advising (PRD §5.2, Process 2.0, decomposed
+  into sub-projects; roadmap Phase 3)
   - Schema-only groundwork landed early as a byproduct of the §5.1
     schema-foundation task below: `student_profiles` plus the eight PRD
     §10.3 tables (`enrollments`, `enrollment_subjects`, `academic_grades`,
     `queue_tickets`, `payments`, `enrollment_documents`,
     `transferee_credits`, `withdrawal_requests`), migrated, tested
     (`EnrollmentRecordsMigrationTest`, `DemoEnrollmentSeederTest`), and
-    documented (`docs/data-dictionary/enrollment-records.md`). **No Policy,
-    Resource, Controller, or route exists for any of these tables** — this
-    checklist item stays unchecked until that API layer has its own
-    spec → plan → build cycle.
+    documented (`docs/data-dictionary/enrollment-records.md`).
+  - [x] Student profile foundation (DFD 2.1): `POST /api/v1/student-profiles`
+    (Admission Staff provisions a `User` + `StudentProfile` together in one
+    transaction, PRD §3.2) and `GET /api/v1/student-profile` (own-record
+    self-read, no broader role visibility — unlike every other sub-project
+    in this API, no planning role sees "everyone's" profiles). See
+    `docs/data-dictionary/student-profile-foundation.md`.
+  - [ ] Eligible subject pool (DFD 2.2/2.3, FR-ENR-001–003/005/011) — next.
+    Cross-references curriculum placements, prerequisite satisfaction
+    (partly blocked on §17's unconfirmed passing-grade rule), published
+    sections' capacity/schedule conflicts, and block-section eligibility.
+  - [ ] Enrollment submission (DFD 2.4, FR-ENR-004/006–010) — after the
+    eligible subject pool. Atomic enrollment + enrollment_subjects +
+    queue_ticket submission, duplicate-active-enrollment prevention (DB
+    constraint already in place), Digital PEF summary.
 - [ ] Final approvals, payment queue, and COM
 - [ ] Predictive analytics and reporting
 - [ ] Cross-cutting UI, notifications, accessibility, and security
@@ -330,13 +342,18 @@ order:
   /api/v1/schedule-proposals` and `PATCH /api/v1/schedule-proposals/{scheduleProposal}`
   (submission is `role:program_chair`; the transition route carries **no**
   `role:` middleware at all — six actions, six required roles, resolved per
-  request by `ScheduleProposalPolicy` — see ADR 0011).
+  request by `ScheduleProposalPolicy` — see ADR 0011);
+  `POST /api/v1/student-profiles` (`role:admission_staff` + `ProvisionStudent`,
+  creates a `User` + `StudentProfile` together in one transaction) and
+  `GET /api/v1/student-profile` (own-record self-read, no path parameter —
+  resolves from the authenticated token like `auth/me`, not a route ID).
 - Route middleware: API group, health/login/reference-data throttles, Sanctum
   bearer auth, and the `role` alias (`EnsureUserHasRole`) — consumed by
   `POST`/`PATCH /curricula`, `sections`, and `schedule-proposals` submission
   (`program_chair`), and the four faculty-input write routes (`faculty`).
   `PATCH /schedule-proposals/{scheduleProposal}` is the first write route
-  with no `role:` middleware — see ADR 0011.
+  with no `role:` middleware — see ADR 0011. `POST /student-profiles` is the
+  first production consumer of `admission_staff`.
 - Pending endpoints: every remaining business endpoint group in PRD §8.4
   (enrollment, payment queue, grades, analytics, notifications, audit logs).
 - Form Requests: `LoginRequest` (validates, normalizes email, owns the
@@ -351,7 +368,10 @@ order:
   `withValidator()`); `StoreScheduleProposalRequest` (one-active-proposal-
   per-term guard) and `UpdateScheduleProposalRequest` (validates the
   requested `action` against the proposal's *current* status, and that
-  `decision_reason` is present exactly for the two return actions).
+  `decision_reason` is present exactly for the two return actions);
+  `StoreStudentProfileRequest` (unique email/student_number,
+  `withValidator()` rejects a curriculum that doesn't belong to the
+  submitted program).
 - Policies: `ProgramPolicy`, `AcademicTermPolicy`, `SubjectPolicy` —
   `viewAny`/`view` only, readable by every role; `CurriculumPolicy`/
   `SectionPolicy` add `create`/`update` restricted to `program_chair`. Row
@@ -364,13 +384,17 @@ order:
   `ScheduleProposalPolicy` adds a third shape: four abilities
   (`approveAsDean`, `approveAsExecutive`, `publish`, `close`) instead of the
   usual `create`/`update` pair, since one route serves six role-specific
-  transitions (see ADR 0011).
+  transitions (see ADR 0011). `StudentProfilePolicy` adds a fourth shape:
+  `view` is own-record only (`$user->id === $profile->user_id`) with **no**
+  planning-role broad visibility at all — unlike Faculty Input, no role sees
+  "everyone's" profile.
 - API Resources: `HealthResource`, `AuthResource`, `UserResource`,
   `ProgramResource`, `AcademicTermResource`, `SubjectResource`,
   `CurriculumResource` (nested subject placements and prerequisites),
   `FacultyAvailabilityResource`, `FacultySubjectPreferenceResource`,
   `SectionResource` (includes a `remaining_seats` display-only convenience),
-  `ScheduleProposalResource`.
+  `ScheduleProposalResource`, `StudentProfileResource` (exact key set; never
+  includes the password).
 - Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
   non-active accounts, issues token, stamps `last_login_at`, all in one
   transaction); `App\Actions\Curriculum\SynchronizeCurriculumSubjects`
@@ -382,13 +406,17 @@ order:
   cycle detector — see ADR 0010); `App\Actions\Scheduling\TransitionScheduleProposal`
   (applies one of six transitions, records who/when, and — only for
   `publish` — bulk-updates the term's `planned` sections to `published` in
-  the same transaction; see ADR 0011).
+  the same transaction; see ADR 0011); `App\Actions\Identity\ProvisionStudent`
+  (creates the `User` and `StudentProfile` together in one transaction —
+  a profile never exists without its account, or vice versa).
 - Transactions and idempotency: `AuthenticateUser` wraps token issuance and
   the login timestamp update in one `DB::transaction`;
   `SynchronizeCurriculumSubjects` wraps the delete-and-recreate of a
   curriculum's subject placements/prerequisites in one `DB::transaction`;
   `TransitionScheduleProposal` wraps the proposal's status change and (for
-  `publish`) the term's section status bulk-update in one `DB::transaction`.
+  `publish`) the term's section status bulk-update in one `DB::transaction`;
+  `ProvisionStudent` wraps `User::create()` and `StudentProfile::create()`
+  in one `DB::transaction`.
 - Security present: correlation IDs, safe exception rendering, no-store,
   credentialless CORS allowlist/preflight behavior, health/login throttling,
   Sanctum bearer tokens with a provisional expiration policy, one generic
@@ -593,6 +621,12 @@ order:
 | Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
 | Backend routes | `php artisan route:list --json` | Passed: exactly 24 routes (21 prior + 3 approval-workflow) | 2026-07-28 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding schedule-proposals) | 2026-07-28 |
+| Backend format | `composer format:check` | Passed (after `composer format` auto-fixed 3 files) | 2026-07-28 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 134 files, 0 errors | 2026-07-28 |
+| Backend tests | `composer test` | Passed: 348 tests, 939 assertions (up from 335/898) | 2026-07-28 |
+| Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly 26 routes (24 prior + 2 student-profile) | 2026-07-28 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding student-profiles/student-profile) | 2026-07-28 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -643,6 +677,10 @@ successfully.
 | 2026-07-28 | Commit a plain, non-secret CI database password directly in `.github/workflows/ci.yml` rather than a GitHub Actions secret. | It authenticates to nothing outside one ephemeral per-run container — not a credential in the sense `AGENTS.md`'s "never commit secrets/production credentials" is protecting against. See ADR 0012. |
 | 2026-07-28 | Leave GitHub branch protection / required status checks out of this change. | That's a repository setting, not a code change, and affects every future push — left for the user to enable manually once the workflow has run green at least once. |
 | 2026-07-28 | Install the ml-service CI job's dependencies from `requirements.lock`, not `requirements-dev.txt`. | The first real CI run failed only this job; `requirements.lock` is the complete, fully-pinned freeze of the actually-verified environment (confirmed installable and passing 6/6 in isolation), while `requirements-dev.txt` leaves every transitive dependency unpinned and subject to drift at whatever moment CI happens to run. |
+| 2026-07-28 | Pause the ml-service CI investigation and move to the next PRD phase instead of continuing to guess at a third fix. | Explicit user direction after two well-reasoned hypotheses (dependency drift, missing model artifact) were both ruled out without finding the real cause; the failing job's raw traceback remains inaccessible without `gh` or a pasted log. Not resolved — revisit using the run/job URLs already recorded above. |
+| 2026-07-28 | Give `StudentProfilePolicy::view()` no broader role-based visibility at all — own-record only, unlike every other resource's Policy in this API. | Nothing in PRD §3 grants any role (including planning roles) broad read access to *other* students' profiles; Faculty Input's "planning role sees everyone's rows" shape doesn't apply here, and inventing one would be scope creep beyond DFD 2.1. |
+| 2026-07-28 | Provision both the `User` and `StudentProfile` in one `POST /api/v1/student-profiles` call via one `ProvisionStudent` transaction, rather than two calls against two endpoints. | PRD §3.2 says Admission Staff "create[s] new student accounts and initial profiles" as one responsibility; there is no `POST /users` endpoint anywhere in this API (`RoleUserSeeder` is a seeder, not an API), so a two-step flow would require inventing a new user-creation endpoint with no PRD basis. |
+| 2026-07-28 | Reject a `curriculum_id` that doesn't belong to the submitted `program_id` as a 422 in `StoreStudentProfileRequest::withValidator()`. | Nothing previously enforced this relationship at the API layer; enrolling a student under a curriculum from a different program would be a silent data-integrity bug with no PRD text describing it either way — treated as an obvious invariant, not an invented policy value. |
 
 ## Blockers and Clarifications Needed
 
@@ -948,6 +986,18 @@ successfully.
   constraint — fixed by creating the term once and reusing its ID for both
   proposals (direct `ScheduleProposal::create()` calls don't enforce the
   one-active-proposal-per-term rule, so this was always safe to do).
+- The same Sanctum guard-caching quirk recurred a second time in
+  `StudentProfilesEndpointTest::test_a_student_can_read_their_own_profile`,
+  which had chained an Admission Staff HTTP provisioning call and then a
+  different student's HTTP login+read call in one test method (348 tests
+  reported 347 passed, 1 failed with an unexpected 404 instead of 200 —
+  same "stale cached user" shape as above, just surfacing as a 404 this
+  time since the wrong/absent profile was resolved rather than an
+  authorization check misfiring). Fixed the same way: rewrote the test to
+  create the `User`+`StudentProfile` directly via Eloquent, so it
+  authenticates via HTTP as exactly one user. Two independent recurrences
+  now confirm this is a structural constraint of this test suite, not a
+  one-off — see the Decisions and Assumptions row above.
 - The first real run of `.github/workflows/ci.yml` (GitHub Actions run
   `30308242547`, triggered by pushing `main`) came back 3/4 green:
   `backend`, `frontend`, and `docs` all passed; `ml-service` failed at the
@@ -1080,6 +1130,19 @@ successfully.
   format:check/audit; npm format:check/lint/lint:fast/typecheck/test/build/
   audit; ruff/mypy/pytest/pip check/pip-audit; Redocly OpenAPI lint) on
   every push to `main` and every pull request. ADR 0012.
+- Student profile foundation session (branch
+  `feat/student-profile-foundation`): `App\Actions\Identity\ProvisionStudent`
+  (creates a `User`+`StudentProfile` together in one transaction),
+  `StudentProfilePolicy` (own-record only, no broader role visibility — a
+  new authorization shape), `StoreStudentProfileRequest` (curriculum/program
+  mismatch check), `StudentProfileResource`, `StudentProfileController`
+  (`store`/`show`), 2 new routes (`role:admission_staff` for provisioning;
+  no role gate beyond authentication for the self-read). First production
+  consumer of the `admission_staff` role. `docs/data-dictionary/student-profile-foundation.md`,
+  OpenAPI updates (1 new tag, 2 new paths, 3 new schemas), and 13 new backend
+  tests (4 Policy, 9 endpoint — including `ApiSurfaceTest` additions). First
+  sub-project of PRD §5.2 (Process 2.0); eligible-subject-pool and
+  enrollment-submission named as the next two.
 
 ## Session Handoff Log
 
@@ -2128,3 +2191,56 @@ API layer (a future PRD phase, per the schema-foundation task's decision);
 demand forecast (FR-SCH-006, blocked on Process 4.0); audit logging
 (FR-SCH-010, cross-cutting, its own future slice); every frontend change;
 CI. This completes every currently-unblocked PRD §5.1 sub-project.
+
+### 2026-07-28 06:28 +08:00 — Student Profile Foundation (PRD §5.2, DFD 2.1); first Process 2.0 sub-project
+
+**Context:** Between the previous entry and this one, `.github/workflows/ci.yml`
+(4 jobs) was built and pushed to `main`; `backend`/`frontend`/`docs` are
+confirmed green on two real runs, `ml-service` still fails at its `pytest`
+step with two hypotheses ruled out (see Failure and Recovery Record) and
+was **paused per explicit user direction** to move on to the next PRD phase
+rather than keep guessing. That redirect led here: PRD §5.2 (Process 2.0,
+roadmap Phase 3) decomposes into four DFD subprocesses; this slice covers
+only 2.1 (Authenticate and Read Profile), naming eligible-subject-pool
+(2.2/2.3) and enrollment-submission (2.4) as the next two.
+**Completed (branch `feat/student-profile-foundation` off `main`, worked in
+place):**
+- `App\Actions\Identity\ProvisionStudent` — one `DB::transaction()` creating
+  the `User` (role `student`, status `active`) and `StudentProfile`
+  (`admission_status: admitted`, `academic_standing: good`) together; a
+  profile never exists without its account, or vice versa.
+- `StudentProfilePolicy` — a fourth authorization shape: `view()` is
+  own-record only (`$user->id === $profile->user_id`) with **no**
+  planning-role broad visibility at all, unlike every other resource in
+  this API. `create()` restricted to `admission_staff`.
+- `StoreStudentProfileRequest` — unique email/student_number,
+  `withValidator()` rejects a curriculum that doesn't belong to the
+  submitted program (a check nothing previously enforced).
+- `StudentProfileController` — `store()` (`POST /api/v1/student-profiles`,
+  `role:admission_staff`, 201) and `show()` (`GET /api/v1/student-profile`,
+  no path parameter, resolves the caller's own profile like `auth/me`, 404
+  not 500 if none exists).
+- 2 new routes (26 total); `StudentProfileResource` (exact key set, no
+  password); `docs/data-dictionary/student-profile-foundation.md`; OpenAPI
+  gained 1 tag ("Student Records"), 2 paths, 3 schemas.
+**Caught before completion, not after:**
+- The Sanctum guard-caching quirk (see the Approval Workflow entry above)
+  recurred a second time: `test_a_student_can_read_their_own_profile`
+  originally chained an Admission Staff provisioning call and a different
+  student's login+read call in one test method, surfacing as an unexpected
+  404 (347/348 passed) rather than a 403. Fixed the same way — create the
+  `User`+`StudentProfile` directly via Eloquent so the test authenticates
+  as exactly one user via HTTP. Two independent recurrences now confirm
+  this is a structural constraint of this suite, not a one-off.
+- `composer format:check` failed on first run (unused import and spacing in
+  `StoreStudentProfileRequest`, import order and a trailing comma in the two
+  new test files); fixed by running `composer format` (Pint auto-fix) and
+  re-verifying the full suite still passed afterward.
+**Verification:** `composer test` 348/348 (939 assertions, up from
+335/898), `format:check`, `analyse` (Larastan level 8, 134 files, 0
+errors), `audit` clean, `route:list` exactly 26 routes, OpenAPI lint clean.
+**Not done, deliberately out of scope:** eligible subject pool and
+enrollment submission (the next two Process 2.0 sub-projects, named above);
+all of Process 3.0 (§5.3); student self-service profile editing; password
+reset endpoints; every frontend change; the ml-service CI job (still
+paused).

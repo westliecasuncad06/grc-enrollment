@@ -30,6 +30,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/programs',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/sections',
+            'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/subjects',
             'PATCH api/v1/curricula/{curriculum}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
@@ -43,6 +44,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
+            'POST api/v1/student-profiles',
         ], $routes);
     }
 
@@ -71,6 +73,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.schedule-proposals.index',
             'api.v1.schedule-proposals.store',
             'api.v1.schedule-proposals.update',
+            'api.v1.student-profile.show',
+            'api.v1.student-profiles.store',
         ];
 
         foreach ($guarded as $name) {
@@ -162,6 +166,14 @@ final class ApiSurfaceTest extends TestCase
         );
 
         $this->assertSame([], array_values($roleMiddleware));
+    }
+
+    public function test_student_profile_provisioning_is_gated_to_the_admission_staff_role(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.student-profiles.store');
+
+        $this->assertNotNull($route);
+        $this->assertContains('role:admission_staff', $route->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void
