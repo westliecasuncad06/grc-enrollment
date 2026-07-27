@@ -250,7 +250,10 @@ order:
     ADR 0007, not the PRD's MySQL 8 LTS — a documented local-development
     deviation).
   - [x] Deterministic role seeders.
-  - [ ] CI quality checks.
+  - [ ] CI quality checks — `.github/workflows/ci.yml` added (backend/
+    frontend/ml-service/docs jobs, see ADR 0012); **not yet checked off**
+    pending a real green run on GitHub Actions after pushing (a workflow
+    file cannot be verified by reading it alone).
 - [x] Authentication (Sanctum bearer-token login/logout/me; RBAC authorization
   policies beyond role-filtered frontend navigation remain unstarted)
 - [ ] Pre-enrollment schedules (PRD §5.1, decomposed into sub-projects)
@@ -624,6 +627,9 @@ successfully.
 | 2026-07-28 | Give `schedule_proposals` no new foreign key to `sections`; `publish` bulk-updates the term's `planned` sections to `published` by `academic_term_id` instead. | The two tables were designed independently with no relationship; a bulk update needs no migration to either already-shipped table, and is exactly correct given a term has at most one non-closed proposal at a time. See ADR 0011. |
 | 2026-07-28 | Enforce "one active proposal per term" in `StoreScheduleProposalRequest`, not a DB constraint. | Same reasoning as `enrollments.active_academic_term_id`: a plain `UNIQUE(academic_term_id)` would wrongly block resubmission after a term's proposal closes, but unlike enrollments this check only needs to run at creation time, so an application-level guard (not a generated column) is sufficient. |
 | 2026-07-28 | Test the approval lifecycle as four separate single-actor tests rather than one chained multi-user walk. | Chaining `withToken()` across different users within one test method hit a Sanctum guard-caching quirk (the guard resolves and caches a user once per instance, outliving a single simulated request); `forgetGuards()` did not resolve it. Every other endpoint test in this session already uses one authenticated actor per test — matching that structure sidesteps the framework issue entirely rather than fighting it. See Failure and Recovery Record. |
+| 2026-07-28 | Run CI against MariaDB (not MySQL) with a single root-equivalent database user, not the local machine's `grc_app`/`grc_migrator`/`grc_test` least-privilege split. | Matches ADR 0007's local engine choice (all 335 tests were verified against MariaDB-specific behavior, not MySQL); the least-privilege split exists to protect one persistent, already-crashed local install, which has no equivalent in an ephemeral, destroyed-after-every-run CI container. See ADR 0012. |
+| 2026-07-28 | Commit a plain, non-secret CI database password directly in `.github/workflows/ci.yml` rather than a GitHub Actions secret. | It authenticates to nothing outside one ephemeral per-run container — not a credential in the sense `AGENTS.md`'s "never commit secrets/production credentials" is protecting against. See ADR 0012. |
+| 2026-07-28 | Leave GitHub branch protection / required status checks out of this change. | That's a repository setting, not a code change, and affects every future push — left for the user to enable manually once the workflow has run green at least once. |
 
 ## Blockers and Clarifications Needed
 
@@ -1015,6 +1021,12 @@ successfully.
   3 new paths, 4 new schemas), and 23 new backend tests. This completes
   every unblocked PRD §5.1 sub-project — only demand forecast (blocked on
   Process 4.0) and cross-cutting audit logging remain.
+- CI session (branch `feat/ci-quality-gates`): `.github/workflows/ci.yml` —
+  four jobs (`backend`, `frontend`, `ml-service`, `docs`) running every
+  quality gate already used manually all project (composer test/analyse/
+  format:check/audit; npm format:check/lint/lint:fast/typecheck/test/build/
+  audit; ruff/mypy/pytest/pip check/pip-audit; Redocly OpenAPI lint) on
+  every push to `main` and every pull request. ADR 0012.
 
 ## Session Handoff Log
 
