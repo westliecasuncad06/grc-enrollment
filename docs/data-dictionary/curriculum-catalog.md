@@ -88,6 +88,11 @@ which also satisfies the FK dependency order. Verified by
 
 ## Seeded data
 
-None. Unlike the identity foundation slice, no seeder ships synthetic
-subjects or curricula in this sub-project — tests create records directly,
-and no acceptance criterion required seeded fixtures.
+`database/seeders/SubjectSeeder.php` and `CurriculumSeeder.php` — added after
+this slice's initial merge, alongside the faculty-input/section-planning/
+approval-workflow schema foundation. `SubjectSeeder` seeds a small coherent
+computing-program catalog; `CurriculumSeeder` builds a genuine multi-step
+prerequisite chain on top of it (`CS102 → CS201 → CS202 → CS301`) plus a
+still-`draft` curriculum, so learner-visibility filtering has something real
+to prove. `local`/`testing` environments only, idempotent, `updateOrCreate`
+keyed on natural keys.

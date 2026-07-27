@@ -271,6 +271,16 @@ order:
   - [ ] Audit logging (FR-SCH-010) — cross-cutting, deferred to the audit
     slice rather than any single sub-project above.
 - [ ] Enrollment and digital advising
+  - Schema-only groundwork landed early as a byproduct of the §5.1
+    schema-foundation task below: `student_profiles` plus the eight PRD
+    §10.3 tables (`enrollments`, `enrollment_subjects`, `academic_grades`,
+    `queue_tickets`, `payments`, `enrollment_documents`,
+    `transferee_credits`, `withdrawal_requests`), migrated, tested
+    (`EnrollmentRecordsMigrationTest`, `DemoEnrollmentSeederTest`), and
+    documented (`docs/data-dictionary/enrollment-records.md`). **No Policy,
+    Resource, Controller, or route exists for any of these tables** — this
+    checklist item stays unchecked until that API layer has its own
+    spec → plan → build cycle.
 - [ ] Final approvals, payment queue, and COM
 - [ ] Predictive analytics and reporting
 - [ ] Cross-cutting UI, notifications, accessibility, and security
@@ -396,6 +406,29 @@ order:
   see Failure and Recovery Record.
 - Rollback status: verified — a full `migrate:rollback` then `migrate` cycle
   passes in the automated test suite for both migration sets.
+- Applied migrations (schema-foundation task): 13 more tables —
+  `student_profiles`, `faculty_availabilities`, `faculty_subject_preferences`,
+  `sections`, `schedule_proposals`, `enrollments`, `enrollment_subjects`,
+  `academic_grades`, `queue_tickets`, `payments`, `enrollment_documents`,
+  `transferee_credits`, `withdrawal_requests`. These were found already
+  written to the working tree with **zero git history** (see Failure and
+  Recovery Record) and, on inspection, already applied to both `grc_enrollment`
+  and `grc_enrollment_test` (migration batch 3) by whatever process wrote
+  them — confirmed schema-correct via `SHOW CREATE TABLE`, migrated no further,
+  only granted and tested. `enrollments.active_academic_term_id` is a
+  `storedAs()` generated column enforcing "one active enrollment per student
+  per term" while permitting re-enrollment after a terminal state — see
+  `docs/data-dictionary/enrollment-records.md`.
+- Grants: table-level `CREATE`+DDL+DML to `grc_migrator`/`grc_test`, then
+  `SELECT`/`INSERT`/`UPDATE`/`DELETE` to `grc_app`, on all 13 tables — 39 grant
+  statements, zero incidents, `CHECK TABLE` and Windows Event Log checked
+  before and after each batch. `FLUSH PRIVILEGES` deliberately omitted this
+  time (see Decisions and Assumptions) — `GRANT` takes effect immediately and
+  `FLUSH PRIVILEGES` was part of one of the two prior crash incidents.
+- Two seeders added that belong to the **already-merged** curriculum-catalog
+  slice but were missing a seeder: `SubjectSeeder`, `CurriculumSeeder` — found
+  alongside the same untracked batch, sound and idempotent, wired into
+  `DatabaseSeeder` ahead of the new `SectionSeeder`/`DemoEnrollmentSeeder`.
 
 ## Predictive Analytics Status
 
@@ -473,6 +506,13 @@ order:
 | Migration reversibility (curriculum catalog) | `migrate:rollback` then `migrate` | Passed: all 4 new tables drop/recreate cleanly, FK-dependency order respected | 2026-07-27 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding subjects/curricula) | 2026-07-27 |
 | Live HTTP proof (curriculum catalog) | curl against a running `php artisan serve` on 127.0.0.1:8000, dev database | Passed, after fixing the `grc_app` grant gap below: Program Chair created a curriculum with a valid prerequisite (201); the same role's attempt at a direct two-subject cycle was rejected (422 `VALIDATION_FAILED`, exact PRD wording "cannot create a prerequisite cycle"); a Student's identical `POST` was rejected (403 `FORBIDDEN`) while their `GET` still succeeded and correctly omitted the still-`draft` curriculum; `PATCH` fully replaced the subject list and, once `status` became `active`, the Student's next `GET` did include it | 2026-07-27 |
+| MariaDB privilege-table health | `CHECK TABLE mysql.db, mysql.global_priv, mysql.tables_priv, mysql.columns_priv, mysql.procs_priv` | Passed: all `OK`, before and after 39 grant statements | 2026-07-28 |
+| Windows Event Log crash check | `Get-WinEvent` filtered for `mysqld` Application Errors | Passed: no new crash before, immediately after granting, or after migrating — still only the two known 2026-07-27 incidents | 2026-07-28 |
+| Backend format | `composer format:check` | Passed | 2026-07-28 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 106 files, 0 errors | 2026-07-28 |
+| Backend tests | `composer test` | Passed: 248 tests, 640 assertions (up from 162/451) | 2026-07-28 |
+| Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
+| Backend routes | `php artisan route:list --json` | Passed: still exactly 10 routes — this task is schema-only, no new endpoints | 2026-07-28 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -505,6 +545,11 @@ successfully.
 | 2026-07-27 | `POST`/`PATCH /curricula` fully replace a curriculum's subject placements and prerequisites rather than diffing incrementally. | PRD does not specify partial-update semantics for this resource; a full replace is simpler to test and avoids undefined behavior when a placement is omitted from a partial payload. See ADR 0009. |
 | 2026-07-27 | Restrict `POST`/`PATCH /curricula` to the Program Chair role via the `role` middleware (first production consumer) plus `CurriculumPolicy`. | Matches the frontend's existing "Curriculum"/"Subjects & Prerequisites" module ownership in `role-capabilities.ts` — not a new policy invented for this slice. |
 | 2026-07-27 | Introduce provisional `SubjectStatus` (`active`/`inactive`) and `CurriculumStatus` (`draft`/`active`/`archived`) enums, and use foreign keys with explicit delete behavior (`restrictOnDelete`/`cascadeOnDelete`) for the first time in this codebase. | Same PRD §17 provisional-value discipline as `ProgramStatus`/`AcademicTermStatus`; PRD §10.6 requires foreign keys with explicit delete behavior, which the identity-foundation slice deferred. See ADR 0009. |
+| 2026-07-28 | Adopt, rather than discard, a 43-file batch of untracked migrations/models/enums/seeders/tests found in the working tree with zero git history — after a full read-through confirmed it matches this codebase's conventions (PRD §-citations, PROVISIONAL-vocabulary flags, correct FK semantics). | User's explicit choice among three options; discarding unreviewed work of unknown value, or silently building on it without review, were both worse than auditing it first. |
+| 2026-07-28 | Land the enrollment-records domain (`student_profiles` + 8 PRD §10.3 tables) as schema-only — migrated, tested, documented — with no Policy/Controller/route/endpoint. | Confirmed with the user: this domain belongs to a distinct, later PRD phase ("Enrollment and digital advising"), not §5.1. Building its API now would jump the checklist's own sequencing. |
+| 2026-07-28 | Split the remaining scaffold work into four sequential branches (schema foundation → faculty input → section planning → approval workflow) reviewed as one plan but merged one at a time. | Matches every prior sub-project's one-branch-per-slice discipline; a single mega-branch across four sub-projects would make review and rollback harder without saving real effort. |
+| 2026-07-28 | Add an `integer` cast for `StudentProfile.year_level`, which the found scaffold omitted. | Every other tiny/small-int column in this codebase (`Section.capacity`, `CurriculumSubject.year_level`, `FacultyAvailability.day_of_week`, etc.) is cast; the omission was an inconsistency, not a deliberate choice — caught by a new unit test. |
+| 2026-07-28 | Omit `FLUSH PRIVILEGES` from this session's `GRANT` batches. | `GRANT` takes effect immediately in MySQL/MariaDB; `FLUSH PRIVILEGES` is unnecessary here and was part of the command sequence in one of the two prior `VCRUNTIME140.dll` crash incidents. |
 
 ## Blockers and Clarifications Needed
 
@@ -676,6 +721,26 @@ successfully.
   browser is available.” This remains a tooling gap rather than an application
   pass; focused browser-like component/router tests are being run, and live
   Playwright claims remain withheld.
+- After pushing the curriculum-catalog merge, `git status` showed 43 untracked
+  files plus a modified `DatabaseSeeder.php` — none of it with any git
+  history (checked `git log --all`, `git stash list`, and `git reflog`; all
+  came up empty for these files). A full read-through found genuinely careful,
+  convention-matching code (13 migrations/models across faculty input, section
+  planning, approval workflow, and a separate enrollment-records domain), but
+  it had never migrated cleanly: a `composer test` run mid-investigation hit
+  `SQLSTATE[HY000] [2002] ... target machine actively refused it` for 7 of 14
+  tests. Checked the Windows Event Log before concluding anything — no fresh
+  `mysqld.exe` crash, still only the two known 2026-07-27 incidents — so the
+  refusal was a transient connectivity gap, not a new crash. Separately
+  discovered the dev database's `migrations` table already listed all 13 new
+  tables as applied (batch 3) even though the files were never committed —
+  `SHOW CREATE TABLE` confirmed the live schema, including the
+  `enrollments.active_academic_term_id` generated column, matches the
+  migration files exactly. Resolved by user decision (see Decisions and
+  Assumptions) rather than guessing: adopt the code, land the schema as
+  tested/documented groundwork, keep the enrollment-records domain schema-only,
+  and build the remaining §5.1 sub-projects' API layer through the normal
+  branch-per-slice process.
 - `ProgramResource`/`AcademicTermResource` initially defined `withResponse()`
   to set `Cache-Control: no-store, private`, following `UserResource`'s
   pattern exactly — but the header assertion in both new endpoint tests failed
@@ -755,6 +820,20 @@ successfully.
   Resources, `StoreCurriculumRequest`/`UpdateCurriculumRequest`,
   `SynchronizeCurriculumSubjects` action, ADR 0009, OpenAPI/data-dictionary
   updates, and 52 new backend tests.
+- Schema-foundation session (branch
+  `feat/schedule-and-enrollment-schema-foundation`): adopted a 43-file
+  untracked batch (13 migrations, 13 models, 10 domain enums, `SubjectSeeder`/
+  `CurriculumSeeder`/`SectionSeeder`/`DemoEnrollmentSeeder`, 2 tests) found
+  with zero git history — see Failure and Recovery Record. Added 24 unit
+  tests (11 enums, 13 models) and 4 migration-constraint test files
+  (`FacultyInputMigrationTest`, `SectionSchedulingMigrationTest`,
+  `ScheduleProposalMigrationTest`, `TransfereeAndWithdrawalMigrationTest`)
+  covering the 6 tables the found tests didn't reach. One real gap fixed:
+  `StudentProfile.year_level` now casts to `integer`, matching every other
+  tiny/small-int column in this codebase. 39 table-level `GRANT` statements
+  (`grc_migrator`/`grc_test` CREATE+DDL+DML, then `grc_app` DML) across all 13
+  tables, zero incidents. New `docs/data-dictionary/enrollment-records.md`;
+  updated `curriculum-catalog.md`'s stale "no seeder" note.
 
 ## Session Handoff Log
 
@@ -1601,3 +1680,55 @@ status to `active`.
 **Not done, out of scope for this sub-project:** faculty input, section
 planning, approval workflow, demand forecast, and audit logging (the
 remaining four Process 1.0 sub-projects); every frontend change; CI.
+
+### 2026-07-28 01:00 +08:00 — Untracked scaffold discovered and audited; schema foundation landed
+
+**Goal:** Push `main` to `origin` (routine follow-up from the previous
+session), then continue with whatever the user directed next.
+**Discovery:** `git status` showed 43 untracked files and a modified
+`DatabaseSeeder.php` with zero git history — not part of anything this
+session or the prior one had done. A full read-through (all 13 migrations,
+13 models, 10 enums, 4 seeders, 2 tests) found genuinely careful,
+convention-matching work: correct FK semantics, PRD §-citations, consistent
+PROVISIONAL-vocabulary flags, and one clever piece of schema design (below).
+It covered two unrelated things — the three remaining PRD §5.1 sub-projects
+(faculty input, section planning, approval workflow) and a completely
+separate enrollment-records domain (`student_profiles` + 8 PRD §10.3 tables)
+belonging to a distinct, later phase. See Failure and Recovery Record for the
+full investigation (event log checks, the already-applied migrations, the
+transient MariaDB connection refusal).
+**User decisions (via plan mode, `backgrounded-inherited-treasure.md`):**
+adopt and properly finish the scaffold rather than discard or ignore it; land
+the enrollment-records domain as schema-only (tested, documented, no API)
+since it belongs to a future phase; work through four sequential branches
+(schema foundation → faculty input → section planning → approval workflow)
+reviewed as one plan but merged one at a time.
+**Completed (branch `feat/schedule-and-enrollment-schema-foundation` off
+`main`, worked in place):**
+- MariaDB safety check (`CHECK TABLE` on the five privilege tables, Event Log
+  clean) then 39 table-level `GRANT` statements — `CREATE`+DDL+DML to
+  `grc_migrator`/`grc_test`, DML to `grc_app` once tables existed — across all
+  13 new tables, zero incidents. `FLUSH PRIVILEGES` deliberately omitted this
+  time (unnecessary, and part of one of the two prior crash incidents).
+- Confirmed the 13 tables were already migrated (batch 3) by whatever process
+  wrote them; verified schema correctness directly (`SHOW CREATE TABLE`)
+  rather than re-migrating.
+- 24 new unit tests (11 domain enums, 13 models) and 4 new migration-
+  constraint test files covering the 6 tables the found tests didn't reach.
+- Fixed one real gap: `StudentProfile.year_level` now casts to `integer`,
+  matching every other tiny/small-int column in this codebase — caught by a
+  new unit test, not assumed.
+- `docs/data-dictionary/enrollment-records.md` (new); corrected
+  `curriculum-catalog.md`'s now-stale "no seeder ships" note, since
+  `SubjectSeeder`/`CurriculumSeeder` were part of the same found batch.
+- This `PROGRESS.md` entry, plus updated Database/Tests/Decisions sections
+  and a checklist note that "Enrollment and digital advising" has schema-only
+  groundwork but stays unchecked.
+**Verification:** `composer test` 248/248 (640 assertions, up from 162/451);
+`format:check`; `analyse` (Larastan level 8, 106 files, 0 errors); `audit`
+clean; `route:list` still exactly 10 routes (schema-only task, no new
+endpoints); Windows Event Log re-checked clean after every privilege write
+and after migrating.
+**Not done, deliberately deferred to the next three branches:** any Policy,
+Resource, Controller, or route for faculty input, section planning, approval
+workflow, or the enrollment-records domain; every frontend change; CI.
