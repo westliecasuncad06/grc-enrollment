@@ -26,6 +26,12 @@ tags:
       returned differs for learner-scoped roles (student, faculty, accounting
       staff) versus planning roles — see ADR 0008. Status vocabularies are
       provisional pending PRD §17 approval.
+  - name: Curriculum
+    description: >
+      Subjects and curricula. Reads follow the same role-differentiated
+      visibility as Organization; writes to curricula are restricted to the
+      Program Chair role — see ADR 0009. Status vocabularies are provisional
+      pending PRD §17 approval.
 paths:
   /api/v1/health:
     get:
@@ -226,6 +232,179 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/subjects:
+    get:
+      operationId: getSubjects
+      summary: List subjects visible to the authenticated role
+      description: >
+        Learner-scoped roles (student, faculty, accounting staff) receive
+        only learner-visible subjects; every other role receives the full
+        catalog regardless of status. Ordered by code ascending.
+      security:
+        - bearerAuth: []
+      tags:
+        - Curriculum
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The subjects visible to the authenticated role.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubjectsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/curricula:
+    get:
+      operationId: getCurricula
+      summary: List curricula visible to the authenticated role
+      description: >
+        Learner-scoped roles do not receive `draft` curricula; every other
+        role receives every curriculum regardless of status. Each curriculum
+        includes its full subject placement and prerequisite tree. Ordered by
+        effective school year descending, then name.
+      security:
+        - bearerAuth: []
+      tags:
+        - Curriculum
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The curricula visible to the authenticated role.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurriculaResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postCurricula
+      summary: Create a curriculum with its subject placements and prerequisites
+      description: >
+        Program Chair only. The `subjects` array is the complete subject
+        placement and prerequisite set for the curriculum — see ADR 0009. A
+        submission whose prerequisites form a direct or transitive cycle is
+        rejected (FR-SCH-002).
+      security:
+        - bearerAuth: []
+      tags:
+        - Curriculum
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreCurriculumRequest"
+      responses:
+        "201":
+          description: The curriculum was created.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurriculumResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            The submitted data is invalid, or the submitted subjects contain
+            a direct or transitive prerequisite cycle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/curricula/{curriculum}:
+    patch:
+      operationId: patchCurriculum
+      summary: Replace a curriculum's fields and subject/prerequisite plan
+      description: >
+        Program Chair only. Full replace, not a partial update: the submitted
+        `subjects` array becomes the curriculum's complete subject placement
+        and prerequisite set — see ADR 0009.
+      security:
+        - bearerAuth: []
+      tags:
+        - Curriculum
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: curriculum
+          in: path
+          required: true
+          description: Curriculum ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCurriculumRequest"
+      responses:
+        "200":
+          description: The curriculum was updated.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurriculumResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No curriculum exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, or the submitted subjects contain
+            a direct or transitive prerequisite cycle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -266,6 +445,18 @@ components:
   responses:
     Unauthenticated:
       description: A valid bearer token is required.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: >
+        The authenticated role is not authorized to perform this action.
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
@@ -558,3 +749,236 @@ components:
             - closed
         status_label:
           type: string
+    SubjectsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectResource"
+    SubjectResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - code
+        - title
+        - units
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: subject
+        id:
+          type: integer
+        code:
+          type: string
+        title:
+          type: string
+        units:
+          type: integer
+        status:
+          type: string
+          description: >
+            PROVISIONAL vocabulary pending PRD §17 approval — see
+            App\Domain\Curriculum\SubjectStatus.
+          enum:
+            - active
+            - inactive
+        status_label:
+          type: string
+    CurriculaResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumResource"
+    CurriculumResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/CurriculumResource"
+    CurriculumResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - program_id
+        - name
+        - effective_school_year
+        - status
+        - status_label
+        - subjects
+      properties:
+        type:
+          type: string
+          const: curriculum
+        id:
+          type: integer
+        program_id:
+          type: integer
+        name:
+          type: string
+        effective_school_year:
+          type: string
+        status:
+          type: string
+          description: >
+            PROVISIONAL vocabulary pending PRD §17 approval — see
+            App\Domain\Curriculum\CurriculumStatus.
+          enum:
+            - draft
+            - active
+            - archived
+        status_label:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumSubjectPlacement"
+    CurriculumSubjectPlacement:
+      type: object
+      additionalProperties: false
+      required:
+        - subject_id
+        - code
+        - title
+        - year_level
+        - semester
+        - is_required
+        - prerequisites
+      properties:
+        subject_id:
+          type: integer
+        code:
+          type: string
+        title:
+          type: string
+        year_level:
+          type: integer
+        semester:
+          type: string
+        is_required:
+          type: boolean
+        prerequisites:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumSubjectPrerequisite"
+    CurriculumSubjectPrerequisite:
+      type: object
+      additionalProperties: false
+      required:
+        - prerequisite_subject_id
+        - code
+        - minimum_grade
+      properties:
+        prerequisite_subject_id:
+          type: integer
+        code:
+          type: string
+        minimum_grade:
+          type: string
+          description: >
+            Institutional grading policy is unconfirmed (PRD §17); stored and
+            returned as an opaque string, not validated against a scale.
+    StoreCurriculumRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - program_id
+        - name
+        - effective_school_year
+        - status
+        - subjects
+      properties:
+        program_id:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        effective_school_year:
+          type: string
+          maxLength: 255
+        status:
+          type: string
+          enum:
+            - draft
+            - active
+            - archived
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumSubjectPlacementInput"
+    UpdateCurriculumRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - effective_school_year
+        - status
+        - subjects
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        effective_school_year:
+          type: string
+          maxLength: 255
+        status:
+          type: string
+          enum:
+            - draft
+            - active
+            - archived
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumSubjectPlacementInput"
+    CurriculumSubjectPlacementInput:
+      type: object
+      additionalProperties: false
+      required:
+        - subject_id
+        - year_level
+        - semester
+        - is_required
+      properties:
+        subject_id:
+          type: integer
+        year_level:
+          type: integer
+          minimum: 1
+        semester:
+          type: string
+          maxLength: 255
+        is_required:
+          type: boolean
+        prerequisites:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumSubjectPrerequisiteInput"
+    CurriculumSubjectPrerequisiteInput:
+      type: object
+      additionalProperties: false
+      required:
+        - prerequisite_subject_id
+        - minimum_grade
+      properties:
+        prerequisite_subject_id:
+          type: integer
+        minimum_grade:
+          type: string
+          maxLength: 255

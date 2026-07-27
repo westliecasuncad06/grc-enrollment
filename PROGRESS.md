@@ -257,8 +257,9 @@ order:
   - [x] Authorization foundation and reference data: `role` middleware,
     `ProgramPolicy`/`AcademicTermPolicy`, `visibleTo` query scopes,
     `GET /api/v1/programs` and `GET /api/v1/academic-terms` (see ADR 0008).
-  - [ ] Curriculum catalog: subjects, curricula, placements, prerequisite
-    cycle rejection (FR-SCH-001, FR-SCH-002).
+  - [x] Curriculum catalog: subjects, curricula, placements, prerequisite
+    cycle rejection (FR-SCH-001, FR-SCH-002; see ADR 0009). First production
+    consumer of the `role` middleware — writes restricted to Program Chair.
   - [ ] Faculty input: availability and ranked subject preferences
     (FR-SCH-003).
   - [ ] Section planning: capacity, viability threshold, conflict detection
@@ -281,41 +282,56 @@ order:
 - Implemented endpoints: public, database-independent `GET /api/v1/health`;
   `POST /api/v1/auth/login` (public, throttled); `POST /api/v1/auth/logout`
   and `GET /api/v1/auth/me` (`auth:sanctum` + `EnsureUserIsActive`);
-  `GET /api/v1/programs` and `GET /api/v1/academic-terms` (`auth:sanctum` +
-  `EnsureUserIsActive` + throttle, readable by every role, row set filtered
-  per role by each model's `visibleTo` scope).
+  `GET /api/v1/programs` and `GET /api/v1/academic-terms` (readable by every
+  role, row set filtered by each model's `visibleTo` scope);
+  `GET /api/v1/subjects` and `GET /api/v1/curricula` (same read pattern);
+  `POST /api/v1/curricula` and `PATCH /api/v1/curricula/{curriculum}`
+  (`role:program_chair` + `CurriculumPolicy`, full-replace subject/
+  prerequisite payload, rejects direct/transitive cycles — see ADR 0009).
 - Route middleware: API group, health/login/reference-data throttles, Sanctum
-  bearer auth, and a new `role` alias (`EnsureUserHasRole`) registered but not
-  yet consumed by any route — its first consumer is the curriculum-catalog
-  sub-project (see ADR 0008).
-- Pending endpoints: every remaining business endpoint group in PRD §8.4.
+  bearer auth, and the `role` alias (`EnsureUserHasRole`) — now consumed for
+  the first time by `POST`/`PATCH /curricula`, restricted to `program_chair`.
+- Pending endpoints: every remaining business endpoint group in PRD §8.4
+  (faculty availability, sections, schedule proposals, enrollment, payment
+  queue, grades, analytics, notifications, audit logs).
 - Form Requests: `LoginRequest` (validates, normalizes email, owns the
-  per-account+IP throttle key).
-- Policies: `ProgramPolicy`, `AcademicTermPolicy` — `viewAny`/`view`, both
-  readable by every role at the endpoint level; row filtering lives in query
-  scopes, not the Policy (see ADR 0008). `App\Http\Controllers\Controller`
+  per-account+IP throttle key); `StoreCurriculumRequest`/
+  `UpdateCurriculumRequest` (validate nested subject/prerequisite arrays,
+  run `PrerequisiteCycleDetector` in `withValidator()`).
+- Policies: `ProgramPolicy`, `AcademicTermPolicy`, `SubjectPolicy` —
+  `viewAny`/`view` only, readable by every role; `CurriculumPolicy` adds
+  `create`/`update` restricted to `program_chair`. Row filtering lives in
+  query scopes, not the Policy (see ADR 0008). `App\Http\Controllers\Controller`
   now `use AuthorizesRequests` again (Laravel 12 dropped it from the base
   controller; `$this->authorize()` did not work until this slice).
 - API Resources: `HealthResource`, `AuthResource`, `UserResource`,
-  `ProgramResource`, `AcademicTermResource`.
+  `ProgramResource`, `AcademicTermResource`, `SubjectResource`,
+  `CurriculumResource` (nested subject placements and prerequisites).
 - Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
   non-active accounts, issues token, stamps `last_login_at`, all in one
-  transaction).
+  transaction); `App\Actions\Curriculum\SynchronizeCurriculumSubjects`
+  (full-replace write, one `DB::transaction`);
+  `App\Domain\Curriculum\PrerequisiteCycleDetector` (pure DFS cycle check,
+  no persistence dependency).
 - Transactions and idempotency: `AuthenticateUser` wraps token issuance and
-  the login timestamp update in one `DB::transaction`.
+  the login timestamp update in one `DB::transaction`;
+  `SynchronizeCurriculumSubjects` wraps the delete-and-recreate of a
+  curriculum's subject placements/prerequisites in one `DB::transaction`.
 - Security present: correlation IDs, safe exception rendering, no-store,
   credentialless CORS allowlist/preflight behavior, health/login throttling,
   Sanctum bearer tokens with a provisional expiration policy, one generic
   credential-failure response (no account enumeration), least-privilege
   MariaDB principals (`grc_app` DML-only, `grc_migrator`/`grc_test`
-  table-scoped DDL), and a clean 401 (not a 500) for every `auth:sanctum`
+  table-scoped DDL), a clean 401 (not a 500) for every `auth:sanctum`
   route regardless of whether the caller sends `Accept: application/json`
   (`bootstrap/app.php`'s `redirectGuestsTo(fn () => null)` override — see
-  Failure and Recovery Record).
+  Failure and Recovery Record), and the first role-gated write endpoints
+  (curriculum authoring restricted to Program Chair, enforced at both the
+  route and Policy layers).
 - Security pending: authorization Policies for every remaining business
-  resource (only Program/AcademicTerm exist so far), business rate limiters,
-  audit events, the approved (non-provisional) token-expiration policy and
-  status vocabularies, and infrastructure controls.
+  resource, business rate limiters, audit events, the approved
+  (non-provisional) token-expiration policy and status vocabularies, and
+  infrastructure controls.
 
 ## Frontend Status
 
@@ -352,23 +368,34 @@ order:
 ## Database and Migrations
 
 - Applied migrations: `users`, `programs`, `academic_terms`,
-  `personal_access_tokens` — all four, live in `grc_enrollment` (dev) and
+  `personal_access_tokens`, `subjects`, `curricula`, `curriculum_subjects`,
+  `subject_prerequisites` — all eight, live in `grc_enrollment` (dev) and
   verified reversible (`migrate:rollback` → `migrate`) in
-  `grc_enrollment_test`.
+  `grc_enrollment_test`. The curriculum-catalog four are the first in this
+  codebase to use foreign keys (`restrictOnDelete`/`cascadeOnDelete` per
+  table — see ADR 0009 and `docs/data-dictionary/curriculum-catalog.md`).
 - Seeders: `RoleUserSeeder` — nine synthetic identities, one per role;
   `ProgramSeeder`/`AcademicTermSeeder` — a small synthetic catalog (3
   programs, 3 terms), each including one non-learner-visible row so the
   authorization difference is observable. All run against the dev database,
-  `local`/`testing` only.
+  `local`/`testing` only. No seeder for subjects/curricula in this
+  sub-project — not required by any acceptance criterion.
 - Database: `C:\xampp\mysql` MariaDB 10.4.32, active on `127.0.0.1:3306`.
   Accepted as the local development substitute for the PRD's MySQL 8 LTS
   requirement per ADR 0007. `grc_enrollment` / `grc_enrollment_test` exist
-  with `utf8mb4`/`utf8mb4_unicode_ci`; `grc_app` (DML-only on the four domain
+  with `utf8mb4`/`utf8mb4_unicode_ci`; `grc_app` (DML-only on the domain
   tables), `grc_migrator` (full DDL+DML, used for `php artisan migrate
   --database=mariadb_migrator`), and `grc_test` (full DDL+DML on the test
-  database) all exist with least-privilege table-level grants.
+  database) all exist with least-privilege table-level grants, now including
+  `subjects`/`curricula`/`curriculum_subjects`/`subject_prerequisites` for all
+  three principals (table-level `GRANT`, not schema-wildcard — see the
+  MariaDB-instability memory; zero incidents across this session's 12
+  additional grant statements). `grc_app`'s DML grant on these four tables
+  was initially missed (only `grc_migrator`/`grc_test` were granted at
+  migration time) and had to be added after a live-server 500 surfaced it —
+  see Failure and Recovery Record.
 - Rollback status: verified — a full `migrate:rollback` then `migrate` cycle
-  passes in the automated test suite.
+  passes in the automated test suite for both migration sets.
 
 ## Predictive Analytics Status
 
@@ -439,6 +466,13 @@ order:
 | Backend routes | `php artisan route:list --json` | Passed: exactly health + 3 auth + 2 reference-data routes (6 total) | 2026-07-27 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding programs/academic-terms) | 2026-07-27 |
 | Live HTTP authorization proof | curl against a running `php artisan serve` on 127.0.0.1:8000, seeded dev database | Passed: `student.seed@grc.test` received 2 programs (both `active`) and 2 terms (no `planning`); `chair.seed@grc.test` received all 3 programs (including `inactive`) and all 3 terms (including `planning`) from the identical URL; `Cache-Control: no-store, private` confirmed; a request with no bearer token returned 401 `UNAUTHENTICATED` both with and without an `Accept: application/json` header | 2026-07-27 |
+| Backend format | `composer format:check` | Passed | 2026-07-27 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 0 errors | 2026-07-27 |
+| Backend tests | `composer test` | Passed: 162 tests, 451 assertions | 2026-07-27 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly 10 routes (health + 3 auth + 2 reference-data + 4 curriculum-catalog) | 2026-07-27 |
+| Migration reversibility (curriculum catalog) | `migrate:rollback` then `migrate` | Passed: all 4 new tables drop/recreate cleanly, FK-dependency order respected | 2026-07-27 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding subjects/curricula) | 2026-07-27 |
+| Live HTTP proof (curriculum catalog) | curl against a running `php artisan serve` on 127.0.0.1:8000, dev database | Passed, after fixing the `grc_app` grant gap below: Program Chair created a curriculum with a valid prerequisite (201); the same role's attempt at a direct two-subject cycle was rejected (422 `VALIDATION_FAILED`, exact PRD wording "cannot create a prerequisite cycle"); a Student's identical `POST` was rejected (403 `FORBIDDEN`) while their `GET` still succeeded and correctly omitted the still-`draft` curriculum; `PATCH` fully replaced the subject list and, once `status` became `active`, the Student's next `GET` did include it | 2026-07-27 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -467,6 +501,10 @@ successfully.
 | 2026-07-27 | Ship the `role` middleware in this slice even though no production route consumes it yet. | Both new endpoints are readable by all nine roles; the middleware's first real consumer is the curriculum-catalog sub-project. Built and tested now so that slice inherits a proven mechanism rather than building it under time pressure later. |
 | 2026-07-27 | Introduce provisional `ProgramStatus` (`active`/`inactive`) and `AcademicTermStatus` (`planning`/`active`/`closed`) enums with an `isVisibleToLearners()` predicate. | PRD §17 leaves the real vocabularies unconfirmed; these exist only so learner-scoped vs. planning roles can be proven to receive different results. Same provisional-value discipline as `SANCTUM_TOKEN_EXPIRATION`. Columns stay `VARCHAR`, so the real vocabulary lands as a data migration, not a schema change. |
 | 2026-07-27 | Override Laravel's default `redirectGuestsTo` with `fn () => null` for every guard, application-wide. | Found while live-verifying this slice: any `auth:sanctum` route crashed with a 500 `RouteNotFoundException` for a caller that omits `Accept: application/json`, because `ApplicationBuilder` always points guests at a `login` named route this JSON-only API doesn't have. Affected every pre-existing guarded route, not just this slice's two new ones. |
+| 2026-07-27 | Manage `curriculum_subjects`/`subject_prerequisites` only as a nested array inside `POST`/`PATCH /curricula`, not as separate endpoints. | PRD §8.4 lists no standalone routes for either table; treating a curriculum as one aggregate root matches the literal endpoint list instead of inventing new routes. See ADR 0009. |
+| 2026-07-27 | `POST`/`PATCH /curricula` fully replace a curriculum's subject placements and prerequisites rather than diffing incrementally. | PRD does not specify partial-update semantics for this resource; a full replace is simpler to test and avoids undefined behavior when a placement is omitted from a partial payload. See ADR 0009. |
+| 2026-07-27 | Restrict `POST`/`PATCH /curricula` to the Program Chair role via the `role` middleware (first production consumer) plus `CurriculumPolicy`. | Matches the frontend's existing "Curriculum"/"Subjects & Prerequisites" module ownership in `role-capabilities.ts` — not a new policy invented for this slice. |
+| 2026-07-27 | Introduce provisional `SubjectStatus` (`active`/`inactive`) and `CurriculumStatus` (`draft`/`active`/`archived`) enums, and use foreign keys with explicit delete behavior (`restrictOnDelete`/`cascadeOnDelete`) for the first time in this codebase. | Same PRD §17 provisional-value discipline as `ProgramStatus`/`AcademicTermStatus`; PRD §10.6 requires foreign keys with explicit delete behavior, which the identity-foundation slice deferred. See ADR 0009. |
 
 ## Blockers and Clarifications Needed
 
@@ -506,6 +544,12 @@ successfully.
   something concrete to filter on, not an approved institutional value. The
   `programs.status`/`academic_terms.status` columns stay `VARCHAR` so the real
   vocabulary lands as a data migration, not a schema change, once confirmed.
+- Added 2026-07-27 (curriculum catalog): `App\Domain\Curriculum\SubjectStatus`
+  (`active`/`inactive`) and `CurriculumStatus`
+  (`draft`/`active`/`archived`) are provisional for the same reason. Also,
+  `subject_prerequisites.minimum_grade` is stored as an opaque `VARCHAR` and
+  never validated against a grading scale, since the official passing-grade
+  rule (PRD §17) is unconfirmed.
 
 ### Visual verification
 
@@ -658,6 +702,21 @@ successfully.
   confirmed by temporarily reverting the fix and re-running the new
   regression test, which failed with the identical error, then passed once
   restored.
+- The curriculum-catalog live HTTP proof hit a real gap the automated test
+  suite could not have caught: `GET /api/v1/subjects` returned a 500 against
+  the live dev server (`grc_app` connection) even though every automated
+  feature test passed (those run against `grc_test` via `.env.testing`).
+  `storage/logs/laravel.log` showed `SQLSTATE[42000] ... SELECT command
+  denied to user 'grc_app'@'localhost' for table
+  grc_enrollment.subjects`. Root cause: Task 1 granted `CREATE`+DDL+DML on
+  the four new tables to `grc_migrator` and `grc_test` (needed to run and
+  test the migrations) but never came back to grant `grc_app` — the
+  connection Laravel's own runtime queries actually use — its DML-only
+  grant, unlike the identity-foundation slice, which granted `grc_app` right
+  after its migrations. Health-checked `mysql.db`/`global_priv`/
+  `tables_priv` clean, then granted `SELECT, INSERT, UPDATE, DELETE` to
+  `grc_app` on all four tables (table-level, per the MariaDB-instability
+  memory); server survived, endpoint immediately returned `200`.
 
 ## Files Changed in the Current Session
 
@@ -689,6 +748,13 @@ successfully.
   two new endpoints and Resources, two new seeders, a `bootstrap/app.php`
   fix for a pre-existing 500-instead-of-401 defect, ADR 0008, OpenAPI/data-
   dictionary/testing doc updates, and 40 new backend tests.
+- Curriculum catalog session (branch `feat/curriculum-catalog`): `Curriculum`
+  domain enums, `PrerequisiteCycleDetector`, `Subject`/`Curriculum`/
+  `CurriculumSubject`/`SubjectPrerequisite` models (first FKs in this
+  codebase), `SubjectPolicy`/`CurriculumPolicy`, four new endpoints and
+  Resources, `StoreCurriculumRequest`/`UpdateCurriculumRequest`,
+  `SynchronizeCurriculumSubjects` action, ADR 0009, OpenAPI/data-dictionary
+  updates, and 52 new backend tests.
 
 ## Session Handoff Log
 
@@ -1480,3 +1546,58 @@ curriculum catalog, faculty input, section planning, approval workflow,
 demand forecast, and audit logging (the remaining five Process 1.0
 sub-projects); every frontend change; CI. No commit, push, or merge was
 made — `AGENTS.md` requires explicit authorization, not yet given.
+
+### 2026-07-27 21:15 +08:00
+
+**Goal:** Implement the next PRD §5.1 sub-project — the curriculum catalog
+(FR-SCH-001, FR-SCH-002) — and update the checklist after.
+**Completed (branch `feat/curriculum-catalog` off `main`, worked in place):**
+- Four migrations (`subjects`, `curricula`, `curriculum_subjects`,
+  `subject_prerequisites`) — the first in this codebase to use foreign keys,
+  with explicit `restrictOnDelete()`/`cascadeOnDelete()` per PRD §10.6.
+  Required granting `grc_migrator`/`grc_test` table-level `CREATE`+DDL+DML on
+  all 4 new tables first (health-checked `mysql.db` et al. before granting,
+  per the MariaDB-instability memory; zero incidents).
+- `App\Domain\Curriculum\SubjectStatus`/`CurriculumStatus` — provisional
+  enums, same discipline as ADR 0008.
+- `App\Domain\Curriculum\PrerequisiteCycleDetector` — a pure DFS cycle check
+  over `{subject_id, prerequisite_subject_id}` edges, independent of
+  Eloquent/persistence, covered by 8 unit tests (self-loop, direct, and
+  transitive cycles; linear chains, shared prerequisites, and diamond graphs
+  all correctly pass as non-cyclic).
+- `Subject`/`Curriculum`/`CurriculumSubject`/`SubjectPrerequisite` models,
+  `SubjectPolicy`/`CurriculumPolicy` (the latter adds `create`/`update`
+  restricted to `program_chair`), and `GET /api/v1/subjects`,
+  `GET/POST /api/v1/curricula`, `PATCH /api/v1/curricula/{curriculum}`.
+- `POST`/`PATCH /curricula` are the **first production route** gated by the
+  `role` middleware built (but unused) in the previous slice — restricted to
+  `program_chair`, matching the frontend's existing module ownership.
+- Full-replace write semantics: `StoreCurriculumRequest`/
+  `UpdateCurriculumRequest` validate a nested `subjects` array and run the
+  cycle detector in `withValidator()`; `SynchronizeCurriculumSubjects`
+  deletes and recreates a curriculum's placements/prerequisites in one
+  transaction. See ADR 0009 for why (PRD §8.4 lists no separate endpoints for
+  the two child tables).
+- Docs: ADR 0009, `docs/data-dictionary/curriculum-catalog.md`, 2 new OpenAPI
+  paths + a `Forbidden` response + 10 new schemas (Redocly clean), this file.
+**Bug caught by Larastan, not by tests:** `CurriculumResource`'s nested
+array-shape docblocks declared `list<...>` but `Collection::map()->all()`
+doesn't guarantee a list to PHPStan even when keys are sequential. Fixed with
+`array_values(...)`, which has an explicit "always returns a list" stub —
+`Collection::values()->all()` alone did not satisfy Larastan.
+**Verification:** `composer test` 162/162 (451 assertions, up from 110/325),
+including the PRD's own acceptance criterion verbatim ("A Program Chair
+cannot create a prerequisite cycle") for both a direct and a transitive
+cycle; `format:check`; `analyse` (Larastan level 8, 0 errors); `route:list`
+exactly 10 routes; migration rollback/reapply clean; Redocly OpenAPI lint
+clean; and a **live HTTP proof** that the automated suite alone could not
+have caught (see Failure and Recovery Record for the `grc_app` grant gap it
+surfaced): as `chair.seed@grc.test`, created a curriculum with a valid
+prerequisite (201), then had a direct two-subject cycle rejected (422, exact
+PRD wording); as `student.seed@grc.test`, the same `POST` was rejected (403)
+while `GET` succeeded and correctly hid the still-`draft` curriculum, then
+correctly showed it once a `PATCH` (full subject-list replace) set its
+status to `active`.
+**Not done, out of scope for this sub-project:** faculty input, section
+planning, approval workflow, demand forecast, and audit logging (the
+remaining four Process 1.0 sub-projects); every frontend change; CI.

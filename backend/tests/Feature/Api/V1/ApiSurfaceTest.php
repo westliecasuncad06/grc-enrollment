@@ -21,10 +21,14 @@ final class ApiSurfaceTest extends TestCase
         $this->assertSame([
             'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/auth/me',
+            'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/programs',
+            'GET|HEAD api/v1/subjects',
+            'PATCH api/v1/curricula/{curriculum}',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
+            'POST api/v1/curricula',
         ], $routes);
     }
 
@@ -35,6 +39,10 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.auth.me',
             'api.v1.programs',
             'api.v1.academic-terms',
+            'api.v1.subjects',
+            'api.v1.curricula.index',
+            'api.v1.curricula.store',
+            'api.v1.curricula.update',
         ];
 
         foreach ($guarded as $name) {
@@ -43,6 +51,22 @@ final class ApiSurfaceTest extends TestCase
             $this->assertNotNull($route, "Missing route {$name}.");
             $this->assertContains('auth:sanctum', $route->gatherMiddleware());
         }
+    }
+
+    public function test_curriculum_writes_are_gated_to_the_program_chair_role(): void
+    {
+        $gated = ['api.v1.curricula.store', 'api.v1.curricula.update'];
+
+        foreach ($gated as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:program_chair', $route->gatherMiddleware());
+        }
+
+        $readRoute = Route::getRoutes()->getByName('api.v1.curricula.index');
+        $this->assertNotNull($readRoute);
+        $this->assertNotContains('role:program_chair', $readRoute->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void
