@@ -30,4 +30,12 @@ final class SectionStatusTest extends TestCase
         self::assertFalse(SectionStatus::Closed->acceptsEnrollment());
         self::assertFalse(SectionStatus::Cancelled->acceptsEnrollment());
     }
+
+    public function test_only_published_and_closed_are_visible_to_learners(): void
+    {
+        self::assertFalse(SectionStatus::Planned->isVisibleToLearners());
+        self::assertTrue(SectionStatus::Published->isVisibleToLearners());
+        self::assertTrue(SectionStatus::Closed->isVisibleToLearners());
+        self::assertFalse(SectionStatus::Cancelled->isVisibleToLearners());
+    }
 }

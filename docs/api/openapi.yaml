@@ -39,6 +39,13 @@ tags:
       member may read and write only their own rows (`role:faculty` at the
       route, re-checked by Policy); every other role reads every professor's
       rows, since planning a schedule needs the full picture.
+  - name: Section Planning
+    description: >
+      Sections (FR-SCH-004) with professor double-booking conflict detection
+      (FR-SCH-005, see ADR 0010). Reads follow the same role-differentiated
+      visibility as Curriculum; writes are restricted to the Program Chair
+      role. Status vocabulary is provisional pending PRD §17 approval;
+      `viability_threshold` is informational only.
 paths:
   /api/v1/health:
     get:
@@ -759,6 +766,144 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/sections:
+    get:
+      operationId: getSections
+      summary: List sections visible to the authenticated role
+      description: >
+        Learner-scoped roles receive only `published`/`closed` sections;
+        every other role receives every section regardless of status.
+        Ordered by term, then subject, then section code.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The sections visible to the authenticated role.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postSection
+      summary: Create a section
+      description: >
+        Program Chair only. Rejected (FR-SCH-005, ADR 0010) if the assigned
+        professor would be double-booked against another section in the same
+        term with an overlapping day and time.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreSectionRequest"
+      responses:
+        "201":
+          description: The section was created.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            The submitted data is invalid, the section code is already used
+            for this subject and term, or the assigned professor would be
+            double-booked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/sections/{section}:
+    patch:
+      operationId: patchSection
+      summary: Replace a section's fields
+      description: Program Chair only. Full replace, not a partial update.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: section
+          in: path
+          required: true
+          description: Section ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSectionRequest"
+      responses:
+        "200":
+          description: The section was updated.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No section exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the section code is already used
+            for this subject and term, or the assigned professor would be
+            double-booked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -1469,3 +1614,139 @@ components:
           minimum: 1
     UpdateFacultySubjectPreferenceRequest:
       $ref: "#/components/schemas/StoreFacultySubjectPreferenceRequest"
+    SectionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionResource"
+    SectionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/SectionResource"
+    SectionResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - academic_term_id
+        - subject_id
+        - section_code
+        - professor_id
+        - schedule_days
+        - starts_at_time
+        - ends_at_time
+        - room
+        - capacity
+        - viability_threshold
+        - enrolled_count
+        - remaining_seats
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: section
+        id:
+          type: integer
+        academic_term_id:
+          type: integer
+        subject_id:
+          type: integer
+        section_code:
+          type: string
+        professor_id:
+          type: ["integer", "null"]
+        schedule_days:
+          type: ["string", "null"]
+          description: >
+            Shorthand such as "MWF" or "TTh" — see
+            App\Domain\Scheduling\ScheduleDayParser.
+        starts_at_time:
+          type: ["string", "null"]
+          format: time
+        ends_at_time:
+          type: ["string", "null"]
+          format: time
+        room:
+          type: ["string", "null"]
+        capacity:
+          type: integer
+        viability_threshold:
+          type: ["integer", "null"]
+          description: >
+            Informational only — PRD §17 leaves the actual threshold value
+            unconfirmed.
+        enrolled_count:
+          type: integer
+          description: Maintained counter, not writable via this API.
+        remaining_seats:
+          type: integer
+          description: capacity minus enrolled_count, floored at zero. Display only.
+        status:
+          type: string
+          description: >
+            PROVISIONAL vocabulary pending PRD §17 approval — see
+            App\Domain\Scheduling\SectionStatus.
+          enum:
+            - planned
+            - published
+            - closed
+            - cancelled
+        status_label:
+          type: string
+    StoreSectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - academic_term_id
+        - subject_id
+        - section_code
+        - capacity
+        - status
+      properties:
+        academic_term_id:
+          type: integer
+        subject_id:
+          type: integer
+        section_code:
+          type: string
+          maxLength: 255
+        professor_id:
+          type: ["integer", "null"]
+        schedule_days:
+          type: ["string", "null"]
+          maxLength: 255
+        starts_at_time:
+          type: ["string", "null"]
+          format: time
+        ends_at_time:
+          type: ["string", "null"]
+          format: time
+        room:
+          type: ["string", "null"]
+          maxLength: 255
+        capacity:
+          type: integer
+          minimum: 1
+        viability_threshold:
+          type: ["integer", "null"]
+          minimum: 1
+        status:
+          type: string
+          enum:
+            - planned
+            - published
+            - closed
+            - cancelled
+    UpdateSectionRequest:
+      $ref: "#/components/schemas/StoreSectionRequest"

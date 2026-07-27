@@ -37,4 +37,17 @@ enum SectionStatus: string
     {
         return $this === self::Published;
     }
+
+    /**
+     * A section is exposed to students/professors once published (PRD
+     * §5.1); closed sections stay visible as term history, matching
+     * AcademicTermStatus's treatment of `closed`.
+     */
+    public function isVisibleToLearners(): bool
+    {
+        return match ($this) {
+            self::Published, self::Closed => true,
+            self::Planned, self::Cancelled => false,
+        };
+    }
 }

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\ProgramController;
+use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +41,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/curricula', [CurriculumController::class, 'index'])->name('curricula.index');
         Route::get('/faculty-availabilities', [FacultyAvailabilityController::class, 'index'])->name('faculty-availabilities.index');
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
+        Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's
@@ -48,6 +50,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::middleware('role:program_chair')->group(function (): void {
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
+
+            // Sections are the chair's schedule plan, same ownership as
+            // curriculum authorship.
+            Route::post('/sections', [SectionController::class, 'store'])->name('sections.store');
+            Route::patch('/sections/{section}', [SectionController::class, 'update'])->name('sections.update');
         });
 
         // A Faculty member writes only their own availability/preferences —

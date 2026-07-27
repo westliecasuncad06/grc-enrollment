@@ -264,8 +264,9 @@ order:
     (FR-SCH-003) — own-record authorization (`role:faculty` +
     `FacultyAvailabilityPolicy`/`FacultySubjectPreferencePolicy`), not the
     status-based visibility every prior slice used.
-  - [ ] Section planning: capacity, viability threshold, conflict detection
-    (FR-SCH-004, FR-SCH-005) — needs the §17 viability threshold confirmed.
+  - [x] Section planning: capacity, viability threshold (informational only,
+    pending §17), professor-double-booking conflict detection (FR-SCH-004,
+    FR-SCH-005; see ADR 0010).
   - [ ] Approval workflow: `schedule_proposals`, the five-state lifecycle,
     return reasons, publication (FR-SCH-007 through FR-SCH-009).
   - [ ] Demand forecast display (FR-SCH-006) — blocked until Process 4.0
@@ -304,14 +305,16 @@ order:
   `PATCH/DELETE /api/v1/faculty-availabilities/{facultyAvailability}`, same
   shape for `faculty-subject-preferences` (`role:faculty` + own-record
   Policy — a professor may write only their own rows; every other role
-  reads everyone's).
+  reads everyone's); `GET/POST /api/v1/sections` and
+  `PATCH /api/v1/sections/{section}` (`role:program_chair` + `SectionPolicy`,
+  rejects professor double-booking — see ADR 0010).
 - Route middleware: API group, health/login/reference-data throttles, Sanctum
   bearer auth, and the `role` alias (`EnsureUserHasRole`) — consumed by
-  `POST`/`PATCH /curricula` (`program_chair`) and now the four faculty-input
-  write routes (`faculty`).
+  `POST`/`PATCH /curricula` and now `sections` (`program_chair`), and the
+  four faculty-input write routes (`faculty`).
 - Pending endpoints: every remaining business endpoint group in PRD §8.4
-  (sections, schedule proposals, enrollment, payment queue, grades,
-  analytics, notifications, audit logs).
+  (schedule proposals, enrollment, payment queue, grades, analytics,
+  notifications, audit logs).
 - Form Requests: `LoginRequest` (validates, normalizes email, owns the
   per-account+IP throttle key); `StoreCurriculumRequest`/
   `UpdateCurriculumRequest` (validate nested subject/prerequisite arrays,
@@ -319,26 +322,32 @@ order:
   `Store`/`UpdateFacultyAvailabilityRequest` and
   `Store`/`UpdateFacultySubjectPreferenceRequest` (composite uniqueness
   enforced via `Rule::unique()->where()->ignore()`, scoped to the
-  authenticated professor and submitted term).
+  authenticated professor and submitted term); `Store`/`UpdateSectionRequest`
+  (composite unique `section_code`, plus `SectionConflictDetector` in
+  `withValidator()`).
 - Policies: `ProgramPolicy`, `AcademicTermPolicy`, `SubjectPolicy` —
-  `viewAny`/`view` only, readable by every role; `CurriculumPolicy` adds
-  `create`/`update` restricted to `program_chair`. Row filtering lives in
-  query scopes, not the Policy (see ADR 0008). `App\Http\Controllers\Controller`
-  now `use AuthorizesRequests` again (Laravel 12 dropped it from the base
-  controller; `$this->authorize()` did not work until this slice).
-  `FacultyAvailabilityPolicy`/`FacultySubjectPreferencePolicy` add a new
-  shape: `update`/`delete` require role **and** row ownership
-  (`professor_id === $user->id`), not role alone.
+  `viewAny`/`view` only, readable by every role; `CurriculumPolicy`/
+  `SectionPolicy` add `create`/`update` restricted to `program_chair`. Row
+  filtering lives in query scopes, not the Policy (see ADR 0008).
+  `App\Http\Controllers\Controller` now `use AuthorizesRequests` again
+  (Laravel 12 dropped it from the base controller; `$this->authorize()` did
+  not work until this slice). `FacultyAvailabilityPolicy`/
+  `FacultySubjectPreferencePolicy` add a new shape: `update`/`delete` require
+  role **and** row ownership (`professor_id === $user->id`), not role alone.
 - API Resources: `HealthResource`, `AuthResource`, `UserResource`,
   `ProgramResource`, `AcademicTermResource`, `SubjectResource`,
   `CurriculumResource` (nested subject placements and prerequisites),
-  `FacultyAvailabilityResource`, `FacultySubjectPreferenceResource`.
+  `FacultyAvailabilityResource`, `FacultySubjectPreferenceResource`,
+  `SectionResource` (includes a `remaining_seats` display-only convenience).
 - Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
   non-active accounts, issues token, stamps `last_login_at`, all in one
   transaction); `App\Actions\Curriculum\SynchronizeCurriculumSubjects`
   (full-replace write, one `DB::transaction`);
   `App\Domain\Curriculum\PrerequisiteCycleDetector` (pure DFS cycle check,
-  no persistence dependency).
+  no persistence dependency); `App\Domain\Scheduling\ScheduleDayParser`
+  (parses `"MWF"`/`"TTh"`-style shorthand into ISO-8601 day-of-week integers)
+  and `SectionConflictDetector` (same pure, persistence-free shape as the
+  cycle detector — see ADR 0010).
 - Transactions and idempotency: `AuthenticateUser` wraps token issuance and
   the login timestamp update in one `DB::transaction`;
   `SynchronizeCurriculumSubjects` wraps the delete-and-recreate of a
@@ -535,6 +544,12 @@ order:
 | Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
 | Backend routes | `php artisan route:list --json` | Passed: exactly 18 routes (10 prior + 8 faculty-input) | 2026-07-28 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding faculty-availabilities/faculty-subject-preferences; also fixed a pre-existing edit slip that had split `minimum_grade`'s `maxLength` from its `type`) | 2026-07-28 |
+| Backend format | `composer format:check` | Passed | 2026-07-28 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 123 files, 0 errors (after fixing 4 errors — see Failure and Recovery Record) | 2026-07-28 |
+| Backend tests | `composer test` | Passed: 312 tests, 832 assertions (up from 278/752) | 2026-07-28 |
+| Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly 21 routes (18 prior + 3 section-planning) | 2026-07-28 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding sections) | 2026-07-28 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -574,6 +589,9 @@ successfully.
 | 2026-07-28 | Omit `FLUSH PRIVILEGES` from this session's `GRANT` batches. | `GRANT` takes effect immediately in MySQL/MariaDB; `FLUSH PRIVILEGES` is unnecessary here and was part of the command sequence in one of the two prior `VCRUNTIME140.dll` crash incidents. |
 | 2026-07-28 | Give `FacultyAvailability`/`FacultySubjectPreference` an own-record `scopeVisibleTo()` (`professor_id === $user->id` for learner-scoped roles) instead of the status-based visibility every prior model used. | Neither table has a status column; the real visibility question is "whose row is this," not "is this row published." Reuses `UserRole::isLearnerScoped()` as the role split rather than inventing a parallel predicate. |
 | 2026-07-28 | Enforce the two `faculty_subject_preferences` composite-uniqueness rules via `Rule::unique()->where()->ignore()` in the Form Request, not a custom `withValidator()` graph check. | The underlying rule is a plain uniqueness check, not graph logic like the prerequisite cycle detector; Laravel's built-in composite-unique rule reaches the same outcome (clean 422, not a raw SQL error) with less code. |
+| 2026-07-28 | Scope `SectionConflictDetector` (FR-SCH-005) to same-professor double-booking only — no room conflicts, no faculty-availability matching. | Neither the found schema nor its seed data evidences either as a hard rule (`room` is an unconstrained free string; nothing links `sections` to `faculty_availabilities`). Inventing either would repeat the §17 mistake of encoding an unconfirmed policy as settled. See ADR 0010. |
+| 2026-07-28 | Parse `sections.schedule_days` shorthand (`"MWF"`, `"TTh"`, `"Sat"`) into ISO-8601 day-of-week integers via a new `ScheduleDayParser`, rather than comparing the raw strings. | The shorthand is `SectionSeeder`'s own convention, not a PRD vocabulary; parsing it precisely (longest-token-first, so `Th`/`Sat`/`Sun` aren't swallowed by single-letter checks) is what makes day-overlap checking possible at all, and produces the same numbering `FacultyAvailability.day_of_week` already uses. See ADR 0010. |
+| 2026-07-28 | Restrict section writes to `role:program_chair`, matching curriculum authorship. | Sections are the chair's schedule plan — same reasoning as ADR 0009's curriculum-write restriction. *(Assumption, not literal PRD text — flagged in the approved plan for review.)* |
 
 ## Blockers and Clarifications Needed
 
@@ -783,6 +801,34 @@ successfully.
   automated test suite's full HTTP-level coverage (real Sanctum tokens
   through `postJson`/`patchJson`/`deleteJson` against the real named routes)
   instead of further manual `curl` verification for this slice.
+- A new `SectionPolicyTest` test called its own `makeUser(UserRole::ProgramChair)`
+  helper twice in one test method; the helper derives each user's email from
+  the role alone (`$role->value.'@grc.test'`), so the second call hit
+  `users_email_unique`. Fixed by creating the Program Chair once and reusing
+  it for both the `create()` and `update()` assertions — the two calls never
+  needed distinct users in the first place.
+- `SectionConflictDetector`/`ScheduleDayParser` and the two Section Form
+  Requests hit the same two Larastan patterns already seen this session:
+  (1) a nullable array-shape field (`schedule_days: ?string`) passed to a
+  `string`-typed parameter after a null-check in a *different* method —
+  PHPStan doesn't carry flow-sensitive narrowing across a method-call
+  boundary, fixed by making `ScheduleDayParser::parse()` itself accept
+  `?string` and return `[]` for `null`; (2) the same `Collection::map()->all()`
+  vs `list<...>` gap the curriculum-catalog slice hit, fixed the same way
+  (`array_values(...)` wrapping the whole chain).
+- Mid-way through this task's first full test run, `mysqld.exe` stopped
+  entirely (confirmed via `tasklist` and `netstat` — no process, nothing on
+  port 3306) with **no** crash logged in the Windows Event Log, so this was a
+  clean stop by something else, not a third `VCRUNTIME140.dll` incident. The
+  symptom was misleading: `composer test` ran for 300+ seconds (versus its
+  usual ~20–25s) before Composer's own process-timeout killed it, and the
+  piped `| tail` made the reported exit code 0 regardless — the real failure
+  was buried in a wall of unrelated `LoginEndpointTest` failures partway
+  through the run. Paused and asked rather than starting the service myself,
+  given this instance's crash history and every prior restart in this
+  project having gone through the user via the XAMPP Control Panel; user
+  confirmed they had started it, and a clean rerun completed normally in
+  ~23s with everything green.
 - `ProgramResource`/`AcademicTermResource` initially defined `withResponse()`
   to set `Cache-Control: no-store, private`, following `UserResource`'s
   pattern exactly — but the header assertion in both new endpoint tests failed
@@ -887,6 +933,16 @@ successfully.
   first `DELETE` endpoints in this API), 8 new routes gated `role:faculty`
   for writes, `docs/data-dictionary/faculty-input.md`, OpenAPI updates
   (1 new tag, 8 new paths, 10 new schemas), and 30 new backend tests.
+- Section planning session (branch `feat/section-planning`):
+  `App\Domain\Scheduling\ScheduleDayParser` (parses `schedule_days`
+  shorthand into ISO-8601 day integers) and `SectionConflictDetector` (pure,
+  persistence-free professor double-booking check — ADR 0010),
+  `SectionStatus::isVisibleToLearners()`, `Section::scopeVisibleTo()`,
+  `SectionPolicy`, `Store`/`UpdateSectionRequest`, `SectionResource`,
+  `SectionController` (index/store/update), 3 new routes gated
+  `role:program_chair` for writes, `docs/data-dictionary/section-planning.md`,
+  OpenAPI updates (1 new tag, 2 new paths, 4 new schemas), and 34 new backend
+  tests.
 
 ## Session Handoff Log
 
@@ -1840,3 +1896,48 @@ manual `curl` session for this slice.
 workflow (the next two branches); the enrollment-records domain's API layer
 (deliberately out of scope per the schema-foundation task's decision); every
 frontend change; CI.
+
+### 2026-07-28 05:03 +08:00 — Task 3: Section Planning API (FR-SCH-004, FR-SCH-005)
+
+**Goal:** Third of the three remaining PRD §5.1 sub-projects from the
+approved plan.
+**Completed (branch `feat/section-planning` off `main`, worked in place):**
+- `App\Domain\Scheduling\ScheduleDayParser` — parses the `schedule_days`
+  shorthand already seeded (`"MWF"`, `"TTh"`, `"Sat"`) into ISO-8601
+  day-of-week integers, greedy and longest-token-first so `Th`/`Sat`/`Sun`
+  aren't swallowed by single-letter checks; stops at the first unrecognized
+  character rather than guessing.
+- `App\Domain\Scheduling\SectionConflictDetector` — same pure,
+  persistence-free shape as `PrerequisiteCycleDetector`. Flags a conflict
+  only for same-professor, same-term, shared-day, overlapping-time
+  double-booking (half-open interval check, so back-to-back slots don't
+  conflict). Deliberately does **not** check room conflicts or
+  faculty-availability matching — see ADR 0010 for why.
+- `SectionStatus::isVisibleToLearners()` and `Section::scopeVisibleTo()`,
+  matching the `Curriculum`/`Subject` pattern exactly.
+- `SectionPolicy`, `Store`/`UpdateSectionRequest` (composite-unique
+  `section_code` via `Rule::unique()->where()`, conflict check in
+  `withValidator()`), `SectionResource` (includes a display-only
+  `remaining_seats`), `SectionController` (index/store/update — no delete,
+  matching curriculum's shape). 3 new routes, writes gated
+  `role:program_chair`.
+- Docs: ADR 0010, `docs/data-dictionary/section-planning.md`; OpenAPI gained
+  1 tag, 2 paths, 4 schemas.
+**Caught before completion, not after:**
+- Larastan found 4 errors on the first run — a nullable-field-narrowing gap
+  and a recurrence of the `Collection::map()->all()` vs `list<...>` issue
+  from the curriculum-catalog slice. Both fixed using the same patterns
+  already established. See Failure and Recovery Record.
+- A `SectionPolicyTest` test tripped a duplicate-email unique-constraint
+  violation from calling its own test helper twice with the same role.
+  Fixed by reusing one user instance.
+- Mid-way through the first full test run, MariaDB stopped entirely with no
+  crash logged — paused and asked the user rather than restarting it myself,
+  given the crash history; user confirmed they'd started it, rerun was
+  clean. See Failure and Recovery Record for the full timeline.
+**Verification:** `composer test` 312/312 (832 assertions, up from
+278/752), `format:check`, `analyse` (Larastan level 8, 123 files, 0 errors),
+`audit` clean, `route:list` exactly 21 routes, OpenAPI lint clean.
+**Not done, out of scope for this sub-project:** approval workflow (the
+final branch); the enrollment-records domain's API layer; every frontend
+change; CI.

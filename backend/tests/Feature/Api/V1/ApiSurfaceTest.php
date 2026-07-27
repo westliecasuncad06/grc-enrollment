@@ -28,15 +28,18 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/programs',
+            'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/subjects',
             'PATCH api/v1/curricula/{curriculum}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
+            'PATCH api/v1/sections/{section}',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
             'POST api/v1/faculty-availabilities',
             'POST api/v1/faculty-subject-preferences',
+            'POST api/v1/sections',
         ], $routes);
     }
 
@@ -59,6 +62,9 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.faculty-subject-preferences.store',
             'api.v1.faculty-subject-preferences.update',
             'api.v1.faculty-subject-preferences.destroy',
+            'api.v1.sections.index',
+            'api.v1.sections.store',
+            'api.v1.sections.update',
         ];
 
         foreach ($guarded as $name) {
@@ -106,6 +112,22 @@ final class ApiSurfaceTest extends TestCase
         $readRoute = Route::getRoutes()->getByName('api.v1.faculty-availabilities.index');
         $this->assertNotNull($readRoute);
         $this->assertNotContains('role:faculty', $readRoute->gatherMiddleware());
+    }
+
+    public function test_section_writes_are_gated_to_the_program_chair_role(): void
+    {
+        $gated = ['api.v1.sections.store', 'api.v1.sections.update'];
+
+        foreach ($gated as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:program_chair', $route->gatherMiddleware());
+        }
+
+        $readRoute = Route::getRoutes()->getByName('api.v1.sections.index');
+        $this->assertNotNull($readRoute);
+        $this->assertNotContains('role:program_chair', $readRoute->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void
