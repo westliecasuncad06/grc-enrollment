@@ -250,10 +250,13 @@ order:
     ADR 0007, not the PRD's MySQL 8 LTS — a documented local-development
     deviation).
   - [x] Deterministic role seeders.
-  - [ ] CI quality checks — `.github/workflows/ci.yml` added (backend/
-    frontend/ml-service/docs jobs, see ADR 0012); **not yet checked off**
-    pending a real green run on GitHub Actions after pushing (a workflow
-    file cannot be verified by reading it alone).
+  - [ ] CI quality checks — `.github/workflows/ci.yml` pushed to `main` and
+    ran on GitHub Actions (run `30308242547`): `backend`, `frontend`, and
+    `docs` jobs passed; `ml-service` failed (unpinned transitive
+    dependencies via `requirements-dev.txt` — see Failure and Recovery
+    Record). Fix pushed on `fix/ci-ml-service-lockfile`, installing from
+    `requirements.lock` instead. **Not checked off** until a full green run
+    confirms it.
 - [x] Authentication (Sanctum bearer-token login/logout/me; RBAC authorization
   policies beyond role-filtered frontend navigation remain unstarted)
 - [ ] Pre-enrollment schedules (PRD §5.1, decomposed into sub-projects)
@@ -630,6 +633,7 @@ successfully.
 | 2026-07-28 | Run CI against MariaDB (not MySQL) with a single root-equivalent database user, not the local machine's `grc_app`/`grc_migrator`/`grc_test` least-privilege split. | Matches ADR 0007's local engine choice (all 335 tests were verified against MariaDB-specific behavior, not MySQL); the least-privilege split exists to protect one persistent, already-crashed local install, which has no equivalent in an ephemeral, destroyed-after-every-run CI container. See ADR 0012. |
 | 2026-07-28 | Commit a plain, non-secret CI database password directly in `.github/workflows/ci.yml` rather than a GitHub Actions secret. | It authenticates to nothing outside one ephemeral per-run container — not a credential in the sense `AGENTS.md`'s "never commit secrets/production credentials" is protecting against. See ADR 0012. |
 | 2026-07-28 | Leave GitHub branch protection / required status checks out of this change. | That's a repository setting, not a code change, and affects every future push — left for the user to enable manually once the workflow has run green at least once. |
+| 2026-07-28 | Install the ml-service CI job's dependencies from `requirements.lock`, not `requirements-dev.txt`. | The first real CI run failed only this job; `requirements.lock` is the complete, fully-pinned freeze of the actually-verified environment (confirmed installable and passing 6/6 in isolation), while `requirements-dev.txt` leaves every transitive dependency unpinned and subject to drift at whatever moment CI happens to run. |
 
 ## Blockers and Clarifications Needed
 
@@ -935,6 +939,25 @@ successfully.
   constraint — fixed by creating the term once and reusing its ID for both
   proposals (direct `ScheduleProposal::create()` calls don't enforce the
   one-active-proposal-per-term rule, so this was always safe to do).
+- The first real run of `.github/workflows/ci.yml` (GitHub Actions run
+  `30308242547`, triggered by pushing `main`) came back 3/4 green:
+  `backend`, `frontend`, and `docs` all passed; `ml-service` failed at the
+  `pytest` step, with everything before it (install, ruff, mypy) passing.
+  The identical suite (`pytest`, 6 tests) passed cleanly locally (Python
+  3.14.3 on Windows), ruling out a test/code defect. Couldn't fetch the raw
+  job log via the GitHub API to confirm the exact error (the logs endpoint
+  403s without authentication, and `gh` isn't installed locally); asked the
+  user to paste the failed step's output, but proceeded on the strongest
+  available evidence rather than wait indefinitely. **Root cause:** the
+  `ml-service` job installed from `requirements-dev.txt`, which pins only
+  the 5 direct runtime packages and 4 dev tools — every transitive
+  dependency (numpy, scipy, pydantic, starlette, etc.) resolves to whatever
+  is newest on PyPI at the moment CI runs, not what was verified.
+  `requirements.lock` (dated 2026-07-26) is a complete, fully-pinned freeze
+  of the actually-verified environment — confirmed by creating an isolated
+  venv and installing *only* from `requirements.lock`, which passed 6/6
+  cleanly. Fixed by switching the CI job to install from `requirements.lock`
+  instead of `requirements-dev.txt` (branch `fix/ci-ml-service-lockfile`).
 
 ## Files Changed in the Current Session
 
