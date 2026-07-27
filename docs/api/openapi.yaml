@@ -20,6 +20,12 @@ tags:
     description: >
       Sanctum bearer-token authentication. Session cookies, CSRF-cookie
       endpoints, and `withCredentials` are never used.
+  - name: Organization
+    description: >
+      Programs and academic terms. Readable by every role; the row set
+      returned differs for learner-scoped roles (student, faculty, accounting
+      staff) versus planning roles — see ADR 0008. Status vocabularies are
+      provisional pending PRD §17 approval.
 paths:
   /api/v1/health:
     get:
@@ -153,6 +159,71 @@ paths:
                 $ref: "#/components/schemas/UserResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/programs:
+    get:
+      operationId: getPrograms
+      summary: List programs visible to the authenticated role
+      description: >
+        Learner-scoped roles (student, faculty, accounting staff) receive
+        only learner-visible programs; every other role receives the full
+        catalog regardless of status. Ordered by code ascending.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The programs visible to the authenticated role.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/academic-terms:
+    get:
+      operationId: getAcademicTerms
+      summary: List academic terms visible to the authenticated role
+      description: >
+        Learner-scoped roles (student, faculty, accounting staff) do not
+        receive terms still in `planning`; every other role receives every
+        term regardless of status. Ordered by school year descending, then
+        semester.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The academic terms visible to the authenticated role.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicTermsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 components:
@@ -390,3 +461,100 @@ components:
         request_id:
           type: string
           pattern: "^[A-Za-z0-9._-]{1,128}$"
+    ProgramsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProgramResource"
+    ProgramResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - code
+        - name
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: program
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          description: >
+            PROVISIONAL vocabulary pending PRD §17 approval — see
+            App\Domain\Organization\ProgramStatus.
+          enum:
+            - active
+            - inactive
+        status_label:
+          type: string
+    AcademicTermsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcademicTermResource"
+    AcademicTermResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - school_year
+        - semester
+        - starts_at
+        - ends_at
+        - enrollment_opens_at
+        - enrollment_closes_at
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: academic-term
+        id:
+          type: integer
+        school_year:
+          type: string
+        semester:
+          type: string
+        starts_at:
+          type: ["string", "null"]
+          format: date-time
+        ends_at:
+          type: ["string", "null"]
+          format: date-time
+        enrollment_opens_at:
+          type: ["string", "null"]
+          format: date-time
+        enrollment_closes_at:
+          type: ["string", "null"]
+          format: date-time
+        status:
+          type: string
+          description: >
+            PROVISIONAL vocabulary pending PRD §17 approval — see
+            App\Domain\Organization\AcademicTermStatus.
+          enum:
+            - planning
+            - active
+            - closed
+        status_label:
+          type: string

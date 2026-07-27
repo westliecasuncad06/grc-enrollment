@@ -10,6 +10,8 @@ final class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleUserSeeder::class,
+            ProgramSeeder::class,
+            AcademicTermSeeder::class,
         ]);
     }
 }

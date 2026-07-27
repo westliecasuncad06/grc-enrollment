@@ -28,4 +28,23 @@ enum UserRole: string
             self::AccountingStaff => 'Accounting Staff',
         };
     }
+
+    /**
+     * Learner-scoped roles see only learner-visible organization records
+     * (e.g. active programs, non-planning terms). Every other role plans
+     * that data and sees the full catalog regardless of visibility status.
+     * See Program::scopeVisibleTo() and AcademicTerm::scopeVisibleTo().
+     */
+    public function isLearnerScoped(): bool
+    {
+        return match ($this) {
+            self::Student, self::Faculty, self::AccountingStaff => true,
+            self::AdmissionStaff,
+            self::ProgramChair,
+            self::Dean,
+            self::ExecutiveDirector,
+            self::RegistrarHead,
+            self::RegistrarStaff => false,
+        };
+    }
 }

@@ -30,7 +30,7 @@ No foreign keys in this slice. `student_profiles`, which would reference
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
 | `code` | `VARCHAR(255)` | not null, **unique** | |
 | `name` | `VARCHAR(255)` | not null | |
-| `status` | `VARCHAR(255)` | not null | Institutional program-status vocabulary is unconfirmed (PRD §17); no value is hardcoded and no program is seeded in this slice |
+| `status` | `VARCHAR(255)` | not null | Application-backed string. **Provisional** values `active`/`inactive` — see `App\Domain\Organization\ProgramStatus`; the institutional vocabulary itself remains unconfirmed (PRD §17) |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
 ## `academic_terms`
@@ -44,7 +44,7 @@ No foreign keys in this slice. `student_profiles`, which would reference
 | `ends_at` | `DATETIME` | nullable | |
 | `enrollment_opens_at` | `DATETIME` | nullable | |
 | `enrollment_closes_at` | `DATETIME` | nullable | |
-| `status` | `VARCHAR(255)` | not null | Institutional status vocabulary is unconfirmed; no term is seeded in this slice |
+| `status` | `VARCHAR(255)` | not null | Application-backed string. **Provisional** values `planning`/`active`/`closed` — see `App\Domain\Organization\AcademicTermStatus`; the institutional vocabulary itself remains unconfirmed (PRD §17) |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 |  |  | **unique** `(school_year, semester)` | |
 
@@ -81,10 +81,24 @@ local default — explicitly documented as not an approved value in that file,
 `.env.example`, and `docs/api/openapi.yaml`. Replace it with the approved
 value before any production-like deployment.
 
+## Authorization
+
+`GET /api/v1/programs` and `GET /api/v1/academic-terms` are readable by every
+role once authenticated. `ProgramPolicy`/`AcademicTermPolicy` govern the
+endpoint and single-record decision; each model's `scopeVisibleTo()` filters
+list results so learner-scoped roles (`student`, `faculty`,
+`accounting_staff` — see `App\Domain\Identity\UserRole::isLearnerScoped()`)
+receive only learner-visible rows, while the remaining six roles receive every
+row regardless of status. See ADR 0008 for the full rationale.
+
 ## Seeded data
 
 Exactly nine synthetic identities, one per role, are seeded by
 `backend/database/seeders/RoleUserSeeder.php` in `local`/`testing`
-environments only. See `docs/testing/SEEDED_IDENTITIES.md` for the full list
-and safety guarantees. No `programs` or `academic_terms` row is seeded in this
-slice.
+environments only. `backend/database/seeders/ProgramSeeder.php` and
+`AcademicTermSeeder.php` seed a small synthetic catalog in the same
+environments — three programs (one `inactive`) and three terms (one still
+`planning`), deliberately including a non-learner-visible row of each so the
+authorization difference is observable. None of this is the real GRC catalog.
+See `docs/testing/SEEDED_IDENTITIES.md` for the full list and safety
+guarantees.

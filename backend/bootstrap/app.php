@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\EnsureUserHasRole;
 use App\Support\Http\ApiExceptionRenderer;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,6 +15,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(AssignRequestId::class);
+        $middleware->alias(['role' => EnsureUserHasRole::class]);
+
+        // This is a JSON-only API with no `login` named route. Laravel's
+        // ApplicationBuilder unconditionally defaults unauthenticated guests
+        // to `redirectGuestsTo(fn () => route('login'))`; without this
+        // override, any request that omits `Accept: application/json` (i.e.
+        // does not satisfy Request::expectsJson()) crashes with a 500
+        // RouteNotFoundException instead of the documented 401.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(

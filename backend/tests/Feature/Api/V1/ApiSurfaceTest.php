@@ -7,7 +7,7 @@ use Tests\TestCase;
 
 final class ApiSurfaceTest extends TestCase
 {
-    public function test_the_api_exposes_only_the_health_and_auth_routes(): void
+    public function test_the_api_exposes_only_the_documented_routes(): void
     {
         $routes = collect(Route::getRoutes()->getRoutes())
             ->map(
@@ -19,16 +19,23 @@ final class ApiSurfaceTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/health',
+            'GET|HEAD api/v1/programs',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
         ], $routes);
     }
 
-    public function test_the_authenticated_auth_routes_are_guarded(): void
+    public function test_the_authenticated_routes_are_guarded(): void
     {
-        $guarded = ['api.v1.auth.logout', 'api.v1.auth.me'];
+        $guarded = [
+            'api.v1.auth.logout',
+            'api.v1.auth.me',
+            'api.v1.programs',
+            'api.v1.academic-terms',
+        ];
 
         foreach ($guarded as $name) {
             $route = Route::getRoutes()->getByName($name);

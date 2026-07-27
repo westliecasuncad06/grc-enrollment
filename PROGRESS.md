@@ -253,7 +253,22 @@ order:
   - [ ] CI quality checks.
 - [x] Authentication (Sanctum bearer-token login/logout/me; RBAC authorization
   policies beyond role-filtered frontend navigation remain unstarted)
-- [ ] Pre-enrollment schedules
+- [ ] Pre-enrollment schedules (PRD §5.1, decomposed into sub-projects)
+  - [x] Authorization foundation and reference data: `role` middleware,
+    `ProgramPolicy`/`AcademicTermPolicy`, `visibleTo` query scopes,
+    `GET /api/v1/programs` and `GET /api/v1/academic-terms` (see ADR 0008).
+  - [ ] Curriculum catalog: subjects, curricula, placements, prerequisite
+    cycle rejection (FR-SCH-001, FR-SCH-002).
+  - [ ] Faculty input: availability and ranked subject preferences
+    (FR-SCH-003).
+  - [ ] Section planning: capacity, viability threshold, conflict detection
+    (FR-SCH-004, FR-SCH-005) — needs the §17 viability threshold confirmed.
+  - [ ] Approval workflow: `schedule_proposals`, the five-state lifecycle,
+    return reasons, publication (FR-SCH-007 through FR-SCH-009).
+  - [ ] Demand forecast display (FR-SCH-006) — blocked until Process 4.0
+    (predictive analytics) exists.
+  - [ ] Audit logging (FR-SCH-010) — cross-cutting, deferred to the audit
+    slice rather than any single sub-project above.
 - [ ] Enrollment and digital advising
 - [ ] Final approvals, payment queue, and COM
 - [ ] Predictive analytics and reporting
@@ -265,13 +280,24 @@ order:
 
 - Implemented endpoints: public, database-independent `GET /api/v1/health`;
   `POST /api/v1/auth/login` (public, throttled); `POST /api/v1/auth/logout`
-  and `GET /api/v1/auth/me` (`auth:sanctum` + `EnsureUserIsActive`).
-- Route middleware: API group, health/login throttles, Sanctum bearer auth.
-- Pending endpoints: every business endpoint group in PRD §8.4 beyond auth.
+  and `GET /api/v1/auth/me` (`auth:sanctum` + `EnsureUserIsActive`);
+  `GET /api/v1/programs` and `GET /api/v1/academic-terms` (`auth:sanctum` +
+  `EnsureUserIsActive` + throttle, readable by every role, row set filtered
+  per role by each model's `visibleTo` scope).
+- Route middleware: API group, health/login/reference-data throttles, Sanctum
+  bearer auth, and a new `role` alias (`EnsureUserHasRole`) registered but not
+  yet consumed by any route — its first consumer is the curriculum-catalog
+  sub-project (see ADR 0008).
+- Pending endpoints: every remaining business endpoint group in PRD §8.4.
 - Form Requests: `LoginRequest` (validates, normalizes email, owns the
   per-account+IP throttle key).
-- Policies: none yet; authentication exists, authorization Policies do not.
-- API Resources: `HealthResource`, `AuthResource`, `UserResource`.
+- Policies: `ProgramPolicy`, `AcademicTermPolicy` — `viewAny`/`view`, both
+  readable by every role at the endpoint level; row filtering lives in query
+  scopes, not the Policy (see ADR 0008). `App\Http\Controllers\Controller`
+  now `use AuthorizesRequests` again (Laravel 12 dropped it from the base
+  controller; `$this->authorize()` did not work until this slice).
+- API Resources: `HealthResource`, `AuthResource`, `UserResource`,
+  `ProgramResource`, `AcademicTermResource`.
 - Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
   non-active accounts, issues token, stamps `last_login_at`, all in one
   transaction).
@@ -280,12 +306,16 @@ order:
 - Security present: correlation IDs, safe exception rendering, no-store,
   credentialless CORS allowlist/preflight behavior, health/login throttling,
   Sanctum bearer tokens with a provisional expiration policy, one generic
-  credential-failure response (no account enumeration), and least-privilege
+  credential-failure response (no account enumeration), least-privilege
   MariaDB principals (`grc_app` DML-only, `grc_migrator`/`grc_test`
-  table-scoped DDL).
-- Security pending: authorization Policies, business rate limiters, audit
-  events, the approved (non-provisional) token-expiration policy, and
-  infrastructure controls.
+  table-scoped DDL), and a clean 401 (not a 500) for every `auth:sanctum`
+  route regardless of whether the caller sends `Accept: application/json`
+  (`bootstrap/app.php`'s `redirectGuestsTo(fn () => null)` override — see
+  Failure and Recovery Record).
+- Security pending: authorization Policies for every remaining business
+  resource (only Program/AcademicTerm exist so far), business rate limiters,
+  audit events, the approved (non-provisional) token-expiration policy and
+  status vocabularies, and infrastructure controls.
 
 ## Frontend Status
 
@@ -325,8 +355,11 @@ order:
   `personal_access_tokens` — all four, live in `grc_enrollment` (dev) and
   verified reversible (`migrate:rollback` → `migrate`) in
   `grc_enrollment_test`.
-- Seeders: `RoleUserSeeder` — nine synthetic identities, one per role, run
-  against the dev database.
+- Seeders: `RoleUserSeeder` — nine synthetic identities, one per role;
+  `ProgramSeeder`/`AcademicTermSeeder` — a small synthetic catalog (3
+  programs, 3 terms), each including one non-learner-visible row so the
+  authorization difference is observable. All run against the dev database,
+  `local`/`testing` only.
 - Database: `C:\xampp\mysql` MariaDB 10.4.32, active on `127.0.0.1:3306`.
   Accepted as the local development substitute for the PRD's MySQL 8 LTS
   requirement per ADR 0007. `grc_enrollment` / `grc_enrollment_test` exist
@@ -399,6 +432,13 @@ order:
 | Interactive browser QA | Playwright MCP against live Laravel (127.0.0.1:8100) + Vite (127.0.0.1:5173) + MariaDB | Passed: real login, session restore across full page reload, sign-out, mobile viewport, zero console errors — first successful browser session in this project's history | 2026-07-27 |
 | Live HTTP smoke (auth) | temporary `php artisan serve` on 127.0.0.1:8100 | Passed: login/me/logout/revoked-token/generic-401/throttle all exact per plan | 2026-07-27 |
 | Service cleanup | listener check for ports 3306 (unaffected), 5173, 8100 | Passed: dev-server ports closed after QA; MariaDB left running (shared XAMPP service) | 2026-07-27 |
+| Backend format | `composer format:check` | Passed | 2026-07-27 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 0 errors | 2026-07-27 |
+| Backend tests | `composer test` | Passed: 110 tests, 325 assertions | 2026-07-27 |
+| Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-27 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly health + 3 auth + 2 reference-data routes (6 total) | 2026-07-27 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding programs/academic-terms) | 2026-07-27 |
+| Live HTTP authorization proof | curl against a running `php artisan serve` on 127.0.0.1:8000, seeded dev database | Passed: `student.seed@grc.test` received 2 programs (both `active`) and 2 terms (no `planning`); `chair.seed@grc.test` received all 3 programs (including `inactive`) and all 3 terms (including `planning`) from the identical URL; `Cache-Control: no-store, private` confirmed; a request with no bearer token returned 401 `UNAUTHENTICATED` both with and without an `Accept: application/json` header | 2026-07-27 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -422,6 +462,11 @@ successfully.
 | 2026-07-26 | Plan `react-router@8.3.0` and `@hookform/resolvers@5.5.7`. | Registry metadata confirms compatibility with Node 24, React 19.2.7, React Hook Form 7.83, and Zod 4.4; the plan retains client-library/non-RSC routing only. |
 | 2026-07-27 | Abandon the isolated MySQL 8.4 instance; use the existing XAMPP MariaDB 10.4.32 on port 3306 with scoped principals instead. | Four review rounds hardened 2,628 lines of lifecycle PowerShell that had never once been executed; user explicitly chose to stop and use MariaDB. See ADR 0007. Collation changes to `utf8mb4_unicode_ci` (MySQL 8's `utf8mb4_0900_ai_ci` does not exist in MariaDB). |
 | 2026-07-27 | Fold the Sanctum login/logout/me vertical slice into this identity-foundation slice instead of deferring it. | User explicitly requested it so the portal authenticates against the database instead of frontend fixtures; PRD §8.4/§9.1 already specify the exact three routes and bearer-token rules. |
+| 2026-07-27 | Decompose PRD §5.1 (Pre-enrollment schedules) into six sub-projects instead of one slice. | Spans 10 FRs, 8 tables, and 4 independent subsystems plus a demand-forecast requirement blocked on Process 4.0; attempting it as one unit was not viable. |
+| 2026-07-27 | Build authorization as `role` middleware **and** Policies, with row filtering in query scopes, not just Policies alone. | PRD §9.4 requires both role-level and record-level access; a Policy cannot filter a collection, so "which rows" had to live in a query scope. Sets the pattern for ~40 future endpoints (ADR 0008). |
+| 2026-07-27 | Ship the `role` middleware in this slice even though no production route consumes it yet. | Both new endpoints are readable by all nine roles; the middleware's first real consumer is the curriculum-catalog sub-project. Built and tested now so that slice inherits a proven mechanism rather than building it under time pressure later. |
+| 2026-07-27 | Introduce provisional `ProgramStatus` (`active`/`inactive`) and `AcademicTermStatus` (`planning`/`active`/`closed`) enums with an `isVisibleToLearners()` predicate. | PRD §17 leaves the real vocabularies unconfirmed; these exist only so learner-scoped vs. planning roles can be proven to receive different results. Same provisional-value discipline as `SANCTUM_TOKEN_EXPIRATION`. Columns stay `VARCHAR`, so the real vocabulary lands as a data migration, not a schema change. |
+| 2026-07-27 | Override Laravel's default `redirectGuestsTo` with `fn () => null` for every guard, application-wide. | Found while live-verifying this slice: any `auth:sanctum` route crashed with a 500 `RouteNotFoundException` for a caller that omits `Accept: application/json`, because `ApplicationBuilder` always points guests at a `login` named route this JSON-only API doesn't have. Affected every pre-existing guarded route, not just this slice's two new ones. |
 
 ## Blockers and Clarifications Needed
 
@@ -454,6 +499,13 @@ successfully.
 - Owner: authorized GRC stakeholders for each policy domain.
 - Safe work meanwhile: generic schema, configuration placeholders,
   authorization foundations, and synthetic tests.
+- Added 2026-07-27: `App\Domain\Organization\ProgramStatus`
+  (`active`/`inactive`) and `AcademicTermStatus`
+  (`planning`/`active`/`closed`) are **provisional** vocabularies in the same
+  vein as `SANCTUM_TOKEN_EXPIRATION` — needed so the authorization slice has
+  something concrete to filter on, not an approved institutional value. The
+  `programs.status`/`academic_terms.status` columns stay `VARCHAR` so the real
+  vocabulary lands as a data migration, not a schema change, once confirmed.
 
 ### Visual verification
 
@@ -580,6 +632,32 @@ successfully.
   browser is available.” This remains a tooling gap rather than an application
   pass; focused browser-like component/router tests are being run, and live
   Playwright claims remain withheld.
+- `ProgramResource`/`AcademicTermResource` initially defined `withResponse()`
+  to set `Cache-Control: no-store, private`, following `UserResource`'s
+  pattern exactly — but the header assertion in both new endpoint tests failed
+  with `no-cache, private` instead. Root cause: `withResponse()` on an item
+  Resource is only invoked when that Resource is returned standalone;
+  `JsonResource::collection()` wraps items in an `AnonymousResourceCollection`,
+  and `ResourceResponse::toResponse()` calls `withResponse()` on the
+  *collection* object, not each item, so the override was silently dead code
+  and Symfony's Response computed its own conservative default. Fixed by
+  setting the header explicitly on the `JsonResponse` returned from
+  `->response($request)` in each controller, and removed the now-misleading
+  `withResponse()` overrides from both Resource classes.
+- The live HTTP authorization proof for this slice used plain `curl` (no
+  `Accept: application/json` header) against `GET /api/v1/programs` and got a
+  500 instead of the expected 401. Laravel's `ApplicationBuilder` always
+  registers `redirectGuestsTo(fn () => route('login'))` before the app's own
+  middleware callback runs; this app is JSON-only and has no `login` named
+  route, so any guarded route hit by a client that doesn't send that header
+  crashed with `RouteNotFoundException`. This affected every pre-existing
+  `auth:sanctum` route too (`/api/v1/auth/me`, `/api/v1/auth/logout`) — no
+  prior feature test caught it because `getJson()`/`postJson()` set the
+  header automatically. Fixed with
+  `$middleware->redirectGuestsTo(fn () => null)` in `bootstrap/app.php`, and
+  confirmed by temporarily reverting the fix and re-running the new
+  regression test, which failed with the identical error, then passed once
+  restored.
 
 ## Files Changed in the Current Session
 
@@ -604,6 +682,13 @@ successfully.
   preview/denial states; focused and full regression coverage; continuously
   updated `PROGRESS.md`.
 - Supplied artifact preserved unchanged: `Casuncad, Westlie.pdf`.
+- Authorization foundation and reference-data session (branch
+  `feat/authz-foundation-reference-data`): `Organization` status enums,
+  `UserRole::isLearnerScoped()`, `Program`/`AcademicTerm` models and query
+  scopes, `EnsureUserHasRole` middleware, `ProgramPolicy`/`AcademicTermPolicy`,
+  two new endpoints and Resources, two new seeders, a `bootstrap/app.php`
+  fix for a pre-existing 500-instead-of-401 defect, ADR 0008, OpenAPI/data-
+  dictionary/testing doc updates, and 40 new backend tests.
 
 ## Session Handoff Log
 
@@ -1327,3 +1412,71 @@ every PRD §17 institutional policy confirmation (including the real token
 expiration value). No commit, push, or merge back to `main` was made —
 `AGENTS.md` requires explicit authorization for that, which has not been
 given in this session.
+
+### 2026-07-27 20:27 +08:00
+
+**Goal:** Turn "what's next on the PRD checklist" into the first concrete
+sub-project of PRD §5.1 (Pre-enrollment schedules) and implement it.
+**Decomposition:** Process 1.0 spans 10 FRs, 8 tables, and 4 independent
+subsystems plus a forecast requirement blocked on Process 4.0 — too large for
+one slice. Brainstormed and chose the authorization foundation and reference
+data as sub-project 1: it unblocks every later sub-project (PRD §9.4 requires
+a Policy or explicit authorization decision on every resource endpoint, and
+none existed yet) and both `programs`/`academic_terms` were empty tables with
+no models.
+**Completed (branch `feat/authz-foundation-reference-data` off `main`, worked
+in place per this session's configuration, not a worktree):**
+- `App\Domain\Organization\ProgramStatus`/`AcademicTermStatus` — provisional
+  status enums (PRD §17 unconfirmed vocabulary) with an
+  `isVisibleToLearners()` predicate.
+- `UserRole::isLearnerScoped()` — single source of truth for which three
+  roles (student, faculty, accounting staff) receive filtered results versus
+  the six planning roles.
+- `Program`/`AcademicTerm` Eloquent models with full `@property` docblocks
+  and a `scopeVisibleTo()` query scope on each.
+- Authorization stack: `AuthorizesRequests` restored on the base
+  `Controller` (Laravel 12 had dropped it), `EnsureUserHasRole` middleware
+  registered as the `role` alias (built now, no production route consumes it
+  yet — see ADR 0008), `ProgramPolicy`/`AcademicTermPolicy`.
+- `GET /api/v1/programs` and `GET /api/v1/academic-terms` — readable by every
+  role, row set filtered by `visibleTo()`, `{"data": [...]}` envelope,
+  `Cache-Control: no-store, private`.
+- `ProgramSeeder`/`AcademicTermSeeder` — synthetic catalog (3 programs, 3
+  terms), each including one non-learner-visible row.
+- Docs: ADR 0008, `docs/api/openapi.yaml` (2 new paths + schemas, Redocly
+  clean), `docs/data-dictionary/identity-foundation.md`,
+  `docs/testing/SEEDED_IDENTITIES.md`, this file.
+**Bugs found by tests, not by inspection:**
+- `withResponse()` on `ProgramResource`/`AcademicTermResource` never fired —
+  dead code, because `JsonResource::collection()` calls `withResponse()` on
+  the wrapping `AnonymousResourceCollection`, not each item. See Failure and
+  Recovery Record above for the fix (set the header on the controller's
+  `JsonResponse` directly).
+- A plain `curl` request (no `Accept: application/json`) to any
+  `auth:sanctum` route — including the pre-existing `/api/v1/auth/me` and
+  `/api/v1/auth/logout`, not just the two new endpoints — crashed with a 500
+  `RouteNotFoundException: Route [login] not defined`, instead of the
+  documented 401. Root cause: Laravel's `ApplicationBuilder` unconditionally
+  defaults unauthenticated guests to `redirectGuestsTo(fn () => route('login'))`;
+  this is a JSON-only API with no `login` named route. This predates this
+  slice — every prior feature test used `getJson()`/`postJson()`, which set
+  the `Accept` header automatically and never exercised the crash path.
+  Fixed with `$middleware->redirectGuestsTo(fn () => null)` in
+  `bootstrap/app.php`; confirmed the new
+  `tests/Feature/Auth/UnauthenticatedNonJsonRequestTest.php` fails with the
+  exact same error when the fix is temporarily reverted, and passes with it
+  restored.
+**Verification:** `composer test` 110/110 (325 assertions, up from 70/250),
+`format:check`, `analyse` (Larastan level 8, 0 errors), `audit --locked` (0
+advisories), Redocly OpenAPI lint clean, `route:list` exactly 6 routes, and a
+**live HTTP proof** against a seeded dev database and a running
+`php artisan serve`: `student.seed@grc.test` and `chair.seed@grc.test` hit
+the identical `GET /api/v1/programs` and `GET /api/v1/academic-terms` URLs
+and received genuinely different row counts and status sets; a tokenless
+request returned 401 `UNAUTHENTICATED` both with and without an `Accept`
+header.
+**Not done, out of scope for this sub-project:** writes to programs/terms;
+curriculum catalog, faculty input, section planning, approval workflow,
+demand forecast, and audit logging (the remaining five Process 1.0
+sub-projects); every frontend change; CI. No commit, push, or merge was
+made — `AGENTS.md` requires explicit authorization, not yet given.

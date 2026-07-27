@@ -27,4 +27,25 @@ final class UserRoleTest extends TestCase
         self::assertSame('Program Chair', UserRole::ProgramChair->label());
         self::assertSame('Accounting Staff', UserRole::AccountingStaff->label());
     }
+
+    public function test_exactly_three_roles_are_learner_scoped(): void
+    {
+        self::assertSame(
+            ['student', 'faculty', 'accounting_staff'],
+            array_column(
+                array_filter(UserRole::cases(), fn (UserRole $role): bool => $role->isLearnerScoped()),
+                'value',
+            ),
+        );
+    }
+
+    public function test_planning_roles_are_not_learner_scoped(): void
+    {
+        self::assertFalse(UserRole::ProgramChair->isLearnerScoped());
+        self::assertFalse(UserRole::Dean->isLearnerScoped());
+        self::assertFalse(UserRole::ExecutiveDirector->isLearnerScoped());
+        self::assertFalse(UserRole::RegistrarHead->isLearnerScoped());
+        self::assertFalse(UserRole::RegistrarStaff->isLearnerScoped());
+        self::assertFalse(UserRole::AdmissionStaff->isLearnerScoped());
+    }
 }
