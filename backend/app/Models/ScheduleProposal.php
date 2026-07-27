@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Scheduling\ScheduleProposalStatus;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -66,5 +67,30 @@ final class ScheduleProposal extends Model
     public function decider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    /**
+     * Restricts the result set for learner-scoped roles to
+     * published/closed proposals. Planning roles see every proposal
+     * regardless of status. Same pattern as Curriculum/Section::scopeVisibleTo().
+     *
+     * @param  Builder<ScheduleProposal>  $query
+     * @return Builder<ScheduleProposal>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (! $user->role->isLearnerScoped()) {
+            return $query;
+        }
+
+        $visibleValues = array_values(array_map(
+            fn (ScheduleProposalStatus $status): string => $status->value,
+            array_filter(
+                ScheduleProposalStatus::cases(),
+                fn (ScheduleProposalStatus $status): bool => $status->isVisibleToLearners(),
+            ),
+        ));
+
+        return $query->whereIn('status', $visibleValues);
     }
 }

@@ -267,10 +267,14 @@ order:
   - [x] Section planning: capacity, viability threshold (informational only,
     pending §17), professor-double-booking conflict detection (FR-SCH-004,
     FR-SCH-005; see ADR 0010).
-  - [ ] Approval workflow: `schedule_proposals`, the five-state lifecycle,
-    return reasons, publication (FR-SCH-007 through FR-SCH-009).
-  - [ ] Demand forecast display (FR-SCH-006) — blocked until Process 4.0
-    (predictive analytics) exists.
+  - [x] Approval workflow: `schedule_proposals`, the five-state lifecycle,
+    role-per-transition authorization (no `role:` middleware — one route
+    serves six transitions), required return reasons, publish bulk-updates
+    the term's sections (FR-SCH-007 through FR-SCH-009; see ADR 0011). This
+    was the last unblocked §5.1 sub-project.
+  - [ ] Demand forecast display (FR-SCH-006) — still blocked until Process
+    4.0 (predictive analytics) exists; this is now the only remaining
+    §5.1 sub-project besides cross-cutting audit logging.
   - [ ] Audit logging (FR-SCH-010) — cross-cutting, deferred to the audit
     slice rather than any single sub-project above.
 - [ ] Enrollment and digital advising
@@ -307,14 +311,19 @@ order:
   Policy — a professor may write only their own rows; every other role
   reads everyone's); `GET/POST /api/v1/sections` and
   `PATCH /api/v1/sections/{section}` (`role:program_chair` + `SectionPolicy`,
-  rejects professor double-booking — see ADR 0010).
+  rejects professor double-booking — see ADR 0010); `GET/POST
+  /api/v1/schedule-proposals` and `PATCH /api/v1/schedule-proposals/{scheduleProposal}`
+  (submission is `role:program_chair`; the transition route carries **no**
+  `role:` middleware at all — six actions, six required roles, resolved per
+  request by `ScheduleProposalPolicy` — see ADR 0011).
 - Route middleware: API group, health/login/reference-data throttles, Sanctum
   bearer auth, and the `role` alias (`EnsureUserHasRole`) — consumed by
-  `POST`/`PATCH /curricula` and now `sections` (`program_chair`), and the
-  four faculty-input write routes (`faculty`).
+  `POST`/`PATCH /curricula`, `sections`, and `schedule-proposals` submission
+  (`program_chair`), and the four faculty-input write routes (`faculty`).
+  `PATCH /schedule-proposals/{scheduleProposal}` is the first write route
+  with no `role:` middleware — see ADR 0011.
 - Pending endpoints: every remaining business endpoint group in PRD §8.4
-  (schedule proposals, enrollment, payment queue, grades, analytics,
-  notifications, audit logs).
+  (enrollment, payment queue, grades, analytics, notifications, audit logs).
 - Form Requests: `LoginRequest` (validates, normalizes email, owns the
   per-account+IP throttle key); `StoreCurriculumRequest`/
   `UpdateCurriculumRequest` (validate nested subject/prerequisite arrays,
@@ -324,7 +333,10 @@ order:
   enforced via `Rule::unique()->where()->ignore()`, scoped to the
   authenticated professor and submitted term); `Store`/`UpdateSectionRequest`
   (composite unique `section_code`, plus `SectionConflictDetector` in
-  `withValidator()`).
+  `withValidator()`); `StoreScheduleProposalRequest` (one-active-proposal-
+  per-term guard) and `UpdateScheduleProposalRequest` (validates the
+  requested `action` against the proposal's *current* status, and that
+  `decision_reason` is present exactly for the two return actions).
 - Policies: `ProgramPolicy`, `AcademicTermPolicy`, `SubjectPolicy` —
   `viewAny`/`view` only, readable by every role; `CurriculumPolicy`/
   `SectionPolicy` add `create`/`update` restricted to `program_chair`. Row
@@ -334,11 +346,16 @@ order:
   not work until this slice). `FacultyAvailabilityPolicy`/
   `FacultySubjectPreferencePolicy` add a new shape: `update`/`delete` require
   role **and** row ownership (`professor_id === $user->id`), not role alone.
+  `ScheduleProposalPolicy` adds a third shape: four abilities
+  (`approveAsDean`, `approveAsExecutive`, `publish`, `close`) instead of the
+  usual `create`/`update` pair, since one route serves six role-specific
+  transitions (see ADR 0011).
 - API Resources: `HealthResource`, `AuthResource`, `UserResource`,
   `ProgramResource`, `AcademicTermResource`, `SubjectResource`,
   `CurriculumResource` (nested subject placements and prerequisites),
   `FacultyAvailabilityResource`, `FacultySubjectPreferenceResource`,
-  `SectionResource` (includes a `remaining_seats` display-only convenience).
+  `SectionResource` (includes a `remaining_seats` display-only convenience),
+  `ScheduleProposalResource`.
 - Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
   non-active accounts, issues token, stamps `last_login_at`, all in one
   transaction); `App\Actions\Curriculum\SynchronizeCurriculumSubjects`
@@ -347,11 +364,16 @@ order:
   no persistence dependency); `App\Domain\Scheduling\ScheduleDayParser`
   (parses `"MWF"`/`"TTh"`-style shorthand into ISO-8601 day-of-week integers)
   and `SectionConflictDetector` (same pure, persistence-free shape as the
-  cycle detector — see ADR 0010).
+  cycle detector — see ADR 0010); `App\Actions\Scheduling\TransitionScheduleProposal`
+  (applies one of six transitions, records who/when, and — only for
+  `publish` — bulk-updates the term's `planned` sections to `published` in
+  the same transaction; see ADR 0011).
 - Transactions and idempotency: `AuthenticateUser` wraps token issuance and
   the login timestamp update in one `DB::transaction`;
   `SynchronizeCurriculumSubjects` wraps the delete-and-recreate of a
-  curriculum's subject placements/prerequisites in one `DB::transaction`.
+  curriculum's subject placements/prerequisites in one `DB::transaction`;
+  `TransitionScheduleProposal` wraps the proposal's status change and (for
+  `publish`) the term's section status bulk-update in one `DB::transaction`.
 - Security present: correlation IDs, safe exception rendering, no-store,
   credentialless CORS allowlist/preflight behavior, health/login throttling,
   Sanctum bearer tokens with a provisional expiration policy, one generic
@@ -550,6 +572,12 @@ order:
 | Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
 | Backend routes | `php artisan route:list --json` | Passed: exactly 21 routes (18 prior + 3 section-planning) | 2026-07-28 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding sections) | 2026-07-28 |
+| Backend format | `composer format:check` | Passed | 2026-07-28 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 129 files, 0 errors | 2026-07-28 |
+| Backend tests | `composer test` | Passed: 335 tests, 898 assertions (up from 312/832) | 2026-07-28 |
+| Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly 24 routes (21 prior + 3 approval-workflow) | 2026-07-28 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding schedule-proposals) | 2026-07-28 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -592,6 +620,10 @@ successfully.
 | 2026-07-28 | Scope `SectionConflictDetector` (FR-SCH-005) to same-professor double-booking only — no room conflicts, no faculty-availability matching. | Neither the found schema nor its seed data evidences either as a hard rule (`room` is an unconstrained free string; nothing links `sections` to `faculty_availabilities`). Inventing either would repeat the §17 mistake of encoding an unconfirmed policy as settled. See ADR 0010. |
 | 2026-07-28 | Parse `sections.schedule_days` shorthand (`"MWF"`, `"TTh"`, `"Sat"`) into ISO-8601 day-of-week integers via a new `ScheduleDayParser`, rather than comparing the raw strings. | The shorthand is `SectionSeeder`'s own convention, not a PRD vocabulary; parsing it precisely (longest-token-first, so `Th`/`Sat`/`Sun` aren't swallowed by single-letter checks) is what makes day-overlap checking possible at all, and produces the same numbering `FacultyAvailability.day_of_week` already uses. See ADR 0010. |
 | 2026-07-28 | Restrict section writes to `role:program_chair`, matching curriculum authorship. | Sections are the chair's schedule plan — same reasoning as ADR 0009's curriculum-write restriction. *(Assumption, not literal PRD text — flagged in the approved plan for review.)* |
+| 2026-07-28 | Map the six schedule-proposal transitions to roles as: `dean_approve`/`dean_return` → Dean; `executive_approve`/`executive_return`/`publish` → Executive Director; `close` → Registrar Head. Each `*_return` action is treated as the *same* role reconsidering their own checkpoint, not a later role rejecting an earlier one's decision. | Inferred from the state/action naming and typical hierarchical-approval symmetry, not literal PRD text. See ADR 0011. *(Assumption flagged for review.)* |
+| 2026-07-28 | Give `schedule_proposals` no new foreign key to `sections`; `publish` bulk-updates the term's `planned` sections to `published` by `academic_term_id` instead. | The two tables were designed independently with no relationship; a bulk update needs no migration to either already-shipped table, and is exactly correct given a term has at most one non-closed proposal at a time. See ADR 0011. |
+| 2026-07-28 | Enforce "one active proposal per term" in `StoreScheduleProposalRequest`, not a DB constraint. | Same reasoning as `enrollments.active_academic_term_id`: a plain `UNIQUE(academic_term_id)` would wrongly block resubmission after a term's proposal closes, but unlike enrollments this check only needs to run at creation time, so an application-level guard (not a generated column) is sufficient. |
+| 2026-07-28 | Test the approval lifecycle as four separate single-actor tests rather than one chained multi-user walk. | Chaining `withToken()` across different users within one test method hit a Sanctum guard-caching quirk (the guard resolves and caches a user once per instance, outliving a single simulated request); `forgetGuards()` did not resolve it. Every other endpoint test in this session already uses one authenticated actor per test — matching that structure sidesteps the framework issue entirely rather than fighting it. See Failure and Recovery Record. |
 
 ## Blockers and Clarifications Needed
 
@@ -870,6 +902,33 @@ successfully.
   `tables_priv` clean, then granted `SELECT, INSERT, UPDATE, DELETE` to
   `grc_app` on all four tables (table-level, per the MariaDB-instability
   memory); server survived, endpoint immediately returned `200`.
+- The approval-workflow endpoint test originally chained four different
+  authenticated users (Program Chair submits, Dean approves, Executive
+  Director approves and publishes, Registrar Head closes) within one test
+  method using sequential `withToken()` swaps. The second swap silently
+  failed: `ScheduleProposalPolicy::approveAsDean()` received the *first*
+  request's Program Chair user, not the Dean the test had just authenticated
+  as, producing a 403 that looked like an authorization bug. Direct dumps
+  inside the Policy method and the controller confirmed `auth()->user()`
+  itself returned the stale user — this is a genuine Laravel/Sanctum testing
+  quirk (the guard resolves and caches a user once per guard instance, which
+  outlives a single simulated request within one test method) not previously
+  triggered because no earlier test in this codebase had chained multiple
+  *different* authenticated users within one test method.
+  `$this->app['auth']->forgetGuards()` between swaps did not fix it. Fixed
+  by restructuring into four single-actor tests (each precreating the
+  proposal directly at whatever status the transition under test requires),
+  matching the structure every other endpoint test in this suite already
+  uses. See ADR 0011's testing note and Decisions and Assumptions.
+- Two of that same test file's setup bugs, caught by the run rather than
+  assumed correct: a proposal precreated in `dean_approved` status was
+  tested against the `executive_return` action, which actually requires
+  `executive_approved` — fixed by correcting the precondition status, not
+  the action; and a visibility test called its own `makeTerm()` helper
+  twice per test, hitting `academic_terms`' unique `(school_year, semester)`
+  constraint — fixed by creating the term once and reusing its ID for both
+  proposals (direct `ScheduleProposal::create()` calls don't enforce the
+  one-active-proposal-per-term rule, so this was always safe to do).
 
 ## Files Changed in the Current Session
 
@@ -943,6 +1002,19 @@ successfully.
   `role:program_chair` for writes, `docs/data-dictionary/section-planning.md`,
   OpenAPI updates (1 new tag, 2 new paths, 4 new schemas), and 34 new backend
   tests.
+- Approval workflow session (branch `feat/schedule-approval-workflow`):
+  `App\Actions\Scheduling\TransitionScheduleProposal` (applies one of six
+  transitions, records who/when, bulk-publishes the term's planned sections
+  on `publish` — ADR 0011), `ScheduleProposal::scopeVisibleTo()`,
+  `ScheduleProposalPolicy` (four abilities instead of the usual pair —
+  `approveAsDean`, `approveAsExecutive`, `publish`, `close`), `Store`/
+  `UpdateScheduleProposalRequest`, `ScheduleProposalResource`,
+  `ScheduleProposalController` — the first controller whose write route
+  carries no `role:` middleware at all. 3 new routes. Docs: ADR 0011,
+  `docs/data-dictionary/approval-workflow.md`, OpenAPI updates (1 new tag,
+  3 new paths, 4 new schemas), and 23 new backend tests. This completes
+  every unblocked PRD §5.1 sub-project — only demand forecast (blocked on
+  Process 4.0) and cross-cutting audit logging remain.
 
 ## Session Handoff Log
 
@@ -1941,3 +2013,53 @@ approved plan.
 **Not done, out of scope for this sub-project:** approval workflow (the
 final branch); the enrollment-records domain's API layer; every frontend
 change; CI.
+
+### 2026-07-28 05:24 +08:00 — Task 4: Approval Workflow API (FR-SCH-007 through FR-SCH-009); PRD §5.1 unblocked scope complete
+
+**Goal:** Final of the four tasks in the approved plan — the last of the
+three remaining PRD §5.1 sub-projects.
+**Completed (branch `feat/schedule-approval-workflow` off `main`, worked in
+place):**
+- `App\Actions\Scheduling\TransitionScheduleProposal` — applies one of six
+  transitions (`dean_approve`, `dean_return`, `executive_approve`,
+  `executive_return`, `publish`, `close`), records `decided_by`/`decided_at`/
+  `decision_reason`, and — only for `publish` — bulk-transitions every
+  `planned` section in the proposal's term to `published`, all in one
+  `DB::transaction()`. No new foreign key between `schedule_proposals` and
+  `sections`; see ADR 0011 for why a term-scoped bulk update is the right
+  call here.
+- `ScheduleProposalPolicy` — a new authorization shape: four abilities
+  (`approveAsDean`, `approveAsExecutive`, `publish`, `close`) instead of the
+  usual `create`/`update` pair, since one `PATCH` route serves six
+  role-specific transitions. `ScheduleProposalController` resolves which
+  ability applies from the request's `action` field — the first write route
+  in this API with **no** `role:` middleware at all.
+- `Store`/`UpdateScheduleProposalRequest` — the one-active-proposal-per-term
+  guard (application-level, same reasoning as `enrollments`' generated
+  column), the current-status precondition per action, and
+  `decision_reason` required exactly for the two return actions.
+- 3 new routes; `ScheduleProposalResource`; ADR 0011;
+  `docs/data-dictionary/approval-workflow.md`; OpenAPI gained 1 tag, 3
+  paths, 4 schemas.
+**Caught before completion, not after:**
+- A genuine Laravel/Sanctum testing quirk: chaining four different
+  authenticated users within one test method (simulating the real
+  chair→dean→executive→registrar workflow) hit a guard-caching issue where
+  the second `withToken()` swap silently kept the *first* request's user.
+  `forgetGuards()` didn't fix it. Resolved by testing each transition as its
+  own single-actor test — the same structure every other endpoint test in
+  this session already uses — rather than fighting the framework further.
+  See Failure and Recovery Record and ADR 0011's testing note.
+- Two test-setup mistakes caught by the run itself: a proposal precreated in
+  the wrong status for the action under test, and a visibility test hitting
+  `academic_terms`' unique constraint by creating two terms with identical
+  `(school_year, semester)`. Both fixed at the test, not the application
+  code — see Failure and Recovery Record.
+**Verification:** `composer test` 335/335 (898 assertions, up from
+312/832), `format:check`, `analyse` (Larastan level 8, 129 files, 0
+errors), `audit` clean, `route:list` exactly 24 routes, OpenAPI lint clean.
+**Not done, deliberately out of scope:** the enrollment-records domain's
+API layer (a future PRD phase, per the schema-foundation task's decision);
+demand forecast (FR-SCH-006, blocked on Process 4.0); audit logging
+(FR-SCH-010, cross-cutting, its own future slice); every frontend change;
+CI. This completes every currently-unblocked PRD §5.1 sub-project.

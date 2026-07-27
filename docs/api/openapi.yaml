@@ -46,6 +46,13 @@ tags:
       visibility as Curriculum; writes are restricted to the Program Chair
       role. Status vocabulary is provisional pending PRD §17 approval;
       `viability_threshold` is informational only.
+  - name: Approval Workflow
+    description: >
+      Schedule proposals (FR-SCH-007 through FR-SCH-009): the five-state
+      lifecycle draft → dean_approved → executive_approved → published →
+      closed. One `action` field drives six transitions, each requiring a
+      different role — see ADR 0011. `publish` also bulk-transitions the
+      term's `planned` sections to `published`.
 paths:
   /api/v1/health:
     get:
@@ -904,6 +911,150 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/schedule-proposals:
+    get:
+      operationId: getScheduleProposals
+      summary: List schedule proposals visible to the authenticated role
+      description: >
+        Learner-scoped roles receive only `published`/`closed` proposals;
+        every other role receives every proposal regardless of status.
+        Ordered by term descending, then most recently created first.
+      security:
+        - bearerAuth: []
+      tags:
+        - Approval Workflow
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The schedule proposals visible to the authenticated role.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleProposalsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postScheduleProposal
+      summary: Submit a schedule proposal for a term
+      description: >
+        Program Chair only. Always created in `draft`. Rejected if the term
+        already has a non-`closed` proposal.
+      security:
+        - bearerAuth: []
+      tags:
+        - Approval Workflow
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreScheduleProposalRequest"
+      responses:
+        "201":
+          description: The proposal was submitted.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleProposalResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            The submitted data is invalid, or this term already has an
+            active (non-closed) proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/schedule-proposals/{scheduleProposal}:
+    patch:
+      operationId: patchScheduleProposal
+      summary: Apply one transition to a schedule proposal
+      description: >
+        No `role:` middleware gates this route — the six possible `action`
+        values each require a different role, resolved by
+        ScheduleProposalPolicy per request (see ADR 0011):
+        `dean_approve`/`dean_return` (Dean), `executive_approve`/
+        `executive_return`/`publish` (Executive Director), `close`
+        (Registrar Head). `decision_reason` is required exactly for
+        `dean_return` and `executive_return`. `publish` also
+        bulk-transitions the term's `planned` sections to `published`.
+      security:
+        - bearerAuth: []
+      tags:
+        - Approval Workflow
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: scheduleProposal
+          in: path
+          required: true
+          description: Schedule proposal ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduleProposalRequest"
+      responses:
+        "200":
+          description: The transition was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleProposalResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No schedule proposal exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the action does not match the
+            proposal's current status, or a required decision reason is
+            missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -1750,3 +1901,90 @@ components:
             - cancelled
     UpdateSectionRequest:
       $ref: "#/components/schemas/StoreSectionRequest"
+    ScheduleProposalsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleProposalResource"
+    ScheduleProposalResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/ScheduleProposalResource"
+    ScheduleProposalResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - academic_term_id
+        - submitted_by
+        - status
+        - status_label
+        - decided_by
+        - decided_at
+        - decision_reason
+      properties:
+        type:
+          type: string
+          const: schedule_proposal
+        id:
+          type: integer
+        academic_term_id:
+          type: integer
+        submitted_by:
+          type: integer
+        status:
+          type: string
+          description: >
+            Authoritative PRD §4.1 lifecycle — see
+            App\Domain\Scheduling\ScheduleProposalStatus.
+          enum:
+            - draft
+            - dean_approved
+            - executive_approved
+            - published
+            - closed
+        status_label:
+          type: string
+        decided_by:
+          type: ["integer", "null"]
+        decided_at:
+          type: ["string", "null"]
+          format: date-time
+        decision_reason:
+          type: ["string", "null"]
+    StoreScheduleProposalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - academic_term_id
+      properties:
+        academic_term_id:
+          type: integer
+    UpdateScheduleProposalRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - dean_approve
+            - dean_return
+            - executive_approve
+            - executive_return
+            - publish
+            - close
+        decision_reason:
+          type: ["string", "null"]
+          description: Required exactly when action is dean_return or executive_return.

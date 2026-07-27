@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\ProgramController;
+use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Middleware\EnsureUserIsActive;
@@ -42,6 +43,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/faculty-availabilities', [FacultyAvailabilityController::class, 'index'])->name('faculty-availabilities.index');
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
+        Route::get('/schedule-proposals', [ScheduleProposalController::class, 'index'])->name('schedule-proposals.index');
+
+        // Every transition (dean_approve, dean_return, executive_approve,
+        // executive_return, publish, close) needs a *different* role, so a
+        // single blanket `role:` middleware doesn't fit this one route —
+        // ScheduleProposalPolicy resolves the right ability per request. See
+        // ADR 0011.
+        Route::patch('/schedule-proposals/{scheduleProposal}', [ScheduleProposalController::class, 'update'])->name('schedule-proposals.update');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's
@@ -55,6 +64,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             // curriculum authorship.
             Route::post('/sections', [SectionController::class, 'store'])->name('sections.store');
             Route::patch('/sections/{section}', [SectionController::class, 'update'])->name('sections.update');
+
+            // Submitting (creating) a proposal is single-role, unlike its
+            // transitions.
+            Route::post('/schedule-proposals', [ScheduleProposalController::class, 'store'])->name('schedule-proposals.store');
         });
 
         // A Faculty member writes only their own availability/preferences —

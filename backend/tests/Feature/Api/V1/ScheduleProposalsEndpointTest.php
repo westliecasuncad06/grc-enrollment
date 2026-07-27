@@ -1,0 +1,245 @@
+<?php
+
+namespace Tests\Feature\Api\V1;
+
+use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Identity\UserRole;
+use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Scheduling\ScheduleProposalStatus;
+use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicTerm;
+use App\Models\ScheduleProposal;
+use App\Models\Section;
+use App\Models\Subject;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+final class ScheduleProposalsEndpointTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const PASSWORD = 'correct-horse-battery-staple';
+
+    private function tokenFor(UserRole $role, string $email): string
+    {
+        User::create([
+            'name' => 'Test '.$role->value,
+            'email' => $email,
+            'password' => self::PASSWORD,
+            'role' => $role,
+            'status' => UserStatus::Active,
+        ]);
+
+        return (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => self::PASSWORD,
+        ])->json('data.token');
+    }
+
+    private function makeTerm(): AcademicTerm
+    {
+        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+    }
+
+    public function test_anonymous_request_is_unauthenticated(): void
+    {
+        $this->getJson('/api/v1/schedule-proposals')->assertUnauthorized();
+        $this->postJson('/api/v1/schedule-proposals', [])->assertUnauthorized();
+    }
+
+    public function test_a_program_chair_can_submit_a_proposal(): void
+    {
+        $term = $this->makeTerm();
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.submit@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
+        $response->assertJsonPath('data.status', 'draft');
+        $this->assertDatabaseHas('schedule_proposals', ['academic_term_id' => $term->id, 'status' => 'draft']);
+    }
+
+    public function test_a_non_program_chair_role_cannot_submit_a_proposal(): void
+    {
+        $term = $this->makeTerm();
+        $token = $this->tokenFor(UserRole::Dean, 'dean.submit@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
+    }
+
+    public function test_a_term_cannot_have_two_active_proposals(): void
+    {
+        $term = $this->makeTerm();
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.dup@grc.test');
+
+        $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
+            'academic_term_id' => $term->id,
+        ])->assertCreated();
+
+        $response = $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+    }
+
+    public function test_a_new_proposal_is_allowed_once_the_prior_one_is_closed(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.reopen@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Closed]);
+
+        $token = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => 'chair.reopen@grc.test', 'password' => self::PASSWORD,
+        ])->json('data.token');
+
+        $response = $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertCreated();
+    }
+
+    public function test_a_learner_scoped_role_does_not_see_a_draft_proposal(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.visibility@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Draft]);
+        $token = $this->tokenFor(UserRole::Student, 'student.visibility@grc.test');
+
+        $response = $this->withToken($token)->getJson('/api/v1/schedule-proposals');
+
+        $response->assertOk();
+        self::assertCount(0, $response->json('data'));
+    }
+
+    /**
+     * The full lifecycle (draft -> dean_approved -> executive_approved ->
+     * published -> closed) is exercised across these four tests rather than
+     * one chained walk — each precreates the proposal directly at whatever
+     * status the transition under test requires and authenticates as
+     * exactly one actor, matching every other endpoint test in this suite.
+     */
+    public function test_dean_approve_transitions_a_draft_proposal(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.deanapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Draft]);
+        $deanToken = $this->tokenFor(UserRole::Dean, 'dean.deanapprove@grc.test');
+
+        $response = $this->withToken($deanToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'dean_approve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'dean_approved');
+        self::assertNotNull($proposal->refresh()->decided_by);
+    }
+
+    public function test_executive_approve_transitions_a_dean_approved_proposal(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.execapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
+        $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.execapprove@grc.test');
+
+        $response = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_approve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'executive_approved');
+    }
+
+    /**
+     * Direct proof that `publish` is what exposes the term's schedule
+     * (FR-SCH-009): the section stays `planned` right up until this exact
+     * transition, then flips to `published` in the same request.
+     */
+    public function test_publish_transitions_the_proposal_and_publishes_the_terms_planned_sections(): void
+    {
+        $term = $this->makeTerm();
+        $subject = Subject::create(['code' => 'CS101', 'title' => 'Test', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $section = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'A', 'capacity' => 40, 'status' => SectionStatus::Planned]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.publish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::ExecutiveApproved]);
+        $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.publish@grc.test');
+
+        self::assertSame('planned', $section->refresh()->status->value);
+
+        $response = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'publish']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'published');
+        self::assertSame('published', $section->refresh()->status->value);
+    }
+
+    public function test_close_transitions_a_published_proposal(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.close@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Published]);
+        $registrarToken = $this->tokenFor(UserRole::RegistrarHead, 'registrar.close@grc.test');
+
+        $response = $this->withToken($registrarToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'close']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'closed');
+    }
+
+    public function test_a_dean_cannot_approve_a_proposal_that_is_not_in_draft(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.wrongstate@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
+        $deanToken = $this->tokenFor(UserRole::Dean, 'dean.wrongstate@grc.test');
+
+        $response = $this->withToken($deanToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'dean_approve']);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+    }
+
+    public function test_an_executive_director_cannot_perform_the_deans_approval(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.wrongrole@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Draft]);
+        $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.wrongrole@grc.test');
+
+        $response = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'dean_approve']);
+
+        $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
+        self::assertSame('draft', $proposal->refresh()->status->value);
+    }
+
+    public function test_returning_a_proposal_to_draft_requires_a_reason(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.reason@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::ExecutiveApproved]);
+        $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.reason@grc.test');
+
+        $withoutReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_return']);
+        $withoutReason->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+
+        $withReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", [
+            'action' => 'executive_return',
+            'decision_reason' => 'Missing a required general education subject.',
+        ]);
+        $withReason->assertOk()->assertJsonPath('data.status', 'draft');
+        $withReason->assertJsonPath('data.decision_reason', 'Missing a required general education subject.');
+    }
+
+    public function test_a_registrar_head_cannot_publish(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.registrarpublish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::ExecutiveApproved]);
+        $registrarToken = $this->tokenFor(UserRole::RegistrarHead, 'registrar.registrarpublish@grc.test');
+
+        $response = $this->withToken($registrarToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'publish']);
+
+        $response->assertForbidden();
+        self::assertSame('executive_approved', $proposal->refresh()->status->value);
+    }
+}
