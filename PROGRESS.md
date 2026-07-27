@@ -250,13 +250,22 @@ order:
     ADR 0007, not the PRD's MySQL 8 LTS — a documented local-development
     deviation).
   - [x] Deterministic role seeders.
-  - [ ] CI quality checks — `.github/workflows/ci.yml` pushed to `main` and
-    ran on GitHub Actions (run `30308242547`): `backend`, `frontend`, and
-    `docs` jobs passed; `ml-service` failed (unpinned transitive
-    dependencies via `requirements-dev.txt` — see Failure and Recovery
-    Record). Fix pushed on `fix/ci-ml-service-lockfile`, installing from
-    `requirements.lock` instead. **Not checked off** until a full green run
-    confirms it.
+  - [ ] CI quality checks — `.github/workflows/ci.yml` live on `main`,
+    verified via two real GitHub Actions runs. `backend`, `frontend`, and
+    `docs` jobs are confirmed green (run `30309273294`). `ml-service` still
+    fails at the `pytest` step on both runs; two hypotheses ruled out by
+    direct investigation (unpinned transitive deps — fixed by installing
+    from `requirements.lock` instead of `requirements-dev.txt`, but the job
+    still failed identically afterward; missing model artifact — ruled out,
+    `models/` is empty in both environments). `app/main.py`,
+    `app/schemas/health.py`, and `tests/test_health.py` were read in full
+    and are platform-agnostic — no file I/O, no required env vars, no
+    OS-specific code — so the remaining cause isn't visible from the code
+    alone. Paused per explicit user direction rather than keep guessing
+    through more full CI cycles; **not checked off**. See Failure and
+    Recovery Record for the full investigation and
+    [https://github.com/westliecasuncad06/grc-enrollment/actions/runs/30309273294/job/90120860940](https://github.com/westliecasuncad06/grc-enrollment/actions/runs/30309273294/job/90120860940)
+    for the failing run.
 - [x] Authentication (Sanctum bearer-token login/logout/me; RBAC authorization
   policies beyond role-filtered frontend navigation remain unstarted)
 - [ ] Pre-enrollment schedules (PRD §5.1, decomposed into sub-projects)
@@ -958,6 +967,27 @@ successfully.
   venv and installing *only* from `requirements.lock`, which passed 6/6
   cleanly. Fixed by switching the CI job to install from `requirements.lock`
   instead of `requirements-dev.txt` (branch `fix/ci-ml-service-lockfile`).
+  **This did not fix it** — the second run (`30309273294`) failed at the
+  identical `pytest` step, with `Install dependencies` now succeeding
+  against the exact locked versions, ruling out dependency drift entirely.
+  A GitHub Actions job page's static HTML (fetched via `WebFetch`, since the
+  raw-logs API 403s without authentication) surfaced one real signal —
+  `Process completed with exit code 2`, pytest's collection/interrupted-run
+  code rather than "some tests failed" — but not the actual traceback text
+  (the log viewer needs JavaScript/auth to render). Checked whether a
+  gitignored model artifact might exist locally but not in a fresh CI
+  checkout: ruled out, `ml-service/models/` contains only the tracked
+  `.gitkeep` in both places. Read `app/main.py`, `app/schemas/health.py`,
+  and `tests/test_health.py` in full: no file I/O, no required environment
+  variables, no OS-specific code paths, and no import of `pandas`/
+  `scikit-learn`/`xgboost` anywhere in the code path this test suite
+  actually exercises — nothing here should differ between Windows (where it
+  passes locally, 6/6) and the `ubuntu-latest` CI runner. Asked the user for
+  the raw log text a second time; they chose to pause this specific
+  diagnosis rather than keep spending CI cycles on further guesses, since
+  the other three jobs (`backend`, `frontend`, `docs`) are confirmed green
+  and CI is otherwise live. Left as a known, explicitly paused gap rather
+  than resolved.
 
 ## Files Changed in the Current Session
 
