@@ -17,6 +17,7 @@ import {
   DemoAuthError,
   invalidDemoCredentialsMessage,
 } from "@/app/auth/demo-auth-gateway"
+import type { AuthMode } from "@/app/auth/demo-auth-mode"
 import { useAuth } from "@/app/auth/use-auth"
 import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert"
 import { Button } from "@/app/components/ui/button"
@@ -41,22 +42,72 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>
 
+interface LoginModeCopy {
+  eyebrow: string
+  formIntro: string
+  guideDescription: string
+  guidePath: string
+  purposeDescription: string
+  invalidCredentialsMessage: string
+  boundaryAlert?: {
+    title: string
+    description: string
+  }
+}
+
+const genericInvalidCredentialsMessage =
+  "The email or password you entered was not recognized."
+
+const modeCopy: Record<AuthMode, LoginModeCopy> = {
+  api: {
+    eyebrow: "Enrollment portal",
+    formIntro: "Sign in with your institutional GRC account.",
+    guideDescription: "Seeded development identities",
+    guidePath: "docs/testing/SEEDED_IDENTITIES.md",
+    purposeDescription:
+      "Enter your credentials to reach the role-guided enrollment portal assigned to your account.",
+    invalidCredentialsMessage: genericInvalidCredentialsMessage,
+  },
+  demo: {
+    eyebrow: "Demo portal access",
+    formIntro:
+      "Use one of the nine synthetic role accounts from the local testing guide.",
+    guideDescription: "Local credential guide",
+    guidePath: "docs/testing/DEMO_CREDENTIALS.md",
+    purposeDescription:
+      "Enter the local demonstration portal to review role-guided enrollment navigation before real identity services are connected.",
+    invalidCredentialsMessage: invalidDemoCredentialsMessage,
+    boundaryAlert: {
+      title: "Interface demonstration—not real authentication",
+      description:
+        "The credentials in this local preview are client fixtures. Laravel does not accept them.",
+    },
+  },
+  disabled: {
+    eyebrow: "Enrollment portal",
+    formIntro: "Sign-in is unavailable in this environment.",
+    guideDescription: "Seeded development identities",
+    guidePath: "docs/testing/SEEDED_IDENTITIES.md",
+    purposeDescription: "Sign-in is unavailable in this environment.",
+    invalidCredentialsMessage: genericInvalidCredentialsMessage,
+  },
+}
+
 const trustStatements = [
   {
     icon: UsersRound,
     title: "Role-aware navigation",
-    description: "Each demo identity opens its assigned portal pathway.",
+    description: "Each identity opens its assigned portal pathway.",
   },
   {
     icon: LockKeyhole,
     title: "Private records stay private",
-    description: "This interface demonstration loads no student record.",
+    description: "This interface loads no student record on sign-in.",
   },
   {
     icon: ShieldCheck,
     title: "Authorized workflows",
-    description:
-      "Real protected actions will continue to require server authorization.",
+    description: "Every protected action requires server authorization.",
   },
 ] as const
 
@@ -91,7 +142,7 @@ export function LoginPage() {
       const message =
         error instanceof DemoAuthError && error.code === "DEMO_AUTH_DISABLED"
           ? error.message
-          : invalidDemoCredentialsMessage
+          : modeCopy[authMode].invalidCredentialsMessage
 
       setError("root.credentials", { message })
       setValue("password", "")
@@ -104,7 +155,8 @@ export function LoginPage() {
     errors.root?.credentials?.message,
   ].filter((message): message is string => Boolean(message))
   const hasErrors = errorMessages.length > 0
-  const demoDisabled = authMode !== "demo"
+  const signInDisabled = authMode === "disabled"
+  const copy = modeCopy[authMode]
 
   useEffect(() => {
     if (hasErrors) {
@@ -133,14 +185,11 @@ export function LoginPage() {
         </Link>
 
         <div className="login-purpose">
-          <p className="eyebrow">Enrollment portal</p>
+          <p className="eyebrow">{copy.eyebrow}</p>
           <h2 id="login-purpose-title">
             One identity. The right work in view.
           </h2>
-          <p>
-            Enter the local demonstration portal to review role-guided
-            enrollment navigation before real identity services are connected.
-          </p>
+          <p>{copy.purposeDescription}</p>
         </div>
 
         <ul className="login-trust-list">
@@ -159,30 +208,26 @@ export function LoginPage() {
           })}
         </ul>
 
-        <Alert className="login-boundary-alert">
-          <KeyRound aria-hidden="true" />
-          <AlertTitle>
-            Interface demonstration—not real authentication
-          </AlertTitle>
-          <AlertDescription>
-            The credentials in this local preview are client fixtures. Laravel
-            does not accept them.
-          </AlertDescription>
-        </Alert>
+        {copy.boundaryAlert && (
+          <Alert className="login-boundary-alert">
+            <KeyRound aria-hidden="true" />
+            <AlertTitle>{copy.boundaryAlert.title}</AlertTitle>
+            <AlertDescription>
+              {copy.boundaryAlert.description}
+            </AlertDescription>
+          </Alert>
+        )}
       </section>
 
       <section className="login-form-panel" aria-labelledby="login-title">
         <div className="login-form-card">
           <div>
-            <p className="eyebrow">Demo portal access</p>
+            <p className="eyebrow">{copy.eyebrow}</p>
             <h1 id="login-title">Sign in to your portal</h1>
-            <p className="login-form-intro">
-              Use one of the nine synthetic role accounts from the local testing
-              guide.
-            </p>
+            <p className="login-form-intro">{copy.formIntro}</p>
           </div>
 
-          {demoDisabled && (
+          {signInDisabled && (
             <Alert variant="destructive">
               <LockKeyhole aria-hidden="true" />
               <AlertTitle>Demo access disabled</AlertTitle>
@@ -225,7 +270,7 @@ export function LoginPage() {
                   aria-describedby={
                     errors.email ? "login-email-error" : undefined
                   }
-                  disabled={demoDisabled || isSubmitting}
+                  disabled={signInDisabled || isSubmitting}
                   {...register("email")}
                 />
                 <FieldError id="login-email-error">
@@ -244,7 +289,7 @@ export function LoginPage() {
                     aria-describedby={
                       errors.password ? "login-password-error" : undefined
                     }
-                    disabled={demoDisabled || isSubmitting}
+                    disabled={signInDisabled || isSubmitting}
                     {...register("password")}
                   />
                   <Button
@@ -254,7 +299,7 @@ export function LoginPage() {
                     aria-label={
                       passwordVisible ? "Hide password" : "Show password"
                     }
-                    disabled={demoDisabled || isSubmitting}
+                    disabled={signInDisabled || isSubmitting}
                     onClick={() => setPasswordVisible((visible) => !visible)}
                   >
                     {passwordVisible ? (
@@ -274,18 +319,18 @@ export function LoginPage() {
               className="login-submit"
               type="submit"
               size="lg"
-              disabled={demoDisabled || isSubmitting}
+              disabled={signInDisabled || isSubmitting}
             >
               {isSubmitting ? "Signing in…" : "Sign in"}
             </Button>
             <span className="sr-only" role="status" aria-live="polite">
-              {isSubmitting ? "Checking demo credentials." : ""}
+              {isSubmitting ? "Checking credentials." : ""}
             </span>
           </form>
 
           <div className="login-guide-note">
-            <FieldDescription>Local credential guide</FieldDescription>
-            <code>docs/testing/DEMO_CREDENTIALS.md</code>
+            <FieldDescription>{copy.guideDescription}</FieldDescription>
+            <code>{copy.guidePath}</code>
           </div>
 
           <Button asChild variant="ghost">

@@ -137,7 +137,7 @@ function PreviewAction({
 }
 
 export function PortalShell() {
-  const { session, signOut, storageAvailable } = useAuth()
+  const { authMode, session, signOut, storageAvailable } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { moduleId } = useParams()
@@ -145,6 +145,13 @@ export function PortalShell() {
   if (!session) {
     return null
   }
+
+  const isDemo = authMode === "demo"
+  const portalBadgeLabel = isDemo ? "Demo portal" : "Preview portal"
+  const workspaceDescriptor = isDemo ? "demo workspace" : "workspace"
+  const storageWarning = isDemo
+    ? "This demo session cannot be restored after refresh on this browser."
+    : "Your session cannot be restored after refresh on this browser."
 
   const definition = rolePortalDefinitions[session.role]
   const activeModule = moduleId ? getRoleModule(session.role, moduleId) : null
@@ -173,7 +180,7 @@ export function PortalShell() {
       <aside className="portal-sidebar">
         <div>
           <PortalIdentity />
-          <Badge variant="secondary">Demo portal</Badge>
+          <Badge variant="secondary">{portalBadgeLabel}</Badge>
         </div>
 
         <PortalNavigation definition={definition} />
@@ -212,12 +219,12 @@ export function PortalShell() {
                 <SheetHeader>
                   <SheetTitle>Portal navigation</SheetTitle>
                   <SheetDescription>
-                    {definition.roleLabel} demo workspace
+                    {definition.roleLabel} {workspaceDescriptor}
                   </SheetDescription>
                 </SheetHeader>
                 <div className="portal-mobile-sheet__body">
                   <PortalIdentity />
-                  <Badge variant="secondary">Demo portal</Badge>
+                  <Badge variant="secondary">{portalBadgeLabel}</Badge>
                   <PortalNavigation definition={definition} mobile />
                 </div>
               </SheetContent>
@@ -251,10 +258,7 @@ export function PortalShell() {
 
         {!storageAvailable && (
           <Alert className="portal-storage-alert">
-            <AlertDescription>
-              This demo session cannot be restored after refresh on this
-              browser.
-            </AlertDescription>
+            <AlertDescription>{storageWarning}</AlertDescription>
           </Alert>
         )}
 

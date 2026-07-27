@@ -19,7 +19,7 @@ Production-stable versions were checked against official release records and the
 | Frontend tests | Vitest 4.1.x; Playwright 1.62.x when E2E begins | Compatible | Phase 0A runs unit/component checks; integrated Playwright remains pending. |
 | Prediction runtime | Python 3.14 with FastAPI 0.140.x | Python 3.14.3 | Compatible; update to Python 3.14.6 before the production lock/image is finalized. |
 | Prediction libraries | pandas 3.0.5, scikit-learn 1.9.0, XGBoost 3.3.0 | Compatible wheels available | Pinned now for reproducibility; models and training data remain out of scope for Phase 0A. |
-| Database | MySQL 8.4 LTS | XAMPP MariaDB 10.4.32, inactive | Blocked. MariaDB is not accepted as a substitute and no Docker runtime is available. |
+| Database | MySQL 8.4 LTS (PRD-specified); MariaDB 10.4.32 accepted as the local development substitute per ADR 0007 | XAMPP MariaDB 10.4.32, active on `127.0.0.1:3306` | Deviation, accepted for local development only. A checksum-verified isolated MySQL 8.4.10 install was attempted and abandoned after four review rounds without ever executing the lifecycle scripts once; see ADR 0007. Collation is `utf8mb4_unicode_ci`, not `utf8mb4_0900_ai_ci` (MySQL-8-only). Must be revisited before production. |
 
 ## Support and Upgrade Notes
 
@@ -28,7 +28,7 @@ Production-stable versions were checked against official release records and the
 - Sanctum personal access tokens are the PRD-mandated mechanism. Token expiry is an open institutional/security decision; Sanctum's default must not silently become GRC policy.
 - Tailwind CSS 4 has a modern-browser floor. The supported-browser list in PRD §17 must be confirmed before the frontend platform is declared final.
 - The prediction environment uses conventional GIL-enabled CPython. Free-threaded Python is not adopted without a separate compatibility and performance evaluation.
-- MySQL 8.4 is the LTS line selected for the PRD's “MySQL 8 LTS” requirement. Fresh migrations, rollback, constraints, and integration tests remain unverified until a compliant instance is available.
+- MySQL 8.4 is the LTS line selected for the PRD's “MySQL 8 LTS” requirement. Fresh migrations, rollback, constraints, and integration tests are now verified against MariaDB 10.4.32 per ADR 0007, not yet against MySQL 8; re-verify against real MySQL 8 before production.
 
 ## Primary References
 

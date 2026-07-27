@@ -2,6 +2,28 @@ import { apiErrorEnvelopeSchema } from "@/app/schemas/api-error-schema"
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
 
+/**
+ * Supplies the bearer token for outgoing requests. Registered once at startup
+ * so this module never imports the token store directly, keeping
+ * `auth-token.ts` the single owner of token storage (PRD §9.1).
+ */
+type TokenProvider = () => string | null
+
+let provideToken: TokenProvider = () => null
+
+/** Invoked whenever the API rejects a token, so the app can sign the user out. */
+type UnauthorizedHandler = () => void
+
+let handleUnauthorized: UnauthorizedHandler = () => undefined
+
+export function setAuthTokenProvider(provider: TokenProvider): void {
+  provideToken = provider
+}
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
+  handleUnauthorized = handler
+}
+
 export type ApiClientErrorKind =
   "configuration" | "connection" | "contract" | "http"
 
@@ -69,18 +91,40 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-export async function getJson(
+interface RequestOptions {
+  authenticated?: boolean
+  body?: unknown
+  method: "GET" | "POST"
+  signal?: AbortSignal
+}
+
+async function request(
   path: string,
-  signal?: AbortSignal,
+  { authenticated = false, body, method, signal }: RequestOptions,
 ): Promise<unknown> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  }
+
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json"
+  }
+
+  if (authenticated) {
+    const token = provideToken()
+
+    if (token !== null) {
+      headers.Authorization = `Bearer ${token}`
+    }
+  }
+
   let response: Response
 
   try {
     response = await fetch(buildApiUrl(path), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "omit",
       cache: "no-store",
       signal,
@@ -98,9 +142,19 @@ export async function getJson(
     })
   }
 
+  if (response.status === 204) {
+    return null
+  }
+
   const payload = await readJson(response)
 
   if (!response.ok) {
+    // A rejected token must never leave the app in a half-signed-in state.
+    // Login itself returns 401 for bad credentials, so it opts out.
+    if (response.status === 401 && authenticated) {
+      handleUnauthorized()
+    }
+
     const parsedError = apiErrorEnvelopeSchema.safeParse(payload)
 
     if (parsedError.success) {
@@ -121,4 +175,36 @@ export async function getJson(
   }
 
   return payload
+}
+
+export function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
+  return request(path, { method: "GET", signal })
+}
+
+export function getAuthenticatedJson(
+  path: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request(path, { authenticated: true, method: "GET", signal })
+}
+
+export function postJson(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request(path, { body, method: "POST", signal })
+}
+
+export function postAuthenticatedJson(
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request(path, {
+    authenticated: true,
+    body: body ?? {},
+    method: "POST",
+    signal,
+  })
 }

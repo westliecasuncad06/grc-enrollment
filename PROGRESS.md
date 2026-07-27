@@ -1,11 +1,16 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-26 23:01 +08:00
-**Current branch:** `main`, locally merged, verified, and worktree-cleaned
+**Last updated:** 2026-07-27 19:22 +08:00
+**Current branch:** working in worktree `.worktrees/mysql84-identity-foundation`
+on `feat/mysql84-identity-foundation`; `main` remains at the locally merged
+demo portal plus the verified login correction, both still uncommitted there
 **Current PRD version:** v3.1  
 **Current phase:** Phase 0 — Discovery, Policy Confirmation, and Foundations  
-**Completed slice:** Phase 0A — Contract-first runnable service shells  
-**Overall status:** Phase 0A complete locally; Phase 0 remains in progress
+**Completed slice:** Phase 0A — Contract-first runnable service shells;
+MariaDB identity foundation + Sanctum bearer-token auth vertical slice
+**Overall status:** Identity/auth slice complete and locally verified,
+including live browser QA; Phase 0 remains in progress (CI, authorization
+policies, business workflows, and institutional policy confirmations remain)
 
 ## Source Documents Reviewed
 
@@ -16,9 +21,14 @@
 
 ## Current Objective
 
-Preserve the verified demo-first landing, login, all-role credential
-documentation, and role portal slice on local `main` while preparing the real
-MySQL/Sanctum identity foundation.
+Identity foundation and real Sanctum authentication are **complete** against
+the existing XAMPP MariaDB 10.4.32 instance (ADR 0007, superseding the
+abandoned isolated MySQL 8.4 plan) — all 9 tasks of
+`docs/superpowers/plans/2026-07-27-mariadb-identity-sanctum-auth.md` done and
+verified, including a live browser pass. Next: choose an integration path
+(commit/merge to `main`, per `AGENTS.md`'s explicit-authorization requirement)
+and begin the next PRD vertical slice (authorization Policies, business
+workflow endpoints, or CI).
 
 ## Completed
 
@@ -179,22 +189,52 @@ MySQL/Sanctum identity foundation.
 - Phase 0 overall remains open.
 - MySQL connection, reversible base migrations, deterministic role seeders,
   migration rollback/fresh verification, and database integration tests are
-  waiting on MySQL 8.4 LTS.
+  waiting on MySQL 8.4 LTS. A fresh post-fix audit still finds only XAMPP
+  MariaDB 10.4.32 on port 3306 and PHP 8.2.12.
 - CI is not configured or executed yet. All intended local quality gates pass,
   but that is not a substitute for a remote pipeline.
 - Authentication, Sanctum bearer tokens, role policies, institutional
   workflows, and business endpoints belong to later complete vertical slices.
 - Interactive browser visual QA was attempted, but the available-browser list
   was empty. No screenshot or interactive-browser pass is claimed.
+- A user browser check found the login correctly rendering its disabled state
+  but unexpectedly unusable for the intended local demo. Investigation shows
+  the selector requires `VITE_AUTH_MODE=demo`, while the checkout contains only
+  `.env.example`; Vite does not automatically load `.env.example`. The local
+  startup contract and production-disable boundary are being reproduced and
+  corrected test-first before proceeding to MySQL/Sanctum work.
+- The local login-access correction is implemented test-first. A fresh Vite
+  development checkout now defaults to demo auth, an explicit local
+  `VITE_AUTH_MODE=disabled` still opts out, and every production-mode request
+  remains disabled. The active server is serving the corrected selector;
+  5 login/router/portal files/79 focused tests pass. README and `.env.example`
+  now document the zero-env startup and production boundary.
+- The complete frontend gate after the login correction passes: Prettier,
+  ESLint, Oxlint, strict TypeScript, 16 Vitest files/144 tests, Vite production
+  build, and `npm audit --audit-level=moderate` all complete successfully; the
+  audit reports 0 vulnerabilities.
 
 ## Next Exact Actions
 
-1. Re-run the documented browser visual/interaction matrix when a connected
-   browser becomes available.
-2. Provision a least-privileged MySQL 8.4 LTS development database before
-   implementing real Sanctum login, users, role seeders, or credential testing.
-3. Update PHP to a current supported patch and re-evaluate the documented
+All nine tasks of the MariaDB identity + Sanctum auth plan are complete and
+verified (see the 2026-07-27 session log below). Remaining, in rough priority
+order:
+
+1. Choose an integration path for this work (commit and/or merge
+   `feat/mysql84-identity-foundation` into `main`) — requires the user's
+   explicit authorization per `AGENTS.md`; none has been given yet.
+2. Fix the `C:\xampp\mysql\bin\VCRUNTIME140.dll` issue on this workstation
+   (re-extract from a fresh XAMPP/MariaDB download, or install the matching
+   VC++ Redistributable) so schema-wildcard `GRANT` statements stop crashing
+   the server; confirm with a real grant before trusting it again.
+3. Begin the next PRD vertical slice: authorization Policies beyond
+   role-filtered navigation, the first business workflow endpoint group, or
+   CI — whichever the user prioritizes.
+4. Update PHP to a current supported patch and re-evaluate the documented
    Laravel 13 upgrade trigger before locking the production framework baseline.
+5. Confirm the PRD §17 institutional policy values this slice left
+   provisional (Sanctum token expiration; `programs`/`academic_terms` status
+   vocabularies) before any production-like deployment.
 
 ## PRD Phase Checklist
 
@@ -206,10 +246,13 @@ MySQL/Sanctum identity foundation.
   - [x] Independently runnable frontend, API, and prediction-service shells.
   - [x] Shared API error contract and OpenAPI document.
   - [x] Database-independent local quality gates and dependency audits.
-  - [ ] Supported MySQL connection and reversible base migrations.
-  - [ ] Deterministic role seeders.
+  - [x] Database connection and reversible base migrations (MariaDB per
+    ADR 0007, not the PRD's MySQL 8 LTS — a documented local-development
+    deviation).
+  - [x] Deterministic role seeders.
   - [ ] CI quality checks.
-- [ ] Authentication and RBAC
+- [x] Authentication (Sanctum bearer-token login/logout/me; RBAC authorization
+  policies beyond role-filtered frontend navigation remain unstarted)
 - [ ] Pre-enrollment schedules
 - [ ] Enrollment and digital advising
 - [ ] Final approvals, payment queue, and COM
@@ -220,48 +263,79 @@ MySQL/Sanctum identity foundation.
 
 ## API and Backend Status
 
-- Implemented endpoint: public, database-independent
-  `GET /api/v1/health`.
-- Route middleware: API group plus `throttle:60,1`.
-- Pending endpoints: every business endpoint group in PRD §8.4.
-- Form Requests: none; Phase 0A accepts no application input.
-- Policies: none; authentication/RBAC has not started.
-- API Resources: `HealthResource`.
-- Actions/Services: none; no Phase 0A business use case exists.
-- Transactions and idempotency: not applicable yet.
+- Implemented endpoints: public, database-independent `GET /api/v1/health`;
+  `POST /api/v1/auth/login` (public, throttled); `POST /api/v1/auth/logout`
+  and `GET /api/v1/auth/me` (`auth:sanctum` + `EnsureUserIsActive`).
+- Route middleware: API group, health/login throttles, Sanctum bearer auth.
+- Pending endpoints: every business endpoint group in PRD §8.4 beyond auth.
+- Form Requests: `LoginRequest` (validates, normalizes email, owns the
+  per-account+IP throttle key).
+- Policies: none yet; authentication exists, authorization Policies do not.
+- API Resources: `HealthResource`, `AuthResource`, `UserResource`.
+- Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
+  non-active accounts, issues token, stamps `last_login_at`, all in one
+  transaction).
+- Transactions and idempotency: `AuthenticateUser` wraps token issuance and
+  the login timestamp update in one `DB::transaction`.
 - Security present: correlation IDs, safe exception rendering, no-store,
-  credentialless CORS allowlist/preflight behavior, and health throttling.
-- Security pending: Sanctum bearer authentication, authorization policies,
-  business rate limiters, audit events, and infrastructure controls.
+  credentialless CORS allowlist/preflight behavior, health/login throttling,
+  Sanctum bearer tokens with a provisional expiration policy, one generic
+  credential-failure response (no account enumeration), and least-privilege
+  MariaDB principals (`grc_app` DML-only, `grc_migrator`/`grc_test`
+  table-scoped DDL).
+- Security pending: authorization Policies, business rate limiters, audit
+  events, the approved (non-provisional) token-expiration policy, and
+  infrastructure controls.
 
 ## Frontend Status
 
-- Pages: institutional landing, service readiness, local-demo login, role-aware
-  portal overview, catalog-authorized module preview/denial, and branded
-  not-found route.
-- Components: public and portal shells plus reviewed shadcn Alert, Avatar,
-  Badge, Button, Card, Empty, Field, Input, Label, Separator, Sheet, and
-  Skeleton sources.
-- Data layer: typed API client, strict Zod success/error parsing, TanStack Query
-  client and health hook.
-- Forms: React Hook Form/Zod local-demo login with generic credential errors,
-  summary focus, pending state, and password visibility.
-- States: loading, success, connection, HTTP, configuration, contract, and retry.
+- Pages: institutional landing, service readiness, login (mode-aware copy for
+  `api`/`demo`/`disabled`), role-aware portal overview, catalog-authorized
+  module preview/denial, and branded not-found route.
+- Components: public and portal shells (mode-aware "Preview portal"/"Demo
+  portal" badging) plus reviewed shadcn Alert, Avatar, Badge, Button, Card,
+  Empty, Field, Input, Label, Separator, Sheet, and Skeleton sources.
+- Auth: `api` mode is now the default everywhere (was `demo`); `auth-token.ts`
+  is the sole owner of the bearer token in `localStorage`; `api-auth-gateway.ts`
+  authenticates against the real backend and restores sessions across page
+  reload via `GET /api/v1/auth/me`; `demo`/`disabled` modes unchanged and still
+  fully covered by their pre-existing tests.
+- Data layer: typed API client (`getJson`/`postJson`/authenticated variants,
+  registered token provider, 401 handler), strict Zod success/error parsing
+  (health + auth schemas), TanStack Query client and health hook.
+- Forms: React Hook Form/Zod login with generic credential errors, summary
+  focus, pending state, and password visibility — real API validation errors
+  and demo fixture errors both flow through the same UI.
+- States: loading, success, connection, HTTP, configuration, contract, retry,
+  and session-restore.
 - Boundary: source scan confirms the sole browser `fetch` call is in
-  `src/app/services/api-client.ts`; no ML URL/call is present.
-- Accessibility/responsiveness: source and component tests pass; interactive
-  browser visual QA remains unverified because no browser session was available.
-- Router status: patched `react-router@8.3.0` now provides public, anonymous,
-  protected, safe-return, all-role portal, module-preview, and not-found routes.
+  `src/app/services/api-client.ts`; `localStorage` only in `auth-token.ts`;
+  `sessionStorage` only in `demo-session-store.ts`; no ML URL/call present.
+- Accessibility/responsiveness: source/component tests pass, **and** live
+  Playwright browser QA passed for the first time this project has had a
+  connected browser — desktop and 390×844 mobile viewports, real login,
+  session restore across a real page reload, sign-out, zero console errors.
+- Router status: patched `react-router@8.3.0` provides public, anonymous,
+  protected, safe-return, all-role portal, module-preview, and not-found
+  routes.
 
 ## Database and Migrations
 
-- Applied migrations: none.
-- Pending first schema slice: PRD §10.1 identity/organization base tables.
-- Seeders/factories: none.
-- Local database warning: `C:\xampp\mysql` is MariaDB 10.4.32, not the required
-  MySQL 8 LTS, and no database listener is active.
-- Rollback status: not applicable because no database change was made.
+- Applied migrations: `users`, `programs`, `academic_terms`,
+  `personal_access_tokens` — all four, live in `grc_enrollment` (dev) and
+  verified reversible (`migrate:rollback` → `migrate`) in
+  `grc_enrollment_test`.
+- Seeders: `RoleUserSeeder` — nine synthetic identities, one per role, run
+  against the dev database.
+- Database: `C:\xampp\mysql` MariaDB 10.4.32, active on `127.0.0.1:3306`.
+  Accepted as the local development substitute for the PRD's MySQL 8 LTS
+  requirement per ADR 0007. `grc_enrollment` / `grc_enrollment_test` exist
+  with `utf8mb4`/`utf8mb4_unicode_ci`; `grc_app` (DML-only on the four domain
+  tables), `grc_migrator` (full DDL+DML, used for `php artisan migrate
+  --database=mariadb_migrator`), and `grc_test` (full DDL+DML on the test
+  database) all exist with least-privilege table-level grants.
+- Rollback status: verified — a full `migrate:rollback` then `migrate` cycle
+  passes in the automated test suite.
 
 ## Predictive Analytics Status
 
@@ -307,6 +381,24 @@ MySQL/Sanctum identity foundation.
 | ML HTTP smoke | temporary Uvicorn server | Passed: 200, exact internal v1 envelope and headers | 2026-07-26 |
 | OpenAPI parse | PyYAML parse/assertions | Passed | 2026-07-26 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors | 2026-07-26 |
+| Backend format | `composer format:check` | Passed | 2026-07-27 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 32 files | 2026-07-27 |
+| Backend tests | `composer test` | Passed: 70 tests, 250 assertions | 2026-07-27 |
+| Backend dependency audit | `composer audit --locked --no-interaction` | Passed: no vulnerability advisories | 2026-07-27 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly health + 3 auth routes | 2026-07-27 |
+| Migration reversibility | `migrate:rollback` then `migrate` | Passed: all 4 tables drop/recreate cleanly | 2026-07-27 |
+| Frontend clean install | `npm ci --ignore-scripts` | Passed: 343 packages, 0 vulnerabilities | 2026-07-27 |
+| Frontend format | `npm run format:check` | Passed | 2026-07-27 |
+| Frontend ESLint | `npm run lint` | Passed, zero warnings | 2026-07-27 |
+| Frontend fast lint | `npm run lint:fast` | Passed | 2026-07-27 |
+| TypeScript | `npm run typecheck` | Passed: strict project build | 2026-07-27 |
+| Frontend tests | `npm test` | Passed: 20 files, 174 tests | 2026-07-27 |
+| Frontend build | `npm run build` | Passed: 509.01 kB/158.30 kB gzip (chunk-size advisory only) | 2026-07-27 |
+| Frontend audit | `npm audit --audit-level=moderate` | Passed: 0 vulnerabilities | 2026-07-27 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding auth routes/schemas) | 2026-07-27 |
+| Interactive browser QA | Playwright MCP against live Laravel (127.0.0.1:8100) + Vite (127.0.0.1:5173) + MariaDB | Passed: real login, session restore across full page reload, sign-out, mobile viewport, zero console errors — first successful browser session in this project's history | 2026-07-27 |
+| Live HTTP smoke (auth) | temporary `php artisan serve` on 127.0.0.1:8100 | Passed: login/me/logout/revoked-token/generic-401/throttle all exact per plan | 2026-07-27 |
+| Service cleanup | listener check for ports 3306 (unaffected), 5173, 8100 | Passed: dev-server ports closed after QA; MariaDB left running (shared XAMPP service) | 2026-07-27 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -328,18 +420,23 @@ successfully.
 | 2026-07-26 | Use React Router 8.3.0 in client-library mode for the demo routes. | The current patched release resolves the recorded RSC advisory; this SPA will not use RSC, server actions, or framework-mode packages. |
 | 2026-07-26 | Enable synthetic authentication only in development/test modes. | Production builds may show the public landing page but must not accept committed demo credentials. |
 | 2026-07-26 | Plan `react-router@8.3.0` and `@hookform/resolvers@5.5.7`. | Registry metadata confirms compatibility with Node 24, React 19.2.7, React Hook Form 7.83, and Zod 4.4; the plan retains client-library/non-RSC routing only. |
+| 2026-07-27 | Abandon the isolated MySQL 8.4 instance; use the existing XAMPP MariaDB 10.4.32 on port 3306 with scoped principals instead. | Four review rounds hardened 2,628 lines of lifecycle PowerShell that had never once been executed; user explicitly chose to stop and use MariaDB. See ADR 0007. Collation changes to `utf8mb4_unicode_ci` (MySQL 8's `utf8mb4_0900_ai_ci` does not exist in MariaDB). |
+| 2026-07-27 | Fold the Sanctum login/logout/me vertical slice into this identity-foundation slice instead of deferring it. | User explicitly requested it so the portal authenticates against the database instead of frontend fixtures; PRD §8.4/§9.1 already specify the exact three routes and bearer-token rules. |
 
 ## Blockers and Clarifications Needed
 
 ### Supported database environment
 
-- Blocker: XAMPP provides MariaDB 10.4.32, not MySQL 8.4 LTS; no database
-  server/listener or Docker runtime is available.
-- Impact: migrations, MySQL constraints, reversible migration checks, seeders,
-  and database integration tests cannot be truthfully verified.
-- Owner: development environment owner.
-- Safe work meanwhile: contracts, documentation, database-independent tests,
-  UI components, and private-service scaffolding.
+- Resolved 2026-07-27: no longer a blocker for local development. The user
+  authorized using the existing XAMPP MariaDB 10.4.32 instance (ADR 0007)
+  instead of waiting for an isolated MySQL 8.4 install, which had consumed
+  four review rounds without ever being executed.
+- Residual gap: MariaDB 10.4 is not the PRD-specified MySQL 8 LTS, and MariaDB
+  10.4 itself is past its upstream end-of-life (June 2024). Migrations,
+  constraints, and integration tests in this phase are verified against
+  MariaDB only; a real MySQL 8 re-verification remains required before any
+  production deployment decision.
+- Owner: revisit alongside the PHP/Laravel production-baseline decision below.
 
 ### PHP production baseline
 
@@ -478,6 +575,11 @@ successfully.
   completion status and advanced conservatively. Those partial results were
   discarded; no related processes remained, and direct isolated reruns
   completed with 140/140 tests and a successful production build.
+- The requested Playwright browser validation was attempted against the active
+  local login URL, but the supported MCP browser runtime again returned “No
+  browser is available.” This remains a tooling gap rather than an application
+  pass; focused browser-like component/router tests are being run, and live
+  Playwright claims remain withheld.
 
 ## Files Changed in the Current Session
 
@@ -623,3 +725,605 @@ ports 5173/5174 confirmed closed, and the retry passed. Browser discovery still
 returns no available browser.
 **Next exact step:** Re-run browser QA when available, then provision the
 supported MySQL 8.4 identity baseline before the real Sanctum vertical slice.
+
+### 2026-07-26 23:15 +08:00
+
+**Goal:** Restore usable local demo login access and verify the UI-only portals
+before continuing the PRD.
+**Completed:** Traced the disabled form to a missing Vite demo-mode input on a
+fresh checkout; added a failing regression, made development default to demo
+with an explicit local disable override, preserved production disablement,
+updated setup documentation, confirmed the active Vite server serves the fix,
+and reran the complete frontend gate.
+**Not completed:** Live Playwright interaction/visual QA remains unavailable
+because the MCP browser runtime has no connected browser. Real Sanctum auth,
+MySQL users/roles, API authorization, CI, and business workflows remain
+deferred.
+**Tests run:** Focused login/router/portal coverage passed 5 files/79 tests.
+The complete gate passed Prettier, ESLint, Oxlint, strict TypeScript, 16 Vitest
+files/144 tests, Vite production build, and audit with 0 vulnerabilities.
+**Known issues:** The workstation still provides MariaDB 10.4.32 and PHP
+8.2.12, not the PRD's supported MySQL 8.4/current PHP production baseline.
+**Next exact step:** Refresh `http://127.0.0.1:5173/login` and test the
+documented synthetic roles; repeat MCP Playwright QA when a browser connects,
+then provision MySQL 8.4 before implementing real Sanctum authentication.
+
+### 2026-07-26 23:24 +08:00
+
+**Goal:** Define the next PRD-aligned database foundation without disrupting
+the existing XAMPP MariaDB environment.
+**Completed:** Audited the local database/backend baseline; compared portable
+MySQL, Windows service, and MariaDB approaches; received approval for an
+isolated official MySQL 8.4 LTS instance on `127.0.0.1:3307`; and created the
+review-ready design at
+`docs/superpowers/specs/2026-07-26-mysql84-identity-foundation-design.md`. The
+design specifies checksum verification, loopback-only operation,
+least-privileged development/test principals, three reversible identity
+foundation tables, a nine-value role enum, and safe deterministic seed data
+whose password must come from an ignored environment variable.
+**Not completed:** The MySQL archive has not been downloaded or installed;
+databases, principals, migrations, enum, seeders, tests, and lifecycle scripts
+have not been implemented. Sanctum and real portal authentication remain a
+later slice.
+**Tests run:** No runtime or application code changed during design, so tests
+were not rerun. Written-design checks found no placeholder markers, exactly
+nine unique synthetic role emails, and no diff whitespace errors. Self-review
+removed premature `curricula` and `student_profiles` tables and their
+unconfirmed policy values; the slice now uses only the unambiguous `users`,
+`programs`, and `academic_terms` foundation.
+**Known issues:** The active local database remains MariaDB 10.4.32 on port
+`3306`. Live Playwright visual QA remains unavailable because no browser is
+connected to the MCP runtime.
+**Next exact step:** Self-review the written database design, obtain user
+approval, then create the TDD implementation plan before provisioning MySQL.
+
+### 2026-07-26 23:24 +08:00 — Planning started
+
+**Goal:** Convert the approved MySQL 8.4 identity-foundation design into an
+exact, test-driven implementation plan.
+**Completed:** User approved the written design; reread `AGENTS.md`, `PRD.md`,
+and the complete progress record; mapped the backend, test, configuration, and
+documentation surfaces; confirmed that `scripts/`, models, migrations, and
+seeders do not yet exist; and aligned the planned PHP role values with the
+existing frontend credential contract.
+**Not completed:** The implementation plan is still being written. No MySQL
+download, instance configuration, database mutation, migration, seeder, or
+application implementation has started.
+**Tests run:** No runtime/application code changed, so application tests were
+not rerun.
+**Known issues:** The existing XAMPP database remains MariaDB 10.4.32 on port
+`3306`; MySQL 8.4 must remain isolated on `3307`. The working tree also retains
+the previously verified login correction and documentation changes.
+**Next exact step:** Finish and self-review the plan against every approved
+design requirement, then offer the supported execution workflows.
+
+### 2026-07-26 23:47 +08:00
+
+**Goal:** Finish a directly executable TDD plan for the approved MySQL 8.4
+identity foundation.
+**Completed:** Created
+`docs/superpowers/plans/2026-07-26-mysql84-identity-foundation.md` with nine
+tasks and 65 checkbox checkpoints covering canonical identity types,
+dependency-free PowerShell safety tests, bootstrap/lifecycle scripts, Laravel
+connections, isolated provisioning, reversible migrations, the guarded
+nine-role seeder, engine/grant verification, data dictionary, runbook, and
+final quality gates. Self-review aligned four role IDs with the existing portal
+contract, removed unresolved implementation labels, added Windows PowerShell
+5.1-compatible secret generation, added DPAPI-protected administrator
+credential persistence, and supplied direct model/constraint/privilege tests.
+The approved design was synchronized with the canonical roles and encrypted
+administrator-credential boundary.
+**Not completed:** No implementation task, worktree, download, installation,
+database/principal creation, migration, seeding, or runtime mutation has
+started. No commit or push was created.
+**Tests run:** Planning checks confirmed nine tasks, 65 executable steps, 1,752
+plan lines, exactly nine unique seed emails, coverage of every required
+runtime/security/rollback/documentation term, zero unresolved-marker matches,
+and zero `git diff --check` errors. Application tests were not rerun because
+only planning and progress documents changed.
+**Known issues:** MySQL 8.4 is still absent and MariaDB 10.4.32 remains the
+local database. The current `main` checkout is intentionally dirty with the
+previously verified login correction plus this uncommitted design/plan, so
+execution must begin through the repository's worktree workflow.
+**Next exact step:** Choose subagent-driven or inline execution, then use the
+required execution/worktree/TDD skills to begin Task 1 without altering the
+dirty root checkout.
+
+### 2026-07-26 23:59 +08:00 — Execution started
+
+**Goal:** Execute the approved nine-task MySQL identity-foundation plan through
+fresh task implementers and independent task reviews.
+**Completed:** User selected and explicitly authorized subagent-driven
+execution. Loaded the subagent, worktree, TDD, and test-quality workflows;
+confirmed the root checkout is normal `main`, `.worktrees/` exists and is
+ignored through `.git/info/exclude`, and no conflicting feature branch or
+linked worktree exists.
+**Not completed:** The isolated worktree, SDD ledger, baseline dependency
+installation/tests, Task 1 implementation, reviews, and every MySQL mutation
+remain pending.
+**Tests run:** Read-only Git/worktree preflight only; no application test has
+run in the new execution workspace yet.
+**Known issues:** Repository instructions prohibit commits without a separate
+explicit request, so this SDD run will use task-scoped uncommitted review
+packages. Preflight is also checking whether the planned PowerShell
+source-contract harness should remain a lint gate while Task 5 supplies the
+required real lifecycle behavior verification.
+**Next exact step:** Create and baseline the isolated feature worktree, create
+the plan-specific SDD ledger, then resolve any load-bearing plan/review-rule
+conflict before dispatching Task 1.
+
+### 2026-07-27 00:05 +08:00 — MySQL identity foundation Task 1 started
+
+**Goal:** Add only the database-independent canonical technical identity types
+and narrow Eloquent user model for the Phase 0 identity foundation.
+**Scope:** No schema exists yet; this task adds no migrations, database access,
+Sanctum behavior, authentication flow, or institutional policy values.
+**Next exact step:** Create the specified failing enum/model unit tests, then
+implement only the canonical role/status types and model casts required by the
+approved Task 1 brief.
+
+**Checkpoint:** The specified focused red run failed as expected because
+`UserRole`, `UserStatus`, and `User` did not exist. After the minimal
+implementation, the same run passed 4 tests/7 assertions. The first
+`composer format:check` then failed only on Pint's `new_with_parentheses` rule
+in `tests/Unit/Models/UserTest.php`; no production behavior failed or changed.
+
+**Completed:** Added the nine-value `UserRole` enum with stable labels, the
+two-value technical `UserStatus` enum, and the narrow `User` model with only
+the approved fillable, hidden, password/hash, enum, and immutable-login casts.
+No schema, database operation, Sanctum trait, authentication flow, or policy
+value was added.
+**Tests run:** After correcting the test-only Pint style finding,
+`php artisan test tests/Unit/Domain/Identity/UserRoleTest.php tests/Unit/Domain/Identity/UserStatusTest.php tests/Unit/Models/UserTest.php`
+passed 4 tests/7 assertions; `composer format:check` passed; `composer analyse`
+passed with no errors across 17 files; and full `composer test` passed 15
+tests/68 assertions.
+**Self-review:** `git diff --check` passed with no output. The implementation
+matches the approved role IDs, labels, status values, and casts verbatim; the
+model deliberately excludes `HasApiTokens` because Sanctum belongs to a later
+slice. No commit or push was created.
+**Next exact step:** Perform the task-scoped independent review, then continue
+with the next approved identity-foundation task.
+
+
+### 2026-07-27 02:07–02:20 +08:00 — MySQL 8.4 lifecycle scripts (Tasks 2–3, collapsed)
+
+**Summary:** The PowerShell safety library and MySQL 8.4 bootstrap/lifecycle
+scripts (old Task 2 and Task 3: `scripts/mysql84/MySql84.Common.ps1`,
+`bootstrap.ps1`, `start.ps1`, `status.ps1`, `stop.ps1`, and their test/scan
+harnesses) were implemented and passed four rounds of independent
+security/spec review (canonical path handling, process argument/quoting
+integrity, initialization-password/TOCTOU/cleanup safety, exact `my.ini`
+option-file validation, and MySQL comment/alias-character path rejection plus
+byte-exact UTF-8/LF generation). Every round found and fixed a real defect,
+and every fix, RED/GREEN cycle, and non-runtime verification pass ran clean.
+No MySQL 8.4 download, extraction, initialization, or server process was ever
+executed at any point: `C:\xampp\mysql84` remained absent and port `3307`
+never had a listener through every round. The scripts were reviewing
+themselves correctly; nothing had verified them against a real MySQL server.
+**Superseded 2026-07-27:** the user chose to use the existing XAMPP MariaDB
+10.4.32 instance instead of provisioning an isolated MySQL 8.4 install.
+`scripts/mysql84/` (8 files, 2,628 lines) was deleted; the approved design and
+plan were marked superseded in place; `docs/adr/0007-mariadb-development-database.md`
+records the rationale and PRD deviation; `docs/architecture/version-compatibility.md`
+was updated. The full round-by-round detail remains in
+`.superpowers/sdd/2026-07-26-mysql84-identity-foundation/task-3-report.md` and
+the SDD ledger. The replacement plan is
+`docs/superpowers/plans/2026-07-27-mariadb-identity-sanctum-auth.md`, which
+also folds in the Sanctum authentication vertical slice.
+**Carried forward unchanged:** old Task 1's canonical identity types and
+`User` model (`backend/app/Domain/Identity/UserRole.php`,
+`UserStatus.php`, `backend/app/Models/User.php`) are database-agnostic and
+remain the foundation for the MariaDB-based migrations.
+**Next exact step:** Begin the replacement plan's Task 2 — create
+`grc_enrollment`/`grc_enrollment_test` and the three scoped principals against
+the live MariaDB instance.
+
+### 2026-07-27 18:00–18:20 +08:00 — Task 2: databases and principals, with a real incident
+
+**Goal:** Create `grc_enrollment`/`grc_enrollment_test` and the three scoped
+principals against the live MariaDB instance.
+**Found first:** `SHOW DATABASES` revealed `grc_enrollment` already existed,
+with 18 tables and real-looking data (12 `system_users`, 4
+`faculty_schedules`, etc.), all created 2026-07-23 — before this repo's git
+history starts. Not created by this project. User confirmed it was disposable
+prototype data. Backed up via `mysqldump` to
+`C:\xampp\mysql-backups\grc_enrollment_prototype_backup_20260723.sql` before
+dropping and recreating the database fresh.
+**Incident:** The first schema-wildcard `GRANT SELECT, INSERT, UPDATE, DELETE
+ON grc_enrollment.* TO 'grc_app'@'127.0.0.1'` failed with `Got error 176 "Read
+page with wrong checksum" from storage engine Aria` — the `mysql.db` system
+table (MariaDB's schema-grant table) was corrupted. `CHECK TABLE` confirmed
+`mysql.global_priv`/`tables_priv`/`columns_priv`/`procs_priv` were all healthy;
+only `mysql.db` was affected. With explicit user approval, ran `REPAIR TABLE
+mysql.db`, which fixed the corruption but reset the table from 3 rows to 0,
+losing `pma@localhost`'s (phpMyAdmin's control user) grant on its own
+`phpmyadmin` database. The next write to that table (`FLUSH PRIVILEGES` after
+a `GRANT` attempting to restore `pma`'s access) crashed `mysqld.exe` entirely
+(Windows Event Log: exception `0xc0000005` in `VCRUNTIME140.dll`). User
+restarted MariaDB via XAMPP Control Panel; a fresh plain schema-wildcard
+`GRANT` on `grc_enrollment.*` crashed it again with the **identical** fault
+signature (same exception, same module, same byte offset), even though
+`CHECK TABLE mysql.db` reported clean immediately beforehand. Two identical
+crashes on a table that checks out clean rules out ordinary data corruption as
+the proximate cause — this points to a broken/corrupted
+`C:\xampp\mysql\bin\VCRUNTIME140.dll`, not the database itself. Not caused by
+this session; a separate, unrelated `mysqld.exe` crash on 2026-07-24 (Windows
+Event Log) predates any agent involvement and is the likely origin of the
+`mysql.db` corruption in the first place.
+**Workaround, user-approved:** table-level `GRANT ... ON db.specific_table TO
+...` statements (routed through `mysql.tables_priv`, confirmed healthy through
+both crashes) do not trigger the crash. Used this exclusively from this point:
+`grc_migrator` and `grc_test` each received `CREATE, ALTER, DROP, INDEX,
+SELECT, INSERT, UPDATE, DELETE` on all five planned table names (`migrations`,
+`users`, `personal_access_tokens`, `programs`, `academic_terms`) in their
+respective databases — valid pre-creation because `CREATE` is the one
+privilege MySQL/MariaDB allows granting on a not-yet-existing table.
+`grc_app`'s `SELECT, INSERT, UPDATE, DELETE`-only grant attempt on the same
+tables correctly failed with `ERROR 1146 table doesn't exist` (expected,
+documented behavior, not a crash) and is deliberately deferred to the start of
+Task 4, once the tables are real. `pma`'s access was fully restored via the
+same table-level approach across its 19 real `phpmyadmin.*` tables — server
+survived all 20+ table-level GRANT statements without incident.
+**State after this task:** MariaDB running (verified via `netstat` + `SELECT
+1`). `grc_enrollment`/`grc_enrollment_test` exist with the intended
+`utf8mb4`/`utf8mb4_unicode_ci` collation. `grc_app`/`grc_migrator`/`grc_test`
+exist; `grc_migrator`/`grc_test` hold their full planned grants, `grc_app`
+holds none yet (by design). `pma` fully restored. No other pre-existing
+database (`b1g_timer_dev`, `harmonyhub`, `login_system`, `sixt_sense_spa`,
+`sixth_sense_spa`, `smartload`, `websystem`, `test`) was touched. The three
+generated passwords exist only in the now-exited PowerShell process memory —
+never written to any file — and must be reset via `ALTER USER ... IDENTIFIED
+BY` when Task 3 writes `backend/.env`/`.env.testing`.
+**Known issue carried forward:** the underlying `VCRUNTIME140.dll` problem is
+unresolved. Schema-wildcard `GRANT ... ON db.*` must not be attempted again
+against this instance without the user first replacing that DLL (fresh XAMPP
+extraction or a matching VC++ Redistributable install) and confirming a
+schema-wildcard grant survives.
+**Next exact step:** Task 3 — Laravel `mariadb` connection config, `.env`/
+`.env.testing`, `phpunit.xml`, and `DatabaseConfigurationTest`.
+
+### 2026-07-27 18:25 +08:00 — Task 3: Laravel connection and environment config
+
+**Completed:** Reset the three principals' passwords (never persisted before)
+via `ALTER USER` and wrote them directly into `backend/.env` (`DB_CONNECTION=
+mariadb`, `grc_app`/`grc_enrollment`) and a new `backend/.env.testing`
+(`grc_test`/`grc_enrollment_test`) without ever displaying or logging a
+password. Added a `mariadb_migrator` connection to `config/database.php`
+(reads `DB_MIGRATOR_USERNAME`/`DB_MIGRATOR_PASSWORD`) so local migrations run
+as `grc_migrator` via `php artisan migrate --database=mariadb_migrator`,
+keeping the app's default connection scoped to `grc_app`'s DML-only grants —
+a one-flag deviation from the original design's "no manual step" wording,
+accepted as a reasonable least-privilege trade-off. Updated `.env.example`
+(`mysql`→`mariadb`, added migrator template vars), added
+`.env.testing.example`, added `.env.testing` to `.gitignore`, and removed
+phpunit.xml's stale commented sqlite lines.
+**Discovered and worked through:** the default `mariadb` connection (`grc_app`)
+cannot even select `grc_enrollment` as its default database yet — MariaDB
+requires at least one privilege in a database before `USE` succeeds, and
+`grc_app`'s grants are deliberately deferred to Task 4. Verified instead
+through the new `mariadb_migrator` connection, which already holds real
+table-level grants; `DatabaseConfigurationTest` checks connection config
+directly via `DB::connection()` (works because PHPUnit's `APP_ENV=testing`
+loads `.env.testing`, where `grc_test` already has full rights on
+`grc_enrollment_test`) rather than asserting against the not-yet-usable
+dev `grc_app` connection.
+**Tests run:** `tests/Feature/Database/DatabaseConfigurationTest.php` — 5
+tests/11 assertions, all against the real live MariaDB server (version string,
+charset, collation, strict SQL mode, migrator connection config). Full
+`composer test`: 20 tests/79 assertions passed. `composer format:check` and
+`composer analyse` (Larastan level 8, 17 files) both passed.
+**Next exact step:** Task 4 — reversible migrations for `users`, `programs`,
+`academic_terms`, and Sanctum's `personal_access_tokens`, run via
+`grc_migrator`; then grant `grc_app`'s deferred DML privileges once the real
+tables exist.
+
+### 2026-07-27 18:35 +08:00 — Tasks 4 and 6: migrations, Sanctum install, and a caught PRD violation
+
+**Completed (Task 4):** Installed `laravel/sanctum` v4.3.3 (pulled forward from
+Task 6 because Task 4 needs its migration), published and renamed its migration
+to `2026_07_26_000004_create_personal_access_tokens_table.php` to fit the
+slice's ordering, and added `HasApiTokens` to `App\Models\User`. Wrote
+`tests/Feature/Database/IdentityFoundationMigrationTest.php` first and
+confirmed RED (7 failed / 1 passed), then implemented the three reversible
+migrations for `users`, `programs`, and `academic_terms` exactly as the
+approved design specifies — `role`/`status` as application-backed strings
+rather than MySQL `ENUM`, no foreign keys in this slice, unique `email`,
+unique `code`, and unique `(school_year, semester)`.
+**Migrations applied:** `php artisan migrate --database=mariadb_migrator`
+created all four tables in `grc_enrollment`. Verified every table is `InnoDB`
+with `utf8mb4_unicode_ci`.
+**Deferred grants completed:** With the tables now real, `grc_app` received its
+`SELECT, INSERT, UPDATE, DELETE` grants on `users`,
+`personal_access_tokens`, `programs`, and `academic_terms` (deliberately not
+`migrations`), using table-level statements per the Task 2 workaround. Server
+survived every batch. Least-privilege verified live: `grc_app` can read
+`users` but a `CREATE TABLE` attempt through its connection is correctly
+denied.
+**PRD violation caught by a test (Task 6):** the pre-existing `ApiSurfaceTest`
+route-inventory assertion failed the moment Sanctum was installed, because
+Sanctum auto-registers `GET|HEAD sanctum/csrf-cookie` — precisely what PRD §9.1
+forbids ("Do not use session cookies, CSRF-cookie endpoints, or
+`withCredentials`"). Published `config/sanctum.php` and set `routes => false`,
+`stateful => []`, `guard => []` (stock `['web']` would consult the session
+guard before falling back to bearer tokens), and `middleware => []`. Route
+inventory is back to exactly `GET|HEAD api/v1/health`. Added
+`tests/Feature/Auth/SanctumConfigurationTest.php` (7 tests) so this boundary
+cannot silently drift back.
+**Token expiration flagged, not invented:** PRD §9.1 requires an approved
+expiration policy and PRD §17 lists it as an open institutional decision.
+`config/sanctum.php` reads `SANCTUM_TOKEN_EXPIRATION` with a **provisional**
+480-minute local default, explicitly documented in the config and
+`.env.example` as not an approved policy value. Sanctum's own default (`null`
+= tokens never expire) was deliberately rejected so an unset policy fails safe.
+**Tests run:** full `composer test` — 35 tests/109 assertions passed, including
+8 migration tests (column presence, all three unique constraints enforced
+against the live server, and a full `migrate:rollback` → `migrate` reversibility
+cycle). `composer format:check` passed after importing `QueryException` rather
+than using inline FQCNs. `composer analyse` (Larastan level 8) passed with no
+errors. `composer audit --locked` found no advisories.
+**Next exact step:** Task 5 — the deterministic nine-role seeder, guarded by
+`GRC_SEED_PASSWORD` and restricted to local/testing environments.
+
+### 2026-07-27 18:45 +08:00 — Task 5: deterministic nine-role seeder
+
+**Completed:** Wrote `RoleUserSeederTest.php` first (RED: 8 failed), then
+implemented `database/seeders/RoleUserSeeder.php` and `DatabaseSeeder.php`.
+The seeder upserts exactly the nine approved synthetic identities keyed on
+email inside a transaction, reads `GRC_SEED_PASSWORD` from the environment,
+hashes through Laravel's `hashed` cast, and refuses to run outside `local`/
+`testing`. Seeded the real dev database and verified all nine rows: one per
+role, all `active`, all passwords stored as 60-character bcrypt hashes, no
+plain text.
+**Test correction during TDD:** the environment-guard test initially failed
+for the wrong reason — `db:seed` in a faked production environment hits
+Laravel's own interactive confirmation prompt before the seeder body runs, so
+the assertion saw a Mockery error rather than the guard. Rewrote it to invoke
+`app(RoleUserSeeder::class)->run()` directly, which is also the more valuable
+assertion: it proves the seeder is safe when chained programmatically from
+another seeder, where the command-level prompt would not protect it. Added two
+further tests asserting that a refused run seeds *nothing* (not a partial
+write) in both the wrong-environment and missing-password cases.
+**Secret handling:** the seed password was generated locally with
+`RandomNumberGenerator`, written only into the gitignored `backend/.env`, and
+never printed, logged, echoed, or recorded in this file or
+`docs/testing/SEEDED_IDENTITIES.md`.
+**Documentation:** added `docs/testing/SEEDED_IDENTITIES.md` listing the nine
+role/name/email triples, the safety guarantees each test enforces, and an
+explicit comparison table separating these database fixtures from the UI-only
+`DEMO_CREDENTIALS.md` accounts — the two sets must never share a password.
+**Quality-gate improvement (unplanned, recorded per AGENTS.md):** `phpstan.neon`
+scanned only `app`, `bootstrap`, and `routes`, so the new seeder and all four
+migrations were invisible to static analysis. Added `database` to the analysed
+paths; coverage went from 17 to 23 files and still passes Larastan level 8
+with no errors.
+**Tests run:** `RoleUserSeederTest` — 10 tests/42 assertions. Full
+`composer test` — 45 tests/151 assertions passed. `composer format:check`
+passed. `composer analyse` passed across 23 files.
+**Next exact step:** Task 7 — `POST /api/v1/auth/login`, `POST
+/api/v1/auth/logout`, and `GET /api/v1/auth/me` with a Form Request, an
+Action, `AuthResource`, generic credential failures, and login rate limiting.
+
+### 2026-07-27 18:50 +08:00 — Task 7: Sanctum auth endpoints
+
+**Completed:** Wrote `LoginEndpointTest` (14 tests) and `SessionEndpointTest`
+(9 tests) first, then implemented the three PRD §8.4 routes:
+`POST /api/v1/auth/login` (public, throttled), `POST /api/v1/auth/logout` and
+`GET /api/v1/auth/me` (both `auth:sanctum`). Layering follows the repository's
+existing conventions: `LoginRequest` Form Request (validates, lowercases and
+trims the email before validation, and owns the throttle key),
+`App\Actions\Auth\AuthenticateUser` action (verifies, rejects non-active
+accounts, issues the token and stamps `last_login_at` in one transaction),
+`AuthResource` as the single path a token may leave through per PRD §9.1, and
+`UserResource` for `/me` with an exact key set that never includes the hash.
+**Security properties implemented and tested:** unknown email, wrong password,
+and disabled account all raise one `InvalidCredentialsException` rendered as an
+identical generic 401, so the endpoint cannot enumerate accounts; a dummy
+`Hash::check` runs on the missing-user path so response timing does not leak
+existence either. Login throttles at 5 attempts per **email+IP** (verified live
+that exhausting one account does not lock out another). Logout revokes only the
+presented token, leaving other devices signed in. A new `EnsureUserIsActive`
+middleware rejects and deletes a still-valid token whose account was disabled
+after issue — without it, disabling a user would only block new logins.
+`Cache-Control: no-store, private` on every token-bearing response.
+**Contract correction during TDD:** the first test run failed because the tests
+expected an unwrapped body. The existing API contract (`HealthResource`,
+`docs/api/openapi.yaml`, and `HealthEndpointTest`'s `assertExactJson`) uses a
+`data` wrapper for success and `error` for failures. The tests were wrong, not
+the implementation; they now assert `data.*` paths, keeping the new endpoints
+consistent with the documented envelope.
+**Test-artifact diagnosis:** `a revoked token can no longer authenticate`
+initially returned 200. The token row *was* deleted (the sibling test asserts
+`personal_access_tokens` count drops), so this was Laravel's auth guard caching
+the already-resolved user across calls within one test method rather than a
+real defect. The test now calls `forgetGuards()` to reproduce a fresh request,
+and the **live HTTP smoke test independently confirmed the real behavior is
+401**.
+**Static analysis fix (root cause, not suppression):** Larastan reported 8
+errors because `App\Models\User` had no property annotations, so `role` and
+`status` were inferred as `string` rather than their enum types — which also
+made a status comparison look always-true and its following code unreachable.
+Added `@property` docblocks for all columns plus `list<string>`/`array<string,
+string>` annotations, and replaced one nullsafe call on a non-nullable Sanctum
+return with an explicit `instanceof` check. No `@phpstan-ignore`, baseline
+entry, cast, or widened type was used.
+**Tests run:** auth suites 23 tests/87 assertions. Full `composer test` — 70
+tests/250 assertions passed. `composer format:check` passed. `composer analyse`
+passed with no errors across 32 files.
+**Live HTTP smoke verification** (temporary server on 127.0.0.1:8100, since
+stopped and the port confirmed closed): login returned 200 with the exact
+envelope, `Cache-Control: no-store, private`, `token_type=Bearer`,
+`expires_at=2026-07-27T18:46:36Z` (ISO-8601 UTC), correct `role_label`, and no
+bcrypt hash anywhere in the body; `/me` with the bearer returned the identity;
+logout returned 204; **reusing the revoked token returned 401**; wrong-password
+and unknown-email returned byte-identical messages; the 6th bad attempt
+returned 429 with `Retry-After: 58` while a different account still logged in
+successfully.
+**Next exact step:** Task 8 — frontend `auth-token` module, `postJson` plus
+bearer/401 handling in `api-client`, Zod-validated `auth-service`, and an
+`api` auth gateway replacing the demo fixtures as the default.
+
+### 2026-07-27 19:05 +08:00 — Task 8: frontend real authentication
+
+**Completed:** Frontend dependencies were never installed in this worktree
+(`node_modules` absent); ran `npm ci --ignore-scripts` (343 packages, 0
+vulnerabilities) before any typecheck/test could run.
+Added `auth-token.ts` as the sole owner of the bearer token in `localStorage`,
+deliberately separate from the demo session's `sessionStorage`. Extended
+`api-client.ts` with `postJson`/`getAuthenticatedJson`/`postAuthenticatedJson`,
+a registered token provider so the client never imports the token store
+directly, and a 401 handler that clears the token — scoped to authenticated
+calls only, so login's own 401 (bad credentials) does not trigger it. Added
+`auth-schema.ts` (strict Zod, mirrors `AuthResource`/`UserResource` exactly)
+and `auth-service.ts`. Added `api-auth-gateway.ts` implementing the existing
+`DemoAuthGateway` interface, extended additively with optional
+`persistsSessions`/`restore`/`signOut` so the 144 pre-existing demo/disabled
+tests needed no changes to their gateway contract. `demo-auth-mode.ts` gained
+an `"api"` mode as the default everywhere (`demo` and `disabled` now both
+require explicit opt-in); `main.tsx` wires the token store, provider/handler
+registration, and the three gateways by mode.
+**Real defect caught by a new test, not by inspection:** the login page
+computed `demoDisabled = authMode !== "demo"`, so under the new `api` default
+the sign-in form would have been disabled and shown "Interface
+demonstration—not real authentication" / "Laravel does not accept them" to
+real users. Rewrote it with mode-specific copy (`api`/`demo`/`disabled`, each
+with its own eyebrow, intro, credential-guide pointer, and generic- vs.
+demo-specific invalid-credentials message) and changed the disable condition
+to `authMode === "disabled"` only. Also fixed the route guard's hardcoded
+"Restoring demo session…" text, now "Restoring your session…" since it covers
+both modes.
+**Real bug caught by a new test, not by inspection (second one):** the new
+API-mode restore path called `gateway.restore?.().then(...)` — when a gateway
+declares `persistsSessions: true` but implements no `restore` (a valid shape
+per the now-optional interface), `gateway.restore?.()` evaluates to
+`undefined` and `.then` on `undefined` threw, leaving every route stuck on
+"Restoring your session…" forever. A new login-page test using exactly that
+minimal gateway shape caught it; fixed with
+`gateway.restore?.() ?? Promise.resolve(null)`.
+**Contract correction:** `auth-schema.ts` and the new service/gateway tests
+initially assumed an unwrapped response body; the existing contract wraps
+success in `{"data": ...}` (matching `HealthResource` and
+`docs/api/openapi.yaml`), so schemas and assertions were corrected to that
+shape, not the backend.
+**Boundary scans:** exactly one raw `fetch(` (`api-client.ts`; the other match
+was `refetch()` from TanStack Query), exactly one `localStorage` user
+(`auth-token.ts`), exactly one `sessionStorage` user
+(`demo-session-store.ts`; `auth-token.ts`'s only match was a doc-comment
+naming that file).
+**Tests run:** added 4 test files — `auth-token.test.ts` (5),
+`api-client.auth.test.ts` (6), `auth-service.test.ts` (5),
+`api-auth-gateway.test.ts` (7) — plus 2 new/updated login-page API-mode tests
+and a rewritten `demo-auth-mode.test.ts`. Full suite: 20 files, **170 tests**,
+all passing. `format:check`, `lint` (ESLint, 0 warnings), `lint:fast` (Oxlint),
+and `typecheck` all passed. `npm run build` succeeded (508.80 kB / 158.22 kB
+gzip — a chunk-size warning only, not an error). `npm audit
+--audit-level=moderate` found 0 vulnerabilities.
+**Documentation:** rewrote `frontend/README.md` (removed the now-false
+"Deferred Production Authentication" section, added the Auth Modes table and
+current three-endpoint contract) and `.env.example` (`VITE_AUTH_MODE` now
+commented out/opt-in instead of defaulting to `demo`).
+**Next exact step:** Task 9 — data dictionary, runbook, OpenAPI update,
+`DEMO_CREDENTIALS.md` clarification, and the final combined backend+frontend
+verification gate including a live browser QA attempt.
+
+### 2026-07-27 19:22 +08:00 — Task 9: documentation and full verification gate
+
+**Documentation completed:**
+- `docs/api/openapi.yaml` — added the three auth routes, a `bearerAuth`
+  security scheme, `LoginRequest`/`AuthResource`/`UserResource` schemas, and
+  `NoStorePrivate`/`Unauthenticated` shared components. Fixed one OpenAPI 3.1
+  issue caught by Redocly: `nullable: true` (an OpenAPI 3.0-ism) on
+  `expires_at` isn't valid JSON Schema for 3.1 — corrected to
+  `type: ["string", "null"]`. Redocly lint and a PyYAML structural parse both
+  pass (4 paths, 9 schemas).
+- `docs/data-dictionary/identity-foundation.md` — all four tables, exact
+  types/constraints, the token-expiration provisional-value note, and the
+  seeded-data summary.
+- `docs/runbooks/mariadb-local.md` — full setup/migrate/seed/reset procedure,
+  leading with the known instability warning and the table-level-grant
+  workaround so a future session doesn't rediscover it the hard way.
+- `docs/testing/DEMO_CREDENTIALS.md` — added an explicit comparison table
+  against `SEEDED_IDENTITIES.md` and corrected the local-setup steps to
+  require `VITE_AUTH_MODE=demo` (no longer the default).
+- Root `README.md` — corrected a now-actively-wrong line ("Do not run
+  migrations against the bundled XAMPP MariaDB instance") and updated Current
+  Status/Environment Baseline to reflect ADR 0007 and the real auth slice.
+
+**Live browser QA — the first successful browser session in this project's
+history.** Every prior session recorded "No browser is available." This
+session's Playwright MCP connection worked. Ran real Laravel (`php artisan
+serve`, port 8100) and Vite (port 5173, matching `CORS_ALLOWED_ORIGINS`)
+servers against the live MariaDB database and drove the actual browser:
+- Fresh `/login` in the default (`api`) mode: real institutional copy, no
+  demo disclaimer, form enabled, pointing to `SEEDED_IDENTITIES.md`.
+- Signed in with a real seeded identity (`dean.seed@grc.test`, then
+  `registrar-staff.seed@grc.test`) — genuine `POST /api/v1/auth/login`
+  against MariaDB, zero console errors, landed on `/portal` with the correct
+  role, display name, and role-filtered module set for each.
+- **Full page reload while authenticated correctly restored the session** via
+  the stored bearer token and a live `GET /api/v1/auth/me` call — no
+  re-login required, zero console errors.
+- Mobile viewport (390×844): screenshot confirmed clean layout, no overflow,
+  correct copy.
+- Sign-out correctly cleared the session and revoked the token.
+**Found and fixed one real content bug via this live pass:** the portal
+shell's sidebar hardcoded a "Demo portal" badge (and matching mobile-sheet
+description and storage-unavailable warning text) regardless of auth mode,
+so a genuinely authenticated user would have been told they were in a demo.
+Made all three mode-aware (`isDemo` from `authMode`): `api`/`disabled` now
+show "Preview portal" and non-demo wording; demo mode is byte-identical to
+before. Left the separate "Workflow and authorization APIs are not connected
+in this preview" module alert untouched — that one remains accurate in every
+mode, since business workflow endpoints genuinely aren't implemented yet.
+**Found and fixed a second real gap via a test that initially claimed the
+wrong thing:** writing a test for "API mode warns when storage is
+unavailable" revealed that `auth-context.tsx` never surfaced whether the
+API gateway's token write actually succeeded — `storageAvailable` was
+hardcoded effectively-true for API mode, so a user in a browser with
+`localStorage` disabled would get no warning that their session cannot
+survive a refresh. Added an optional `persistenceAvailable()` method to the
+`DemoAuthGateway` interface, implemented in `api-auth-gateway.ts` by tracking
+the last `tokenStore.write()` result, and wired it into `auth-context.tsx`'s
+sign-in path. Four new tests cover both the fixed portal-shell copy and the
+gateway method directly.
+**Known non-blocking finding, not fixed:** in a real `BrowserRouter` (not
+jsdom), `PortalShell`'s pre-existing sign-out handler (`await navigate("/",
+...); signOut()`) sometimes lands on `/login?returnTo=/portal` instead of
+`/` for the API-mode async sign-out path — `navigate()` from `useNavigate()`
+isn't a reliably awaitable commit signal outside a data router, so the two
+calls can interleave differently than in jsdom. The user still ends up on a
+fully functional page (a working login form, arguably reasonable UX since
+re-authenticating returns them to where they were) with no data or security
+issue and the token is genuinely revoked either way. Not part of this
+slice's scope (auth backend/gateway, not portal-shell navigation
+architecture); flagged here rather than risking an unreviewed architectural
+change under time pressure.
+**Test-environment hygiene:** a stray `.env.local` created for the live
+browser test (pointing `VITE_API_BASE_URL` at the temporary port 8100)
+leaked into two Vitest runs, breaking `health-service.test.ts`'s hardcoded
+URL assertion. Removed before the final gate; confirmed 174/174 clean
+afterward. Also found and stopped an unrelated stale `vite` process serving
+the **main checkout** (not this worktree) that had been idly holding port
+5173 from an earlier, unrelated session — consistent with this repo's own
+documented history of needing exactly this kind of cleanup.
+**Final verification, everything from a clean state:**
+- Backend: `composer test` 70/70 (250 assertions), `format:check`,
+  `analyse` (32 files, Larastan level 8, 0 errors), `audit --locked` (0
+  advisories), `route:list` shows exactly the 4 intended routes.
+- Frontend: `npm test` 174/174, `format:check`, `lint` (0 warnings),
+  `lint:fast`, `typecheck`, `build` (succeeds; one chunk-size advisory
+  notice, not an error), `audit --audit-level=moderate` (0 vulnerabilities).
+- OpenAPI: Redocly lint clean, PyYAML parse clean.
+
+**All nine tasks of
+`docs/superpowers/plans/2026-07-27-mariadb-identity-sanctum-auth.md` are now
+complete.** The identity foundation runs on the existing XAMPP MariaDB
+instance (ADR 0007), and the portal authenticates for real against it via
+Sanctum bearer tokens — the original goal driving this entire session's
+pivot away from the abandoned isolated MySQL 8.4 plan.
+**Not done, out of scope for this slice:** CI, authorization Policies beyond
+role-filtered navigation, business workflow endpoints, password reset, and
+every PRD §17 institutional policy confirmation (including the real token
+expiration value). No commit, push, or merge back to `main` was made —
+`AGENTS.md` requires explicit authorization for that, which has not been
+given in this session.

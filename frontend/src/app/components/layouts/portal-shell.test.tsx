@@ -148,4 +148,50 @@ describe("PortalShell", () => {
       ),
     ).toBeInTheDocument()
   })
+
+  it("labels a real API session as a preview, never as a demo", async () => {
+    const session = sessionFor(demoUsers[0])
+    const gateway = {
+      persistsSessions: true as const,
+      signIn: () => Promise.resolve(session),
+      restore: () => Promise.resolve(session),
+    }
+
+    renderAppAtRoute("/portal", { authMode: "api", gateway })
+
+    expect(
+      await screen.findByRole("heading", {
+        name: rolePortalDefinitions[session.role].welcomeHeading,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("Preview portal").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Demo portal")).not.toBeInTheDocument()
+  })
+
+  it("in API mode, warns without calling it a demo when the token cannot persist", async () => {
+    const session = sessionFor(demoUsers[0])
+    const gateway = {
+      persistsSessions: true as const,
+      signIn: () => Promise.resolve(session),
+      restore: () => Promise.resolve(null),
+      persistenceAvailable: () => false,
+    }
+    const user = userEvent.setup()
+
+    renderAppAtRoute("/login", { authMode: "api", gateway })
+    await user.type(await screen.findByLabelText("Email address"), "a@b.test")
+    await user.type(screen.getByLabelText("Password"), "whatever")
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+    expect(
+      await screen.findByText(
+        "Your session cannot be restored after refresh on this browser.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        "This demo session cannot be restored after refresh on this browser.",
+      ),
+    ).not.toBeInTheDocument()
+  })
 })

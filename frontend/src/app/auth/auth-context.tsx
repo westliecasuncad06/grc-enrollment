@@ -39,6 +39,33 @@ export function AuthProvider({
   useEffect(() => {
     let active = true
 
+    if (authMode !== "disabled" && gateway.persistsSessions === true) {
+      // The gateway owns persistence (API mode): restoring requires a network
+      // round-trip, so it cannot use the synchronous session-store path.
+      const restore = gateway.restore?.() ?? Promise.resolve(null)
+
+      restore.then(
+        (restored) => {
+          if (!active) {
+            return
+          }
+
+          setSession(restored)
+          setStatus(restored ? "authenticated" : "anonymous")
+        },
+        () => {
+          if (active) {
+            setSession(null)
+            setStatus("anonymous")
+          }
+        },
+      )
+
+      return () => {
+        active = false
+      }
+    }
+
     queueMicrotask(() => {
       if (!active) {
         return
@@ -60,31 +87,40 @@ export function AuthProvider({
     return () => {
       active = false
     }
-  }, [authMode, sessionStore])
+  }, [authMode, gateway, sessionStore])
 
   const signIn = useCallback(
     async (credentials: DemoCredentials) => {
-      if (authMode !== "demo") {
+      if (authMode === "disabled") {
         throw new DemoAuthError("DEMO_AUTH_DISABLED")
       }
 
       const authenticatedSession = await gateway.signIn(credentials)
-      const persisted = sessionStore.write(authenticatedSession)
+
+      if (gateway.persistsSessions === true) {
+        setStorageAvailable(gateway.persistenceAvailable?.() ?? true)
+      } else {
+        setStorageAvailable(sessionStore.write(authenticatedSession))
+      }
 
       setSession(authenticatedSession)
-      setStorageAvailable(persisted)
       setStatus("authenticated")
     },
     [authMode, gateway, sessionStore],
   )
 
   const signOut = useCallback(() => {
-    const cleared = sessionStore.clear()
+    if (gateway.persistsSessions === true) {
+      // Revoke server-side, but clear locally without waiting: a failed or
+      // slow revoke must never leave the user stuck in a signed-in UI.
+      void gateway.signOut?.()
+    } else {
+      setStorageAvailable(sessionStore.clear())
+    }
 
     setSession(null)
-    setStorageAvailable(cleared)
     setStatus("anonymous")
-  }, [sessionStore])
+  }, [gateway, sessionStore])
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -3,7 +3,9 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { createRoot } from "react-dom/client"
 
 import { App } from "@/app/app"
+import { createApiAuthGateway } from "@/app/auth/api-auth-gateway"
 import { AuthProvider } from "@/app/auth/auth-context"
+import { createBrowserAuthTokenStore } from "@/app/auth/auth-token"
 import { getAuthMode } from "@/app/auth/demo-auth-mode"
 import {
   createDemoAuthGateway,
@@ -12,6 +14,10 @@ import {
 import { createBrowserDemoSessionStore } from "@/app/auth/demo-session-store"
 import { demoUsers } from "@/app/auth/demo-users"
 import { createAppQueryClient } from "@/app/lib/query-client"
+import {
+  setAuthTokenProvider,
+  setUnauthorizedHandler,
+} from "@/app/services/api-client"
 
 import "./index.css"
 
@@ -23,19 +29,33 @@ if (!rootElement) {
 
 const queryClient = createAppQueryClient()
 const authMode = getAuthMode()
-const authGateway =
-  authMode === "demo"
-    ? createDemoAuthGateway(demoUsers)
-    : createDisabledAuthGateway()
-const sessionStore = createBrowserDemoSessionStore()
+const tokenStore = createBrowserAuthTokenStore()
+
+// The API client reaches the token through this provider so `auth-token.ts`
+// remains the only module that touches token storage (PRD §9.1).
+setAuthTokenProvider(() => tokenStore.read())
+setUnauthorizedHandler(() => {
+  tokenStore.clear()
+})
+
+function createGateway() {
+  switch (authMode) {
+    case "api":
+      return createApiAuthGateway(tokenStore)
+    case "demo":
+      return createDemoAuthGateway(demoUsers)
+    default:
+      return createDisabledAuthGateway()
+  }
+}
 
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider
         authMode={authMode}
-        gateway={authGateway}
-        sessionStore={sessionStore}
+        gateway={createGateway()}
+        sessionStore={createBrowserDemoSessionStore()}
       >
         <App />
       </AuthProvider>

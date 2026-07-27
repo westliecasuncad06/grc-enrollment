@@ -1,4 +1,10 @@
-export type AuthMode = "demo" | "disabled"
+/**
+ * - `api`      — real Laravel/Sanctum authentication. The default everywhere.
+ * - `demo`     — UI-only fixtures, for working on the interface without a
+ *                running backend. Local development and test builds only.
+ * - `disabled` — no sign-in is possible.
+ */
+export type AuthMode = "api" | "demo" | "disabled"
 
 export interface AuthModeEnvironment {
   requestedMode: string | undefined
@@ -11,7 +17,17 @@ export function selectAuthMode({
 }: AuthModeEnvironment): AuthMode {
   const isLocalRuntime = mode === "development" || mode === "test"
 
-  return requestedMode === "demo" && isLocalRuntime ? "demo" : "disabled"
+  // Demo fixtures are committed to the repository, so they must never be an
+  // accepted credential in a production build.
+  if (requestedMode === "demo") {
+    return isLocalRuntime ? "demo" : "disabled"
+  }
+
+  if (requestedMode === "disabled") {
+    return "disabled"
+  }
+
+  return "api"
 }
 
 export function getAuthMode(): AuthMode {

@@ -2,6 +2,7 @@
 
 namespace App\Support\Http;
 
+use App\Domain\Identity\Exceptions\InvalidCredentialsException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,17 @@ final class ApiExceptionRenderer
                 'The submitted data is invalid.',
                 422,
                 $exception->errors(),
+            );
+        }
+
+        // Deliberately identical for a missing account, a wrong password, and
+        // a disabled account, so the API cannot be used to enumerate users.
+        if ($exception instanceof InvalidCredentialsException) {
+            return ApiErrorResponse::make(
+                $request,
+                ApiErrorCode::Unauthenticated,
+                'The provided credentials are incorrect.',
+                401,
             );
         }
 

@@ -173,4 +173,45 @@ describe("LoginPage", () => {
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled()
   })
+
+  it("in API mode, renders a real institutional form with no demo disclaimer", async () => {
+    renderAppAtRoute("/login", { authMode: "api" })
+
+    expect(
+      await screen.findByRole("heading", { name: "Sign in to your portal" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Email address")).toBeEnabled()
+    expect(screen.getByLabelText("Password")).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled()
+    expect(
+      screen.getByText("docs/testing/SEEDED_IDENTITIES.md"),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("Interface demonstration—not real authentication"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("docs/testing/DEMO_CREDENTIALS.md"),
+    ).not.toBeInTheDocument()
+  })
+
+  it("in API mode, a rejected sign-in shows a generic non-demo message", async () => {
+    const user = userEvent.setup()
+    const gateway: DemoAuthGateway = {
+      persistsSessions: true,
+      signIn: () => Promise.reject(new Error("credentials rejected")),
+    }
+    renderAppAtRoute("/login", { authMode: "api", gateway })
+
+    await enterStudentCredentials(user, "registrar-head.seed@grc.test", "wrong")
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+    expect(
+      await screen.findByText(
+        "The email or password you entered was not recognized.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("The demo credentials were not recognized."),
+    ).not.toBeInTheDocument()
+  })
 })

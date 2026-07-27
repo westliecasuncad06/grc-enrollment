@@ -16,12 +16,27 @@ describe("selectAuthMode", () => {
     )
   })
 
-  it("keeps authentication disabled when demo mode was not requested", () => {
+  it("defaults to real API authentication when no mode was requested", () => {
     expect(
       selectAuthMode({ requestedMode: undefined, mode: "development" }),
-    ).toBe("disabled")
+    ).toBe("api")
+    expect(
+      selectAuthMode({ requestedMode: undefined, mode: "production" }),
+    ).toBe("api")
+  })
+
+  it("falls back to real API authentication for an unrecognized request", () => {
     expect(selectAuthMode({ requestedMode: "unsupported", mode: "test" })).toBe(
-      "disabled",
+      "api",
     )
   })
+
+  it.each(["development", "test", "production"])(
+    "honors an explicit request to disable authentication in %s mode",
+    (mode) => {
+      expect(selectAuthMode({ requestedMode: "disabled", mode })).toBe(
+        "disabled",
+      )
+    },
+  )
 })

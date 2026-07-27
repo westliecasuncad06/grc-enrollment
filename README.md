@@ -4,12 +4,18 @@ Secure, API-first enrollment platform for Global Reciprocal Colleges, implemente
 
 ## Current Status
 
-The database-independent **Phase 0A — contract-first runnable shells** slice is
-implemented and locally verified. It establishes three independently runnable
-service boundaries, health contracts, a shared error format, safe configuration
-examples, and automated checks. Phase 0 remains in progress because the
-compliant MySQL environment, base migrations, CI execution, authentication,
-roles, and institutional business rules are not part of this slice.
+Phase 0A's database-independent contract-first shells are implemented and
+locally verified. On top of that, the identity foundation and a real Sanctum
+bearer-token vertical slice are implemented against the existing XAMPP
+MariaDB 10.4.32 instance (accepted as the local development substitute for
+the PRD's MySQL 8 LTS requirement — see
+[ADR 0007](docs/adr/0007-mariadb-development-database.md)): reversible
+migrations for `users`/`programs`/`academic_terms`/`personal_access_tokens`,
+a deterministic nine-role seeder, and `POST /api/v1/auth/login`,
+`POST /api/v1/auth/logout`, `GET /api/v1/auth/me`. Phase 0 remains in
+progress: CI execution, authorization Policies beyond role-filtered
+navigation, business workflow endpoints, and institutional policy
+confirmations are not part of this slice.
 
 See [`PROGRESS.md`](PROGRESS.md) for the exact implementation state, real test results, blockers, and resume steps.
 
@@ -43,10 +49,18 @@ The initial workstation audit found:
 - PHP 8.2.12 and Composer 2.9.2
 - Node.js 24.14.1 and npm 11.11.0
 - Python 3.14.3 and Python 3.11.9
-- XAMPP MariaDB 10.4.32, with no database server currently listening
+- XAMPP MariaDB 10.4.32
 - no Docker installation
 
-The bundled MariaDB is not a substitute for the PRD-required supported MySQL 8 LTS environment. Database migrations and MySQL-backed integration tests must not be marked verified until a compliant server is available. PHP must also be updated to a current security patch before production-like use.
+Per [ADR 0007](docs/adr/0007-mariadb-development-database.md), this MariaDB
+instance is now used directly for local development and MariaDB-backed
+integration tests, in place of the PRD-required MySQL 8 LTS — a deliberate
+deviation accepted for local development only, to be revisited before any
+production-like deployment. See
+[`docs/runbooks/mariadb-local.md`](docs/runbooks/mariadb-local.md) for setup,
+including a known instability issue in this specific MariaDB installation
+that must be read before granting any database privilege. PHP must also be
+updated to a current security patch before production-like use.
 
 ## Setup
 
@@ -83,8 +97,10 @@ py -3.14 -m venv .venv
 
 The public liveness contract is `GET http://127.0.0.1:8000/api/v1/health`;
 the private liveness contract is
-`GET http://127.0.0.1:8100/internal/v1/health`. Do not run migrations against
-the bundled XAMPP MariaDB instance.
+`GET http://127.0.0.1:8100/internal/v1/health`. Migrations run against the
+bundled XAMPP MariaDB instance — see
+[`docs/runbooks/mariadb-local.md`](docs/runbooks/mariadb-local.md) before
+running `php artisan migrate` or issuing any database `GRANT`.
 
 ## Quality Gates
 

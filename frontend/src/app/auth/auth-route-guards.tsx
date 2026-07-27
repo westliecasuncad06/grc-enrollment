@@ -7,7 +7,7 @@ function SessionRestoreState() {
   return (
     <main className="grid min-h-svh place-items-center px-6">
       <p role="status" className="text-sm text-muted-foreground">
-        Restoring demo session…
+        Restoring your session…
       </p>
     </main>
   )

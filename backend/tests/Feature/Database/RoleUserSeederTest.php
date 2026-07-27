@@ -1,0 +1,156 @@
+<?php
+
+namespace Tests\Feature\Database;
+
+use App\Domain\Identity\UserRole;
+use App\Domain\Identity\UserStatus;
+use App\Models\User;
+use Database\Seeders\RoleUserSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use RuntimeException;
+use Tests\TestCase;
+
+final class RoleUserSeederTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const SEED_PASSWORD = 'local-development-seed-password';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        putenv('GRC_SEED_PASSWORD='.self::SEED_PASSWORD);
+    }
+
+    protected function tearDown(): void
+    {
+        putenv('GRC_SEED_PASSWORD');
+
+        parent::tearDown();
+    }
+
+    public function test_it_seeds_exactly_one_active_user_for_every_role(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+
+        $this->assertSame(count(UserRole::cases()), User::count());
+
+        foreach (UserRole::cases() as $role) {
+            $user = User::where('role', $role->value)->first();
+
+            $this->assertNotNull($user, "Missing seeded user for role {$role->value}.");
+            $this->assertSame(UserStatus::Active, $user->status);
+        }
+    }
+
+    public function test_seeded_emails_are_unique_and_use_the_reserved_test_domain(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+
+        $emails = User::pluck('email');
+
+        $this->assertCount(9, $emails);
+        $this->assertCount(9, $emails->unique());
+
+        foreach ($emails as $email) {
+            $this->assertStringEndsWith('@grc.test', $email);
+        }
+    }
+
+    public function test_seeded_passwords_are_hashed_not_stored_in_plain_text(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+
+        $user = User::firstOrFail();
+
+        $this->assertNotSame(self::SEED_PASSWORD, $user->password);
+        $this->assertTrue(Hash::check(self::SEED_PASSWORD, $user->password));
+    }
+
+    public function test_reseeding_updates_in_place_without_creating_duplicates(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+        $originalIds = User::orderBy('id')->pluck('id')->all();
+
+        $this->seed(RoleUserSeeder::class);
+
+        $this->assertSame(9, User::count());
+        $this->assertSame($originalIds, User::orderBy('id')->pluck('id')->all());
+    }
+
+    public function test_it_does_not_delete_unrelated_users(): void
+    {
+        $unrelated = User::create([
+            'name' => 'Pre-existing Person',
+            'email' => 'unrelated@example.test',
+            'password' => 'irrelevant',
+            'role' => UserRole::Student,
+            'status' => UserStatus::Active,
+        ]);
+
+        $this->seed(RoleUserSeeder::class);
+
+        $this->assertDatabaseHas('users', ['id' => $unrelated->id]);
+        $this->assertSame(10, User::count());
+    }
+
+    public function test_it_seeds_no_programs_or_academic_terms(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+
+        $this->assertDatabaseCount('programs', 0);
+        $this->assertDatabaseCount('academic_terms', 0);
+    }
+
+    public function test_it_fails_closed_when_the_seed_password_is_absent(): void
+    {
+        putenv('GRC_SEED_PASSWORD');
+
+        $this->expectException(RuntimeException::class);
+
+        $this->seed(RoleUserSeeder::class);
+    }
+
+    /**
+     * Invoked directly rather than through `db:seed`, because the artisan
+     * command's own production confirmation prompt would intercept the call
+     * before the seeder runs. This asserts the seeder is safe even when
+     * chained programmatically from another seeder.
+     */
+    public function test_it_refuses_to_run_outside_local_and_testing_environments(): void
+    {
+        app()->detectEnvironment(static fn (): string => 'production');
+
+        $this->expectException(RuntimeException::class);
+
+        app(RoleUserSeeder::class)->run();
+    }
+
+    public function test_it_seeds_nothing_when_it_refuses_to_run(): void
+    {
+        app()->detectEnvironment(static fn (): string => 'production');
+
+        try {
+            app(RoleUserSeeder::class)->run();
+        } catch (RuntimeException) {
+            // Expected; asserted in the preceding test.
+        }
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_it_seeds_nothing_when_the_password_is_absent(): void
+    {
+        putenv('GRC_SEED_PASSWORD');
+
+        try {
+            app(RoleUserSeeder::class)->run();
+        } catch (RuntimeException) {
+            // Expected; asserted in test_it_fails_closed_when_the_seed_password_is_absent.
+        }
+
+        $this->assertDatabaseCount('users', 0);
+    }
+}

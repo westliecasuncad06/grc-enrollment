@@ -7,14 +7,19 @@ info:
     identifier: LicenseRef-GRC-Pending
   description: >
     Public, versioned Laravel API for the GRC Automated Enrollment System.
-    Phase 0A documents only the database-independent health contract. Later
-    endpoint groups must be added as their complete vertical slices ship.
+    Documents the database-independent health contract and the Sanctum
+    bearer-token identity foundation. Later endpoint groups must be added as
+    their complete vertical slices ship.
 servers:
   - url: /
     description: Deployment-relative Laravel API origin
 tags:
   - name: System
     description: Database-independent service liveness
+  - name: Auth
+    description: >
+      Sanctum bearer-token authentication. Session cookies, CSRF-cookie
+      endpoints, and `withCredentials` are never used.
 paths:
   /api/v1/health:
     get:
@@ -51,7 +56,111 @@ paths:
           $ref: "#/components/responses/InternalError"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/auth/login:
+    post:
+      operationId: postAuthLogin
+      summary: Authenticate and issue a bearer token
+      description: >
+        Returns one identical generic failure for an unknown email, a wrong
+        password, and a disabled account, so the endpoint cannot be used to
+        enumerate accounts. Throttled per submitted account and caller
+        address.
+      security: []
+      tags:
+        - Auth
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication succeeded.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: The provided credentials are incorrect.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The submitted email or password failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/logout:
+    post:
+      operationId: postAuthLogout
+      summary: Revoke the current bearer token
+      description: >
+        Revokes only the token presented on this request; the caller's other
+        devices remain signed in.
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "204":
+          description: The token was revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/me:
+    get:
+      operationId: getAuthMe
+      summary: Read the authenticated identity
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The identity for the presented bearer token.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Laravel Sanctum personal access token.
   parameters:
     RequestId:
       name: X-Request-ID
@@ -76,7 +185,25 @@ components:
       schema:
         type: string
         pattern: '(^|.*,\s*)no-store(\s*,.*|$)'
+    NoStorePrivate:
+      description: >
+        The response contains no-store and private directives, since it may
+        carry a bearer token or identity detail no shared cache may retain.
+      schema:
+        type: string
+        pattern: '(^|.*,\s*)no-store(\s*,.*|$)'
   responses:
+    Unauthenticated:
+      description: A valid bearer token is required.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     TooManyRequests:
       description: The caller has exceeded the applicable request rate.
       headers:
@@ -138,6 +265,100 @@ components:
         generated_at:
           type: string
           format: date-time
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthResource"
+    AuthResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - token
+        - token_type
+        - expires_at
+        - user
+      properties:
+        type:
+          type: string
+          const: auth-session
+        token:
+          type: string
+          description: Plain-text bearer token. Shown only once, on this response.
+        token_type:
+          type: string
+          const: Bearer
+        expires_at:
+          type: ["string", "null"]
+          format: date-time
+          description: >
+            PROVISIONAL — derived from a local development default pending
+            the PRD §17 approved token-expiration policy.
+        user:
+          $ref: "#/components/schemas/UserResource"
+    UserResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/UserResource"
+    UserResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - name
+        - email
+        - role
+        - role_label
+        - status
+      properties:
+        type:
+          type: string
+          const: user
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - student
+            - admission_staff
+            - faculty
+            - program_chair
+            - dean
+            - executive_director
+            - registrar_head
+            - registrar_staff
+            - accounting_staff
+        role_label:
+          type: string
+        status:
+          type: string
     ErrorResponse:
       type: object
       additionalProperties: false
