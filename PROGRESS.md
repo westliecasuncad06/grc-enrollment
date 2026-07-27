@@ -627,6 +627,7 @@ order:
 | Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
 | Backend routes | `php artisan route:list --json` | Passed: exactly 26 routes (24 prior + 2 student-profile) | 2026-07-28 |
 | OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding student-profiles/student-profile) | 2026-07-28 |
+| Live HTTP proof (student profile foundation) | temporary `php artisan serve` on 127.0.0.1:8100 (port 8000 left untouched — an unrelated, ambiguous pre-existing `php.exe` was already listening there), seeded dev database | Passed: Admission Staff provisioned two students (201 each, no `password` field, `admission_status: admitted`); student #1 read their own profile (200, `STU-PROOF-0001`); student #2 read their own profile (200, `STU-PROOF-0002`, never student #1's — proving own-record scoping, not just "any authenticated user sees profile #1"); Faculty attempting to provision received 403 `FORBIDDEN`; all 4 issued tokens logged out afterward | 2026-07-28 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -2239,6 +2240,14 @@ place):**
 **Verification:** `composer test` 348/348 (939 assertions, up from
 335/898), `format:check`, `analyse` (Larastan level 8, 134 files, 0
 errors), `audit` clean, `route:list` exactly 26 routes, OpenAPI lint clean.
+Merged to `main` (fast-forward), re-verified 348/348 on merged main, branch
+deleted. Live HTTP proof against a temporary `php artisan serve` on
+127.0.0.1:8100 (port 8000 left alone — an unrelated pre-existing process was
+already listening there, same ambiguity as the section-planning/
+approval-workflow slices): Admission Staff provisioned two real students
+(201 each), each logged in and read only their own profile (200, never each
+other's), and Faculty attempting to provision was rejected (403). All
+issued tokens logged out afterward.
 **Not done, deliberately out of scope:** eligible subject pool and
 enrollment submission (the next two Process 2.0 sub-projects, named above);
 all of Process 3.0 (§5.3); student self-service profile editing; password
