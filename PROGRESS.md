@@ -260,8 +260,10 @@ order:
   - [x] Curriculum catalog: subjects, curricula, placements, prerequisite
     cycle rejection (FR-SCH-001, FR-SCH-002; see ADR 0009). First production
     consumer of the `role` middleware — writes restricted to Program Chair.
-  - [ ] Faculty input: availability and ranked subject preferences
-    (FR-SCH-003).
+  - [x] Faculty input: availability and ranked subject preferences
+    (FR-SCH-003) — own-record authorization (`role:faculty` +
+    `FacultyAvailabilityPolicy`/`FacultySubjectPreferencePolicy`), not the
+    status-based visibility every prior slice used.
   - [ ] Section planning: capacity, viability threshold, conflict detection
     (FR-SCH-004, FR-SCH-005) — needs the §17 viability threshold confirmed.
   - [ ] Approval workflow: `schedule_proposals`, the five-state lifecycle,
@@ -297,26 +299,40 @@ order:
   `GET /api/v1/subjects` and `GET /api/v1/curricula` (same read pattern);
   `POST /api/v1/curricula` and `PATCH /api/v1/curricula/{curriculum}`
   (`role:program_chair` + `CurriculumPolicy`, full-replace subject/
-  prerequisite payload, rejects direct/transitive cycles — see ADR 0009).
+  prerequisite payload, rejects direct/transitive cycles — see ADR 0009);
+  `GET/POST /api/v1/faculty-availabilities` and
+  `PATCH/DELETE /api/v1/faculty-availabilities/{facultyAvailability}`, same
+  shape for `faculty-subject-preferences` (`role:faculty` + own-record
+  Policy — a professor may write only their own rows; every other role
+  reads everyone's).
 - Route middleware: API group, health/login/reference-data throttles, Sanctum
-  bearer auth, and the `role` alias (`EnsureUserHasRole`) — now consumed for
-  the first time by `POST`/`PATCH /curricula`, restricted to `program_chair`.
+  bearer auth, and the `role` alias (`EnsureUserHasRole`) — consumed by
+  `POST`/`PATCH /curricula` (`program_chair`) and now the four faculty-input
+  write routes (`faculty`).
 - Pending endpoints: every remaining business endpoint group in PRD §8.4
-  (faculty availability, sections, schedule proposals, enrollment, payment
-  queue, grades, analytics, notifications, audit logs).
+  (sections, schedule proposals, enrollment, payment queue, grades,
+  analytics, notifications, audit logs).
 - Form Requests: `LoginRequest` (validates, normalizes email, owns the
   per-account+IP throttle key); `StoreCurriculumRequest`/
   `UpdateCurriculumRequest` (validate nested subject/prerequisite arrays,
-  run `PrerequisiteCycleDetector` in `withValidator()`).
+  run `PrerequisiteCycleDetector` in `withValidator()`);
+  `Store`/`UpdateFacultyAvailabilityRequest` and
+  `Store`/`UpdateFacultySubjectPreferenceRequest` (composite uniqueness
+  enforced via `Rule::unique()->where()->ignore()`, scoped to the
+  authenticated professor and submitted term).
 - Policies: `ProgramPolicy`, `AcademicTermPolicy`, `SubjectPolicy` —
   `viewAny`/`view` only, readable by every role; `CurriculumPolicy` adds
   `create`/`update` restricted to `program_chair`. Row filtering lives in
   query scopes, not the Policy (see ADR 0008). `App\Http\Controllers\Controller`
   now `use AuthorizesRequests` again (Laravel 12 dropped it from the base
   controller; `$this->authorize()` did not work until this slice).
+  `FacultyAvailabilityPolicy`/`FacultySubjectPreferencePolicy` add a new
+  shape: `update`/`delete` require role **and** row ownership
+  (`professor_id === $user->id`), not role alone.
 - API Resources: `HealthResource`, `AuthResource`, `UserResource`,
   `ProgramResource`, `AcademicTermResource`, `SubjectResource`,
-  `CurriculumResource` (nested subject placements and prerequisites).
+  `CurriculumResource` (nested subject placements and prerequisites),
+  `FacultyAvailabilityResource`, `FacultySubjectPreferenceResource`.
 - Actions/Services: `App\Actions\Auth\AuthenticateUser` (verifies, rejects
   non-active accounts, issues token, stamps `last_login_at`, all in one
   transaction); `App\Actions\Curriculum\SynchronizeCurriculumSubjects`
@@ -513,6 +529,12 @@ order:
 | Backend tests | `composer test` | Passed: 248 tests, 640 assertions (up from 162/451) | 2026-07-28 |
 | Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
 | Backend routes | `php artisan route:list --json` | Passed: still exactly 10 routes — this task is schema-only, no new endpoints | 2026-07-28 |
+| Backend format | `composer format:check` | Passed | 2026-07-28 |
+| Backend static analysis | `composer analyse` | Passed: Larastan/PHPStan level 8, 116 files, 0 errors | 2026-07-28 |
+| Backend tests | `composer test` | Passed: 278 tests, 752 assertions (up from 248/640) | 2026-07-28 |
+| Backend dependency audit | `composer audit --locked` | Passed: no vulnerability advisories | 2026-07-28 |
+| Backend routes | `php artisan route:list --json` | Passed: exactly 18 routes (10 prior + 8 faculty-input) | 2026-07-28 |
+| OpenAPI semantic lint | `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | Passed: no warnings/errors (after adding faculty-availabilities/faculty-subject-preferences; also fixed a pre-existing edit slip that had split `minimum_grade`'s `maxLength` from its `type`) | 2026-07-28 |
 
 Never change a result to `Passed` unless that command actually ran
 successfully.
@@ -550,6 +572,8 @@ successfully.
 | 2026-07-28 | Split the remaining scaffold work into four sequential branches (schema foundation → faculty input → section planning → approval workflow) reviewed as one plan but merged one at a time. | Matches every prior sub-project's one-branch-per-slice discipline; a single mega-branch across four sub-projects would make review and rollback harder without saving real effort. |
 | 2026-07-28 | Add an `integer` cast for `StudentProfile.year_level`, which the found scaffold omitted. | Every other tiny/small-int column in this codebase (`Section.capacity`, `CurriculumSubject.year_level`, `FacultyAvailability.day_of_week`, etc.) is cast; the omission was an inconsistency, not a deliberate choice — caught by a new unit test. |
 | 2026-07-28 | Omit `FLUSH PRIVILEGES` from this session's `GRANT` batches. | `GRANT` takes effect immediately in MySQL/MariaDB; `FLUSH PRIVILEGES` is unnecessary here and was part of the command sequence in one of the two prior `VCRUNTIME140.dll` crash incidents. |
+| 2026-07-28 | Give `FacultyAvailability`/`FacultySubjectPreference` an own-record `scopeVisibleTo()` (`professor_id === $user->id` for learner-scoped roles) instead of the status-based visibility every prior model used. | Neither table has a status column; the real visibility question is "whose row is this," not "is this row published." Reuses `UserRole::isLearnerScoped()` as the role split rather than inventing a parallel predicate. |
+| 2026-07-28 | Enforce the two `faculty_subject_preferences` composite-uniqueness rules via `Rule::unique()->where()->ignore()` in the Form Request, not a custom `withValidator()` graph check. | The underlying rule is a plain uniqueness check, not graph logic like the prerequisite cycle detector; Laravel's built-in composite-unique rule reaches the same outcome (clean 422, not a raw SQL error) with less code. |
 
 ## Blockers and Clarifications Needed
 
@@ -741,6 +765,24 @@ successfully.
   tested/documented groundwork, keep the enrollment-records domain schema-only,
   and build the remaining §5.1 sub-projects' API layer through the normal
   branch-per-slice process.
+- A `docs/api/openapi.yaml` edit for the faculty-input schemas matched its
+  `old_string` one property short of the actual file content, splitting the
+  pre-existing `CurriculumSubjectPrerequisiteInput.minimum_grade` property's
+  `type: string` from its `maxLength: 255` sibling — the latter got stranded,
+  badly indented, at the very end of the file. `@redocly/cli lint` caught it
+  immediately as a YAML parse error before any completion claim; fixed by
+  restoring `maxLength: 255` next to `type: string` and deleting the
+  orphaned line, then re-linting clean.
+- While starting a `php artisan serve` for live verification, found a
+  pre-existing listener already on port 8000 (two `php.exe` processes,
+  started ~40 minutes before this check) that this session never started —
+  a possible concurrent process working against the same repository/database.
+  Identified my own new pair by matching process start times exactly, stopped
+  only those two, and left the pre-existing pair (and one other unrelated
+  `php.exe`) untouched rather than guessing at ownership. Relied on the
+  automated test suite's full HTTP-level coverage (real Sanctum tokens
+  through `postJson`/`patchJson`/`deleteJson` against the real named routes)
+  instead of further manual `curl` verification for this slice.
 - `ProgramResource`/`AcademicTermResource` initially defined `withResponse()`
   to set `Cache-Control: no-store, private`, following `UserResource`'s
   pattern exactly — but the header assertion in both new endpoint tests failed
@@ -834,6 +876,17 @@ successfully.
   (`grc_migrator`/`grc_test` CREATE+DDL+DML, then `grc_app` DML) across all 13
   tables, zero incidents. New `docs/data-dictionary/enrollment-records.md`;
   updated `curriculum-catalog.md`'s stale "no seeder" note.
+- Faculty input session (branch `feat/faculty-input`): own-record
+  `scopeVisibleTo()` on `FacultyAvailability`/`FacultySubjectPreference`,
+  `FacultyAvailabilityPolicy`/`FacultySubjectPreferencePolicy`, `Store`/
+  `UpdateFacultyAvailabilityRequest` and `Store`/
+  `UpdateFacultySubjectPreferenceRequest` (composite uniqueness via
+  `Rule::unique()->where()->ignore()`), `FacultyAvailabilityResource`/
+  `FacultySubjectPreferenceResource`, `FacultyAvailabilityController`/
+  `FacultySubjectPreferenceController` (index/store/update/destroy — the
+  first `DELETE` endpoints in this API), 8 new routes gated `role:faculty`
+  for writes, `docs/data-dictionary/faculty-input.md`, OpenAPI updates
+  (1 new tag, 8 new paths, 10 new schemas), and 30 new backend tests.
 
 ## Session Handoff Log
 
@@ -1732,3 +1785,58 @@ and after migrating.
 **Not done, deliberately deferred to the next three branches:** any Policy,
 Resource, Controller, or route for faculty input, section planning, approval
 workflow, or the enrollment-records domain; every frontend change; CI.
+
+### 2026-07-28 01:45 +08:00 — Task 2: Faculty Input API (FR-SCH-003)
+
+**Goal:** Second of the three remaining PRD §5.1 sub-projects from the
+approved plan — build the API layer on top of the schema landed in the
+previous task.
+**Completed (branch `feat/faculty-input` off `main`, worked in place):**
+- `FacultyAvailability`/`FacultySubjectPreference` gained a **new**
+  `scopeVisibleTo()` shape: own-record, not status-based (neither table has
+  a status column). Learner-scoped roles (in practice only `Faculty`) see
+  `WHERE professor_id = $user->id`; planning roles see every professor's
+  rows unfiltered.
+- `FacultyAvailabilityPolicy`/`FacultySubjectPreferencePolicy`: `viewAny`
+  true for everyone (the scope filters rows); `view` follows the
+  visibility rule; `create` requires the `Faculty` role; `update`/`delete`
+  require **both** the `Faculty` role **and** row ownership — a new
+  two-condition shape, since same-role professors must not edit each
+  other's rows.
+- 8 new routes: `GET/POST /api/v1/faculty-availabilities`,
+  `PATCH/DELETE /api/v1/faculty-availabilities/{facultyAvailability}`, same
+  shape for `faculty-subject-preferences`. Writes gated `role:faculty`;
+  `professor_id` is forced server-side to the authenticated user's ID, never
+  accepted from the request body. These are the first `DELETE` endpoints in
+  this API.
+- The two `faculty_subject_preferences` composite-uniqueness rules
+  (subject-per-term, rank-per-term) are enforced pre-flight with
+  `Rule::unique()->where()->ignore()` rather than a custom `withValidator()`
+  hook — simpler than the curriculum catalog's cycle detector because the
+  underlying rule is plain uniqueness, not graph logic; same outcome (clean
+  422, not a raw SQL error).
+- Docs: `docs/data-dictionary/faculty-input.md`; OpenAPI gained 1 new tag,
+  8 new paths, 10 new schemas.
+**Two things caught before completion, not after:**
+- An `openapi.yaml` edit matched its `old_string` one property short of the
+  actual file, splitting the pre-existing `minimum_grade` property's
+  `type`/`maxLength` apart. `@redocly/cli lint` failed immediately with a
+  YAML parse error; fixed and re-linted clean. See Failure and Recovery
+  Record.
+- Starting `php artisan serve` for live verification found a pre-existing
+  listener on port 8000 (two `php.exe`, running ~40 minutes already) that
+  this session never started — a possible concurrent process against the
+  same repository/database. Identified and stopped only my own new pair by
+  matching exact process start times; left the pre-existing pair and one
+  other unrelated `php.exe` untouched. See Failure and Recovery Record.
+**Verification:** `composer test` 278/278 (752 assertions, up from
+248/640), `format:check`, `analyse` (Larastan level 8, 116 files, 0
+errors), `audit` clean, `route:list` exactly 18 routes, OpenAPI lint clean.
+Given the port-8000 ambiguity, relied on the automated suite's real
+HTTP-level coverage (Sanctum tokens through `postJson`/`patchJson`/
+`deleteJson` against the real named routes) rather than an additional
+manual `curl` session for this slice.
+**Not done, out of scope for this sub-project:** section planning, approval
+workflow (the next two branches); the enrollment-records domain's API layer
+(deliberately out of scope per the schema-foundation task's decision); every
+frontend change; CI.

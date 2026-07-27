@@ -19,16 +19,24 @@ final class ApiSurfaceTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
+            'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/curricula',
+            'GET|HEAD api/v1/faculty-availabilities',
+            'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/programs',
             'GET|HEAD api/v1/subjects',
             'PATCH api/v1/curricula/{curriculum}',
+            'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
+            'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
+            'POST api/v1/faculty-availabilities',
+            'POST api/v1/faculty-subject-preferences',
         ], $routes);
     }
 
@@ -43,6 +51,14 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.curricula.index',
             'api.v1.curricula.store',
             'api.v1.curricula.update',
+            'api.v1.faculty-availabilities.index',
+            'api.v1.faculty-availabilities.store',
+            'api.v1.faculty-availabilities.update',
+            'api.v1.faculty-availabilities.destroy',
+            'api.v1.faculty-subject-preferences.index',
+            'api.v1.faculty-subject-preferences.store',
+            'api.v1.faculty-subject-preferences.update',
+            'api.v1.faculty-subject-preferences.destroy',
         ];
 
         foreach ($guarded as $name) {
@@ -67,6 +83,29 @@ final class ApiSurfaceTest extends TestCase
         $readRoute = Route::getRoutes()->getByName('api.v1.curricula.index');
         $this->assertNotNull($readRoute);
         $this->assertNotContains('role:program_chair', $readRoute->gatherMiddleware());
+    }
+
+    public function test_faculty_input_writes_are_gated_to_the_faculty_role(): void
+    {
+        $gated = [
+            'api.v1.faculty-availabilities.store',
+            'api.v1.faculty-availabilities.update',
+            'api.v1.faculty-availabilities.destroy',
+            'api.v1.faculty-subject-preferences.store',
+            'api.v1.faculty-subject-preferences.update',
+            'api.v1.faculty-subject-preferences.destroy',
+        ];
+
+        foreach ($gated as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:faculty', $route->gatherMiddleware());
+        }
+
+        $readRoute = Route::getRoutes()->getByName('api.v1.faculty-availabilities.index');
+        $this->assertNotNull($readRoute);
+        $this->assertNotContains('role:faculty', $readRoute->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void

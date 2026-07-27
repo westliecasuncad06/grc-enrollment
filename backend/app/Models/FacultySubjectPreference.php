@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -60,5 +61,21 @@ final class FacultySubjectPreference extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class);
+    }
+
+    /**
+     * Own-record visibility, not status-based — see
+     * FacultyAvailability::scopeVisibleTo() for the same rationale.
+     *
+     * @param  Builder<FacultySubjectPreference>  $query
+     * @return Builder<FacultySubjectPreference>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (! $user->role->isLearnerScoped()) {
+            return $query;
+        }
+
+        return $query->where('professor_id', $user->id);
     }
 }
