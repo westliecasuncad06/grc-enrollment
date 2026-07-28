@@ -33,18 +33,18 @@ Do not infer institutional values listed as open decisions in PRD §17.
 ## Target Architecture
 
 ```text
-frontend/     React + strict TypeScript + Vite SPA
+frontend/     Next.js (App Router) + React + strict TypeScript
 backend/      Laravel REST API under /api/v1
 ml-service/   Private Python prediction service
 docs/         ADRs, API contract, data dictionary, and runbooks
 e2e/          Playwright journeys against the integrated stack
 ```
 
-`frontend/` migrates from Vite to **Next.js (App Router)** in roadmap Phase 3.
-Next.js is the approved Presentation Layer as of PRD v3.2 (see ADR 0013); the
-line above describes the tree as it stands today, before that migration lands.
+Next.js is used **client-rendered only** (PRD v3.2, [ADR 0013](docs/adr/0013-nextjs-presentation-layer.md)): no server session, no server-side rendering of authorized student data, and no proxying of the Laravel API. It provides routing and the build pipeline, not a second server.
 
-The SPA and API remain independently deployable. Browser requests use bearer tokens; session-cookie and CSRF-cookie authentication are out of scope. The browser must not call the prediction service directly.
+The frontend and API remain independently deployable. Browser requests use bearer tokens; session-cookie and CSRF-cookie authentication are out of scope. Because the token lives in `localStorage`, Next.js middleware cannot read it — route guards are client-side, and Laravel Policies remain the authoritative check on every request. The browser must not call the prediction service directly.
+
+Local development runs the frontend on port 3000 (`npm run dev`) and the API on 8000 (`php artisan serve`).
 
 ## Environment Baseline
 

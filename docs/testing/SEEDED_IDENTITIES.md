@@ -7,20 +7,17 @@ These are **database fixtures**, not production accounts. They exist so every
 PRD role can be exercised against real Sanctum authentication during
 development.
 
-## Relationship to the UI-only demo credentials
+## These are now the only sign-in credentials
 
-`docs/testing/DEMO_CREDENTIALS.md` documents a **separate** set of accounts
-that live only in the frontend as TypeScript fixtures. Those never touch the
-database and are used when the SPA runs in `demo` auth mode without a backend.
+A second, UI-only set once existed in `docs/testing/DEMO_CREDENTIALS.md`: nine
+hardcoded frontend fixtures with a committed shared password, used when the SPA
+ran in a `demo` auth mode without a backend. **Both the file and that auth mode
+were deleted in the Next.js migration** (roadmap Phase 3, ADR 0013) — they
+predated real Sanctum authentication, and porting their environment guard to
+Next.js risked making a committed password valid in a production build.
 
-The two sets are deliberately distinct and **must never share a password**:
-
-| | Demo credentials | Seeded identities (this file) |
-|---|---|---|
-| Lives in | Frontend TypeScript fixtures | `grc_enrollment.users` table |
-| Auth path | UI-only, no network call | Real `POST /api/v1/auth/login` |
-| Email domain | `*.test` (see that file) | `*.seed@grc.test` |
-| Password | Committed, shared, documented | Generated locally, never committed |
+The identities below are the only way to sign in. Their password lives in
+`GRC_SEED_PASSWORD` and is never committed.
 
 ## The nine identities
 

@@ -93,7 +93,7 @@ jobs:
         run: composer audit --locked
 
   frontend:
-    name: Frontend (React)
+    name: Frontend (Next.js)
     runs-on: ubuntu-latest
     defaults:
       run:

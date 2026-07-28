@@ -1,0 +1,136 @@
+import { screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import type { AuthSession } from "@/features/auth/auth-types"
+import { userRoles, type UserRole } from "@/features/auth/roles"
+import { PortalShell } from "@/features/components/layouts/portal-shell"
+import { PortalOverviewPage } from "@/features/components/pages/portal-overview-page"
+import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
+import { routerMock } from "@/tests/navigation-mock"
+import { renderWithSession } from "@/tests/render-app"
+
+function sessionFor(role: UserRole): AuthSession {
+  return {
+    userId: "1",
+    displayName: `Test ${rolePortalDefinitions[role].roleLabel}`,
+    role,
+    signedInAt: "2026-07-26T12:00:00.000Z",
+  }
+}
+
+function renderShell(role: UserRole, overrides = {}) {
+  return renderWithSession(
+    <PortalShell>
+      <PortalOverviewPage />
+    </PortalShell>,
+    { route: "/portal", session: sessionFor(role), ...overrides },
+  )
+}
+
+describe("PortalShell", () => {
+  const fetchMock = vi.fn<typeof fetch>()
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => undefined))
+    vi.stubGlobal("fetch", fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it.each(userRoles)("shows the exact role navigation for %s", (role) => {
+    const definition = rolePortalDefinitions[role]
+    renderShell(role)
+
+    expect(
+      screen.getByRole("heading", { name: definition.welcomeHeading }),
+    ).toBeInTheDocument()
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Role portal navigation",
+    })
+    const links = within(navigation).getAllByRole("link")
+
+    expect(links).toHaveLength(definition.modules.length + 1)
+    expect(
+      within(navigation).getByRole("link", { name: "Portal overview" }),
+    ).toHaveAttribute("href", "/portal")
+
+    for (const module of definition.modules) {
+      expect(
+        within(navigation).getByRole("link", { name: module.label }),
+      ).toHaveAttribute("href", `/portal/${module.id}`)
+    }
+
+    expect(
+      screen.getAllByText(sessionFor(role).displayName).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(0)
+  })
+
+  it("exposes preview actions without claiming they are connected", () => {
+    renderShell("student")
+
+    for (const name of [
+      "Notifications preview",
+      "Profile preview",
+      "Password settings preview",
+      "Help preview",
+      "Report issue preview",
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled()
+    }
+    expect(
+      screen.getAllByText("Academic term not connected").length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("opens an accessible mobile navigation Sheet", async () => {
+    const user = userEvent.setup()
+    renderShell("accounting_staff")
+
+    await user.click(
+      screen.getByRole("button", { name: "Open portal navigation" }),
+    )
+
+    const dialog = screen.getByRole("dialog", { name: "Portal navigation" })
+    expect(
+      within(dialog).getByRole("link", { name: "Payment Queue" }),
+    ).toHaveAttribute("href", "/portal/payment-queue")
+    expect(
+      within(dialog).getByRole("button", { name: "Close" }),
+    ).toBeInTheDocument()
+  })
+
+  it("signs out by navigating home before clearing the session", async () => {
+    const user = userEvent.setup()
+    const signOut = vi.fn()
+    renderShell("student", { signOut })
+
+    await user.click(screen.getByRole("button", { name: "Sign out" }))
+
+    // Order matters: navigating first is what stops RequireSession from
+    // bouncing a now-anonymous user to /login instead of the landing page.
+    expect(routerMock.replace).toHaveBeenCalledWith("/")
+    expect(signOut).toHaveBeenCalled()
+  })
+
+  it("warns when the session cannot be persisted on this browser", () => {
+    renderShell("student", { storageAvailable: false })
+
+    expect(
+      screen.getByText(
+        "Your session cannot be restored after refresh on this browser.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("labels the portal as a preview and never as a demo", () => {
+    renderShell("student")
+
+    expect(screen.getAllByText("Preview portal").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Demo portal")).not.toBeInTheDocument()
+  })
+})

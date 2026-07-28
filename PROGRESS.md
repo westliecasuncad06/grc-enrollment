@@ -4,10 +4,10 @@
 
 ---
 
-# ■ Overall Completion — 32%
+# ■ Overall Completion — 36%
 
 ```
-████████░░░░░░░░░░░░░░░░░  32 / 100
+█████████░░░░░░░░░░░░░░░░  36 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -21,19 +21,19 @@ against work that is **merged**, not work that is written or planned.
 | 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 25% | 2.50 |
 | 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 15% | 1.80 |
 | 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 0% | 0.00 |
-| 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 50% | 4.00 |
+| 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
 | 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 5% | 1.25 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
 | 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **32.25 ≈ 32%** |
+| | **Total** | **100%** | | **36.25 ≈ 36%** |
 
 Two scores that look surprising, explained:
 
 - **Row 5 at 15%** — all 9 Process 3.0 tables are migrated, tested and
   documented, but not one Controller, Policy, Resource or route exists.
-- **Row 7 at 50%** — the Tailwind v4 theme, 12 shadcn components, API client,
-  Zod schemas and auth logic all carry over to Next.js. Routing, the
-  composition root, build config and all 20 test files do not.
+- **Row 8 at 5%** — the nav structure and role catalog exist, but all 40
+  modules are still placeholder empty-states. This is the largest single
+  block of remaining work.
 
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
@@ -44,12 +44,12 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 
 | | |
 |---|---|
-| **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · React 19 + Vite 8 → **migrating to Next.js** · FastAPI (ml-service, dormant) |
+| **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
 | **Live API routes** | 26 |
 | **Database tables** | 21 migrated, all reversible |
 | **Backend tests** | 348 passing (939 assertions) · Larastan level 8 clean · Pint clean |
-| **Frontend tests** | 20 files, Vitest |
+| **Frontend tests** | 15 files, 145 tests, Vitest |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
 | **Portals functional** | 0 of 9 |
 
@@ -92,8 +92,8 @@ functional system before any model is trained.
 | 0 | Foundations & Platform | ✅ Complete | 90 |
 | 1 | Identity, RBAC & the Nine Users | ✅ Complete | 85 |
 | 2 | Process 1.0 — Scheduling backend | ✅ Complete (2 deferred) | 80 |
-| 3 | **Next.js Migration** | ⬅ **Next** | 0 |
-| 4 | Cross-Cutting Backend & ML Substrate | ⬜ Planned | 0 |
+| 3 | **Next.js Migration** | ✅ Complete | 100 |
+| 4 | Cross-Cutting Backend & ML Substrate | ⬅ **Next** | 0 |
 | 5 | Portals over Existing APIs (5 roles) | ⬜ Planned | 0 |
 | 6 | Process 2.0 + Student Portal | ⬜ Planned | 25 |
 | 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
@@ -155,38 +155,47 @@ FR-SCH-001 through FR-SCH-005 and FR-SCH-007 through FR-SCH-009.
 **Deferred:** FR-SCH-006 demand forecast → Phase 9 (needs ML).
 FR-SCH-010 audit logging → Phase 4 (cross-cutting).
 
-## Phase 3 — Next.js Migration ⬅ NEXT
+## Phase 3 — Next.js Migration ✅
 
-Port the 4 real screens (landing, login, portal shell, 404). **No new
-features.** Done when the app does exactly what it does today, on Next.js,
-with CI green.
+**Next.js 16.2.12**, App Router, client-rendered only (ADR 0013). The 4 real
+screens were ported with no feature changes; all 40 modules remain
+placeholders as intended.
 
-Migrating now costs 4 screens. Migrating after Phases 5–7 costs 44.
+- `src/app/` is now routing only; application code moved to `src/features/`
+  (69 files, verified complete by `tsc`).
+- **Demo auth mode deleted** — but it could not simply be dropped: `demoRoles`
+  was the runtime enum validating *real* API responses in `auth-schema.ts`,
+  and `DemoAuthError`/`DemoSession` were used by the live API gateway. Those
+  were extracted to `features/auth/roles.ts`, `auth-types.ts` and
+  `auth-error.ts` first; only then were the demo files removed, along with
+  `DEMO_CREDENTIALS.md`. `AuthProvider` lost its `sessionStore` prop and the
+  whole `AuthMode` tri-state collapsed.
+- Test harness rebuilt against a mocked `next/navigation`; `MemoryRouter` and
+  the `LocationProbe` have no App Router equivalent, so routing assertions now
+  check the redirect the guard *requested*. 20 files → 15, 145 tests.
+- `app-router.test.tsx` was replaced by `auth-route-guards.test.tsx`, which
+  keeps the security-adjacent coverage: `returnTo` encoding, query
+  preservation, and rejection of a hostile cross-origin `returnTo`.
 
-- Resolve the current stable Next.js version at implementation time (PRD §6:
-  production-stable only — no alpha/beta/RC).
-- Rename `src/app/` → `src/features/` first; Next's `app/` means the router.
-- Replace `react-router` v8 with the App Router; `NavLink`'s `isActive`
-  render-prop → `usePathname()`; `await navigate(...)` → `router.push`.
-- Rework the composition root — `main.tsx` mutates **module-level singletons**
-  in `api-client.ts`, which is unsafe under Next.
-- `VITE_API_BASE_URL` → `NEXT_PUBLIC_API_BASE_URL`.
-- Add `"use client"` to stateful shadcn components (`components.json` has
-  `"rsc": false`).
-- Tailwind v4: `@tailwindcss/vite` → `@tailwindcss/postcss`. The 1,930-line
-  `index.css` and the GRC brand tokens (`--grc-primary: #c8102e`) carry over.
-- **Delete demo auth mode** — gateway, fixtures, session store, and
-  `DEMO_CREDENTIALS.md`. It predates real auth; nine seeded DB identities
-  replace it. It is also the migration's highest-risk item: Vite's
-  `MODE === "test"` guard has no exact Next equivalent, and porting it wrong
-  would make a committed password a valid production login.
-- Watch `Intl.DateTimeFormat("en-PH", …)` in `public-api-readiness.tsx` — a
-  hydration-mismatch source.
-- Rewrite the 20 test files; `MemoryRouter` has no App Router equivalent.
-- Keep the CI frontend job green; update `CORS_ALLOWED_ORIGINS` for the port.
+**Three defects caught during the migration, not after** — see Failure and
+Recovery Record: a Next-introduced audit failure, an ESLint 10 incompatibility,
+and a real unhandled-rejection bug in sign-out.
 
-**PRD amendment shipped with this phase:** §1.2, §6.1, §7 and §7.3 currently
-record Vite as a deliberate replacement *for* Next.js. See ADR 0013.
+**Verification:** `typecheck`, `lint` (`--max-warnings=0`), `lint:fast`,
+`format:check`, `audit` (0 vulnerabilities), `build`, and 145/145 tests all
+clean. Backend gate unchanged at 348/348. **Live HTTP proof: 17/17** against a
+real Laravel API — all four routes served, metadata migrated from `index.html`,
+CORS accepting the new port 3000 origin, real Sanctum login → `/auth/me` →
+logout → 401, and an explicit ADR 0013 check that **no authorized content is
+ever server-rendered** on `/login` or `/portal`.
+
+**Carried over unchanged:** the 1,930-line Tailwind v4 theme and GRC brand
+tokens, all 12 shadcn components, the strict-Zod API client, the auth token
+module, TanStack Query, React Hook Form, and every accessibility behaviour.
+
+**Not done, deliberately:** any portal functionality (Phases 5–7); Playwright
+E2E (Phase 8); `next/font` migration; server components fetching authorized
+data and httpOnly-cookie auth, both rejected in ADR 0013.
 
 ## Phase 4 — Cross-Cutting Backend & ML Substrate
 
@@ -404,6 +413,10 @@ All `local`/`testing` only.
 
 ## Frontend
 
+**Next.js 16.2.12**, App Router, client-rendered only. Routes live in
+`src/app/` (`layout`, `providers`, `page`, `login/`, `portal/[moduleId]/`,
+`not-found`); application code in `src/features/`.
+
 4 real screens — institutional landing (with a live health check), login
 (real Sanctum, RHF + Zod, accessible error summary), role-filtered portal
 shell, branded 404. Plus 12 reviewed shadcn components, a strict-Zod API
@@ -412,11 +425,14 @@ client, and TanStack Query.
 Everything past the login wall is a static prototype. 40 modules, all
 placeholders. Only 4 of 26 endpoints are consumed by any UI.
 
+There is one auth path. The dev-only demo mode and its committed credential
+file were deleted in Phase 3.
+
 ## Documentation
 
 13 ADRs · `docs/api/openapi.yaml` (Redocly clean) · `docs/api/error-contract.md` ·
-7 data-dictionary pages · `docs/testing/SEEDED_IDENTITIES.md` ·
-`docs/history/2026-07-session-log.md`.
+7 data-dictionary pages · `docs/testing/SEEDED_IDENTITIES.md` (now the only
+credential doc) · `docs/history/2026-07-session-log.md`.
 
 ---
 
@@ -452,6 +468,26 @@ omits `Accept: application/json`.
 **`PRD(1).md` is a stale duplicate — do not read it.** It was byte-identical to
 `PRD.md` until the v3.2 amendment; it is now out of date. `PRD.md` is the sole
 source of truth per `AGENTS.md`.
+
+**`npm audit` needs two `overrides` to stay clean.** Next 16.2.12 pins
+`postcss@8.4.31` and `sharp@0.34.5`, both carrying advisories that fail CI's
+`--audit-level=moderate`. `package.json` forces the patched releases. npm's own
+suggested fix is a downgrade to `next@9.3.3` — never take it. Re-check on every
+Next upgrade and drop the overrides once upstream ships them.
+
+**`eslint-config-next` cannot be used on this repo.** It bundles
+`eslint-plugin-react@7.37.5`, whose peer range stops at ESLint 9.7, so it
+crashes ESLint 10 with `contextOrFilename.getFilename is not a function`. No
+override fixes it — the plugin has no ESLint 10 release. It also drags in a
+`brace-expansion` advisory chain. See the comment in `eslint.config.js`.
+
+**Seeded identities can drift from `GRC_SEED_PASSWORD`.** `RoleUserSeeder`
+reads the password with `getenv()`, not Laravel's `.env` parsing, so it must be
+exported into the process. If live login returns 401 for `*.seed@grc.test`
+while the tests pass, the stored hash predates the current value — re-run
+`php artisan db:seed --class=RoleUserSeeder` with the variable exported. The
+seeder is `updateOrCreate` keyed on email, so it is idempotent and touches only
+the nine synthetic accounts.
 
 ---
 
@@ -495,6 +531,10 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-28 | Extract `demoRoles`, the session/credential/gateway types and `DemoAuthError` out of the `demo-*` modules **before** deleting them. | They were not demo-only despite the naming: `demoRoles` is the runtime enum validating *real* API responses in `auth-schema.ts`, and `DemoAuthError`/`DemoSession` were used by the live API gateway. Deleting the files first would have broken production code. |
+| 2026-07-28 | Assert routing in tests via the mocked router's calls rather than a rendered URL. | The App Router has no `MemoryRouter`, so real URL changes are not observable in jsdom. Guards are asserted on the redirect they *request*; true end-to-end routing moves to Playwright in Phase 8, which PRD §14.3 requires anyway. |
+| 2026-07-28 | Pin `postcss` and `sharp` through `overrides` instead of accepting Next's pinned versions. | Next 16.2.12 ships versions with advisories that fail CI's `npm audit --audit-level=moderate`; npm's suggested fix is a downgrade to `next@9.3.3`. Both patches are semver-compatible and already elsewhere in the tree. |
+| 2026-07-28 | Do not adopt `eslint-config-next`. | It bundles `eslint-plugin-react@7.37.5`, which has no ESLint 10 support and crashes the lint run. The existing type-checked `typescript-eslint` + `react-hooks` rules are stricter than what it would have added. |
 | 2026-07-28 | Reorganise the roadmap into 11 execution phases, moving all machine learning to Phase 9. | User direction: make the whole system functional first. Each earlier phase now carries an explicit ML data-capture obligation so Phase 9 builds models, not plumbing. |
 | 2026-07-28 | Migrate the frontend from Vite/React to Next.js, and amend PRD §1.2/§6.1/§7/§7.3 accordingly (PRD → v3.2). | User direction. Realigns with the manuscript's original architecture diagram, which the PRD had deliberately overridden. PRD §18 requires the document be updated when architecture changes. Also touched `README.md`'s architecture block — one line, same decision, forward-pointing note only since the migration has not run yet. See ADR 0013. |
 | 2026-07-28 | Use Next.js as a client-rendered application only — no SSR of authorized data, no server session, no API proxying. | Preserves ADR 0001's independently-runnable service boundary and PRD §9.1's bearer-token rule. Next.js is adopted for routing and build pipeline, not to move computation to a Node server. |
@@ -533,4 +573,5 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-28 | Schedule approval workflow API | Merged (ADR 0011) |
 | 2026-07-28 | CI quality gates | Merged (ADR 0012); ml-service job fails, paused |
 | 2026-07-28 | Student profile foundation (DFD 2.1) | Merged; CI-confirmed green |
-| 2026-07-28 | Roadmap replan, Next.js decision, PROGRESS restructure | This entry |
+| 2026-07-28 | Roadmap replan, Next.js decision, PROGRESS restructure | Merged (ADR 0013); PRD → v3.2 |
+| 2026-07-28 | Phase 3 — Next.js migration | This entry; 145/145 tests, live proof 17/17 |

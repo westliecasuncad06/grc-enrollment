@@ -1,96 +1,108 @@
 import { QueryClientProvider } from "@tanstack/react-query"
 import { render } from "@testing-library/react"
-import { MemoryRouter } from "react-router"
+import type { ReactNode } from "react"
 
-import { AuthProvider } from "@/app/auth/auth-context"
-import type { AuthMode } from "@/app/auth/demo-auth-mode"
+import { AuthProvider } from "@/features/auth/auth-context"
 import {
-  createDemoAuthGateway,
-  createDisabledAuthGateway,
-} from "@/app/auth/demo-auth-gateway"
-import type { DemoAuthGateway, DemoSession } from "@/app/auth/demo-auth-types"
-import {
-  createDemoSessionStore,
-  demoSessionStorageKey,
-  type DemoSessionPersistence,
-  type SessionStorageLike,
-} from "@/app/auth/demo-session-store"
-import { demoUsers } from "@/app/auth/demo-users"
-import { createAppQueryClient } from "@/app/lib/query-client"
-import { AppRouter } from "@/app/router/app-router"
-import { LocationProbe } from "@/tests/location-probe"
+  AuthContext,
+  type AuthContextValue,
+} from "@/features/auth/auth-context-value"
+import type { AuthGateway, AuthSession } from "@/features/auth/auth-types"
+import { createAppQueryClient } from "@/features/lib/query-client"
+import { setLocation, setRouteParams } from "@/tests/navigation-mock"
 
-class TestStorage implements SessionStorageLike {
-  private readonly values = new Map<string, string>()
+export const testSession: AuthSession = {
+  userId: "1",
+  displayName: "Test Person",
+  role: "student",
+  signedInAt: "2026-07-28T00:00:00.000Z",
+}
 
-  getItem(key: string): string | null {
-    return this.values.get(key) ?? null
-  }
-
-  setItem(key: string, value: string): void {
-    this.values.set(key, value)
-  }
-
-  removeItem(key: string): void {
-    this.values.delete(key)
+/**
+ * A gateway that resolves immediately, so `AuthProvider` leaves its
+ * "restoring" state on the first flush rather than hanging there.
+ */
+export function createStubGateway(
+  overrides: Partial<AuthGateway> = {},
+): AuthGateway {
+  return {
+    signIn: () => Promise.resolve(testSession),
+    restore: () => Promise.resolve(null),
+    signOut: () => Promise.resolve(),
+    persistenceAvailable: () => true,
+    ...overrides,
   }
 }
 
-interface RenderAppOptions {
-  authMode?: AuthMode
-  gateway?: DemoAuthGateway
-  initialSession?: DemoSession
-  persistedValue?: string
-  sessionStore?: DemoSessionPersistence
+interface RenderOptions {
+  /** Simulated URL, e.g. `/portal/enrollment?tab=available`. */
+  route?: string
+  /** Simulated dynamic segments, e.g. `{ moduleId: "enrollment" }`. */
+  routeParams?: Record<string, string>
 }
 
-export function renderAppAtRoute(
-  route: string,
+/**
+ * Renders a tree against the real `AuthProvider` and a stub gateway. Use this
+ * when the test exercises sign-in, restore, or sign-out behaviour.
+ */
+export function renderWithAuthProvider(
+  ui: ReactNode,
   {
-    authMode = "demo",
-    gateway: gatewayOverride,
-    initialSession,
-    persistedValue,
-    sessionStore: sessionStoreOverride,
-  }: RenderAppOptions = {},
+    gateway = createStubGateway(),
+    route = "/",
+    routeParams = {},
+  }: RenderOptions & { gateway?: AuthGateway } = {},
 ) {
-  const storage = new TestStorage()
+  setLocation(route)
+  setRouteParams(routeParams)
 
-  if (persistedValue !== undefined) {
-    storage.setItem(demoSessionStorageKey, persistedValue)
-  }
-
-  const sessionStore = sessionStoreOverride ?? createDemoSessionStore(storage)
-
-  if (initialSession && !sessionStoreOverride) {
-    sessionStore.write(initialSession)
-  }
-
-  const gateway =
-    gatewayOverride ??
-    (authMode === "demo"
-      ? createDemoAuthGateway(demoUsers)
-      : createDisabledAuthGateway())
   const queryClient = createAppQueryClient()
 
-  const result = render(
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider
-        authMode={authMode}
-        gateway={gateway}
-        sessionStore={sessionStore}
-      >
-        <MemoryRouter initialEntries={[route]}>
-          <AppRouter />
-          <LocationProbe />
-        </MemoryRouter>
-      </AuthProvider>
-    </QueryClientProvider>,
-  )
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider gateway={gateway}>{ui}</AuthProvider>
+      </QueryClientProvider>,
+    ),
+    gateway,
+  }
+}
+
+/**
+ * Renders a tree against a fixed auth state, skipping the provider entirely.
+ * Use this when the test cares about what a given session *renders*, not about
+ * how that session was established.
+ */
+export function renderWithSession(
+  ui: ReactNode,
+  {
+    route = "/",
+    routeParams = {},
+    session = testSession,
+    signIn = () => Promise.resolve(),
+    signOut = () => undefined,
+    status = "authenticated",
+    storageAvailable = true,
+  }: RenderOptions & Partial<AuthContextValue> = {},
+) {
+  setLocation(route)
+  setRouteParams(routeParams)
+
+  const value: AuthContextValue = {
+    session,
+    signIn,
+    signOut,
+    status,
+    storageAvailable,
+  }
+  const queryClient = createAppQueryClient()
 
   return {
-    ...result,
-    sessionStore,
-    storage,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <AuthContext.Provider value={value}>{ui}</AuthContext.Provider>
+      </QueryClientProvider>,
+    ),
+    value,
   }
 }
