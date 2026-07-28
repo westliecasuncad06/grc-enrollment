@@ -40,6 +40,10 @@ docs/         ADRs, API contract, data dictionary, and runbooks
 e2e/          Playwright journeys against the integrated stack
 ```
 
+`frontend/` migrates from Vite to **Next.js (App Router)** in roadmap Phase 3.
+Next.js is the approved Presentation Layer as of PRD v3.2 (see ADR 0013); the
+line above describes the tree as it stands today, before that migration lands.
+
 The SPA and API remain independently deployable. Browser requests use bearer tokens; session-cookie and CSRF-cookie authentication are out of scope. The browser must not call the prediction service directly.
 
 ## Environment Baseline

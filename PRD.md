@@ -4,20 +4,28 @@
 
 **Client:** Global Reciprocal Colleges (GRC)  
 **Product Type:** Secure, API-first web application  
-**Architecture:** React + TypeScript Single-Page Application and Laravel REST API  
-**Revision:** v3.1 — Capstone Manuscript Alignment, API-First Stack, and Delivery Controls  
+**Architecture:** Next.js + React + TypeScript client application and Laravel REST API  
+**Revision:** v3.2 — Presentation Layer Realigned to Next.js  
 **Status:** Implementation specification aligned to the approved capstone manuscript and current project instructions
 
 ---
 
 ## Revision Summary
 
+### v3.2 — Presentation Layer Realigned to Next.js (2026-07-28)
+
+The Presentation Layer moves from a Vite-based React SPA to **Next.js with React and strict TypeScript**, reverting v3.1's deliberate substitution and realigning the implementation with the capstone manuscript's own architecture diagram. Sections changed: the header, §1.2, §6.1, §7, and §7.3.
+
+Nothing else changes. The three-tier Client-Server model, the Laravel REST API boundary, the MySQL data layer, bearer-token authentication (§9.1), the four DFD processes, the nine actors, and every functional requirement are unaffected. Next.js is used as a client-rendered application only: no server-side session, no server-side rendering of authorized student data, no API proxying. See ADR 0013 for the full decision record.
+
+### v3.1 — Capstone Manuscript Alignment, API-First Stack, and Delivery Controls
+
 This revision refines PRD v3 after reviewing the April 2026 capstone manuscript, *A Development of an Automated Enrollment System with Predictive Analytics*. It preserves the API-first engineering direction required by the project instructions while aligning the implementation requirements with the manuscript's institutional scope, nine actors, four DFD processes, logical data stores, Agile method, and ISO/IEC 25010 evaluation plan.
 
 1. **Architecture replaced:** The product is now a React + TypeScript SPA backed by a Laravel REST API. Server-rendered PHP pages, native PHP controllers, Bootstrap, session authentication, and direct browser-to-PHP form submissions are removed from the implementation plan.
 2. **Authentication replaced:** Protected requests use Laravel Sanctum personal access tokens sent as bearer tokens. Cookie/session authentication and CSRF-cookie flows are not used.
 3. **API contract added:** All public application endpoints are versioned under `/api/v1`, use Laravel API Resources, return a consistent error envelope, enforce Policies, and preserve pagination metadata.
-4. **Frontend standards added:** Vite, strict TypeScript, Tailwind CSS, shadcn/ui, React Hook Form, Zod, and TanStack Query are required.
+4. **Frontend standards added:** Vite, strict TypeScript, Tailwind CSS, shadcn/ui, React Hook Form, Zod, and TanStack Query are required. *(Superseded by v3.2: Next.js with the App Router replaces Vite. Every other item in this list still stands — see §6.1.)*
 5. **Enrollment state ambiguity corrected:** Student submission, Registrar approval, Accounting confirmation, and COM generation now follow one explicit state machine.
 6. **Section threshold aligned:** The institutional 25-student value is treated as the section-viability threshold, not room capacity. A proposed section below the threshold cannot be published by default; any permitted exception requires authorized approval and a complete audit trail.
 7. **Predictive analytics safeguards added:** Forecasts and attrition results are advisory decision support. They must not automatically deny enrollment, remove a student, dissolve a section, or impose punitive action.
@@ -66,7 +74,7 @@ The implementation must preserve these manuscript boundaries:
 
 ### 1.2 Resolved and Unresolved Manuscript Differences
 
-- **Frontend technology:** The manuscript's architecture diagram references Next.js/React. The newer project instructions explicitly require a React + TypeScript SPA using Vite. This PRD follows Vite while preserving the manuscript's three-tier Client-Server architecture, Laravel REST API, MySQL data layer, and token-based authentication.
+- **Frontend technology:** The manuscript's architecture diagram references Next.js/React. PRD v3.1 temporarily replaced this with a Vite-based React SPA. **As of v3.2 this is reversed: Next.js with React and strict TypeScript is the approved Presentation Layer**, realigning the implementation with the manuscript's own architecture diagram. The three-tier Client-Server architecture, Laravel REST API, MySQL data layer, and bearer-token authentication are unchanged. Next.js is used as a client-rendered application against the independent Laravel API — it does not render backend data server-side, does not proxy the API, and does not introduce session cookies. See ADR 0013.
 - **COM versus COR:** The Level 1 and Level 2 DFDs, proposed workflow, and use case discussion identify **Digital Certificate of Matriculation (COM)** as the Process 3.5 output delivered to the Student Portal after payment confirmation. Earlier scope and context passages also mention **Certificate of Registration (COR)**, including a Registrar Staff view. The implementation must not silently merge the terms. COM is required for Process 3.5; whether COR is a separate artifact remains an open institutional decision.
 - **Accounting permissions:** “View-only” applies to academic and enrollment-record content. Accounting Staff may perform only the operational writes explicitly required by the DFD: update the Active Serving Number and record Payment Confirmation. They cannot edit academic data, curriculum, Registrar decisions, or enrollment contents.
 
@@ -401,9 +409,9 @@ Exact versions must be recorded at implementation time after checking official c
 
 ### 6.1 Frontend
 
+- Next.js (App Router)
 - React
 - TypeScript with strict mode
-- Vite
 - Tailwind CSS
 - shadcn/ui
 - React Hook Form
@@ -411,7 +419,8 @@ Exact versions must be recorded at implementation time after checking official c
 - TanStack Query
 - A small authentication context or store only for client state that cannot remain local
 - A shared HTTP client with token and error interceptors
-- React Router or the approved stable routing solution
+
+Routing is provided by the Next.js App Router; no separate routing library is used. Because authentication is bearer-token only (§9.1), the token is not readable by Next.js middleware — route guards are client-side, and server components must not be used to fetch authorized student data.
 
 ### 6.2 Backend
 
@@ -469,7 +478,9 @@ Direct `shell_exec()` invocation is not the target architecture. It may be used 
 
 ## 7. System Architecture
 
-The manuscript's three-tier Client-Server model remains mandatory: a Presentation Layer, a Laravel REST API Application Layer, and a centralized MySQL Data Layer connected to the predictive engine. The manuscript illustrates Next.js/React in the Presentation Layer; the current project instructions deliberately replace Next.js with a Vite-based React + strict TypeScript SPA. This is an approved implementation-stack update and does not change the DFD scope, RBAC boundaries, or required data flows.
+The manuscript's three-tier Client-Server model remains mandatory: a Presentation Layer, a Laravel REST API Application Layer, and a centralized MySQL Data Layer connected to the predictive engine. The manuscript illustrates Next.js/React in the Presentation Layer, and the Presentation Layer is implemented in Next.js with React and strict TypeScript accordingly. This does not change the DFD scope, RBAC boundaries, or required data flows.
+
+Next.js is used strictly as a client-rendered application. The Presentation Layer holds no server-side session, performs no server-side rendering of authorized student data, and does not proxy or re-export the Laravel API. Authentication remains bearer-token only per §9.1, which means route protection is enforced client-side in the Presentation Layer and authoritatively by Laravel Policies on every request — hiding a control in the client is not authorization. See ADR 0013.
 
 ### 7.1 Repository Layout
 
@@ -574,14 +585,16 @@ The `frontend/`, `backend/`, and `ml-service/` must be independently runnable. T
 
 ### 7.3 Frontend Separation of Concerns
 
-- All React rendering components live under `frontend/src/app/components/`.
+- `frontend/src/app/` is reserved for the Next.js App Router — route segments, layouts, and `not-found`. It holds routing only.
+- All React rendering components live under `frontend/src/features/components/`.
 - Components do not perform raw `fetch` calls or parse backend responses.
-- API clients live in `app/services`.
-- Zod schemas live in `app/schemas`.
-- Shared types live in `app/types`.
-- Reusable browser behavior lives in `app/hooks`.
-- Pure utilities live in `app/lib`.
+- API clients live in `features/services`.
+- Zod schemas live in `features/schemas`.
+- Shared types live in `features/types`.
+- Reusable browser behavior lives in `features/hooks`.
+- Pure utilities live in `features/lib`.
 - TanStack Query owns server state.
+- Any component using state, effects, browser storage, or Next.js navigation hooks must declare `"use client"`.
 - Use `@/` path aliases for internal imports.
 - Use kebab-case filenames and folders.
 - Export React components using PascalCase.
