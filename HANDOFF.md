@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 22:00:00 +08:00
+- **Date and time:** 2026-07-29 22:12:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
@@ -226,7 +226,7 @@ UI belongs in Phase 5.
   **Phase 5 Task 8 — Dean and Executive Director schedule approval and master
   schedule workspace.**
 
-#### Review remediation — pending re-review
+#### Review remediation — accepted and complete
 
 - A term-selector regression showed that the Sections workspace reset from a
   stale watched term immediately after selecting a new one. Reset now accepts
@@ -242,7 +242,10 @@ UI belongs in Phase 5.
   missing retry actions; GREEN focused verification passed **5 files / 13
   tests**. Full frontend verification passed **34 files / 204 tests**;
   TypeScript, ESLint, Prettier, Oxlint, production build, and `git diff
-  --check` passed. Published completion remains **41%** pending re-review.
+  --check` passed. The independent re-review returned **Accept with no
+  findings**. Task 7 is accepted and complete; published completion remains
+  **41%**. Exact next: **Phase 5 Task 8 — Dean approval and Executive Director
+  master schedule workspace.**
 
 ### Takeover verification performed by Codex
 
