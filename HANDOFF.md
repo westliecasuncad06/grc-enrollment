@@ -3,17 +3,16 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 18:17:41 +08:00
-- **Current branch:** `phase-4-cross-cutting-backend`
-- **Latest commit:** `694010cfd82f1aeb90a69e7e968d78a3b98b8348`
-  (`chore: stop tracking the TypeScript incremental build artifact`)
-- **Integration state:** all current Phase 4 and shared-password changes are
-  uncommitted; nothing is staged, merged, or pushed
+- **Date and time:** 2026-07-29 18:48:00 +08:00
+- **Current branch:** `main`
+- **Latest commit:** `5bf9e77` (`feat: add Phase 4 cross-cutting backend foundation`)
+- **Integration state:** Phase 4 was fast-forward merged locally into `main`;
+  nothing has been pushed. The pre-existing main-branch plan edit was preserved.
 
 ## Current Objective
 
-Finish roadmap Phase 4, “Cross-Cutting Backend & ML Substrate,” in the
-isolated worktree:
+Record and verify the local integration of roadmap Phase 4, “Cross-Cutting
+Backend & ML Substrate,” on `main`:
 
 - immutable audit history and Registrar Head audit reads;
 - user-owned notifications and schedule-publication notifications;
@@ -22,7 +21,7 @@ isolated worktree:
 - synchronized routes, OpenAPI, data dictionary, and `PROGRESS.md`; and
 - the complete backend verification gate.
 
-The page-top published completion remains **36%** until integration. Machine
+The page-top published completion is now **41%** after integration. Machine
 learning remains last in roadmap Phase 9; no model, prediction endpoint, or
 student attrition UI belongs in Phase 4.
 
@@ -68,7 +67,7 @@ student attrition UI belongs in Phase 4.
   - `git diff --check` clean; and
   - route inventory still exactly 29.
 
-### Phase 4 implementation present in the worktree
+### Phase 4 implementation merged into `main`
 
 Tasks 1–11 in
 `.superpowers/sdd/2026-07-29-phase-4-cross-cutting-backend/progress.md`
@@ -95,16 +94,15 @@ Task 12 route inventory is implemented and included in the fresh passing
 focused suite. OpenAPI and the cross-cutting data dictionary are written and
 Redocly-clean.
 
-`PROGRESS.md` has been reconciled at the pre-full-gate milestone:
+`PROGRESS.md` was reconciled through the full-gate and merge milestone:
 
-- it distinguishes the 26-route/21-table merged baseline from the
-  29-route/26-table Phase 4 worktree;
+- it records the merged 29-route/26-table Phase 4 surface;
 - records the complete audit, notification, publication-recipient, and
   schema-only analytical scope;
 - updates the nine-role authorization table without marking any portal
   functional;
-- keeps ML in Phase 9 and the published overall completion at 36%; and
-- states that full suite, migration, and static gates remain pending.
+- keeps ML in Phase 9; and
+- raises the published overall completion to 41% after the merge.
 
 After the fresh full suite, `PROGRESS.md` was updated to the verified worktree
 total of **503 tests / 1,899 assertions**. It now states only the remaining
@@ -115,10 +113,10 @@ fresh + five-step rollback + reapply result and **27 tests / 70 assertions**.
 It now states only the remaining static/security gate and final
 reconciliation.
 
-After the final quality gate:
+After the final quality gate and local merge:
 
-- `PROGRESS.md` now marks Phase 4 **verified in worktree, pending
-  integration**, while keeping published completion at 36%;
+- `PROGRESS.md` now marks Phase 4 **complete (merged and verified)** and
+  published completion at 41%;
 - its system snapshot carries the exact 503/1,899 full-suite and 27/70
   migration-gate results plus the clean static/security results; and
 - the local SDD ledger marks Tasks 12 and 13 complete.
@@ -134,14 +132,14 @@ Independent final review found no Critical code/security/authorization/
 transaction/migration/API-contract defect. It found one Important handoff-only
 blocker: three older passages still said Task 13 verification and migration
 reversibility were pending. Those passages now state the completed
-503/1,899 suite, successful migration sequence, and “verified in worktree”
+503/1,899 suite, successful migration sequence, and “merged and verified”
 status consistently. The targeted stale-pattern scan and `git diff --check`
 pass. Focused re-review approved the correction; no Critical or Important
 review finding remains.
 
-Final whole-worktree inspection passed:
+Final pre-merge whole-worktree inspection passed:
 
-- branch remains `phase-4-cross-cutting-backend` at base commit `694010c`;
+- feature branch was at base commit `694010c` before the Phase 4 commit;
 - 27 tracked files are modified and 69 exact untracked files exist (Git's
   short status collapses these into 51 untracked path entries);
 - zero files are staged;
@@ -164,13 +162,12 @@ Task 12 of the Phase 4 plan is content-complete:
   notification/audit pagination schemas; Redocly passes.
 - `docs/data-dictionary/cross-cutting-backend.md` documents all five tables
   and the approved `HISTORICAL DATA` mapping.
-- `PROGRESS.md` publishes the verified worktree totals and labels Phase 4
-  “verified in worktree, pending integration,” while overall completion stays
-  at 36% because the work is unmerged.
+- `PROGRESS.md` publishes the merged totals, labels Phase 4 complete, and
+  reports 41% overall completion.
 
 No implementation or verification task remains in the approved Phase 4 plan.
-Tasks 1–13 are complete and independently reviewed in the worktree. The only
-remaining work is the user's integration decision.
+Tasks 1–13 are complete, independently reviewed, merged into `main`, and
+awaiting only the post-merge test run and handoff commit.
 
 ## Files Changed
 
@@ -190,7 +187,7 @@ remaining work is the user's integration decision.
   `docs/runbooks/mariadb-local.md`, and
   `docs/testing/SEEDED_IDENTITIES.md`
 
-### New untracked implementation groups
+### New implementation groups merged by `5bf9e77`
 
 - Audit, faculty, notification, curriculum, and scheduling Actions
 - Analytics/audit/notification domain vocabulary
@@ -204,9 +201,9 @@ remaining work is the user's integration decision.
 - Phase 4 design and implementation-plan documents
 - This `HANDOFF.md`
 
-Use `git status --short` and `git ls-files --others --exclude-standard` for
-the exact current inventory. The `.superpowers/sdd/...` ledger and reports are
-local execution evidence and may be ignored by Git.
+The feature worktree was removed only after post-merge verification. The
+`.superpowers/sdd/...` ledger and reports remain local execution evidence and
+may be ignored by Git.
 
 ## Commands and Tests Run
 
@@ -240,6 +237,15 @@ The `composer test` run completed successfully but its streamed output
 truncated the final summary. A fresh non-TTY run was therefore captured to a
 temporary log and its tail inspected. Result:
 **503 tests passed, 1,899 assertions, 31.61 seconds**.
+
+Post-merge verification on `main`:
+
+```powershell
+cd C:\xampp\htdocs\GRC-ENROLLMENT\backend
+php artisan test --without-tty
+```
+
+Result: **503 tests passed, 1,899 assertions, 46.23 seconds**; exit code 0.
 
 ```powershell
 php artisan route:list --json
@@ -314,8 +320,7 @@ Results: no stale-pattern matches; diff check clean.
 
 Earlier task-level commands and exact results are recorded in
 `.superpowers/sdd/2026-07-29-phase-4-cross-cutting-backend/task-*-report.md`.
-Do not substitute those historical focused results for the pending full
-Task 13 gate.
+The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Technical Decisions
 
@@ -351,8 +356,9 @@ Task 13 gate.
 
 ## Uncommitted or Risky Changes
 
-- The worktree contains a large coherent uncommitted Phase 4 delta plus the
-  user-requested shared-password seeder changes. None is staged.
+- The pre-existing user edit to
+  `docs/superpowers/plans/2026-07-27-mariadb-identity-sanctum-auth.md` remains
+  modified on `main` and was not touched.
 - Five migrations add persistent tables. Their complete test-database
   fresh/five-step rollback/reapply sequence and focused constraint suites
   passed in Task 13.
@@ -362,19 +368,14 @@ Task 13 gate.
 - Do not expose database credentials from `.env.testing`.
 - Do not kill unknown port-8000 processes; use another port if live HTTP
   verification is later needed.
-- Do not stage, commit, merge, or push without explicit user authorization.
+- Do not push or alter the unrelated plan edit without explicit user direction.
 
 ## Exact Next Steps
 
-1. Await the user's integration choice. Before acting, run
-   `git status --short` in
-   `C:\xampp\htdocs\GRC-ENROLLMENT\.worktrees\phase-4-cross-cutting-backend`
-   and verify that no new delta appeared.
-2. If the user chooses merge or pull request, obtain explicit authorization
-   to stage and commit this currently uncommitted delta before the selected
-   integration workflow.
-3. If the user chooses to keep the branch, make no Git mutation and preserve
-   this worktree at its current path.
+1. Commit the reconciled `PROGRESS.md` and this merged-state handoff on
+   `main`.
+2. Remove the already-merged feature worktree and delete its local branch.
+3. Keep `main` as the working branch; begin Phase 5 portal implementation next.
 
 ## Do Not Change
 

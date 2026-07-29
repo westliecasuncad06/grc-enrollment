@@ -1,13 +1,13 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `phase-4-cross-cutting-backend`
+**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `main`
 
 ---
 
-# ■ Overall Completion — 36%
+# ■ Overall Completion — 41%
 
 ```
-█████████░░░░░░░░░░░░░░░░  36 / 100
+██████████░░░░░░░░░░░░░░  41 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -20,12 +20,12 @@ against work that is **merged**, not work that is written or planned.
 | 3 | Process 1.0 backend — scheduling (PRD §5.1) | 10% | 80% | 8.00 |
 | 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 25% | 2.50 |
 | 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 15% | 1.80 |
-| 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 0% | 0.00 |
+| 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 100% | 5.00 |
 | 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
 | 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 5% | 1.25 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
 | 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **36.25 ≈ 36%** |
+| | **Total** | **100%** | | **41.25 ≈ 41%** |
 
 Two scores that look surprising, explained:
 
@@ -46,9 +46,9 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | 26 merged baseline · **29 in the Phase 4 worktree** |
-| **Database tables** | 21 merged baseline · **26 in the Phase 4 worktree** |
-| **Backend tests** | Phase 4 worktree: **503 passing (1,899 assertions)** · focused Phase 4 gate: 152/935 · migration gate: 27/70 after fresh + 5-step rollback + reapply · Larastan/Pint/audit clean |
+| **Live API routes** | **29** |
+| **Database tables** | **26** |
+| **Backend tests** | **503 passing (1,899 assertions)** · focused Phase 4 gate: 152/935 · migration gate: 27/70 after fresh + 5-step rollback + reapply · Larastan/Pint/audit clean |
 | **Frontend tests** | 15 files, 145 tests, Vitest |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
 | **Portals functional** | 0 of 9 |
@@ -100,7 +100,7 @@ functional system before any model is trained.
 | 1 | Identity, RBAC & the Nine Users | ✅ Complete | 85 |
 | 2 | Process 1.0 — Scheduling backend | ✅ Complete (2 deferred) | 80 |
 | 3 | **Next.js Migration** | ✅ Complete | 100 |
-| 4 | Cross-Cutting Backend & ML Substrate | ✅ Verified in worktree · pending integration | 0 |
+| 4 | Cross-Cutting Backend & ML Substrate | ✅ Complete (merged and verified) | 100 |
 | 5 | Portals over Existing APIs (5 roles) | ⬜ Planned | 0 |
 | 6 | Process 2.0 + Student Portal | ⬜ Planned | 25 |
 | 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
@@ -160,8 +160,8 @@ FR-SCH-001 through FR-SCH-005 and FR-SCH-007 through FR-SCH-009.
   (ADR 0011).
 
 **Deferred:** FR-SCH-006 demand forecast → Phase 9 (needs ML).
-FR-SCH-010 audit logging is implemented in the Phase 4 worktree and closes on
-integration.
+FR-SCH-010 audit logging is implemented and verified in the merged Phase 4
+backend.
 
 ## Phase 3 — Next.js Migration ✅
 
@@ -207,12 +207,12 @@ data and httpOnly-cookie auth, both rejected in ADR 0013.
 
 ## Phase 4 — Cross-Cutting Backend & ML Substrate
 
-The worktree now contains the five remaining PRD §10.4 tables and all planned
+The merged backend now contains the five remaining PRD §10.4 tables and all planned
 Phase 4 behavior. It is placed before the portals because the portal shell's
 notification centre is still disabled and because later business processes
 must produce complete audit and analytical history from their first write.
 
-**Implemented in the worktree:**
+**Implemented:**
 
 - `audit_logs` with actor/action/entity snapshots, reason, request ID and IP;
   application-level immutability; and transaction-coupled rollback.
@@ -247,9 +247,8 @@ rollback and reapplication of exactly the five Phase 4 migrations, and the
 focused migration suites pass (27 tests / 70 assertions). The full
 static-analysis/format/security gate also passes: Pint clean, Larastan level 8
 over 175 files with no errors, Composer locked audit with no advisories, and
-Redocly with no warnings/errors. Phase 4 is verified in this worktree and
-awaits explicit integration; the published overall score therefore remains
-36%.
+Redocly with no warnings/errors. Phase 4 is merged into `main` and the
+published overall score is now 41%.
 
 ## Phase 5 — Portals over Existing APIs
 
@@ -376,7 +375,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Audit Logs | 5 | ⬜ backend ready in Phase 4 worktree; UI pending |
+| Audit Logs | 5 | ⬜ backend ready; UI pending |
 | Enrollment Approvals | 7 | ⬜ |
 | Overrides & Voids | 7 | ⬜ |
 | Policy Settings | 8 | ⬜ §17-dependent |
@@ -407,7 +406,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 # ■ What Is Built
 
-## API surface — 26 merged routes / 29 in the Phase 4 worktree
+## API surface — 29 routes
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
@@ -434,7 +433,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 six transitions, so `ScheduleProposalPolicy` resolves the ability from the
 request's `action` field (ADR 0011).
 
-## Database — 21 merged tables / 26 in the Phase 4 worktree
+## Database — 26 tables
 
 Identity and reference: `users`, `personal_access_tokens`, `programs`,
 `academic_terms`.
@@ -447,7 +446,7 @@ Enrollment records (**schema only, no API**): `student_profiles`,
 `payments`, `enrollment_documents`, `transferee_credits`,
 `withdrawal_requests`.
 
-**Phase 4 worktree additions:** operational `audit_logs` and `notifications`;
+**Phase 4 additions:** operational `audit_logs` and `notifications`;
 schema-only `prediction_runs`, `section_demand_forecasts`, and
 `attrition_predictions`. The analytical tables have no API, job, seeder, or
 frontend and stay unused until Phase 9.
@@ -476,7 +475,7 @@ file were deleted in Phase 3.
 ## Documentation
 
 13 ADRs · `docs/api/openapi.yaml` (Redocly clean) · `docs/api/error-contract.md` ·
-7 merged data-dictionary pages plus the Phase 4 worktree's
+7 merged data-dictionary pages plus the Phase 4
 `cross-cutting-backend.md` · `docs/testing/SEEDED_IDENTITIES.md` (now the only
 credential doc) · `docs/history/2026-07-session-log.md`.
 
