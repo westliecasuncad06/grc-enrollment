@@ -2,8 +2,14 @@ import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { AuthSession } from "@/features/auth/auth-types"
+import { useAuth } from "@/features/auth/use-auth"
 import { PortalNotificationSheet } from "@/features/components/portal/portal-notification-sheet"
-import { renderWithSession } from "@/tests/render-app"
+import {
+  createStubGateway,
+  renderWithAuthProvider,
+  renderWithSession,
+} from "@/tests/render-app"
 
 const notificationEnvelope = {
   data: [
@@ -31,6 +37,40 @@ function requestUrl(input: RequestInfo | URL): string {
   }
 
   return input instanceof URL ? input.toString() : input.url
+}
+
+const userASession: AuthSession = {
+  userId: "1",
+  displayName: "User A",
+  role: "faculty",
+  signedInAt: "2026-07-29T10:00:00Z",
+}
+
+const userBSession: AuthSession = {
+  userId: "2",
+  displayName: "User B",
+  role: "faculty",
+  signedInAt: "2026-07-29T10:01:00Z",
+}
+
+function AuthSwitchControls() {
+  const { signIn, signOut } = useAuth()
+
+  return (
+    <>
+      <button type="button" onClick={signOut}>
+        Sign out
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void signIn({ email: "user-b@grc.test", password: "secret" })
+        }
+      >
+        Sign in as User B
+      </button>
+    </>
+  )
 }
 
 describe("PortalNotificationSheet", () => {
@@ -127,5 +167,65 @@ describe("PortalNotificationSheet", () => {
       await screen.findByText("Notifications are unavailable right now."),
     ).toBeInTheDocument()
     expect(screen.queryByText(/user_id/i)).not.toBeInTheDocument()
+  })
+
+  it("does not show User A's cached notifications after User B signs in", async () => {
+    const user = userEvent.setup()
+    const userANotifications = {
+      ...notificationEnvelope,
+      data: [
+        {
+          ...notificationEnvelope.data[0],
+          message: "User A private notification",
+        },
+      ],
+    }
+    const userBNotifications = {
+      ...notificationEnvelope,
+      data: [
+        {
+          ...notificationEnvelope.data[0],
+          id: 8,
+          message: "User B private notification",
+        },
+      ],
+    }
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(userANotifications), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(userBNotifications), { status: 200 }),
+      )
+
+    renderWithAuthProvider(
+      <>
+        <AuthSwitchControls />
+        <PortalNotificationSheet />
+      </>,
+      {
+        gateway: createStubGateway({
+          restore: () => Promise.resolve(userASession),
+          signIn: () => Promise.resolve(userBSession),
+        }),
+      },
+    )
+
+    await user.click(screen.getByRole("button", { name: /notifications/i }))
+    expect(
+      await screen.findByText("User A private notification"),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Close" }))
+    await user.click(screen.getByRole("button", { name: "Sign out" }))
+    await user.click(screen.getByRole("button", { name: "Sign in as User B" }))
+    await user.click(screen.getByRole("button", { name: /notifications/i }))
+
+    expect(
+      await screen.findByText("User B private notification"),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("User A private notification"),
+    ).not.toBeInTheDocument()
   })
 })

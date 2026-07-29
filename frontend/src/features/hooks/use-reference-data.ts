@@ -2,15 +2,19 @@
 
 import { useQuery } from "@tanstack/react-query"
 
+import { useAuth } from "@/features/auth/use-auth"
 import {
   getAcademicTerms,
   getPrograms,
   getSubjects,
 } from "@/features/services/reference-data-service"
 
-export const academicTermsQueryKey = ["academic-terms"] as const
-export const programsQueryKey = ["programs"] as const
-export const subjectsQueryKey = ["subjects"] as const
+export const academicTermsQueryKey = (userId: string | null) =>
+  ["academic-terms", userId] as const
+export const programsQueryKey = (userId: string | null) =>
+  ["programs", userId] as const
+export const subjectsQueryKey = (userId: string | null) =>
+  ["subjects", userId] as const
 
 interface ReferenceDataQueryOptions {
   enabled?: boolean
@@ -19,29 +23,35 @@ interface ReferenceDataQueryOptions {
 export function useAcademicTermsQuery({
   enabled = true,
 }: ReferenceDataQueryOptions = {}) {
+  const { session } = useAuth()
+
   return useQuery({
-    queryKey: academicTermsQueryKey,
+    queryKey: academicTermsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getAcademicTerms(signal),
-    enabled,
+    enabled: enabled && session !== null,
   })
 }
 
 export function useProgramsQuery({
   enabled = true,
 }: ReferenceDataQueryOptions = {}) {
+  const { session } = useAuth()
+
   return useQuery({
-    queryKey: programsQueryKey,
+    queryKey: programsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getPrograms(signal),
-    enabled,
+    enabled: enabled && session !== null,
   })
 }
 
 export function useSubjectsQuery({
   enabled = true,
 }: ReferenceDataQueryOptions = {}) {
+  const { session } = useAuth()
+
   return useQuery({
-    queryKey: subjectsQueryKey,
+    queryKey: subjectsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getSubjects(signal),
-    enabled,
+    enabled: enabled && session !== null,
   })
 }
