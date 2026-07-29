@@ -1,6 +1,7 @@
 "use client"
 
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { useAuth } from "@/features/auth/use-auth"
 import { Badge } from "@/features/components/ui/badge"
 import {
   Card,
@@ -25,11 +26,19 @@ import {
 import { getFacultyTeachingSchedule } from "@/features/services/faculty-service"
 
 export function TeachingScheduleWorkspace() {
+  const { session } = useAuth()
   const termsQuery = useAcademicTermsQuery()
   const subjectsQuery = useSubjectsQuery()
   const sectionsQuery = useSectionsQuery()
+  const facultyId = Number(session?.userId)
+  const assignedSections =
+    Number.isSafeInteger(facultyId) && facultyId > 0
+      ? (sectionsQuery.data ?? []).filter(
+          (section) => section.professor_id === facultyId,
+        )
+      : []
   const rows = getFacultyTeachingSchedule(
-    sectionsQuery.data ?? [],
+    assignedSections,
     subjectsQuery.data ?? [],
     termsQuery.data ?? [],
   )
@@ -42,10 +51,7 @@ export function TeachingScheduleWorkspace() {
     <section aria-label="Teaching schedule workspace" className="grid gap-4">
       <div>
         <h2>Teaching schedule</h2>
-        <p>
-          This schedule contains only sections the API makes visible to your
-          faculty account.
-        </p>
+        <p>This schedule contains sections assigned to your faculty account.</p>
       </div>
       {hasError && (
         <Alert variant="destructive">
@@ -76,7 +82,9 @@ export function TeachingScheduleWorkspace() {
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.sectionId}>
-                    <TableCell>{row.subjectCode}</TableCell>
+                    <TableCell>
+                      {row.subjectCode} · {row.subjectTitle}
+                    </TableCell>
                     <TableCell>{row.termLabel}</TableCell>
                     <TableCell>{row.days}</TableCell>
                     <TableCell>{row.time}</TableCell>

@@ -24,6 +24,11 @@ final class SectionPolicy
             return true;
         }
 
+        if ($user->role === UserRole::Faculty) {
+            return $section->professor_id === $user->id
+                && $section->status->isVisibleToLearners();
+        }
+
         return $section->status->isVisibleToLearners();
     }
 

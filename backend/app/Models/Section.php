@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Identity\UserRole;
 use App\Domain\Scheduling\SectionStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -106,20 +107,31 @@ final class Section extends Model
     }
 
     /**
-     * Restricts the result set for learner-scoped roles to published/closed
-     * sections. Planning roles see every section regardless of status,
-     * since they are the ones authoring the schedule. Same pattern as
-     * Subject/Curriculum::scopeVisibleTo().
+     * Faculty receives only the published/closed sections assigned directly
+     * through `professor_id`; student and Accounting learner visibility stays
+     * status-based. Planning roles see every section regardless of status.
      *
      * @param  Builder<Section>  $query
      * @return Builder<Section>
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
+        if ($user->role === UserRole::Faculty) {
+            return $query
+                ->where('professor_id', $user->id)
+                ->whereIn('status', self::learnerVisibleStatusValues());
+        }
+
         if (! $user->role->isLearnerScoped()) {
             return $query;
         }
 
+        return $query->whereIn('status', self::learnerVisibleStatusValues());
+    }
+
+    /** @return list<string> */
+    private static function learnerVisibleStatusValues(): array
+    {
         $visibleValues = array_values(array_map(
             fn (SectionStatus $status): string => $status->value,
             array_filter(
@@ -128,6 +140,6 @@ final class Section extends Model
             ),
         ));
 
-        return $query->whereIn('status', $visibleValues);
+        return $visibleValues;
     }
 }

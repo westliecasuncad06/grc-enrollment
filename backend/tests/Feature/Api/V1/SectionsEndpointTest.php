@@ -67,6 +67,71 @@ final class SectionsEndpointTest extends TestCase
         self::assertCount(1, $response->json('data'));
     }
 
+    public function test_a_faculty_member_sees_only_their_own_published_or_closed_sections(): void
+    {
+        $term = $this->makeTerm();
+        $faculty = User::create([
+            'name' => 'Faculty Owner',
+            'email' => 'faculty.owner.sections@grc.test',
+            'password' => self::PASSWORD,
+            'role' => UserRole::Faculty,
+            'status' => UserStatus::Active,
+        ]);
+        $otherFaculty = User::create([
+            'name' => 'Other Faculty',
+            'email' => 'faculty.other.sections@grc.test',
+            'password' => self::PASSWORD,
+            'role' => UserRole::Faculty,
+            'status' => UserStatus::Active,
+        ]);
+
+        $ownPublished = Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $this->makeSubject('CS201')->id,
+            'section_code' => 'OWN-PUBLISHED',
+            'professor_id' => $faculty->id,
+            'capacity' => 40,
+            'status' => SectionStatus::Published,
+        ]);
+        $ownClosed = Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $this->makeSubject('CS202')->id,
+            'section_code' => 'OWN-CLOSED',
+            'professor_id' => $faculty->id,
+            'capacity' => 40,
+            'status' => SectionStatus::Closed,
+        ]);
+        Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $this->makeSubject('CS203')->id,
+            'section_code' => 'OTHER-PUBLISHED',
+            'professor_id' => $otherFaculty->id,
+            'capacity' => 40,
+            'status' => SectionStatus::Published,
+        ]);
+        Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $this->makeSubject('CS204')->id,
+            'section_code' => 'OTHER-CLOSED',
+            'professor_id' => $otherFaculty->id,
+            'capacity' => 40,
+            'status' => SectionStatus::Closed,
+        ]);
+
+        $token = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $faculty->email,
+            'password' => self::PASSWORD,
+        ])->json('data.token');
+
+        $response = $this->withToken($token)->getJson('/api/v1/sections');
+
+        $response->assertOk()->assertJsonCount(2, 'data');
+        self::assertSame(
+            [$ownPublished->id, $ownClosed->id],
+            array_column($response->json('data'), 'id'),
+        );
+    }
+
     public function test_a_program_chair_can_create_a_section(): void
     {
         $term = $this->makeTerm();

@@ -14,7 +14,7 @@ describe("TeachingScheduleWorkspace", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("renders a schedule row and mobile card from API-scoped sections only", async () => {
+  it("renders the assigned API response in desktop and mobile schedule views", async () => {
     fetchMock.mockImplementation((input) => {
       const url = requestUrl(input)
       if (url.endsWith("/academic-terms"))
@@ -52,6 +52,15 @@ describe("TeachingScheduleWorkspace", () => {
                   status: "active",
                   status_label: "Active",
                 },
+                {
+                  type: "subject",
+                  id: 102,
+                  code: "CS102",
+                  title: "Programming 2",
+                  units: 3,
+                  status: "active",
+                  status_label: "Active",
+                },
               ],
             }),
           ),
@@ -78,6 +87,24 @@ describe("TeachingScheduleWorkspace", () => {
                 status: "published",
                 status_label: "Published",
               },
+              {
+                type: "section",
+                id: 45,
+                academic_term_id: 1,
+                subject_id: 102,
+                section_code: "CS102-A",
+                professor_id: 6,
+                schedule_days: "TTh",
+                starts_at_time: "10:00:00",
+                ends_at_time: "11:30:00",
+                room: "R202",
+                capacity: 30,
+                viability_threshold: null,
+                enrolled_count: 0,
+                remaining_seats: 30,
+                status: "published",
+                status_label: "Published",
+              },
             ],
           }),
         ),
@@ -92,12 +119,13 @@ describe("TeachingScheduleWorkspace", () => {
       },
     })
     expect(
-      await screen.findByRole("cell", { name: "CS101" }),
+      await screen.findByRole("cell", { name: "CS101 · Programming 1" }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole("article", { name: "CS101 Programming 1" }),
     ).toHaveTextContent("R201")
     expect(screen.getAllByText("Published")).toHaveLength(2)
+    expect(screen.queryByText("CS102 · Programming 2")).not.toBeInTheDocument()
   })
 
   it("states clearly when no assigned schedule is visible", async () => {
