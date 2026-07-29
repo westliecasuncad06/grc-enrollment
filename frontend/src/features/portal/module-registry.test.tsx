@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  phaseFiveModuleIds,
-  phaseFiveModuleRegistry,
+  connectedModuleIds,
+  connectedModuleRegistry,
 } from "@/features/portal/module-registry"
 import {
   getRoleModule,
@@ -11,15 +11,15 @@ import {
 } from "@/features/portal/role-capabilities"
 import { renderWithSession } from "@/tests/render-app"
 
-describe("phaseFiveModuleRegistry", () => {
-  it("dispatches exactly the thirteen Phase 5 role-owned module IDs", () => {
-    expect(phaseFiveModuleIds).toHaveLength(13)
-    expect(Object.keys(phaseFiveModuleRegistry).sort()).toEqual(
-      [...phaseFiveModuleIds].sort(),
+describe("connectedModuleRegistry", () => {
+  it("dispatches exactly the fifteen role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(15)
+    expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
+      [...connectedModuleIds].sort(),
     )
 
-    for (const moduleId of phaseFiveModuleIds) {
-      const ModuleComponent = phaseFiveModuleRegistry[moduleId]
+    for (const moduleId of connectedModuleIds) {
+      const ModuleComponent = connectedModuleRegistry[moduleId]
       const view = renderWithSession(<ModuleComponent />, {
         session: {
           userId: "5",
@@ -52,7 +52,11 @@ describe("phaseFiveModuleRegistry", () => {
                         ? "Master schedule workspace"
                         : moduleId === "audit-logs"
                           ? "Audit logs workspace"
-                          : "Connected portal workspace"
+                          : moduleId === "eligible-subjects"
+                            ? "Eligible subjects workspace"
+                            : moduleId === "enrollment"
+                              ? "Enrollment submission workspace"
+                              : "Connected portal workspace"
       expect(
         view.getByRole("region", { name: expectedRegion }),
       ).toBeInTheDocument()
@@ -60,16 +64,16 @@ describe("phaseFiveModuleRegistry", () => {
     }
   })
 
-  it("does not connect any module outside the Phase 5 registry", () => {
+  it("does not connect any module outside the registry", () => {
     const plannedModuleIds = [...knownPortalModuleIds].filter(
-      (moduleId) => !phaseFiveModuleIds.includes(moduleId as never),
+      (moduleId) => !connectedModuleIds.includes(moduleId as never),
     )
 
     expect(plannedModuleIds).toHaveLength(
-      knownPortalModuleIds.size - phaseFiveModuleIds.length,
+      knownPortalModuleIds.size - connectedModuleIds.length,
     )
     for (const moduleId of plannedModuleIds) {
-      expect(phaseFiveModuleRegistry[moduleId as never]).toBeUndefined()
+      expect(connectedModuleRegistry[moduleId as never]).toBeUndefined()
     }
   })
 

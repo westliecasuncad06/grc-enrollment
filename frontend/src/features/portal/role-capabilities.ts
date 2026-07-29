@@ -61,13 +61,13 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "enrollment",
         "Enrollment",
-        "Preview the subject-selection and enrollment submission pathway.",
+        "Select sections and submit your enrollment for the term.",
         GraduationCap,
       ),
       portalModule(
         "eligible-subjects",
         "Eligible Subjects",
-        "Review where curriculum and prerequisite eligibility will appear.",
+        "Review curriculum and prerequisite eligibility for each subject.",
         BookOpen,
       ),
       portalModule(

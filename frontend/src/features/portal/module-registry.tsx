@@ -10,8 +10,10 @@ import { SectionsWorkspace } from "@/features/components/portal/sections-workspa
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
 import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
 import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
+import { EligibleSubjectsWorkspace } from "@/features/components/portal/eligible-subjects-workspace"
+import { EnrollmentWorkspace } from "@/features/components/portal/enrollment-workspace"
 
-export type PhaseFiveModuleId =
+export type ConnectedModuleId =
   | "student-accounts"
   | "admission-status"
   | "credential-issuance"
@@ -25,10 +27,12 @@ export type PhaseFiveModuleId =
   | "schedule-approvals"
   | "master-schedule"
   | "audit-logs"
+  | "eligible-subjects"
+  | "enrollment"
 
 export type PortalModuleComponent = ComponentType
 
-export const phaseFiveModuleIds = [
+export const connectedModuleIds = [
   "student-accounts",
   "admission-status",
   "credential-issuance",
@@ -42,7 +46,9 @@ export const phaseFiveModuleIds = [
   "schedule-approvals",
   "master-schedule",
   "audit-logs",
-] as const satisfies readonly PhaseFiveModuleId[]
+  "eligible-subjects",
+  "enrollment",
+] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
   <AdmissionProvisioningWorkspace initialModuleId="student-accounts" />
@@ -73,8 +79,8 @@ const scheduleProposalsWorkspace: PortalModuleComponent = () => (
   <ScheduleProposalsWorkspace />
 )
 
-export const phaseFiveModuleRegistry: Readonly<
-  Record<PhaseFiveModuleId, PortalModuleComponent>
+export const connectedModuleRegistry: Readonly<
+  Record<ConnectedModuleId, PortalModuleComponent>
 > = {
   "student-accounts": studentAccountsWorkspace,
   "admission-status": admissionStatusWorkspace,
@@ -89,10 +95,12 @@ export const phaseFiveModuleRegistry: Readonly<
   "schedule-approvals": ScheduleDecisionWorkspace,
   "master-schedule": MasterScheduleWorkspace,
   "audit-logs": AuditLogsWorkspace,
+  "eligible-subjects": EligibleSubjectsWorkspace,
+  enrollment: EnrollmentWorkspace,
 }
 
-export function isPhaseFiveModuleId(
+export function isConnectedModuleId(
   moduleId: string,
-): moduleId is PhaseFiveModuleId {
-  return phaseFiveModuleIds.includes(moduleId as PhaseFiveModuleId)
+): moduleId is ConnectedModuleId {
+  return connectedModuleIds.includes(moduleId as ConnectedModuleId)
 }

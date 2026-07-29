@@ -24,8 +24,8 @@ import {
   rolePortalDefinitions,
 } from "@/features/portal/role-capabilities"
 import {
-  isPhaseFiveModuleId,
-  phaseFiveModuleRegistry,
+  isConnectedModuleId,
+  connectedModuleRegistry,
 } from "@/features/portal/module-registry"
 
 export function PortalModulePage({ moduleId }: { moduleId: string }) {
@@ -76,8 +76,8 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
   }
 
   const Icon = module.icon
-  const ModuleComponent = isPhaseFiveModuleId(module.id)
-    ? phaseFiveModuleRegistry[module.id]
+  const ModuleComponent = isConnectedModuleId(module.id)
+    ? connectedModuleRegistry[module.id]
     : null
 
   if (ModuleComponent) {

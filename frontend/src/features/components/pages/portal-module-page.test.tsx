@@ -5,7 +5,7 @@ import type { AuthSession } from "@/features/auth/auth-types"
 import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
-import { isPhaseFiveModuleId } from "@/features/portal/module-registry"
+import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { renderWithSession } from "@/tests/render-app"
 
@@ -59,6 +59,8 @@ const schedulingWorkspaceRegions: Record<string, string> = {
   "schedule-approvals": "Schedule decision workspace",
   "master-schedule": "Master schedule workspace",
   "audit-logs": "Audit logs workspace",
+  "eligible-subjects": "Eligible subjects workspace",
+  enrollment: "Enrollment submission workspace",
 }
 
 describe("PortalModulePage", () => {
@@ -75,7 +77,7 @@ describe("PortalModulePage", () => {
       expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(
         0,
       )
-      if (isPhaseFiveModuleId(module.id)) {
+      if (isConnectedModuleId(module.id)) {
         expect(
           screen.getAllByRole("region", {
             name: `${module.label} workspace`,
