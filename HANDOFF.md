@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 21:07:00 +08:00
+- **Date and time:** 2026-07-29 21:16:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
@@ -12,12 +12,11 @@
 
 ## Current Objective
 
-Complete the Phase 5 Task 5 Faculty schedule-ownership remediation and await
-re-review on the isolated branch. The exact next implementation slice after
-acceptance is Task 6 — Program Chair curriculum and prerequisite workspaces.
-Preserve the completed Faculty contract, identity-scoped private query keys,
-browser-token ownership, strict reference contracts, full-replace curriculum
-semantics, and user-owned notification authorization; do not merge or push.
+Begin Phase 5 Task 6 — Program Chair curriculum and prerequisite workspaces on
+the isolated branch. Preserve the accepted Faculty contract, identity-scoped
+private query keys, browser-token ownership, strict reference contracts,
+full-replace curriculum semantics, and user-owned notification authorization;
+do not merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -142,7 +141,7 @@ UI belongs in Phase 5.
   **26 files / 179 tests**, Prettier, ESLint, Oxlint, TypeScript, and the
   production build. Published completion remains **41%**; Task 6 is next.
 
-#### Review remediation — pending re-review
+#### Review remediation — accepted
 
 - Corrected a Task 5 authorization gap: the existing `/api/v1/sections`
   contract now scopes a Faculty response to its own `professor_id` and to
@@ -155,8 +154,12 @@ UI belongs in Phase 5.
 - Regression coverage proves a Faculty index excludes another Faculty member's
   published and closed sections and direct policy evaluation denies another
   Faculty assignment. Schedule desktop cells now include subject code and
-  title, matching mobile cards. Re-review remains pending; published completion
-  remains **41%**.
+  title, matching mobile cards.
+- Independent re-review returned **Accept with no findings**. The review gate
+  passed **18 backend files / 52 tests** and **5 frontend files / 27 tests**;
+  the full backend (**517 tests / 1,956 assertions**) and frontend (**26 files
+  / 179 tests**) suites remain green. Task 5 is accepted and complete;
+  published completion remains **41%** and Task 6 is next.
 
 ### Takeover verification performed by Codex
 

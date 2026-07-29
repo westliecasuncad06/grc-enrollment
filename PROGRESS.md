@@ -343,7 +343,7 @@ build. Published completion remains **41%**.
 **Next:** Phase 5 Task 6 — Program Chair curriculum and prerequisite
 workspaces.
 
-**Task 5 review remediation pending re-review:** the existing backend
+**Task 5 review remediation accepted and complete:** the existing backend
 `GET /api/v1/sections` scope had exposed every published/closed Faculty section
 to each Faculty user. It now constrains Faculty by the direct `professor_id`
 to the authenticated user as well as status; Student/Accounting status-only
@@ -351,8 +351,11 @@ and planning-role full visibility are unchanged. `SectionPolicy::view()`
 mirrors the same condition to prevent direct-ID bypass. The frontend has only
 a numeric `session.userId`/`professor_id` defense-in-depth display filter and
 does not infer identity by name; its desktop schedule now shows subject code
-and title to match mobile cards. Re-review is pending. Published completion
-remains **41%**; exact next after acceptance is Task 6 — Program Chair
+and title to match mobile cards. Independent re-review returned **Accept with
+no findings**; its review gate passed **18 backend files / 52 tests** and
+**5 frontend files / 27 tests**, alongside the already-green full backend
+**517 tests / 1,956 assertions** and frontend **26 files / 179 tests** suites.
+Published completion remains **41%**; exact next is Task 6 — Program Chair
 curriculum and prerequisite workspaces.
 
 ## Phase 6 — Process 2.0 + Student Portal
