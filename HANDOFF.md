@@ -3,20 +3,20 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 21:39:00 +08:00
+- **Date and time:** 2026-07-29 21:43:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Tasks 1–6 are committed only on their isolated review branch; nothing has been
-  pushed or merged.
+  Tasks 1–6 are accepted and committed only on their isolated review branch;
+  nothing has been pushed or merged.
 
 ## Current Objective
 
-Await independent re-review of the Phase 5 Task 6 curriculum-workspace
-remediation on the isolated branch. Preserve the full-replace curriculum graph
+Begin Phase 5 Task 7 — Program Chair sections and schedule workspace on the
+isolated branch. Preserve the accepted Task 6 full-replace curriculum graph
 contract, identity-scoped reference queries, browser-token ownership, strict
 parsed API contracts, and Program Chair-only backend authorization; do not
-merge, push, or begin Task 7 until the re-review is accepted.
+merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -183,7 +183,7 @@ UI belongs in Phase 5.
   186 tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and
   `git diff --check`. Published completion remains **41%**; Task 7 is next.
 
-#### Review remediation — pending re-review
+#### Review remediation — accepted
 
 - Placement is again an explicit catalog-subject choice. Every placement now
   exposes editable year level (1–4), semester (1st–3rd), and required status;
@@ -198,8 +198,9 @@ UI belongs in Phase 5.
   reset edge case. GREEN verification passed the 4-file Task 6 gate (**15
   tests**) and the complete frontend suite (**29 files / 191 tests**),
   production build, TypeScript, Prettier, ESLint,
-  Oxlint, and `git diff --check`. Published completion remains **41%**;
-  independent re-review is pending.
+  Oxlint, and `git diff --check`. The independent re-review returned **Accept
+  with no findings**. Task 6 is accepted and complete; published completion
+  remains **41%** and Task 7 is next.
 
 ### Takeover verification performed by Codex
 
@@ -546,8 +547,9 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Obtain an **independent re-review of the Phase 5 Task 6 remediation** on
-   `phase-5-portal-workspaces`. Do not begin Task 7 until it is accepted.
+1. Begin **Phase 5 Task 7 — Program Chair sections and schedule workspace**
+   from its supplied task brief on `phase-5-portal-workspaces`. Preserve the
+   accepted Task 6 full-replace curriculum graph semantics.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.

@@ -373,7 +373,7 @@ tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and `git diff
 --check`. Published completion remains **41%**; exact next is Phase 5 Task 7
 — Program Chair sections and schedule workspace.
 
-**Task 6 review remediation pending re-review:** placement now requires a
+**Task 6 review remediation accepted and complete:** placement now requires a
 catalog selection and offers per-placement year level (1–4), semester
 (1st–3rd), and required-status controls. Dirty curriculum selection changes
 now share the accessible discard confirmation used by New, including a cancel
@@ -383,9 +383,10 @@ strictly rejects response envelopes with unexpected top-level properties. RED
 coverage reproduced all review findings and the selector-to-New reset edge
 case; GREEN verification passed the Task 6 gate (**4 files / 15 tests**), full
 frontend suite (**29 files / 191 tests**),
-production build, TypeScript, Prettier, ESLint, and Oxlint. Published
-completion remains **41%**; independent re-review is the exact next step before
-Task 7.
+production build, TypeScript, Prettier, ESLint, and Oxlint. The independent
+re-review returned **Accept with no findings**. Published completion remains
+**41%**; exact next is Phase 5 Task 7 — Program Chair sections and schedule
+workspace.
 
 ## Phase 6 — Process 2.0 + Student Portal
 
