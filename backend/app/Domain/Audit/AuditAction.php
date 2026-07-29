@@ -44,6 +44,8 @@ final class AuditAction
 
     public const AUDIT_LOG_LIST_VIEWED = 'audit_log.list_viewed';
 
+    public const FACULTY_DIRECTORY_LIST_VIEWED = 'faculty_directory.list_viewed';
+
     /**
      * @return list<string>
      */
@@ -70,6 +72,7 @@ final class AuditAction
             self::SCHEDULE_PROPOSAL_CLOSED,
             self::STUDENT_PROFILE_PROVISIONED,
             self::AUDIT_LOG_LIST_VIEWED,
+            self::FACULTY_DIRECTORY_LIST_VIEWED,
         ];
     }
 }

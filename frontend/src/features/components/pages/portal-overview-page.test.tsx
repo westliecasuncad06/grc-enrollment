@@ -25,7 +25,7 @@ describe("PortalOverviewPage", () => {
     vi.unstubAllGlobals()
   })
 
-  it("explains the demo boundary and unavailable connected data", async () => {
+  it("explains the role boundary and loading academic-term state", async () => {
     renderWithSession(<PortalOverviewPage />, {
       route: "/portal",
       session: studentSession,
@@ -37,15 +37,13 @@ describe("PortalOverviewPage", () => {
       }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("heading", { name: "Demo portal interface" }),
+      screen.getByRole("heading", { name: "Portal workspace" }),
     ).toBeInTheDocument()
-    expect(
-      screen.getAllByText("Academic term not connected").length,
-    ).toBeGreaterThan(0)
+    expect(screen.getByText("Loading academic term…")).toBeInTheDocument()
     expect(screen.getByText("Checking public API…")).toBeInTheDocument()
     expect(
       screen.getByText(
-        "Workflow and authorization APIs are not connected in this preview.",
+        "Your available modules are limited to your signed-in role.",
       ),
     ).toBeInTheDocument()
   })

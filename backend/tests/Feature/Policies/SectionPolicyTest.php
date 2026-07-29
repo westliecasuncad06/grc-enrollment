@@ -62,6 +62,26 @@ final class SectionPolicyTest extends TestCase
         self::assertTrue($policy->view($this->makeUser(UserRole::ProgramChair), $section));
     }
 
+    public function test_a_faculty_member_cannot_view_another_faculty_members_published_section_by_id(): void
+    {
+        $policy = new SectionPolicy;
+        $faculty = $this->makeUser(UserRole::Faculty);
+        $otherFaculty = User::create([
+            'name' => 'Other Faculty',
+            'email' => 'other-faculty@grc.test',
+            'password' => 'irrelevant-password',
+            'role' => UserRole::Faculty,
+            'status' => UserStatus::Active,
+        ]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::Active]);
+        $subject = Subject::create(['code' => 'CS102', 'title' => 'Other Test', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $ownSection = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'OWN', 'professor_id' => $faculty->id, 'capacity' => 40, 'status' => SectionStatus::Published]);
+        $otherSection = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'OTHER', 'professor_id' => $otherFaculty->id, 'capacity' => 40, 'status' => SectionStatus::Published]);
+
+        self::assertTrue($policy->view($faculty, $ownSection));
+        self::assertFalse($policy->view($faculty, $otherSection));
+    }
+
     public function test_only_a_program_chair_may_create_or_update(): void
     {
         $policy = new SectionPolicy;

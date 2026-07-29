@@ -26,6 +26,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/faculty-availabilities',
+            'GET|HEAD api/v1/faculty-members',
             'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/notifications',
@@ -66,6 +67,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.curricula.store',
             'api.v1.curricula.update',
             'api.v1.faculty-availabilities.index',
+            'api.v1.faculty-members.index',
             'api.v1.faculty-availabilities.store',
             'api.v1.faculty-availabilities.update',
             'api.v1.faculty-availabilities.destroy',
@@ -202,6 +204,14 @@ final class ApiSurfaceTest extends TestCase
 
             $this->assertSame([], array_values($roleMiddleware));
         }
+    }
+
+    public function test_faculty_directory_is_gated_to_the_program_chair_role(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.faculty-members.index');
+
+        $this->assertNotNull($route);
+        $this->assertContains('role:program_chair', $route->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void

@@ -617,6 +617,40 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/faculty-members:
+    get:
+      operationId: getFacultyMembers
+      summary: List active faculty members for assignment
+      description: >
+        Program Chair only. Returns active Faculty identities ordered by name,
+        then ID. Each successful view creates a `faculty_directory.list_viewed`
+        operational audit record with the result count.
+      security:
+        - bearerAuth: []
+      tags:
+        - Scheduling
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Active faculty directory.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyMembersResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/faculty-subject-preferences:
     get:
       operationId: getFacultySubjectPreferences
@@ -795,8 +829,11 @@ paths:
       operationId: getSections
       summary: List sections visible to the authenticated role
       description: >
-        Learner-scoped roles receive only `published`/`closed` sections;
-        every other role receives every section regardless of status.
+        Faculty receives only its own `published`/`closed` sections, matched
+        by the assigned `professor_id`. Executive Director receives only
+        `published` sections for the master schedule. Student and Accounting
+        receive all `published`/`closed` sections; remaining planning roles
+        receive every section regardless of status.
         Ordered by term, then subject, then section code.
       security:
         - bearerAuth: []
@@ -1322,6 +1359,7 @@ paths:
               - schedule_proposal.closed
               - student_profile.provisioned
               - audit_log.list_viewed
+              - faculty_directory.list_viewed
         - name: auditable_type
           in: query
           required: false
@@ -1335,6 +1373,7 @@ paths:
               - schedule_proposal
               - student_profile
               - audit_log
+              - faculty_directory
         - name: actor_user_id
           in: query
           required: false
@@ -2257,6 +2296,40 @@ components:
           format: time
     UpdateFacultyAvailabilityRequest:
       $ref: "#/components/schemas/StoreFacultyAvailabilityRequest"
+    FacultyMembersResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacultyMemberResource"
+    FacultyMemberResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - name
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: faculty_member
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+        status_label:
+          type: string
     FacultySubjectPreferencesResponse:
       type: object
       additionalProperties: false

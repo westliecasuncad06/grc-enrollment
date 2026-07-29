@@ -38,6 +38,7 @@ interface ApiClientErrorOptions {
   message: string
   cause?: unknown
   code?: string
+  fieldErrors?: Record<string, string[]>
   requestId?: string
   status?: number
 }
@@ -45,6 +46,7 @@ interface ApiClientErrorOptions {
 export class ApiClientError extends Error {
   readonly kind: ApiClientErrorKind
   readonly code?: string
+  readonly fieldErrors?: Record<string, string[]>
   readonly requestId?: string
   readonly status?: number
 
@@ -53,6 +55,7 @@ export class ApiClientError extends Error {
     message,
     cause,
     code,
+    fieldErrors,
     requestId,
     status,
   }: ApiClientErrorOptions) {
@@ -60,6 +63,7 @@ export class ApiClientError extends Error {
     this.name = "ApiClientError"
     this.kind = kind
     this.code = code
+    this.fieldErrors = fieldErrors
     this.requestId = requestId
     this.status = status
   }
@@ -100,7 +104,7 @@ async function readJson(response: Response): Promise<unknown> {
 interface RequestOptions {
   authenticated?: boolean
   body?: unknown
-  method: "GET" | "POST"
+  method: "GET" | "POST" | "PATCH" | "DELETE"
   signal?: AbortSignal
 }
 
@@ -168,6 +172,7 @@ async function request(
         kind: "http",
         message: parsedError.data.error.message,
         code: parsedError.data.error.code,
+        fieldErrors: parsedError.data.error.errors,
         requestId: parsedError.data.error.request_id,
         status: response.status,
       })
@@ -213,4 +218,19 @@ export function postAuthenticatedJson(
     method: "POST",
     signal,
   })
+}
+
+export function patchAuthenticatedJson(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request(path, { authenticated: true, body, method: "PATCH", signal })
+}
+
+export function deleteAuthenticatedJson(
+  path: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request(path, { authenticated: true, method: "DELETE", signal })
 }

@@ -5,6 +5,7 @@ import type { AuthSession } from "@/features/auth/auth-types"
 import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
+import { isPhaseFiveModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { renderWithSession } from "@/tests/render-app"
 
@@ -35,6 +36,31 @@ const allowedModuleCases = userRoles.flatMap((role) =>
   rolePortalDefinitions[role].modules.map((module) => ({ module, role })),
 )
 
+const admissionWorkspaceHeadings: Record<string, string> = {
+  "student-accounts": "Student accounts",
+  "admission-status": "Admission status",
+  "credential-issuance": "Credential issuance",
+}
+
+const facultyWorkspaceRegions: Record<string, string> = {
+  "availability-preferences": "Faculty input workspace",
+  "teaching-schedule": "Teaching schedule workspace",
+}
+
+const curriculumWorkspaceModules = new Set([
+  "curriculum",
+  "subjects-prerequisites",
+])
+
+const schedulingWorkspaceRegions: Record<string, string> = {
+  "sections-schedules": "Sections and schedules workspace",
+  "faculty-assignment": "Faculty assignment workspace",
+  "schedule-proposals": "Schedule proposals workspace",
+  "schedule-approvals": "Schedule decision workspace",
+  "master-schedule": "Master schedule workspace",
+  "audit-logs": "Audit logs workspace",
+}
+
 describe("PortalModulePage", () => {
   it.each(allowedModuleCases)(
     "renders $role access to $module.id from that role's catalog",
@@ -49,17 +75,65 @@ describe("PortalModulePage", () => {
       expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(
         0,
       )
-      expect(
-        screen.getByRole("region", { name: `${module.label} module preview` }),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByRole("heading", { name: "Demo module preview" }),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByText(
-          "This module is not connected to workflow or authorization APIs.",
-        ),
-      ).toBeInTheDocument()
+      if (isPhaseFiveModuleId(module.id)) {
+        expect(
+          screen.getAllByRole("region", {
+            name: `${module.label} workspace`,
+          }),
+        ).not.toHaveLength(0)
+        const admissionHeading = admissionWorkspaceHeadings[module.id]
+        if (admissionHeading) {
+          expect(
+            screen.getByRole("region", {
+              name: "Admission provisioning workspace",
+            }),
+          ).toBeInTheDocument()
+          expect(
+            screen.getByRole("heading", { name: admissionHeading }),
+          ).toBeInTheDocument()
+        } else if (facultyWorkspaceRegions[module.id]) {
+          expect(
+            screen.getByRole("region", {
+              name: facultyWorkspaceRegions[module.id],
+            }),
+          ).toBeInTheDocument()
+        } else if (curriculumWorkspaceModules.has(module.id)) {
+          expect(
+            screen.getAllByRole("region", {
+              name: "Curriculum workspace",
+            }),
+          ).not.toHaveLength(0)
+        } else if (schedulingWorkspaceRegions[module.id]) {
+          expect(
+            screen.getByRole("region", {
+              name: schedulingWorkspaceRegions[module.id],
+            }),
+          ).toBeInTheDocument()
+        } else {
+          expect(
+            screen.getByRole("region", {
+              name: "Connected portal workspace",
+            }),
+          ).toBeInTheDocument()
+        }
+        expect(
+          screen.queryByRole("heading", { name: "Demo module preview" }),
+        ).not.toBeInTheDocument()
+      } else {
+        expect(
+          screen.getByRole("region", {
+            name: `${module.label} module preview`,
+          }),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByRole("heading", { name: "Demo module preview" }),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            "This module is not connected to workflow or authorization APIs.",
+          ),
+        ).toBeInTheDocument()
+      }
       expect(
         screen.getByRole("link", { name: "Return to portal overview" }),
       ).toHaveAttribute("href", "/portal")

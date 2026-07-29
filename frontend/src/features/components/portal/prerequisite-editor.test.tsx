@@ -1,0 +1,73 @@
+import { screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { describe, expect, it } from "vitest"
+
+import { PrerequisiteEditor } from "@/features/components/portal/prerequisite-editor"
+import { renderWithSession } from "@/tests/render-app"
+
+describe("PrerequisiteEditor", () => {
+  it("prevents duplicate, self, and cyclic prerequisite edges before save", async () => {
+    const user = userEvent.setup()
+    const onChange = (value: unknown) => value
+    renderWithSession(
+      <PrerequisiteEditor
+        subjects={[
+          {
+            subject_id: 1,
+            year_level: 1,
+            semester: "1st",
+            is_required: true,
+            prerequisites: [
+              { prerequisite_subject_id: 2, minimum_grade: "75" },
+            ],
+          },
+          {
+            subject_id: 2,
+            year_level: 1,
+            semester: "2nd",
+            is_required: true,
+            prerequisites: [],
+          },
+        ]}
+        subjectCatalog={[
+          {
+            type: "subject",
+            id: 1,
+            code: "CS101",
+            title: "Programming 1",
+            units: 3,
+            status: "active",
+            status_label: "Active",
+          },
+          {
+            type: "subject",
+            id: 2,
+            code: "CS102",
+            title: "Programming 2",
+            units: 3,
+            status: "active",
+            status_label: "Active",
+          },
+        ]}
+        onChange={onChange}
+      />,
+      {
+        session: {
+          userId: "4",
+          displayName: "Chair",
+          role: "program_chair",
+          signedInAt: "2026-07-29T12:00:00Z",
+        },
+      },
+    )
+    await user.selectOptions(
+      screen.getByLabelText("Subject for prerequisite"),
+      "2",
+    )
+    await user.selectOptions(screen.getByLabelText("Prerequisite subject"), "1")
+    await user.click(screen.getByRole("button", { name: "Add prerequisite" }))
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "would create a prerequisite cycle",
+    )
+  })
+})

@@ -29,7 +29,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/features/components/ui/sheet"
+import { PortalNotificationSheet } from "@/features/components/portal/portal-notification-sheet"
+import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { cn } from "@/features/lib/utils"
+import {
+  formatAcademicTerm,
+  getActiveAcademicTerm,
+} from "@/features/services/reference-data-service"
 import {
   getRoleModule,
   rolePortalDefinitions,
@@ -137,6 +143,9 @@ function PreviewAction({
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { session, signOut, storageAvailable } = useAuth()
+  const academicTermsQuery = useAcademicTermsQuery({
+    enabled: session !== null,
+  })
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams<{ moduleId?: string }>()
@@ -148,6 +157,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const moduleId = typeof params.moduleId === "string" ? params.moduleId : null
   const definition = rolePortalDefinitions[session.role]
   const activeModule = moduleId ? getRoleModule(session.role, moduleId) : null
+  const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
   const currentPageLabel =
     pathname === "/portal"
       ? "Portal overview"
@@ -185,7 +195,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
         <PortalNavigation definition={definition} />
 
         <div className="portal-sidebar__footer">
-          <p>Academic term not connected</p>
+          <p>
+            {activeAcademicTerm
+              ? formatAcademicTerm(activeAcademicTerm)
+              : academicTermsQuery.isPending
+                ? "Loading academic term…"
+                : "No active academic term"}
+          </p>
           <Separator />
           <div className="portal-profile">
             <Avatar>
@@ -236,7 +252,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="portal-topbar__actions">
-            <PreviewAction icon={Bell} label="Notifications preview" />
+            <PortalNotificationSheet />
             <PreviewAction icon={UserRound} label="Profile preview" />
             <PreviewAction icon={KeyRound} label="Password settings preview" />
             <PreviewAction icon={CircleHelp} label="Help preview" />

@@ -28,6 +28,14 @@ function renderShell(role: UserRole, overrides = {}) {
   )
 }
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") {
+    return input
+  }
+
+  return input instanceof URL ? input.toString() : input.url
+}
+
 describe("PortalShell", () => {
   const fetchMock = vi.fn<typeof fetch>()
 
@@ -70,11 +78,12 @@ describe("PortalShell", () => {
     expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(0)
   })
 
-  it("exposes preview actions without claiming they are connected", () => {
+  it("connects notifications while keeping unsupported account actions honestly disabled", () => {
     renderShell("student")
 
+    expect(screen.getByRole("button", { name: /notifications/i })).toBeEnabled()
+
     for (const name of [
-      "Notifications preview",
       "Profile preview",
       "Password settings preview",
       "Help preview",
@@ -82,8 +91,71 @@ describe("PortalShell", () => {
     ]) {
       expect(screen.getByRole("button", { name })).toBeDisabled()
     }
+  })
+
+  it("shows the active academic term and falls back when none is active", async () => {
+    fetchMock.mockImplementation((input) => {
+      if (requestUrl(input).includes("/academic-terms")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term",
+                  id: 1,
+                  school_year: "2026-2027",
+                  semester: "1st",
+                  starts_at: null,
+                  ends_at: null,
+                  enrollment_opens_at: null,
+                  enrollment_closes_at: null,
+                  status: "active",
+                  status_label: "Active",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        )
+      }
+
+      return new Promise<Response>(() => undefined)
+    })
+    renderShell("student")
     expect(
-      screen.getAllByText("Academic term not connected").length,
+      (await screen.findAllByText("2026-2027 · 1st")).length,
+    ).toBeGreaterThan(0)
+
+    fetchMock.mockImplementation((input) => {
+      if (requestUrl(input).includes("/academic-terms")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term",
+                  id: 2,
+                  school_year: "2026-2027",
+                  semester: "2nd",
+                  starts_at: null,
+                  ends_at: null,
+                  enrollment_opens_at: null,
+                  enrollment_closes_at: null,
+                  status: "planning",
+                  status_label: "Planning",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        )
+      }
+
+      return new Promise<Response>(() => undefined)
+    })
+    renderShell("faculty")
+    expect(
+      (await screen.findAllByText("No active academic term")).length,
     ).toBeGreaterThan(0)
   })
 

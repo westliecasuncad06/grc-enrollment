@@ -28,17 +28,26 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { useHealthQuery } from "@/features/hooks/use-health-query"
+import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
+import {
+  formatAcademicTerm,
+  getActiveAcademicTerm,
+} from "@/features/services/reference-data-service"
 
 export function PortalOverviewPage() {
   const { session } = useAuth()
   const healthQuery = useHealthQuery()
+  const academicTermsQuery = useAcademicTermsQuery({
+    enabled: session !== null,
+  })
 
   if (!session) {
     return null
   }
 
   const definition = rolePortalDefinitions[session.role]
+  const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
 
   return (
     <main className="portal-overview">
@@ -53,21 +62,19 @@ export function PortalOverviewPage() {
         </div>
         <span className="portal-overview-header__folio" aria-hidden="true">
           <strong>GRC</strong>
-          <small>Role preview</small>
+          <small>Role workspace</small>
         </span>
       </section>
 
       <Alert className="portal-boundary-alert">
         <ShieldAlert aria-hidden="true" />
         <AlertTitle role="heading" aria-level={2}>
-          Demo portal interface
+          Portal workspace
         </AlertTitle>
         <AlertDescription>
+          <p>Your available modules are limited to your signed-in role.</p>
           <p>
-            Workflow and authorization APIs are not connected in this preview.
-          </p>
-          <p>
-            The cards below demonstrate navigation and role visibility only.
+            Connected workspaces identify their live API boundary on arrival.
           </p>
         </AlertDescription>
       </Alert>
@@ -82,8 +89,7 @@ export function PortalOverviewPage() {
             <h2>Modules prepared for your role</h2>
           </div>
           <p>
-            Each destination is a clearly labeled preview. Connected records,
-            approvals, and transactions remain unavailable.
+            Module availability is shown inside each role-authorized workspace.
           </p>
         </div>
 
@@ -129,12 +135,21 @@ export function PortalOverviewPage() {
               Academic term
             </CardTitle>
             <CardDescription>
-              The active term must come from the future institutional settings
+              Current institutional context from the authenticated reference
               API.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Badge variant="outline">Academic term not connected</Badge>
+            {academicTermsQuery.isPending && <p>Loading academic term…</p>}
+            {academicTermsQuery.isError && <p>Academic term unavailable</p>}
+            {activeAcademicTerm && (
+              <Badge variant="outline">
+                {formatAcademicTerm(activeAcademicTerm)}
+              </Badge>
+            )}
+            {academicTermsQuery.data && !activeAcademicTerm && (
+              <Badge variant="outline">No active academic term</Badge>
+            )}
           </CardContent>
         </Card>
 

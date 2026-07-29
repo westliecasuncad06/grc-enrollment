@@ -29,10 +29,15 @@ slice — see ADR 0010 for the conflict-detection design).
 ## Authorization
 
 Read/write shape matches `Curriculum` exactly (ADR 0009): `GET /api/v1/sections`
-is readable by every role, with `Section::scopeVisibleTo()` restricting
-learner-scoped roles to `published`/`closed` sections (added this slice —
-`SectionStatus::isVisibleToLearners()`). `POST`/`PATCH /api/v1/sections` are
-gated `role:program_chair`, re-checked by `SectionPolicy`.
+is readable by every role. `Section::scopeVisibleTo()` restricts Executive
+Director to published rows only for the master schedule; it restricts Faculty to
+their own assigned `professor_id` rows in `published`/`closed` status; Student
+and Accounting retain the status-only `published`/`closed` visibility rule,
+while remaining planning roles retain every status. `SectionPolicy::view()`
+mirrors both the Faculty own-assignment and Executive published-only rules to
+prevent direct-ID bypass. `POST`/`PATCH
+/api/v1/sections` are gated `role:program_chair`, re-checked by
+`SectionPolicy`.
 
 ## Conflict detection (FR-SCH-005)
 

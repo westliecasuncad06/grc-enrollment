@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { getJson } from "@/features/services/api-client"
+import {
+  deleteAuthenticatedJson,
+  getJson,
+  patchAuthenticatedJson,
+  setAuthTokenProvider,
+  setUnauthorizedHandler,
+} from "@/features/services/api-client"
 
 describe("getJson", () => {
   const fetchMock = vi.fn<typeof fetch>()
@@ -72,5 +78,72 @@ describe("getJson", () => {
       message: "The public API returned a response that was not valid JSON.",
       status: 200,
     })
+  })
+
+  it("sends authenticated PATCH requests with the bearer token and no browser credentials", async () => {
+    setAuthTokenProvider(() => "1|the-token")
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: { read_at: "2026-07-29T12:00:00Z" } }),
+        {
+          status: 200,
+        },
+      ),
+    )
+
+    await patchAuthenticatedJson("/api/v1/notifications/7/read", {})
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.method).toBe("PATCH")
+    expect(init.credentials).toBe("omit")
+    expect(init.cache).toBe("no-store")
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      "Bearer 1|the-token",
+    )
+  })
+
+  it("accepts an empty successful DELETE response", async () => {
+    const onUnauthorized = vi.fn()
+    setAuthTokenProvider(() => "1|the-token")
+    setUnauthorizedHandler(onUnauthorized)
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
+
+    await expect(
+      deleteAuthenticatedJson("/api/v1/faculty-availabilities/7"),
+    ).resolves.toBeNull()
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.method).toBe("DELETE")
+    expect(init.credentials).toBe("omit")
+    expect(init.cache).toBe("no-store")
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      "Bearer 1|the-token",
+    )
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  it("invokes the unauthorized handler when an authenticated PATCH is rejected", async () => {
+    const onUnauthorized = vi.fn()
+    setAuthTokenProvider(() => "1|expired-token")
+    setUnauthorizedHandler(onUnauthorized)
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Authentication is required.",
+            errors: {},
+            request_id: "request-003",
+          },
+        }),
+        { status: 401 },
+      ),
+    )
+
+    await expect(
+      patchAuthenticatedJson("/api/v1/notifications/7/read", {}),
+    ).rejects.toMatchObject({ status: 401 })
+
+    expect(onUnauthorized).toHaveBeenCalledOnce()
   })
 })

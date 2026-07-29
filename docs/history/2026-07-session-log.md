@@ -1538,3 +1538,138 @@ enrollment submission (the next two Process 2.0 sub-projects, named above);
 all of Process 3.0 (§5.3); student self-service profile editing; password
 reset endpoints; every frontend change; the ml-service CI job (still
 paused).
+
+---
+
+## Phase 5 — Portals over Existing APIs, task-by-task record
+
+Built on an isolated branch/worktree (`phase-5-portal-workspaces`, base
+`f78da68`) across nine tasks, each implemented, independently reviewed, and
+where findings surfaced, remediated and re-reviewed before acceptance. This
+entry preserves the full RED/GREEN/review trail that `PROGRESS.md` now
+summarizes in one paragraph per phase.
+
+**Task 1 — audited faculty directory API.** Added Program Chair-only
+`GET /api/v1/faculty-members`, returning active Faculty users only, in
+deterministic `name` then `id` order, via a five-field Resource
+(`type`, `id`, `name`, `status`, `status_label`) with no email. Records
+`faculty_directory.list_viewed` with only `result_count` in the same
+transaction as the query, so a write failure yields no directory payload.
+Focused `FacultyMembersEndpointTest|AuditVocabularyTest|ApiSurfaceTest` gate:
+24 tests / 147 assertions. API inventory: 29 → 30 routes.
+
+**Task 2 — shared API client, error mapping, UI primitives.** Added
+authenticated `PATCH`/`DELETE` JSON helpers, `ApiClientError.fieldErrors`,
+and React Hook Form 422 field mapping. Installed and mounted Sonner once;
+added Table/Select/Dialog/Alert Dialog/Pagination primitives under the
+existing shadcn alias. Focused client/form tests: 14 tests; full frontend
+suite: 16 files / 150 tests. Independent review: accept, no findings.
+
+**Task 3 — portal shell, reference data, notifications, module registry.**
+Added strict Zod schemas/services/hooks for academic terms, programs,
+subjects, and private notifications. Shell/overview show only the
+`status: active` term or an honest no-active-term fallback. Live notification
+Sheet: unread count/filter, pagination, idempotent mark-as-read PATCH. Added
+the explicit 13-ID `phaseFiveModuleRegistry`. Focused: 6 files / 70 tests;
+full suite: 19 files / 160 tests.
+**Remediation (accepted):** independent review found identity-free private
+query keys could let a second account on the same browser reuse the first
+account's cached notification response. Notification and authenticated
+reference-data query keys now include `session.userId` and are disabled while
+anonymous; a User A → logout → User B regression proves isolation. Re-review:
+accept, no findings.
+
+**Task 4 — Admission Staff provisioning.** One three-step workspace serving
+`student-accounts`, `admission-status`, `credential-issuance`. Submits only
+the seven accepted provisioning fields; status step shows the API-guaranteed
+`Admitted`/`Good` read-only (no invented update API). A browser CSPRNG
+generates a 20-character one-time temporary credential that never enters
+storage, logs, form state, or query caches; displayed only in the success
+receipt, clipboard-copyable, cleared on close. Focused: 4 files / 9 tests;
+full suite: 22 files / 166 tests.
+**Remediation (accepted):** curriculum parsing corrected to the backend's
+`archived` status literal; provisioning service now strictly parses its
+seven-field request before fetch; changing `program_id` clears the dependent
+curriculum field in RHF state; added clipboard success/denial and
+retry-gets-a-fresh-credential regressions. Focused: 4 files / 12 tests; full
+suite: 23 files / 170 tests. Re-review: accept, no findings.
+
+**Task 5 — Faculty availability, preferences, teaching schedule.** Added
+CRUD services/hooks for `/faculty-availabilities` and
+`/faculty-subject-preferences`, plus a responsive (desktop table / mobile
+card) teaching schedule reading only parsed, API-scoped sections — no roster
+or grade endpoint call. Focused: 4 files / 23 tests; full stack: backend 517
+tests / 1,956 assertions, frontend 26 files / 179 tests.
+**Remediation (accepted) — real backend privacy fix:** `GET /api/v1/sections`
+had exposed every published/closed section to *every* Faculty user, not just
+their own. `Section` collection scope and `SectionPolicy::view()` now both
+constrain Faculty to their own `professor_id`; Student/Accounting status-only
+and planning-role full visibility unchanged. Re-review: accept, no findings;
+backend review gate 18 files / 52 tests, frontend review gate 5 files /
+27 tests.
+
+**Task 6 — Program Chair curriculum and prerequisites.** `curriculum` and
+`subjects-prerequisites` dispatch to one full-replace curriculum editor.
+Create sends `program_id` + full graph; update omits immutable `program_id`
+while preserving every placement/prerequisite. Client-side duplicate/
+self-prerequisite/cycle checks sit beside backend cycle-422 feedback. Focused:
+4 files / 10 tests; full suite: 29 files / 186 tests.
+**Remediation (accepted):** placement now requires a catalog selection and
+exposes per-placement year level/semester/required controls; dirty-curriculum
+switching shares the same accessible discard confirmation as "New"; create
+adopts the returned ID so the next save PATCHes; response envelope parsing
+strictly rejects unexpected top-level properties. Focused: 4 files / 15
+tests; full suite: 29 files / 191 tests. Re-review: accept, no findings.
+
+**Task 7 — Program Chair sections, faculty assignment, proposals.**
+`sections-schedules` validates term/subject dependencies, schedule-day
+shorthand, end-after-start times, positive capacity, and creates/fully
+replaces sections. `faculty-assignment` lists only active directory
+identities (client schema rejects an undeclared email field), shows matching
+availability/preference context, PATCHes the complete section. `schedule-
+proposals` creates drafts only — no approval/publish/close controls exposed
+to the chair. Focused: 5 files / 9 tests; full suite: 34 files / 200 tests.
+**Remediation (accepted):** fixed a second-term Section create silently
+resetting to the previously-watched term instead of the just-selected one;
+added in-place retry for failed reference queries across all three
+workspaces; corrected the assignment-conflict fixture to the backend's actual
+`schedule_days` 422 field. Focused: 5 files / 13 tests; full suite: 34 files /
+204 tests. Re-review: accept, no findings.
+
+**Task 8 — Dean, Executive Director, Registrar Head.** Dean/Executive receive
+a shared schedule-decision component gated to their own legal actions only
+(`availableScheduleActions(role, proposal)` mirrors the backend's exact
+status/role matrix); a reason is required only for `dean_return` and
+`executive_return`; each transition requires an explicit confirm step and
+disables duplicate submission while pending. Executive Director's master
+schedule and Registrar Head's paginated/filterable audit log (never rendering
+actor name or email) round out the task. Focused: 5 files / 11 tests; full
+suite: 38 files / 212 tests.
+**Remediation (accepted) — real backend privacy fix:** Executive Director had
+fallen through the generic non-learner branch, so unpublished
+(planned/closed/cancelled) sections reached the private frontend cache. Both
+the `Section` collection scope and the direct-access policy now require
+`status === 'published'` for Executive Director. Audit action/entity filters
+now mirror the backend/OpenAPI enum vocabulary exactly. Focused backend: 15
+tests / 50 assertions; focused frontend: 3 files / 9 tests. A transient
+single-file Faculty timeout during this task's verification did not
+reproduce in isolated reruns or two subsequent clean full-suite passes (38
+files / 215 tests each); no fake timers, leaked global mocks, or shared-state
+issue was found — treated as parallel-worker contention, not a defect.
+Re-review: accept, no Critical or Important findings. Root independently
+re-verified backend 519 tests / 1,964 assertions.
+
+**Task 9 — reconciliation and final gate**, carried out by the takeover
+agent after the user authorized continuation (see `PROGRESS.md` Phase 5
+entry for the consolidated result): added the carried-forward
+proposal/section cache-invalidation regression and strengthened the
+module-registry boundary test to check every catalog module outside the
+Phase 5 registry, not just one. Confirmed the frontend full-suite parallel
+run is unreliable on this specific low-memory (~6 GB free) Windows dev
+machine — different files fail each parallel run (2 to 27 tests observed
+across five runs) but every one of those tests passes individually, and
+`npx vitest run --no-file-parallelism` passed clean at 38 files / 216 tests
+twice. This is a machine-resource artifact, not a code defect; documented as
+an Operational Caution rather than "fixed" by changing shared vitest config,
+since CI's GitHub Actions runners are unaffected (already green) and Task 9's
+scope is verification, not test-infrastructure rework.

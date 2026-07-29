@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Domain\Identity\UserRole;
+use App\Domain\Scheduling\SectionStatus;
 use App\Models\Section;
 use App\Models\User;
 
@@ -21,7 +22,16 @@ final class SectionPolicy
     public function view(User $user, Section $section): bool
     {
         if (! $user->role->isLearnerScoped()) {
+            if ($user->role === UserRole::ExecutiveDirector) {
+                return $section->status === SectionStatus::Published;
+            }
+
             return true;
+        }
+
+        if ($user->role === UserRole::Faculty) {
+            return $section->professor_id === $user->id
+                && $section->status->isVisibleToLearners();
         }
 
         return $section->status->isVisibleToLearners();
