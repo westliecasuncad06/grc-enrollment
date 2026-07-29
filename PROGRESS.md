@@ -261,9 +261,18 @@ faculty directory at `GET /api/v1/faculty-members`, returning active Faculty
 users only in deterministic `name`, then `id` order with a privacy-safe
 five-field Resource. The focused
 `FacultyMembersEndpointTest|AuditVocabularyTest|ApiSurfaceTest` gate passed
-**24 tests / 147 assertions**; the API inventory is now **30 routes**. The
-published 41% overall completion remains unchanged pending the planned phase
-increment. **Next:** Phase 5 Task 2.
+**24 tests / 147 assertions**; the API inventory is now **30 routes**.
+
+**Task 2 implemented and verified (isolated review branch; independent review
+pending):** the frontend now has authenticated `PATCH`/`DELETE` JSON helpers,
+validated `ApiClientError.fieldErrors`, and React Hook Form 422 mapping.
+Sonner is installed and mounted once; Table, Select, Dialog, Alert Dialog, and
+Pagination sources are available under the configured shadcn alias. Focused
+client/form tests passed **14 tests**; the complete frontend suite passed
+**16 files / 150 tests**. Prettier, ESLint, Oxlint, TypeScript, production
+build, `git diff --check`, and the no-direct-browser-storage scan passed. The
+published **41%** overall completion remains unchanged pending the planned
+phase increment. **Next:** independent Task 2 review.
 
 ## Phase 6 — Process 2.0 + Student Portal
 

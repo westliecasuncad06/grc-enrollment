@@ -3,19 +3,20 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 19:15:36 +08:00
+- **Date and time:** 2026-07-29 19:37:43 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
-- **Latest commit:** `c71d7b7 feat(api): add program chair faculty directory`
+- **Previous reviewed commit:** `c71d7b7 feat(api): add program chair faculty directory`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Task 1 is committed only on its isolated review branch; nothing has been
+  Tasks 1 and 2 are committed only on their isolated review branch; nothing has been
   pushed or merged.
 
 ## Current Objective
 
-Begin Phase 5 Task 2 after the verified Task 1 Program Chair faculty-directory
-API slice. Task 2 must use its supplied brief, preserve Task 1's audited
-faculty-directory contract, and remain on the isolated Phase 5 branch until
-the authorized review/integration workflow says otherwise.
+Phase 5 Task 2 is implemented and verified on the isolated review branch.
+It adds the shared typed frontend client, field-error mapper, and shadcn
+primitives required before portal modules are connected. It awaits independent
+review; do not merge or push it. Preserve Task 1's audited faculty-directory
+contract and the browser-token ownership boundary.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -41,6 +42,21 @@ UI belongs in Phase 5.
   — **24 tests, 147 assertions**. The API inventory increased from **29 to
   30 routes**.
 - Local review commit: `c71d7b7` (isolated branch only; not pushed or merged).
+
+### Phase 5 Task 2 — Shared frontend data layer
+
+- Added authenticated `PATCH` and `DELETE` JSON helpers to the strict API
+  client. They preserve bearer injection, `credentials: "omit"`, `cache:
+  "no-store"`, abort signals, 204 handling, and authenticated-401 sign-out.
+- `ApiClientError` now retains the validated backend `errors` envelope, and
+  `applyApiFieldErrors()` maps named 422 messages into React Hook Form without
+  treating conflicts or other server failures as field validation.
+- Added the configured radix/shadcn sources for Table, Select, Dialog, Alert
+  Dialog, Pagination, and a single Sonner `Toaster` mounted from `Providers`.
+- Verification passed: focused client/form gate **14 tests**; full frontend
+  suite **16 files / 150 tests**; Prettier, ESLint, Oxlint, TypeScript, and
+  production build all passed. The storage-boundary scan found no direct
+  browser storage access outside `auth-token.ts` (other match is a comment).
 
 ### Takeover verification performed by Codex
 

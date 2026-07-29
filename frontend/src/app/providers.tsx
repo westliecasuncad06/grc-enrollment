@@ -7,6 +7,7 @@ import { createApiAuthGateway } from "@/features/auth/api-auth-gateway"
 import { AuthProvider } from "@/features/auth/auth-context"
 import { createBrowserAuthTokenStore } from "@/features/auth/auth-token"
 import { createAppQueryClient } from "@/features/lib/query-client"
+import { Toaster } from "@/features/components/ui/toaster"
 import {
   setAuthTokenProvider,
   setUnauthorizedHandler,
@@ -42,6 +43,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider gateway={gateway}>{children}</AuthProvider>
+      <Toaster />
     </QueryClientProvider>
   )
 }
