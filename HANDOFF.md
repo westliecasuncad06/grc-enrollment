@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 20:07:37 +08:00
+- **Date and time:** 2026-07-29 20:10:22 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `ddee93e feat(frontend): add shared portal data layer`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
@@ -74,16 +74,16 @@ UI belongs in Phase 5.
   catalog module retains the scoped preview state, including cross-role
   not-found protection.
 - RED evidence: the required narrow notification/sheet/registry Vitest
-  command exited 1 because all three new imports did not exist. Final focused
-  portal coverage passed **6 files / 69 tests**; complete frontend verification
-  passed **19 files / 159 tests**, TypeScript, Prettier, ESLint, Oxlint, and
+  command exited 1 because all three new imports did not exist. Final targeted
+  coverage passed **6 files / 70 tests**; complete frontend verification passed
+  **19 files / 160 tests**, TypeScript, Prettier, ESLint, Oxlint, and
   production build. `git diff --check` was clean.
 - Independent review found an identity-free private-query cache issue. The
   remediation scopes notification and authenticated reference-data query keys
   by `session.userId` and disables them while anonymous, so no account can
   address another account's fresh cache. The A → logout → B regression passes;
-  full frontend verification is **19 files / 160 tests**. This fix is pending
-  independent re-review.
+  full frontend verification is **19 files / 160 tests**. Independent re-review
+  returned **Accept with no findings**; Task 3 is accepted and complete.
 
 ### Takeover verification performed by Codex
 

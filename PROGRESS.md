@@ -283,19 +283,20 @@ idempotent mark-as-read PATCH, and safe generic API-error rendering without
 assuming another user's notification details. The explicit 13-ID Phase 5
 registry dispatches only role-authorized modules to isolated workspace slots;
 every remaining module retains its existing scoped preview state. Required RED
-evidence recorded missing schema/sheet/registry imports; final focused portal
-tests passed **6 files / 69 tests** and complete frontend verification passed
-**19 files / 159 tests**, TypeScript, Prettier, ESLint, Oxlint, and production
+evidence recorded missing schema/sheet/registry imports; final targeted portal
+tests passed **6 files / 70 tests** and complete frontend verification passed
+**19 files / 160 tests**, TypeScript, Prettier, ESLint, Oxlint, and production
 build. `git diff --check` was clean. Published overall completion remains
 **41%** pending the planned Phase 5 increment.
-**Review remediation pending re-review:** an independent Task 3 review found
+**Review remediation accepted:** an independent Task 3 review found
 that identity-free private-query keys could let a second account reuse a
 fresh first-account notification response. Notification and authenticated
 reference-data keys now include `session.userId` and are disabled while
 anonymous; a User A → logout → User B regression proves User B receives only
-its own notification result. The remediation gate passed **19 files / 160
-tests**, TypeScript, Prettier, ESLint, Oxlint, production build, and `git diff
---check`. Published overall completion remains **41%**.
+its own notification result. The remediation gate passed **6 files / 70
+tests** and **19 files / 160 tests** complete, plus TypeScript, Prettier,
+ESLint, Oxlint, production build, and `git diff --check`. Re-review returned
+**Accept with no findings**. Published overall completion remains **41%**.
 **Next:** Phase 5 Task 4 — Admission Staff provisioning workspace.
 
 ## Phase 6 — Process 2.0 + Student Portal
