@@ -3,20 +3,19 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 19:37:43 +08:00
+- **Date and time:** 2026-07-29 19:43:53 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
-- **Previous reviewed commit:** `c71d7b7 feat(api): add program chair faculty directory`
+- **Previous reviewed commit:** `ddee93e feat(frontend): add shared portal data layer`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
   Tasks 1 and 2 are committed only on their isolated review branch; nothing has been
   pushed or merged.
 
 ## Current Objective
 
-Phase 5 Task 2 is implemented and verified on the isolated review branch.
-It adds the shared typed frontend client, field-error mapper, and shadcn
-primitives required before portal modules are connected. It awaits independent
-review; do not merge or push it. Preserve Task 1's audited faculty-directory
-contract and the browser-token ownership boundary.
+Begin Phase 5 Task 3 — typed module registry and live notification sheet — on
+the isolated review branch. Preserve Task 1's audited faculty-directory
+contract, Task 2's browser-token ownership boundary, and user-owned
+notification authorization; do not merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -57,6 +56,7 @@ UI belongs in Phase 5.
   suite **16 files / 150 tests**; Prettier, ESLint, Oxlint, TypeScript, and
   production build all passed. The storage-boundary scan found no direct
   browser storage access outside `auth-token.ts` (other match is a comment).
+- Independent Task 2 review verdict: **Accept with no findings**.
 
 ### Takeover verification performed by Codex
 
@@ -403,10 +403,11 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 2** from its supplied task brief on
-   `phase-5-portal-workspaces`; do not alter the verified Task 1 contract.
+1. Begin **Phase 5 Task 3 — typed module registry and live notification
+   sheet** from its supplied task brief on `phase-5-portal-workspaces`.
+   Preserve the verified Task 1 and Task 2 contracts.
 2. Preserve the unrelated modified plan file until its owner decides what to
-   do with it; do not push or merge the isolated Task 1 commit without
+   do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.
 
 ## Do Not Change
