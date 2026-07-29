@@ -89,4 +89,16 @@ describe("curriculum-service", () => {
       subjects: replacement.subjects,
     })
   })
+
+  it("rejects a curriculum response with undeclared envelope fields", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ...response, extra: "not-contractual" }), {
+        status: 201,
+      }),
+    )
+
+    await expect(
+      createCurriculum({ program_id: 1, ...replacement }),
+    ).rejects.toMatchObject({ kind: "contract" })
+  })
 })

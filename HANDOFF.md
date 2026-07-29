@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 21:27:00 +08:00
+- **Date and time:** 2026-07-29 21:39:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
@@ -12,10 +12,11 @@
 
 ## Current Objective
 
-Begin Phase 5 Task 7 — Program Chair sections and schedule workspace on the
-isolated branch. Preserve the Task 6 full-replace curriculum graph contract,
-identity-scoped reference queries, browser-token ownership, strict parsed API
-contracts, and Program Chair-only backend authorization; do not merge or push.
+Await independent re-review of the Phase 5 Task 6 curriculum-workspace
+remediation on the isolated branch. Preserve the full-replace curriculum graph
+contract, identity-scoped reference queries, browser-token ownership, strict
+parsed API contracts, and Program Chair-only backend authorization; do not
+merge, push, or begin Task 7 until the re-review is accepted.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -181,6 +182,24 @@ UI belongs in Phase 5.
   passed **4 files / 10 tests**; full frontend verification passed **29 files /
   186 tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and
   `git diff --check`. Published completion remains **41%**; Task 7 is next.
+
+#### Review remediation — pending re-review
+
+- Placement is again an explicit catalog-subject choice. Every placement now
+  exposes editable year level (1–4), semester (1st–3rd), and required status;
+  duplicate placements remain blocked before submission.
+- A dirty curriculum selection change uses the same accessible discard dialog
+  as New. Cancel preserves both the selected curriculum and unsaved values;
+  confirmed replacement is intentional. A successful create adopts the
+  returned curriculum ID so the next save is a PATCH, not a duplicate POST.
+- Curriculum responses now use a strict Zod `{ data }` envelope that rejects
+  unexpected top-level properties, matching the published OpenAPI contract.
+- New RED coverage exposed the four review defects and the selector-to-New
+  reset edge case. GREEN verification passed the 4-file Task 6 gate (**15
+  tests**) and the complete frontend suite (**29 files / 191 tests**),
+  production build, TypeScript, Prettier, ESLint,
+  Oxlint, and `git diff --check`. Published completion remains **41%**;
+  independent re-review is pending.
 
 ### Takeover verification performed by Codex
 
@@ -527,10 +546,8 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 7 — Program Chair sections and schedule workspace**
-   from its supplied task brief on `phase-5-portal-workspaces`. Preserve the
-   verified Task 1–6 contracts, strict parsed references, and full-replace
-   curriculum graph semantics.
+1. Obtain an **independent re-review of the Phase 5 Task 6 remediation** on
+   `phase-5-portal-workspaces`. Do not begin Task 7 until it is accepted.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.

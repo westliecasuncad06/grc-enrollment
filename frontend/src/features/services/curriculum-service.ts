@@ -1,4 +1,5 @@
 import type { Curriculum } from "@/features/schemas/reference-data-schema"
+import { z } from "zod"
 import {
   storeCurriculumInputSchema,
   curriculumReplacementSchema,
@@ -78,13 +79,8 @@ export async function replaceCurriculum(
   return parse(zEnvelope, payload, "updated curriculum").data
 }
 
+const curriculumEnvelopeSchema = z.object({ data: curriculumSchema }).strict()
+
 const zEnvelope = {
-  safeParse: (payload: unknown) => {
-    const parsed = ((awaitable) => awaitable)(
-      curriculumSchema.safeParse((payload as { data?: unknown })?.data),
-    )
-    return parsed.success
-      ? { success: true as const, data: { data: parsed.data } }
-      : { success: false as const, error: parsed.error }
-  },
+  safeParse: (payload: unknown) => curriculumEnvelopeSchema.safeParse(payload),
 }

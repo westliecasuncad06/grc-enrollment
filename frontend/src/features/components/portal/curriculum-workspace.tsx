@@ -60,7 +60,10 @@ export function CurriculumWorkspace() {
   const subjectsQuery = useSubjectsQuery()
   const curriculaQuery = useCurriculaQuery()
   const [selectedId, setSelectedId] = useState(0)
-  const [discarding, setDiscarding] = useState(false)
+  const [discardTarget, setDiscardTarget] = useState<number | "new" | null>(
+    null,
+  )
+  const [placementSubjectId, setPlacementSubjectId] = useState(0)
   const [requestError, setRequestError] = useState("")
   const form = useForm<StoreCurriculumInput>({
     resolver: zodResolver(storeCurriculumInputSchema),
@@ -113,15 +116,22 @@ export function CurriculumWorkspace() {
         ),
       })
   }
+  const requestEdit = (id: number) => {
+    if (id === selectedId) return
+    if (id === 0) return startNew()
+    if (form.formState.isDirty) return setDiscardTarget(id)
+    edit(id)
+  }
   const startNew = () => {
-    if (selectedId > 0 || form.formState.isDirty) return setDiscarding(true)
+    if (selectedId > 0 || form.formState.isDirty) return setDiscardTarget("new")
     setSelectedId(0)
     form.reset(fresh)
   }
   const save = async (input: StoreCurriculumInput) => {
     setRequestError("")
     try {
-      await mutation.mutateAsync(input)
+      const saved = await mutation.mutateAsync(input)
+      setSelectedId(saved.id)
       form.reset(input)
     } catch (error) {
       if (!applyApiFieldErrors(error, form.setError))
@@ -131,22 +141,24 @@ export function CurriculumWorkspace() {
     }
   }
   const addPlacement = () => {
-    const next = (subjectsQuery.data ?? []).find(
-      (subject) =>
-        !form
-          .getValues("subjects")
-          .some((placement) => placement.subject_id === subject.id),
-    )
-    if (!next)
+    if (placementSubjectId <= 0)
       return form.setError("subjects", {
-        message: "Each available subject is already placed in this curriculum.",
+        message: "Select a subject to place.",
+      })
+    if (
+      form
+        .getValues("subjects")
+        .some((placement) => placement.subject_id === placementSubjectId)
+    )
+      return form.setError("subjects", {
+        message: "This subject is already placed in this curriculum.",
       })
     form.setValue(
       "subjects",
       [
         ...form.getValues("subjects"),
         {
-          subject_id: next.id,
+          subject_id: placementSubjectId,
           year_level: 1,
           semester: "1st",
           is_required: true,
@@ -155,7 +167,21 @@ export function CurriculumWorkspace() {
       ],
       { shouldDirty: true, shouldValidate: true },
     )
+    setPlacementSubjectId(0)
   }
+  const updatePlacement = (
+    index: number,
+    update: Partial<(typeof formSubjects)[number]>,
+  ) =>
+    form.setValue(
+      "subjects",
+      form
+        .getValues("subjects")
+        .map((placement, row) =>
+          row === index ? { ...placement, ...update } : placement,
+        ),
+      { shouldDirty: true, shouldValidate: true },
+    )
   const isLoading =
     programsQuery.isLoading ||
     subjectsQuery.isLoading ||
@@ -189,7 +215,7 @@ export function CurriculumWorkspace() {
               <select
                 id="curriculum-select"
                 value={selectedId}
-                onChange={(event) => edit(Number(event.target.value))}
+                onChange={(event) => requestEdit(Number(event.target.value))}
               >
                 <option value={0}>New curriculum</option>
                 {(curriculaQuery.data ?? []).map((curriculum) => (
@@ -256,8 +282,27 @@ export function CurriculumWorkspace() {
                 </select>
               </Field>
               <section aria-label="Curriculum subject placements">
-                <div className="flex items-center justify-between">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                   <h3>Subject placements</h3>
+                  <Field>
+                    <FieldLabel htmlFor="subject-to-place">
+                      Subject to place
+                    </FieldLabel>
+                    <select
+                      id="subject-to-place"
+                      value={placementSubjectId}
+                      onChange={(event) =>
+                        setPlacementSubjectId(Number(event.target.value))
+                      }
+                    >
+                      <option value={0}>Select a subject</option>
+                      {(subjectsQuery.data ?? []).map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.code} — {subject.title}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
                   <Button
                     type="button"
                     variant="outline"
@@ -268,11 +313,76 @@ export function CurriculumWorkspace() {
                 </div>
                 <ul>
                   {formSubjects.map((placement, index) => (
-                    <li key={placement.subject_id}>
-                      {(subjectsQuery.data ?? []).find(
-                        (subject) => subject.id === placement.subject_id,
-                      )?.code ?? placement.subject_id}{" "}
-                      · Year {placement.year_level}, {placement.semester}{" "}
+                    <li
+                      key={placement.subject_id}
+                      className="grid gap-2 md:grid-cols-5"
+                    >
+                      <span>
+                        {(subjectsQuery.data ?? []).find(
+                          (subject) => subject.id === placement.subject_id,
+                        )?.code ?? placement.subject_id}
+                      </span>
+                      <Field>
+                        <FieldLabel
+                          htmlFor={`placement-${placement.subject_id}-year`}
+                        >
+                          Placement {placement.subject_id} year level
+                        </FieldLabel>
+                        <select
+                          id={`placement-${placement.subject_id}-year`}
+                          value={placement.year_level}
+                          onChange={(event) =>
+                            updatePlacement(index, {
+                              year_level: Number(event.target.value),
+                            })
+                          }
+                        >
+                          {[1, 2, 3, 4].map((year) => (
+                            <option key={year} value={year}>
+                              {year}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field>
+                        <FieldLabel
+                          htmlFor={`placement-${placement.subject_id}-semester`}
+                        >
+                          Placement {placement.subject_id} semester
+                        </FieldLabel>
+                        <select
+                          id={`placement-${placement.subject_id}-semester`}
+                          value={placement.semester}
+                          onChange={(event) =>
+                            updatePlacement(index, {
+                              semester: event.target.value,
+                            })
+                          }
+                        >
+                          {["1st", "2nd", "3rd"].map((semester) => (
+                            <option key={semester} value={semester}>
+                              {semester}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field>
+                        <FieldLabel
+                          htmlFor={`placement-${placement.subject_id}-required`}
+                        >
+                          Placement {placement.subject_id} is required
+                        </FieldLabel>
+                        <input
+                          id={`placement-${placement.subject_id}-required`}
+                          type="checkbox"
+                          checked={placement.is_required}
+                          onChange={(event) =>
+                            updatePlacement(index, {
+                              is_required: event.target.checked,
+                            })
+                          }
+                        />
+                      </Field>
                       <Button
                         type="button"
                         variant="ghost"
@@ -314,22 +424,30 @@ export function CurriculumWorkspace() {
           </form>
         </>
       )}
-      <AlertDialog open={discarding} onOpenChange={setDiscarding}>
+      <AlertDialog
+        open={discardTarget !== null}
+        onOpenChange={(open) => !open && setDiscardTarget(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               Discard unsaved curriculum changes
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Start a new curriculum without saving your current edits?
+              Continue without saving your current edits?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                setSelectedId(0)
-                form.reset(fresh)
+                if (discardTarget === "new") {
+                  setSelectedId(0)
+                  form.reset(fresh)
+                } else if (typeof discardTarget === "number") {
+                  edit(discardTarget)
+                }
+                setDiscardTarget(null)
               }}
             >
               Discard changes
