@@ -25,6 +25,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/curricula',
+            'GET|HEAD api/v1/eligible-subjects',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-members',
             'GET|HEAD api/v1/faculty-subject-preferences',
@@ -66,6 +67,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.curricula.index',
             'api.v1.curricula.store',
             'api.v1.curricula.update',
+            'api.v1.eligible-subjects.index',
             'api.v1.faculty-availabilities.index',
             'api.v1.faculty-members.index',
             'api.v1.faculty-availabilities.store',
@@ -212,6 +214,25 @@ final class ApiSurfaceTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('role:program_chair', $route->gatherMiddleware());
+    }
+
+    /**
+     * Own computed view, not a role-exclusive resource — no `role:`
+     * middleware, matching `student-profile.show`. EligibleSubjectPolicy
+     * resolves the student-only boundary instead.
+     */
+    public function test_eligible_subjects_carries_no_role_middleware(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.eligible-subjects.index');
+
+        $this->assertNotNull($route);
+
+        $roleMiddleware = array_filter(
+            $route->gatherMiddleware(),
+            static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+        );
+
+        $this->assertSame([], array_values($roleMiddleware));
     }
 
     public function test_the_login_route_is_throttled(): void

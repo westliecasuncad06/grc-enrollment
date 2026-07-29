@@ -61,6 +61,14 @@ tags:
       profile, with no broader role-based visibility. `admission_status` and
       `academic_standing` vocabularies are provisional pending PRD §17
       approval.
+  - name: Enrollment
+    description: >
+      Process 2.0 — the eligible-subject pool (PRD §5.2, DFD 2.2). Own-record
+      only: a student sees only their own computed eligibility, never another
+      student's. Every entry carries an explainable reason (FR-ENR-005); the
+      official grading policy behind prerequisite checks is a PRD §17
+      decision still pending formal GRC approval — see
+      App\Domain\Academic\PrerequisiteEvaluator.
   - name: Notifications
     description: >
       Private, user-owned in-app notifications. Every authenticated role may
@@ -1190,6 +1198,69 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           description: The authenticated user has no student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/eligible-subjects:
+    get:
+      operationId: getEligibleSubjects
+      summary: Build the authenticated student's eligible-subject pool
+      description: >
+        Own-record only — Student role only, resolved against the caller's
+        own StudentProfile. Every subject in the caller's curriculum is
+        returned, whether currently selectable or not, each with an
+        explainable `reasons` list (FR-ENR-005): `completed`,
+        `already_selected`, `prerequisite`, `prerequisite_advisory` (the
+        grading policy is not yet confirmed — see PRD §17), `no_sections_available`,
+        `block_restricted`, or `eligible`. Cross-subject schedule-conflict
+        exclusion is applied at submission time, not here — see the
+        enrollment submission endpoint.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academic_term_id
+          in: query
+          required: true
+          description: The term to build the pool against.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The authenticated student's eligible-subject pool.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EligibleSubjectCollectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The authenticated user has no student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: academic_term_id is missing or does not exist.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
@@ -2483,6 +2554,84 @@ components:
             - closed
             - cancelled
         status_label:
+          type: string
+    EligibleSubjectCollectionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EligibleSubjectResource"
+    EligibleSubjectResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - subject_id
+        - code
+        - title
+        - units
+        - year_level
+        - semester
+        - is_required
+        - is_eligible
+        - reasons
+        - available_sections
+      properties:
+        type:
+          type: string
+          const: eligible_subject
+        subject_id:
+          type: integer
+        code:
+          type: string
+        title:
+          type: string
+        units:
+          type: number
+          format: float
+        year_level:
+          type: integer
+        semester:
+          type: string
+        is_required:
+          type: boolean
+        is_eligible:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/EligibleSubjectReason"
+        available_sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionResource"
+    EligibleSubjectReason:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - eligible
+            - completed
+            - already_selected
+            - prerequisite
+            - prerequisite_advisory
+            - no_sections_available
+            - block_restricted
+          description: >
+            Machine-checkable category. `prerequisite_advisory` and
+            `block_restricted` reflect PRD §17 decisions pending formal GRC
+            approval — see App\Domain\Academic\PrerequisiteEvaluator and
+            App\Actions\Enrollment\BuildEligibleSubjectPool.
+        message:
           type: string
     StoreSectionRequest:
       type: object

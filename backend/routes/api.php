@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\CurriculumController;
+use App\Http\Controllers\Api\V1\EligibleSubjectController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
@@ -61,6 +62,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Own-record only — no role gate beyond authentication, since the
         // Policy resolves "whose profile is this" the same way auth/me does.
         Route::get('/student-profile', [StudentProfileController::class, 'show'])->name('student-profile.show');
+
+        // Own computed view, not a stored resource — EligibleSubjectPolicy
+        // resolves "student role only" the same way FacultyMemberPolicy
+        // resolves "program chair only" for the faculty directory.
+        Route::get('/eligible-subjects', EligibleSubjectController::class)->name('eligible-subjects.index');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's
