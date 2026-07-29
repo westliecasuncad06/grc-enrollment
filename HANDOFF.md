@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 20:23:00 +08:00
+- **Date and time:** 2026-07-29 20:39:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `435c391 docs: accept portal cache privacy remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
@@ -104,6 +104,18 @@ UI belongs in Phase 5.
   9 tests**; complete frontend verification passed **22 files / 166 tests**,
   Prettier, ESLint, Oxlint, TypeScript, and production build. Published
   completion remains **41%**; Task 5 is next.
+
+#### Review remediation — pending re-review
+
+- Corrected the curriculum status contract from the unsupported `retired`
+  literal to backend/OpenAPI's `archived`; strictly parses provisioning inputs
+  before the request; and resets dependent curriculum form state on a program
+  change.
+- Added regressions for clipboard success/denial and distinct failed/retry
+  credentials. The remediation gate passed **4 files / 12 tests** and the full
+  frontend suite passed **23 files / 170 tests**. Prettier, ESLint, Oxlint,
+  TypeScript, and production build passed; published completion remains
+  **41%**.
 
 ### Takeover verification performed by Codex
 

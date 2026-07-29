@@ -68,4 +68,16 @@ describe("provisionStudent", () => {
       "year_level",
     ])
   })
+
+  it("rejects an unexpected provisioning key before it can reach fetch", async () => {
+    const unsafeInput = {
+      ...input,
+      admission_status: "rejected",
+    } as ProvisionStudentInput
+
+    await expect(provisionStudent(unsafeInput)).rejects.toMatchObject({
+      kind: "contract",
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

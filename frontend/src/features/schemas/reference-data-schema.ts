@@ -79,7 +79,7 @@ export const curriculumSchema = z
     program_id: z.number().int().positive(),
     name: z.string().min(1),
     effective_school_year: z.string().min(1),
-    status: z.enum(["draft", "active", "retired"]),
+    status: z.enum(["draft", "active", "archived"]),
     status_label: z.string().min(1),
     subjects: z.array(curriculumSubjectSchema),
   })

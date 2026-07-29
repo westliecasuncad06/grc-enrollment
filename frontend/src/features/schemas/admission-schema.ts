@@ -1,14 +1,16 @@
 import { z } from "zod"
 
-export const provisionStudentSchema = z.object({
-  name: z.string().trim().min(1, "Enter the student's name."),
-  email: z.email("Enter a valid email address."),
-  password: z.string().min(8),
-  student_number: z.string().trim().min(1, "Enter the student number."),
-  program_id: z.number().int().positive("Select a program."),
-  curriculum_id: z.number().int().positive("Select a curriculum."),
-  year_level: z.number().int().positive("Select a year level."),
-})
+export const provisionStudentSchema = z
+  .object({
+    name: z.string().trim().min(1, "Enter the student's name."),
+    email: z.email("Enter a valid email address."),
+    password: z.string().min(8),
+    student_number: z.string().trim().min(1, "Enter the student number."),
+    program_id: z.number().int().positive("Select a program."),
+    curriculum_id: z.number().int().positive("Select a curriculum."),
+    year_level: z.number().int().positive("Select a year level."),
+  })
+  .strict()
 
 export const studentProfileSchema = z
   .object({

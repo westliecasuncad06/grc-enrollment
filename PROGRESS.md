@@ -316,6 +316,17 @@ frontend verification passed **22 files / 166 tests**, Prettier, ESLint,
 Oxlint, TypeScript, and production build. Published completion remains **41%**.
 **Next:** Phase 5 Task 5 — Faculty availability and preferences workspace.
 
+**Task 4 review remediation pending re-review:** frontend curriculum parsing
+now uses the backend/OpenAPI `archived` status literal, the provisioning
+service strictly parses its seven-field request before fetch, and changing a
+program clears the dependent curriculum value in React Hook Form state.
+Additional regressions prove clipboard success/denial feedback and that a
+retry receives a newly generated temporary credential rather than the failed
+attempt's value. The remediation-focused gate passed **4 files / 12 tests**;
+the complete frontend suite passed **23 files / 170 tests**, and Prettier,
+ESLint, Oxlint, TypeScript, and production build passed. Published completion
+remains **41%** pending re-review.
+
 ## Phase 6 — Process 2.0 + Student Portal
 
 - **Eligible Subject Pool** (DFD 2.2/2.3 · FR-ENR-001–003, 005, 011). Reuse

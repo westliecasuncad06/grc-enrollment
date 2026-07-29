@@ -52,6 +52,7 @@ const workspaceHeadings: Record<string, string> = {
 interface AdmissionProvisioningWorkspaceProps {
   initialModuleId?: string
   generateCredential?: () => string
+  writeCredential?: (credential: string) => Promise<void>
 }
 
 interface CredentialReceipt {
@@ -62,6 +63,7 @@ interface CredentialReceipt {
 export function AdmissionProvisioningWorkspace({
   initialModuleId = "student-accounts",
   generateCredential = generateTemporaryCredential,
+  writeCredential = (credential) => navigator.clipboard.writeText(credential),
 }: AdmissionProvisioningWorkspaceProps) {
   const [receipt, setReceipt] = useState<CredentialReceipt | null>(null)
   const [copyStatus, setCopyStatus] = useState("")
@@ -78,6 +80,7 @@ export function AdmissionProvisioningWorkspace({
     register,
     reset,
     setError,
+    setValue,
   } = useForm<AdmissionFormValues>({
     resolver: zodResolver(formSchema),
     shouldFocusError: false,
@@ -91,6 +94,7 @@ export function AdmissionProvisioningWorkspace({
     },
   })
   const selectedProgramId = useWatch({ control, name: "program_id" })
+  const programRegistration = register("program_id", { valueAsNumber: true })
   const curricula = useMemo(
     () =>
       (curriculaQuery.data ?? []).filter(
@@ -121,7 +125,7 @@ export function AdmissionProvisioningWorkspace({
     }
 
     try {
-      await navigator.clipboard.writeText(receipt.credential)
+      await writeCredential(receipt.credential)
       setCopyStatus("Credential copied")
     } catch {
       setCopyStatus("Credential copy is unavailable in this browser.")
@@ -200,7 +204,11 @@ export function AdmissionProvisioningWorkspace({
                   id="admission-program"
                   disabled={isProvisioning || programsQuery.isLoading}
                   aria-invalid={Boolean(errors.program_id)}
-                  {...register("program_id", { valueAsNumber: true })}
+                  {...programRegistration}
+                  onChange={(event) => {
+                    void programRegistration.onChange(event)
+                    setValue("curriculum_id", 0, { shouldValidate: true })
+                  }}
                 >
                   <option value={0}>Select a program</option>
                   {(programsQuery.data ?? []).map((program) => (

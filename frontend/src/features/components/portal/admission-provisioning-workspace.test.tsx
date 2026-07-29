@@ -6,6 +6,7 @@ import { AdmissionProvisioningWorkspace } from "@/features/components/portal/adm
 import { renderWithSession } from "@/tests/render-app"
 
 const credential = "Aa1!Aa1!Aa1!Aa1!Aa1!"
+const writeTextMock = vi.fn<(value: string) => Promise<void>>()
 
 const profile = {
   type: "student_profile",
@@ -31,6 +32,14 @@ const programs = {
       status: "active",
       status_label: "Active",
     },
+    {
+      type: "program",
+      id: 12,
+      code: "BSIT",
+      name: "BS Information Technology",
+      status: "active",
+      status_label: "Active",
+    },
   ],
 } as const
 
@@ -41,6 +50,16 @@ const curricula = {
       id: 22,
       program_id: 11,
       name: "BSCS 2026 Curriculum",
+      effective_school_year: "2026-2027",
+      status: "active",
+      status_label: "Active",
+      subjects: [],
+    },
+    {
+      type: "curriculum",
+      id: 23,
+      program_id: 12,
+      name: "BSIT 2026 Curriculum",
       effective_school_year: "2026-2027",
       status: "active",
       status_label: "Active",
@@ -57,11 +76,16 @@ function requestUrl(input: RequestInfo | URL): string {
   return input instanceof URL ? input.toString() : input.url
 }
 
-function renderWorkspace(initialModuleId = "student-accounts") {
+function renderWorkspace(
+  initialModuleId = "student-accounts",
+  generateCredential = () => credential,
+  writeCredential = writeTextMock,
+) {
   return renderWithSession(
     <AdmissionProvisioningWorkspace
       initialModuleId={initialModuleId}
-      generateCredential={() => credential}
+      generateCredential={generateCredential}
+      writeCredential={writeCredential}
     />,
     {
       session: {
@@ -91,6 +115,8 @@ describe("AdmissionProvisioningWorkspace", () => {
 
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
+    writeTextMock.mockReset()
+    writeTextMock.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -151,6 +177,7 @@ describe("AdmissionProvisioningWorkspace", () => {
     await user.click(
       screen.getByRole("button", { name: "Copy temporary credential" }),
     )
+    expect(writeTextMock).toHaveBeenCalledWith(credential)
     expect(screen.getByRole("status")).toHaveTextContent("Credential copied")
     await user.click(
       screen.getByRole("button", { name: "Close credential receipt" }),
@@ -203,6 +230,89 @@ describe("AdmissionProvisioningWorkspace", () => {
     )
   })
 
+  it("clears the selected curriculum from form state when the program changes", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((request) => {
+      const url = requestUrl(request)
+      if (url.endsWith("/programs")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(programs), { status: 200 }),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify(curricula), { status: 200 }),
+      )
+    })
+
+    renderWorkspace()
+    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
+    await user.selectOptions(screen.getByLabelText("Program"), "11")
+    await user.selectOptions(screen.getByLabelText("Curriculum"), "22")
+    expect(screen.getByLabelText("Curriculum")).toHaveValue("22")
+
+    await user.selectOptions(screen.getByLabelText("Program"), "12")
+
+    expect(screen.getByLabelText("Curriculum")).toHaveValue("0")
+    expect(
+      screen.getByRole("option", {
+        name: "BSIT 2026 Curriculum (2026-2027)",
+      }),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("Student name"), "Amina Santos")
+    await user.type(
+      screen.getByLabelText("Email address"),
+      "amina.santos@grc.test",
+    )
+    await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
+    await user.selectOptions(screen.getByLabelText("Year level"), "1")
+    await user.click(
+      screen.getByRole("button", { name: "Create student account" }),
+    )
+
+    expect(await screen.findByText("Select a curriculum.")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("announces a clipboard denial without persisting the credential", async () => {
+    const user = userEvent.setup()
+    writeTextMock.mockRejectedValueOnce(
+      new DOMException("Denied", "NotAllowedError"),
+    )
+    fetchMock.mockImplementation((request) => {
+      const url = requestUrl(request)
+      if (url.endsWith("/programs")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(programs), { status: 200 }),
+        )
+      }
+      if (url.endsWith("/curricula")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(curricula), { status: 200 }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: profile }), { status: 201 }),
+      )
+    })
+
+    renderWorkspace()
+    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
+    await completeForm(user)
+    await user.click(
+      screen.getByRole("button", { name: "Create student account" }),
+    )
+    await screen.findByText("Student account created")
+    await user.click(
+      screen.getByRole("button", { name: "Copy temporary credential" }),
+    )
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Credential copy is unavailable in this browser.",
+    )
+  })
+
   it("disables a duplicate submission while provisioning is pending", async () => {
     const user = userEvent.setup()
     let resolveProvision: (response: Response) => void = () => undefined
@@ -240,10 +350,14 @@ describe("AdmissionProvisioningWorkspace", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
-  it("shows a retry after a connection failure without retaining the temporary credential", async () => {
+  it("replaces a failed attempt's temporary credential on retry", async () => {
     const user = userEvent.setup()
     let provisionAttempts = 0
-    fetchMock.mockImplementation((request) => {
+    const attemptedPasswords: string[] = []
+    const firstCredential = "Bb2!Bb2!Bb2!Bb2!Bb2!"
+    const retryCredential = "Cc3@Cc3@Cc3@Cc3@Cc3@"
+    let credentialIndex = 0
+    fetchMock.mockImplementation((request, init) => {
       const url = requestUrl(request)
       if (url.endsWith("/programs")) {
         return Promise.resolve(
@@ -256,6 +370,12 @@ describe("AdmissionProvisioningWorkspace", () => {
         )
       }
       provisionAttempts += 1
+      if (typeof init?.body !== "string") {
+        throw new Error("Expected a JSON provisioning request.")
+      }
+      attemptedPasswords.push(
+        (JSON.parse(init.body) as { password: string }).password,
+      )
       if (provisionAttempts === 1) {
         return Promise.reject(new TypeError("Network unavailable"))
       }
@@ -264,7 +384,11 @@ describe("AdmissionProvisioningWorkspace", () => {
       )
     })
 
-    renderWorkspace("credential-issuance")
+    renderWorkspace("credential-issuance", () => {
+      const generated = [firstCredential, retryCredential][credentialIndex]
+      credentialIndex += 1
+      return generated
+    })
     expect(
       screen.getByRole("heading", { name: "Credential issuance" }),
     ).toBeInTheDocument()
@@ -279,12 +403,15 @@ describe("AdmissionProvisioningWorkspace", () => {
         "The student account could not be created. Check the connection and try again.",
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByText(credential)).not.toBeInTheDocument()
+    expect(screen.queryByText(firstCredential)).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Try again" }))
 
     await waitFor(() => {
       expect(screen.getByText("Student account created")).toBeInTheDocument()
     })
     expect(provisionAttempts).toBe(2)
+    expect(attemptedPasswords).toEqual([firstCredential, retryCredential])
+    expect(screen.getByText(retryCredential)).toBeInTheDocument()
+    expect(screen.queryByText(firstCredential)).not.toBeInTheDocument()
   })
 })

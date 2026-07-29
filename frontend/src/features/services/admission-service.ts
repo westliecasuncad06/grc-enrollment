@@ -1,4 +1,5 @@
 import {
+  provisionStudentSchema,
   studentProfileEnvelopeSchema,
   type ProvisionStudentInput,
   type StudentProfile,
@@ -15,7 +16,21 @@ export type { ProvisionStudentInput, StudentProfile }
 export async function provisionStudent(
   input: ProvisionStudentInput,
 ): Promise<StudentProfile> {
-  const payload = await postAuthenticatedJson(STUDENT_PROFILES_PATH, input)
+  const parsedInput = provisionStudentSchema.safeParse(input)
+
+  if (!parsedInput.success) {
+    throw new ApiClientError({
+      kind: "contract",
+      message:
+        "The student provisioning request did not match the published v1 contract.",
+      cause: parsedInput.error,
+    })
+  }
+
+  const payload = await postAuthenticatedJson(
+    STUDENT_PROFILES_PATH,
+    parsedInput.data,
+  )
   const parsed = studentProfileEnvelopeSchema.safeParse(payload)
 
   if (!parsed.success) {
