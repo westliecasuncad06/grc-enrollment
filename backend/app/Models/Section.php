@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $capacity
  * @property ?int $viability_threshold
  * @property int $enrolled_count
+ * @property ?bool $is_block_exclusive
  * @property SectionStatus $status
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -47,6 +48,7 @@ final class Section extends Model
         'capacity',
         'viability_threshold',
         'enrolled_count',
+        'is_block_exclusive',
         'status',
     ];
 
@@ -60,6 +62,7 @@ final class Section extends Model
             'capacity' => 'integer',
             'viability_threshold' => 'integer',
             'enrolled_count' => 'integer',
+            'is_block_exclusive' => 'boolean',
         ];
     }
 
