@@ -21,6 +21,23 @@ const terms = {
     },
   ],
 }
+const twoTerms = {
+  data: [
+    ...terms.data,
+    {
+      type: "academic-term",
+      id: 3,
+      school_year: "2026-2027",
+      semester: "2nd",
+      starts_at: null,
+      ends_at: null,
+      enrollment_opens_at: null,
+      enrollment_closes_at: null,
+      status: "planning",
+      status_label: "Planning",
+    },
+  ],
+}
 const subjects = {
   data: [
     {
@@ -153,5 +170,99 @@ describe("SectionsWorkspace", () => {
         url(request).endsWith("/sections"),
       ),
     ).toHaveLength(3)
+  })
+
+  it("keeps an explicitly selected second term in the created section payload", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).endsWith("/academic-terms")
+              ? twoTerms
+              : url(input).endsWith("/subjects")
+                ? subjects
+                : init?.method === "POST"
+                  ? { data: { ...created.data, academic_term_id: 3 } }
+                  : sections,
+          ),
+          { status: init?.method === "POST" ? 201 : 200 },
+        ),
+      ),
+    )
+    renderWithSession(<SectionsWorkspace />, {
+      session: {
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByRole("option", { name: /2nd/ })
+    await user.selectOptions(screen.getByLabelText("Academic term"), "3")
+    await user.selectOptions(screen.getByLabelText("Subject"), "7")
+    await user.type(screen.getByLabelText("Section code"), "B")
+    await user.clear(screen.getByLabelText("Capacity"))
+    await user.type(screen.getByLabelText("Capacity"), "30")
+    await user.click(screen.getByRole("button", { name: "Save section" }))
+    await vi.waitFor(() => {
+      const request = fetchMock.mock.calls.find(
+        ([request, init]) =>
+          url(request).endsWith("/sections") && init?.method === "POST",
+      )
+      expect(JSON.parse(request?.[1]?.body as string)).toEqual(
+        expect.objectContaining({ academic_term_id: 3, section_code: "B" }),
+      )
+    })
+  })
+
+  it("retries failed reference data in place", async () => {
+    const user = userEvent.setup()
+    let termsAttempts = 0
+    fetchMock.mockImplementation((input) => {
+      if (url(input).endsWith("/academic-terms")) {
+        termsAttempts += 1
+        return Promise.resolve(
+          termsAttempts <= 2
+            ? new Response(
+                JSON.stringify({
+                  error: {
+                    code: "UNAVAILABLE",
+                    message: "Unavailable",
+                    errors: {},
+                    request_id: "req-retry",
+                  },
+                }),
+                { status: 500 },
+              )
+            : new Response(JSON.stringify(terms)),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).endsWith("/subjects") ? subjects : sections,
+          ),
+        ),
+      )
+    })
+    renderWithSession(<SectionsWorkspace />, {
+      session: {
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByText(
+      "Section planning data could not be loaded. Refresh and try again.",
+      {},
+      { timeout: 3_000 },
+    )
+    await user.click(screen.getByRole("button", { name: "Retry section data" }))
+    expect(
+      await screen.findByRole("option", { name: /2026-2027/ }),
+    ).toBeInTheDocument()
+    expect(termsAttempts).toBe(3)
   })
 })

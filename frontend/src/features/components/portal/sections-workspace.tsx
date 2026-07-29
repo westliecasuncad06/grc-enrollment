@@ -114,9 +114,16 @@ export function SectionsWorkspace() {
       status: next.status,
     })
   }
-  const startNew = () => {
+  const startNew = (nextTermId = termId) => {
     setSelectedId(null)
-    form.reset(fresh(termId === 0 ? (activeTerm?.id ?? 0) : termId))
+    form.reset(fresh(nextTermId === 0 ? (activeTerm?.id ?? 0) : nextTermId))
+  }
+  const retryReferences = () => {
+    void Promise.all([
+      termsQuery.refetch(),
+      subjectsQuery.refetch(),
+      sectionsQuery.refetch(),
+    ])
   }
   const save = async (values: SectionInput) => {
     setRequestError("")
@@ -151,6 +158,13 @@ export function SectionsWorkspace() {
             {requestError ||
               "Section planning data could not be loaded. Refresh and try again."}
           </AlertDescription>
+          {(termsQuery.isError ||
+            subjectsQuery.isError ||
+            sectionsQuery.isError) && (
+            <Button type="button" variant="outline" onClick={retryReferences}>
+              Retry section data
+            </Button>
+          )}
         </Alert>
       )}
       {loading ? (
@@ -192,7 +206,11 @@ export function SectionsWorkspace() {
                 </select>
               </Field>
               <div className="flex items-end">
-                <Button type="button" variant="outline" onClick={startNew}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => startNew()}
+                >
                   New section
                 </Button>
               </div>
@@ -212,12 +230,7 @@ export function SectionsWorkspace() {
                       valueAsNumber: true,
                     })}
                     onChange={(event) => {
-                      form.setValue(
-                        "academic_term_id",
-                        Number(event.target.value),
-                        { shouldValidate: true },
-                      )
-                      startNew()
+                      startNew(Number(event.target.value))
                     }}
                   >
                     <option value={0}>Select an academic term</option>

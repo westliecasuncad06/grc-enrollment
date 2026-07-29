@@ -132,6 +132,16 @@ export function FacultyAssignmentWorkspace() {
     directoryQuery.isError ||
     availabilitiesQuery.isError ||
     preferencesQuery.isError
+  const retryReferences = () => {
+    void Promise.all([
+      termsQuery.refetch(),
+      subjectsQuery.refetch(),
+      sectionsQuery.refetch(),
+      directoryQuery.refetch(),
+      availabilitiesQuery.refetch(),
+      preferencesQuery.refetch(),
+    ])
+  }
   const subject = (subjectsQuery.data ?? []).find(
     (item) => item.id === section?.subject_id,
   )
@@ -150,6 +160,11 @@ export function FacultyAssignmentWorkspace() {
             {requestError ||
               "Assignment data could not be loaded. Refresh and try again."}
           </AlertDescription>
+          {failed && (
+            <Button type="button" variant="outline" onClick={retryReferences}>
+              Retry assignment data
+            </Button>
+          )}
         </Alert>
       )}
       {loading ? (

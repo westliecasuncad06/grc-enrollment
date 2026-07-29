@@ -128,4 +128,50 @@ describe("ScheduleProposalsWorkspace", () => {
       await screen.findByText("This term already has an active proposal."),
     ).toBeInTheDocument()
   })
+
+  it("retries failed reference data in place", async () => {
+    const user = userEvent.setup()
+    let termAttempts = 0
+    fetchMock.mockImplementation((input) => {
+      if (url(input).endsWith("/academic-terms")) {
+        termAttempts += 1
+        return Promise.resolve(
+          termAttempts <= 2
+            ? new Response(
+                JSON.stringify({
+                  error: {
+                    code: "UNAVAILABLE",
+                    message: "Unavailable",
+                    errors: {},
+                    request_id: "req-retry",
+                  },
+                }),
+                { status: 500 },
+              )
+            : new Response(JSON.stringify(terms)),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(proposals)))
+    })
+    renderWithSession(<ScheduleProposalsWorkspace />, {
+      session: {
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByText(
+      "Schedule proposals could not be loaded. Refresh and try again.",
+      {},
+      { timeout: 3_000 },
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Retry proposal data" }),
+    )
+    expect(
+      await screen.findByRole("option", { name: /2026-2027/ }),
+    ).toBeInTheDocument()
+    expect(termAttempts).toBe(3)
+  })
 })

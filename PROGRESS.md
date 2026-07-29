@@ -406,6 +406,20 @@ and `git diff --check`. Published completion remains **41%**; exact next is
 **Phase 5 Task 8 — Dean and Executive Director schedule approval and master
 schedule workspace.**
 
+**Task 7 review remediation pending re-review:** a second-term Section create
+had reset back to the stale watched term after selection; reset now receives
+the explicit selector value and a regression asserts `academic_term_id: 3` in
+the submitted payload. Sections, Faculty Assignment, and Schedule Proposals
+now have accessible in-place retry actions for failed reference queries using
+their existing scoped `refetch()` functions. The assignment conflict fixture
+now matches the backend's `schedule_days` 422 field. RED reproduced stale-term
+and missing-retry behavior; GREEN focused verification passed **5 files / 13
+tests**, and full frontend verification passed **34 files / 204 tests** with
+Prettier, ESLint, Oxlint, TypeScript, production build, and `git diff --check`.
+Published completion remains **41%** pending re-review; exact next remains
+**Phase 5 Task 8 — Dean and Executive Director schedule approval and master
+schedule workspace.**
+
 ## Phase 6 — Process 2.0 + Student Portal
 
 - **Eligible Subject Pool** (DFD 2.2/2.3 · FR-ENR-001–003, 005, 011). Reuse

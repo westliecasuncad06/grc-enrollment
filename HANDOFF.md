@@ -226,6 +226,24 @@ UI belongs in Phase 5.
   **Phase 5 Task 8 — Dean and Executive Director schedule approval and master
   schedule workspace.**
 
+#### Review remediation — pending re-review
+
+- A term-selector regression showed that the Sections workspace reset from a
+  stale watched term immediately after selecting a new one. Reset now accepts
+  the explicit selected term; the regression creates a second-term section and
+  asserts the exact `academic_term_id: 3` request payload.
+- Each workspace now provides an in-place accessible retry for failed
+  reference queries without a page refresh. It calls the existing scoped query
+  `refetch()` functions only; mutation errors and identity-scoped cache keys
+  remain unchanged. Regression tests cover Sections, Faculty Assignment, and
+  Schedule Proposals retry paths after the configured automatic retry.
+- Assignment conflict coverage now matches the backend's authoritative
+  `schedule_days` 422 field. Remediation RED was observed for stale term and
+  missing retry actions; GREEN focused verification passed **5 files / 13
+  tests**. Full frontend verification passed **34 files / 204 tests**;
+  TypeScript, ESLint, Prettier, Oxlint, production build, and `git diff
+  --check` passed. Published completion remains **41%** pending re-review.
+
 ### Takeover verification performed by Codex
 
 - Read the complete root `AGENTS.md`, `PRD.md`, and `PROGRESS.md`.

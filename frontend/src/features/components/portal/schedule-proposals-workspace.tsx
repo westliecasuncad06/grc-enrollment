@@ -73,6 +73,10 @@ export function ScheduleProposalsWorkspace() {
     }
   }
   const loading = termsQuery.isLoading || proposalsQuery.isLoading
+  const failed = termsQuery.isError || proposalsQuery.isError
+  const retryReferences = () => {
+    void Promise.all([termsQuery.refetch(), proposalsQuery.refetch()])
+  }
   return (
     <section aria-label="Schedule proposals workspace" className="grid gap-4">
       <div>
@@ -82,12 +86,17 @@ export function ScheduleProposalsWorkspace() {
           intentionally unavailable in this Program Chair workspace.
         </p>
       </div>
-      {(requestError || termsQuery.isError || proposalsQuery.isError) && (
+      {(requestError || failed) && (
         <Alert variant="destructive">
           <AlertDescription>
             {requestError ||
               "Schedule proposals could not be loaded. Refresh and try again."}
           </AlertDescription>
+          {failed && (
+            <Button type="button" variant="outline" onClick={retryReferences}>
+              Retry proposal data
+            </Button>
+          )}
         </Alert>
       )}
       {loading ? (
