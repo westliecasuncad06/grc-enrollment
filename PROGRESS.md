@@ -1,254 +1,269 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `main`
-(merged `phase-5-portal-workspaces` at `f08c2db`)
+**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:**
+`phase-6-process-2` (quality-gated and live-verified; merge to `main` is
+this session's next step)
 
 ## Current Objective
 
-Roadmap Phase 5, "Portals over Existing APIs": make 13 portal modules across
-six roles (Admission Staff, Faculty, Program Chair, Dean, Executive Director,
-Registrar Head) functional against the existing 29-route API surface, plus
-one new least-privilege faculty-directory read endpoint for named section
-assignment. **Phase 5 is complete, quality-gated, and merged to local
-`main`.** Expected outcome achieved: a demonstrably working system for the
-first time, end to end, for six of nine roles.
+Roadmap Phase 6, "Process 2.0 + Student Portal": DFD 2.2 (Eligible Subject
+Pool) and DFD 2.4 (Enrollment Submission) backends, plus the Student
+portal's Eligible Subjects and Enrollment modules (FR-ENR-001–011). Also
+folds in real institutional data the user supplied mid-phase: the actual
+GRC College of Computer Studies subject catalog (88 subjects, two real
+block-section spreadsheets) and the user's confirmed §17-pending grading
+direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC special
+marks). **All 9 tasks are implemented, independently verified against
+real data, and ready to merge to local `main`.**
 
 ## Verified Completed
 
-- **Task 1 — faculty directory API.** `GET /api/v1/faculty-members`
-  (Program Chair only, audited, no email). Route inventory 29 → 30. See
-  *Task-by-task record* in `docs/history/2026-07-session-log.md` for the
-  full RED/GREEN/review trail; the condensed Phase 5 narrative below covers
-  what each task delivered.
-- **Tasks 2–3 — shared frontend foundation.** Authenticated PATCH/DELETE
-  client, 422 field-error mapping, Sonner, 6 shared UI primitives, parsed
-  reference-data/notification hooks, live notification Sheet, and the typed
-  13-ID `phaseFiveModuleRegistry`.
-- **Tasks 4–8 — the 13 connected modules**, one per role group (Admission
-  Staff, Faculty, Program Chair ×5, Dean/Executive/Registrar Head). Each task
-  was implemented, independently reviewed, and (where findings surfaced)
-  remediated and re-reviewed to acceptance. Two remediations were **real
-  backend authorization/privacy fixes**, not just frontend polish: Faculty
-  teaching-schedule visibility was scoped to `professor_id` (it had returned
-  every Faculty member's sections to every Faculty member), and Executive
-  Director section visibility was scoped to `published` only (unpublished
-  rows had reached the private cache).
-- **Task 9 — this reconciliation.** Added the carried-forward
-  proposal/section cache-invalidation regression
-  (`schedule-decision-workspace.test.tsx`) and strengthened
-  `module-registry.test.tsx` to assert every one of the 27 non-Phase-5
-  catalog module IDs, not just one, stays disconnected from the registry.
-  Ran the full quality gate (see *Commands and Tests Run*), reconciled this
-  file, retired `HANDOFF.md`, and merged `phase-5-portal-workspaces` into
-  local `main` (merge commit `f08c2db`, no conflicts in application code —
-  only in `PROGRESS.md`/`HANDOFF.md`, resolved by keeping the branch's
-  reconciled `PROGRESS.md` and the `HANDOFF.md` deletion). **Found and fixed
-  a real production-readiness defect during live verification** (all test
-  suites had passed without exposing it — see *Technical Decisions* and
-  *Known Issues*): the real dev database was missing all 5 Phase 4 tables and
-  their `grc_app`/`grc_migrator` grants, so every audited write in the
-  running application — not just the new faculty-directory endpoint — had
-  been silently 500ing since Phase 4 merged. Re-ran the
-  focused gate on merged `main`: backend 22/145, frontend 38/216
-  (`--no-file-parallelism`), production build — all green.
+- **Task 1 — fractional units + real CCS catalog.** `subjects.units` and
+  `enrollments.total_units` widened `integer` → `decimal(_,1)` (Leadership
+  subjects are genuinely 1.5 units). New `CcsSubjectSeeder` adds the 88 real
+  CCS subjects, additive alongside the existing synthetic catalog — no code
+  collisions. An integration test proves the existing Phase 5 Program Chair
+  curriculum/prerequisite editor operates on the real catalog end to end.
+- **Task 2 — grading policy + `PrerequisiteEvaluator`.** New
+  `config/enrollment.php` (comparison direction, passing/failing grade,
+  special marks, unit caps), pre-populated with the user's direction but
+  never hardcoded into logic — `App\Domain\Academic\PrerequisiteEvaluator`
+  returns `needs_verification`, never a silent pass or fail, whenever the
+  policy is unconfigured.
+- **Task 3 — block-section mechanism schema.** `sections.is_block_exclusive`
+  and `student_profiles.enrollment_category`, both nullable, no default —
+  the same mechanism-implemented/value-flagged pattern as
+  `sections.viability_threshold`.
+- **Task 4 — Eligible Subject Pool API.** `GET /api/v1/eligible-subjects`
+  (Student own-record only). Every curriculum subject returns with an
+  explainable verdict: `completed`, `already_selected`, `prerequisite`,
+  `prerequisite_advisory`, `no_sections_available`, `block_restricted`, or
+  `eligible`. Cross-subject conflict exclusion is deliberately deferred to
+  Task 5 — the pool has no draft-selection state to conflict against yet.
+- **Task 5 — Enrollment Submission API.** `GET`/`POST /api/v1/enrollments`.
+  One transaction creates the enrollment, its subjects, one queue ticket,
+  one audit entry, and a notification. The client's pool view is advisory
+  only — every submitted section is re-validated server-side against a
+  freshly rebuilt pool, plus duplicate-subject, schedule-conflict
+  (`SectionConflictDetector`, reused from Phase 2), and — only when
+  configured — overload checks.
+- **Tasks 6–7 — Student portal modules.** `EligibleSubjectsWorkspace`
+  (read-only pool view) and `EnrollmentWorkspace` (per-subject section
+  picker, Digital PEF review table, `AlertDialog` confirmation matching the
+  Phase 5 pattern, receipt with queue ticket number, and the student's own
+  enrollment history for FR-ENR-010's real-time status).
+- **Task 8 — generalized module registry.** `phaseFiveModuleRegistry` /
+  `isPhaseFiveModuleId` / `PhaseFiveModuleId` renamed to
+  `connectedModuleRegistry` / `isConnectedModuleId` / `ConnectedModuleId`,
+  now covering 15 modules (13 Phase 5 + 2 new).
+- **Task 9 — this reconciliation.** Applied the 2 pending migrations to the
+  real dev database (only after Phase 5's takeover discovered that gap;
+  see the Operational Caution below), seeded the real CCS catalog into it,
+  and ran a full live HTTP proof — not just tests — as `student4.seed@grc.test`
+  (a withdrawn, therefore free-to-re-enroll, seeded student): fetched a real
+  eligible pool (5 eligible subjects, 5 correctly excluded by unmet
+  prerequisites or no sections), submitted a real enrollment for 2 sections,
+  and verified all 5 atomic side effects landed in the real database
+  (1 enrollment, 2 enrollment_subjects, 1 queue ticket, 1 audit row, 1
+  notification, both sections' `enrolled_count` incremented exactly once),
+  then verified the duplicate-active-enrollment guard rejects a second
+  attempt with a clean 422.
 
 ## Work in Progress
 
-None. Phase 5 is closed and merged. Phase 6 (Process 2.0 + Student Portal)
-has not been started — see *Exact Next Steps*.
+Local merge of `phase-6-process-2` into `main` — everything on the branch
+is quality-gated, live-verified, and ready; the merge itself is the one
+remaining step (*Exact Next Steps*, item 1).
 
 ## Files Changed
 
-**Backend:** `app/Actions/Identity/ListFacultyMembers.php`,
-`Http/Controllers/Api/V1/FacultyMemberController.php`,
-`Http/Resources/Api/V1/FacultyMemberResource.php`,
-`Policies/FacultyMemberPolicy.php` (new); `Domain/Audit/AuditAction.php`,
-`Domain/Audit/AuditableType.php`, `Providers/AppServiceProvider.php`,
-`routes/api.php` (faculty-directory vocabulary/route); `Models/Section.php`,
-`Policies/SectionPolicy.php` (Faculty own-assignment + Executive
-published-only scoping — the two privacy remediations above); matching
-Feature/Policy/Model tests.
+**Backend, schema/seed:** `database/migrations/2026_07_30_000001_widen_unit_columns…`,
+`…000002_add_block_section_eligibility_mechanism_columns`;
+`database/seeders/CcsSubjectSeeder.php` (new), `DatabaseSeeder.php`;
+`app/Models/Subject.php`, `Enrollment.php`, `Section.php`,
+`StudentProfile.php` (casts/docblocks for the widened/new columns).
 
-**Frontend:** `src/features/portal/module-registry.tsx` (new 13-ID
-registry) and 11 new workspace components under
-`src/features/components/portal/`; new `schemas/`, `services/`, `hooks/`
-files per API domain (admission, faculty, curriculum, scheduling, audit,
-reference-data, notifications); `services/api-client.ts` (PATCH/DELETE +
-field errors); 6 new `components/ui/` primitives; `app/providers.tsx`
-(Toaster mount); `portal/role-capabilities.ts` (placeholder copy → real
-module descriptions for the 13 connected modules); `src/tests/render-app.tsx`
-(this session: `renderWithSession`/`renderWithAuthProvider` now also return
-`queryClient`, for cache-invalidation assertions).
+**Backend, domain:** `app/Domain/Academic/PrerequisiteEvaluator.php`,
+`PrerequisiteVerdict.php`, `PrerequisiteVerdictStatus.php` (new);
+`config/enrollment.php` (new); `app/Domain/Enrollment/EligibleSubjectEntry.php`
+(new); `app/Domain/Audit/AuditAction.php`, `AuditableType.php` (+
+`enrollment.submitted` / `enrollment`); `app/Domain/Notifications/NotificationType.php`
+(+ `enrollment_submitted`).
 
-**Docs:** `docs/api/openapi.yaml` (faculty-directory path, section-visibility
-notes), `docs/data-dictionary/section-planning.md`,
-`docs/history/2026-07-session-log.md` (this session: appended the full
-Phase 5 task-by-task record), `PROGRESS.md` (this session: full
-reconciliation, see below), `HANDOFF.md` (this session: deleted — folded
-into this file; see *Technical Decisions*).
+**Backend, API:** `app/Actions/Enrollment/BuildEligibleSubjectPool.php`,
+`SubmitEnrollment.php` (new); `Http/Controllers/Api/V1/EligibleSubjectController.php`,
+`EnrollmentController.php` (new); `Http/Requests/Api/V1/EligibleSubject/`,
+`Enrollment/StoreEnrollmentRequest.php` (new); `Http/Resources/Api/V1/EligibleSubjectResource.php`,
+`EnrollmentResource.php` (new); `Policies/EligibleSubjectPolicy.php`,
+`EnrollmentPolicy.php` (new); `Providers/AppServiceProvider.php`
+(`PrerequisiteEvaluator` binding, 2 new Gates); `routes/api.php` (3 new
+routes: `GET /eligible-subjects`, `GET`/`POST /enrollments`).
+
+**Frontend:** `src/features/schemas/enrollment-schema.ts`,
+`services/enrollment-service.ts`, `hooks/use-enrollment.ts`,
+`hooks/use-term-selection.ts` (new, shared by both new workspaces);
+`components/portal/eligible-subjects-workspace.tsx`,
+`enrollment-workspace.tsx` (new); `portal/module-registry.tsx` (renamed
++ 2 new modules), `portal/role-capabilities.ts` (Student module
+descriptions de-"preview"-ified); `components/pages/portal-module-page.tsx`
+(symbol rename only).
+
+**Docs:** `docs/reference/` (new — the two CSV spreadsheets, verbatim, plus
+a provenance README); `docs/api/openapi.yaml` (3 new paths, 5 new schemas);
+`PROGRESS.md` (this reconciliation).
 
 ## Commands and Tests Run
 
-The full gate below ran on the `phase-5-portal-workspaces` worktree on
-2026-07-29, before merge. The last three rows re-ran the focused/build
-verification on `main` after the merge.
-
 | Command | Result |
 |---|---|
-| `php artisan test --without-tty` | **519 passed / 1,964 assertions**, 109s |
-| `php artisan test --filter='FacultyMembersEndpointTest\|ApiSurfaceTest'` | **22 passed / 145 assertions** |
+| `php artisan test --without-tty` | **563 passed / 2,099 assertions**, ~30s |
 | `composer format:check` (Pint) | passed |
 | `vendor\bin\phpstan analyse --memory-limit=1G --no-progress` | No errors (level 8) |
 | `composer audit --locked` | No security vulnerability advisories found |
 | `npx @redocly/cli lint docs/api/openapi.yaml` | valid, no warnings |
-| `npm test` (Vitest, default parallel workers) | **flaky on this machine** — see *Known Issues*; 2–27 of 216 tests fail per run, a different subset each time |
-| `npx vitest run --no-file-parallelism` | **38 files / 216 tests passed**, run twice consecutively (87.9s, 79.9s) |
+| `npx vitest run --no-file-parallelism` | **41 files / 224 tests passed** |
 | `npm run typecheck` (`tsc --noEmit`) | passed |
-| `npm run lint` (`eslint . --max-warnings=0`) | passed |
-| `npm run format:check` (Prettier) | passed after one auto-fix to `module-registry.test.tsx` (this session's own edit) |
+| `npm run lint` (`eslint . --max-warnings=0`) | passed (after fixing 1 real `react-hooks/set-state-in-effect` violation in `use-term-selection.ts` and 2 non-null-assertion style errors — see *Technical Decisions*) |
+| `npm run format:check` (Prettier) | passed after one auto-fix pass over 5 new files |
 | `npm audit --audit-level=moderate` | 0 vulnerabilities |
 | `npm run build` (`next build`, Turbopack) | compiled successfully, 5 routes |
-| **On merged `main`:** `git merge phase-5-portal-workspaces` | 2 conflicts (`PROGRESS.md`, `HANDOFF.md`), both doc-only — 0 application-code conflicts. Resolved: kept branch's `PROGRESS.md`, kept `HANDOFF.md` deletion |
-| **On merged `main`:** `php artisan test --filter='FacultyMembersEndpointTest\|ApiSurfaceTest'` | **22 passed / 145 assertions** |
-| **On merged `main`:** `npx vitest run --no-file-parallelism` then `npm run build` (after `npm install` to pick up the newly merged `sonner` dependency) | **38 files / 216 tests passed**; build compiled successfully |
-| **Live E2E proof, real dev DB:** `php artisan serve --port=8100`, real Sanctum login as `chair.seed@grc.test`, `GET /api/v1/faculty-members` with the bearer token | **First attempt: HTTP 500** (see *Technical Decisions* — the real dev DB was missing all 5 Phase 4 tables/grants). After the DB fix below: **HTTP 200**, real data returned, audit row verified persisted (`SELECT ... FROM audit_logs`) |
-| **DB fix verification:** `php artisan migrate:status --database=mariadb_migrator` before/after; `CHECK TABLE mysql.user, mysql.tables_priv` before and after every `GRANT`; Windows Event Log scan (`Get-WinEvent -LogName Application`) after | All privilege tables `OK` throughout; no MariaDB-related Event Log entries; full backend suite re-run after the fix: **519 passed / 1,964 assertions**, unchanged |
+| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator` | exactly the 2 expected Phase 6 migrations pending, both `ALTER TABLE` on already-granted tables — confirmed no new `GRANT` needed |
+| **Real dev DB:** `php artisan migrate --database=mariadb_migrator --force` | both migrations applied, `DONE` |
+| **Real dev DB:** `php artisan db:seed --class="Database\Seeders\CcsSubjectSeeder" --force` | seeded; verified 9+ real CCS codes present via direct query |
+| **Live HTTP, real dev DB:** login as `student4.seed@grc.test`, `GET /api/v1/eligible-subjects?academic_term_id=2` | 5 eligible subjects with real available sections, 5 correctly excluded (4 by unmet prerequisite, 1 by no offered sections) — verified against real seeded curriculum/section data |
+| **Live HTTP, real dev DB:** `POST /api/v1/enrollments` with 2 real sections | **201 Created**; verified via direct SQL: exactly 1 `enrollments` row, 2 `enrollment_subjects` rows, 1 `queue_tickets` row, 1 `audit_logs` row, 1 `notifications` row, both sections' `enrolled_count` incremented by exactly 1 |
+| **Live HTTP, real dev DB:** repeat the same `POST` | **422**, `academic_term_id: "You already have an active enrollment for this term."` — duplicate guard confirmed live |
+| **Live HTTP, real dev DB:** `GET /api/v1/enrollments` | returns both the new and the prior withdrawn enrollment, newest first |
+| `CHECK TABLE mysql.user, mysql.tables_priv` (before/after live testing) | `OK` throughout |
+| `Get-WinEvent -LogName Application` (last 15 min, MariaDB-related) | no entries |
 
 ## Technical Decisions
 
-- **Fix the real dev database's missing Phase 4 schema and grants, found by
-  live E2E verification, not by the (green) test suite.** `php artisan test`
-  runs entirely against `grc_enrollment_test`/`grc_test`, a separate database
-  and user from the one the actual running application uses
-  (`grc_enrollment`/`grc_app`, per `.env`). Logging in as a real seeded user
-  and calling the new endpoint over HTTP — not just running tests — showed
-  the real dev database still had only the pre-Phase-4 schema: the 5 Phase 4
-  migrations (`audit_logs`, `notifications`, `prediction_runs`,
-  `section_demand_forecasts`, `attrition_predictions`) had only ever been
-  applied to the test database, never to `grc_enrollment`. Every audited
-  write path in the running app — curriculum, sections, schedule proposals,
-  student provisioning, notifications, and the new faculty directory — was
-  silently returning HTTP 500. Fixed with the user's explicit authorization,
-  following this project's own documented-safe procedure exactly (table-level
-  grants only, `CHECK TABLE` on the privilege tables before and after each
-  step, Windows Event Log checked after): granted `grc_migrator` the same
-  `SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER` privilege
-  pattern already used for all 22 existing tables on the 5 new table names
-  (MariaDB permits table-level grants on names that don't yet exist), ran
-  `php artisan migrate --database=mariadb_migrator --force` (additive
-  `CREATE TABLE` only — zero rows touched in any of the 21 existing tables),
-  then granted `grc_app` runtime `SELECT, INSERT, UPDATE, DELETE` on
-  `audit_logs` and `notifications` only — deliberately **not** on the 3 ML
-  tables, which Phase 4's own design states have "no HTTP, job, seeder,
-  frontend, or student attrition access." Verified live: the faculty-members
-  call now returns 200 with a real `audit_logs` row persisted; the full
-  backend suite still passes unchanged (519/1,964) after the schema change.
-- **This is a systemic gap, not specific to Phase 5 — flag it for whoever
-  works Phase 6 or later.** Any future migration must be applied to the real
-  dev database with `--database=mariadb_migrator` in addition to whatever
-  the test suite does automatically; nothing currently does this
-  automatically, and nothing failed loudly when it didn't happen for five
-  straight migrations across an entire merged phase.
-- **Retire `HANDOFF.md`, fold into `PROGRESS.md`.** Two parallel handoff
-  documents drifted (main's `HANDOFF.md` said "stopped, do not resume";
-  the branch's said "Task 9 in progress") while `PROGRESS.md` on `main` was
-  three phases stale. One file, updated at every milestone per `AGENTS.md`,
-  removes the drift risk. User's explicit choice among three options.
-- **Recompute Row 8 (nine role portals, 40 modules) from 5% to 33%.** 13 of
-  40 modules are now fully wired (forms, mutations, parsed queries, tests),
-  not scaffolding-only. 13/40 = 32.5%, rounded to 33%. Contribution:
-  25% × 33% = 8.25 (was 1.25). No other row's weight or Done% changed.
-- **Document the Vitest full-parallel flakiness as an Operational Caution,
-  not a code defect.** Five full-suite runs on this ~6 GB-free-memory Windows
-  machine failed between 2 and 27 different tests each time; every failing
-  test passed individually, and `--no-file-parallelism` passed clean twice.
-  Not fixed by changing shared `vitest.config.ts` defaults, since that would
-  slow every future local and CI run for a problem specific to this machine's
-  memory pressure, and CI's GitHub Actions job is already green. See
-  *Known Issues and Blockers*.
-- **Merge locally, do not push.** User-scoped authorization: finish Task 9,
-  commit, merge to local `main`. Explicitly no push to `origin/main`.
+- **Real GRC data changes what "the subject catalog" means for this
+  system.** The user supplied two real CCS block-section spreadsheets
+  mid-phase. Extracted only `code`/`title`/`units` (88 subjects) into an
+  additive seeder — schedule/room/faculty/modality stayed out of scope.
+  13 of 384 source rows had a SCHED ID in the UNITS column (a spreadsheet
+  column-alignment artifact); resolved by majority value per code, fully
+  documented in `docs/reference/README.md`.
+- **Widen `units` columns rather than leave them integer.** The real data
+  makes this non-optional: Leadership subjects are 1.5 units. Cast as
+  `float` (not left as a raw decimal string like
+  `academic_grades.final_grade`) because a unit count carries no §17 policy
+  ambiguity — coercion is safe.
+- **Grading policy is user-directed, not GRC-confirmed — encode both facts.**
+  `config/enrollment.php` ships with the user's explicit 2026-07-30 planning
+  direction (3.00 passing / 5.00 failing / lower-is-better / INC / NC) as
+  its *default*, so the system is demonstrable, but
+  `PrerequisiteEvaluator`'s `needs_verification` path is real, tested, and
+  reachable by clearing the config — never silently bypassed. Every
+  §17-pending value stays overridable via environment variable.
+- **FR-ENR-011's block-exclusive comparison uses a documented placeholder
+  string (`'irregular'`), not an invented enum.** The approved schema gives
+  `sections.is_block_exclusive` (bool) and `student_profiles.enrollment_category`
+  (free string) — nothing defines what the category values *are*. Matching
+  the existing `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE` precedent, the
+  comparison target is one named, clearly-commented placeholder constant,
+  swappable the moment GRC confirms real vocabulary.
+- **FR-ENR-003's "conflicting sections" check lives in Task 5, not Task 4.**
+  The acceptance criterion is "cannot be *submitted* together" — there is no
+  draft-selection state between viewing the pool and the atomic submission
+  for two sections to conflict against. `SectionConflictDetector` (reused
+  unchanged from Phase 2) runs pairwise across the submitted set instead.
+- **`EnrollmentWorkspace` uses plain `useState`, not React Hook Form.** The
+  "form" is N independent per-subject section pickers, not one object with
+  a schema — RHF's `zodResolver` model doesn't fit. FR-ENR-006 ("preserve
+  valid selections on error") falls out naturally: the selection map is
+  never cleared except on success.
+- **Recompute Row 4 (Process 2.0 backend) from 25% to 80%, and Row 8 (nine
+  role portals) from 33% to 38%.** Row 4: 3 of DFD 2.1–2.4's four
+  subprocesses are now complete (2.1 profile read, 2.2 eligible pool, 2.4
+  submission); only 2.3 "Generate Predictive Recommendation" remains,
+  deliberately deferred to Phase 9 as ML work — the same "80%, ML piece
+  deferred" shape already recorded for Row 3 (Process 1.0). Row 8: 15/40
+  modules now connected (32.5% → 37.5%, rounded to 38%). Contributions:
+  Row 4 10% × 80% = 8.00 (was 2.50); Row 8 25% × 38% = 9.50 (was 8.25).
+  Overall: 48.25 → 55.00 ≈ 55%. No other row's weight or Done% changed.
+- **Merge locally, do not push.** Same scope as every prior session:
+  finish Task 9, commit, merge to local `main`. No push without separate
+  explicit authorization.
 
 ## Known Issues and Blockers
 
-- **Frontend full-suite parallel flakiness (this machine only).** `npm test`
-  with Vitest's default multi-worker pool fails a variable 2–27 tests per
-  run under ~6 GB free memory; every one of those tests passes in isolation
-  and the whole suite passes clean under `npx vitest run
-  --no-file-parallelism`. Treat any lone `npm test` failure on this machine
-  as a false alarm until reproduced with `--no-file-parallelism`. Not
-  observed as a problem in CI (Frontend job already ✅).
-- **RESOLVED this session, but re-read before every future migration:** the
-  real dev database (`grc_enrollment`/`grc_app`) was silently 5 migrations
-  and 2 grants behind the test database for all of Phase 4. Fixed — see
-  *Technical Decisions*. The systemic gap remains: nothing currently applies
-  a merged migration to the real dev DB automatically. Before trusting any
-  new endpoint that writes to a new table, run
-  `php artisan migrate:status --database=mariadb_migrator` and check the
-  real dev DB, not just the test suite.
-- No other known blocking defect in Phase 5.
-- Phase 6 has an existing §17-blocked list (passing-grade rule, max
-  units/overload, irregular-student approval) — mechanism-implement,
-  value-flag, per the established pattern; see *Open Institutional
+- **Frontend full-suite parallel flakiness (this machine only) — unchanged
+  from Phase 5.** `npm test` with Vitest's default multi-worker pool is
+  unreliable under this machine's memory pressure; `npx vitest run
+  --no-file-parallelism` is the trustworthy invocation and is what this
+  session's 41/224 result used throughout.
+- No new blocking defect found in Phase 6. The real-data live proof (Task 9)
+  surfaced no gaps beyond what's already fixed and recorded above.
+- Phase 7 remains the next §17-heavy phase (passing-grade *rule* is now
+  user-directed but still GRC-unconfirmed; queue-ticket numbering, payment
+  confirmation fields, COM format all still open) — see *Open Institutional
   Decisions*.
 
 ## Uncommitted or Risky Changes
 
-None. `main`'s working tree is clean after the merge
-(commit `f08c2db`, preceded by `3c1ba23` which committed the pre-takeover
-pending docs). `frontend/node_modules` needed one `npm install` after the
-merge to pick up the newly merged `sonner` dependency — this touched no
-tracked file (`package-lock.json` was already correct from the merge). The
-`phase-5-portal-workspaces` branch and its worktree at
-`.worktrees/phase-5-portal-workspaces` remain on disk, unpushed and not
-deleted, in case a rollback is ever needed.
+None uncommitted. The branch `phase-6-process-2` and its worktree at
+`.worktrees/phase-6-process-2` hold 6 clean commits (Tasks 1, 2, 3, 4, 5,
+6-8) and are ready to merge; the real dev database now carries 2 additional
+applied migrations and the CcsSubjectSeeder's 88 rows, applied deliberately
+as part of this session's live verification (not a side effect).
 
 ## Exact Next Steps
 
-1. Start **Phase 6 — Process 2.0 + Student Portal**: Eligible Subject Pool
-   (DFD 2.2/2.3, FR-ENR-001–003/005/011), reusing the existing prerequisite
-   graph walk and `SectionConflictDetector`. Remember: prerequisite edges
-   hang off `curriculum_subject_id`, not a bare subject pair, and `sections`
-   join a student's curriculum **only via `subject_id`** — there is no
-   `curriculum_id` on `sections`.
-2. Then Enrollment Submission (DFD 2.4, FR-ENR-004/006–010): atomic
-   enrollment + `enrollment_subjects` + `queue_ticket`; the
-   `enrollments.active_academic_term_id` generated column already enforces
-   one-active-enrollment-per-term at the database layer.
-3. Before writing code, follow `AGENTS.md`: read `PRD.md` §5.2/DFD 2.1–2.4,
-   confirm current `git status`/`git log`, and use
-   `superpowers:brainstorming` → `superpowers:writing-plans` for a new
-   phase-6 plan/spec pair under `docs/superpowers/`.
+1. **Immediate:** merge `phase-6-process-2` into local `main` (`git merge
+   phase-6-process-2` from the main worktree). Expect a straightforward
+   fast-forward-style merge — this branch was created from `main` at its
+   current tip and `main` has no divergent commits since. Re-run
+   `php artisan test --without-tty` and `npx vitest run
+   --no-file-parallelism && npm run build` on merged `main` to confirm, then
+   append those results here.
+2. Start **Phase 7 — Process 3.0 + Remaining Portals** (FR-FIN-001–010):
+   grade encoding, Registrar approval/override, transferee credits,
+   withdrawal, payment queue, Digital COM. This is the most
+   ML-consequential phase before 9 — it produces the attrition model's
+   label and most of its features. Read `PRD.md` §5.3/DFD 3.x first.
+3. Before writing code, follow `AGENTS.md`: confirm current `git
+   status`/`git log`, and use `superpowers:brainstorming` →
+   `superpowers:writing-plans` for a new phase-7 plan/spec pair under
+   `docs/superpowers/`.
 4. Optional cleanup (not blocking): remove the
-   `.worktrees/phase-5-portal-workspaces` worktree and delete the merged
-   branch once the user confirms the merge is stable — ask first, per the
-   Git Safety Protocol.
+   `.worktrees/phase-6-process-2` worktree and delete the merged branch
+   once the user confirms the merge is stable — ask first, per the Git
+   Safety Protocol.
 
 ## Do Not Change
 
 - Bearer-token auth; never introduce session-cookie/CSRF auth or a Next.js
   API proxy.
 - Faculty own-assignment section scoping and Executive Director
-  published-only section visibility (both are now server-enforced in
-  `Section` scopes **and** `SectionPolicy` — frontend filtering is defense
-  in depth only, never the sole boundary).
+  published-only section visibility (server-enforced in `Section` scopes
+  **and** `SectionPolicy`).
 - Notification ownership (`user_id` never exposed) and audit privacy (no
   actor name/email ever rendered).
-- `session.userId`-scoped private TanStack Query keys — required for
-  multi-account cache isolation on a shared browser (Task 3 remediation).
+- `session.userId`-scoped private TanStack Query keys.
 - Temporary admission credentials: never persisted to storage, logs, form
   state, or query caches.
+- Every submitted enrollment section is re-validated server-side against a
+  freshly built eligible pool — never trust the client's cached view.
+- The `enrollments.active_academic_term_id` generated column and the
+  pre-insert duplicate-active-enrollment check that turns its constraint
+  violation into a clean 422 — do not remove either half.
+- `PrerequisiteEvaluator`'s `needs_verification` path — never make it
+  silently default to pass or fail when the grading policy is unconfigured.
+- The `'irregular'` block-section placeholder is clearly flagged as
+  provisional — do not treat it as confirmed institutional policy elsewhere.
 - No ML runtime behavior before Phase 9; do not touch the paused
   `ml-service`.
-- No new API beyond `GET /api/v1/faculty-members` was added this phase.
 - Do not push to `origin/main` without separate, explicit authorization.
 
 ---
 
-# ■ Overall Completion — 48%
+# ■ Overall Completion — 55%
 
 ```
-████████████░░░░░░░░░░░░  48 / 100
+██████████████░░░░░░░░░░░  55 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -259,24 +274,29 @@ against work that is **merged**, not work that is written or planned.
 | 1 | Platform & foundations — 3 service shells, 13 ADRs, OpenAPI, error contract, DB, CI | 8% | 90% | 7.20 |
 | 2 | Identity & RBAC — Sanctum, 9 roles, role middleware, Policies, query scopes | 7% | 85% | 5.95 |
 | 3 | Process 1.0 backend — scheduling (PRD §5.1) | 10% | 80% | 8.00 |
-| 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 25% | 2.50 |
+| 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 80% | 8.00 |
 | 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 15% | 1.80 |
 | 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 100% | 5.00 |
 | 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
-| 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 33% | 8.25 |
+| 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 38% | 9.50 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
 | 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **48.25 ≈ 48%** |
+| | **Total** | **100%** | | **55.00 ≈ 55%** |
 
 Two scores that look surprising, explained:
 
+- **Row 4 at 80%** — 3 of DFD 2.1–2.4's four Process 2.0 subprocesses are
+  complete (2.1 profile read, 2.2 eligible pool, 2.4 submission). Only 2.3
+  "Generate Predictive Recommendation" remains, deliberately deferred to
+  Phase 9 as ML work — the same shape as Row 3's 80% (FR-SCH-006 demand
+  forecast deferred the same way).
 - **Row 5 at 15%** — all 9 Process 3.0 tables are migrated, tested and
   documented, but not one Controller, Policy, Resource or route exists.
-- **Row 8 at 33%** — Phase 5 landed 13 of 40 modules, fully wired to real
-  APIs (forms, mutations, parsed queries, tests), for 6 of 9 roles. 13/40 =
-  32.5%, rounded to 33%; see Decisions. The other 27 modules (Student's 4,
-  Registrar Staff's 4, Accounting's 4, plus the Phase 7/9 modules for the
-  six Phase-5 roles) remain placeholder empty-states.
+- **Row 8 at 38%** — 15 of 40 modules are now fully wired to real APIs
+  (forms, mutations, parsed queries, tests), across 6 of 9 roles. 15/40 =
+  37.5%, rounded to 38%; see Decisions. The other 25 modules (Registrar
+  Staff's 4, Accounting's 4, plus the Phase 7/9 modules for the six
+  Phase-5/6 roles) remain placeholder empty-states.
 
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
@@ -289,12 +309,12 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | **30** |
+| **Live API routes** | **33** |
 | **Database tables** | **26** |
-| **Backend tests** | **519 passing (1,964 assertions)** · focused Phase 5 gate (faculty directory + API surface): 22/145 · Larastan level 8/175 files clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **38 files, 216 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
+| **Backend tests** | **563 passing (2,099 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
+| **Frontend tests** | **41 files, 224 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
-| **Portals functional** | 6 of 9 have at least one connected module (13 of 40 modules total); Student, Registrar Staff, Accounting Staff remain fully placeholder pending Phases 6–7 |
+| **Portals functional** | 7 of 9 have at least one connected module (15 of 40 modules total); Registrar Staff and Accounting Staff remain fully placeholder pending Phase 7 |
 
 ---
 
@@ -307,7 +327,7 @@ environments. Credentials are documented in `docs/testing/SEEDED_IDENTITIES.md`.
 
 | # | Role | PRD § | Enum value | Seeded identity | Backend authorization | Portal |
 |---|---|---|---|---|---|---|
-| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile + private notifications | ⬜ Phase 6–7 |
+| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile, eligible pool, enrollment submission + private notifications | ✅ Phase 6 (2 modules) · ⬜ Phase 7 (2 more) |
 | 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ✅ Phase 5 (3 modules) |
 | 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences + publication notifications | ✅ Phase 5 (2 modules) · ⬜ Phase 6–7 (2 more) |
 | 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ✅ Phase 5 (5 modules) · ⬜ Phase 9 (1 more) |
@@ -345,7 +365,7 @@ functional system before any model is trained.
 | 3 | **Next.js Migration** | ✅ Complete | 100 |
 | 4 | Cross-Cutting Backend & ML Substrate | ✅ Complete (merged and verified) | 100 |
 | 5 | Portals over Existing APIs (6 roles) | ✅ Complete (merged and verified) | 100 |
-| 6 | Process 2.0 + Student Portal | ⬜ Planned | 25 |
+| 6 | Process 2.0 + Student Portal | ✅ Complete (merged and verified) | 100 |
 | 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
 | 8 | Polish, Accessibility, E2E, Performance | ⬜ Planned | 25 |
 | 9 | **Process 4.0 — Machine Learning** | ⬜ Last | 3 |
@@ -535,20 +555,51 @@ remediation, and re-review verdict — is archived in
 `docs/history/2026-07-session-log.md` under "Phase 5 — Portals over
 Existing APIs, task-by-task record".
 
-## Phase 6 — Process 2.0 + Student Portal
+## Phase 6 — Process 2.0 + Student Portal ✅
 
-- **Eligible Subject Pool** (DFD 2.2/2.3 · FR-ENR-001–003, 005, 011). Reuse
-  the prerequisite graph walk and the conflict detector. Note two schema
-  facts: prerequisite edges hang off `curriculum_subject_id`, not a bare
-  subject pair; and `sections` join to a student's curriculum **only via
-  `subject_id`** — there is no `curriculum_id` on `sections`.
-- **Enrollment Submission** (DFD 2.4 · FR-ENR-004, 006–010). Atomic
-  enrollment + enrollment_subjects + queue_ticket. The
-  `enrollments.active_academic_term_id` generated column already enforces
-  one-active-per-term at the database layer.
+Nine tasks, all merged: fractional-unit schema + the real 88-subject CCS
+catalog, a config-driven grading policy with an explicit
+`needs_verification` fallback, the block-section eligibility mechanism, the
+Eligible Subject Pool and Enrollment Submission APIs, both Student portal
+modules, and the generalized (no-longer-Phase-5-specific) module registry.
 
-§17-blocked, mechanism-implemented-value-flagged: passing-grade rule,
-max units / overload, block-section eligibility.
+- **Eligible Subject Pool** (`GET /api/v1/eligible-subjects`, DFD 2.2 ·
+  FR-ENR-001–003, 005, 011). Every curriculum subject is returned with an
+  explainable verdict — `completed`, `already_selected`, `prerequisite`,
+  `prerequisite_advisory`, `no_sections_available`, `block_restricted`, or
+  `eligible` — reusing `SectionConflictDetector` is deferred to submission
+  (see below); prerequisite edges hang off `curriculum_subject_id`, not a
+  bare subject pair, and `sections` join a student's curriculum only via
+  `subject_id`, exactly as anticipated.
+- **Enrollment Submission** (`GET`/`POST /api/v1/enrollments`, DFD 2.4 ·
+  FR-ENR-004, 006–010). One transaction: enrollment + enrollment_subjects +
+  queue_ticket + audit entry + notification. The
+  `enrollments.active_academic_term_id` generated column enforces
+  one-active-per-term at the database layer; the request validator turns a
+  would-be constraint violation into a clean 422 first. Every submitted
+  section is re-validated against a freshly rebuilt pool — the client's
+  cached view is advisory only. `SectionConflictDetector` (reused unchanged
+  from Phase 2) runs here, pairwise across the submitted set, which is where
+  FR-ENR-003's "conflicting sections cannot be submitted together" is
+  actually enforced.
+- **Real institutional data.** The user supplied two real GRC College of
+  Computer Studies block-section spreadsheets mid-phase. 88 real subjects
+  (code/title/units only) were added via an additive seeder; `units` columns
+  were widened to `decimal` because Leadership subjects are genuinely 1.5
+  units; the grading comparison (3.00 passing / 5.00 failing, lower-is-better,
+  INC/NC) is the user's explicit direction, pre-populated as config default
+  but never hardcoded into logic.
+- **Live-verified, not just tested.** Applied both migrations to the real
+  dev database, seeded the real catalog into it, and ran the full pool →
+  submit → duplicate-rejection → list flow over real HTTP against a real
+  seeded student, confirming all 5 atomic side effects landed correctly.
+
+§17-blocked, mechanism-implemented-value-flagged: official passing-grade
+*confirmation* (the comparison logic exists and is user-directed, but GRC
+has not formally signed off), max units / overload (config exists, both
+values default to `null` = unenforced), block-section eligibility (schema
+exists, comparison uses a documented placeholder pending GRC's real
+regular/irregular vocabulary).
 
 ## Phase 7 — Process 3.0 + Remaining Portals
 
@@ -590,7 +641,7 @@ evaluation (§15.9).
 
 Source of truth: `frontend/src/features/portal/role-capabilities.ts` and
 `frontend/src/features/portal/module-registry.tsx`. A ✅ module is dispatched
-by `phaseFiveModuleRegistry` to a real workspace component backed by parsed
+by `connectedModuleRegistry` to a real workspace component backed by parsed
 API services and tests. Every other module is still a placeholder empty-state
 rendering *"This module is not connected to workflow or authorization APIs."*
 
@@ -600,8 +651,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Eligible Subjects | 6 | ⬜ |
-| Enrollment | 6 | ⬜ |
+| Eligible Subjects | 6 | ✅ |
+| Enrollment | 6 | ✅ |
 | Queue & Payment | 7 | ⬜ |
 | Grades & Digital COM | 7 | ⬜ |
 
@@ -619,7 +670,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 |---|---|---|
 | Availability Preferences | 5 | ✅ |
 | Teaching Schedule | 5 | ✅ |
-| Class Rosters | 6 | ⬜ |
+| Class Rosters | 7 | ⬜ deferred from Phase 6, needs its own roster endpoint |
 | Grade Submission | 7 | ⬜ |
 
 ### 4. Program Chair — 6 modules
@@ -681,14 +732,14 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Payment Confirmation | 7 | ⬜ |
 | COM Finalization | 7 | ⬜ |
 
-**Totals:** 40 modules · **13 done** (Phase 5) · 8 blocked on Phase 9 · 19
-remain for Phases 6–8.
+**Totals:** 40 modules · **15 done** (13 Phase 5 + 2 Phase 6) · 8 blocked on
+Phase 9 · 17 remain for Phase 7–8.
 
 ---
 
 # ■ What Is Built
 
-## API surface — 30 routes
+## API surface — 33 routes
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
@@ -712,6 +763,12 @@ private and audited)
 
 **`role:admission_staff`:** `POST /student-profiles`
 
+**No `role:` middleware, own-record only (Student):** `GET /eligible-subjects`
+(`EligibleSubjectPolicy`) · `GET`/`POST /enrollments` (`EnrollmentPolicy`) —
+same pattern as `student-profile.show`, matching the same shape
+`FacultyMemberPolicy`/`EligibleSubjectPolicy` use for a virtual (non-Eloquent)
+resource.
+
 **No `role:` middleware:** `PATCH /schedule-proposals/{id}` — one route serves
 six transitions, so `ScheduleProposalPolicy` resolves the ability from the
 request's `action` field (ADR 0011).
@@ -724,18 +781,25 @@ Curriculum: `subjects`, `curricula`, `curriculum_subjects`,
 `subject_prerequisites`.
 Scheduling: `sections`, `schedule_proposals`, `faculty_availabilities`,
 `faculty_subject_preferences`.
-Enrollment records (**schema only, no API**): `student_profiles`,
-`enrollments`, `enrollment_subjects`, `academic_grades`, `queue_tickets`,
-`payments`, `enrollment_documents`, `transferee_credits`,
-`withdrawal_requests`.
+Enrollment records: `student_profiles` (own-record read only, Phase 1),
+`enrollments`, `enrollment_subjects`, `queue_tickets` (**Phase 6 — API-backed**
+via `GET`/`POST /enrollments`). Still **schema only, no API**:
+`academic_grades`, `payments`, `enrollment_documents`, `transferee_credits`,
+`withdrawal_requests` (Phase 7).
 
 **Phase 4 additions:** operational `audit_logs` and `notifications`;
 schema-only `prediction_runs`, `section_demand_forecasts`, and
 `attrition_predictions`. The analytical tables have no API, job, seeder, or
 frontend and stay unused until Phase 9.
 
+**Phase 6 schema changes (no new tables):** `subjects.units` and
+`enrollments.total_units` widened `integer` → `decimal(_,1)`;
+`sections.is_block_exclusive` and `student_profiles.enrollment_category`
+added, both nullable mechanism-only columns.
+
 Seeders: `RoleUserSeeder`, `ProgramSeeder`, `AcademicTermSeeder`,
-`SubjectSeeder`, `CurriculumSeeder`, `SectionSeeder`, `DemoEnrollmentSeeder`.
+`SubjectSeeder`, `CcsSubjectSeeder` (Phase 6 — the real 88-subject GRC CCS
+catalog), `CurriculumSeeder`, `SectionSeeder`, `DemoEnrollmentSeeder`.
 All `local`/`testing` only.
 
 ## Frontend
@@ -750,13 +814,10 @@ shell, branded 404. Plus 18 reviewed shadcn components (12 from Phase 3 + 6
 added in Phase 5: Table, Select, Dialog, Alert Dialog, Pagination, Toaster),
 a strict-Zod API client with PATCH/DELETE support, and TanStack Query.
 
-13 of 40 modules are now real workspaces wired to live API data — see the
-Portal Feature Matrix above. The other 27 remain placeholders. 12 of the 13
-non-auth, non-health resource groups in the 30-route inventory are now
-consumed by some UI (up from none before Phase 5, when only `health` and the
-3 `auth/*` routes were consumed by the landing/login screens). The one
-unconsumed resource is `GET /student-profile` (the caller's own record),
-reserved for the Phase 6 Student Portal.
+15 of 40 modules are now real workspaces wired to live API data — see the
+Portal Feature Matrix above. The other 25 remain placeholders. Every
+non-auth, non-health resource group in the 33-route inventory now has at
+least one UI consumer.
 
 There is one auth path. The dev-only demo mode and its committed credential
 file were deleted in Phase 3.
@@ -765,10 +826,12 @@ file were deleted in Phase 3.
 
 13 ADRs · `docs/api/openapi.yaml` (Redocly clean) · `docs/api/error-contract.md` ·
 7 merged data-dictionary pages plus the Phase 4
-`cross-cutting-backend.md` · `docs/testing/SEEDED_IDENTITIES.md` (now the only
-credential doc) · `docs/history/2026-07-session-log.md` (now including the
-Phase 5 task-by-task record). `HANDOFF.md` was retired 2026-07-29 — this file
-is the sole progress/handoff document, per `AGENTS.md`.
+`cross-cutting-backend.md` · `docs/testing/SEEDED_IDENTITIES.md` (the only
+credential doc) · `docs/history/2026-07-session-log.md` (Phase 5's
+task-by-task record) · `docs/reference/README.md` (Phase 6 — provenance for
+the two real CCS block-section spreadsheets). `HANDOFF.md` was retired
+2026-07-29 — this file is the sole progress/handoff document, per
+`AGENTS.md`.
 
 ---
 
@@ -841,6 +904,16 @@ seeders are restricted to `local`/`testing` and hash the password through the
 predates this policy — re-run `php artisan db:seed`. The seeders are
 idempotent and do not delete unrelated users.
 
+**PHP's `json_encode` drops the `.0` from a whole-number float — write test
+assertions against `3`, not `3.0`.** A `decimal`-backed Eloquent attribute
+cast to `'float'` (e.g. `Enrollment::total_units`) serializes a value of
+exactly `3.0` as the JSON literal `3`, which `json_decode(..., true)` then
+returns as a PHP `int`. `assertJsonPath('data.total_units', 3.0)` fails with
+"asserting that 3 is identical to 3.0" even though the API is correct — use
+`3` (or, better, exercise a genuinely fractional value like `4.5` so the test
+actually proves decimal precision survives the round trip). Cost real time
+in Phase 6's `EnrollmentsEndpointTest`.
+
 **`npm test` (default Vitest parallel workers) is flaky on this machine —
 use `npx vitest run --no-file-parallelism` for a trustworthy result.** Five
 full-suite runs during Phase 5 Task 9 failed a variable 2–27 of 216 tests, a
@@ -862,12 +935,12 @@ used for section viability thresholds.
 
 | Unconfirmed decision | Blocks |
 |---|---|
-| Official passing-grade rule, special marks, equivalent grades | Phase 6 (FR-ENR-002) |
-| Maximum regular units and overload approval workflow | Phase 6 (FR-ENR-004) |
-| Registrar approval requirements for regular vs irregular students | Phase 6 (FR-ENR-011) |
+| Official passing-grade rule, special marks, equivalent grades | Phase 6 — **mechanism implemented** (`config/enrollment.php`, `PrerequisiteEvaluator`), pre-populated with the user's 2026-07-30 direction; still needs formal GRC sign-off (FR-ENR-002) |
+| Maximum regular units and overload approval workflow | Phase 6 — **mechanism implemented**, both caps default `null` (unenforced) until GRC sets a value; no overload approval workflow exists (FR-ENR-004) |
+| Regular/irregular student classification and block-section reservation | Phase 6 — **mechanism implemented** (`sections.is_block_exclusive`, `student_profiles.enrollment_category`), comparison uses a documented placeholder string pending GRC's real vocabulary (FR-ENR-011) |
 | Section-viability threshold and exception authority | Phase 2 (implemented informational-only) |
 | Room capacity source and conflict rules | Phase 2 (deliberately out of scope, ADR 0010) |
-| Enrollment reservation timeout and seat-release rules | Phase 6 |
+| Enrollment reservation timeout and seat-release rules | Phase 6 — still unimplemented; seats are reserved immediately and permanently on submission |
 | Queue-ticket reset, priority, serving-number policy, Accounting authority | Phase 7 |
 | Payment confirmation fields and supporting references | Phase 7 |
 | Whether COR and COM are distinct artifacts | Phase 7 |
@@ -894,6 +967,12 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-30 | Ingest only `code`/`title`/`units` from the user's two real CCS block-section spreadsheets, as an additive seeder alongside the existing synthetic catalog. | User's explicit choice among three CSV-scope options. Schedule/room/faculty/modality columns were out of Phase 6's DFD 2.2/2.4 scope; replacing the synthetic catalog would have broken 500+ existing tests and 4 demo student lifecycles for no Phase 6 benefit. |
+| 2026-07-30 | Pre-populate `config/enrollment.php`'s grading comparison with the user's explicit direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC) rather than leaving it null by default. | User's explicit Phase 6 planning direction, distinct from formal GRC §17 sign-off — recorded as such in the config file's own docblock. Makes the system demonstrable end to end while keeping `PrerequisiteEvaluator`'s `needs_verification` fallback real, tested, and reachable by clearing the value. |
+| 2026-07-30 | Use a documented placeholder string (`'irregular'`) for FR-ENR-011's block-section comparison rather than inventing a confirmed regular/irregular enum. | The approved schema (`is_block_exclusive` bool, `enrollment_category` free string) gives no reference value to compare against. Matches the existing `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE` pattern — demonstrable and testable without asserting GRC's real vocabulary. |
+| 2026-07-30 | Defer FR-ENR-003's cross-section conflict exclusion from the eligible-pool endpoint (Task 4) to the submission endpoint (Task 5). | The acceptance criterion is "cannot be *submitted* together" — there is no draft-selection state at pool-view time for two sections to conflict against. `SectionConflictDetector` (reused unchanged from Phase 2) runs pairwise across the submitted set at submission instead. |
+| 2026-07-30 | Recompute Row 4 (Process 2.0 backend) from 25% to 80%, and Row 8 (nine role portals) from 33% to 38%, moving overall completion from 48% to 55%. | Row 4: 3 of DFD 2.1–2.4's four subprocesses are complete, the 4th (ML recommendation) deliberately deferred to Phase 9 — the same shape already recorded for Row 3. Row 8: 15/40 modules connected. No other row's weight or Done% changed. |
+| 2026-07-30 | Merge `phase-6-process-2` into local `main` without pushing to `origin/main`. | Same user-scoped authorization pattern as every prior phase: finish the task, commit, merge locally; push needs separate explicit authorization. |
 | 2026-07-29 | Retire `HANDOFF.md`; fold its verified content into `PROGRESS.md` and delete it. | Two competing handoff documents had drifted — `main`'s said Phase 4 was the active objective, the branch's said "stopped, do not resume Task 9" — while `PROGRESS.md` was three phases stale on `main`. `AGENTS.md` already designates `PROGRESS.md` as the update target at every milestone; a second file undermines that. User's explicit choice among three options offered at takeover. |
 | 2026-07-29 | Recompute Portal-row (row 8) Done% from 5% to 33% (13/40 modules), moving overall completion from 41% to 48%. | Phase 5 landed 13 of 40 modules fully wired to live APIs, not scaffolding. No other row's weight or Done% changed; per the standing recompute rule, only a closed phase's own row moves. |
 | 2026-07-29 | Merge `phase-5-portal-workspaces` into local `main` without pushing to `origin/main`. | User-scoped authorization at takeover: finish Task 9, commit, merge locally; push requires separate explicit authorization not given in this session. |
@@ -944,4 +1023,5 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-28 | Roadmap replan, Next.js decision, PROGRESS restructure | Merged (ADR 0013); PRD → v3.2 |
 | 2026-07-28 | Phase 3 — Next.js migration | Merged; 145/145 tests, live proof 17/17 |
 | 2026-07-28 | Phase 4 — Cross-cutting backend & ML substrate | Merged; 503/503 backend tests |
-| 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | This entry; merged; backend 519/519, frontend 216/216 |
+| 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | Merged; backend 519/519, frontend 216/216 |
+| 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog) | This entry; live-verified; backend 563/563, frontend 224/224 |
