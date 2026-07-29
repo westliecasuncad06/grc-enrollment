@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
+import { sectionsQueryKey } from "@/features/hooks/use-reference-data"
+import { scheduleProposalsQueryKey } from "@/features/hooks/use-scheduling"
 import { availableScheduleActions } from "@/features/services/scheduling-service"
 import { renderWithSession } from "@/tests/render-app"
 
@@ -130,6 +132,39 @@ describe("ScheduleDecisionWorkspace", () => {
       }),
     )
     resolvePatch?.(new Response(JSON.stringify({ data: draftProposal })))
+  })
+
+  it("invalidates both proposal and section caches after a successful transition", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: deanApprovedProposal })),
+        )
+      return Promise.resolve(new Response(JSON.stringify(proposals)))
+    })
+    const { queryClient } = renderWithSession(<ScheduleDecisionWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries")
+    await user.click(
+      await screen.findByRole("button", { name: "Approve as Dean" }),
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm decision" }))
+    await screen.findByRole("button", { name: "Approve as Dean" })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: scheduleProposalsQueryKey("5"),
+      exact: true,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: sectionsQueryKey("5"),
+      exact: true,
+    })
   })
 
   it("requires an explicit confirmation before a dean transition", async () => {

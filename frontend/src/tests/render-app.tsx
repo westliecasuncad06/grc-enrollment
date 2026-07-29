@@ -65,6 +65,7 @@ export function renderWithAuthProvider(
       </QueryClientProvider>,
     ),
     gateway,
+    queryClient,
   }
 }
 
@@ -104,5 +105,6 @@ export function renderWithSession(
       </QueryClientProvider>,
     ),
     value,
+    queryClient,
   }
 }

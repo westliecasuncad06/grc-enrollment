@@ -60,15 +60,19 @@ describe("phaseFiveModuleRegistry", () => {
     }
   })
 
-  it("does not connect a module outside the Phase 5 registry", () => {
-    const plannedModuleId = [...knownPortalModuleIds].find(
+  it("does not connect any module outside the Phase 5 registry", () => {
+    const plannedModuleIds = [...knownPortalModuleIds].filter(
       (moduleId) => !phaseFiveModuleIds.includes(moduleId as never),
     )
 
-    expect(plannedModuleId).toBeDefined()
-    expect(
-      plannedModuleId && phaseFiveModuleRegistry[plannedModuleId as never],
-    ).toBeUndefined()
+    expect(plannedModuleIds).toHaveLength(
+      knownPortalModuleIds.size - phaseFiveModuleIds.length,
+    )
+    for (const moduleId of plannedModuleIds) {
+      expect(
+        phaseFiveModuleRegistry[moduleId as never],
+      ).toBeUndefined()
+    }
   })
 
   it("keeps the registry independent from role authorization", () => {
