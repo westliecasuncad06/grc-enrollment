@@ -2,12 +2,14 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\AuditLog;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
@@ -83,6 +85,10 @@ final class SectionsEndpointTest extends TestCase
         $response->assertJsonPath('data.section_code', 'A');
         $response->assertJsonPath('data.remaining_seats', 40);
         $this->assertDatabaseHas('sections', ['section_code' => 'A', 'capacity' => 40]);
+        self::assertSame(
+            AuditAction::SECTION_CREATED,
+            AuditLog::query()->sole()->action,
+        );
     }
 
     public function test_a_non_program_chair_role_cannot_create_a_section(): void
@@ -101,6 +107,7 @@ final class SectionsEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         $this->assertDatabaseMissing('sections', ['section_code' => 'A']);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_the_same_section_code_cannot_repeat_for_one_subject_in_one_term(): void
@@ -114,12 +121,15 @@ final class SectionsEndpointTest extends TestCase
             'section_code' => 'A', 'capacity' => 40, 'status' => 'planned',
         ])->assertCreated();
 
+        $auditCountBeforeRejection = AuditLog::query()->count();
+
         $response = $this->withToken($token)->postJson('/api/v1/sections', [
             'academic_term_id' => $term->id, 'subject_id' => $subject->id,
             'section_code' => 'A', 'capacity' => 35, 'status' => 'planned',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertSame($auditCountBeforeRejection, AuditLog::query()->count());
     }
 
     public function test_a_program_chair_cannot_double_book_a_professor(): void
@@ -138,6 +148,8 @@ final class SectionsEndpointTest extends TestCase
             'capacity' => 40, 'status' => 'planned',
         ])->assertCreated();
 
+        $auditCountBeforeRejection = AuditLog::query()->count();
+
         $response = $this->withToken($token)->postJson('/api/v1/sections', [
             'academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('CS102')->id,
             'section_code' => 'A', 'professor_id' => $professor->id,
@@ -146,6 +158,7 @@ final class SectionsEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertSame($auditCountBeforeRejection, AuditLog::query()->count());
     }
 
     public function test_the_same_professor_may_teach_non_overlapping_sections(): void
@@ -194,6 +207,10 @@ final class SectionsEndpointTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('data.capacity', 45);
         $response->assertJsonPath('data.status', 'published');
+        self::assertSame(
+            1,
+            AuditLog::query()->where('action', AuditAction::SECTION_UPDATED)->count(),
+        );
     }
 
     public function test_updating_a_section_does_not_conflict_with_itself(): void
@@ -238,5 +255,6 @@ final class SectionsEndpointTest extends TestCase
 
         $response->assertForbidden();
         $this->assertDatabaseHas('sections', ['id' => $section->id, 'capacity' => 40]);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 }

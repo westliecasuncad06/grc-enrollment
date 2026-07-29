@@ -8,9 +8,11 @@ use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoEnrollmentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -18,21 +20,7 @@ final class DemoEnrollmentSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const SEED_PASSWORD = 'local-development-seed-password';
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        putenv('GRC_SEED_PASSWORD='.self::SEED_PASSWORD);
-    }
-
-    protected function tearDown(): void
-    {
-        putenv('GRC_SEED_PASSWORD');
-
-        parent::tearDown();
-    }
+    private const SEED_PASSWORD = 'password';
 
     public function test_it_seeds_one_enrollment_per_demonstrated_lifecycle_state(): void
     {
@@ -116,13 +104,22 @@ final class DemoEnrollmentSeederTest extends TestCase
         }
     }
 
-    public function test_it_fails_closed_when_the_seed_password_is_absent(): void
+    public function test_every_seeded_student_account_uses_the_shared_development_password(): void
     {
         putenv('GRC_SEED_PASSWORD');
 
-        $this->expectException(RuntimeException::class);
+        $this->seed(DatabaseSeeder::class);
 
-        $this->seed(DemoEnrollmentSeeder::class);
+        $students = User::query()->where('role', 'student')->get();
+
+        $this->assertCount(4, $students);
+
+        foreach ($students as $student) {
+            $this->assertTrue(
+                Hash::check(self::SEED_PASSWORD, $student->password),
+                "Seeded student {$student->email} does not use the shared development password.",
+            );
+        }
     }
 
     /**

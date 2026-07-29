@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Scheduling\CreateScheduleProposal;
 use App\Actions\Scheduling\TransitionScheduleProposal;
-use App\Domain\Scheduling\ScheduleProposalStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ScheduleProposal\StoreScheduleProposalRequest;
 use App\Http\Requests\Api\V1\ScheduleProposal\UpdateScheduleProposalRequest;
 use App\Http\Resources\Api\V1\ScheduleProposalResource;
 use App\Models\ScheduleProposal;
 use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,16 +54,19 @@ final class ScheduleProposalController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function store(StoreScheduleProposalRequest $request): JsonResponse
-    {
+    public function store(
+        StoreScheduleProposalRequest $request,
+        CreateScheduleProposal $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
         $user = $this->authenticatedUser($request);
         $this->authorize('create', ScheduleProposal::class);
 
-        $proposal = ScheduleProposal::create([
-            'academic_term_id' => $request->validated('academic_term_id'),
-            'submitted_by' => $user->id,
-            'status' => ScheduleProposalStatus::Draft,
-        ]);
+        $proposal = $action->execute(
+            (int) $request->validated('academic_term_id'),
+            $user,
+            $contextFactory->fromRequest($request),
+        );
 
         $response = ScheduleProposalResource::make($proposal)->response($request);
         $response->setStatusCode(201);
@@ -77,6 +81,7 @@ final class ScheduleProposalController extends Controller
         UpdateScheduleProposalRequest $request,
         ScheduleProposal $scheduleProposal,
         TransitionScheduleProposal $transitioner,
+        AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $user = $this->authenticatedUser($request);
 
@@ -85,10 +90,16 @@ final class ScheduleProposalController extends Controller
 
         $this->authorize($ability, ScheduleProposal::class);
 
-        $transitioner->execute($scheduleProposal, $action, $user, $request->validated('decision_reason'));
+        $proposal = $transitioner->execute(
+            $scheduleProposal,
+            $action,
+            $user,
+            $request->validated('decision_reason'),
+            $contextFactory->fromRequest($request),
+        );
 
         return $this->cachePrivateResponse(
-            ScheduleProposalResource::make($scheduleProposal->refresh())->response($request),
+            ScheduleProposalResource::make($proposal)->response($request),
         );
     }
 

@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Faculty\CreateFacultyAvailability;
+use App\Actions\Faculty\DeleteFacultyAvailability;
+use App\Actions\Faculty\UpdateFacultyAvailability;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\FacultyAvailability\StoreFacultyAvailabilityRequest;
 use App\Http\Requests\Api\V1\FacultyAvailability\UpdateFacultyAvailabilityRequest;
 use App\Http\Resources\Api\V1\FacultyAvailabilityResource;
 use App\Models\FacultyAvailability;
 use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,18 +40,20 @@ final class FacultyAvailabilityController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function store(StoreFacultyAvailabilityRequest $request): JsonResponse
-    {
+    public function store(
+        StoreFacultyAvailabilityRequest $request,
+        CreateFacultyAvailability $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
         $user = $this->authenticatedUser($request);
         $this->authorize('create', FacultyAvailability::class);
 
-        $availability = FacultyAvailability::create([
-            'professor_id' => $user->id,
+        $availability = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),
             'day_of_week' => $request->validated('day_of_week'),
             'starts_at_time' => $request->validated('starts_at_time'),
             'ends_at_time' => $request->validated('ends_at_time'),
-        ]);
+        ], $contextFactory->fromRequest($request));
 
         $response = FacultyAvailabilityResource::make($availability)->response($request);
         $response->setStatusCode(201);
@@ -58,30 +64,38 @@ final class FacultyAvailabilityController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function update(UpdateFacultyAvailabilityRequest $request, FacultyAvailability $facultyAvailability): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function update(
+        UpdateFacultyAvailabilityRequest $request,
+        FacultyAvailability $facultyAvailability,
+        UpdateFacultyAvailability $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
         $this->authorize('update', $facultyAvailability);
 
-        $facultyAvailability->update([
+        $availability = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),
             'day_of_week' => $request->validated('day_of_week'),
             'starts_at_time' => $request->validated('starts_at_time'),
             'ends_at_time' => $request->validated('ends_at_time'),
-        ]);
+        ], $facultyAvailability, $contextFactory->fromRequest($request));
 
-        return $this->cachePrivateResponse(FacultyAvailabilityResource::make($facultyAvailability)->response($request));
+        return $this->cachePrivateResponse(FacultyAvailabilityResource::make($availability)->response($request));
     }
 
     /**
      * @throws AuthenticationException
      */
-    public function destroy(Request $request, FacultyAvailability $facultyAvailability): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function destroy(
+        Request $request,
+        FacultyAvailability $facultyAvailability,
+        DeleteFacultyAvailability $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
         $this->authorize('delete', $facultyAvailability);
 
-        $facultyAvailability->delete();
+        $action->execute($user, $facultyAvailability, $contextFactory->fromRequest($request));
 
         $response = new JsonResponse(null, 204);
         $response->headers->set('Cache-Control', 'no-store, private');

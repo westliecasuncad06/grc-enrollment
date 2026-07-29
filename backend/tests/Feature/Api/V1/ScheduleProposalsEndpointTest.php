@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
@@ -9,6 +10,8 @@ use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Scheduling\ScheduleProposalStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\AuditLog;
+use App\Models\Notification;
 use App\Models\ScheduleProposal;
 use App\Models\Section;
 use App\Models\Subject;
@@ -61,6 +64,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonPath('data.status', 'draft');
         $this->assertDatabaseHas('schedule_proposals', ['academic_term_id' => $term->id, 'status' => 'draft']);
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CREATED, AuditLog::query()->sole()->action);
     }
 
     public function test_a_non_program_chair_role_cannot_submit_a_proposal(): void
@@ -73,6 +77,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         ]);
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_a_term_cannot_have_two_active_proposals(): void
@@ -83,12 +88,14 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
             'academic_term_id' => $term->id,
         ])->assertCreated();
+        $auditCountBeforeRejection = AuditLog::query()->count();
 
         $response = $this->withToken($token)->postJson('/api/v1/schedule-proposals', [
             'academic_term_id' => $term->id,
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertSame($auditCountBeforeRejection, AuditLog::query()->count());
     }
 
     public function test_a_new_proposal_is_allowed_once_the_prior_one_is_closed(): void
@@ -106,6 +113,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         ]);
 
         $response->assertCreated();
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CREATED, AuditLog::query()->sole()->action);
     }
 
     public function test_a_learner_scoped_role_does_not_see_a_draft_proposal(): void
@@ -139,6 +147,10 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.status', 'dean_approved');
         self::assertNotNull($proposal->refresh()->decided_by);
+        self::assertSame(
+            AuditAction::SCHEDULE_PROPOSAL_DEAN_APPROVED,
+            AuditLog::query()->sole()->action,
+        );
     }
 
     public function test_executive_approve_transitions_a_dean_approved_proposal(): void
@@ -151,6 +163,10 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $response = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_approve']);
 
         $response->assertOk()->assertJsonPath('data.status', 'executive_approved');
+        self::assertSame(
+            AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_APPROVED,
+            AuditLog::query()->sole()->action,
+        );
     }
 
     /**
@@ -173,6 +189,11 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.status', 'published');
         self::assertSame('published', $section->refresh()->status->value);
+        self::assertSame(
+            [AuditAction::SECTION_PUBLISHED, AuditAction::SCHEDULE_PROPOSAL_PUBLISHED],
+            AuditLog::query()->orderBy('id')->pluck('action')->all(),
+        );
+        self::assertSame([$chair->id], Notification::query()->pluck('user_id')->all());
     }
 
     public function test_close_transitions_a_published_proposal(): void
@@ -185,6 +206,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $response = $this->withToken($registrarToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'close']);
 
         $response->assertOk()->assertJsonPath('data.status', 'closed');
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CLOSED, AuditLog::query()->sole()->action);
     }
 
     public function test_a_dean_cannot_approve_a_proposal_that_is_not_in_draft(): void
@@ -197,6 +219,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $response = $this->withToken($deanToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'dean_approve']);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_an_executive_director_cannot_perform_the_deans_approval(): void
@@ -210,6 +233,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         self::assertSame('draft', $proposal->refresh()->status->value);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_returning_a_proposal_to_draft_requires_a_reason(): void
@@ -221,6 +245,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $withoutReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_return']);
         $withoutReason->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseCount('audit_logs', 0);
 
         $withReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", [
             'action' => 'executive_return',
@@ -228,6 +253,9 @@ final class ScheduleProposalsEndpointTest extends TestCase
         ]);
         $withReason->assertOk()->assertJsonPath('data.status', 'draft');
         $withReason->assertJsonPath('data.decision_reason', 'Missing a required general education subject.');
+        $audit = AuditLog::query()->sole();
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_RETURNED, $audit->action);
+        self::assertSame('Missing a required general education subject.', $audit->reason);
     }
 
     public function test_a_registrar_head_cannot_publish(): void
@@ -241,5 +269,6 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response->assertForbidden();
         self::assertSame('executive_approved', $proposal->refresh()->status->value);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 }

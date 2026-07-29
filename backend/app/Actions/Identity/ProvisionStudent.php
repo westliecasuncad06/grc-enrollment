@@ -2,12 +2,16 @@
 
 namespace App\Actions\Identity;
 
+use App\Domain\Audit\AuditableType;
+use App\Domain\Audit\AuditAction;
+use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Support\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,12 +22,17 @@ use Illuminate\Support\Facades\DB;
  */
 final class ProvisionStudent
 {
+    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+
     /**
      * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, curriculum_id: int, year_level: int}  $data
      */
-    public function handle(array $data): StudentProfile
-    {
-        return DB::transaction(function () use ($data): StudentProfile {
+    public function handle(
+        array $data,
+        User $actor,
+        AuditRequestContext $context,
+    ): StudentProfile {
+        return DB::transaction(function () use ($data, $actor, $context): StudentProfile {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -32,7 +41,7 @@ final class ProvisionStudent
                 'status' => UserStatus::Active,
             ]);
 
-            return StudentProfile::create([
+            $profile = StudentProfile::create([
                 'user_id' => $user->id,
                 'student_number' => $data['student_number'],
                 'program_id' => $data['program_id'],
@@ -41,6 +50,29 @@ final class ProvisionStudent
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
             ]);
+            $profile->refresh();
+
+            $this->auditRecorder->record(
+                $actor,
+                AuditAction::STUDENT_PROFILE_PROVISIONED,
+                AuditableType::STUDENT_PROFILE,
+                $profile->id,
+                null,
+                [
+                    'user_id' => $profile->user_id,
+                    'student_profile_id' => $profile->id,
+                    'role' => $user->role->value,
+                    'program_id' => $profile->program_id,
+                    'curriculum_id' => $profile->curriculum_id,
+                    'year_level' => $profile->year_level,
+                    'admission_status' => $profile->admission_status->value,
+                    'academic_standing' => $profile->academic_standing->value,
+                ],
+                null,
+                $context,
+            );
+
+            return $profile;
         });
     }
 }

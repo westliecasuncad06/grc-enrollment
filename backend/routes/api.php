@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AcademicTermController;
+use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Api\V1\CurriculumController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
@@ -45,6 +47,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
         Route::get('/schedule-proposals', [ScheduleProposalController::class, 'index'])->name('schedule-proposals.index');
+        Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
         // Every transition (dean_approve, dean_return, executive_approve,
         // executive_return, publish, close) needs a *different* role, so a
@@ -93,6 +97,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // first production consumer of the admission_staff role.
         Route::middleware('role:admission_staff')->group(function (): void {
             Route::post('/student-profiles', [StudentProfileController::class, 'store'])->name('student-profiles.store');
+        });
+
+        Route::middleware('role:registrar_head')->group(function (): void {
+            Route::get('/audit-logs', AuditLogController::class)
+                ->name('audit-logs.index');
         });
     });
 });

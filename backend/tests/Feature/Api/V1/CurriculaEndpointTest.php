@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\Subject;
@@ -65,8 +67,11 @@ final class CurriculaEndpointTest extends TestCase
 
         $response = $this->withToken($token)->getJson('/api/v1/curricula');
 
-        $response->assertOk()->assertHeader('Cache-Control', 'no-store, private');
-        self::assertSame(['Active Curriculum'], collect($response->json('data'))->pluck('name')->all());
+        $response
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Active Curriculum');
     }
 
     public function test_a_program_chair_can_create_a_curriculum_with_subjects_and_prerequisites(): void
@@ -94,17 +99,21 @@ final class CurriculaEndpointTest extends TestCase
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonPath('data.name', 'BSCS 2026 Curriculum');
         $response->assertJsonPath('data.status', 'draft');
-        self::assertCount(2, $response->json('data.subjects'));
-        $dataStructuresPayload = collect($response->json('data.subjects'))
-            ->firstWhere('code', 'CS102');
-        self::assertSame(
-            [$intro->id],
-            collect($dataStructuresPayload['prerequisites'])->pluck('prerequisite_subject_id')->all(),
+        $response->assertJsonCount(2, 'data.subjects');
+        $response->assertJsonPath('data.subjects.1.code', 'CS102');
+        $response->assertJsonCount(1, 'data.subjects.1.prerequisites');
+        $response->assertJsonPath(
+            'data.subjects.1.prerequisites.0.prerequisite_subject_id',
+            $intro->id,
         );
 
         $this->assertDatabaseHas('curricula', ['name' => 'BSCS 2026 Curriculum']);
         $this->assertDatabaseCount('curriculum_subjects', 2);
         $this->assertDatabaseCount('subject_prerequisites', 1);
+        self::assertSame(
+            AuditAction::CURRICULUM_CREATED,
+            AuditLog::query()->sole()->action,
+        );
     }
 
     public function test_a_non_program_chair_role_cannot_create_a_curriculum(): void
@@ -122,6 +131,7 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         $this->assertDatabaseMissing('curricula', ['name' => 'Should Not Exist']);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     /**
@@ -151,6 +161,7 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
         $this->assertDatabaseMissing('curricula', ['name' => 'Cyclic Curriculum']);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_a_program_chair_cannot_create_a_transitive_prerequisite_cycle(): void
@@ -180,6 +191,7 @@ final class CurriculaEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_updating_a_curriculum_fully_replaces_its_subject_placements(): void
@@ -211,8 +223,13 @@ final class CurriculaEndpointTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('data.name', 'BSCS 2026 Curriculum (revised)');
         $response->assertJsonPath('data.status', 'active');
-        self::assertSame(['CS102'], collect($response->json('data.subjects'))->pluck('code')->all());
+        $response->assertJsonCount(1, 'data.subjects');
+        $response->assertJsonPath('data.subjects.0.code', 'CS102');
         $this->assertDatabaseCount('curriculum_subjects', 1);
+        self::assertSame(
+            1,
+            AuditLog::query()->where('action', AuditAction::CURRICULUM_UPDATED)->count(),
+        );
     }
 
     public function test_a_non_program_chair_role_cannot_update_a_curriculum(): void
@@ -230,5 +247,6 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertForbidden();
         $this->assertDatabaseHas('curricula', ['name' => 'Existing']);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 }

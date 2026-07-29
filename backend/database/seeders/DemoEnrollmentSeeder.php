@@ -55,6 +55,8 @@ use RuntimeException;
  */
 final class DemoEnrollmentSeeder extends Seeder
 {
+    private const PASSWORD = 'password';
+
     /**
      * @var list<array{
      *     email: string, name: string, number: string,
@@ -149,7 +151,7 @@ final class DemoEnrollmentSeeder extends Seeder
             ['email' => $definition['email']],
             [
                 'name' => $definition['name'],
-                'password' => $this->seedPassword(),
+                'password' => self::PASSWORD,
                 'role' => UserRole::Student,
                 'status' => UserStatus::Active,
             ],
@@ -426,24 +428,6 @@ final class DemoEnrollmentSeeder extends Seeder
         }
 
         return $user;
-    }
-
-    /**
-     * Fails closed, exactly as RoleUserSeeder does: an absent password must
-     * stop the seeder rather than silently create accounts with an empty secret.
-     */
-    private function seedPassword(): string
-    {
-        $password = getenv('GRC_SEED_PASSWORD');
-
-        if (! is_string($password) || trim($password) === '') {
-            throw new RuntimeException(
-                'GRC_SEED_PASSWORD is not set. Set it to a local development '
-                .'secret before seeding; it is never committed or logged.',
-            );
-        }
-
-        return $password;
     }
 
     /**

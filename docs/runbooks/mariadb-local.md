@@ -88,11 +88,11 @@ them.
 
 ## Seeding the nine role identities
 
-`GRC_SEED_PASSWORD` must be set; the seeder fails closed without it and
-refuses to run outside `local`/`testing`.
+Every synthetic identity uses the shared password `password`. The seeder
+refuses to run outside `local`/`testing`, and the password is stored only as a
+Laravel hash.
 
 ```powershell
-$env:GRC_SEED_PASSWORD = <a local secret>
 php artisan db:seed --class=RoleUserSeeder
 ```
 

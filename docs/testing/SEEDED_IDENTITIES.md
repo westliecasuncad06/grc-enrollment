@@ -5,7 +5,7 @@
 
 These are **database fixtures**, not production accounts. They exist so every
 PRD role can be exercised against real Sanctum authentication during
-development.
+development. Every synthetic login uses the shared password `password`.
 
 ## These are now the only sign-in credentials
 
@@ -16,8 +16,7 @@ were deleted in the Next.js migration** (roadmap Phase 3, ADR 0013) — they
 predated real Sanctum authentication, and porting their environment guard to
 Next.js risked making a committed password valid in a production build.
 
-The identities below are the only way to sign in. Their password lives in
-`GRC_SEED_PASSWORD` and is never committed.
+The identities below are the primary role-based sign-ins.
 
 ## The nine identities
 
@@ -41,18 +40,32 @@ All are created with status `active`. Emails use the reserved `.test` TLD
 
 ## The password
 
-**Not recorded in this file, in any commit, or in `PROGRESS.md`.**
+All synthetic identities use:
 
-The seeder reads `GRC_SEED_PASSWORD` from the environment, hashes it through
-Laravel, and **fails closed** if it is absent — it will not fall back to a
-default or empty secret. Your local value is in the gitignored
-`backend/.env`.
+```text
+password
+```
+
+This deliberately guessable credential is permitted only because both
+`RoleUserSeeder` and `DemoEnrollmentSeeder` refuse to run outside Laravel's
+`local` and `testing` environments. Laravel hashes the value before storing
+it; the database never contains the plain-text password.
+
+## Additional student scenarios
+
+The full `DatabaseSeeder` also creates three extra synthetic student accounts
+for portal and enrollment-state testing. They use the same shared password.
+
+| Name | Email | Scenario |
+|---|---|---|
+| Seed Student Two | `student2.seed@grc.test` | Pending Registrar approval |
+| Seed Student Three | `student3.seed@grc.test` | Pending payment |
+| Seed Student Four | `student4.seed@grc.test` | Withdrawn |
 
 ## Running the seeder
 
 ```powershell
 cd backend
-$env:GRC_SEED_PASSWORD = '<your local secret>'
 php artisan db:seed --class=RoleUserSeeder
 ```
 
@@ -69,9 +82,9 @@ which asserts that it:
 
 - creates exactly one active user per role, with unique `@grc.test` emails;
 - stores only a bcrypt hash, never the plain-text password;
+- gives every synthetic login the shared development password `password`;
 - is idempotent — reseeding updates the same rows, creating no duplicates;
 - never deletes unrelated users;
-- throws rather than seeding anything when `GRC_SEED_PASSWORD` is absent;
 - throws rather than seeding anything outside the `local` and `testing`
   environments, even when invoked programmatically.
 

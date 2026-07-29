@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\StudentProfile;
@@ -75,6 +77,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $this->assertDatabaseHas('users', ['email' => 'new.student@grc.test', 'role' => 'student']);
         $this->assertDatabaseHas('student_profiles', ['student_number' => 'STU-2027-0001']);
+        self::assertSame(AuditAction::STUDENT_PROFILE_PROVISIONED, AuditLog::query()->sole()->action);
     }
 
     public function test_a_non_admission_staff_role_cannot_provision_a_student(): void
@@ -94,6 +97,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         $this->assertDatabaseMissing('users', ['email' => 'blocked.student@grc.test']);
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_a_curriculum_from_a_different_program_is_rejected(): void
@@ -117,6 +121,7 @@ final class StudentProfilesEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     public function test_duplicate_email_is_rejected(): void
@@ -136,6 +141,7 @@ final class StudentProfilesEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseCount('audit_logs', 0);
     }
 
     /**

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Scheduling\CreateSection;
+use App\Actions\Scheduling\UpdateSection;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Section\StoreSectionRequest;
 use App\Http\Requests\Api\V1\Section\UpdateSectionRequest;
 use App\Http\Resources\Api\V1\SectionResource;
 use App\Models\Section;
 use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,12 +39,15 @@ final class SectionController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function store(StoreSectionRequest $request): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function store(
+        StoreSectionRequest $request,
+        CreateSection $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
         $this->authorize('create', Section::class);
 
-        $section = Section::create([
+        $section = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),
             'subject_id' => $request->validated('subject_id'),
             'section_code' => $request->validated('section_code'),
@@ -53,7 +59,7 @@ final class SectionController extends Controller
             'capacity' => $request->validated('capacity'),
             'viability_threshold' => $request->validated('viability_threshold'),
             'status' => $request->validated('status'),
-        ]);
+        ], $contextFactory->fromRequest($request));
 
         $response = SectionResource::make($section)->response($request);
         $response->setStatusCode(201);
@@ -64,12 +70,16 @@ final class SectionController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function update(UpdateSectionRequest $request, Section $section): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function update(
+        UpdateSectionRequest $request,
+        Section $section,
+        UpdateSection $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
         $this->authorize('update', $section);
 
-        $section->update([
+        $section = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),
             'subject_id' => $request->validated('subject_id'),
             'section_code' => $request->validated('section_code'),
@@ -81,7 +91,7 @@ final class SectionController extends Controller
             'capacity' => $request->validated('capacity'),
             'viability_threshold' => $request->validated('viability_threshold'),
             'status' => $request->validated('status'),
-        ]);
+        ], $section, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(SectionResource::make($section)->response($request));
     }

@@ -159,7 +159,8 @@ decision and are not encoded here.
 points of the PRD §4.2 lifecycle (`enrolled`, `pending_registrar_approval`,
 `pending_payment`, `withdrawn`), exercising every table on this page plus the
 unique-active-enrollment rule. `local`/`testing` environments only; fails
-closed without `GRC_SEED_PASSWORD`. See
+closed outside those environments. Every synthetic student login uses the
+shared development password `password`, stored only as a Laravel hash. See
 `tests/Feature/Database/DemoEnrollmentSeederTest.php` and
 `EnrollmentRecordsMigrationTest.php`.
 

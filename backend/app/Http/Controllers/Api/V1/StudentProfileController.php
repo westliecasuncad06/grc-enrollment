@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\StudentProfile\StoreStudentProfileRequest;
 use App\Http\Resources\Api\V1\StudentProfileResource;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,9 +18,12 @@ final class StudentProfileController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function store(StoreStudentProfileRequest $request, ProvisionStudent $provisioner): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function store(
+        StoreStudentProfileRequest $request,
+        ProvisionStudent $provisioner,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
         $this->authorize('create', StudentProfile::class);
 
         $profile = $provisioner->handle([
@@ -30,7 +34,7 @@ final class StudentProfileController extends Controller
             'program_id' => $request->validated('program_id'),
             'curriculum_id' => $request->validated('curriculum_id'),
             'year_level' => $request->validated('year_level'),
-        ]);
+        ], $actor, $contextFactory->fromRequest($request));
 
         $response = StudentProfileResource::make($profile)->response($request);
         $response->setStatusCode(201);

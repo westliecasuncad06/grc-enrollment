@@ -15,21 +15,7 @@ final class RoleUserSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const SEED_PASSWORD = 'local-development-seed-password';
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        putenv('GRC_SEED_PASSWORD='.self::SEED_PASSWORD);
-    }
-
-    protected function tearDown(): void
-    {
-        putenv('GRC_SEED_PASSWORD');
-
-        parent::tearDown();
-    }
+    private const SEED_PASSWORD = 'password';
 
     public function test_it_seeds_exactly_one_active_user_for_every_role(): void
     {
@@ -104,13 +90,18 @@ final class RoleUserSeederTest extends TestCase
         $this->assertDatabaseCount('academic_terms', 0);
     }
 
-    public function test_it_fails_closed_when_the_seed_password_is_absent(): void
+    public function test_it_uses_the_shared_development_password_without_environment_configuration(): void
     {
         putenv('GRC_SEED_PASSWORD');
 
-        $this->expectException(RuntimeException::class);
-
         $this->seed(RoleUserSeeder::class);
+
+        foreach (User::all() as $user) {
+            $this->assertTrue(
+                Hash::check(self::SEED_PASSWORD, $user->password),
+                "Seeded user {$user->email} does not use the shared development password.",
+            );
+        }
     }
 
     /**
@@ -141,16 +132,19 @@ final class RoleUserSeederTest extends TestCase
         $this->assertDatabaseCount('users', 0);
     }
 
-    public function test_it_seeds_nothing_when_the_password_is_absent(): void
+    public function test_a_legacy_environment_override_cannot_change_the_shared_password(): void
     {
-        putenv('GRC_SEED_PASSWORD');
+        putenv('GRC_SEED_PASSWORD=legacy-local-password');
 
         try {
-            app(RoleUserSeeder::class)->run();
-        } catch (RuntimeException) {
-            // Expected; asserted in test_it_fails_closed_when_the_seed_password_is_absent.
+            $this->seed(RoleUserSeeder::class);
+        } finally {
+            putenv('GRC_SEED_PASSWORD');
         }
 
-        $this->assertDatabaseCount('users', 0);
+        foreach (User::all() as $user) {
+            $this->assertTrue(Hash::check(self::SEED_PASSWORD, $user->password));
+            $this->assertFalse(Hash::check('legacy-local-password', $user->password));
+        }
     }
 }

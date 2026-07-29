@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Audit\AuditAction;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicTerm;
+use App\Models\AuditLog;
 use App\Models\FacultyAvailability;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,6 +63,12 @@ final class FacultyAvailabilitiesEndpointTest extends TestCase
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonPath('data.professor_id', $professor->id);
         $this->assertDatabaseHas('faculty_availabilities', ['professor_id' => $professor->id, 'day_of_week' => 1]);
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_user_id' => $professor->id,
+            'action' => AuditAction::FACULTY_AVAILABILITY_CREATED,
+            'auditable_id' => $response->json('data.id'),
+        ]);
+        self::assertSame(1, AuditLog::query()->count());
     }
 
     public function test_a_non_faculty_role_cannot_create_availability(): void

@@ -22,11 +22,13 @@ final class ApiSurfaceTest extends TestCase
             'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'GET|HEAD api/v1/academic-terms',
+            'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/health',
+            'GET|HEAD api/v1/notifications',
             'GET|HEAD api/v1/programs',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/sections',
@@ -35,6 +37,7 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/curricula/{curriculum}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
+            'PATCH api/v1/notifications/{notification}/read',
             'PATCH api/v1/schedule-proposals/{scheduleProposal}',
             'PATCH api/v1/sections/{section}',
             'POST api/v1/auth/login',
@@ -53,6 +56,9 @@ final class ApiSurfaceTest extends TestCase
         $guarded = [
             'api.v1.auth.logout',
             'api.v1.auth.me',
+            'api.v1.audit-logs.index',
+            'api.v1.notifications.index',
+            'api.v1.notifications.read',
             'api.v1.programs',
             'api.v1.academic-terms',
             'api.v1.subjects',
@@ -174,6 +180,28 @@ final class ApiSurfaceTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('role:admission_staff', $route->gatherMiddleware());
+    }
+
+    public function test_cross_cutting_read_routes_have_the_exact_role_boundaries(): void
+    {
+        $auditRoute = Route::getRoutes()->getByName('api.v1.audit-logs.index');
+
+        $this->assertNotNull($auditRoute);
+        $this->assertContains('role:registrar_head', $auditRoute->gatherMiddleware());
+
+        foreach (['api.v1.notifications.index', 'api.v1.notifications.read'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+
+            $roleMiddleware = array_filter(
+                $route->gatherMiddleware(),
+                static fn ($middleware): bool => is_string($middleware)
+                    && str_starts_with($middleware, 'role:'),
+            );
+
+            $this->assertSame([], array_values($roleMiddleware));
+        }
     }
 
     public function test_the_login_route_is_throttled(): void

@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Faculty\CreateFacultySubjectPreference;
+use App\Actions\Faculty\DeleteFacultySubjectPreference;
+use App\Actions\Faculty\UpdateFacultySubjectPreference;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\FacultySubjectPreference\StoreFacultySubjectPreferenceRequest;
 use App\Http\Requests\Api\V1\FacultySubjectPreference\UpdateFacultySubjectPreferenceRequest;
 use App\Http\Resources\Api\V1\FacultySubjectPreferenceResource;
 use App\Models\FacultySubjectPreference;
 use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,17 +39,19 @@ final class FacultySubjectPreferenceController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function store(StoreFacultySubjectPreferenceRequest $request): JsonResponse
-    {
+    public function store(
+        StoreFacultySubjectPreferenceRequest $request,
+        CreateFacultySubjectPreference $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
         $user = $this->authenticatedUser($request);
         $this->authorize('create', FacultySubjectPreference::class);
 
-        $preference = FacultySubjectPreference::create([
-            'professor_id' => $user->id,
+        $preference = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),
             'subject_id' => $request->validated('subject_id'),
             'rank' => $request->validated('rank'),
-        ]);
+        ], $contextFactory->fromRequest($request));
 
         $response = FacultySubjectPreferenceResource::make($preference)->response($request);
         $response->setStatusCode(201);
@@ -59,30 +65,36 @@ final class FacultySubjectPreferenceController extends Controller
     public function update(
         UpdateFacultySubjectPreferenceRequest $request,
         FacultySubjectPreference $facultySubjectPreference,
+        UpdateFacultySubjectPreference $action,
+        AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
-        $this->authenticatedUser($request);
+        $user = $this->authenticatedUser($request);
         $this->authorize('update', $facultySubjectPreference);
 
-        $facultySubjectPreference->update([
+        $preference = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),
             'subject_id' => $request->validated('subject_id'),
             'rank' => $request->validated('rank'),
-        ]);
+        ], $facultySubjectPreference, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(
-            FacultySubjectPreferenceResource::make($facultySubjectPreference)->response($request),
+            FacultySubjectPreferenceResource::make($preference)->response($request),
         );
     }
 
     /**
      * @throws AuthenticationException
      */
-    public function destroy(Request $request, FacultySubjectPreference $facultySubjectPreference): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function destroy(
+        Request $request,
+        FacultySubjectPreference $facultySubjectPreference,
+        DeleteFacultySubjectPreference $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
         $this->authorize('delete', $facultySubjectPreference);
 
-        $facultySubjectPreference->delete();
+        $action->execute($user, $facultySubjectPreference, $contextFactory->fromRequest($request));
 
         $response = new JsonResponse(null, 204);
         $response->headers->set('Cache-Control', 'no-store, private');

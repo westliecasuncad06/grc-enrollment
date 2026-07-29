@@ -2,13 +2,15 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Actions\Curriculum\SynchronizeCurriculumSubjects;
+use App\Actions\Curriculum\CreateCurriculum;
+use App\Actions\Curriculum\UpdateCurriculum;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Curriculum\StoreCurriculumRequest;
 use App\Http\Requests\Api\V1\Curriculum\UpdateCurriculumRequest;
 use App\Http\Resources\Api\V1\CurriculumResource;
 use App\Models\Curriculum;
 use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,21 +41,20 @@ final class CurriculumController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function store(StoreCurriculumRequest $request, SynchronizeCurriculumSubjects $synchronizer): JsonResponse
-    {
-        $this->authenticatedUser($request);
+    public function store(
+        StoreCurriculumRequest $request,
+        CreateCurriculum $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
         $this->authorize('create', Curriculum::class);
 
-        $curriculum = Curriculum::create([
+        $curriculum = $action->execute($user, [
             'program_id' => $request->validated('program_id'),
             'name' => $request->validated('name'),
             'effective_school_year' => $request->validated('effective_school_year'),
             'status' => $request->validated('status'),
-        ]);
-
-        $synchronizer->execute($curriculum, $request->subjects());
-
-        $curriculum->load(self::EAGER_LOAD);
+        ], $request->subjects(), $contextFactory->fromRequest($request));
 
         $response = CurriculumResource::make($curriculum)->response($request);
         $response->setStatusCode(201);
@@ -67,20 +68,17 @@ final class CurriculumController extends Controller
     public function update(
         UpdateCurriculumRequest $request,
         Curriculum $curriculum,
-        SynchronizeCurriculumSubjects $synchronizer,
+        UpdateCurriculum $action,
+        AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
-        $this->authenticatedUser($request);
+        $user = $this->authenticatedUser($request);
         $this->authorize('update', $curriculum);
 
-        $curriculum->update([
+        $curriculum = $action->execute($user, [
             'name' => $request->validated('name'),
             'effective_school_year' => $request->validated('effective_school_year'),
             'status' => $request->validated('status'),
-        ]);
-
-        $synchronizer->execute($curriculum, $request->subjects());
-
-        $curriculum->load(self::EAGER_LOAD);
+        ], $request->subjects(), $curriculum, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(CurriculumResource::make($curriculum)->response($request));
     }

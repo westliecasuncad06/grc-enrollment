@@ -61,6 +61,15 @@ tags:
       profile, with no broader role-based visibility. `admission_status` and
       `academic_standing` vocabularies are provisional pending PRD §17
       approval.
+  - name: Notifications
+    description: >
+      Private, user-owned in-app notifications. Every authenticated role may
+      list only its own notifications and may mark only its own notification
+      as read; the owning user ID is never exposed.
+  - name: Audit
+    description: >
+      Immutable operational audit history. Only the Registrar Head may read
+      this endpoint, and every successful list view is itself audited.
 paths:
   /api/v1/health:
     get:
@@ -1152,6 +1161,249 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/notifications:
+    get:
+      operationId: getNotifications
+      summary: List the authenticated user's notifications
+      description: >
+        Returns only notifications owned by the authenticated user, newest
+        first. The optional unread filter and pagination inputs are preserved
+        in pagination links. Notification resources deliberately omit
+        `user_id`.
+      security:
+        - bearerAuth: []
+      tags:
+        - Notifications
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: unread_only
+          in: query
+          required: false
+          description: When true, return only notifications whose read_at is null.
+          schema:
+            type: boolean
+            default: false
+        - name: per_page
+          in: query
+          required: false
+          description: Number of notifications per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          description: One-based page number.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The authenticated user's notifications.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedNotificationCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "422":
+          description: A query parameter failed validation.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/notifications/{notification}/read:
+    patch:
+      operationId: patchNotificationRead
+      summary: Mark an owned notification as read
+      description: >
+        Sets read_at once and is idempotent: retrying preserves the original
+        read timestamp. A different user's notification is forbidden without
+        disclosing its content.
+      security:
+        - bearerAuth: []
+      tags:
+        - Notifications
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: notification
+          in: path
+          required: true
+          description: Notification primary key.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The notification is marked as read.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No notification exists for the supplied primary key.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/audit-logs:
+    get:
+      operationId: getAuditLogs
+      summary: List operational audit history
+      description: >
+        Registrar Head only. Results are ordered newest first and may be
+        filtered by the exact audited action, entity type, actor, or inclusive
+        UTC date bounds. Each successful view creates an
+        `audit_log.list_viewed` record after the result query is built.
+      security:
+        - bearerAuth: []
+      tags:
+        - Audit
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - curriculum.created
+              - curriculum.updated
+              - faculty_availability.created
+              - faculty_availability.updated
+              - faculty_availability.deleted
+              - faculty_subject_preference.created
+              - faculty_subject_preference.updated
+              - faculty_subject_preference.deleted
+              - section.created
+              - section.updated
+              - schedule_proposal.created
+              - schedule_proposal.dean_approved
+              - schedule_proposal.dean_returned
+              - schedule_proposal.executive_approved
+              - schedule_proposal.executive_returned
+              - schedule_proposal.published
+              - section.published
+              - schedule_proposal.closed
+              - student_profile.provisioned
+              - audit_log.list_viewed
+        - name: auditable_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - curriculum
+              - faculty_availability
+              - faculty_subject_preference
+              - section
+              - schedule_proposal
+              - student_profile
+              - audit_log
+        - name: actor_user_id
+          in: query
+          required: false
+          description: Existing user primary key.
+          schema:
+            type: integer
+            minimum: 1
+        - name: from
+          in: query
+          required: false
+          description: Inclusive lower UTC calendar date.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          description: Inclusive upper UTC calendar date; cannot precede from.
+          schema:
+            type: string
+            format: date
+        - name: per_page
+          in: query
+          required: false
+          description: Number of audit records per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          description: One-based page number.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: Filtered operational audit history.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAuditLogCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -1729,6 +1981,209 @@ components:
         minimum_grade:
           type: string
           maxLength: 255
+    NotificationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/Notification"
+    PaginatedNotificationCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    Notification:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - notification_type
+        - message
+        - read_at
+        - created_at
+      properties:
+        type:
+          type: string
+          const: notification
+        id:
+          type: integer
+          minimum: 1
+        notification_type:
+          type: string
+          enum:
+            - schedule_published
+        message:
+          type: string
+        read_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      description: Private notification resource; the owning user_id is never exposed.
+    PaginatedAuditLogCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    AuditLog:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - actor_user_id
+        - actor_role
+        - actor_role_label
+        - action
+        - auditable_type
+        - auditable_id
+        - before_values
+        - after_values
+        - reason
+        - request_id
+        - ip_address
+        - created_at
+      properties:
+        type:
+          type: string
+          const: audit_log
+        id:
+          type: integer
+          minimum: 1
+        actor_user_id:
+          type: integer
+          minimum: 1
+        actor_role:
+          type: string
+          enum:
+            - student
+            - admission_staff
+            - faculty
+            - program_chair
+            - dean
+            - executive_director
+            - registrar_head
+            - registrar_staff
+            - accounting_staff
+        actor_role_label:
+          type: string
+        action:
+          type: string
+        auditable_type:
+          type: string
+        auditable_id:
+          type:
+            - integer
+            - "null"
+          minimum: 1
+        before_values:
+          type:
+            - object
+            - "null"
+          additionalProperties: true
+        after_values:
+          type:
+            - object
+            - "null"
+          additionalProperties: true
+        reason:
+          type:
+            - string
+            - "null"
+        request_id:
+          type: string
+          pattern: "^[A-Za-z0-9._-]{1,128}$"
+          maxLength: 128
+        ip_address:
+          type:
+            - string
+            - "null"
+          maxLength: 45
+        created_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+    PaginationLinks:
+      type: object
+      additionalProperties: false
+      required:
+        - first
+        - last
+        - prev
+        - next
+      properties:
+        first:
+          type: string
+          format: uri
+        last:
+          type: string
+          format: uri
+        prev:
+          type:
+            - string
+            - "null"
+          format: uri
+        next:
+          type:
+            - string
+            - "null"
+          format: uri
+    PaginationMeta:
+      type: object
+      description: >
+        Laravel pagination metadata. The four required stable fields are the
+        public contract; Laravel may include additional navigation details.
+      required:
+        - current_page
+        - last_page
+        - per_page
+        - total
+      properties:
+        current_page:
+          type: integer
+          minimum: 1
+        last_page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+      additionalProperties: true
     FacultyAvailabilitiesResponse:
       type: object
       additionalProperties: false

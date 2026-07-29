@@ -1,6 +1,6 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-28 · **PRD version:** v3.2 · **Branch:** `main`
+**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `phase-4-cross-cutting-backend`
 
 ---
 
@@ -46,9 +46,9 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | 26 |
-| **Database tables** | 21 migrated, all reversible |
-| **Backend tests** | 348 passing (939 assertions) · Larastan level 8 clean · Pint clean |
+| **Live API routes** | 26 merged baseline · **29 in the Phase 4 worktree** |
+| **Database tables** | 21 merged baseline · **26 in the Phase 4 worktree** |
+| **Backend tests** | Phase 4 worktree: **503 passing (1,899 assertions)** · focused Phase 4 gate: 152/935 · migration gate: 27/70 after fresh + 5-step rollback + reapply · Larastan/Pint/audit clean |
 | **Frontend tests** | 15 files, 145 tests, Vitest |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
 | **Portals functional** | 0 of 9 |
@@ -58,24 +58,31 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 # ■ The Nine System Users
 
 All nine roles exist as `App\Domain\Identity\UserRole` enum cases and are seeded
-one-per-role by `RoleUserSeeder`. Credentials live in `GRC_SEED_PASSWORD` and
-are documented in `docs/testing/SEEDED_IDENTITIES.md` — **never committed**.
+one-per-role by `RoleUserSeeder`. Every local/testing synthetic account uses
+the shared password `password`; the seeders refuse to run in production-like
+environments. Credentials are documented in `docs/testing/SEEDED_IDENTITIES.md`.
 
 | # | Role | PRD § | Enum value | Seeded identity | Backend authorization | Portal |
 |---|---|---|---|---|---|---|
-| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own-record profile read | ⬜ Phase 6–7 |
-| 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students | ⬜ Phase 5 |
-| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own-record availability + preferences | ⬜ Phase 5–7 |
-| 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals | ⬜ Phase 5, 9 |
-| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return | ⬜ Phase 5, 7, 9 |
-| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve + publish | ⬜ Phase 5, 7, 9 |
-| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ⚠️ close proposal only | ⬜ Phase 5, 7–9 |
-| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ❌ none yet | ⬜ Phase 7 |
-| 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ❌ none yet | ⬜ Phase 7 |
+| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile + private notifications | ⬜ Phase 6–7 |
+| 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ⬜ Phase 5 |
+| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences + publication notifications | ⬜ Phase 5–7 |
+| 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ⬜ Phase 5, 9 |
+| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ⬜ Phase 5, 7, 9 |
+| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ⬜ Phase 5, 7, 9 |
+| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal + audit logs + private notifications | ⬜ Phase 5, 7–9 |
+| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7 |
+| 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7 |
+
+The local database was reseeded on 2026-07-29. All 12 synthetic
+`*.seed@grc.test` accounts—the nine role identities plus three additional
+student lifecycle scenarios—were verified against the shared password
+`password`.
 
 Every role can already sign in, receive a bearer token, and get a role-filtered
-navigation set. What none of them can yet do is complete a real task — that is
-what Phases 5–7 deliver.
+navigation set. Several roles can complete backend tasks through the API, as
+the table records, but the portal UI is still placeholder-only; Phases 5–7
+connect those workflows to each role's portal.
 
 ---
 
@@ -93,7 +100,7 @@ functional system before any model is trained.
 | 1 | Identity, RBAC & the Nine Users | ✅ Complete | 85 |
 | 2 | Process 1.0 — Scheduling backend | ✅ Complete (2 deferred) | 80 |
 | 3 | **Next.js Migration** | ✅ Complete | 100 |
-| 4 | Cross-Cutting Backend & ML Substrate | ⬅ **Next** | 0 |
+| 4 | Cross-Cutting Backend & ML Substrate | ✅ Verified in worktree · pending integration | 0 |
 | 5 | Portals over Existing APIs (5 roles) | ⬜ Planned | 0 |
 | 6 | Process 2.0 + Student Portal | ⬜ Planned | 25 |
 | 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
@@ -153,7 +160,8 @@ FR-SCH-001 through FR-SCH-005 and FR-SCH-007 through FR-SCH-009.
   (ADR 0011).
 
 **Deferred:** FR-SCH-006 demand forecast → Phase 9 (needs ML).
-FR-SCH-010 audit logging → Phase 4 (cross-cutting).
+FR-SCH-010 audit logging is implemented in the Phase 4 worktree and closes on
+integration.
 
 ## Phase 3 — Next.js Migration ✅
 
@@ -199,18 +207,49 @@ data and httpOnly-cookie auth, both rejected in ADR 0013.
 
 ## Phase 4 — Cross-Cutting Backend & ML Substrate
 
-The 5 remaining PRD §10.4 tables. Placed before the portals because the portal
-shell's notification centre is currently a disabled button, and because
-retrofitting audit onto three more processes' writes costs far more later.
+The worktree now contains the five remaining PRD §10.4 tables and all planned
+Phase 4 behavior. It is placed before the portals because the portal shell's
+notification centre is still disabled and because later business processes
+must produce complete audit and analytical history from their first write.
 
-- `audit_logs` — actor, action, auditable type/id, before/after, reason,
-  request ID, IP. Satisfies the deferred **FR-SCH-010** and is a prerequisite
-  for FR-FIN-002's "reason required on every override".
-- `notifications` + `GET /notifications`, `PATCH /notifications/{n}/read`.
-- Retrofit audit onto existing privileged writes.
+**Implemented in the worktree:**
+
+- `audit_logs` with actor/action/entity snapshots, reason, request ID and IP;
+  application-level immutability; and transaction-coupled rollback.
+- Registrar Head-only `GET /api/v1/audit-logs`, with validated filters,
+  deterministic pagination, private/no-store responses, safe Resources, and
+  an `audit_log.list_viewed` event created after page materialization.
+- `notifications` plus authenticated user-owned
+  `GET /api/v1/notifications` and idempotent
+  `PATCH /api/v1/notifications/{notification}/read`; `user_id` is never
+  exposed.
+- Complete audit retrofit for curriculum graphs, faculty availability and
+  preferences, sections, schedule-proposal creation/transitions/publication,
+  and atomic student provisioning. Audit failure rolls back each domain
+  write.
+- Schedule publication notifies the submitting Program Chair and every unique
+  non-null professor assigned to a newly published section, exactly once per
+  recipient, in the publication transaction.
 - **ML substrate, schema-only:** `prediction_runs`,
-  `section_demand_forecasts`, `attrition_predictions`, plus the design for
-  §5.5's `HISTORICAL DATA` store.
+  `section_demand_forecasts`, and `attrition_predictions`, with lineage,
+  uniqueness, range/bounds checks, fixed-point casts, and no HTTP, job,
+  seeder, frontend, or student attrition access.
+- Complete `HISTORICAL DATA` physical mapping in
+  `docs/data-dictionary/cross-cutting-backend.md`; no duplicate generic
+  `historical_data` table. `report_exports` remains Phase 9.
+
+**Fresh takeover verification so far:** the full backend suite passes
+503 tests / 1,899 assertions and the focused Phase 4 gate passes 152 tests /
+935 assertions; the route inventory is exactly 29; no prediction public
+boundary or direct write in the six refactored controllers exists; OpenAPI
+semantic lint and `git diff --check` pass. A fresh migration of all 26 tables,
+rollback and reapplication of exactly the five Phase 4 migrations, and the
+focused migration suites pass (27 tests / 70 assertions). The full
+static-analysis/format/security gate also passes: Pint clean, Larastan level 8
+over 175 files with no errors, Composer locked audit with no advisories, and
+Redocly with no warnings/errors. Phase 4 is verified in this worktree and
+awaits explicit integration; the published overall score therefore remains
+36%.
 
 ## Phase 5 — Portals over Existing APIs
 
@@ -337,7 +376,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Audit Logs | 5 | ⬜ needs Phase 4 |
+| Audit Logs | 5 | ⬜ backend ready in Phase 4 worktree; UI pending |
 | Enrollment Approvals | 7 | ⬜ |
 | Overrides & Voids | 7 | ⬜ |
 | Policy Settings | 8 | ⬜ §17-dependent |
@@ -368,11 +407,15 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 # ■ What Is Built
 
-## API surface — 26 routes
+## API surface — 26 merged routes / 29 in the Phase 4 worktree
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
 **Authenticated:** `POST /auth/logout` · `GET /auth/me`
+
+**Phase 4 authenticated additions:** `GET /notifications` ·
+`PATCH /notifications/{notification}/read` (own records for all roles) ·
+`GET /audit-logs` (Registrar Head only)
 
 **Readable by every role** (rows filtered by each model's `visibleTo` scope):
 `GET /programs` · `/academic-terms` · `/subjects` · `/curricula` ·
@@ -391,7 +434,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 six transitions, so `ScheduleProposalPolicy` resolves the ability from the
 request's `action` field (ADR 0011).
 
-## Database — 21 tables
+## Database — 21 merged tables / 26 in the Phase 4 worktree
 
 Identity and reference: `users`, `personal_access_tokens`, `programs`,
 `academic_terms`.
@@ -404,8 +447,10 @@ Enrollment records (**schema only, no API**): `student_profiles`,
 `payments`, `enrollment_documents`, `transferee_credits`,
 `withdrawal_requests`.
 
-**Not yet created** (PRD §10.4): `audit_logs`, `notifications`,
-`prediction_runs`, `section_demand_forecasts`, `attrition_predictions`.
+**Phase 4 worktree additions:** operational `audit_logs` and `notifications`;
+schema-only `prediction_runs`, `section_demand_forecasts`, and
+`attrition_predictions`. The analytical tables have no API, job, seeder, or
+frontend and stay unused until Phase 9.
 
 Seeders: `RoleUserSeeder`, `ProgramSeeder`, `AcademicTermSeeder`,
 `SubjectSeeder`, `CurriculumSeeder`, `SectionSeeder`, `DemoEnrollmentSeeder`.
@@ -431,7 +476,8 @@ file were deleted in Phase 3.
 ## Documentation
 
 13 ADRs · `docs/api/openapi.yaml` (Redocly clean) · `docs/api/error-contract.md` ·
-7 data-dictionary pages · `docs/testing/SEEDED_IDENTITIES.md` (now the only
+7 merged data-dictionary pages plus the Phase 4 worktree's
+`cross-cutting-backend.md` · `docs/testing/SEEDED_IDENTITIES.md` (now the only
 credential doc) · `docs/history/2026-07-session-log.md`.
 
 ---
@@ -481,13 +527,11 @@ crashes ESLint 10 with `contextOrFilename.getFilename is not a function`. No
 override fixes it — the plugin has no ESLint 10 release. It also drags in a
 `brace-expansion` advisory chain. See the comment in `eslint.config.js`.
 
-**Seeded identities can drift from `GRC_SEED_PASSWORD`.** `RoleUserSeeder`
-reads the password with `getenv()`, not Laravel's `.env` parsing, so it must be
-exported into the process. If live login returns 401 for `*.seed@grc.test`
-while the tests pass, the stored hash predates the current value — re-run
-`php artisan db:seed --class=RoleUserSeeder` with the variable exported. The
-seeder is `updateOrCreate` keyed on email, so it is idempotent and touches only
-the nine synthetic accounts.
+**Seeded identities use the shared password `password`.** Both user-producing
+seeders are restricted to `local`/`testing` and hash the password through the
+`User` model. If a `*.seed@grc.test` login still returns 401, its stored hash
+predates this policy — re-run `php artisan db:seed`. The seeders are
+idempotent and do not delete unrelated users.
 
 ---
 
@@ -531,6 +575,7 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-29 | Give every local/testing synthetic login the shared password `password`; retain the production-environment refusal and hashed storage. | Explicit user direction to make switching among all nine role portals easy during development. The full dataset applies the same password to its additional student scenarios. |
 | 2026-07-28 | Extract `demoRoles`, the session/credential/gateway types and `DemoAuthError` out of the `demo-*` modules **before** deleting them. | They were not demo-only despite the naming: `demoRoles` is the runtime enum validating *real* API responses in `auth-schema.ts`, and `DemoAuthError`/`DemoSession` were used by the live API gateway. Deleting the files first would have broken production code. |
 | 2026-07-28 | Assert routing in tests via the mocked router's calls rather than a rendered URL. | The App Router has no `MemoryRouter`, so real URL changes are not observable in jsdom. Guards are asserted on the redirect they *request*; true end-to-end routing moves to Playwright in Phase 8, which PRD §14.3 requires anyway. |
 | 2026-07-28 | Pin `postcss` and `sharp` through `overrides` instead of accepting Next's pinned versions. | Next 16.2.12 ships versions with advisories that fail CI's `npm audit --audit-level=moderate`; npm's suggested fix is a downgrade to `next@9.3.3`. Both patches are semver-compatible and already elsewhere in the tree. |

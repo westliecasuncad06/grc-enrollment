@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -18,6 +20,8 @@ use Laravel\Sanctum\HasApiTokens;
  * @property ?CarbonImmutable $last_login_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
+ * @property-read Collection<int, AuditLog> $auditLogs
+ * @property-read Collection<int, Notification> $notifications
  */
 final class User extends Authenticatable
 {
@@ -49,5 +53,21 @@ final class User extends Authenticatable
             'status' => UserStatus::class,
             'last_login_at' => 'immutable_datetime',
         ];
+    }
+
+    /**
+     * @return HasMany<AuditLog, $this>
+     */
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'actor_user_id');
+    }
+
+    /**
+     * @return HasMany<Notification, $this>
+     */
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class);
     }
 }
