@@ -16,6 +16,7 @@ final class NotificationTypeTest extends TestCase
                 'enrollment_registrar_approved',
                 'enrollment_registrar_rejected',
                 'enrollment_voided',
+                'academic_grade_locked',
             ],
             array_column(NotificationType::cases(), 'value'),
         );

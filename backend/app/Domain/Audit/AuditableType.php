@@ -22,6 +22,8 @@ final class AuditableType
 
     public const ENROLLMENT = 'enrollment';
 
+    public const ACADEMIC_GRADE = 'academic_grade';
+
     /**
      * @return list<string>
      */
@@ -37,6 +39,7 @@ final class AuditableType
             self::AUDIT_LOG,
             self::FACULTY_DIRECTORY,
             self::ENROLLMENT,
+            self::ACADEMIC_GRADE,
         ];
     }
 }

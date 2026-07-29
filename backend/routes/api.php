@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AcademicGradeController;
 use App\Http\Controllers\Api\V1\AcademicTermController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
@@ -81,6 +82,18 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // `role:` middleware fits, so EnrollmentPolicy resolves the ability
         // per `action`. See ADR 0011.
         Route::patch('/enrollments/{enrollment}', [EnrollmentController::class, 'update'])->name('enrollments.update');
+
+        // Role-scoped read (Student own, Faculty own sections, Registrar
+        // Head all — AcademicGrade::scopeVisibleTo). Writes carry no
+        // `role:` middleware: create is Faculty-only (re-checked by
+        // AcademicGradePolicy::create); the PATCH route serves a plain
+        // content edit plus two further checkpoints (submit by Faculty,
+        // lock by the Registrar Head), resolved the same way
+        // EnrollmentController resolves registrar_approve/registrar_reject/
+        // void. See ADR 0011.
+        Route::get('/academic-grades', [AcademicGradeController::class, 'index'])->name('academic-grades.index');
+        Route::post('/academic-grades', [AcademicGradeController::class, 'store'])->name('academic-grades.store');
+        Route::patch('/academic-grades/{academicGrade}', [AcademicGradeController::class, 'update'])->name('academic-grades.update');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's

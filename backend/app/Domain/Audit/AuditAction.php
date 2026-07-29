@@ -54,6 +54,14 @@ final class AuditAction
 
     public const ENROLLMENT_VOIDED = 'enrollment.voided';
 
+    public const ACADEMIC_GRADE_CREATED = 'academic_grade.created';
+
+    public const ACADEMIC_GRADE_UPDATED = 'academic_grade.updated';
+
+    public const ACADEMIC_GRADE_SUBMITTED = 'academic_grade.submitted';
+
+    public const ACADEMIC_GRADE_LOCKED = 'academic_grade.locked';
+
     /**
      * @return list<string>
      */
@@ -85,6 +93,10 @@ final class AuditAction
             self::ENROLLMENT_REGISTRAR_APPROVED,
             self::ENROLLMENT_REGISTRAR_REJECTED,
             self::ENROLLMENT_VOIDED,
+            self::ACADEMIC_GRADE_CREATED,
+            self::ACADEMIC_GRADE_UPDATED,
+            self::ACADEMIC_GRADE_SUBMITTED,
+            self::ACADEMIC_GRADE_LOCKED,
         ];
     }
 }

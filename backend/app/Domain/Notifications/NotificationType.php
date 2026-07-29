@@ -9,4 +9,5 @@ enum NotificationType: string
     case EnrollmentRegistrarApproved = 'enrollment_registrar_approved';
     case EnrollmentRegistrarRejected = 'enrollment_registrar_rejected';
     case EnrollmentVoided = 'enrollment_voided';
+    case AcademicGradeLocked = 'academic_grade_locked';
 }

@@ -106,7 +106,21 @@ interrupted.
   focused tests (both happy paths, both reason-required checks, wrong-status
   rejection, cross-role forbidden checks) all green; full backend suite
   572/572 passing; PHPStan level 8, Pint, and Redocly all clean.
-- ⬜ Task 3 — grade encoding API.
+- ✅ **Task 3 — grade encoding API (PRD §4.3, §5.3 DFD 3.1).**
+  `GET`/`POST`/`PATCH /api/v1/academic-grades`, role-scoped read (Student
+  own, Faculty own sections via `section.professor_id`, Registrar Head all
+  — `AcademicGrade::scopeVisibleTo`). `POST` is Faculty-only and re-checks
+  section ownership plus the (student, subject, term) uniqueness
+  server-side. `PATCH` serves three concerns on one route: a plain content
+  edit of `final_grade`/`remarks` while still `draft`, `action: submit`
+  (Faculty, `draft`→`submitted`), and `action: lock` (Registrar Head,
+  `submitted`→`locked` — the moment a grade becomes part of the official
+  record `BuildEligibleSubjectPool` reads for prerequisite evaluation, so
+  it's the one point that notifies the student). `final_grade` stays the
+  exact decimal string the model already carried since Phase 4 — no scale
+  or passing-mark asserted, per PRD §17. 15 new focused tests all green;
+  full backend suite 588/588 passing; PHPStan level 8, Pint, and Redocly
+  all clean.
 - ⬜ Task 4 — payment queue + serving number API.
 - ⬜ Task 5 — payment confirmation + Digital COM API.
 - ⬜ Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).

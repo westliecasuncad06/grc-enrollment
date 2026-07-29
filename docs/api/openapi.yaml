@@ -63,12 +63,25 @@ tags:
       approval.
   - name: Enrollment
     description: >
-      Process 2.0 — the eligible-subject pool (PRD §5.2, DFD 2.2). Own-record
-      only: a student sees only their own computed eligibility, never another
-      student's. Every entry carries an explainable reason (FR-ENR-005); the
-      official grading policy behind prerequisite checks is a PRD §17
-      decision still pending formal GRC approval — see
-      App\Domain\Academic\PrerequisiteEvaluator.
+      Process 2.0's eligible-subject pool and submission (PRD §5.2, DFD 2.2)
+      plus Process 3.0's approval queue (PRD §5.3, FR-FIN-001/002). The
+      eligible-subject pool is own-record only; every entry carries an
+      explainable reason (FR-ENR-005), and the official grading policy
+      behind prerequisite checks is a PRD §17 decision still pending formal
+      GRC approval — see App\Domain\Academic\PrerequisiteEvaluator. Reading
+      and deciding enrollments is role-scoped (Student own, Registrar Head
+      all, Accounting Staff pending_payment only) via
+      App\Models\Enrollment::scopeVisibleTo and EnrollmentPolicy.
+  - name: Academic Records
+    description: >
+      Grade encoding (PRD §4.3, §5.3 DFD 3.1): draft → submitted → locked.
+      A Faculty member writes only for sections they are assigned to teach
+      and may edit only while a grade is draft; the Registrar Head locks a
+      submitted grade, the moment it becomes part of the official record
+      `BuildEligibleSubjectPool` reads for prerequisite evaluation. Reads
+      are role-scoped: Student own, Faculty own sections, Registrar Head
+      all. `final_grade` carries no scale or passing-mark assertion — PRD
+      §17 leaves the official grading scale an open decision.
   - name: Notifications
     description: >
       Private, user-owned in-app notifications. Every authenticated role may
@@ -1471,6 +1484,212 @@ paths:
           description: >
             The submitted data is invalid, the action does not match the
             enrollment's current status, or a required reason is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/academic-grades:
+    get:
+      operationId: getAcademicGrades
+      summary: List academic grades (role-scoped)
+      description: >
+        Role-scoped per DFD 3.1 (see App\Models\AcademicGrade::scopeVisibleTo):
+        a Student sees only their own grade records; Faculty sees only
+        grades tied to a section they are assigned to teach; the Registrar
+        Head sees every grade, as keeper of the official academic record.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: student_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: subject_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - submitted
+              - locked
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The role-scoped, paginated grade list.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAcademicGradeCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postAcademicGrade
+      summary: Create a draft grade record
+      description: >
+        Faculty only, and only for one of the encoding professor's own
+        sections (re-checked server-side even though the client should
+        already know its own roster). Always created with status draft.
+        Rejects a duplicate (student, subject, term) combination.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreAcademicGradeRequest"
+      responses:
+        "201":
+          description: The created draft grade record.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicGradeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            Validation failed — the section is not assigned to the caller,
+            or a grade record already exists for this student, subject, and
+            term.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/academic-grades/{academicGrade}:
+    patch:
+      operationId: patchAcademicGrade
+      summary: Edit a draft grade, or apply a submit/lock transition
+      description: >
+        No `role:` middleware gates this route — AcademicGradePolicy
+        resolves the right ability per request (ADR 0011). With no `action`,
+        this is a plain content edit of `final_grade`/`remarks` by the
+        encoding Faculty member, allowed only while the grade is still
+        draft. `action: submit` (Faculty, draft → submitted) or
+        `action: lock` (Registrar Head, submitted → locked) is a pure
+        status transition; content fields are prohibited on those requests.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academicGrade
+          in: path
+          required: true
+          description: Academic grade ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAcademicGradeRequest"
+      responses:
+        "200":
+          description: The edit or transition was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicGradeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No academic grade exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the grade is no longer editable,
+            or the action does not match the grade's current status.
           content:
             application/json:
               schema:
@@ -3017,6 +3236,128 @@ components:
         reason:
           type: ["string", "null"]
           description: Required exactly when action is registrar_reject or void.
+    PaginatedAcademicGradeCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcademicGradeResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    AcademicGradeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/AcademicGradeResource"
+    AcademicGradeResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - student_id
+        - student_number
+        - subject_id
+        - subject_code
+        - section_id
+        - academic_term_id
+        - final_grade
+        - remarks
+        - status
+        - status_label
+        - submitted_at
+        - locked_at
+      properties:
+        type:
+          type: string
+          const: academic_grade
+        id:
+          type: integer
+        student_id:
+          type: integer
+        student_number:
+          type: string
+        subject_id:
+          type: integer
+        subject_code:
+          type: string
+        section_id:
+          type: ["integer", "null"]
+        academic_term_id:
+          type: integer
+        final_grade:
+          type: ["string", "null"]
+          description: >
+            Carried as the exact decimal string, never coerced to a float or
+            asserted against a passing-mark scale — PRD §17 leaves the
+            official grading scale unconfirmed.
+        remarks:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum:
+            - draft
+            - submitted
+            - locked
+        status_label:
+          type: string
+        submitted_at:
+          type: ["string", "null"]
+          format: date-time
+        locked_at:
+          type: ["string", "null"]
+          format: date-time
+    StoreAcademicGradeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - student_id
+        - subject_id
+        - section_id
+        - academic_term_id
+      properties:
+        student_id:
+          type: integer
+        subject_id:
+          type: integer
+        section_id:
+          type: integer
+        academic_term_id:
+          type: integer
+        final_grade:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 999.99
+        remarks:
+          type: ["string", "null"]
+    UpdateAcademicGradeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+            - submit
+            - lock
+        final_grade:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 999.99
+          description: Prohibited when action is submit or lock.
+        remarks:
+          type: ["string", "null"]
+          description: Prohibited when action is submit or lock.
     StoreSectionRequest:
       type: object
       additionalProperties: false

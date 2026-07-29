@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -99,5 +101,29 @@ final class AcademicGrade extends Model
     public function encoder(): BelongsTo
     {
         return $this->belongsTo(User::class, 'encoded_by');
+    }
+
+    /**
+     * PRD §4.3 / §5.3 DFD 3.1: a Student sees only their own grade records;
+     * Faculty sees only grades tied to a section they are assigned to teach
+     * (a grade with no `section_id` is therefore invisible to every
+     * Faculty member, which is correct — it belongs to no one's roster);
+     * the Registrar Head, as keeper of the official academic record, sees
+     * every grade. Mirrors `Enrollment::scopeVisibleTo` (ADR 0008).
+     *
+     * @param  Builder<AcademicGrade>  $query
+     * @return Builder<AcademicGrade>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->role === UserRole::Faculty) {
+            return $query->whereHas('section', fn ($sectionQuery) => $sectionQuery->where('professor_id', $user->id));
+        }
+
+        if ($user->role === UserRole::RegistrarHead) {
+            return $query;
+        }
+
+        return $query->whereHas('student', fn ($studentQuery) => $studentQuery->where('user_id', $user->id));
     }
 }

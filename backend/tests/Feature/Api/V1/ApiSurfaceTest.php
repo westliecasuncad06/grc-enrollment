@@ -21,6 +21,7 @@ final class ApiSurfaceTest extends TestCase
         $this->assertSame([
             'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
+            'GET|HEAD api/v1/academic-grades',
             'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
@@ -37,6 +38,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/subjects',
+            'PATCH api/v1/academic-grades/{academicGrade}',
             'PATCH api/v1/curricula/{curriculum}',
             'PATCH api/v1/enrollments/{enrollment}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
@@ -44,6 +46,7 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/notifications/{notification}/read',
             'PATCH api/v1/schedule-proposals/{scheduleProposal}',
             'PATCH api/v1/sections/{section}',
+            'POST api/v1/academic-grades',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
@@ -73,6 +76,10 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.eligible-subjects.index',
             'api.v1.enrollments.index',
             'api.v1.enrollments.store',
+            'api.v1.enrollments.update',
+            'api.v1.academic-grades.index',
+            'api.v1.academic-grades.store',
+            'api.v1.academic-grades.update',
             'api.v1.faculty-availabilities.index',
             'api.v1.faculty-members.index',
             'api.v1.faculty-availabilities.store',
@@ -247,6 +254,28 @@ final class ApiSurfaceTest extends TestCase
     public function test_enrollments_carry_no_role_middleware(): void
     {
         foreach (['api.v1.enrollments.index', 'api.v1.enrollments.store', 'api.v1.enrollments.update'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+
+            $roleMiddleware = array_filter(
+                $route->gatherMiddleware(),
+                static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+            );
+
+            $this->assertSame([], array_values($roleMiddleware));
+        }
+    }
+
+    /**
+     * Same shape as `test_enrollments_carry_no_role_middleware`: create is
+     * Faculty-only and the PATCH route serves a content edit plus two
+     * further checkpoints, all resolved by AcademicGradePolicy per request,
+     * never by a blanket `role:` middleware on either route.
+     */
+    public function test_academic_grades_carry_no_role_middleware(): void
+    {
+        foreach (['api.v1.academic-grades.index', 'api.v1.academic-grades.store', 'api.v1.academic-grades.update'] as $name) {
             $route = Route::getRoutes()->getByName($name);
 
             $this->assertNotNull($route, "Missing route {$name}.");
