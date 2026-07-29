@@ -101,7 +101,7 @@ functional system before any model is trained.
 | 2 | Process 1.0 — Scheduling backend | ✅ Complete (2 deferred) | 80 |
 | 3 | **Next.js Migration** | ✅ Complete | 100 |
 | 4 | Cross-Cutting Backend & ML Substrate | ✅ Complete (merged and verified) | 100 |
-| 5 | Portals over Existing APIs (5 roles) | ⬜ Planned | 0 |
+| 5 | Portals over Existing APIs (5 roles) | 🔨 Design + implementation plan ready | 0 |
 | 6 | Process 2.0 + Student Portal | ⬜ Planned | 25 |
 | 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
 | 8 | Polish, Accessibility, E2E, Performance | ⬜ Planned | 25 |
@@ -252,8 +252,11 @@ published overall score is now 41%.
 
 ## Phase 5 — Portals over Existing APIs
 
-Five portals, ~13 modules, **zero new backend**. 22 built endpoints currently
-have no UI at all. First real proof the system works end to end.
+Five portal workspaces spanning six roles and 13 modules consume the existing API surface, with one
+least-privilege Program Chair faculty-directory read endpoint added so section
+assignment can use names rather than opaque IDs. The user-approved design and
+nine-task implementation plan are ready; 22 existing built endpoints still
+have no UI at all. This is the first real proof the system works end to end.
 
 ## Phase 6 — Process 2.0 + Student Portal
 
@@ -584,7 +587,7 @@ Newest first. Full reasoning for older entries is in
 | 2026-07-28 | Use Next.js as a client-rendered application only — no SSR of authorized data, no server session, no API proxying. | Preserves ADR 0001's independently-runnable service boundary and PRD §9.1's bearer-token rule. Next.js is adopted for routing and build pipeline, not to move computation to a Node server. |
 | 2026-07-28 | Keep the bearer token in `localStorage` under Next.js rather than moving to an httpOnly cookie. | Preserves the proven Sanctum flow and stays compliant with PRD §9.1's explicit no-cookie/no-`withCredentials` rule. Server-side route protection is given up knowingly; guards stay client-side. |
 | 2026-07-28 | Delete the frontend demo auth mode rather than porting it. | It predates real authentication; nine seeded database identities now cover the same need. Vite's `MODE === "test"` guard has no exact Next equivalent, and porting it wrong would make a committed password a valid production login. |
-| 2026-07-28 | Build portals for backend-ready roles (Phase 5) before completing Process 2.0. | 22 endpoints are merged with no UI. Five portals can become functional with zero new backend work — the fastest path to a demonstrably working system. |
+| 2026-07-29 | Build portals for backend-ready roles (Phase 5) before completing Process 2.0. | 22 endpoints are merged with no UI. Five portal workspaces spanning six roles can become functional with one least-privilege faculty-directory read endpoint — the fastest path to a demonstrably working system. |
 | 2026-07-28 | Archive the session log and failure record to `docs/history/` instead of deleting or keeping them inline. | 1,350 of 2,255 lines were historical narrative, making `PROGRESS.md` unusable as a tracker. Nothing is lost; the detail is one link away. |
 | 2026-07-28 | Score completion with a published weighting table rather than asserting a single number. | The percentage must be auditable and challengeable, and recomputable as each phase closes. |
 | 2026-07-28 | `StudentProfilePolicy::view()` gets no broader role visibility — own-record only. | Nothing in PRD §3 grants any role read access to *other* students' profiles; inventing one would be scope creep beyond DFD 2.1. |

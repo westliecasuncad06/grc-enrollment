@@ -18,7 +18,7 @@ five, and **was never executed once** — `C:\xampp\mysql84` does not exist and
 port 3307 has no listener. The last three review rounds addressed increasingly
 theoretical
 failure modes (`#` in directory paths, UTF-16 BOMs in `my.ini`, Windows reserved
-device aliases) for a loopback-only development database, while every piece of
+device aliases) for a loopback-only developmentf database, while every piece of
 actual PRD value stayed blocked behind a script nobody had run.
 
 The user has decided to **use the existing XAMPP MariaDB 10.4.32 instance**

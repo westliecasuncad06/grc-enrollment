@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 18:55:00 +08:00
+- **Date and time:** 2026-07-29 20:00:00 +08:00
 - **Current branch:** `main`
 - **Latest commit:** see `git log -1 --oneline` (local integration handoff finalized)
 - **Integration state:** Phase 4 was fast-forward merged locally into `main`;
@@ -11,18 +11,16 @@
 
 ## Current Objective
 
-Record and verify the local integration of roadmap Phase 4, “Cross-Cutting
-Backend & ML Substrate,” on `main`:
+Plan roadmap Phase 5, “Portals over Existing APIs,” for five portal workspaces
+spanning six backend-ready roles on `main`:
 
-- immutable audit history and Registrar Head audit reads;
-- user-owned notifications and schedule-publication notifications;
-- transactional audit retrofits for existing privileged writes;
-- schema-only analytical storage for the final machine-learning phase;
-- synchronized routes, OpenAPI, data dictionary, and `PROGRESS.md`; and
-- the complete backend verification gate.
+- a shared live term context and notification centre;
+- Admission Staff, Faculty, Program Chair, Dean, Executive Director, and
+  Registrar Head portal workflows over the existing API surface; and
+- one least-privilege faculty-directory read endpoint for named assignment.
 
-The page-top published completion is now **41%** after integration. Machine
-learning remains last in roadmap Phase 9; no model, prediction endpoint, or
+The page-top published completion remains **41%** until Phase 5 is implemented.
+Machine learning remains last in roadmap Phase 9; no model, prediction endpoint, or
 student attrition UI belongs in Phase 4.
 
 ## Verified Completed Work
@@ -155,19 +153,18 @@ both user-producing seeders still refuse production-like environments.
 
 ## Work in Progress
 
-Task 12 of the Phase 4 plan is content-complete:
+Phase 5 discovery and design are approved by the user:
 
-- `backend/tests/Feature/Api/V1/ApiSurfaceTest.php` is updated and passes.
-- `docs/api/openapi.yaml` contains the three new paths and reusable
-  notification/audit pagination schemas; Redocly passes.
-- `docs/data-dictionary/cross-cutting-backend.md` documents all five tables
-  and the approved `HISTORICAL DATA` mapping.
-- `PROGRESS.md` publishes the merged totals, labels Phase 4 complete, and
-  reports 41% overall completion.
+- preserve the typed `/portal/[moduleId]` dispatch pattern;
+- use a generated, one-time temporary credential for student provisioning;
+- deliver all 13 Phase 5 modules in incremental role slices;
+- add only `GET /api/v1/faculty-members` beyond the current surface; and
+- keep ML, Process 2.0/3.0 workflows, profile/password recovery, help, and
+  report-issue APIs out of scope.
 
-No implementation or verification task remains in the approved Phase 4 plan.
-Tasks 1–13 are complete, independently reviewed, merged into `main`, and
-  with the post-merge test run, handoff update, and cleanup complete.
+The Phase 5 design and nine-task implementation plan are written and
+self-reviewed. No Phase 5 application implementation file has been modified
+yet.
 
 ## Files Changed
 
@@ -372,8 +369,8 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Keep `main` as the working branch; begin Phase 5 portal implementation
-   next.
+1. Execute `docs/superpowers/plans/2026-07-29-phase-5-portal-workspaces.md`
+   task-by-task using either the subagent-driven or inline execution workflow.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it.
 
@@ -387,7 +384,7 @@ The post-merge full-suite result must still be recorded below before cleanup.
 - Do not weaken audit privacy, notification ownership, Registrar Head audit
   authorization, transactional rollback, or advisory-only analytical
   boundaries.
-- Do not modify frontend or `ml-service` code for this backend-only phase.
+- Do not modify `ml-service` code before Phase 9.
 - Do not alter unrelated dirty-worktree changes.
 - Do not stage, commit, merge, push, reset, or stash without explicit user
   authorization.
