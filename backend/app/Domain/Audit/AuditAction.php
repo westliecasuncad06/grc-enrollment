@@ -48,6 +48,12 @@ final class AuditAction
 
     public const ENROLLMENT_SUBMITTED = 'enrollment.submitted';
 
+    public const ENROLLMENT_REGISTRAR_APPROVED = 'enrollment.registrar_approved';
+
+    public const ENROLLMENT_REGISTRAR_REJECTED = 'enrollment.registrar_rejected';
+
+    public const ENROLLMENT_VOIDED = 'enrollment.voided';
+
     /**
      * @return list<string>
      */
@@ -76,6 +82,9 @@ final class AuditAction
             self::AUDIT_LOG_LIST_VIEWED,
             self::FACULTY_DIRECTORY_LIST_VIEWED,
             self::ENROLLMENT_SUBMITTED,
+            self::ENROLLMENT_REGISTRAR_APPROVED,
+            self::ENROLLMENT_REGISTRAR_REJECTED,
+            self::ENROLLMENT_VOIDED,
         ];
     }
 }

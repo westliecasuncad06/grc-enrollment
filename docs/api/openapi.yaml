@@ -1415,6 +1415,70 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/enrollments/{enrollment}:
+    patch:
+      operationId: patchEnrollment
+      summary: Apply one Registrar Head decision to an enrollment
+      description: >
+        No `role:` middleware gates this route — `registrar_approve` and
+        `registrar_reject` (the approval-queue checkpoint) and `void` (a
+        later, distinct checkpoint: cancelling an already-approved but unpaid
+        enrollment) are each resolved by EnrollmentPolicy per request (see
+        ADR 0011). `reason` is required exactly for `registrar_reject` and
+        `void` (FR-FIN-002) and is recorded only in the audit row, since
+        `enrollments` has no `decision_reason` column of its own.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: enrollment
+          in: path
+          required: true
+          description: Enrollment ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEnrollmentRequest"
+      responses:
+        "200":
+          description: The transition was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No enrollment exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the action does not match the
+            enrollment's current status, or a required reason is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/notifications:
     get:
       operationId: getNotifications
@@ -2938,6 +3002,21 @@ components:
             properties:
               section_id:
                 type: integer
+    UpdateEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - registrar_approve
+            - registrar_reject
+            - void
+        reason:
+          type: ["string", "null"]
+          description: Required exactly when action is registrar_reject or void.
     StoreSectionRequest:
       type: object
       additionalProperties: false

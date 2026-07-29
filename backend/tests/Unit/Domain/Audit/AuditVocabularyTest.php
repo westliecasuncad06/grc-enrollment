@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class AuditVocabularyTest extends TestCase
 {
-    public function test_action_values_are_the_twenty_two_approved_actions(): void
+    public function test_action_values_are_the_twenty_five_approved_actions(): void
     {
         self::assertSame(
             [
@@ -34,6 +34,9 @@ final class AuditVocabularyTest extends TestCase
                 'audit_log.list_viewed',
                 'faculty_directory.list_viewed',
                 'enrollment.submitted',
+                'enrollment.registrar_approved',
+                'enrollment.registrar_rejected',
+                'enrollment.voided',
             ],
             AuditAction::values(),
         );

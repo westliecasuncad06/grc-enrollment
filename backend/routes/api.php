@@ -69,10 +69,18 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // resolves "program chair only" for the faculty directory.
         Route::get('/eligible-subjects', EligibleSubjectController::class)->name('eligible-subjects.index');
 
-        // Own-record only — EnrollmentPolicy resolves "student role only";
-        // "which enrollments" is the controller's own `student_id` scope.
+        // Role-scoped read (Student own, Registrar Head all, Accounting
+        // pending_payment only — Enrollment::scopeVisibleTo) and Student-only
+        // submission.
         Route::get('/enrollments', [EnrollmentController::class, 'index'])->name('enrollments.index');
         Route::post('/enrollments', [EnrollmentController::class, 'store'])->name('enrollments.store');
+
+        // Two Registrar Head checkpoints (registrar_approve/registrar_reject
+        // at the approval queue, void at the payment-pending queue) share one
+        // route the same way schedule-proposal transitions do — no single
+        // `role:` middleware fits, so EnrollmentPolicy resolves the ability
+        // per `action`. See ADR 0011.
+        Route::patch('/enrollments/{enrollment}', [EnrollmentController::class, 'update'])->name('enrollments.update');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's

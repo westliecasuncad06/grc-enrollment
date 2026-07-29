@@ -38,6 +38,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/subjects',
             'PATCH api/v1/curricula/{curriculum}',
+            'PATCH api/v1/enrollments/{enrollment}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'PATCH api/v1/notifications/{notification}/read',
@@ -245,7 +246,7 @@ final class ApiSurfaceTest extends TestCase
      */
     public function test_enrollments_carry_no_role_middleware(): void
     {
-        foreach (['api.v1.enrollments.index', 'api.v1.enrollments.store'] as $name) {
+        foreach (['api.v1.enrollments.index', 'api.v1.enrollments.store', 'api.v1.enrollments.update'] as $name) {
             $route = Route::getRoutes()->getByName($name);
 
             $this->assertNotNull($route, "Missing route {$name}.");

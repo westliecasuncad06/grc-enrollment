@@ -10,7 +10,13 @@ final class NotificationTypeTest extends TestCase
     public function test_values_are_the_approved_notification_types(): void
     {
         self::assertSame(
-            ['schedule_published', 'enrollment_submitted'],
+            [
+                'schedule_published',
+                'enrollment_submitted',
+                'enrollment_registrar_approved',
+                'enrollment_registrar_rejected',
+                'enrollment_voided',
+            ],
             array_column(NotificationType::cases(), 'value'),
         );
     }

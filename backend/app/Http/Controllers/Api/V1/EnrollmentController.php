@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Enrollment\ListEnrollments;
 use App\Actions\Enrollment\SubmitEnrollment;
+use App\Actions\Enrollment\TransitionEnrollment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Enrollment\IndexEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\StoreEnrollmentRequest;
+use App\Http\Requests\Api\V1\Enrollment\UpdateEnrollmentRequest;
 use App\Http\Resources\Api\V1\EnrollmentResource;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
@@ -19,6 +21,19 @@ use Illuminate\Http\Request;
 
 final class EnrollmentController extends Controller
 {
+    /**
+     * Which Policy ability governs each transition action — see
+     * EnrollmentPolicy and ADR 0011 for why one route serves two Registrar
+     * Head checkpoints instead of a single `role:` middleware.
+     *
+     * @var array<string, string>
+     */
+    private const ABILITY_FOR_ACTION = [
+        'registrar_approve' => 'decideApproval',
+        'registrar_reject' => 'decideApproval',
+        'void' => 'void',
+    ];
+
     /**
      * @throws AuthenticationException
      */
@@ -57,6 +72,35 @@ final class EnrollmentController extends Controller
 
         $response = EnrollmentResource::make($enrollment)->response($request);
         $response->setStatusCode(201);
+
+        return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function update(
+        UpdateEnrollmentRequest $request,
+        Enrollment $enrollment,
+        TransitionEnrollment $transitioner,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+
+        $action = $request->validated('action');
+        $ability = self::ABILITY_FOR_ACTION[$action];
+
+        $this->authorize($ability, Enrollment::class);
+
+        $enrollment = $transitioner->execute(
+            $enrollment,
+            $action,
+            $actor,
+            $request->validated('reason'),
+            $contextFactory->fromRequest($request),
+        );
+
+        $response = EnrollmentResource::make($enrollment)->response($request);
 
         return $this->cachePrivateResponse($response);
     }

@@ -486,4 +486,122 @@ final class EnrollmentsEndpointTest extends TestCase
             ->getJson('/api/v1/enrollments?status=pending_registrar_approval');
         $stillFiltered->assertOk()->assertJsonCount(0, 'data');
     }
+
+    public function test_registrar_approve_transitions_a_pending_approval_enrollment_to_pending_payment(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.approve@grc.test');
+
+        $response = $this->withToken($registrarToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
+        self::assertNotNull($enrollment->refresh()->registrar_decided_at);
+        self::assertSame(
+            AuditAction::ENROLLMENT_REGISTRAR_APPROVED,
+            AuditLog::query()->sole()->action,
+        );
+        self::assertSame(
+            NotificationType::EnrollmentRegistrarApproved,
+            Notification::query()->sole()->type,
+        );
+    }
+
+    public function test_registrar_reject_requires_a_reason_and_transitions_to_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.reject@grc.test');
+
+        $withoutReason = $this->withToken($registrarToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_reject']);
+        $withoutReason->assertUnprocessable();
+        self::assertArrayHasKey('reason', $withoutReason->json('error.errors'));
+
+        $withReason = $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'registrar_reject',
+            'reason' => 'Missing prerequisite documentation.',
+        ]);
+        $withReason->assertOk()->assertJsonPath('data.status', 'rejected');
+        self::assertSame(
+            'Missing prerequisite documentation.',
+            AuditLog::query()->sole()->reason,
+        );
+    }
+
+    public function test_void_transitions_a_pending_payment_enrollment_to_cancelled_and_requires_a_reason(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingPayment);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.void@grc.test');
+
+        $withoutReason = $this->withToken($registrarToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'void']);
+        $withoutReason->assertUnprocessable();
+
+        $response = $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'void',
+            'reason' => 'Duplicate submission created in error.',
+        ]);
+        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+        self::assertSame(AuditAction::ENROLLMENT_VOIDED, AuditLog::query()->sole()->action);
+    }
+
+    public function test_void_cannot_be_performed_from_pending_registrar_approval(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.voidwrongstate@grc.test');
+
+        $response = $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'void',
+            'reason' => 'Attempted too early.',
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+        $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    public function test_a_non_registrar_head_role_cannot_perform_registrar_approve(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $studentToken = $this->tokenFor($student);
+
+        $response = $this->withToken($studentToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
+        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+        $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    public function test_an_accounting_staff_role_cannot_void_an_enrollment(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingPayment);
+        $accountingToken = $this->tokenForNewStaff(UserRole::AccountingStaff, 'accounting.void@grc.test');
+
+        $response = $this->withToken($accountingToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'void',
+            'reason' => 'Not accounting\'s call.',
+        ]);
+
+        $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
+        self::assertSame('pending_payment', $enrollment->refresh()->status->value);
+    }
 }

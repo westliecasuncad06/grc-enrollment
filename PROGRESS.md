@@ -90,7 +90,22 @@ interrupted.
   pending-payment-only regardless of requested filter) plus the existing
   Phase 6 index test, all green; full backend suite 566/566 passing;
   PHPStan level 8 and Pint clean.
-- ⬜ Task 2 — Registrar decisions API (approve/reject/void via ADR 0011).
+- ✅ **Task 2 — Registrar decisions API (FR-FIN-001, FR-FIN-002).**
+  `PATCH /api/v1/enrollments/{enrollment}` follows ADR 0011 verbatim (see
+  `TransitionScheduleProposal`): one route, an `action` field,
+  `EnrollmentPolicy` resolving `decideApproval` (`registrar_approve`/
+  `registrar_reject`) or `void` per request, no `role:` middleware.
+  `registrar_approve` moves `pending_registrar_approval` → `pending_payment`;
+  `registrar_reject` moves it to `rejected`; `void` moves `pending_payment` →
+  `cancelled` — a distinct, later checkpoint for cancelling an
+  already-approved-but-unpaid enrollment, scoped this way because §17 doesn't
+  define "authorized edge case" precisely (documented in
+  `EnrollmentPolicy::void`'s docblock). Reject and void require a non-empty
+  reason, recorded only in the audit row (`enrollments` has no
+  `decision_reason` column of its own, unlike `schedule_proposals`). 6 new
+  focused tests (both happy paths, both reason-required checks, wrong-status
+  rejection, cross-role forbidden checks) all green; full backend suite
+  572/572 passing; PHPStan level 8, Pint, and Redocly all clean.
 - ⬜ Task 3 — grade encoding API.
 - ⬜ Task 4 — payment queue + serving number API.
 - ⬜ Task 5 — payment confirmation + Digital COM API.
