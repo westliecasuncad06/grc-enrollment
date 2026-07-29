@@ -7,6 +7,7 @@ import {
   getAcademicTerms,
   getCurricula,
   getPrograms,
+  getSections,
   getSubjects,
 } from "@/features/services/reference-data-service"
 
@@ -18,6 +19,8 @@ export const subjectsQueryKey = (userId: string | null) =>
   ["subjects", userId] as const
 export const curriculaQueryKey = (userId: string | null) =>
   ["curricula", userId] as const
+export const sectionsQueryKey = (userId: string | null) =>
+  ["sections", userId] as const
 
 interface ReferenceDataQueryOptions {
   enabled?: boolean
@@ -67,6 +70,18 @@ export function useCurriculaQuery({
   return useQuery({
     queryKey: curriculaQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getCurricula(signal),
+    enabled: enabled && session !== null,
+  })
+}
+
+export function useSectionsQuery({
+  enabled = true,
+}: ReferenceDataQueryOptions = {}) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: sectionsQueryKey(session?.userId ?? null),
+    queryFn: ({ signal }) => getSections(signal),
     enabled: enabled && session !== null,
   })
 }

@@ -42,6 +42,11 @@ const admissionWorkspaceHeadings: Record<string, string> = {
   "credential-issuance": "Credential issuance",
 }
 
+const facultyWorkspaceRegions: Record<string, string> = {
+  "availability-preferences": "Faculty input workspace",
+  "teaching-schedule": "Teaching schedule workspace",
+}
+
 describe("PortalModulePage", () => {
   it.each(allowedModuleCases)(
     "renders $role access to $module.id from that role's catalog",
@@ -69,6 +74,12 @@ describe("PortalModulePage", () => {
           ).toBeInTheDocument()
           expect(
             screen.getByRole("heading", { name: admissionHeading }),
+          ).toBeInTheDocument()
+        } else if (facultyWorkspaceRegions[module.id]) {
+          expect(
+            screen.getByRole("region", {
+              name: facultyWorkspaceRegions[module.id],
+            }),
           ).toBeInTheDocument()
         } else {
           expect(

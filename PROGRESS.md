@@ -328,6 +328,21 @@ ESLint, Oxlint, TypeScript, and production build passed. Independent re-review
 returned **Accept with no findings**; its latest review check passed **6 relevant
 files / 56 tests**. Published completion remains **41%**.
 
+**Task 5 complete (isolated review branch):** The Faculty
+`availability-preferences` and `teaching-schedule` modules now use strict Zod
+schemas and typed CRUD services, identity-scoped faculty/section query keys,
+RHF validation and 422 field-error mapping, edit/delete confirmation, and
+responsive desktop-table/mobile-card schedule rendering. The schedule maps
+only parsed API-scoped sections with subjects and terms; it never calls roster
+or grade endpoints. RED evidence: the required three-file Vitest command
+failed because all new production imports were absent. Final Faculty and shell
+gate passed **4 files / 23 tests**; full frontend verification passed
+**26 files / 179 tests**, Prettier, ESLint, Oxlint, TypeScript, and production
+build. Published completion remains **41%**.
+
+**Next:** Phase 5 Task 6 — Program Chair curriculum and prerequisite
+workspaces.
+
 ## Phase 6 — Process 2.0 + Student Portal
 
 - **Eligible Subject Pool** (DFD 2.2/2.3 · FR-ENR-001–003, 005, 011). Reuse

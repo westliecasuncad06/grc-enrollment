@@ -3,20 +3,20 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 20:45:00 +08:00
+- **Date and time:** 2026-07-29 20:56:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
-- **Previous reviewed commit:** `435c391 docs: accept portal cache privacy remediation`
+- **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Tasks 1–4 are committed only on their isolated review branch; nothing has been
+  Tasks 1–5 are committed only on their isolated review branch; nothing has been
   pushed or merged.
 
 ## Current Objective
 
-Begin Phase 5 Task 5 — Faculty availability and preferences workspace — on
-the isolated review branch. Preserve the completed Admission Staff credential
-boundary, the audited faculty-directory contract, browser-token ownership,
-strict reference contracts, and user-owned notification authorization; do not
-merge or push.
+Begin Phase 5 Task 6 — Program Chair curriculum and prerequisite workspaces —
+on the isolated review branch. Preserve the completed Faculty contract,
+identity-scoped private query keys, browser-token ownership, strict reference
+contracts, full-replace curriculum semantics, and user-owned notification
+authorization; do not merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -118,6 +118,28 @@ UI belongs in Phase 5.
 - Independent re-review returned **Accept with no findings**; its latest review
   check passed **6 relevant files / 56 tests**. Task 4 is accepted and
   complete; published completion remains **41%**.
+
+### Phase 5 Task 5 — Faculty availability, preferences, and teaching schedule
+
+- Connected the Faculty role's `availability-preferences` and
+  `teaching-schedule` module IDs to real workspaces. Availability and subject
+  preferences use strict Zod contracts and typed CRUD clients for the existing
+  own-record `/faculty-availabilities` and `/faculty-subject-preferences`
+  endpoints; all query keys include the authenticated user ID.
+- The RHF forms validate ISO weekdays 1–7, `HH:mm:ss`, end-after-start, and
+  preference rank. Backend 422 field errors render beside their named inputs;
+  each mutation invalidates only its matching user-scoped query key. Edit,
+  loading, empty, generic-error, and accessible Alert Dialog delete-confirm
+  states are covered.
+- Added a strict parsed `/sections` reference hook. Teaching schedule display
+  maps only the API-scoped section response with subjects and terms, never
+  calls roster or grade APIs, and renders both a desktop table and mobile
+  cards.
+- RED evidence: the required three-file Vitest command exited 1 because all
+  three new production imports were absent. Final Faculty/portal-shell gate
+  passed **4 files / 23 tests**; complete frontend verification passed
+  **26 files / 179 tests**, Prettier, ESLint, Oxlint, TypeScript, and the
+  production build. Published completion remains **41%**; Task 6 is next.
 
 ### Takeover verification performed by Codex
 
@@ -464,9 +486,10 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 5 — Faculty availability and preferences workspace**
-   from its supplied task brief on `phase-5-portal-workspaces`. Preserve the
-   verified Task 1–4 contracts and the no-browser-storage credential boundary.
+1. Begin **Phase 5 Task 6 — Program Chair curriculum and prerequisite
+   workspaces** from its supplied task brief on `phase-5-portal-workspaces`.
+   Preserve the verified Task 1–5 contracts, strict parsed references, and
+   full-replace curriculum graph semantics.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.

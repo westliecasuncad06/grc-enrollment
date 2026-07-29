@@ -34,7 +34,11 @@ describe("phaseFiveModuleRegistry", () => {
         "credential-issuance",
       ].includes(moduleId)
         ? "Admission provisioning workspace"
-        : "Connected portal workspace"
+        : moduleId === "availability-preferences"
+          ? "Faculty input workspace"
+          : moduleId === "teaching-schedule"
+            ? "Teaching schedule workspace"
+            : "Connected portal workspace"
       expect(
         view.getByRole("region", { name: expectedRegion }),
       ).toBeInTheDocument()

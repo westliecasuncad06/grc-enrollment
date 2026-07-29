@@ -52,6 +52,31 @@ export const subjectsEnvelopeSchema = z
   .object({ data: z.array(subjectSchema) })
   .strict()
 
+export const sectionSchema = z
+  .object({
+    type: z.literal("section"),
+    id: z.number().int().positive(),
+    academic_term_id: z.number().int().positive(),
+    subject_id: z.number().int().positive(),
+    section_code: z.string().min(1),
+    professor_id: z.number().int().positive().nullable(),
+    schedule_days: z.string().min(1).nullable(),
+    starts_at_time: z.string().min(1).nullable(),
+    ends_at_time: z.string().min(1).nullable(),
+    room: z.string().min(1).nullable(),
+    capacity: z.number().int().nonnegative(),
+    viability_threshold: z.number().int().positive().nullable(),
+    enrolled_count: z.number().int().nonnegative(),
+    remaining_seats: z.number().int().nonnegative(),
+    status: z.enum(["planned", "published", "closed", "cancelled"]),
+    status_label: z.string().min(1),
+  })
+  .strict()
+
+export const sectionsEnvelopeSchema = z
+  .object({ data: z.array(sectionSchema) })
+  .strict()
+
 const curriculumSubjectSchema = z
   .object({
     subject_id: z.number().int().positive(),
@@ -92,4 +117,5 @@ export const curriculaEnvelopeSchema = z
 export type AcademicTerm = z.infer<typeof academicTermSchema>
 export type Program = z.infer<typeof programSchema>
 export type Subject = z.infer<typeof subjectSchema>
+export type Section = z.infer<typeof sectionSchema>
 export type Curriculum = z.infer<typeof curriculumSchema>
