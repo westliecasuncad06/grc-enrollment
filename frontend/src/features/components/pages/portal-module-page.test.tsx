@@ -36,6 +36,12 @@ const allowedModuleCases = userRoles.flatMap((role) =>
   rolePortalDefinitions[role].modules.map((module) => ({ module, role })),
 )
 
+const admissionWorkspaceHeadings: Record<string, string> = {
+  "student-accounts": "Student accounts",
+  "admission-status": "Admission status",
+  "credential-issuance": "Credential issuance",
+}
+
 describe("PortalModulePage", () => {
   it.each(allowedModuleCases)(
     "renders $role access to $module.id from that role's catalog",
@@ -54,9 +60,23 @@ describe("PortalModulePage", () => {
         expect(
           screen.getByRole("region", { name: `${module.label} workspace` }),
         ).toBeInTheDocument()
-        expect(
-          screen.getByRole("region", { name: "Connected portal workspace" }),
-        ).toBeInTheDocument()
+        const admissionHeading = admissionWorkspaceHeadings[module.id]
+        if (admissionHeading) {
+          expect(
+            screen.getByRole("region", {
+              name: "Admission provisioning workspace",
+            }),
+          ).toBeInTheDocument()
+          expect(
+            screen.getByRole("heading", { name: admissionHeading }),
+          ).toBeInTheDocument()
+        } else {
+          expect(
+            screen.getByRole("region", {
+              name: "Connected portal workspace",
+            }),
+          ).toBeInTheDocument()
+        }
         expect(
           screen.queryByRole("heading", { name: "Demo module preview" }),
         ).not.toBeInTheDocument()

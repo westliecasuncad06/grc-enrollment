@@ -1,8 +1,10 @@
 import {
   academicTermsEnvelopeSchema,
+  curriculaEnvelopeSchema,
   programsEnvelopeSchema,
   subjectsEnvelopeSchema,
   type AcademicTerm,
+  type Curriculum,
   type Program,
   type Subject,
 } from "@/features/schemas/reference-data-schema"
@@ -14,6 +16,7 @@ import {
 export const ACADEMIC_TERMS_PATH = "/api/v1/academic-terms"
 export const PROGRAMS_PATH = "/api/v1/programs"
 export const SUBJECTS_PATH = "/api/v1/subjects"
+export const CURRICULA_PATH = "/api/v1/curricula"
 
 function parseResponse<T>(
   schema: {
@@ -57,6 +60,13 @@ export async function getSubjects(
 ): Promise<readonly Subject[]> {
   const payload = await getAuthenticatedJson(SUBJECTS_PATH, signal)
   return parseResponse(subjectsEnvelopeSchema, payload, "subjects").data
+}
+
+export async function getCurricula(
+  signal?: AbortSignal,
+): Promise<readonly Curriculum[]> {
+  const payload = await getAuthenticatedJson(CURRICULA_PATH, signal)
+  return parseResponse(curriculaEnvelopeSchema, payload, "curricula").data
 }
 
 export function getActiveAcademicTerm(

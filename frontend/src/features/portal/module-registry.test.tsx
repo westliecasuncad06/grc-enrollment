@@ -1,4 +1,3 @@
-import { render } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -10,6 +9,7 @@ import {
   knownPortalModuleIds,
   rolePortalDefinitions,
 } from "@/features/portal/role-capabilities"
+import { renderWithSession } from "@/tests/render-app"
 
 describe("phaseFiveModuleRegistry", () => {
   it("dispatches exactly the thirteen Phase 5 role-owned module IDs", () => {
@@ -20,9 +20,23 @@ describe("phaseFiveModuleRegistry", () => {
 
     for (const moduleId of phaseFiveModuleIds) {
       const ModuleComponent = phaseFiveModuleRegistry[moduleId]
-      const view = render(<ModuleComponent />)
+      const view = renderWithSession(<ModuleComponent />, {
+        session: {
+          userId: "5",
+          displayName: "Admission Staff",
+          role: "admission_staff",
+          signedInAt: "2026-07-29T12:00:00Z",
+        },
+      })
+      const expectedRegion = [
+        "student-accounts",
+        "admission-status",
+        "credential-issuance",
+      ].includes(moduleId)
+        ? "Admission provisioning workspace"
+        : "Connected portal workspace"
       expect(
-        view.getByRole("region", { name: "Connected portal workspace" }),
+        view.getByRole("region", { name: expectedRegion }),
       ).toBeInTheDocument()
       view.unmount()
     }

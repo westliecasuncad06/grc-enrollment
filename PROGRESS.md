@@ -299,6 +299,23 @@ ESLint, Oxlint, production build, and `git diff --check`. Re-review returned
 **Accept with no findings**. Published overall completion remains **41%**.
 **Next:** Phase 5 Task 4 — Admission Staff provisioning workspace.
 
+**Task 4 complete (isolated review branch):** Admission Staff now has one
+three-step provisioning workspace for the role-owned `student-accounts`,
+`admission-status`, and `credential-issuance` routes. It submits only the
+seven accepted student-provisioning fields through the existing
+bearer-authenticated service, selects program/curriculum from typed reference
+data, maps backend 422 field errors, prevents duplicate submission, and offers
+a safe connection retry. The read-only outcome states are the API-guaranteed
+`Admitted` and `Good`; no status-update API was invented. A browser CSPRNG
+generates a 20-character temporary credential only for a provision attempt,
+never puts it in browser storage, logs, form state, or query caches, displays
+it only in the success receipt, supports clipboard copy, and clears it on
+close. Required RED evidence recorded the three missing feature imports.
+Focused Task 4 plus registry tests passed **4 files / 9 tests**; complete
+frontend verification passed **22 files / 166 tests**, Prettier, ESLint,
+Oxlint, TypeScript, and production build. Published completion remains **41%**.
+**Next:** Phase 5 Task 5 — Faculty availability and preferences workspace.
+
 ## Phase 6 — Process 2.0 + Student Portal
 
 - **Eligible Subject Pool** (DFD 2.2/2.3 · FR-ENR-001–003, 005, 011). Reuse

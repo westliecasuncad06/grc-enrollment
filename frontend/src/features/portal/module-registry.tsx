@@ -1,5 +1,7 @@
 import type { ComponentType } from "react"
 
+import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
+
 export type PhaseFiveModuleId =
   | "student-accounts"
   | "admission-status"
@@ -39,12 +41,24 @@ const connectedPortalWorkspace: PortalModuleComponent = () => (
   </section>
 )
 
+const studentAccountsWorkspace: PortalModuleComponent = () => (
+  <AdmissionProvisioningWorkspace initialModuleId="student-accounts" />
+)
+
+const admissionStatusWorkspace: PortalModuleComponent = () => (
+  <AdmissionProvisioningWorkspace initialModuleId="admission-status" />
+)
+
+const credentialIssuanceWorkspace: PortalModuleComponent = () => (
+  <AdmissionProvisioningWorkspace initialModuleId="credential-issuance" />
+)
+
 export const phaseFiveModuleRegistry: Readonly<
   Record<PhaseFiveModuleId, PortalModuleComponent>
 > = {
-  "student-accounts": connectedPortalWorkspace,
-  "admission-status": connectedPortalWorkspace,
-  "credential-issuance": connectedPortalWorkspace,
+  "student-accounts": studentAccountsWorkspace,
+  "admission-status": admissionStatusWorkspace,
+  "credential-issuance": credentialIssuanceWorkspace,
   "availability-preferences": connectedPortalWorkspace,
   "teaching-schedule": connectedPortalWorkspace,
   curriculum: connectedPortalWorkspace,

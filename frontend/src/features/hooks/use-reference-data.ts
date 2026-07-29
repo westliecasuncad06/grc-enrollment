@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/features/auth/use-auth"
 import {
   getAcademicTerms,
+  getCurricula,
   getPrograms,
   getSubjects,
 } from "@/features/services/reference-data-service"
@@ -15,6 +16,8 @@ export const programsQueryKey = (userId: string | null) =>
   ["programs", userId] as const
 export const subjectsQueryKey = (userId: string | null) =>
   ["subjects", userId] as const
+export const curriculaQueryKey = (userId: string | null) =>
+  ["curricula", userId] as const
 
 interface ReferenceDataQueryOptions {
   enabled?: boolean
@@ -52,6 +55,18 @@ export function useSubjectsQuery({
   return useQuery({
     queryKey: subjectsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getSubjects(signal),
+    enabled: enabled && session !== null,
+  })
+}
+
+export function useCurriculaQuery({
+  enabled = true,
+}: ReferenceDataQueryOptions = {}) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: curriculaQueryKey(session?.userId ?? null),
+    queryFn: ({ signal }) => getCurricula(signal),
     enabled: enabled && session !== null,
   })
 }

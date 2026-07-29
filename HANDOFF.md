@@ -3,19 +3,19 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 20:10:22 +08:00
+- **Date and time:** 2026-07-29 20:23:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
-- **Previous reviewed commit:** `ddee93e feat(frontend): add shared portal data layer`
+- **Previous reviewed commit:** `435c391 docs: accept portal cache privacy remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Tasks 1–3 are committed only on their isolated review branch; nothing has been
+  Tasks 1–4 are committed only on their isolated review branch; nothing has been
   pushed or merged.
 
 ## Current Objective
 
-Begin Phase 5 Task 4 — Admission Staff provisioning workspace — on the
-isolated review branch. Preserve Task 1's audited faculty-directory contract,
-Task 2's browser-token ownership boundary, Task 3's strict reference and
-notification contracts, and user-owned notification authorization; do not
+Begin Phase 5 Task 5 — Faculty availability and preferences workspace — on
+the isolated review branch. Preserve the completed Admission Staff credential
+boundary, the audited faculty-directory contract, browser-token ownership,
+strict reference contracts, and user-owned notification authorization; do not
 merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
@@ -84,6 +84,26 @@ UI belongs in Phase 5.
   address another account's fresh cache. The A → logout → B regression passes;
   full frontend verification is **19 files / 160 tests**. Independent re-review
   returned **Accept with no findings**; Task 3 is accepted and complete.
+
+### Phase 5 Task 4 — Admission Staff provisioning workspace
+
+- Connected `student-accounts`, `admission-status`, and
+  `credential-issuance` to one three-step Admission Staff workspace. It submits
+  exactly the seven existing student-provisioning fields through the existing
+  bearer-authenticated `POST /api/v1/student-profiles` contract.
+- Added strict student-profile parsing, typed curricula reference data, and a
+  browser CSPRNG 20-character temporary credential with required upper/lower,
+  digit, and symbol classes. Credentials never enter browser storage, form
+  state, logs, or TanStack Query caches; failures discard them and the success
+  receipt clears them on close.
+- The workspace maps named 422 errors, prevents duplicate submission, provides
+  a safe connection retry, and renders the API-guaranteed `Admitted` / `Good`
+  status read-only without inventing an update API.
+- RED evidence: the required three-test Vitest command exited 1 because all
+  three new feature imports were absent. Final focused gate passed **4 files /
+  9 tests**; complete frontend verification passed **22 files / 166 tests**,
+  Prettier, ESLint, Oxlint, TypeScript, and production build. Published
+  completion remains **41%**; Task 5 is next.
 
 ### Takeover verification performed by Codex
 
@@ -430,9 +450,9 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 4 — Admission Staff provisioning workspace** from its
-   supplied task brief on `phase-5-portal-workspaces`. Preserve the verified
-   Task 1–3 contracts and the no-browser-storage credential boundary.
+1. Begin **Phase 5 Task 5 — Faculty availability and preferences workspace**
+   from its supplied task brief on `phase-5-portal-workspaces`. Preserve the
+   verified Task 1–4 contracts and the no-browser-storage credential boundary.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.
