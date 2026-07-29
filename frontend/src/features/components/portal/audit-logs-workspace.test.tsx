@@ -16,7 +16,7 @@ const auditLogs = {
       action: "section.updated",
       auditable_type: "section",
       auditable_id: 3,
-      before_values: { status: "planned" },
+      before_values: { status: "planned", email: "hidden@example.test" },
       after_values: { status: "published" },
       reason: null,
       request_id: "req-1",
@@ -67,6 +67,10 @@ describe("AuditLogsWorkspace", () => {
       },
     })
     await screen.findByText(/section.updated/)
+    expect(screen.getByRole("combobox", { name: "Action" })).toHaveValue("")
+    expect(screen.getByRole("combobox", { name: "Entity type" })).toHaveValue(
+      "",
+    )
     await user.click(
       await screen.findByRole("button", { name: "Apply audit filters" }),
     )
@@ -77,6 +81,13 @@ describe("AuditLogsWorkspace", () => {
     expect(screen.queryByText("Dean Example")).not.toBeInTheDocument()
     await user.click(screen.getByText("Expand audit snapshot"))
     expect(screen.getByText(/planned/)).toBeInTheDocument()
+    expect(screen.getByText(/\[redacted\]/)).toBeInTheDocument()
+    expect(screen.queryByText("hidden@example.test")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Next page" }))
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("page=2"),
+      expect.anything(),
+    )
   })
 
   it("does not fetch or render audit records for an unauthorized role", () => {

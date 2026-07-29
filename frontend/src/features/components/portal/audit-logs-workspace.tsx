@@ -15,7 +15,11 @@ import {
 import { Skeleton } from "@/features/components/ui/skeleton"
 import { useAuditLogsQuery } from "@/features/hooks/use-audit-logs"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
-import type { AuditLogFilters } from "@/features/schemas/audit-schema"
+import {
+  auditActions,
+  auditableTypes,
+  type AuditLogFilters,
+} from "@/features/schemas/audit-schema"
 
 const defaults: AuditLogFilters = { page: 1, per_page: 20 }
 function snapshot(value: Record<string, unknown> | null) {
@@ -56,9 +60,13 @@ export function AuditLogsWorkspace() {
       return typeof value === "string" ? value.trim() : ""
     }
     const actor = get("actor_user_id")
+    const action = auditActions.find((value) => value === get("action"))
+    const auditableType = auditableTypes.find(
+      (value) => value === get("auditable_type"),
+    )
     setFilters({
-      action: get("action") || undefined,
-      auditable_type: get("auditable_type") || undefined,
+      action,
+      auditable_type: auditableType,
       actor_user_id: actor ? Number(actor) : undefined,
       from: get("from") || undefined,
       to: get("to") || undefined,
@@ -83,11 +91,25 @@ export function AuditLogsWorkspace() {
       >
         <label>
           Action
-          <input name="action" />
+          <select name="action" defaultValue="">
+            <option value="">All actions</option>
+            {auditActions.map((action) => (
+              <option key={action} value={action}>
+                {action}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Entity type
-          <input name="auditable_type" />
+          <select name="auditable_type" defaultValue="">
+            <option value="">All entity types</option>
+            {auditableTypes.map((auditableType) => (
+              <option key={auditableType} value={auditableType}>
+                {auditableType}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Actor user ID

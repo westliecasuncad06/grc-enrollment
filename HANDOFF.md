@@ -7,8 +7,8 @@
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Tasks 1–6 are accepted and committed only on their isolated review branch;
-  nothing has been pushed or merged.
+  Tasks 1–8, including Task 8 remediation, are committed only on the isolated
+  review branch; they remain unmerged, unscored, and unpushed.
 
 ## Current Objective
 
@@ -264,6 +264,20 @@ UI belongs in Phase 5.
   frontend **38 files / 212 tests**; TypeScript, ESLint, Prettier, Oxlint, and
   production build passed. Published completion remains **41%**. Exact next:
   **Phase 5 Task 9 — Reconcile documentation and run the Phase 5 quality gate.**
+
+#### Review remediation — pending re-review
+
+- Executive Director no longer falls through the generic planning-role section
+  visibility branch: collection and direct policy visibility are now limited to
+  published sections, so planned, closed, and cancelled rows never reach the
+  master-schedule browser query cache. The client filter remains defense in
+  depth.
+- Audit action/entity vocabulary now mirrors backend/OpenAPI enums, and the
+  Registrar filter uses blank-capable selects rather than arbitrary text input.
+  Additional regressions cover the legal matrix, required return reason,
+  confirmed pending transition, HTTP 403, pagination, and snapshot redaction.
+- Remediation is committed only on this isolated branch and awaits independent
+  re-review; **41%** stays unchanged and Task 9 remains next.
 
 ### Takeover verification performed by Codex
 

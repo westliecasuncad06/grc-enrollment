@@ -830,9 +830,10 @@ paths:
       summary: List sections visible to the authenticated role
       description: >
         Faculty receives only its own `published`/`closed` sections, matched
-        by the assigned `professor_id`. Student and Accounting receive all
-        `published`/`closed` sections; every other role receives every section
-        regardless of status.
+        by the assigned `professor_id`. Executive Director receives only
+        `published` sections for the master schedule. Student and Accounting
+        receive all `published`/`closed` sections; remaining planning roles
+        receive every section regardless of status.
         Ordered by term, then subject, then section code.
       security:
         - bearerAuth: []
@@ -1358,6 +1359,7 @@ paths:
               - schedule_proposal.closed
               - student_profile.provisioned
               - audit_log.list_viewed
+              - faculty_directory.list_viewed
         - name: auditable_type
           in: query
           required: false
@@ -1371,6 +1373,7 @@ paths:
               - schedule_proposal
               - student_profile
               - audit_log
+              - faculty_directory
         - name: actor_user_id
           in: query
           required: false

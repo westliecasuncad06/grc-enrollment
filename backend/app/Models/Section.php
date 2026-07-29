@@ -109,7 +109,8 @@ final class Section extends Model
     /**
      * Faculty receives only the published/closed sections assigned directly
      * through `professor_id`; student and Accounting learner visibility stays
-     * status-based. Planning roles see every section regardless of status.
+     * status-based. Executive Director receives published sections only for
+     * the master schedule; remaining planning roles see every status.
      *
      * @param  Builder<Section>  $query
      * @return Builder<Section>
@@ -120,6 +121,10 @@ final class Section extends Model
             return $query
                 ->where('professor_id', $user->id)
                 ->whereIn('status', self::learnerVisibleStatusValues());
+        }
+
+        if ($user->role === UserRole::ExecutiveDirector) {
+            return $query->where('status', SectionStatus::Published->value);
         }
 
         if (! $user->role->isLearnerScoped()) {

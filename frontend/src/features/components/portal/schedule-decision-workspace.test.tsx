@@ -46,6 +46,90 @@ describe("ScheduleDecisionWorkspace", () => {
     expect(
       availableScheduleActions("registrar_head", publishedProposal),
     ).toEqual(["close"])
+    for (const role of [
+      "student",
+      "admission_staff",
+      "faculty",
+      "program_chair",
+      "dean",
+      "executive_director",
+      "registrar_head",
+      "registrar_staff",
+      "accounting_staff",
+    ] as const) {
+      for (const proposal of [
+        draftProposal,
+        deanApprovedProposal,
+        { ...draftProposal, status: "executive_approved" as const },
+        publishedProposal,
+        { ...draftProposal, status: "closed" as const },
+      ]) {
+        const expected =
+          role === "dean" && proposal.status === "draft"
+            ? ["dean_approve"]
+            : role === "dean" && proposal.status === "dean_approved"
+              ? ["dean_return"]
+              : role === "executive_director" &&
+                  proposal.status === "dean_approved"
+                ? ["executive_approve"]
+                : role === "executive_director" &&
+                    proposal.status === "executive_approved"
+                  ? ["executive_return", "publish"]
+                  : role === "registrar_head" && proposal.status === "published"
+                    ? ["close"]
+                    : []
+        expect(availableScheduleActions(role, proposal)).toEqual(expected)
+      }
+    }
+  })
+
+  it("requires a return reason and sends one confirmed patch only while pending", async () => {
+    const user = userEvent.setup()
+    let resolvePatch: ((response: Response) => void) | undefined
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return new Promise<Response>((resolve) => {
+          resolvePatch = resolve
+        })
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [deanApprovedProposal] })),
+      )
+    })
+    renderWithSession(<ScheduleDecisionWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await user.click(
+      await screen.findByRole("button", { name: "Return to draft" }),
+    )
+    expect(
+      screen.getByRole("button", { name: "Confirm decision" }),
+    ).toBeDisabled()
+    await user.type(
+      screen.getByLabelText("Decision reason"),
+      "Capacity conflict",
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm decision" }))
+    expect(
+      screen.getByRole("button", { name: "Saving decision" }),
+    ).toBeDisabled()
+    await user.click(screen.getByRole("button", { name: "Saving decision" }))
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/schedule-proposals/9"),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "dean_return",
+          decision_reason: "Capacity conflict",
+        }),
+      }),
+    )
+    resolvePatch?.(new Response(JSON.stringify({ data: draftProposal })))
   })
 
   it("requires an explicit confirmation before a dean transition", async () => {

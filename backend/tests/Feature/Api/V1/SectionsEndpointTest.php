@@ -132,6 +132,21 @@ final class SectionsEndpointTest extends TestCase
         );
     }
 
+    public function test_an_executive_director_receives_only_published_sections(): void
+    {
+        $term = $this->makeTerm();
+        $published = Section::create(['academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('EXEC-PUBLISHED')->id, 'section_code' => 'PUBLISHED', 'capacity' => 40, 'status' => SectionStatus::Published]);
+        Section::create(['academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('EXEC-PLANNED')->id, 'section_code' => 'PLANNED', 'capacity' => 40, 'status' => SectionStatus::Planned]);
+        Section::create(['academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('EXEC-CLOSED')->id, 'section_code' => 'CLOSED', 'capacity' => 40, 'status' => SectionStatus::Closed]);
+        Section::create(['academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('EXEC-CANCELLED')->id, 'section_code' => 'CANCELLED', 'capacity' => 40, 'status' => SectionStatus::Cancelled]);
+
+        $response = $this->withToken($this->tokenFor(UserRole::ExecutiveDirector, 'executive.sections@grc.test'))
+            ->getJson('/api/v1/sections');
+
+        $response->assertOk()->assertJsonCount(1, 'data');
+        self::assertSame([$published->id], array_column($response->json('data'), 'id'));
+    }
+
     public function test_a_program_chair_can_create_a_section(): void
     {
         $term = $this->makeTerm();

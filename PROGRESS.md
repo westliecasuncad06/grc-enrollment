@@ -1,8 +1,9 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `main`
+**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:**
+`phase-5-portal-workspaces` (isolated, unmerged)
 
-## 2026-07-29 — Phase 5 Task 8 complete
+## 2026-07-29 — Phase 5 Task 8 complete on isolated branch (unmerged)
 
 - Delivered the Dean decision, Executive Director master schedule, and Registrar
   Head audit/closure workspaces. Strict schemas/services parse the existing
@@ -15,9 +16,26 @@
   emails. RED was observed because all four requested new modules were absent.
   Focused verification passed **5 files / 11 tests**; complete frontend
   verification passed **38 files / 212 tests**, TypeScript, ESLint, Prettier,
-  Oxlint, and the production build. Published completion remains **41%**.
+  Oxlint, and the production build. This work remains unmerged and unscored;
+  published completion remains **41%**.
   Exact next: **Phase 5 Task 9 — Reconcile documentation and run the Phase 5
   quality gate.**
+
+### Task 8 review remediation — pending re-review
+
+- Corrected an Executive Director section-data privacy leak at the backend
+  collection and direct-policy boundaries; the master schedule client filter
+  remains defense in depth. Strict audit action/entity enums now mirror the
+  backend/OpenAPI vocabulary and the UI provides only valid blank-capable
+  selects. The published completion remains **41%** because this isolated work
+  is unmerged.
+- RED proved Executive received planned/closed/cancelled rows and audit filters
+  accepted invented vocabulary. Focused backend passed **15 tests / 50
+  assertions**; focused frontend passed **3 files / 9 tests**. Full backend,
+  Pint, PHPStan, OpenAPI lint, frontend static checks, and build passed. The
+  normal parallel full frontend suite has one unrelated flaky Faculty 422 test;
+  its isolated file passes **3/3**, so re-review should obtain a fresh complete
+  suite before accepting this remediation.
 
 ---
 

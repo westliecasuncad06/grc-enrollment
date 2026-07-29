@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { auditLogFiltersSchema } from "@/features/schemas/audit-schema"
 import { getAuditLogs } from "@/features/services/audit-service"
 
 describe("getAuditLogs", () => {
@@ -41,6 +42,36 @@ describe("getAuditLogs", () => {
         "action=section.updated&auditable_type=section&actor_user_id=7&from=2026-07-01&to=2026-07-31&page=2&per_page=20",
       ),
       expect.anything(),
+    )
+  })
+
+  it("rejects actions and entity types outside the backend audit vocabulary", () => {
+    expect(
+      auditLogFiltersSchema.safeParse({ action: "invented.action" }).success,
+    ).toBe(false)
+    expect(
+      auditLogFiltersSchema.safeParse({ auditable_type: "invented_type" })
+        .success,
+    ).toBe(false)
+  })
+
+  it("surfaces a forbidden audit response without accepting any audit data", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "FORBIDDEN",
+            message: "Forbidden",
+            errors: {},
+            request_id: "req-forbidden",
+          },
+        }),
+        { status: 403 },
+      ),
+    )
+
+    await expect(getAuditLogs({ page: 1, per_page: 20 })).rejects.toMatchObject(
+      { status: 403, code: "FORBIDDEN" },
     )
   })
 })

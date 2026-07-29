@@ -4,6 +4,42 @@ import { userRoles } from "@/features/auth/roles"
 
 const nullableObject = z.record(z.string(), z.unknown()).nullable()
 
+export const auditActions = [
+  "curriculum.created",
+  "curriculum.updated",
+  "faculty_availability.created",
+  "faculty_availability.updated",
+  "faculty_availability.deleted",
+  "faculty_subject_preference.created",
+  "faculty_subject_preference.updated",
+  "faculty_subject_preference.deleted",
+  "section.created",
+  "section.updated",
+  "schedule_proposal.created",
+  "schedule_proposal.dean_approved",
+  "schedule_proposal.dean_returned",
+  "schedule_proposal.executive_approved",
+  "schedule_proposal.executive_returned",
+  "schedule_proposal.published",
+  "section.published",
+  "schedule_proposal.closed",
+  "student_profile.provisioned",
+  "audit_log.list_viewed",
+  "faculty_directory.list_viewed",
+] as const
+export const auditableTypes = [
+  "curriculum",
+  "faculty_availability",
+  "faculty_subject_preference",
+  "section",
+  "schedule_proposal",
+  "student_profile",
+  "audit_log",
+  "faculty_directory",
+] as const
+export const auditActionSchema = z.enum(auditActions)
+export const auditableTypeSchema = z.enum(auditableTypes)
+
 export const auditLogSchema = z
   .object({
     type: z.literal("audit_log"),
@@ -11,8 +47,8 @@ export const auditLogSchema = z
     actor_user_id: z.number().int().positive(),
     actor_role: z.enum(userRoles),
     actor_role_label: z.string().min(1),
-    action: z.string().min(1),
-    auditable_type: z.string().min(1),
+    action: auditActionSchema,
+    auditable_type: auditableTypeSchema,
     auditable_id: z.number().int().positive().nullable(),
     before_values: nullableObject,
     after_values: nullableObject,
@@ -50,8 +86,8 @@ export const paginatedAuditLogsSchema = z
 
 export const auditLogFiltersSchema = z
   .object({
-    action: z.string().min(1).optional(),
-    auditable_type: z.string().min(1).optional(),
+    action: auditActionSchema.optional(),
+    auditable_type: auditableTypeSchema.optional(),
     actor_user_id: z.number().int().positive().optional(),
     from: z.iso.date().optional(),
     to: z.iso.date().optional(),
