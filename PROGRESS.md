@@ -1,8 +1,7 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:**
-`phase-6-process-2` (quality-gated and live-verified; merge to `main` is
-this session's next step)
+**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:** `main`
+(merged `phase-6-process-2` at `783c775`, fast-forward)
 
 ## Current Objective
 
@@ -13,8 +12,8 @@ folds in real institutional data the user supplied mid-phase: the actual
 GRC College of Computer Studies subject catalog (88 subjects, two real
 block-section spreadsheets) and the user's confirmed §17-pending grading
 direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC special
-marks). **All 9 tasks are implemented, independently verified against
-real data, and ready to merge to local `main`.**
+marks). **Phase 6 is complete, quality-gated, live-verified against real
+data, and merged to local `main`.**
 
 ## Verified Completed
 
@@ -71,9 +70,8 @@ real data, and ready to merge to local `main`.**
 
 ## Work in Progress
 
-Local merge of `phase-6-process-2` into `main` — everything on the branch
-is quality-gated, live-verified, and ready; the merge itself is the one
-remaining step (*Exact Next Steps*, item 1).
+None. Phase 6 is closed and merged. Phase 7 (Process 3.0 + Remaining
+Portals) has not been started — see *Exact Next Steps*.
 
 ## Files Changed
 
@@ -136,6 +134,10 @@ a provenance README); `docs/api/openapi.yaml` (3 new paths, 5 new schemas);
 | **Live HTTP, real dev DB:** `GET /api/v1/enrollments` | returns both the new and the prior withdrawn enrollment, newest first |
 | `CHECK TABLE mysql.user, mysql.tables_priv` (before/after live testing) | `OK` throughout |
 | `Get-WinEvent -LogName Application` (last 15 min, MariaDB-related) | no entries |
+| **On merged `main`:** `git merge phase-6-process-2` | Fast-forward, `77ae5ac..783c775`, **0 conflicts** — the branch was cut from `main`'s current tip and `main` had no divergent commits |
+| **On merged `main`:** `php artisan test --without-tty` | **563 passed / 2,099 assertions**, 45s |
+| **On merged `main`:** `npx vitest run --no-file-parallelism` | **41 files / 224 tests passed** |
+| **On merged `main`:** `npm run build` (`next build`, Turbopack) | compiled successfully, 5 routes |
 
 ## Technical Decisions
 
@@ -204,31 +206,26 @@ a provenance README); `docs/api/openapi.yaml` (3 new paths, 5 new schemas);
 
 ## Uncommitted or Risky Changes
 
-None uncommitted. The branch `phase-6-process-2` and its worktree at
-`.worktrees/phase-6-process-2` hold 6 clean commits (Tasks 1, 2, 3, 4, 5,
-6-8) and are ready to merge; the real dev database now carries 2 additional
-applied migrations and the CcsSubjectSeeder's 88 rows, applied deliberately
-as part of this session's live verification (not a side effect).
+None. `main`'s working tree is clean after the fast-forward merge (now at
+`783c775`). The `phase-6-process-2` branch and its worktree at
+`.worktrees/phase-6-process-2` remain on disk, unpushed and not deleted, in
+case a rollback is ever needed. The real dev database carries the 2 Phase 6
+migrations and the `CcsSubjectSeeder`'s 88 rows, applied deliberately as
+part of this session's live verification (not a side effect) — the same
+database the merged `main` code now runs against.
 
 ## Exact Next Steps
 
-1. **Immediate:** merge `phase-6-process-2` into local `main` (`git merge
-   phase-6-process-2` from the main worktree). Expect a straightforward
-   fast-forward-style merge — this branch was created from `main` at its
-   current tip and `main` has no divergent commits since. Re-run
-   `php artisan test --without-tty` and `npx vitest run
-   --no-file-parallelism && npm run build` on merged `main` to confirm, then
-   append those results here.
-2. Start **Phase 7 — Process 3.0 + Remaining Portals** (FR-FIN-001–010):
+1. Start **Phase 7 — Process 3.0 + Remaining Portals** (FR-FIN-001–010):
    grade encoding, Registrar approval/override, transferee credits,
    withdrawal, payment queue, Digital COM. This is the most
    ML-consequential phase before 9 — it produces the attrition model's
    label and most of its features. Read `PRD.md` §5.3/DFD 3.x first.
-3. Before writing code, follow `AGENTS.md`: confirm current `git
+2. Before writing code, follow `AGENTS.md`: confirm current `git
    status`/`git log`, and use `superpowers:brainstorming` →
    `superpowers:writing-plans` for a new phase-7 plan/spec pair under
    `docs/superpowers/`.
-4. Optional cleanup (not blocking): remove the
+3. Optional cleanup (not blocking): remove the
    `.worktrees/phase-6-process-2` worktree and delete the merged branch
    once the user confirms the merge is stable — ask first, per the Git
    Safety Protocol.
