@@ -47,6 +47,11 @@ const facultyWorkspaceRegions: Record<string, string> = {
   "teaching-schedule": "Teaching schedule workspace",
 }
 
+const curriculumWorkspaceModules = new Set([
+  "curriculum",
+  "subjects-prerequisites",
+])
+
 describe("PortalModulePage", () => {
   it.each(allowedModuleCases)(
     "renders $role access to $module.id from that role's catalog",
@@ -63,8 +68,10 @@ describe("PortalModulePage", () => {
       )
       if (isPhaseFiveModuleId(module.id)) {
         expect(
-          screen.getByRole("region", { name: `${module.label} workspace` }),
-        ).toBeInTheDocument()
+          screen.getAllByRole("region", {
+            name: `${module.label} workspace`,
+          }),
+        ).not.toHaveLength(0)
         const admissionHeading = admissionWorkspaceHeadings[module.id]
         if (admissionHeading) {
           expect(
@@ -81,6 +88,12 @@ describe("PortalModulePage", () => {
               name: facultyWorkspaceRegions[module.id],
             }),
           ).toBeInTheDocument()
+        } else if (curriculumWorkspaceModules.has(module.id)) {
+          expect(
+            screen.getAllByRole("region", {
+              name: "Curriculum workspace",
+            }),
+          ).not.toHaveLength(0)
         } else {
           expect(
             screen.getByRole("region", {

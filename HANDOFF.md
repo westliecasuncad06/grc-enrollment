@@ -3,20 +3,19 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 21:16:00 +08:00
+- **Date and time:** 2026-07-29 21:27:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Tasks 1–5 are committed only on their isolated review branch; nothing has been
+  Tasks 1–6 are committed only on their isolated review branch; nothing has been
   pushed or merged.
 
 ## Current Objective
 
-Begin Phase 5 Task 6 — Program Chair curriculum and prerequisite workspaces on
-the isolated branch. Preserve the accepted Faculty contract, identity-scoped
-private query keys, browser-token ownership, strict reference contracts,
-full-replace curriculum semantics, and user-owned notification authorization;
-do not merge or push.
+Begin Phase 5 Task 7 — Program Chair sections and schedule workspace on the
+isolated branch. Preserve the Task 6 full-replace curriculum graph contract,
+identity-scoped reference queries, browser-token ownership, strict parsed API
+contracts, and Program Chair-only backend authorization; do not merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -160,6 +159,28 @@ UI belongs in Phase 5.
   the full backend (**517 tests / 1,956 assertions**) and frontend (**26 files
   / 179 tests**) suites remain green. Task 5 is accepted and complete;
   published completion remains **41%** and Task 6 is next.
+
+### Phase 5 Task 6 — Program Chair curriculum and prerequisites
+
+- Connected both Program Chair module IDs, `curriculum` and
+  `subjects-prerequisites`, to one full-replace curriculum workspace. The
+  typed client sends `program_id` only on `POST`; immutable ownership is not
+  sent to `PATCH`, while all metadata, placements, and prerequisite edges are
+  preserved.
+- Strict Zod/RHF contracts reject duplicate placements, self-prerequisites,
+  and direct or transitive graph cycles before submission. The editor also
+  renders the backend's authoritative cycle `422` beside the graph, preserves
+  values for retry/conflict resolution, and requires an accessible discard
+  confirmation for unsaved edits.
+- Curricula, programs, and subjects remain parsed reference data through
+  TanStack Query; curriculum query keys are scoped to `session.userId`, and
+  rendering components make no direct browser requests. Loading, empty,
+  error, saving, and retry-capable states are explicit.
+- RED evidence: the required three-file command failed because the service,
+  workspace, and prerequisite editor imports did not exist. Final focused gate
+  passed **4 files / 10 tests**; full frontend verification passed **29 files /
+  186 tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and
+  `git diff --check`. Published completion remains **41%**; Task 7 is next.
 
 ### Takeover verification performed by Codex
 
@@ -506,10 +527,10 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 6 — Program Chair curriculum and prerequisite
-   workspaces** from its supplied task brief on `phase-5-portal-workspaces`.
-   Preserve the verified Task 1–5 contracts, strict parsed references, and
-   full-replace curriculum graph semantics.
+1. Begin **Phase 5 Task 7 — Program Chair sections and schedule workspace**
+   from its supplied task brief on `phase-5-portal-workspaces`. Preserve the
+   verified Task 1–6 contracts, strict parsed references, and full-replace
+   curriculum graph semantics.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.

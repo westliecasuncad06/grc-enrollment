@@ -358,6 +358,21 @@ no findings**; its review gate passed **18 backend files / 52 tests** and
 Published completion remains **41%**; exact next is Task 6 — Program Chair
 curriculum and prerequisite workspaces.
 
+**Task 6 complete (isolated review branch):** Program Chair `curriculum` and
+`subjects-prerequisites` now dispatch to a typed, identity-scoped full-replace
+curriculum workspace. Create sends `program_id` and the complete graph;
+replacement deliberately omits immutable `program_id` while retaining every
+placement and prerequisite. Strict Zod/RHF validation prevents duplicate
+placements, self-prerequisites, and DAG cycles locally, and backend cycle 422
+feedback renders beside the graph. The workspace provides loading, empty,
+error, save/retry, and accessible discard-confirmation states without direct
+component fetches. RED evidence: the supplied three-file Vitest command failed
+with the three missing feature imports. Final focused verification passed **4
+files / 10 tests**; complete frontend verification passed **29 files / 186
+tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and `git diff
+--check`. Published completion remains **41%**; exact next is Phase 5 Task 7
+— Program Chair sections and schedule workspace.
+
 ## Phase 6 — Process 2.0 + Student Portal
 
 - **Eligible Subject Pool** (DFD 2.2/2.3 · FR-ENR-001–003, 005, 011). Reuse

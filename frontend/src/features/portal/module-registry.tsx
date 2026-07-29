@@ -3,6 +3,7 @@ import type { ComponentType } from "react"
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
+import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
 
 export type PhaseFiveModuleId =
   | "student-accounts"
@@ -63,6 +64,8 @@ const teachingScheduleWorkspace: PortalModuleComponent = () => (
   <TeachingScheduleWorkspace />
 )
 
+const curriculumWorkspace: PortalModuleComponent = () => <CurriculumWorkspace />
+
 export const phaseFiveModuleRegistry: Readonly<
   Record<PhaseFiveModuleId, PortalModuleComponent>
 > = {
@@ -71,8 +74,8 @@ export const phaseFiveModuleRegistry: Readonly<
   "credential-issuance": credentialIssuanceWorkspace,
   "availability-preferences": availabilityPreferencesWorkspace,
   "teaching-schedule": teachingScheduleWorkspace,
-  curriculum: connectedPortalWorkspace,
-  "subjects-prerequisites": connectedPortalWorkspace,
+  curriculum: curriculumWorkspace,
+  "subjects-prerequisites": curriculumWorkspace,
   "sections-schedules": connectedPortalWorkspace,
   "faculty-assignment": connectedPortalWorkspace,
   "schedule-proposals": connectedPortalWorkspace,
