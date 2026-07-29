@@ -277,7 +277,8 @@ UI belongs in Phase 5.
   Additional regressions cover the legal matrix, required return reason,
   confirmed pending transition, HTTP 403, pagination, and snapshot redaction.
 - Remediation is committed only on this isolated branch and awaits independent
-  re-review; **41%** stays unchanged and Task 9 remains next.
+  re-review; normal full frontend verification was rerun twice cleanly at 38
+  files / 215 tests each. **41%** stays unchanged and Task 9 remains next.
 
 ### Takeover verification performed by Codex
 

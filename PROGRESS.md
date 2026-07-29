@@ -33,9 +33,11 @@
   accepted invented vocabulary. Focused backend passed **15 tests / 50
   assertions**; focused frontend passed **3 files / 9 tests**. Full backend,
   Pint, PHPStan, OpenAPI lint, frontend static checks, and build passed. The
-  normal parallel full frontend suite has one unrelated flaky Faculty 422 test;
-  its isolated file passes **3/3**, so re-review should obtain a fresh complete
-  suite before accepting this remediation.
+  normal parallel full frontend suite was then rerun twice cleanly at **38
+  files / 215 tests** each. The suspect Faculty file also passed repeated
+  isolated runs; Task 8 tests use no fake timers or leaked global mocks, and
+  shared cleanup resets DOM/navigation. No timeout was raised or test behavior
+  changed because the failure did not reproduce after contention cleared.
 
 ---
 
