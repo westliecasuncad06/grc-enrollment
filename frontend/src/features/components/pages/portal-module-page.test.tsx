@@ -5,6 +5,7 @@ import type { AuthSession } from "@/features/auth/auth-types"
 import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
+import { isPhaseFiveModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { renderWithSession } from "@/tests/render-app"
 
@@ -49,17 +50,31 @@ describe("PortalModulePage", () => {
       expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(
         0,
       )
-      expect(
-        screen.getByRole("region", { name: `${module.label} module preview` }),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByRole("heading", { name: "Demo module preview" }),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByText(
-          "This module is not connected to workflow or authorization APIs.",
-        ),
-      ).toBeInTheDocument()
+      if (isPhaseFiveModuleId(module.id)) {
+        expect(
+          screen.getByRole("region", { name: `${module.label} workspace` }),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByRole("region", { name: "Connected portal workspace" }),
+        ).toBeInTheDocument()
+        expect(
+          screen.queryByRole("heading", { name: "Demo module preview" }),
+        ).not.toBeInTheDocument()
+      } else {
+        expect(
+          screen.getByRole("region", {
+            name: `${module.label} module preview`,
+          }),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByRole("heading", { name: "Demo module preview" }),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            "This module is not connected to workflow or authorization APIs.",
+          ),
+        ).toBeInTheDocument()
+      }
       expect(
         screen.getByRole("link", { name: "Return to portal overview" }),
       ).toHaveAttribute("href", "/portal")

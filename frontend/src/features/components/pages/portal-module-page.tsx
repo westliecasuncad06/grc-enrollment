@@ -23,6 +23,10 @@ import {
   getRoleModule,
   rolePortalDefinitions,
 } from "@/features/portal/role-capabilities"
+import {
+  isPhaseFiveModuleId,
+  phaseFiveModuleRegistry,
+} from "@/features/portal/module-registry"
 
 export function PortalModulePage({ moduleId }: { moduleId: string }) {
   const { session } = useAuth()
@@ -72,6 +76,32 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
   }
 
   const Icon = module.icon
+  const ModuleComponent = isPhaseFiveModuleId(module.id)
+    ? phaseFiveModuleRegistry[module.id]
+    : null
+
+  if (ModuleComponent) {
+    return (
+      <main className="portal-module-page">
+        <section
+          className="portal-module-empty"
+          role="region"
+          aria-label={`${module.label} workspace`}
+        >
+          <Badge variant="outline">{definition.roleLabel}</Badge>
+          <h1>{module.label}</h1>
+          <p>{module.description}</p>
+          <ModuleComponent />
+          <Button asChild variant="outline">
+            <Link href="/portal">
+              <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+              Return to portal overview
+            </Link>
+          </Button>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="portal-module-page">

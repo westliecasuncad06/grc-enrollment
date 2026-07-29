@@ -273,7 +273,22 @@ client/form tests passed **14 tests**; the complete frontend suite passed
 build, `git diff --check`, and the no-direct-browser-storage scan passed.
 Independent review returned **Accept with no findings**. The published **41%**
 overall completion remains unchanged pending the planned phase increment.
-**Next:** Phase 5 Task 3 — typed module registry and live notification sheet.
+
+**Task 3 complete (isolated review branch):** strict Zod schemas, parsed
+services, and TanStack Query hooks now consume the authenticated academic-term,
+program, subject, and private notification contracts. The portal shell and
+overview show only the `status: active` term, or an honest no-active-term
+fallback. The live notification Sheet supports unread count/filter, pagination,
+idempotent mark-as-read PATCH, and safe generic API-error rendering without
+assuming another user's notification details. The explicit 13-ID Phase 5
+registry dispatches only role-authorized modules to isolated workspace slots;
+every remaining module retains its existing scoped preview state. Required RED
+evidence recorded missing schema/sheet/registry imports; final focused portal
+tests passed **6 files / 69 tests** and complete frontend verification passed
+**19 files / 159 tests**, TypeScript, Prettier, ESLint, Oxlint, and production
+build. `git diff --check` was clean. Published overall completion remains
+**41%** pending the planned Phase 5 increment.
+**Next:** Phase 5 Task 4 — Admission Staff provisioning workspace.
 
 ## Phase 6 — Process 2.0 + Student Portal
 

@@ -91,19 +91,19 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "student-accounts",
         "Student Accounts",
-        "Preview account preparation for admitted students.",
+        "Prepare admitted student accounts through the authorized workspace.",
         Users,
       ),
       portalModule(
         "admission-status",
         "Admission Status",
-        "See where admission progress and record checks will be coordinated.",
+        "Coordinate admission progress and record checks.",
         UserCheck,
       ),
       portalModule(
         "credential-issuance",
         "Credential Issuance",
-        "Preview the controlled handoff of student access credentials.",
+        "Manage the controlled handoff of student access credentials.",
         BadgeCheck,
       ),
     ],
@@ -115,13 +115,13 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "availability-preferences",
         "Availability Preferences",
-        "Preview the workspace for communicating teaching availability.",
+        "Communicate teaching availability and subject preferences.",
         CalendarDays,
       ),
       portalModule(
         "teaching-schedule",
         "Teaching Schedule",
-        "See where approved teaching assignments will be presented.",
+        "Review approved teaching assignments.",
         FileClock,
       ),
       portalModule(
@@ -145,25 +145,25 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "curriculum",
         "Curriculum",
-        "Preview curriculum structure and program requirements.",
+        "Manage curriculum structure and program requirements.",
         LibraryBig,
       ),
       portalModule(
         "subjects-prerequisites",
         "Subjects & Prerequisites",
-        "See where subject relationships and eligibility rules will be managed.",
+        "Manage subject relationships and eligibility rules.",
         Network,
       ),
       portalModule(
         "sections-schedules",
         "Sections & Schedules",
-        "Preview section planning across rooms and meeting patterns.",
+        "Plan sections across approved meeting patterns.",
         CalendarDays,
       ),
       portalModule(
         "faculty-assignment",
         "Faculty Assignment",
-        "See where instructors will be proposed for planned sections.",
+        "Propose faculty assignments for planned sections.",
         UserRoundCog,
       ),
       portalModule(
@@ -187,7 +187,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "schedule-approvals",
         "Schedule Approvals",
-        "Preview the academic schedule review queue.",
+        "Review the academic schedule approval queue.",
         ClipboardCheck,
       ),
       portalModule(
@@ -223,7 +223,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "master-schedule",
         "Master Schedule",
-        "Preview the consolidated academic schedule view.",
+        "Review the consolidated academic schedule.",
         CalendarDays,
       ),
       portalModule(
@@ -277,7 +277,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "audit-logs",
         "Audit Logs",
-        "Preview traceable activity records for authorized review.",
+        "Review traceable activity records within authorized controls.",
         FileText,
       ),
       portalModule(

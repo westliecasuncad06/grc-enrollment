@@ -3,19 +3,20 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 19:43:53 +08:00
+- **Date and time:** 2026-07-29 19:54:47 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `ddee93e feat(frontend): add shared portal data layer`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
-  Tasks 1 and 2 are committed only on their isolated review branch; nothing has been
+  Tasks 1–3 are committed only on their isolated review branch; nothing has been
   pushed or merged.
 
 ## Current Objective
 
-Begin Phase 5 Task 3 — typed module registry and live notification sheet — on
-the isolated review branch. Preserve Task 1's audited faculty-directory
-contract, Task 2's browser-token ownership boundary, and user-owned
-notification authorization; do not merge or push.
+Begin Phase 5 Task 4 — Admission Staff provisioning workspace — on the
+isolated review branch. Preserve Task 1's audited faculty-directory contract,
+Task 2's browser-token ownership boundary, Task 3's strict reference and
+notification contracts, and user-owned notification authorization; do not
+merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -57,6 +58,26 @@ UI belongs in Phase 5.
   production build all passed. The storage-boundary scan found no direct
   browser storage access outside `auth-token.ts` (other match is a comment).
 - Independent Task 2 review verdict: **Accept with no findings**.
+
+### Phase 5 Task 3 — Portal reference context, notifications, and registry
+
+- Added strict Zod clients and TanStack Query hooks for academic terms,
+  programs, subjects, and authenticated user-owned notifications. The active
+  term is selected only from `status: active`, with an honest no-active-term
+  fallback.
+- Replaced the disabled notification preview action with an accessible Sheet:
+  unread count, unread-only filter, pagination, mark-as-read PATCH, and a
+  safe generic API-error state. Profile, password, help, and report-issue
+  controls remain disabled and honestly labeled.
+- Added the explicit 13-ID Phase 5 registry after the existing role check.
+  Registry-owned IDs dispatch to their isolated workspace slots; every other
+  catalog module retains the scoped preview state, including cross-role
+  not-found protection.
+- RED evidence: the required narrow notification/sheet/registry Vitest
+  command exited 1 because all three new imports did not exist. Final focused
+  portal coverage passed **6 files / 69 tests**; complete frontend verification
+  passed **19 files / 159 tests**, TypeScript, Prettier, ESLint, Oxlint, and
+  production build. `git diff --check` was clean.
 
 ### Takeover verification performed by Codex
 
@@ -403,9 +424,9 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 3 — typed module registry and live notification
-   sheet** from its supplied task brief on `phase-5-portal-workspaces`.
-   Preserve the verified Task 1 and Task 2 contracts.
+1. Begin **Phase 5 Task 4 — Admission Staff provisioning workspace** from its
+   supplied task brief on `phase-5-portal-workspaces`. Preserve the verified
+   Task 1–3 contracts and the no-browser-storage credential boundary.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.
@@ -420,7 +441,7 @@ The post-merge full-suite result must still be recorded below before cleanup.
 - Do not weaken audit privacy, notification ownership, Registrar Head audit
   authorization, transactional rollback, or advisory-only analytical
   boundaries.
-- Do not modify frontend or `ml-service` code for this backend-only phase.
+- Do not modify `ml-service` code or work outside the scoped Phase 5 task.
 - Do not alter unrelated dirty-worktree changes.
 - Do not stage, commit, merge, push, reset, or stash without explicit user
   authorization.
