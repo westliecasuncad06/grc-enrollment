@@ -617,6 +617,40 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/faculty-members:
+    get:
+      operationId: getFacultyMembers
+      summary: List active faculty members for assignment
+      description: >
+        Program Chair only. Returns active Faculty identities ordered by name,
+        then ID. Each successful view creates a `faculty_directory.list_viewed`
+        operational audit record with the result count.
+      security:
+        - bearerAuth: []
+      tags:
+        - Scheduling
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Active faculty directory.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyMembersResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/faculty-subject-preferences:
     get:
       operationId: getFacultySubjectPreferences
@@ -2257,6 +2291,40 @@ components:
           format: time
     UpdateFacultyAvailabilityRequest:
       $ref: "#/components/schemas/StoreFacultyAvailabilityRequest"
+    FacultyMembersResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacultyMemberResource"
+    FacultyMemberResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - name
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: faculty_member
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+        status_label:
+          type: string
     FacultySubjectPreferencesResponse:
       type: object
       additionalProperties: false

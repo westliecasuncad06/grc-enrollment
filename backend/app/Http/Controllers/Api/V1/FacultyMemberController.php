@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Actions\Identity\ListFacultyMembers;
+use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\FacultyMemberResource;
+use App\Models\User;
+use App\Support\Audit\AuditRequestContextFactory;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+final class FacultyMemberController extends Controller
+{
+    /**
+     * @throws AuthenticationException
+     */
+    public function __invoke(
+        Request $request,
+        ListFacultyMembers $listFacultyMembers,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $request->user();
+
+        if (! $actor instanceof User) {
+            throw new AuthenticationException;
+        }
+
+        $this->authorize('view-faculty-directory');
+
+        $members = $listFacultyMembers->execute(
+            $actor,
+            $contextFactory->fromRequest($request),
+        );
+
+        $response = FacultyMemberResource::collection($members)->response($request);
+        $response->headers->set('Cache-Control', 'no-store, private');
+
+        return $response;
+    }
+}

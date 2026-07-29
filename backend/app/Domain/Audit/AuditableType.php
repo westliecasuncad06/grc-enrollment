@@ -18,6 +18,8 @@ final class AuditableType
 
     public const AUDIT_LOG = 'audit_log';
 
+    public const FACULTY_DIRECTORY = 'faculty_directory';
+
     /**
      * @return list<string>
      */
@@ -31,6 +33,7 @@ final class AuditableType
             self::SCHEDULE_PROPOSAL,
             self::STUDENT_PROFILE,
             self::AUDIT_LOG,
+            self::FACULTY_DIRECTORY,
         ];
     }
 }

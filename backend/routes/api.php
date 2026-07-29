@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\CurriculumController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
+use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -66,6 +67,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // existing "curriculum"/"subjects-prerequisites" module ownership.
         // CurriculumPolicy re-checks the role as defense in depth.
         Route::middleware('role:program_chair')->group(function (): void {
+            Route::get('/faculty-members', FacultyMemberController::class)->name('faculty-members.index');
+
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
 
