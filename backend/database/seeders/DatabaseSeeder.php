@@ -21,6 +21,9 @@ final class DatabaseSeeder extends Seeder
             ProgramSeeder::class,
             AcademicTermSeeder::class,
             SubjectSeeder::class,
+            // Additive: the real GRC CCS catalog, alongside (not replacing)
+            // the synthetic subjects above. See CcsSubjectSeeder's docblock.
+            CcsSubjectSeeder::class,
             CurriculumSeeder::class,
             SectionSeeder::class,
             DemoEnrollmentSeeder::class,

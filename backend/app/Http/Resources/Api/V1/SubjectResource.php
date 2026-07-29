@@ -19,7 +19,7 @@ final class SubjectResource extends JsonResource
      *     id: int,
      *     code: string,
      *     title: string,
-     *     units: int,
+     *     units: float,
      *     status: string,
      *     status_label: string
      * }

@@ -42,7 +42,7 @@ export const subjectSchema = z
     id: z.number().int().positive(),
     code: z.string().min(1),
     title: z.string().min(1),
-    units: z.number().int().positive(),
+    units: z.number().positive(),
     status: z.enum(["active", "inactive"]),
     status_label: z.string().min(1),
   })

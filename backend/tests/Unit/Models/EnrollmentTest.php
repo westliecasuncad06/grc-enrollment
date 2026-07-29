@@ -20,7 +20,7 @@ final class EnrollmentTest extends TestCase
         ]);
 
         self::assertSame(EnrollmentStatus::Enrolled, $enrollment->status);
-        self::assertSame(15, $enrollment->total_units);
+        self::assertSame(15.0, $enrollment->total_units);
     }
 
     public function test_lifecycle_timestamps_are_cast_to_carbon_immutable(): void

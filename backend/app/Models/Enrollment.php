@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $student_id
  * @property int $academic_term_id
  * @property EnrollmentStatus $status
- * @property int $total_units
+ * @property float $total_units
  * @property ?CarbonImmutable $submitted_at
  * @property ?CarbonImmutable $registrar_decided_at
  * @property ?CarbonImmutable $payment_confirmed_at
@@ -58,7 +58,7 @@ final class Enrollment extends Model
     {
         return [
             'status' => EnrollmentStatus::class,
-            'total_units' => 'integer',
+            'total_units' => 'float',
             'submitted_at' => 'immutable_datetime',
             'registrar_decided_at' => 'immutable_datetime',
             'payment_confirmed_at' => 'immutable_datetime',

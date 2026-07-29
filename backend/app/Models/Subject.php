@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property string $code
  * @property string $title
- * @property int $units
+ * @property float $units
  * @property SubjectStatus $status
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -30,12 +30,16 @@ final class Subject extends Model
     ];
 
     /**
+     * `units` is a `float`, not the raw decimal string: unlike
+     * `academic_grades.final_grade`, a unit count carries no §17
+     * policy ambiguity, so it is safe to coerce to a numeric type.
+     *
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'units' => 'integer',
+            'units' => 'float',
             'status' => SubjectStatus::class,
         ];
     }

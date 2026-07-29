@@ -1819,7 +1819,11 @@ components:
         title:
           type: string
         units:
-          type: integer
+          type: number
+          format: float
+          description: >
+            One decimal place of precision (e.g. 1.5) to represent
+            fractional-credit subjects such as Leadership.
         status:
           type: string
           description: >

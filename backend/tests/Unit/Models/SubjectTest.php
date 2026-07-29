@@ -19,6 +19,6 @@ final class SubjectTest extends TestCase
         ]);
 
         self::assertSame(SubjectStatus::Active, $subject->status);
-        self::assertSame(3, $subject->units);
+        self::assertSame(3.0, $subject->units);
     }
 }
