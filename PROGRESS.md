@@ -1,8 +1,7 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:**
-`phase-5-portal-workspaces` (quality-gated; merge to `main` is this session's
-next step)
+**Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `main`
+(merged `phase-5-portal-workspaces` at `f08c2db`)
 
 ## Current Objective
 
@@ -10,10 +9,9 @@ Roadmap Phase 5, "Portals over Existing APIs": make 13 portal modules across
 six roles (Admission Staff, Faculty, Program Chair, Dean, Executive Director,
 Registrar Head) functional against the existing 29-route API surface, plus
 one new least-privilege faculty-directory read endpoint for named section
-assignment. Phase 5 implementation, review, and the full quality gate are
-**complete on the isolated branch**; local merge to `main` is the immediate
-next action (see *Exact Next Steps*). Expected outcome: a demonstrably
-working system for the first time, end to end, for six of nine roles.
+assignment. **Phase 5 is complete, quality-gated, and merged to local
+`main`.** Expected outcome achieved: a demonstrably working system for the
+first time, end to end, for six of nine roles.
 
 ## Verified Completed
 
@@ -41,15 +39,17 @@ working system for the first time, end to end, for six of nine roles.
   `module-registry.test.tsx` to assert every one of the 27 non-Phase-5
   catalog module IDs, not just one, stays disconnected from the registry.
   Ran the full quality gate (see *Commands and Tests Run*), reconciled this
-  file, and retired `HANDOFF.md`.
+  file, retired `HANDOFF.md`, and merged `phase-5-portal-workspaces` into
+  local `main` (merge commit `f08c2db`, no conflicts in application code —
+  only in `PROGRESS.md`/`HANDOFF.md`, resolved by keeping the branch's
+  reconciled `PROGRESS.md` and the `HANDOFF.md` deletion). Re-ran the
+  focused gate on merged `main`: backend 22/145, frontend 38/216
+  (`--no-file-parallelism`), production build — all green.
 
 ## Work in Progress
 
-Local merge of `phase-5-portal-workspaces` into `main` — everything on the
-branch is quality-gated and ready; the merge itself and its post-merge
-re-verification are the one remaining step of this session (*Exact Next
-Steps*, item 1). Phase 6 (Process 2.0 + Student Portal) has not been
-started.
+None. Phase 5 is closed and merged. Phase 6 (Process 2.0 + Student Portal)
+has not been started — see *Exact Next Steps*.
 
 ## Files Changed
 
@@ -83,9 +83,9 @@ into this file; see *Technical Decisions*).
 
 ## Commands and Tests Run
 
-All commands below were actually executed in the `phase-5-portal-workspaces`
-worktree on 2026-07-29. Post-merge re-verification on `main` happens as this
-session's next step and will be appended here once run.
+The full gate below ran on the `phase-5-portal-workspaces` worktree on
+2026-07-29, before merge. The last three rows re-ran the focused/build
+verification on `main` after the merge.
 
 | Command | Result |
 |---|---|
@@ -102,6 +102,9 @@ session's next step and will be appended here once run.
 | `npm run format:check` (Prettier) | passed after one auto-fix to `module-registry.test.tsx` (this session's own edit) |
 | `npm audit --audit-level=moderate` | 0 vulnerabilities |
 | `npm run build` (`next build`, Turbopack) | compiled successfully, 5 routes |
+| **On merged `main`:** `git merge phase-5-portal-workspaces` | 2 conflicts (`PROGRESS.md`, `HANDOFF.md`), both doc-only — 0 application-code conflicts. Resolved: kept branch's `PROGRESS.md`, kept `HANDOFF.md` deletion |
+| **On merged `main`:** `php artisan test --filter='FacultyMembersEndpointTest\|ApiSurfaceTest'` | **22 passed / 145 assertions** |
+| **On merged `main`:** `npx vitest run --no-file-parallelism` then `npm run build` (after `npm install` to pick up the newly merged `sonner` dependency) | **38 files / 216 tests passed**; build compiled successfully |
 
 ## Technical Decisions
 
@@ -142,39 +145,32 @@ session's next step and will be appended here once run.
 
 ## Uncommitted or Risky Changes
 
-`main`'s working tree carries its own pending doc-only edits from before this
-takeover (`HANDOFF.md`, `PROGRESS.md`, one plan/spec pair for this same
-Phase 5 work, and an unrelated pre-existing dirty line in the 2026-07-27
-MariaDB plan). Those must be committed on `main` — not stashed, not
-discarded — before the merge below, since a dirty target blocks `git merge`.
+None. `main`'s working tree is clean after the merge
+(commit `f08c2db`, preceded by `3c1ba23` which committed the pre-takeover
+pending docs). `frontend/node_modules` needed one `npm install` after the
+merge to pick up the newly merged `sonner` dependency — this touched no
+tracked file (`package-lock.json` was already correct from the merge). The
+`phase-5-portal-workspaces` branch and its worktree at
+`.worktrees/phase-5-portal-workspaces` remain on disk, unpushed and not
+deleted, in case a rollback is ever needed.
 
 ## Exact Next Steps
 
-1. **Immediate:** in the main worktree (`C:\xampp\htdocs\GRC-ENROLLMENT`),
-   commit the pending doc changes listed above, then
-   `git merge phase-5-portal-workspaces`. Expect a conflict in
-   `PROGRESS.md` (both sides edited it) and in `HANDOFF.md` (deleted on the
-   branch, modified on `main`) — resolve by taking the branch's reconciled
-   `PROGRESS.md` and keeping the deletion. Re-run
-   `php artisan test --filter='FacultyMembersEndpointTest|ApiSurfaceTest'`
-   and `npm test && npm run build` on merged `main` to confirm the merge
-   result, then append those results to *Commands and Tests Run* and update
-   the header/*Work in Progress* to say "merged."
-2. Start **Phase 6 — Process 2.0 + Student Portal**: Eligible Subject Pool
+1. Start **Phase 6 — Process 2.0 + Student Portal**: Eligible Subject Pool
    (DFD 2.2/2.3, FR-ENR-001–003/005/011), reusing the existing prerequisite
    graph walk and `SectionConflictDetector`. Remember: prerequisite edges
    hang off `curriculum_subject_id`, not a bare subject pair, and `sections`
    join a student's curriculum **only via `subject_id`** — there is no
    `curriculum_id` on `sections`.
-3. Then Enrollment Submission (DFD 2.4, FR-ENR-004/006–010): atomic
+2. Then Enrollment Submission (DFD 2.4, FR-ENR-004/006–010): atomic
    enrollment + `enrollment_subjects` + `queue_ticket`; the
    `enrollments.active_academic_term_id` generated column already enforces
    one-active-enrollment-per-term at the database layer.
-4. Before writing code, follow `AGENTS.md`: read `PRD.md` §5.2/DFD 2.1–2.4,
+3. Before writing code, follow `AGENTS.md`: read `PRD.md` §5.2/DFD 2.1–2.4,
    confirm current `git status`/`git log`, and use
    `superpowers:brainstorming` → `superpowers:writing-plans` for a new
    phase-6 plan/spec pair under `docs/superpowers/`.
-5. Optional cleanup (not blocking): remove the
+4. Optional cleanup (not blocking): remove the
    `.worktrees/phase-5-portal-workspaces` worktree and delete the merged
    branch once the user confirms the merge is stable — ask first, per the
    Git Safety Protocol.
