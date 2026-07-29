@@ -42,7 +42,13 @@ first time, end to end, for six of nine roles.
   file, retired `HANDOFF.md`, and merged `phase-5-portal-workspaces` into
   local `main` (merge commit `f08c2db`, no conflicts in application code —
   only in `PROGRESS.md`/`HANDOFF.md`, resolved by keeping the branch's
-  reconciled `PROGRESS.md` and the `HANDOFF.md` deletion). Re-ran the
+  reconciled `PROGRESS.md` and the `HANDOFF.md` deletion). **Found and fixed
+  a real production-readiness defect during live verification** (all test
+  suites had passed without exposing it — see *Technical Decisions* and
+  *Known Issues*): the real dev database was missing all 5 Phase 4 tables and
+  their `grc_app`/`grc_migrator` grants, so every audited write in the
+  running application — not just the new faculty-directory endpoint — had
+  been silently 500ing since Phase 4 merged. Re-ran the
   focused gate on merged `main`: backend 22/145, frontend 38/216
   (`--no-file-parallelism`), production build — all green.
 
@@ -105,9 +111,44 @@ verification on `main` after the merge.
 | **On merged `main`:** `git merge phase-5-portal-workspaces` | 2 conflicts (`PROGRESS.md`, `HANDOFF.md`), both doc-only — 0 application-code conflicts. Resolved: kept branch's `PROGRESS.md`, kept `HANDOFF.md` deletion |
 | **On merged `main`:** `php artisan test --filter='FacultyMembersEndpointTest\|ApiSurfaceTest'` | **22 passed / 145 assertions** |
 | **On merged `main`:** `npx vitest run --no-file-parallelism` then `npm run build` (after `npm install` to pick up the newly merged `sonner` dependency) | **38 files / 216 tests passed**; build compiled successfully |
+| **Live E2E proof, real dev DB:** `php artisan serve --port=8100`, real Sanctum login as `chair.seed@grc.test`, `GET /api/v1/faculty-members` with the bearer token | **First attempt: HTTP 500** (see *Technical Decisions* — the real dev DB was missing all 5 Phase 4 tables/grants). After the DB fix below: **HTTP 200**, real data returned, audit row verified persisted (`SELECT ... FROM audit_logs`) |
+| **DB fix verification:** `php artisan migrate:status --database=mariadb_migrator` before/after; `CHECK TABLE mysql.user, mysql.tables_priv` before and after every `GRANT`; Windows Event Log scan (`Get-WinEvent -LogName Application`) after | All privilege tables `OK` throughout; no MariaDB-related Event Log entries; full backend suite re-run after the fix: **519 passed / 1,964 assertions**, unchanged |
 
 ## Technical Decisions
 
+- **Fix the real dev database's missing Phase 4 schema and grants, found by
+  live E2E verification, not by the (green) test suite.** `php artisan test`
+  runs entirely against `grc_enrollment_test`/`grc_test`, a separate database
+  and user from the one the actual running application uses
+  (`grc_enrollment`/`grc_app`, per `.env`). Logging in as a real seeded user
+  and calling the new endpoint over HTTP — not just running tests — showed
+  the real dev database still had only the pre-Phase-4 schema: the 5 Phase 4
+  migrations (`audit_logs`, `notifications`, `prediction_runs`,
+  `section_demand_forecasts`, `attrition_predictions`) had only ever been
+  applied to the test database, never to `grc_enrollment`. Every audited
+  write path in the running app — curriculum, sections, schedule proposals,
+  student provisioning, notifications, and the new faculty directory — was
+  silently returning HTTP 500. Fixed with the user's explicit authorization,
+  following this project's own documented-safe procedure exactly (table-level
+  grants only, `CHECK TABLE` on the privilege tables before and after each
+  step, Windows Event Log checked after): granted `grc_migrator` the same
+  `SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER` privilege
+  pattern already used for all 22 existing tables on the 5 new table names
+  (MariaDB permits table-level grants on names that don't yet exist), ran
+  `php artisan migrate --database=mariadb_migrator --force` (additive
+  `CREATE TABLE` only — zero rows touched in any of the 21 existing tables),
+  then granted `grc_app` runtime `SELECT, INSERT, UPDATE, DELETE` on
+  `audit_logs` and `notifications` only — deliberately **not** on the 3 ML
+  tables, which Phase 4's own design states have "no HTTP, job, seeder,
+  frontend, or student attrition access." Verified live: the faculty-members
+  call now returns 200 with a real `audit_logs` row persisted; the full
+  backend suite still passes unchanged (519/1,964) after the schema change.
+- **This is a systemic gap, not specific to Phase 5 — flag it for whoever
+  works Phase 6 or later.** Any future migration must be applied to the real
+  dev database with `--database=mariadb_migrator` in addition to whatever
+  the test suite does automatically; nothing currently does this
+  automatically, and nothing failed loudly when it didn't happen for five
+  straight migrations across an entire merged phase.
 - **Retire `HANDOFF.md`, fold into `PROGRESS.md`.** Two parallel handoff
   documents drifted (main's `HANDOFF.md` said "stopped, do not resume";
   the branch's said "Task 9 in progress") while `PROGRESS.md` on `main` was
@@ -137,6 +178,14 @@ verification on `main` after the merge.
   --no-file-parallelism`. Treat any lone `npm test` failure on this machine
   as a false alarm until reproduced with `--no-file-parallelism`. Not
   observed as a problem in CI (Frontend job already ✅).
+- **RESOLVED this session, but re-read before every future migration:** the
+  real dev database (`grc_enrollment`/`grc_app`) was silently 5 migrations
+  and 2 grants behind the test database for all of Phase 4. Fixed — see
+  *Technical Decisions*. The systemic gap remains: nothing currently applies
+  a merged migration to the real dev DB automatically. Before trusting any
+  new endpoint that writes to a new table, run
+  `php artisan migrate:status --database=mariadb_migrator` and check the
+  real dev DB, not just the test suite.
 - No other known blocking defect in Phase 5.
 - Phase 6 has an existing §17-blocked list (passing-grade rule, max
   units/overload, irregular-student approval) — mechanism-implement,
@@ -733,6 +782,24 @@ the local XAMPP MariaDB 10.4.32 has crashed the server twice
 privilege tables first, and check the Windows Event Log after. `GRANT` takes
 effect immediately — `FLUSH PRIVILEGES` is unnecessary and was implicated in
 one crash. Never stop, reconfigure, or upgrade `C:\xampp\mysql`.
+
+**A green test suite does not prove the real dev database works — verify
+migrations and grants separately.** `php artisan test` runs entirely against
+`grc_enrollment_test`/`grc_test`; the actual running application uses
+`grc_enrollment`/`grc_app` (per `.env`) and `grc_migrator` for schema changes
+(per `config/database.php`'s `mariadb_migrator` connection —
+`php artisan migrate --database=mariadb_migrator`, not the default
+connection, which lacks CREATE/ALTER/DROP by design). These two databases can
+silently drift: Phase 4's 5 migrations sat merged and 519/519-tested for a
+full session while the real dev DB never received them or the matching
+`grc_app`/`grc_migrator` grants, so the running application 500'd on every
+audited write until this was caught by a live HTTP check and fixed
+2026-07-29 (see the Phase 5 Technical Decisions entry). After any migration,
+confirm with `php artisan migrate:status --database=mariadb_migrator`
+against the real dev DB, not just a green test run. New table-level grants
+follow the same safe procedure as above and can be pre-issued on a table
+name that doesn't exist yet — MariaDB does not require the object to exist
+first for a table-level `GRANT`.
 
 **Sanctum guard caching — one authenticated actor per test method.** Chaining
 `withToken()` across different users inside a single test method silently keeps
