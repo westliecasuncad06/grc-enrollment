@@ -46,7 +46,13 @@ describe("phaseFiveModuleRegistry", () => {
                   ? "Faculty assignment workspace"
                   : moduleId === "schedule-proposals"
                     ? "Schedule proposals workspace"
-                    : "Connected portal workspace"
+                    : moduleId === "schedule-approvals"
+                      ? "Schedule decision workspace"
+                      : moduleId === "master-schedule"
+                        ? "Master schedule workspace"
+                        : moduleId === "audit-logs"
+                          ? "Audit logs workspace"
+                          : "Connected portal workspace"
       expect(
         view.getByRole("region", { name: expectedRegion }),
       ).toBeInTheDocument()

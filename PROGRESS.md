@@ -2,6 +2,23 @@
 
 **Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:** `main`
 
+## 2026-07-29 — Phase 5 Task 8 complete
+
+- Delivered the Dean decision, Executive Director master schedule, and Registrar
+  Head audit/closure workspaces. Strict schemas/services parse the existing
+  proposal and audit contracts; private query keys include the active user ID.
+  The client exposes only the API's legal lifecycle actions, requires a reason
+  exactly for return actions, confirms transitions, disables duplicate actions
+  while pending, and invalidates proposal/section data after success.
+- Executive Director renders only published sections; Registrar audit filters,
+  pagination, retry, and safe snapshot expansion never expose actor names or
+  emails. RED was observed because all four requested new modules were absent.
+  Focused verification passed **5 files / 11 tests**; complete frontend
+  verification passed **38 files / 212 tests**, TypeScript, ESLint, Prettier,
+  Oxlint, and the production build. Published completion remains **41%**.
+  Exact next: **Phase 5 Task 9 — Reconcile documentation and run the Phase 5
+  quality gate.**
+
 ---
 
 # ■ Overall Completion — 41%

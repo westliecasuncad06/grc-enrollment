@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { UserRole } from "@/features/auth/roles"
 import {
   sectionSchema,
   type Section,
@@ -6,10 +7,13 @@ import {
 import {
   scheduleProposalEnvelopeSchema,
   scheduleProposalInputSchema,
+  scheduleProposalTransitionSchema,
   scheduleProposalsEnvelopeSchema,
   sectionInputSchema,
   type ScheduleProposal,
   type ScheduleProposalInput,
+  type ScheduleProposalTransition,
+  type ScheduleAction,
   type SectionEditorValues,
   type SectionInput,
 } from "@/features/schemas/scheduling-schema"
@@ -22,6 +26,31 @@ import {
 
 export const SCHEDULE_PROPOSALS_PATH = "/api/v1/schedule-proposals"
 export const SECTIONS_PATH = "/api/v1/sections"
+
+const legalActions: Record<
+  UserRole,
+  Partial<Record<ScheduleProposal["status"], readonly ScheduleAction[]>>
+> = {
+  student: {},
+  admission_staff: {},
+  faculty: {},
+  program_chair: {},
+  dean: { draft: ["dean_approve"], dean_approved: ["dean_return"] },
+  executive_director: {
+    dean_approved: ["executive_approve"],
+    executive_approved: ["executive_return", "publish"],
+  },
+  registrar_head: { published: ["close"] },
+  registrar_staff: {},
+  accounting_staff: {},
+}
+
+export function availableScheduleActions(
+  role: UserRole,
+  proposal: ScheduleProposal,
+): ScheduleAction[] {
+  return [...(legalActions[role][proposal.status] ?? [])]
+}
 
 function parse<T>(
   schema: {
@@ -106,6 +135,28 @@ export async function createScheduleProposal(
     ),
     "created schedule proposal",
   ).data
+}
+
+export async function transitionScheduleProposal(
+  id: number,
+  transition: ScheduleProposalTransition,
+): Promise<ScheduleProposal> {
+  return parse(
+    scheduleProposalEnvelopeSchema,
+    await patchAuthenticatedJson(
+      `${SCHEDULE_PROPOSALS_PATH}/${id}`,
+      parse(
+        scheduleProposalTransitionSchema,
+        transition,
+        "schedule transition request",
+      ),
+    ),
+    "transitioned schedule proposal",
+  ).data
+}
+
+export function closeScheduleProposal(id: number): Promise<ScheduleProposal> {
+  return transitionScheduleProposal(id, { action: "close" })
 }
 
 // Section resources predate this feature and remain in the shared reference schema.

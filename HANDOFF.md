@@ -12,11 +12,11 @@
 
 ## Current Objective
 
-Begin Phase 5 Task 8 — Dean and Executive Director schedule approval and
-master schedule workspace on the isolated branch. Preserve Program Chair's
-Task 7 draft-only proposal boundary, backend state transitions, identity-scoped
-queries, browser-token ownership, and strict parsed API contracts; do not
-merge or push.
+Begin Phase 5 Task 9 — Reconcile documentation and run the Phase 5 quality
+gate on the isolated branch. Preserve Task 8's role/status lifecycle matrix,
+identity-scoped private queries, published-only master schedule filter, audit
+privacy boundary, browser-token ownership, and strict parsed API contracts; do
+not merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
 last in roadmap Phase 9; no model, prediction endpoint, or student attrition
@@ -246,6 +246,24 @@ UI belongs in Phase 5.
   findings**. Task 7 is accepted and complete; published completion remains
   **41%**. Exact next: **Phase 5 Task 8 — Dean approval and Executive Director
   master schedule workspace.**
+
+### Phase 5 Task 8 — Dean, Executive Director, and Registrar Head workspaces
+
+- Connected the final three Phase 5 module IDs to role-scoped workspaces:
+  Dean schedule decisions, Executive Director master schedule/actions, and
+  Registrar Head audit history with published-proposal closure.
+- `availableScheduleActions()` mirrors the backend's status/action matrix;
+  reason text is accepted only for the two return actions. Confirmation and
+  pending disablement protect against accidental or duplicate transitions, and
+  successful actions invalidate user-scoped proposal and section queries.
+- Audit history uses strict paginated parsing and serializes the published
+  filters with default `per_page=20`; snapshot expansion is safely serialized
+  and redacts identity/secrets, while actor names and emails are never shown.
+- RED evidence: the mandated four tests failed because all requested new
+  imports were absent. GREEN: focused **5 files / 11 tests**; complete
+  frontend **38 files / 212 tests**; TypeScript, ESLint, Prettier, Oxlint, and
+  production build passed. Published completion remains **41%**. Exact next:
+  **Phase 5 Task 9 — Reconcile documentation and run the Phase 5 quality gate.**
 
 ### Takeover verification performed by Codex
 
@@ -592,10 +610,11 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 8 — Dean and Executive Director schedule approval and
-   master schedule workspace** from its supplied task brief on
-   `phase-5-portal-workspaces`. Preserve Task 7's draft-only Program Chair
-   proposal boundary and backend-owned lifecycle authorization.
+1. Begin **Phase 5 Task 9 — Reconcile documentation and run the Phase 5
+   quality gate** from the Phase 5 portal-workspaces plan on
+   `phase-5-portal-workspaces`. Reconcile only verified module/API facts and
+   run the backend, OpenAPI, and frontend quality gates without claiming Phase
+   5 is merged.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.

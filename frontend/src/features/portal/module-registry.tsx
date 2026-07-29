@@ -7,6 +7,9 @@ import { CurriculumWorkspace } from "@/features/components/portal/curriculum-wor
 import { FacultyAssignmentWorkspace } from "@/features/components/portal/faculty-assignment-workspace"
 import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
 import { SectionsWorkspace } from "@/features/components/portal/sections-workspace"
+import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
+import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
+import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
 
 export type PhaseFiveModuleId =
   | "student-accounts"
@@ -40,12 +43,6 @@ export const phaseFiveModuleIds = [
   "master-schedule",
   "audit-logs",
 ] as const satisfies readonly PhaseFiveModuleId[]
-
-const connectedPortalWorkspace: PortalModuleComponent = () => (
-  <section role="region" aria-label="Connected portal workspace">
-    <p>Workspace data is being prepared from the approved API contract.</p>
-  </section>
-)
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
   <AdmissionProvisioningWorkspace initialModuleId="student-accounts" />
@@ -89,9 +86,9 @@ export const phaseFiveModuleRegistry: Readonly<
   "sections-schedules": sectionsWorkspace,
   "faculty-assignment": facultyAssignmentWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
-  "schedule-approvals": connectedPortalWorkspace,
-  "master-schedule": connectedPortalWorkspace,
-  "audit-logs": connectedPortalWorkspace,
+  "schedule-approvals": ScheduleDecisionWorkspace,
+  "master-schedule": MasterScheduleWorkspace,
+  "audit-logs": AuditLogsWorkspace,
 }
 
 export function isPhaseFiveModuleId(

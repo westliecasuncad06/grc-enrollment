@@ -115,6 +115,21 @@ export const scheduleProposalInputSchema = z
   })
   .strict()
 
+export const scheduleActionSchema = z.enum([
+  "dean_approve",
+  "dean_return",
+  "executive_approve",
+  "executive_return",
+  "publish",
+  "close",
+])
+export const scheduleProposalTransitionSchema = z
+  .object({
+    action: scheduleActionSchema,
+    decision_reason: z.string().trim().min(1).max(255).optional(),
+  })
+  .strict()
+
 export const facultyMemberSchema = z
   .object({
     type: z.literal("faculty_member"),
@@ -132,4 +147,8 @@ export type SectionInput = z.infer<typeof sectionInputSchema>
 export type SectionEditorValues = z.input<typeof sectionEditorSchema>
 export type ScheduleProposal = z.infer<typeof scheduleProposalSchema>
 export type ScheduleProposalInput = z.infer<typeof scheduleProposalInputSchema>
+export type ScheduleAction = z.infer<typeof scheduleActionSchema>
+export type ScheduleProposalTransition = z.infer<
+  typeof scheduleProposalTransitionSchema
+>
 export type FacultyMember = z.infer<typeof facultyMemberSchema>

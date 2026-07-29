@@ -56,6 +56,9 @@ const schedulingWorkspaceRegions: Record<string, string> = {
   "sections-schedules": "Sections and schedules workspace",
   "faculty-assignment": "Faculty assignment workspace",
   "schedule-proposals": "Schedule proposals workspace",
+  "schedule-approvals": "Schedule decision workspace",
+  "master-schedule": "Master schedule workspace",
+  "audit-logs": "Audit logs workspace",
 }
 
 describe("PortalModulePage", () => {
