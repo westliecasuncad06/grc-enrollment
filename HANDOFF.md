@@ -265,7 +265,7 @@ UI belongs in Phase 5.
   production build passed. Published completion remains **41%**. Exact next:
   **Phase 5 Task 9 — Reconcile documentation and run the Phase 5 quality gate.**
 
-#### Review remediation — pending re-review
+#### Review remediation — accepted and complete on isolated branch
 
 - Executive Director no longer falls through the generic planning-role section
   visibility branch: collection and direct policy visibility are now limited to
@@ -276,9 +276,18 @@ UI belongs in Phase 5.
   Registrar filter uses blank-capable selects rather than arbitrary text input.
   Additional regressions cover the legal matrix, required return reason,
   confirmed pending transition, HTTP 403, pagination, and snapshot redaction.
-- Remediation is committed only on this isolated branch and awaits independent
-  re-review; normal full frontend verification was rerun twice cleanly at 38
-  files / 215 tests each. **41%** stays unchanged and Task 9 remains next.
+- Independent re-review accepted the remediation with no Critical or Important
+  findings. It remains committed only on this isolated branch; normal full
+  frontend verification was rerun twice cleanly at **38 files / 215 tests**
+  each and the full backend gate passed **519 tests / 1,964 assertions**.
+  **41%** stays unchanged and Task 9 remains next.
+
+#### Task 9 carry-forward minors
+
+- Add an explicit post-success UI regression proving proposal and section query
+  invalidation after a schedule transition.
+- Reconcile stale lower `PROGRESS.md` feature matrices/placeholders with the
+  accepted Phase 5 module status during the documentation/quality gate.
 
 ### Takeover verification performed by Codex
 

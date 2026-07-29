@@ -21,7 +21,7 @@
   Exact next: **Phase 5 Task 9 — Reconcile documentation and run the Phase 5
   quality gate.**
 
-### Task 8 review remediation — pending re-review
+### Task 8 review remediation — accepted and complete on isolated branch
 
 - Corrected an Executive Director section-data privacy leak at the backend
   collection and direct-policy boundaries; the master schedule client filter
@@ -38,6 +38,16 @@
   isolated runs; Task 8 tests use no fake timers or leaked global mocks, and
   shared cleanup resets DOM/navigation. No timeout was raised or test behavior
   changed because the failure did not reproduce after contention cleared.
+
+- Independent re-review accepted Task 8 remediation with no Critical or
+  Important findings. The complete backend gate passed **519 tests / 1,964
+  assertions** and normal frontend verification passed twice at **38 files /
+  215 tests**. This isolated work remains unmerged and unscored; completion
+  remains **41%**. Exact next: **Phase 5 Task 9 — Reconcile documentation and
+  run the Phase 5 quality gate.**
+- Task 9 carry-forward minors: add an explicit success-path regression for
+  proposal/section cache invalidation after a transition, and reconcile stale
+  lower `PROGRESS.md` feature matrices/placeholders to accepted Phase 5 status.
 
 ---
 
