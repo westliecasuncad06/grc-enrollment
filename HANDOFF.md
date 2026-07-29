@@ -3,9 +3,9 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 18:48:00 +08:00
+- **Date and time:** 2026-07-29 18:55:00 +08:00
 - **Current branch:** `main`
-- **Latest commit:** `5bf9e77` (`feat: add Phase 4 cross-cutting backend foundation`)
+- **Latest commit:** `3969553` (`docs: record Phase 4 local integration`)
 - **Integration state:** Phase 4 was fast-forward merged locally into `main`;
   nothing has been pushed. The pre-existing main-branch plan edit was preserved.
 
@@ -167,7 +167,7 @@ Task 12 of the Phase 4 plan is content-complete:
 
 No implementation or verification task remains in the approved Phase 4 plan.
 Tasks 1–13 are complete, independently reviewed, merged into `main`, and
-awaiting only the post-merge test run and handoff commit.
+  with the post-merge test run, handoff update, and cleanup complete.
 
 ## Files Changed
 
@@ -372,10 +372,10 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Commit the reconciled `PROGRESS.md` and this merged-state handoff on
-   `main`.
-2. Remove the already-merged feature worktree and delete its local branch.
-3. Keep `main` as the working branch; begin Phase 5 portal implementation next.
+1. Keep `main` as the working branch; begin Phase 5 portal implementation
+   next.
+2. Preserve the unrelated modified plan file until its owner decides what to
+   do with it.
 
 ## Do Not Change
 
