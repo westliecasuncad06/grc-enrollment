@@ -100,6 +100,55 @@ final class EnrollmentsEndpointTest extends TestCase
         ])->json('data.token');
     }
 
+    private function makeStudentWithEmail(Curriculum $curriculum, string $email, string $studentNumber): StudentProfile
+    {
+        $user = User::create([
+            'name' => 'Another Student', 'email' => $email,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+        ]);
+
+        return StudentProfile::create([
+            'user_id' => $user->id,
+            'student_number' => $studentNumber,
+            'program_id' => $curriculum->program_id,
+            'curriculum_id' => $curriculum->id,
+            'year_level' => 1,
+            'admission_status' => AdmissionStatus::Admitted,
+            'academic_standing' => AcademicStanding::Good,
+        ]);
+    }
+
+    private function tokenForNewStaff(UserRole $role, string $email): string
+    {
+        User::create([
+            'name' => $role->value, 'email' => $email,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+        ]);
+
+        return (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $email, 'password' => self::PASSWORD,
+        ])->json('data.token');
+    }
+
+    /**
+     * Creates an enrollment directly via Eloquent rather than through the
+     * submission endpoint. Chaining `withToken()` for two *different* users
+     * within one test method silently reuses the first user's cached guard
+     * resolution (a documented Sanctum test gotcha) — so every visibility
+     * test below authenticates as exactly one actor and seeds every other
+     * student's data directly instead of via a second login+submit.
+     */
+    private function makeEnrollment(StudentProfile $student, AcademicTerm $term, EnrollmentStatus $status = EnrollmentStatus::PendingRegistrarApproval): Enrollment
+    {
+        return Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => $status,
+            'total_units' => 3.0,
+            'submitted_at' => now(),
+        ]);
+    }
+
     public function test_anonymous_request_is_unauthenticated(): void
     {
         $this->getJson('/api/v1/enrollments')->assertUnauthorized();
@@ -371,5 +420,70 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertOk()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonCount(1, 'data');
         $response->assertJsonPath('data.0.status', 'pending_registrar_approval');
+    }
+
+    public function test_a_second_students_enrollment_is_not_visible_to_the_first_student(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+        $this->makeEnrollment($student, $term);
+
+        $otherStudent = $this->makeStudentWithEmail($curriculum, 'other.student@grc.test', '2026-0002');
+        $this->makeEnrollment($otherStudent, $term);
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollments');
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.student_number', $student->student_number);
+    }
+
+    public function test_registrar_head_sees_every_enrollment_with_filters_and_pagination(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+
+        $studentA = $this->makeStudent($curriculum);
+        $this->makeEnrollment($studentA, $term);
+
+        $studentB = $this->makeStudentWithEmail($curriculum, 'second.student@grc.test', '2026-0003');
+        $this->makeEnrollment($studentB, $term);
+
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.enroll@grc.test');
+
+        $all = $this->withToken($registrarToken)->getJson('/api/v1/enrollments');
+        $all->assertOk()->assertJsonCount(2, 'data');
+
+        $filtered = $this->withToken($registrarToken)->getJson('/api/v1/enrollments?status=pending_registrar_approval');
+        $filtered->assertOk()->assertJsonCount(2, 'data');
+
+        $paged = $this->withToken($registrarToken)->getJson('/api/v1/enrollments?per_page=1&page=1');
+        $paged->assertOk()->assertJsonCount(1, 'data');
+        $paged->assertJsonPath('meta.total', 2);
+        $paged->assertJsonPath('meta.per_page', 1);
+    }
+
+    public function test_accounting_staff_sees_only_pending_payment_enrollments_regardless_of_status_filter(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+
+        $student = $this->makeStudent($curriculum);
+        $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+
+        $paidStudent = $this->makeStudentWithEmail($curriculum, 'paid.student@grc.test', '2026-0004');
+        $this->makeEnrollment($paidStudent, $term, EnrollmentStatus::PendingPayment);
+
+        $accountingToken = $this->tokenForNewStaff(UserRole::AccountingStaff, 'accounting.enroll@grc.test');
+
+        $response = $this->withToken($accountingToken)->getJson('/api/v1/enrollments');
+        $response->assertOk()->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.student_number', $paidStudent->student_number);
+
+        $stillFiltered = $this->withToken($accountingToken)
+            ->getJson('/api/v1/enrollments?status=pending_registrar_approval');
+        $stillFiltered->assertOk()->assertJsonCount(0, 'data');
     }
 }

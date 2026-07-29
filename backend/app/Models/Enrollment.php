@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -76,6 +77,31 @@ final class Enrollment extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->whereNotIn('status', EnrollmentStatus::terminalValues());
+    }
+
+    /**
+     * PRD §5.3 FR-FIN-001/005: a Student sees only their own enrollments; the
+     * Registrar Head sees every enrollment (the approval queue); Accounting
+     * Staff sees only `pending_payment` rows — FR-FIN-005 is an
+     * authorization boundary, not a display filter, so it belongs here (and
+     * is re-checked by `EnrollmentPolicy`), not only in a frontend filter.
+     * `EnrollmentPolicy::viewAny()` already restricts every other role to
+     * zero rows before this scope ever runs.
+     *
+     * @param  Builder<Enrollment>  $query
+     * @return Builder<Enrollment>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->role === UserRole::AccountingStaff) {
+            return $query->where('status', EnrollmentStatus::PendingPayment->value);
+        }
+
+        if ($user->role === UserRole::RegistrarHead) {
+            return $query;
+        }
+
+        return $query->whereHas('student', fn ($studentQuery) => $studentQuery->where('user_id', $user->id));
     }
 
     /**

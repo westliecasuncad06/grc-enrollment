@@ -1272,20 +1272,61 @@ paths:
   /api/v1/enrollments:
     get:
       operationId: getEnrollments
-      summary: List the authenticated student's own enrollments
+      summary: List enrollments (role-scoped)
       description: >
-        Own-record only — Student role only. Returns every enrollment the
-        caller has ever submitted, newest first, each with its subjects and
-        queue ticket.
+        Role-scoped per FR-FIN-001/005 (see App\Models\Enrollment::scopeVisibleTo):
+        a Student sees only their own enrollments; the Registrar Head sees
+        every enrollment (the approval queue), filterable by `status` and
+        `academic_term_id` and paginated; Accounting Staff sees only
+        `pending_payment` enrollments regardless of any `status` filter
+        supplied — that restriction is an authorization boundary
+        (`EnrollmentPolicy`), not merely a display filter.
       security:
         - bearerAuth: []
       tags:
         - Enrollment
       parameters:
         - $ref: "#/components/parameters/RequestId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - draft
+              - pending_registrar_approval
+              - pending_payment
+              - enrolled
+              - rejected
+              - cancelled
+              - withdrawn
+        - name: academic_term_id
+          in: query
+          required: false
+          description: Existing academic term primary key.
+          schema:
+            type: integer
+            minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          description: Number of enrollments per page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          description: One-based page number.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
       responses:
         "200":
-          description: The authenticated student's enrollments.
+          description: The role-scoped, paginated enrollment list.
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -1294,13 +1335,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EnrollmentCollectionResponse"
+                $ref: "#/components/schemas/PaginatedEnrollmentCollection"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          description: The authenticated user has no student profile.
+        "422":
+          description: A query parameter failed validation.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
@@ -2733,16 +2779,22 @@ components:
             App\Actions\Enrollment\BuildEligibleSubjectPool.
         message:
           type: string
-    EnrollmentCollectionResponse:
+    PaginatedEnrollmentCollection:
       type: object
       additionalProperties: false
       required:
         - data
+        - links
+        - meta
       properties:
         data:
           type: array
           items:
             $ref: "#/components/schemas/EnrollmentResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
     EnrollmentResponse:
       type: object
       additionalProperties: false
@@ -2757,6 +2809,8 @@ components:
       required:
         - type
         - id
+        - student_id
+        - student_number
         - academic_term_id
         - status
         - status_label
@@ -2773,6 +2827,14 @@ components:
           const: enrollment
         id:
           type: integer
+        student_id:
+          type: integer
+        student_number:
+          type: string
+          description: >
+            Never email or name — exposed so the Registrar Head and
+            Accounting Staff can identify whose enrollment they are
+            processing.
         academic_term_id:
           type: integer
         status:

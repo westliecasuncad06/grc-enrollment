@@ -14,10 +14,16 @@ final class EnrollmentResource extends JsonResource
 {
     /**
      * Exact key set. No attribute is passed through implicitly.
+     * `student_number` (never email or name) is exposed so the Registrar
+     * Head and Accounting Staff can identify whose enrollment they are
+     * processing — the same non-sensitive identifier `StudentProfileResource`
+     * already exposes.
      *
      * @return array{
      *     type: string,
      *     id: int,
+     *     student_id: int,
+     *     student_number: string,
      *     academic_term_id: int,
      *     status: string,
      *     status_label: string,
@@ -37,6 +43,8 @@ final class EnrollmentResource extends JsonResource
         return [
             'type' => 'enrollment',
             'id' => $this->resource->id,
+            'student_id' => $this->resource->student_id,
+            'student_number' => $this->resource->student->student_number,
             'academic_term_id' => $this->resource->academic_term_id,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),

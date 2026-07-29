@@ -70,8 +70,33 @@ data, and merged to local `main`.**
 
 ## Work in Progress
 
-None. Phase 6 is closed and merged. Phase 7 (Process 3.0 + Remaining
-Portals) has not been started — see *Exact Next Steps*.
+**Phase 7a — Process 3.0 money path**, on worktree branch
+`phase-7-process-3` (not yet merged). Full recompute of this document
+(objective, verified-completed list, files changed, percentages) happens
+once at Task 9, per the approved plan's cadence; this section tracks
+real-time status in the meantime so the phase can resume cleanly if
+interrupted.
+
+- ✅ **Task 1 — role-scoped enrollment visibility (FR-FIN-001, FR-FIN-005).**
+  `GET /api/v1/enrollments` generalized from Student-only to the
+  `scopeVisibleTo` pattern (ADR 0008): Student → own rows; Registrar Head →
+  all, with `status`/`academic_term_id` filters and pagination; Accounting
+  Staff → `pending_payment` only, enforced in both `Enrollment::scopeVisibleTo`
+  and `EnrollmentPolicy::viewAny` (defense in depth). `EnrollmentResource`
+  gained `student_id`/`student_number` so non-owning roles can identify whose
+  row they're viewing. New `IndexEnrollmentRequest` + `ListEnrollments`
+  Action mirror `ListAuditLogs`'s shape. 5 new focused tests (cross-student
+  isolation, Registrar Head all-rows + filters + pagination, Accounting
+  pending-payment-only regardless of requested filter) plus the existing
+  Phase 6 index test, all green; full backend suite 566/566 passing;
+  PHPStan level 8 and Pint clean.
+- ⬜ Task 2 — Registrar decisions API (approve/reject/void via ADR 0011).
+- ⬜ Task 3 — grade encoding API.
+- ⬜ Task 4 — payment queue + serving number API.
+- ⬜ Task 5 — payment confirmation + Digital COM API.
+- ⬜ Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).
+- ⬜ Task 9 — docs, full quality gate, live HTTP proof, `PROGRESS.md`
+  recompute, merge to `main`, push to `origin`.
 
 ## Files Changed
 

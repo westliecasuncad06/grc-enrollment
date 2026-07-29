@@ -111,7 +111,7 @@ final readonly class SubmitEnrollment
                 ),
             ]);
 
-            return $enrollment->refresh()->load(['enrollmentSubjects.section.subject', 'queueTicket']);
+            return $enrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'queueTicket']);
         });
     }
 }
