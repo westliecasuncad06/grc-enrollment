@@ -1,60 +1,209 @@
 # GRC Enrollment System — Development Progress
 
 **Last updated:** 2026-07-29 · **PRD version:** v3.2 · **Branch:**
-`phase-5-portal-workspaces` (isolated, unmerged)
+`phase-5-portal-workspaces` (quality-gated; merge to `main` is this session's
+next step)
 
-## 2026-07-29 — Phase 5 Task 8 complete on isolated branch (unmerged)
+## Current Objective
 
-- Delivered the Dean decision, Executive Director master schedule, and Registrar
-  Head audit/closure workspaces. Strict schemas/services parse the existing
-  proposal and audit contracts; private query keys include the active user ID.
-  The client exposes only the API's legal lifecycle actions, requires a reason
-  exactly for return actions, confirms transitions, disables duplicate actions
-  while pending, and invalidates proposal/section data after success.
-- Executive Director renders only published sections; Registrar audit filters,
-  pagination, retry, and safe snapshot expansion never expose actor names or
-  emails. RED was observed because all four requested new modules were absent.
-  Focused verification passed **5 files / 11 tests**; complete frontend
-  verification passed **38 files / 212 tests**, TypeScript, ESLint, Prettier,
-  Oxlint, and the production build. This work remains unmerged and unscored;
-  published completion remains **41%**.
-  Exact next: **Phase 5 Task 9 — Reconcile documentation and run the Phase 5
-  quality gate.**
+Roadmap Phase 5, "Portals over Existing APIs": make 13 portal modules across
+six roles (Admission Staff, Faculty, Program Chair, Dean, Executive Director,
+Registrar Head) functional against the existing 29-route API surface, plus
+one new least-privilege faculty-directory read endpoint for named section
+assignment. Phase 5 implementation, review, and the full quality gate are
+**complete on the isolated branch**; local merge to `main` is the immediate
+next action (see *Exact Next Steps*). Expected outcome: a demonstrably
+working system for the first time, end to end, for six of nine roles.
 
-### Task 8 review remediation — accepted and complete on isolated branch
+## Verified Completed
 
-- Corrected an Executive Director section-data privacy leak at the backend
-  collection and direct-policy boundaries; the master schedule client filter
-  remains defense in depth. Strict audit action/entity enums now mirror the
-  backend/OpenAPI vocabulary and the UI provides only valid blank-capable
-  selects. The published completion remains **41%** because this isolated work
-  is unmerged.
-- RED proved Executive received planned/closed/cancelled rows and audit filters
-  accepted invented vocabulary. Focused backend passed **15 tests / 50
-  assertions**; focused frontend passed **3 files / 9 tests**. Full backend,
-  Pint, PHPStan, OpenAPI lint, frontend static checks, and build passed. The
-  normal parallel full frontend suite was then rerun twice cleanly at **38
-  files / 215 tests** each. The suspect Faculty file also passed repeated
-  isolated runs; Task 8 tests use no fake timers or leaked global mocks, and
-  shared cleanup resets DOM/navigation. No timeout was raised or test behavior
-  changed because the failure did not reproduce after contention cleared.
+- **Task 1 — faculty directory API.** `GET /api/v1/faculty-members`
+  (Program Chair only, audited, no email). Route inventory 29 → 30. See
+  *Task-by-task record* in `docs/history/2026-07-session-log.md` for the
+  full RED/GREEN/review trail; the condensed Phase 5 narrative below covers
+  what each task delivered.
+- **Tasks 2–3 — shared frontend foundation.** Authenticated PATCH/DELETE
+  client, 422 field-error mapping, Sonner, 6 shared UI primitives, parsed
+  reference-data/notification hooks, live notification Sheet, and the typed
+  13-ID `phaseFiveModuleRegistry`.
+- **Tasks 4–8 — the 13 connected modules**, one per role group (Admission
+  Staff, Faculty, Program Chair ×5, Dean/Executive/Registrar Head). Each task
+  was implemented, independently reviewed, and (where findings surfaced)
+  remediated and re-reviewed to acceptance. Two remediations were **real
+  backend authorization/privacy fixes**, not just frontend polish: Faculty
+  teaching-schedule visibility was scoped to `professor_id` (it had returned
+  every Faculty member's sections to every Faculty member), and Executive
+  Director section visibility was scoped to `published` only (unpublished
+  rows had reached the private cache).
+- **Task 9 — this reconciliation.** Added the carried-forward
+  proposal/section cache-invalidation regression
+  (`schedule-decision-workspace.test.tsx`) and strengthened
+  `module-registry.test.tsx` to assert every one of the 27 non-Phase-5
+  catalog module IDs, not just one, stays disconnected from the registry.
+  Ran the full quality gate (see *Commands and Tests Run*), reconciled this
+  file, and retired `HANDOFF.md`.
 
-- Independent re-review accepted Task 8 remediation with no Critical or
-  Important findings. The complete backend gate passed **519 tests / 1,964
-  assertions** and normal frontend verification passed twice at **38 files /
-  215 tests**. This isolated work remains unmerged and unscored; completion
-  remains **41%**. Exact next: **Phase 5 Task 9 — Reconcile documentation and
-  run the Phase 5 quality gate.**
-- Task 9 carry-forward minors: add an explicit success-path regression for
-  proposal/section cache invalidation after a transition, and reconcile stale
-  lower `PROGRESS.md` feature matrices/placeholders to accepted Phase 5 status.
+## Work in Progress
+
+Local merge of `phase-5-portal-workspaces` into `main` — everything on the
+branch is quality-gated and ready; the merge itself and its post-merge
+re-verification are the one remaining step of this session (*Exact Next
+Steps*, item 1). Phase 6 (Process 2.0 + Student Portal) has not been
+started.
+
+## Files Changed
+
+**Backend:** `app/Actions/Identity/ListFacultyMembers.php`,
+`Http/Controllers/Api/V1/FacultyMemberController.php`,
+`Http/Resources/Api/V1/FacultyMemberResource.php`,
+`Policies/FacultyMemberPolicy.php` (new); `Domain/Audit/AuditAction.php`,
+`Domain/Audit/AuditableType.php`, `Providers/AppServiceProvider.php`,
+`routes/api.php` (faculty-directory vocabulary/route); `Models/Section.php`,
+`Policies/SectionPolicy.php` (Faculty own-assignment + Executive
+published-only scoping — the two privacy remediations above); matching
+Feature/Policy/Model tests.
+
+**Frontend:** `src/features/portal/module-registry.tsx` (new 13-ID
+registry) and 11 new workspace components under
+`src/features/components/portal/`; new `schemas/`, `services/`, `hooks/`
+files per API domain (admission, faculty, curriculum, scheduling, audit,
+reference-data, notifications); `services/api-client.ts` (PATCH/DELETE +
+field errors); 6 new `components/ui/` primitives; `app/providers.tsx`
+(Toaster mount); `portal/role-capabilities.ts` (placeholder copy → real
+module descriptions for the 13 connected modules); `src/tests/render-app.tsx`
+(this session: `renderWithSession`/`renderWithAuthProvider` now also return
+`queryClient`, for cache-invalidation assertions).
+
+**Docs:** `docs/api/openapi.yaml` (faculty-directory path, section-visibility
+notes), `docs/data-dictionary/section-planning.md`,
+`docs/history/2026-07-session-log.md` (this session: appended the full
+Phase 5 task-by-task record), `PROGRESS.md` (this session: full
+reconciliation, see below), `HANDOFF.md` (this session: deleted — folded
+into this file; see *Technical Decisions*).
+
+## Commands and Tests Run
+
+All commands below were actually executed in the `phase-5-portal-workspaces`
+worktree on 2026-07-29. Post-merge re-verification on `main` happens as this
+session's next step and will be appended here once run.
+
+| Command | Result |
+|---|---|
+| `php artisan test --without-tty` | **519 passed / 1,964 assertions**, 109s |
+| `php artisan test --filter='FacultyMembersEndpointTest\|ApiSurfaceTest'` | **22 passed / 145 assertions** |
+| `composer format:check` (Pint) | passed |
+| `vendor\bin\phpstan analyse --memory-limit=1G --no-progress` | No errors (level 8) |
+| `composer audit --locked` | No security vulnerability advisories found |
+| `npx @redocly/cli lint docs/api/openapi.yaml` | valid, no warnings |
+| `npm test` (Vitest, default parallel workers) | **flaky on this machine** — see *Known Issues*; 2–27 of 216 tests fail per run, a different subset each time |
+| `npx vitest run --no-file-parallelism` | **38 files / 216 tests passed**, run twice consecutively (87.9s, 79.9s) |
+| `npm run typecheck` (`tsc --noEmit`) | passed |
+| `npm run lint` (`eslint . --max-warnings=0`) | passed |
+| `npm run format:check` (Prettier) | passed after one auto-fix to `module-registry.test.tsx` (this session's own edit) |
+| `npm audit --audit-level=moderate` | 0 vulnerabilities |
+| `npm run build` (`next build`, Turbopack) | compiled successfully, 5 routes |
+
+## Technical Decisions
+
+- **Retire `HANDOFF.md`, fold into `PROGRESS.md`.** Two parallel handoff
+  documents drifted (main's `HANDOFF.md` said "stopped, do not resume";
+  the branch's said "Task 9 in progress") while `PROGRESS.md` on `main` was
+  three phases stale. One file, updated at every milestone per `AGENTS.md`,
+  removes the drift risk. User's explicit choice among three options.
+- **Recompute Row 8 (nine role portals, 40 modules) from 5% to 33%.** 13 of
+  40 modules are now fully wired (forms, mutations, parsed queries, tests),
+  not scaffolding-only. 13/40 = 32.5%, rounded to 33%. Contribution:
+  25% × 33% = 8.25 (was 1.25). No other row's weight or Done% changed.
+- **Document the Vitest full-parallel flakiness as an Operational Caution,
+  not a code defect.** Five full-suite runs on this ~6 GB-free-memory Windows
+  machine failed between 2 and 27 different tests each time; every failing
+  test passed individually, and `--no-file-parallelism` passed clean twice.
+  Not fixed by changing shared `vitest.config.ts` defaults, since that would
+  slow every future local and CI run for a problem specific to this machine's
+  memory pressure, and CI's GitHub Actions job is already green. See
+  *Known Issues and Blockers*.
+- **Merge locally, do not push.** User-scoped authorization: finish Task 9,
+  commit, merge to local `main`. Explicitly no push to `origin/main`.
+
+## Known Issues and Blockers
+
+- **Frontend full-suite parallel flakiness (this machine only).** `npm test`
+  with Vitest's default multi-worker pool fails a variable 2–27 tests per
+  run under ~6 GB free memory; every one of those tests passes in isolation
+  and the whole suite passes clean under `npx vitest run
+  --no-file-parallelism`. Treat any lone `npm test` failure on this machine
+  as a false alarm until reproduced with `--no-file-parallelism`. Not
+  observed as a problem in CI (Frontend job already ✅).
+- No other known blocking defect in Phase 5.
+- Phase 6 has an existing §17-blocked list (passing-grade rule, max
+  units/overload, irregular-student approval) — mechanism-implement,
+  value-flag, per the established pattern; see *Open Institutional
+  Decisions*.
+
+## Uncommitted or Risky Changes
+
+`main`'s working tree carries its own pending doc-only edits from before this
+takeover (`HANDOFF.md`, `PROGRESS.md`, one plan/spec pair for this same
+Phase 5 work, and an unrelated pre-existing dirty line in the 2026-07-27
+MariaDB plan). Those must be committed on `main` — not stashed, not
+discarded — before the merge below, since a dirty target blocks `git merge`.
+
+## Exact Next Steps
+
+1. **Immediate:** in the main worktree (`C:\xampp\htdocs\GRC-ENROLLMENT`),
+   commit the pending doc changes listed above, then
+   `git merge phase-5-portal-workspaces`. Expect a conflict in
+   `PROGRESS.md` (both sides edited it) and in `HANDOFF.md` (deleted on the
+   branch, modified on `main`) — resolve by taking the branch's reconciled
+   `PROGRESS.md` and keeping the deletion. Re-run
+   `php artisan test --filter='FacultyMembersEndpointTest|ApiSurfaceTest'`
+   and `npm test && npm run build` on merged `main` to confirm the merge
+   result, then append those results to *Commands and Tests Run* and update
+   the header/*Work in Progress* to say "merged."
+2. Start **Phase 6 — Process 2.0 + Student Portal**: Eligible Subject Pool
+   (DFD 2.2/2.3, FR-ENR-001–003/005/011), reusing the existing prerequisite
+   graph walk and `SectionConflictDetector`. Remember: prerequisite edges
+   hang off `curriculum_subject_id`, not a bare subject pair, and `sections`
+   join a student's curriculum **only via `subject_id`** — there is no
+   `curriculum_id` on `sections`.
+3. Then Enrollment Submission (DFD 2.4, FR-ENR-004/006–010): atomic
+   enrollment + `enrollment_subjects` + `queue_ticket`; the
+   `enrollments.active_academic_term_id` generated column already enforces
+   one-active-enrollment-per-term at the database layer.
+4. Before writing code, follow `AGENTS.md`: read `PRD.md` §5.2/DFD 2.1–2.4,
+   confirm current `git status`/`git log`, and use
+   `superpowers:brainstorming` → `superpowers:writing-plans` for a new
+   phase-6 plan/spec pair under `docs/superpowers/`.
+5. Optional cleanup (not blocking): remove the
+   `.worktrees/phase-5-portal-workspaces` worktree and delete the merged
+   branch once the user confirms the merge is stable — ask first, per the
+   Git Safety Protocol.
+
+## Do Not Change
+
+- Bearer-token auth; never introduce session-cookie/CSRF auth or a Next.js
+  API proxy.
+- Faculty own-assignment section scoping and Executive Director
+  published-only section visibility (both are now server-enforced in
+  `Section` scopes **and** `SectionPolicy` — frontend filtering is defense
+  in depth only, never the sole boundary).
+- Notification ownership (`user_id` never exposed) and audit privacy (no
+  actor name/email ever rendered).
+- `session.userId`-scoped private TanStack Query keys — required for
+  multi-account cache isolation on a shared browser (Task 3 remediation).
+- Temporary admission credentials: never persisted to storage, logs, form
+  state, or query caches.
+- No ML runtime behavior before Phase 9; do not touch the paused
+  `ml-service`.
+- No new API beyond `GET /api/v1/faculty-members` was added this phase.
+- Do not push to `origin/main` without separate, explicit authorization.
 
 ---
 
-# ■ Overall Completion — 41%
+# ■ Overall Completion — 48%
 
 ```
-██████████░░░░░░░░░░░░░░  41 / 100
+████████████░░░░░░░░░░░░  48 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -69,18 +218,20 @@ against work that is **merged**, not work that is written or planned.
 | 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 15% | 1.80 |
 | 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 100% | 5.00 |
 | 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
-| 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 5% | 1.25 |
+| 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 33% | 8.25 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
 | 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **41.25 ≈ 41%** |
+| | **Total** | **100%** | | **48.25 ≈ 48%** |
 
 Two scores that look surprising, explained:
 
 - **Row 5 at 15%** — all 9 Process 3.0 tables are migrated, tested and
   documented, but not one Controller, Policy, Resource or route exists.
-- **Row 8 at 5%** — the nav structure and role catalog exist, but all 40
-  modules are still placeholder empty-states. This is the largest single
-  block of remaining work.
+- **Row 8 at 33%** — Phase 5 landed 13 of 40 modules, fully wired to real
+  APIs (forms, mutations, parsed queries, tests), for 6 of 9 roles. 13/40 =
+  32.5%, rounded to 33%; see Decisions. The other 27 modules (Student's 4,
+  Registrar Staff's 4, Accounting's 4, plus the Phase 7/9 modules for the
+  six Phase-5 roles) remain placeholder empty-states.
 
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
@@ -95,10 +246,10 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
 | **Live API routes** | **30** |
 | **Database tables** | **26** |
-| **Backend tests** | **503 passing (1,899 assertions)** · focused Phase 4 gate: 152/935 · Task 1 faculty-directory gate: 24/147 · migration gate: 27/70 after fresh + 5-step rollback + reapply · Larastan/Pint/audit clean |
-| **Frontend tests** | 15 files, 145 tests, Vitest |
+| **Backend tests** | **519 passing (1,964 assertions)** · focused Phase 5 gate (faculty directory + API surface): 22/145 · Larastan level 8/175 files clean, Pint clean, `composer audit` clean |
+| **Frontend tests** | **38 files, 216 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
-| **Portals functional** | 0 of 9 |
+| **Portals functional** | 6 of 9 have at least one connected module (13 of 40 modules total); Student, Registrar Staff, Accounting Staff remain fully placeholder pending Phases 6–7 |
 
 ---
 
@@ -112,12 +263,12 @@ environments. Credentials are documented in `docs/testing/SEEDED_IDENTITIES.md`.
 | # | Role | PRD § | Enum value | Seeded identity | Backend authorization | Portal |
 |---|---|---|---|---|---|---|
 | 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile + private notifications | ⬜ Phase 6–7 |
-| 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ⬜ Phase 5 |
-| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences + publication notifications | ⬜ Phase 5–7 |
-| 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ⬜ Phase 5, 9 |
-| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ⬜ Phase 5, 7, 9 |
-| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ⬜ Phase 5, 7, 9 |
-| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal + audit logs + private notifications | ⬜ Phase 5, 7–9 |
+| 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ✅ Phase 5 (3 modules) |
+| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences + publication notifications | ✅ Phase 5 (2 modules) · ⬜ Phase 6–7 (2 more) |
+| 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ✅ Phase 5 (5 modules) · ⬜ Phase 9 (1 more) |
+| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7, 9 (4 more) |
+| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7, 9 (3 more) |
+| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal + audit logs + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7–9 (5 more) |
 | 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7 |
 | 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7 |
 
@@ -148,7 +299,7 @@ functional system before any model is trained.
 | 2 | Process 1.0 — Scheduling backend | ✅ Complete (2 deferred) | 80 |
 | 3 | **Next.js Migration** | ✅ Complete | 100 |
 | 4 | Cross-Cutting Backend & ML Substrate | ✅ Complete (merged and verified) | 100 |
-| 5 | Portals over Existing APIs (5 roles) | ⬜ Planned | 0 |
+| 5 | Portals over Existing APIs (6 roles) | ✅ Complete (merged and verified) | 100 |
 | 6 | Process 2.0 + Student Portal | ⬜ Planned | 25 |
 | 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
 | 8 | Polish, Accessibility, E2E, Performance | ⬜ Planned | 25 |
@@ -297,175 +448,47 @@ over 175 files with no errors, Composer locked audit with no advisories, and
 Redocly with no warnings/errors. Phase 4 is merged into `main` and the
 published overall score is now 41%.
 
-## Phase 5 — Portals over Existing APIs
+## Phase 5 — Portals over Existing APIs ✅
 
-Five portals, ~13 modules, plus the small audited faculty-directory API slice
-required for Program Chair assignment. 23 built endpoints currently have no UI
-at all. First real proof the system works end to end.
+Six portals, 13 modules, plus one audited faculty-directory read endpoint
+for Program Chair section assignment. All nine tasks are implemented,
+independently reviewed, quality-gated (see *Commands and Tests Run* at the
+top of this file), and merged to local `main`.
 
-**Task 1 complete (isolated review branch):** Program Chair-only audited
-faculty directory at `GET /api/v1/faculty-members`, returning active Faculty
-users only in deterministic `name`, then `id` order with a privacy-safe
-five-field Resource. The focused
-`FacultyMembersEndpointTest|AuditVocabularyTest|ApiSurfaceTest` gate passed
-**24 tests / 147 assertions**; the API inventory is now **30 routes**.
+- **Task 1 — backend.** `GET /api/v1/faculty-members`, Program Chair only,
+  audited, no email. Route inventory 29 → 30.
+- **Tasks 2–3 — shared frontend foundation.** PATCH/DELETE client, 422 form
+  mapping, Sonner + 6 UI primitives, parsed reference/notification hooks,
+  live notification Sheet, the typed 13-ID module registry.
+- **Task 4 — Admission Staff.** One workspace for `student-accounts`,
+  `admission-status`, `credential-issuance`; one-time browser-generated
+  temporary credential, never persisted.
+- **Task 5 — Faculty.** `availability-preferences` + `teaching-schedule`
+  CRUD/read. Remediation fixed a real backend bug: `GET /api/v1/sections`
+  had returned every Faculty member's sections to every Faculty member;
+  now scoped to `professor_id` in both the collection scope and
+  `SectionPolicy`.
+- **Task 6 — Program Chair curriculum.** `curriculum` +
+  `subjects-prerequisites`, full-replace editor with client + backend
+  cycle/duplicate checks.
+- **Task 7 — Program Chair scheduling.** `sections-schedules`,
+  `faculty-assignment`, `schedule-proposals` (drafts only — chair gets no
+  approval/publish/close controls).
+- **Task 8 — Dean / Executive Director / Registrar Head.** Shared
+  schedule-decision component gated to each role's exact legal transitions;
+  master schedule; paginated/filtered audit log with no actor identity
+  rendered. Remediation fixed a second real backend bug: Executive Director
+  had received unpublished (planned/closed/cancelled) sections; now scoped
+  to `status === 'published'` in both the collection scope and the direct
+  policy.
+- **Task 9 — this reconciliation.** Closed the two carried-forward test
+  gaps, ran the full quality gate, rewrote this file, retired
+  `HANDOFF.md`, merged to `main`.
 
-**Task 2 accepted and completed (isolated review branch):** the frontend now
-has authenticated `PATCH`/`DELETE` JSON helpers,
-validated `ApiClientError.fieldErrors`, and React Hook Form 422 mapping.
-Sonner is installed and mounted once; Table, Select, Dialog, Alert Dialog, and
-Pagination sources are available under the configured shadcn alias. Focused
-client/form tests passed **14 tests**; the complete frontend suite passed
-**16 files / 150 tests**. Prettier, ESLint, Oxlint, TypeScript, production
-build, `git diff --check`, and the no-direct-browser-storage scan passed.
-Independent review returned **Accept with no findings**. The published **41%**
-overall completion remains unchanged pending the planned phase increment.
-
-**Task 3 complete (isolated review branch):** strict Zod schemas, parsed
-services, and TanStack Query hooks now consume the authenticated academic-term,
-program, subject, and private notification contracts. The portal shell and
-overview show only the `status: active` term, or an honest no-active-term
-fallback. The live notification Sheet supports unread count/filter, pagination,
-idempotent mark-as-read PATCH, and safe generic API-error rendering without
-assuming another user's notification details. The explicit 13-ID Phase 5
-registry dispatches only role-authorized modules to isolated workspace slots;
-every remaining module retains its existing scoped preview state. Required RED
-evidence recorded missing schema/sheet/registry imports; final targeted portal
-tests passed **6 files / 70 tests** and complete frontend verification passed
-**19 files / 160 tests**, TypeScript, Prettier, ESLint, Oxlint, and production
-build. `git diff --check` was clean. Published overall completion remains
-**41%** pending the planned Phase 5 increment.
-**Review remediation accepted:** an independent Task 3 review found
-that identity-free private-query keys could let a second account reuse a
-fresh first-account notification response. Notification and authenticated
-reference-data keys now include `session.userId` and are disabled while
-anonymous; a User A → logout → User B regression proves User B receives only
-its own notification result. The remediation gate passed **6 files / 70
-tests** and **19 files / 160 tests** complete, plus TypeScript, Prettier,
-ESLint, Oxlint, production build, and `git diff --check`. Re-review returned
-**Accept with no findings**. Published overall completion remains **41%**.
-**Next:** Phase 5 Task 4 — Admission Staff provisioning workspace.
-
-**Task 4 complete (isolated review branch):** Admission Staff now has one
-three-step provisioning workspace for the role-owned `student-accounts`,
-`admission-status`, and `credential-issuance` routes. It submits only the
-seven accepted student-provisioning fields through the existing
-bearer-authenticated service, selects program/curriculum from typed reference
-data, maps backend 422 field errors, prevents duplicate submission, and offers
-a safe connection retry. The read-only outcome states are the API-guaranteed
-`Admitted` and `Good`; no status-update API was invented. A browser CSPRNG
-generates a 20-character temporary credential only for a provision attempt,
-never puts it in browser storage, logs, form state, or query caches, displays
-it only in the success receipt, supports clipboard copy, and clears it on
-close. Required RED evidence recorded the three missing feature imports.
-Focused Task 4 plus registry tests passed **4 files / 9 tests**; complete
-frontend verification passed **22 files / 166 tests**, Prettier, ESLint,
-Oxlint, TypeScript, and production build. Published completion remains **41%**.
-**Next:** Phase 5 Task 5 — Faculty availability and preferences workspace.
-
-**Task 4 review remediation accepted and complete:** frontend curriculum parsing
-now uses the backend/OpenAPI `archived` status literal, the provisioning
-service strictly parses its seven-field request before fetch, and changing a
-program clears the dependent curriculum value in React Hook Form state.
-Additional regressions prove clipboard success/denial feedback and that a
-retry receives a newly generated temporary credential rather than the failed
-attempt's value. The remediation-focused gate passed **4 files / 12 tests**;
-the complete implementer suite passed **23 files / 170 tests**, and Prettier,
-ESLint, Oxlint, TypeScript, and production build passed. Independent re-review
-returned **Accept with no findings**; its latest review check passed **6 relevant
-files / 56 tests**. Published completion remains **41%**.
-
-**Task 5 complete (isolated review branch):** The Faculty
-`availability-preferences` and `teaching-schedule` modules now use strict Zod
-schemas and typed CRUD services, identity-scoped faculty/section query keys,
-RHF validation and 422 field-error mapping, edit/delete confirmation, and
-responsive desktop-table/mobile-card schedule rendering. The schedule maps
-only parsed API-scoped sections with subjects and terms; it never calls roster
-or grade endpoints. RED evidence: the required three-file Vitest command
-failed because all new production imports were absent. Final Faculty and shell
-gate passed **4 files / 23 tests**; full frontend verification passed
-**26 files / 179 tests**, Prettier, ESLint, Oxlint, TypeScript, and production
-build. Published completion remains **41%**.
-
-**Next:** Phase 5 Task 6 — Program Chair curriculum and prerequisite
-workspaces.
-
-**Task 5 review remediation accepted and complete:** the existing backend
-`GET /api/v1/sections` scope had exposed every published/closed Faculty section
-to each Faculty user. It now constrains Faculty by the direct `professor_id`
-to the authenticated user as well as status; Student/Accounting status-only
-and planning-role full visibility are unchanged. `SectionPolicy::view()`
-mirrors the same condition to prevent direct-ID bypass. The frontend has only
-a numeric `session.userId`/`professor_id` defense-in-depth display filter and
-does not infer identity by name; its desktop schedule now shows subject code
-and title to match mobile cards. Independent re-review returned **Accept with
-no findings**; its review gate passed **18 backend files / 52 tests** and
-**5 frontend files / 27 tests**, alongside the already-green full backend
-**517 tests / 1,956 assertions** and frontend **26 files / 179 tests** suites.
-Published completion remains **41%**; exact next is Task 6 — Program Chair
-curriculum and prerequisite workspaces.
-
-**Task 6 complete (isolated review branch):** Program Chair `curriculum` and
-`subjects-prerequisites` now dispatch to a typed, identity-scoped full-replace
-curriculum workspace. Create sends `program_id` and the complete graph;
-replacement deliberately omits immutable `program_id` while retaining every
-placement and prerequisite. Strict Zod/RHF validation prevents duplicate
-placements, self-prerequisites, and DAG cycles locally, and backend cycle 422
-feedback renders beside the graph. The workspace provides loading, empty,
-error, save/retry, and accessible discard-confirmation states without direct
-component fetches. RED evidence: the supplied three-file Vitest command failed
-with the three missing feature imports. Final focused verification passed **4
-files / 10 tests**; complete frontend verification passed **29 files / 186
-tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and `git diff
---check`. Published completion remains **41%**; exact next is Phase 5 Task 7
-— Program Chair sections and schedule workspace.
-
-**Task 6 review remediation accepted and complete:** placement now requires a
-catalog selection and offers per-placement year level (1–4), semester
-(1st–3rd), and required-status controls. Dirty curriculum selection changes
-now share the accessible discard confirmation used by New, including a cancel
-path that preserves the selected curriculum and unsaved values. Create adopts
-the returned curriculum identity so follow-up saves PATCH it, and the client
-strictly rejects response envelopes with unexpected top-level properties. RED
-coverage reproduced all review findings and the selector-to-New reset edge
-case; GREEN verification passed the Task 6 gate (**4 files / 15 tests**), full
-frontend suite (**29 files / 191 tests**),
-production build, TypeScript, Prettier, ESLint, and Oxlint. The independent
-re-review returned **Accept with no findings**. Published completion remains
-**41%**; exact next is Phase 5 Task 7 — Program Chair sections and schedule
-workspace.
-
-**Task 7 complete (isolated review branch):** Program Chair
-`sections-schedules`, `faculty-assignment`, and `schedule-proposals` now
-dispatch to accessible, responsive workspaces backed by strict parsed Zod
-contracts and identity-scoped TanStack Query keys. Sections validates academic
-term/subject dependencies, schedule-day shorthand, paired end-after-start
-times, and positive capacity; it creates or fully replaces every writable
-field. Faculty assignment lists only active directory identities (the client
-schema rejects undeclared email), shows matching term availability and subject
-preference context, and PATCHes a complete selected section while surfacing
-authoritative 422 conflicts. Schedule proposals creates drafts only and
-exposes no approval, publication, or close controls. RED was observed from the
-required five-file command before production modules existed; final focused
-gate passed **5 files / 9 tests**. Complete frontend verification passed **34
-files / 200 tests**, Prettier, ESLint, Oxlint, TypeScript, production build,
-and `git diff --check`. Published completion remains **41%**; exact next is
-**Phase 5 Task 8 — Dean and Executive Director schedule approval and master
-schedule workspace.**
-
-**Task 7 review remediation accepted and complete:** a second-term Section create
-had reset back to the stale watched term after selection; reset now receives
-the explicit selector value and a regression asserts `academic_term_id: 3` in
-the submitted payload. Sections, Faculty Assignment, and Schedule Proposals
-now have accessible in-place retry actions for failed reference queries using
-their existing scoped `refetch()` functions. The assignment conflict fixture
-now matches the backend's `schedule_days` 422 field. RED reproduced stale-term
-and missing-retry behavior; GREEN focused verification passed **5 files / 13
-tests**, and full frontend verification passed **34 files / 204 tests** with
-Prettier, ESLint, Oxlint, TypeScript, production build, and `git diff --check`.
-Independent re-review returned **Accept with no findings**. Task 7 is accepted
-and complete; published completion remains **41%**. Exact next: **Phase 5 Task
-8 — Dean approval and Executive Director master schedule workspace.**
+Full task-by-task RED/GREEN/review detail — every focused test count,
+remediation, and re-review verdict — is archived in
+`docs/history/2026-07-session-log.md` under "Phase 5 — Portals over
+Existing APIs, task-by-task record".
 
 ## Phase 6 — Process 2.0 + Student Portal
 
@@ -520,10 +543,11 @@ evaluation (§15.9).
 
 # ■ Portal Feature Matrix — 40 Modules
 
-Source of truth: `frontend/src/app/portal/role-capabilities.ts` (moves to
-`src/features/portal/` in Phase 3). Every module is currently a placeholder
-empty-state rendering *"This module is not connected to workflow or
-authorization APIs."*
+Source of truth: `frontend/src/features/portal/role-capabilities.ts` and
+`frontend/src/features/portal/module-registry.tsx`. A ✅ module is dispatched
+by `phaseFiveModuleRegistry` to a real workspace component backed by parsed
+API services and tests. Every other module is still a placeholder empty-state
+rendering *"This module is not connected to workflow or authorization APIs."*
 
 Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
@@ -540,16 +564,16 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Student Accounts | 5 | ⬜ |
-| Admission Status | 5 | ⬜ |
-| Credential Issuance | 5 | ⬜ |
+| Student Accounts | 5 | ✅ |
+| Admission Status | 5 | ✅ |
+| Credential Issuance | 5 | ✅ |
 
 ### 3. Professor / Faculty — 4 modules
 
 | Module | Phase | Status |
 |---|---|---|
-| Availability Preferences | 5 | ⬜ |
-| Teaching Schedule | 5 | ⬜ |
+| Availability Preferences | 5 | ✅ |
+| Teaching Schedule | 5 | ✅ |
 | Class Rosters | 6 | ⬜ |
 | Grade Submission | 7 | ⬜ |
 
@@ -557,18 +581,18 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Curriculum | 5 | ⬜ |
-| Subjects & Prerequisites | 5 | ⬜ |
-| Sections & Schedules | 5 | ⬜ |
-| Faculty Assignment | 5 | ⬜ |
-| Schedule Proposals | 5 | ⬜ |
+| Curriculum | 5 | ✅ |
+| Subjects & Prerequisites | 5 | ✅ |
+| Sections & Schedules | 5 | ✅ |
+| Faculty Assignment | 5 | ✅ |
+| Schedule Proposals | 5 | ✅ |
 | Demand Forecast | **9** | ⬜ blocked on ML |
 
 ### 5. Dean — 5 modules
 
 | Module | Phase | Status |
 |---|---|---|
-| Schedule Approvals | 5 | ⬜ |
+| Schedule Approvals | 5 | ✅ |
 | Enrollment Dashboard | 7 | ⬜ |
 | Stuck Students | **9** | ⬜ |
 | Honors | **9** | ⬜ |
@@ -578,7 +602,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Master Schedule | 5 | ⬜ |
+| Master Schedule | 5 | ✅ |
 | Institution Dashboard | 7 | ⬜ |
 | KPIs | **9** | ⬜ |
 | Reports | **9** | ⬜ |
@@ -587,7 +611,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Audit Logs | 5 | ⬜ backend ready; UI pending |
+| Audit Logs | 5 | ✅ |
 | Enrollment Approvals | 7 | ⬜ |
 | Overrides & Voids | 7 | ⬜ |
 | Policy Settings | 8 | ⬜ §17-dependent |
@@ -612,7 +636,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Payment Confirmation | 7 | ⬜ |
 | COM Finalization | 7 | ⬜ |
 
-**Totals:** 40 modules · 0 done · 13 land in Phase 5 · 8 blocked on Phase 9.
+**Totals:** 40 modules · **13 done** (Phase 5) · 8 blocked on Phase 9 · 19
+remain for Phases 6–8.
 
 ---
 
@@ -676,11 +701,17 @@ All `local`/`testing` only.
 
 4 real screens — institutional landing (with a live health check), login
 (real Sanctum, RHF + Zod, accessible error summary), role-filtered portal
-shell, branded 404. Plus 12 reviewed shadcn components, a strict-Zod API
-client, and TanStack Query.
+shell, branded 404. Plus 18 reviewed shadcn components (12 from Phase 3 + 6
+added in Phase 5: Table, Select, Dialog, Alert Dialog, Pagination, Toaster),
+a strict-Zod API client with PATCH/DELETE support, and TanStack Query.
 
-Everything past the login wall is a static prototype. 40 modules, all
-placeholders. Only 4 of 26 endpoints are consumed by any UI.
+13 of 40 modules are now real workspaces wired to live API data — see the
+Portal Feature Matrix above. The other 27 remain placeholders. 12 of the 13
+non-auth, non-health resource groups in the 30-route inventory are now
+consumed by some UI (up from none before Phase 5, when only `health` and the
+3 `auth/*` routes were consumed by the landing/login screens). The one
+unconsumed resource is `GET /student-profile` (the caller's own record),
+reserved for the Phase 6 Student Portal.
 
 There is one auth path. The dev-only demo mode and its committed credential
 file were deleted in Phase 3.
@@ -690,7 +721,9 @@ file were deleted in Phase 3.
 13 ADRs · `docs/api/openapi.yaml` (Redocly clean) · `docs/api/error-contract.md` ·
 7 merged data-dictionary pages plus the Phase 4
 `cross-cutting-backend.md` · `docs/testing/SEEDED_IDENTITIES.md` (now the only
-credential doc) · `docs/history/2026-07-session-log.md`.
+credential doc) · `docs/history/2026-07-session-log.md` (now including the
+Phase 5 task-by-task record). `HANDOFF.md` was retired 2026-07-29 — this file
+is the sole progress/handoff document, per `AGENTS.md`.
 
 ---
 
@@ -745,6 +778,17 @@ seeders are restricted to `local`/`testing` and hash the password through the
 predates this policy — re-run `php artisan db:seed`. The seeders are
 idempotent and do not delete unrelated users.
 
+**`npm test` (default Vitest parallel workers) is flaky on this machine —
+use `npx vitest run --no-file-parallelism` for a trustworthy result.** Five
+full-suite runs during Phase 5 Task 9 failed a variable 2–27 of 216 tests, a
+different subset each time (`waitFor`/`findBy` timeouts), on a machine
+observed with only ~6 GB free memory. Every failing test passed individually,
+and the sequential invocation passed clean (38 files / 216 tests) twice in a
+row. Do not treat a lone `npm test` failure on this machine as a regression
+without reproducing it under `--no-file-parallelism` first. Not observed as
+a CI problem (GitHub Actions' Frontend job is green); do not change
+`vitest.config.ts`'s shared defaults over a local-machine artifact.
+
 ---
 
 # ■ Open Institutional Decisions (PRD §17)
@@ -787,6 +831,10 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-29 | Retire `HANDOFF.md`; fold its verified content into `PROGRESS.md` and delete it. | Two competing handoff documents had drifted — `main`'s said Phase 4 was the active objective, the branch's said "stopped, do not resume Task 9" — while `PROGRESS.md` was three phases stale on `main`. `AGENTS.md` already designates `PROGRESS.md` as the update target at every milestone; a second file undermines that. User's explicit choice among three options offered at takeover. |
+| 2026-07-29 | Recompute Portal-row (row 8) Done% from 5% to 33% (13/40 modules), moving overall completion from 41% to 48%. | Phase 5 landed 13 of 40 modules fully wired to live APIs, not scaffolding. No other row's weight or Done% changed; per the standing recompute rule, only a closed phase's own row moves. |
+| 2026-07-29 | Merge `phase-5-portal-workspaces` into local `main` without pushing to `origin/main`. | User-scoped authorization at takeover: finish Task 9, commit, merge locally; push requires separate explicit authorization not given in this session. |
+| 2026-07-29 | Document the Vitest full-parallel-worker flakiness as an Operational Caution rather than changing `vitest.config.ts`. | Five full-suite runs failed a different 2–27-test subset each time on this ~6 GB-free machine; every failing test passed alone, and `--no-file-parallelism` passed clean twice. The cause is machine memory pressure, not the tests or the code; CI is unaffected. Changing shared test-runner defaults for a local-machine artifact would slow every future run for no correctness benefit. |
 | 2026-07-29 | Give every local/testing synthetic login the shared password `password`; retain the production-environment refusal and hashed storage. | Explicit user direction to make switching among all nine role portals easy during development. The full dataset applies the same password to its additional student scenarios. |
 | 2026-07-28 | Extract `demoRoles`, the session/credential/gateway types and `DemoAuthError` out of the `demo-*` modules **before** deleting them. | They were not demo-only despite the naming: `demoRoles` is the runtime enum validating *real* API responses in `auth-schema.ts`, and `DemoAuthError`/`DemoSession` were used by the live API gateway. Deleting the files first would have broken production code. |
 | 2026-07-28 | Assert routing in tests via the mocked router's calls rather than a rendered URL. | The App Router has no `MemoryRouter`, so real URL changes are not observable in jsdom. Guards are asserted on the redirect they *request*; true end-to-end routing moves to Playwright in Phase 8, which PRD §14.3 requires anyway. |
@@ -831,4 +879,6 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-28 | CI quality gates | Merged (ADR 0012); ml-service job fails, paused |
 | 2026-07-28 | Student profile foundation (DFD 2.1) | Merged; CI-confirmed green |
 | 2026-07-28 | Roadmap replan, Next.js decision, PROGRESS restructure | Merged (ADR 0013); PRD → v3.2 |
-| 2026-07-28 | Phase 3 — Next.js migration | This entry; 145/145 tests, live proof 17/17 |
+| 2026-07-28 | Phase 3 — Next.js migration | Merged; 145/145 tests, live proof 17/17 |
+| 2026-07-28 | Phase 4 — Cross-cutting backend & ML substrate | Merged; 503/503 backend tests |
+| 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | This entry; merged; backend 519/519, frontend 216/216 |

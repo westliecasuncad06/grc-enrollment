@@ -69,9 +69,7 @@ describe("phaseFiveModuleRegistry", () => {
       knownPortalModuleIds.size - phaseFiveModuleIds.length,
     )
     for (const moduleId of plannedModuleIds) {
-      expect(
-        phaseFiveModuleRegistry[moduleId as never],
-      ).toBeUndefined()
+      expect(phaseFiveModuleRegistry[moduleId as never]).toBeUndefined()
     }
   })
 
