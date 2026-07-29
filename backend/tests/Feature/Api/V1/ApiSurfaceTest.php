@@ -26,6 +26,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/eligible-subjects',
+            'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-members',
             'GET|HEAD api/v1/faculty-subject-preferences',
@@ -45,6 +46,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
+            'POST api/v1/enrollments',
             'POST api/v1/faculty-availabilities',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/schedule-proposals',
@@ -68,6 +70,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.curricula.store',
             'api.v1.curricula.update',
             'api.v1.eligible-subjects.index',
+            'api.v1.enrollments.index',
+            'api.v1.enrollments.store',
             'api.v1.faculty-availabilities.index',
             'api.v1.faculty-members.index',
             'api.v1.faculty-availabilities.store',
@@ -233,6 +237,26 @@ final class ApiSurfaceTest extends TestCase
         );
 
         $this->assertSame([], array_values($roleMiddleware));
+    }
+
+    /**
+     * Own-record only, no role-exclusive resource — no `role:` middleware
+     * on either route. EnrollmentPolicy resolves the student-only boundary.
+     */
+    public function test_enrollments_carry_no_role_middleware(): void
+    {
+        foreach (['api.v1.enrollments.index', 'api.v1.enrollments.store'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+
+            $roleMiddleware = array_filter(
+                $route->gatherMiddleware(),
+                static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+            );
+
+            $this->assertSame([], array_values($roleMiddleware));
+        }
     }
 
     public function test_the_login_route_is_throttled(): void

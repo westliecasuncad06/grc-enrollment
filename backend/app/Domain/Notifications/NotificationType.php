@@ -5,4 +5,5 @@ namespace App\Domain\Notifications;
 enum NotificationType: string
 {
     case SchedulePublished = 'schedule_published';
+    case EnrollmentSubmitted = 'enrollment_submitted';
 }

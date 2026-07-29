@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\CurriculumController;
 use App\Http\Controllers\Api\V1\EligibleSubjectController;
+use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
@@ -67,6 +68,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // resolves "student role only" the same way FacultyMemberPolicy
         // resolves "program chair only" for the faculty directory.
         Route::get('/eligible-subjects', EligibleSubjectController::class)->name('eligible-subjects.index');
+
+        // Own-record only — EnrollmentPolicy resolves "student role only";
+        // "which enrollments" is the controller's own `student_id` scope.
+        Route::get('/enrollments', [EnrollmentController::class, 'index'])->name('enrollments.index');
+        Route::post('/enrollments', [EnrollmentController::class, 'store'])->name('enrollments.store');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's

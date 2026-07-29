@@ -20,6 +20,8 @@ final class AuditableType
 
     public const FACULTY_DIRECTORY = 'faculty_directory';
 
+    public const ENROLLMENT = 'enrollment';
+
     /**
      * @return list<string>
      */
@@ -34,6 +36,7 @@ final class AuditableType
             self::STUDENT_PROFILE,
             self::AUDIT_LOG,
             self::FACULTY_DIRECTORY,
+            self::ENROLLMENT,
         ];
     }
 }

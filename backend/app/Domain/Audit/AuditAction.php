@@ -46,6 +46,8 @@ final class AuditAction
 
     public const FACULTY_DIRECTORY_LIST_VIEWED = 'faculty_directory.list_viewed';
 
+    public const ENROLLMENT_SUBMITTED = 'enrollment.submitted';
+
     /**
      * @return list<string>
      */
@@ -73,6 +75,7 @@ final class AuditAction
             self::STUDENT_PROFILE_PROVISIONED,
             self::AUDIT_LOG_LIST_VIEWED,
             self::FACULTY_DIRECTORY_LIST_VIEWED,
+            self::ENROLLMENT_SUBMITTED,
         ];
     }
 }

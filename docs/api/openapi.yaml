@@ -1269,6 +1269,106 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/enrollments:
+    get:
+      operationId: getEnrollments
+      summary: List the authenticated student's own enrollments
+      description: >
+        Own-record only — Student role only. Returns every enrollment the
+        caller has ever submitted, newest first, each with its subjects and
+        queue ticket.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The authenticated student's enrollments.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentCollectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The authenticated user has no student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createEnrollment
+      summary: Submit an enrollment (DFD 2.4)
+      description: >
+        Own-record only — Student role only. Atomically creates one
+        enrollment, its enrollment subjects, one queue ticket, one audit
+        entry, and a confirmation notification (FR-ENR-007–009). Every
+        submitted section is re-validated server-side against a freshly
+        built eligible-subject pool — the client's pool view is advisory
+        only. Rejects a duplicate active enrollment for the term, a
+        duplicate subject across two sections, sections that conflict on
+        schedule with each other, and (only when
+        `enrollment.max_regular_units` is configured — PRD §17 pending) a
+        total load over the configured cap.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreEnrollmentRequest"
+      responses:
+        "201":
+          description: The created enrollment.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: >
+            Validation failed — a duplicate active enrollment, an ineligible,
+            duplicate-subject, or schedule-conflicting section, or (when
+            configured) an overload.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/notifications:
     get:
       operationId: getNotifications
@@ -2633,6 +2733,149 @@ components:
             App\Actions\Enrollment\BuildEligibleSubjectPool.
         message:
           type: string
+    EnrollmentCollectionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnrollmentResource"
+    EnrollmentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/EnrollmentResource"
+    EnrollmentResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - academic_term_id
+        - status
+        - status_label
+        - total_units
+        - submitted_at
+        - registrar_decided_at
+        - payment_confirmed_at
+        - enrolled_at
+        - subjects
+        - queue_ticket
+      properties:
+        type:
+          type: string
+          const: enrollment
+        id:
+          type: integer
+        academic_term_id:
+          type: integer
+        status:
+          type: string
+          description: >
+            PRD §4.2's authoritative lifecycle — see
+            App\Domain\Enrollment\EnrollmentStatus.
+          enum:
+            - draft
+            - pending_registrar_approval
+            - pending_payment
+            - enrolled
+            - rejected
+            - cancelled
+            - withdrawn
+        status_label:
+          type: string
+        total_units:
+          type: number
+          format: float
+        submitted_at:
+          type: ["string", "null"]
+          format: date-time
+        registrar_decided_at:
+          type: ["string", "null"]
+          format: date-time
+        payment_confirmed_at:
+          type: ["string", "null"]
+          format: date-time
+        enrolled_at:
+          type: ["string", "null"]
+          format: date-time
+        subjects:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - section_id
+              - subject_code
+              - subject_title
+              - status
+              - status_label
+            properties:
+              section_id:
+                type: integer
+              subject_code:
+                type: string
+              subject_title:
+                type: string
+              status:
+                type: string
+                enum:
+                  - selected
+                  - enrolled
+                  - dropped
+              status_label:
+                type: string
+        queue_ticket:
+          type: ["object", "null"]
+          additionalProperties: false
+          required:
+            - ticket_number
+            - queue_date
+            - status
+            - status_label
+          properties:
+            ticket_number:
+              type: string
+              description: >
+                Opaque — PRD §17 leaves the numbering scheme unconfirmed.
+            queue_date:
+              type: string
+              format: date
+            status:
+              type: string
+              enum:
+                - waiting
+                - serving
+                - served
+                - cancelled
+            status_label:
+              type: string
+    StoreEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - academic_term_id
+        - sections
+      properties:
+        academic_term_id:
+          type: integer
+        sections:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - section_id
+            properties:
+              section_id:
+                type: integer
     StoreSectionRequest:
       type: object
       additionalProperties: false
