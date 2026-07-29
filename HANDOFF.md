@@ -3,7 +3,7 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 21:43:00 +08:00
+- **Date and time:** 2026-07-29 22:00:00 +08:00
 - **Current branch:** `phase-5-portal-workspaces`
 - **Previous reviewed commit:** `b6ee7ed docs(handoff): accept admission provisioning remediation`
 - **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
@@ -12,10 +12,10 @@
 
 ## Current Objective
 
-Begin Phase 5 Task 7 — Program Chair sections and schedule workspace on the
-isolated branch. Preserve the accepted Task 6 full-replace curriculum graph
-contract, identity-scoped reference queries, browser-token ownership, strict
-parsed API contracts, and Program Chair-only backend authorization; do not
+Begin Phase 5 Task 8 — Dean and Executive Director schedule approval and
+master schedule workspace on the isolated branch. Preserve Program Chair's
+Task 7 draft-only proposal boundary, backend state transitions, identity-scoped
+queries, browser-token ownership, and strict parsed API contracts; do not
 merge or push.
 
 The page-top published completion remains **41%**. Machine learning remains
@@ -201,6 +201,30 @@ UI belongs in Phase 5.
   Oxlint, and `git diff --check`. The independent re-review returned **Accept
   with no findings**. Task 6 is accepted and complete; published completion
   remains **41%** and Task 7 is next.
+
+### Phase 5 Task 7 — Program Chair sections, assignment, and proposals
+
+- Connected `sections-schedules`, `faculty-assignment`, and
+  `schedule-proposals` to real Program Chair workspaces. Section POST and PATCH
+  use a strict complete input contract; `toSectionReplacement()` preserves all
+  required existing fields before a faculty-assignment PATCH.
+- The client validates dependent academic-term/subject selection, supported
+  schedule-day shorthand, paired `HH:mm:ss` times with end-after-start, and
+  positive capacity. Existing sections remain editable through full
+  replacement, while assignment filters to unassigned sections and active
+  faculty only.
+- Faculty directory schemas contain exactly the safe published identity fields
+  and reject email. The assignment workspace shows term-matched availability
+  and selected-subject preference context; API 422 conflicts remain visible to
+  the chair. Proposal creation is draft-only and has no approval/publication
+  controls; duplicate-term 422 feedback is shown beside the term selector.
+- RED evidence: the required focused command failed before the new scheduling,
+  directory, and workspace modules existed. Final Task 7 focused verification
+  passed **5 files / 9 tests**; full frontend verification passed **34 files /
+  200 tests**, Prettier, ESLint, Oxlint, TypeScript, production build, and
+  `git diff --check`. Published completion remains **41%**. Exact next:
+  **Phase 5 Task 8 — Dean and Executive Director schedule approval and master
+  schedule workspace.**
 
 ### Takeover verification performed by Codex
 
@@ -547,9 +571,10 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Begin **Phase 5 Task 7 — Program Chair sections and schedule workspace**
-   from its supplied task brief on `phase-5-portal-workspaces`. Preserve the
-   accepted Task 6 full-replace curriculum graph semantics.
+1. Begin **Phase 5 Task 8 — Dean and Executive Director schedule approval and
+   master schedule workspace** from its supplied task brief on
+   `phase-5-portal-workspaces`. Preserve Task 7's draft-only Program Chair
+   proposal boundary and backend-owned lifecycle authorization.
 2. Preserve the unrelated modified plan file until its owner decides what to
    do with it; do not push or merge the isolated Task 1 or Task 2 commits without
    explicit authorization.

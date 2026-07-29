@@ -4,6 +4,9 @@ import { AdmissionProvisioningWorkspace } from "@/features/components/portal/adm
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
 import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
+import { FacultyAssignmentWorkspace } from "@/features/components/portal/faculty-assignment-workspace"
+import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
+import { SectionsWorkspace } from "@/features/components/portal/sections-workspace"
 
 export type PhaseFiveModuleId =
   | "student-accounts"
@@ -65,6 +68,13 @@ const teachingScheduleWorkspace: PortalModuleComponent = () => (
 )
 
 const curriculumWorkspace: PortalModuleComponent = () => <CurriculumWorkspace />
+const sectionsWorkspace: PortalModuleComponent = () => <SectionsWorkspace />
+const facultyAssignmentWorkspace: PortalModuleComponent = () => (
+  <FacultyAssignmentWorkspace />
+)
+const scheduleProposalsWorkspace: PortalModuleComponent = () => (
+  <ScheduleProposalsWorkspace />
+)
 
 export const phaseFiveModuleRegistry: Readonly<
   Record<PhaseFiveModuleId, PortalModuleComponent>
@@ -76,9 +86,9 @@ export const phaseFiveModuleRegistry: Readonly<
   "teaching-schedule": teachingScheduleWorkspace,
   curriculum: curriculumWorkspace,
   "subjects-prerequisites": curriculumWorkspace,
-  "sections-schedules": connectedPortalWorkspace,
-  "faculty-assignment": connectedPortalWorkspace,
-  "schedule-proposals": connectedPortalWorkspace,
+  "sections-schedules": sectionsWorkspace,
+  "faculty-assignment": facultyAssignmentWorkspace,
+  "schedule-proposals": scheduleProposalsWorkspace,
   "schedule-approvals": connectedPortalWorkspace,
   "master-schedule": connectedPortalWorkspace,
   "audit-logs": connectedPortalWorkspace,

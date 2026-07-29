@@ -52,6 +52,12 @@ const curriculumWorkspaceModules = new Set([
   "subjects-prerequisites",
 ])
 
+const schedulingWorkspaceRegions: Record<string, string> = {
+  "sections-schedules": "Sections and schedules workspace",
+  "faculty-assignment": "Faculty assignment workspace",
+  "schedule-proposals": "Schedule proposals workspace",
+}
+
 describe("PortalModulePage", () => {
   it.each(allowedModuleCases)(
     "renders $role access to $module.id from that role's catalog",
@@ -94,6 +100,12 @@ describe("PortalModulePage", () => {
               name: "Curriculum workspace",
             }),
           ).not.toHaveLength(0)
+        } else if (schedulingWorkspaceRegions[module.id]) {
+          expect(
+            screen.getByRole("region", {
+              name: schedulingWorkspaceRegions[module.id],
+            }),
+          ).toBeInTheDocument()
         } else {
           expect(
             screen.getByRole("region", {

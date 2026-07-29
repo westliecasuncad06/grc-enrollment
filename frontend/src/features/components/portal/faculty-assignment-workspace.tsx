@@ -1,0 +1,272 @@
+"use client"
+
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
+
+import { useAuth } from "@/features/auth/use-auth"
+import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { Button } from "@/features/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/features/components/ui/card"
+import { Field, FieldLabel } from "@/features/components/ui/field"
+import { Skeleton } from "@/features/components/ui/skeleton"
+import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
+import {
+  useFacultyAvailabilitiesQuery,
+  useFacultySubjectPreferencesQuery,
+} from "@/features/hooks/use-faculty-input"
+import {
+  useAcademicTermsQuery,
+  useSectionsQuery,
+  useSubjectsQuery,
+  sectionsQueryKey,
+} from "@/features/hooks/use-reference-data"
+import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import {
+  replaceSection,
+  toSectionReplacement,
+} from "@/features/services/scheduling-service"
+import {
+  formatAcademicTerm,
+  getActiveAcademicTerm,
+} from "@/features/services/reference-data-service"
+
+const weekday = [
+  "",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+]
+
+export function FacultyAssignmentWorkspace() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+  const termsQuery = useAcademicTermsQuery()
+  const subjectsQuery = useSubjectsQuery()
+  const sectionsQuery = useSectionsQuery()
+  const directoryQuery = useFacultyDirectoryQuery()
+  const availabilitiesQuery = useFacultyAvailabilitiesQuery()
+  const preferencesQuery = useFacultySubjectPreferencesQuery()
+  const [termId, setTermId] = useState(0)
+  const [sectionId, setSectionId] = useState(0)
+  const [professorId, setProfessorId] = useState(0)
+  const [requestError, setRequestError] = useState("")
+  const activeTerm = getActiveAcademicTerm(termsQuery.data)
+  const selectedTermId = termId === 0 ? (activeTerm?.id ?? 0) : termId
+  const unassigned = (sectionsQuery.data ?? []).filter(
+    (section) =>
+      section.academic_term_id === selectedTermId &&
+      section.professor_id === null,
+  )
+  const section = unassigned.find((item) => item.id === sectionId) ?? null
+  const faculty =
+    (directoryQuery.data ?? []).find((member) => member.id === professorId) ??
+    null
+  const availability = (availabilitiesQuery.data ?? []).filter(
+    (item) =>
+      item.professor_id === professorId &&
+      item.academic_term_id === selectedTermId,
+  )
+  const preferences = (preferencesQuery.data ?? []).filter(
+    (item) =>
+      item.professor_id === professorId &&
+      item.academic_term_id === selectedTermId &&
+      item.subject_id === section?.subject_id,
+  )
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (!section || !faculty)
+        throw new Error(
+          "Select an unassigned section and an active faculty member.",
+        )
+      return replaceSection(
+        section.id,
+        toSectionReplacement(section, { professor_id: faculty.id }),
+      )
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: sectionsQueryKey(session?.userId ?? null),
+        exact: true,
+      }),
+  })
+  const save = async () => {
+    setRequestError("")
+    try {
+      await mutation.mutateAsync()
+      setSectionId(0)
+      setProfessorId(0)
+    } catch (error) {
+      const messages: string[] = []
+      applyApiFieldErrors(error, (_field, detail) => {
+        if (detail.message) messages.push(detail.message)
+      })
+      setRequestError(
+        messages[0] ??
+          (error instanceof Error
+            ? error.message
+            : "The faculty assignment could not be saved. Try again."),
+      )
+    }
+  }
+  const loading =
+    termsQuery.isLoading ||
+    subjectsQuery.isLoading ||
+    sectionsQuery.isLoading ||
+    directoryQuery.isLoading ||
+    availabilitiesQuery.isLoading ||
+    preferencesQuery.isLoading
+  const failed =
+    termsQuery.isError ||
+    subjectsQuery.isError ||
+    sectionsQuery.isError ||
+    directoryQuery.isError ||
+    availabilitiesQuery.isError ||
+    preferencesQuery.isError
+  const subject = (subjectsQuery.data ?? []).find(
+    (item) => item.id === section?.subject_id,
+  )
+  return (
+    <section aria-label="Faculty assignment workspace" className="grid gap-4">
+      <div>
+        <h2>Faculty assignment</h2>
+        <p>
+          Assign active faculty to unassigned planned sections, with their
+          declared constraints in view.
+        </p>
+      </div>
+      {(failed || requestError) && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {requestError ||
+              "Assignment data could not be loaded. Refresh and try again."}
+          </AlertDescription>
+        </Alert>
+      )}
+      {loading ? (
+        <Skeleton className="h-48" />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Assign faculty</CardTitle>
+            <CardDescription>
+              The API remains authoritative for faculty schedule conflicts; this
+              view provides declared availability and subject-preference
+              context.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <Field>
+              <FieldLabel htmlFor="assignment-term">Academic term</FieldLabel>
+              <select
+                id="assignment-term"
+                value={selectedTermId}
+                onChange={(event) => {
+                  setTermId(Number(event.target.value))
+                  setSectionId(0)
+                  setProfessorId(0)
+                }}
+              >
+                <option value={0}>Select an academic term</option>
+                {(termsQuery.data ?? []).map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {formatAcademicTerm(term)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="assignment-section">
+                Unassigned section
+              </FieldLabel>
+              <select
+                id="assignment-section"
+                value={sectionId}
+                onChange={(event) => setSectionId(Number(event.target.value))}
+              >
+                <option value={0}>Select an unassigned section</option>
+                {unassigned.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {(subjectsQuery.data ?? []).find(
+                      (subject) => subject.id === item.subject_id,
+                    )?.code ?? "Subject"}{" "}
+                    · {item.section_code}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {selectedTermId > 0 && unassigned.length === 0 && (
+              <p>
+                No unassigned sections are available for this academic term.
+              </p>
+            )}
+            <Field>
+              <FieldLabel htmlFor="assignment-faculty">
+                Faculty member
+              </FieldLabel>
+              <select
+                id="assignment-faculty"
+                value={professorId}
+                onChange={(event) => setProfessorId(Number(event.target.value))}
+                disabled={!section}
+              >
+                <option value={0}>Select an active faculty member</option>
+                {(directoryQuery.data ?? []).map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {faculty && (
+              <aside
+                aria-label="Faculty constraint context"
+                className="rounded-md border p-3"
+              >
+                <h3>{faculty.name}’s declared context</h3>
+                <p>
+                  {availability.length
+                    ? availability
+                        .map(
+                          (item) =>
+                            `${weekday[item.day_of_week]} ${item.starts_at_time.slice(0, 5)}–${item.ends_at_time.slice(0, 5)}`,
+                        )
+                        .join(", ")
+                    : "No availability declared for this term."}
+                </p>
+                <p>
+                  {preferences.length
+                    ? preferences
+                        .map(
+                          (item) =>
+                            `Preference #${item.rank} for ${subject?.code ?? "this subject"}`,
+                        )
+                        .join(", ")
+                    : `No preference declared for ${subject?.code ?? "this subject"}.`}
+                </p>
+              </aside>
+            )}
+            <Button
+              type="button"
+              onClick={() => void save()}
+              disabled={!section || !faculty || mutation.isPending}
+            >
+              {mutation.isPending
+                ? "Saving faculty assignment"
+                : "Save faculty assignment"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  )
+}
