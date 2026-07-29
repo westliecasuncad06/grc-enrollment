@@ -3,29 +3,44 @@
 ## Last Updated
 
 - **Agent:** Codex
-- **Date and time:** 2026-07-29 18:55:00 +08:00
-- **Current branch:** `main`
-- **Latest commit:** see `git log -1 --oneline` (local integration handoff finalized)
-- **Integration state:** Phase 4 was fast-forward merged locally into `main`;
-  nothing has been pushed. The pre-existing main-branch plan edit was preserved.
+- **Date and time:** 2026-07-29 19:15:36 +08:00
+- **Current branch:** `phase-5-portal-workspaces`
+- **Latest commit:** `c71d7b7 feat(api): add program chair faculty directory`
+- **Integration state:** Phase 4 remains locally integrated on `main`. Phase 5
+  Task 1 is committed only on its isolated review branch; nothing has been
+  pushed or merged.
 
 ## Current Objective
 
-Record and verify the local integration of roadmap Phase 4, “Cross-Cutting
-Backend & ML Substrate,” on `main`:
+Begin Phase 5 Task 2 after the verified Task 1 Program Chair faculty-directory
+API slice. Task 2 must use its supplied brief, preserve Task 1's audited
+faculty-directory contract, and remain on the isolated Phase 5 branch until
+the authorized review/integration workflow says otherwise.
 
-- immutable audit history and Registrar Head audit reads;
-- user-owned notifications and schedule-publication notifications;
-- transactional audit retrofits for existing privileged writes;
-- schema-only analytical storage for the final machine-learning phase;
-- synchronized routes, OpenAPI, data dictionary, and `PROGRESS.md`; and
-- the complete backend verification gate.
-
-The page-top published completion is now **41%** after integration. Machine
-learning remains last in roadmap Phase 9; no model, prediction endpoint, or
-student attrition UI belongs in Phase 4.
+The page-top published completion remains **41%**. Machine learning remains
+last in roadmap Phase 9; no model, prediction endpoint, or student attrition
+UI belongs in Phase 5.
 
 ## Verified Completed Work
+
+### Phase 5 Task 1 — Program Chair faculty directory
+
+- Added the audited, private `GET /api/v1/faculty-members` endpoint for the
+  Program Chair. It returns only active Faculty users in deterministic `name`,
+  then `id` order, with the exact safe resource keys `type`, `id`, `name`,
+  `status`, and `status_label`.
+- Authorization is defense in depth: authenticated/active/throttled route
+  middleware plus `role:program_chair`, the `view-faculty-directory` Gate,
+  and `FacultyMemberPolicy`.
+- The action materializes the directory and writes the
+  `faculty_directory.list_viewed` audit event with only `result_count` in one
+  transaction. An injected audit-write failure returns no successful
+  directory payload.
+- Focused verification passed:
+  `php artisan test --filter='FacultyMembersEndpointTest|AuditVocabularyTest|ApiSurfaceTest'`
+  — **24 tests, 147 assertions**. The API inventory increased from **29 to
+  30 routes**.
+- Local review commit: `c71d7b7` (isolated branch only; not pushed or merged).
 
 ### Takeover verification performed by Codex
 
@@ -372,10 +387,11 @@ The post-merge full-suite result must still be recorded below before cleanup.
 
 ## Exact Next Steps
 
-1. Keep `main` as the working branch; begin Phase 5 portal implementation
-   next.
+1. Begin **Phase 5 Task 2** from its supplied task brief on
+   `phase-5-portal-workspaces`; do not alter the verified Task 1 contract.
 2. Preserve the unrelated modified plan file until its owner decides what to
-   do with it.
+   do with it; do not push or merge the isolated Task 1 commit without
+   explicit authorization.
 
 ## Do Not Change
 

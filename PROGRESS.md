@@ -46,9 +46,9 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | **29** |
+| **Live API routes** | **30** |
 | **Database tables** | **26** |
-| **Backend tests** | **503 passing (1,899 assertions)** · focused Phase 4 gate: 152/935 · migration gate: 27/70 after fresh + 5-step rollback + reapply · Larastan/Pint/audit clean |
+| **Backend tests** | **503 passing (1,899 assertions)** · focused Phase 4 gate: 152/935 · Task 1 faculty-directory gate: 24/147 · migration gate: 27/70 after fresh + 5-step rollback + reapply · Larastan/Pint/audit clean |
 | **Frontend tests** | 15 files, 145 tests, Vitest |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
 | **Portals functional** | 0 of 9 |
@@ -252,8 +252,18 @@ published overall score is now 41%.
 
 ## Phase 5 — Portals over Existing APIs
 
-Five portals, ~13 modules, **zero new backend**. 22 built endpoints currently
-have no UI at all. First real proof the system works end to end.
+Five portals, ~13 modules, plus the small audited faculty-directory API slice
+required for Program Chair assignment. 23 built endpoints currently have no UI
+at all. First real proof the system works end to end.
+
+**Task 1 complete (isolated review branch):** Program Chair-only audited
+faculty directory at `GET /api/v1/faculty-members`, returning active Faculty
+users only in deterministic `name`, then `id` order with a privacy-safe
+five-field Resource. The focused
+`FacultyMembersEndpointTest|AuditVocabularyTest|ApiSurfaceTest` gate passed
+**24 tests / 147 assertions**; the API inventory is now **30 routes**. The
+published 41% overall completion remains unchanged pending the planned phase
+increment. **Next:** Phase 5 Task 2.
 
 ## Phase 6 — Process 2.0 + Student Portal
 
@@ -406,7 +416,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 # ■ What Is Built
 
-## API surface — 29 routes
+## API surface — 30 routes
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
@@ -422,7 +432,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 `/schedule-proposals` · `/student-profile` (own-record only)
 
 **`role:program_chair`:** `POST`/`PATCH /curricula` · `POST`/`PATCH /sections` ·
-`POST /schedule-proposals`
+`POST /schedule-proposals` · `GET /faculty-members` (active Faculty directory,
+private and audited)
 
 **`role:faculty`:** `POST`/`PATCH`/`DELETE /faculty-availabilities` and
 `/faculty-subject-preferences`
