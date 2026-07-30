@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/features/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -20,7 +21,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Skeleton } from "@/features/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/features/components/ui/table"
 import {
   useEnrollmentsListQuery,
   useUpdateEnrollmentMutation,
@@ -52,6 +62,14 @@ function availableActions(enrollment: Enrollment): readonly RegistrarAction[] {
     return ["void"]
   }
   return []
+}
+
+function statusBadgeVariant(
+  status: Enrollment["status"],
+): "default" | "destructive" | "outline" {
+  if (status === "rejected" || status === "cancelled") return "destructive"
+  if (status === "enrolled") return "default"
+  return "outline"
 }
 
 interface RegistrarEnrollmentWorkspaceProps {
@@ -144,50 +162,74 @@ export function RegistrarEnrollmentWorkspace({
             {(enrollmentsQuery.data?.data.length ?? 0) === 0 ? (
               <p>No enrollments match this queue.</p>
             ) : (
-              <ul className="grid gap-3">
-                {(enrollmentsQuery.data?.data ?? []).map((enrollment) => (
-                  <li key={enrollment.id} className="rounded-md border p-3">
-                    <p>
-                      Student {enrollment.student_number} · Enrollment #
-                      {enrollment.id} · {enrollment.status_label}
-                    </p>
-                    <p>Total units: {enrollment.total_units}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {availableActions(enrollment).map((action) => (
-                        <Button
-                          key={action}
-                          type="button"
-                          disabled={mutation.isPending}
-                          onClick={() => {
-                            setPending({ enrollment, action })
-                            setReason("")
-                            setError("")
-                          }}
-                        >
-                          {actionLabel[action]}
-                        </Button>
-                      ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Enrollment</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Units</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(enrollmentsQuery.data?.data ?? []).map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell>{enrollment.student_number}</TableCell>
+                      <TableCell>#{enrollment.id}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusBadgeVariant(enrollment.status)}>
+                          {enrollment.status_label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{enrollment.total_units}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          {availableActions(enrollment).map((action) => (
+                            <Button
+                              key={action}
+                              type="button"
+                              size="sm"
+                              variant={
+                                action === "registrar_approve"
+                                  ? "default"
+                                  : "destructive"
+                              }
+                              disabled={mutation.isPending}
+                              onClick={() => {
+                                setPending({ enrollment, action })
+                                setReason("")
+                                setError("")
+                              }}
+                            >
+                              {actionLabel[action]}
+                            </Button>
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
-            <div className="mt-4 flex justify-between">
+            <div className="mt-4 flex items-center justify-between">
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage((value) => Math.max(1, value - 1))}
               >
                 Previous page
               </Button>
-              <span>
+              <span className="text-sm text-muted-foreground">
                 Page {enrollmentsQuery.data?.meta.current_page ?? 1} of{" "}
                 {enrollmentsQuery.data?.meta.last_page ?? 1}
               </span>
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 disabled={
                   (enrollmentsQuery.data?.meta.current_page ?? 1) >=
                   (enrollmentsQuery.data?.meta.last_page ?? 1)
@@ -215,15 +257,18 @@ export function RegistrarEnrollmentWorkspace({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {pending && requiresReason(pending.action) && (
-            <label className="grid gap-1" htmlFor="registrar-decision-reason">
-              Reason
+            <Field>
+              <FieldLabel htmlFor="registrar-decision-reason">
+                Reason
+              </FieldLabel>
               <textarea
                 id="registrar-decision-reason"
+                className="min-h-20 w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 dark:bg-input/30"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 disabled={mutation.isPending}
               />
-            </label>
+            </Field>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={mutation.isPending}>

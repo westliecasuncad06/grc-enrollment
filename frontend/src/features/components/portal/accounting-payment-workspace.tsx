@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/features/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -20,7 +21,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import { Input } from "@/features/components/ui/input"
 import { Skeleton } from "@/features/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/features/components/ui/table"
 import {
   useConfirmPaymentMutation,
   useEnrollmentsListQuery,
@@ -30,12 +41,21 @@ import {
   useUpdateQueueTicketMutation,
 } from "@/features/hooks/use-queue-tickets"
 import type { PaymentConfirmation } from "@/features/schemas/enrollment-schema"
+import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
 
 const workspaceHeadings: Record<string, string> = {
   "payment-queue": "Payment queue",
   "serving-number": "Serving number",
   "payment-confirmation": "Payment confirmation",
   "com-finalization": "COM finalization",
+}
+
+function ticketBadgeVariant(
+  status: QueueTicket["status"],
+): "default" | "secondary" | "outline" {
+  if (status === "serving") return "default"
+  if (status === "served") return "secondary"
+  return "outline"
 }
 
 export function AccountingPaymentWorkspace({
@@ -139,46 +159,69 @@ export function AccountingPaymentWorkspace({
           ) : (ticketsQuery.data?.data.length ?? 0) === 0 ? (
             <p>No queue tickets are currently active.</p>
           ) : (
-            <ul className="grid gap-3">
-              {(ticketsQuery.data?.data ?? []).map((ticket) => (
-                <li key={ticket.id} className="rounded-md border p-3">
-                  <p>
-                    {ticket.ticket_number} · Student {ticket.student_number} ·{" "}
-                    {ticket.status_label}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {ticket.status === "waiting" && (
-                      <Button
-                        type="button"
-                        disabled={ticketMutation.isPending}
-                        onClick={() =>
-                          ticketMutation.mutate({
-                            id: ticket.id,
-                            action: "serve",
-                          })
-                        }
-                      >
-                        Call to serve
-                      </Button>
-                    )}
-                    {ticket.status === "serving" && (
-                      <Button
-                        type="button"
-                        disabled={ticketMutation.isPending}
-                        onClick={() =>
-                          ticketMutation.mutate({
-                            id: ticket.id,
-                            action: "complete",
-                          })
-                        }
-                      >
-                        Mark served
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ticket</TableHead>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(ticketsQuery.data?.data ?? []).map((ticket) => (
+                  <TableRow key={ticket.id}>
+                    <TableCell className="font-medium">
+                      {ticket.ticket_number}
+                    </TableCell>
+                    <TableCell>{ticket.student_number}</TableCell>
+                    <TableCell>
+                      <Badge variant={ticketBadgeVariant(ticket.status)}>
+                        {ticket.status_label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {ticket.status === "waiting" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={ticketMutation.isPending}
+                          onClick={() =>
+                            ticketMutation.mutate({
+                              id: ticket.id,
+                              action: "serve",
+                            })
+                          }
+                        >
+                          Call to serve
+                        </Button>
+                      )}
+                      {ticket.status === "serving" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={ticketMutation.isPending}
+                          onClick={() =>
+                            ticketMutation.mutate({
+                              id: ticket.id,
+                              action: "complete",
+                            })
+                          }
+                        >
+                          Mark served
+                        </Button>
+                      )}
+                      {ticket.status === "served" && (
+                        <span className="text-sm text-muted-foreground">
+                          Complete
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -205,28 +248,39 @@ export function AccountingPaymentWorkspace({
           ) : (pendingPaymentQuery.data?.data.length ?? 0) === 0 ? (
             <p>No enrollments are awaiting payment confirmation.</p>
           ) : (
-            <ul className="grid gap-3">
-              {(pendingPaymentQuery.data?.data ?? []).map((enrollment) => (
-                <li key={enrollment.id} className="rounded-md border p-3">
-                  <p>
-                    Student {enrollment.student_number} · Enrollment #
-                    {enrollment.id} · {enrollment.total_units} units
-                  </p>
-                  <Button
-                    type="button"
-                    className="mt-2"
-                    onClick={() => {
-                      setConfirming(enrollment.id)
-                      setExternalReference("")
-                      setAmount("")
-                      setError("")
-                    }}
-                  >
-                    Confirm payment
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Enrollment</TableHead>
+                  <TableHead>Units</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(pendingPaymentQuery.data?.data ?? []).map((enrollment) => (
+                  <TableRow key={enrollment.id}>
+                    <TableCell>{enrollment.student_number}</TableCell>
+                    <TableCell>#{enrollment.id}</TableCell>
+                    <TableCell>{enrollment.total_units}</TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setConfirming(enrollment.id)
+                          setExternalReference("")
+                          setAmount("")
+                          setError("")
+                        }}
+                      >
+                        Confirm payment
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -244,25 +298,31 @@ export function AccountingPaymentWorkspace({
               audit log. Confirming twice has no additional effect.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <label className="grid gap-1" htmlFor="external-reference">
-            External reference (optional)
-            <input
-              id="external-reference"
-              value={externalReference}
-              onChange={(event) => setExternalReference(event.target.value)}
-              disabled={paymentMutation.isPending}
-            />
-          </label>
-          <label className="grid gap-1" htmlFor="payment-amount">
-            Amount (optional)
-            <input
-              id="payment-amount"
-              inputMode="decimal"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              disabled={paymentMutation.isPending}
-            />
-          </label>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="external-reference">
+                External reference (optional)
+              </FieldLabel>
+              <Input
+                id="external-reference"
+                value={externalReference}
+                onChange={(event) => setExternalReference(event.target.value)}
+                disabled={paymentMutation.isPending}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="payment-amount">
+                Amount (optional)
+              </FieldLabel>
+              <Input
+                id="payment-amount"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                disabled={paymentMutation.isPending}
+              />
+            </Field>
+          </FieldGroup>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={paymentMutation.isPending}>
               Cancel

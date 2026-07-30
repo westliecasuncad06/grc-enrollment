@@ -124,9 +124,34 @@ and ready to merge to local `main`.**
 
 ## Work in Progress
 
-None. Phase 7a is closed and ready to merge. Phase 7b (transferee credits,
-withdrawals, Faculty rosters/grade-submission UI, Dean/Executive Director
-dashboards) has not been started — see *Exact Next Steps*.
+**Phase 7b — Transfers, Withdrawals & the Registrar Staff Portal**, in
+progress directly on `main` (this background session works in place, not
+via a per-phase worktree). Scoped to the "records core": withdrawal
+requests, transferee credits, class rosters, and the six portal modules
+that depend on them — the Dean/Executive Director dashboards are
+deliberately deferred again, to a 7c, since they are the only part of the
+remaining scope with no PRD-specified content.
+
+- ✅ **Design pass over the 8 Phase 7a portal modules**, done first at the
+  user's explicit request before new feature work. `RegistrarEnrollmentWorkspace`
+  and `AccountingPaymentWorkspace` now render their lists as `Table`s with
+  semantic `Badge` status colors (destructive for rejected/cancelled,
+  default for the "in-progress-positive" states) instead of plain
+  `<ul><li>` rows; the payment-confirmation dialog's raw `<input>`s became
+  proper `Field`/`FieldLabel`/`Input`; `StudentQueuePaymentWorkspace` gained
+  a visual 4-stage status stepper (Submitted → Registrar approved →
+  Payment confirmed → Enrolled) with a distinct stopped-state alert for
+  rejected/cancelled/withdrawn; `StudentGradesComWorkspace`'s grade list
+  became a `Table` and its Digital COM card got a certificate-style layout.
+  All changes matched this codebase's own established design-system
+  conventions (the same `Table`/`Badge`/`Field` patterns already used in
+  `enrollment-workspace.tsx`, `admission-provisioning-workspace.tsx`) rather
+  than inventing new ones. **The Chrome browser extension was not connected
+  in this session, so this was a rigorous code-level design audit against
+  the existing component library and established patterns, not a live
+  visual/screenshot review** — flagging this limitation explicitly rather
+  than claiming a visual check that didn't happen. Full frontend gate green
+  throughout (243/243 tests, `tsc`, `eslint`, `prettier` all clean).
 
 ## Files Changed
 

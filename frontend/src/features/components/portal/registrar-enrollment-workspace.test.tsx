@@ -91,7 +91,8 @@ describe("RegistrarEnrollmentWorkspace", () => {
       session: registrarSession,
     })
 
-    expect(await screen.findByText(/Enrollment #9/)).toBeInTheDocument()
+    expect(await screen.findByText("#9")).toBeInTheDocument()
+    expect(screen.getByText("#10")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Void" })).toBeInTheDocument()
