@@ -61,6 +61,14 @@ const schedulingWorkspaceRegions: Record<string, string> = {
   "audit-logs": "Audit logs workspace",
   "eligible-subjects": "Eligible subjects workspace",
   enrollment: "Enrollment submission workspace",
+  "enrollment-approvals": "Registrar enrollment workspace",
+  "overrides-voids": "Registrar enrollment workspace",
+  "payment-queue": "Accounting payment workspace",
+  "serving-number": "Accounting payment workspace",
+  "payment-confirmation": "Accounting payment workspace",
+  "com-finalization": "Accounting payment workspace",
+  "queue-payment": "Payment queue status workspace",
+  "grades-com": "Academic records workspace",
 }
 
 describe("PortalModulePage", () => {

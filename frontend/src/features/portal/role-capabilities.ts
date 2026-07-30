@@ -73,13 +73,13 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "queue-payment",
         "Queue & Payment",
-        "Preview the payment-queue handoff after authorized approval.",
+        "Track your enrollment's registrar approval, payment-queue ticket, and payment status.",
         CreditCard,
       ),
       portalModule(
         "grades-com",
         "Grades & Digital COM",
-        "See the future home for released grades and finalized registration records.",
+        "Review your recorded grades and print your Digital Certificate of Matriculation.",
         FileCheck2,
       ),
     ],
@@ -253,13 +253,13 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "enrollment-approvals",
         "Enrollment Approvals",
-        "Preview final registrar review of enrollment submissions.",
+        "Approve or reject enrollment submissions pending registrar review.",
         ClipboardCheck,
       ),
       portalModule(
         "overrides-voids",
         "Overrides & Voids",
-        "See where exceptional actions will require controlled authorization.",
+        "Void an already-approved enrollment before payment is confirmed, for authorized edge cases.",
         ShieldCheck,
       ),
       portalModule(
@@ -325,25 +325,25 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "payment-queue",
         "Payment Queue",
-        "Preview the ordered queue of approved enrollment payments.",
+        "Advance the ordered queue of approved enrollment payments.",
         ReceiptText,
       ),
       portalModule(
         "serving-number",
         "Serving Number",
-        "See where the active payment-queue number will be managed.",
+        "Call and complete the active payment-queue serving number.",
         Hash,
       ),
       portalModule(
         "payment-confirmation",
         "Payment Confirmation",
-        "Preview the controlled confirmation step after verified payment.",
+        "Confirm a verified payment and generate the Digital COM.",
         BadgeCheck,
       ),
       portalModule(
         "com-finalization",
         "COM Finalization",
-        "See the future handoff that finalizes the Digital Certificate of Matriculation.",
+        "Finalize the Digital Certificate of Matriculation after payment confirmation.",
         FileCheck2,
       ),
     ],

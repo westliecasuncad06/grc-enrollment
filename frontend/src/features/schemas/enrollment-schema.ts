@@ -56,20 +56,24 @@ const queueTicketSchema = z
   })
   .strict()
 
+const enrollmentStatusValues = [
+  "draft",
+  "pending_registrar_approval",
+  "pending_payment",
+  "enrolled",
+  "rejected",
+  "cancelled",
+  "withdrawn",
+] as const
+
 export const enrollmentSchema = z
   .object({
     type: z.literal("enrollment"),
     id: z.number().int().positive(),
+    student_id: z.number().int().positive(),
+    student_number: z.string().min(1),
     academic_term_id: z.number().int().positive(),
-    status: z.enum([
-      "draft",
-      "pending_registrar_approval",
-      "pending_payment",
-      "enrolled",
-      "rejected",
-      "cancelled",
-      "withdrawn",
-    ]),
+    status: z.enum(enrollmentStatusValues),
     status_label: z.string().min(1),
     total_units: z.number().nonnegative(),
     submitted_at: z.iso.datetime().nullable(),
@@ -85,8 +89,38 @@ export const enrollmentEnvelopeSchema = z
   .object({ data: enrollmentSchema })
   .strict()
 
-export const enrollmentsEnvelopeSchema = z
-  .object({ data: z.array(enrollmentSchema) })
+const paginationLinksSchema = z
+  .object({
+    first: z.string().url(),
+    last: z.string().url(),
+    prev: z.string().url().nullable(),
+    next: z.string().url().nullable(),
+  })
+  .strict()
+const paginationMetaSchema = z
+  .object({
+    current_page: z.number().int().positive(),
+    last_page: z.number().int().positive(),
+    per_page: z.number().int().min(1).max(100),
+    total: z.number().int().nonnegative(),
+  })
+  .passthrough()
+
+export const paginatedEnrollmentsSchema = z
+  .object({
+    data: z.array(enrollmentSchema),
+    links: paginationLinksSchema,
+    meta: paginationMetaSchema,
+  })
+  .strict()
+
+export const enrollmentFiltersSchema = z
+  .object({
+    status: z.enum(enrollmentStatusValues).optional(),
+    academic_term_id: z.number().int().positive().optional(),
+    page: z.number().int().positive().default(1),
+    per_page: z.number().int().min(1).max(100).default(20),
+  })
   .strict()
 
 export const storeEnrollmentInputSchema = z
@@ -98,7 +132,60 @@ export const storeEnrollmentInputSchema = z
   })
   .strict()
 
+export const updateEnrollmentInputSchema = z
+  .object({
+    action: z.enum(["registrar_approve", "registrar_reject", "void"]),
+    reason: z.string().min(1).optional(),
+  })
+  .strict()
+
+export const confirmPaymentInputSchema = z
+  .object({
+    external_reference: z.string().optional(),
+    amount: z.number().nonnegative().optional(),
+  })
+  .strict()
+
+const paymentConfirmationPaymentSchema = z
+  .object({
+    external_reference: z.string().nullable(),
+    amount: z.string().nullable(),
+    confirmed_at: z.iso.datetime().nullable(),
+  })
+  .strict()
+
+const paymentConfirmationDocumentSchema = z
+  .object({
+    document_type: z.literal("com").nullable(),
+    document_number: z.string().nullable(),
+    generated_at: z.iso.datetime().nullable(),
+  })
+  .strict()
+
+export const paymentConfirmationEnvelopeSchema = z
+  .object({
+    data: z
+      .object({
+        enrollment: enrollmentSchema,
+        payment: paymentConfirmationPaymentSchema,
+        document: paymentConfirmationDocumentSchema,
+      })
+      .strict(),
+  })
+  .strict()
+
 export type EligibleSubjectReason = z.infer<typeof eligibleSubjectReasonSchema>
 export type EligibleSubject = z.infer<typeof eligibleSubjectSchema>
 export type Enrollment = z.infer<typeof enrollmentSchema>
+export type EnrollmentFilters = z.input<typeof enrollmentFiltersSchema>
 export type StoreEnrollmentInput = z.infer<typeof storeEnrollmentInputSchema>
+export type UpdateEnrollmentInput = z.infer<typeof updateEnrollmentInputSchema>
+export type ConfirmPaymentInput = z.infer<typeof confirmPaymentInputSchema>
+export type PaymentConfirmation = z.infer<
+  typeof paymentConfirmationEnvelopeSchema
+>["data"]
+export interface Paginated<T> {
+  data: readonly T[]
+  links: z.infer<typeof paginationLinksSchema>
+  meta: z.infer<typeof paginationMetaSchema>
+}

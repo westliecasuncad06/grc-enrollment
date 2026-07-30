@@ -1,10 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  confirmPayment,
   createEnrollment,
   getEligibleSubjects,
   getEnrollments,
+  listEnrollments,
+  updateEnrollment,
 } from "@/features/services/enrollment-service"
+
+const paginationLinks = {
+  first: "https://api.test/enrollments?page=1",
+  last: "https://api.test/enrollments?page=1",
+  prev: null,
+  next: null,
+}
+const paginationMeta = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 20,
+  total: 1,
+}
 
 const eligibleSubject = {
   type: "eligible_subject",
@@ -42,6 +58,8 @@ const eligibleSubject = {
 const enrollment = {
   type: "enrollment",
   id: 9,
+  student_id: 3,
+  student_number: "2026-0001",
   academic_term_id: 2,
   status: "pending_registrar_approval",
   status_label: "Pending Registrar Approval",
@@ -88,13 +106,94 @@ describe("enrollment-service", () => {
 
   it("fetches the authenticated student's enrollments", async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: [enrollment] })),
+      new Response(
+        JSON.stringify({
+          data: [enrollment],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
     )
 
     const result = await getEnrollments()
 
     expect(result).toEqual([enrollment])
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/enrollments")
+  })
+
+  it("lists role-scoped enrollments with filters and pagination", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [enrollment],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+
+    const result = await listEnrollments({
+      status: "pending_registrar_approval",
+      page: 1,
+      per_page: 20,
+    })
+
+    expect(result.data).toEqual([enrollment])
+    expect(result.meta).toEqual(paginationMeta)
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "status=pending_registrar_approval&page=1&per_page=20",
+    )
+  })
+
+  it("applies a registrar decision", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ data: { ...enrollment, status: "rejected" } }),
+      ),
+    )
+
+    const result = await updateEnrollment(9, {
+      action: "registrar_reject",
+      reason: "Missing prerequisite.",
+    })
+
+    expect(result.status).toBe("rejected")
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/enrollments/9")
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH")
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      action: "registrar_reject",
+      reason: "Missing prerequisite.",
+    })
+  })
+
+  it("confirms payment and parses the enrollment/payment/document bundle", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            enrollment: { ...enrollment, status: "enrolled" },
+            payment: {
+              external_reference: "OR-000123",
+              amount: "1500.00",
+              confirmed_at: "2026-07-30T00:00:00Z",
+            },
+            document: {
+              document_type: "com",
+              document_number: "COM000009",
+              generated_at: "2026-07-30T00:00:00Z",
+            },
+          },
+        }),
+        { status: 201 },
+      ),
+    )
+
+    const result = await confirmPayment(9, { external_reference: "OR-000123" })
+
+    expect(result.enrollment.status).toBe("enrolled")
+    expect(result.document.document_number).toBe("COM000009")
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/enrollments/9/payment")
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST")
   })
 
   it("submits an enrollment and parses the created resource", async () => {

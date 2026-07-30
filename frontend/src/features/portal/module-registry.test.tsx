@@ -12,8 +12,8 @@ import {
 import { renderWithSession } from "@/tests/render-app"
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the fifteen role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(15)
+  it("dispatches exactly the twenty-three role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(23)
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )
@@ -56,7 +56,23 @@ describe("connectedModuleRegistry", () => {
                             ? "Eligible subjects workspace"
                             : moduleId === "enrollment"
                               ? "Enrollment submission workspace"
-                              : "Connected portal workspace"
+                              : [
+                                    "enrollment-approvals",
+                                    "overrides-voids",
+                                  ].includes(moduleId)
+                                ? "Registrar enrollment workspace"
+                                : [
+                                      "payment-queue",
+                                      "serving-number",
+                                      "payment-confirmation",
+                                      "com-finalization",
+                                    ].includes(moduleId)
+                                  ? "Accounting payment workspace"
+                                  : moduleId === "queue-payment"
+                                    ? "Payment queue status workspace"
+                                    : moduleId === "grades-com"
+                                      ? "Academic records workspace"
+                                      : "Connected portal workspace"
       expect(
         view.getByRole("region", { name: expectedRegion }),
       ).toBeInTheDocument()

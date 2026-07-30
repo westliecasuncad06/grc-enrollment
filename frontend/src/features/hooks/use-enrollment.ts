@@ -1,11 +1,15 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import type { EnrollmentFilters } from "@/features/schemas/enrollment-schema"
 import {
+  confirmPayment,
   getEligibleSubjects,
   getEnrollments,
+  listEnrollments,
+  updateEnrollment,
 } from "@/features/services/enrollment-service"
 
 export const eligibleSubjectsQueryKey = (
@@ -35,5 +39,89 @@ export function useEnrollmentsQuery({
     queryKey: enrollmentsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getEnrollments(signal),
     enabled: enabled && session !== null,
+  })
+}
+
+/**
+ * The Registrar Head approval queue and the Accounting payment queue: a
+ * role-scoped, filterable, paginated view distinct from
+ * `useEnrollmentsQuery`'s own-record student list.
+ */
+export const enrollmentsListQueryKey = (
+  userId: string | null,
+  filters: EnrollmentFilters,
+) => ["enrollments-list", userId, filters] as const
+
+export function useEnrollmentsListQuery(
+  filters: EnrollmentFilters,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: enrollmentsListQueryKey(session?.userId ?? null, filters),
+    queryFn: ({ signal }) => listEnrollments(filters, signal),
+    enabled: enabled && session !== null,
+  })
+}
+
+/**
+ * Both Registrar decisions (`registrar_approve`/`registrar_reject`/`void`)
+ * and payment confirmation invalidate the same two query families: the
+ * role-scoped list this decision was made from, and the student's own view
+ * (only ever populated for a Student session, but harmless to invalidate
+ * unconditionally since the query is gated on session presence anyway).
+ */
+function useInvalidateEnrollmentQueries() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["enrollments-list", session?.userId ?? null],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: enrollmentsQueryKey(session?.userId ?? null),
+        exact: true,
+      }),
+    ])
+}
+
+export function useUpdateEnrollmentMutation() {
+  const invalidate = useInvalidateEnrollmentQueries()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      reason,
+    }: {
+      id: number
+      action: "registrar_approve" | "registrar_reject" | "void"
+      reason?: string
+    }) => updateEnrollment(id, { action, reason }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useConfirmPaymentMutation() {
+  const invalidate = useInvalidateEnrollmentQueries()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      externalReference,
+      amount,
+    }: {
+      id: number
+      externalReference?: string
+      amount?: number
+    }) =>
+      confirmPayment(id, {
+        external_reference: externalReference,
+        amount,
+      }),
+    onSuccess: () => invalidate(),
   })
 }

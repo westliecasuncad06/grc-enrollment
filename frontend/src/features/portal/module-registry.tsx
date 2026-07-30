@@ -12,6 +12,10 @@ import { MasterScheduleWorkspace } from "@/features/components/portal/master-sch
 import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
 import { EligibleSubjectsWorkspace } from "@/features/components/portal/eligible-subjects-workspace"
 import { EnrollmentWorkspace } from "@/features/components/portal/enrollment-workspace"
+import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/registrar-enrollment-workspace"
+import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
+import { StudentQueuePaymentWorkspace } from "@/features/components/portal/student-queue-payment-workspace"
+import { StudentGradesComWorkspace } from "@/features/components/portal/student-grades-com-workspace"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -29,6 +33,14 @@ export type ConnectedModuleId =
   | "audit-logs"
   | "eligible-subjects"
   | "enrollment"
+  | "enrollment-approvals"
+  | "overrides-voids"
+  | "payment-queue"
+  | "serving-number"
+  | "payment-confirmation"
+  | "com-finalization"
+  | "queue-payment"
+  | "grades-com"
 
 export type PortalModuleComponent = ComponentType
 
@@ -48,6 +60,14 @@ export const connectedModuleIds = [
   "audit-logs",
   "eligible-subjects",
   "enrollment",
+  "enrollment-approvals",
+  "overrides-voids",
+  "payment-queue",
+  "serving-number",
+  "payment-confirmation",
+  "com-finalization",
+  "queue-payment",
+  "grades-com",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
@@ -79,6 +99,26 @@ const scheduleProposalsWorkspace: PortalModuleComponent = () => (
   <ScheduleProposalsWorkspace />
 )
 
+const enrollmentApprovalsWorkspace: PortalModuleComponent = () => (
+  <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />
+)
+const overridesVoidsWorkspace: PortalModuleComponent = () => (
+  <RegistrarEnrollmentWorkspace initialModuleId="overrides-voids" />
+)
+
+const paymentQueueWorkspace: PortalModuleComponent = () => (
+  <AccountingPaymentWorkspace initialModuleId="payment-queue" />
+)
+const servingNumberWorkspace: PortalModuleComponent = () => (
+  <AccountingPaymentWorkspace initialModuleId="serving-number" />
+)
+const paymentConfirmationWorkspace: PortalModuleComponent = () => (
+  <AccountingPaymentWorkspace initialModuleId="payment-confirmation" />
+)
+const comFinalizationWorkspace: PortalModuleComponent = () => (
+  <AccountingPaymentWorkspace initialModuleId="com-finalization" />
+)
+
 export const connectedModuleRegistry: Readonly<
   Record<ConnectedModuleId, PortalModuleComponent>
 > = {
@@ -97,6 +137,14 @@ export const connectedModuleRegistry: Readonly<
   "audit-logs": AuditLogsWorkspace,
   "eligible-subjects": EligibleSubjectsWorkspace,
   enrollment: EnrollmentWorkspace,
+  "enrollment-approvals": enrollmentApprovalsWorkspace,
+  "overrides-voids": overridesVoidsWorkspace,
+  "payment-queue": paymentQueueWorkspace,
+  "serving-number": servingNumberWorkspace,
+  "payment-confirmation": paymentConfirmationWorkspace,
+  "com-finalization": comFinalizationWorkspace,
+  "queue-payment": StudentQueuePaymentWorkspace,
+  "grades-com": StudentGradesComWorkspace,
 }
 
 export function isConnectedModuleId(

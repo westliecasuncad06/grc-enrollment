@@ -55,10 +55,25 @@ const eligibleSubject = {
   ],
 }
 
+const paginationLinks = {
+  first: "https://api.test/enrollments?page=1",
+  last: "https://api.test/enrollments?page=1",
+  prev: null,
+  next: null,
+}
+const paginationMeta = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 20,
+  total: 0,
+}
+
 const createdEnrollment = {
   data: {
     type: "enrollment",
     id: 9,
+    student_id: 4,
+    student_number: "2026-0001",
     academic_term_id: 2,
     status: "pending_registrar_approval",
     status_label: "Pending Registrar Approval",
@@ -116,7 +131,15 @@ function mockRoutes(
       )
     if (target.includes("/enrollments"))
       return Promise.resolve(
-        new Response(JSON.stringify(overrides.enrollments ?? { data: [] })),
+        new Response(
+          JSON.stringify(
+            overrides.enrollments ?? {
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            },
+          ),
+        ),
       )
     return Promise.resolve(new Response(JSON.stringify({ data: [] })))
   }
@@ -192,6 +215,16 @@ describe("EnrollmentWorkspace", () => {
             { status: 422 },
           ),
         )
+      if (target.includes("/enrollments"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
     renderWithSession(<EnrollmentWorkspace />, {
@@ -225,6 +258,8 @@ describe("EnrollmentWorkspace", () => {
               status: "pending_registrar_approval",
             },
           ],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 1 },
         },
       }),
     )

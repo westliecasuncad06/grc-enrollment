@@ -156,7 +156,33 @@ interrupted.
   Redocly all clean. **All 5 backend API tasks of Phase 7a are now
   complete** — remaining: 3 frontend portal-module tasks (6–8) and the
   final docs/gate/live-proof/merge task (9).
-- ⬜ Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).
+- ✅ **Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).**
+  New schemas/services/hooks for academic grades, queue tickets, and
+  enrollment documents (mirroring `audit-schema.ts`'s pagination pattern);
+  `enrollment-schema.ts` updated for the paginated envelope,
+  `student_id`/`student_number`, registrar-decision and payment-confirmation
+  inputs. `getEnrollments`/`useEnrollmentsQuery` stay a flat own-list for the
+  Student (backward-compatible with the existing Enrollment module); a new
+  `listEnrollments`/`useEnrollmentsListQuery` adds the filterable, paginated
+  role-scoped view for Registrar Head/Accounting.
+
+  Four workspace components serve the 8 modules — following the
+  Admission-provisioning precedent of one shared component per
+  `initialModuleId`: `RegistrarEnrollmentWorkspace` (Enrollment Approvals +
+  Overrides & Voids — approve/reject/void with a required-reason dialog),
+  `AccountingPaymentWorkspace` (Payment Queue + Serving Number + Payment
+  Confirmation + COM Finalization — serve/complete queue actions plus a
+  payment-confirmation dialog showing the generated COM), and two
+  standalone Student modules, `StudentQueuePaymentWorkspace` (reads the
+  already-existing own-enrollment data, including its embedded
+  `queue_ticket`) and `StudentGradesComWorkspace` (grades + Digital COM with
+  a `window.print()` affordance, since PRD §17 leaves COM format open and no
+  PDF pipeline exists). Registry grew 15 → 23 `connectedModuleIds`; both
+  boundary tests (`module-registry.test.tsx`, `portal-module-page.test.tsx`)
+  updated. Full frontend gate green: `npx vitest run
+  --no-file-parallelism` 243/243 passing, `tsc --noEmit`, `eslint --max-warnings=0`,
+  `prettier --check`, `npm audit --omit=dev` (0 vulnerabilities), and
+  `next build` all clean.
 - ⬜ Task 9 — docs, full quality gate, live HTTP proof, `PROGRESS.md`
   recompute, merge to `main`, push to `origin`.
 
