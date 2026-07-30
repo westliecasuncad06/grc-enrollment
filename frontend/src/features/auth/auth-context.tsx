@@ -17,6 +17,7 @@ import type {
   AuthSession,
   Credentials,
 } from "@/features/auth/auth-types"
+import { setUnauthorizedHandler } from "@/features/services/api-client"
 
 interface AuthProviderProps {
   children: ReactNode
@@ -55,6 +56,19 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
     return () => {
       active = false
     }
+  }, [gateway])
+
+  useEffect(() => {
+    // A 401 on an authenticated request means the stored token is already
+    // invalid — clear it locally (no revoke round-trip; that would just 401
+    // again) and drop to "anonymous" so `RequireSession` performs its normal
+    // redirect, instead of leaving a stale authenticated view rendered over a
+    // cleared token.
+    setUnauthorizedHandler(() => {
+      gateway.clearSession()
+      setSession(null)
+      setStatus("anonymous")
+    })
   }, [gateway])
 
   const signIn = useCallback(

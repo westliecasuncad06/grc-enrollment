@@ -19,51 +19,10 @@ import {
 import { Button } from "@/features/components/ui/button"
 import { Skeleton } from "@/features/components/ui/skeleton"
 import { useHealthQuery } from "@/features/hooks/use-health-query"
+import { getStatePresentation } from "@/features/lib/api-error-presentation"
 import { cn } from "@/features/lib/utils"
-import { isApiClientError } from "@/features/services/api-client"
 import { PUBLIC_API_HEALTH_PATH } from "@/features/services/health-service"
 import type { ServiceHealth } from "@/features/types/health"
-
-interface ErrorPresentation {
-  message: string
-  title: string
-}
-
-function getErrorPresentation(error: unknown): ErrorPresentation {
-  if (!isApiClientError(error)) {
-    return {
-      title: "Connection interrupted",
-      message:
-        "The public enrollment API is not available right now. Confirm that the Laravel service is running, then try again.",
-    }
-  }
-
-  switch (error.kind) {
-    case "configuration":
-      return {
-        title: "API address needs attention",
-        message: error.message,
-      }
-    case "contract":
-      return {
-        title: "Unexpected API response",
-        message: error.message,
-      }
-    case "http":
-      return {
-        title: "API check was not accepted",
-        message: error.requestId
-          ? `${error.message} Request ${error.requestId}.`
-          : error.message,
-      }
-    case "connection":
-      return {
-        title: "Connection interrupted",
-        message:
-          "The public enrollment API is not available right now. Confirm that the Laravel service is running, then try again.",
-      }
-  }
-}
 
 function formatGeneratedAt(value: string): string {
   return new Intl.DateTimeFormat("en-PH", {
@@ -96,7 +55,7 @@ function ApiHealthContent({
   }
 
   if (!health) {
-    const presentation = getErrorPresentation(error)
+    const presentation = getStatePresentation(error)
 
     return (
       <Alert variant="destructive">

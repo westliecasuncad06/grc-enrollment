@@ -3,6 +3,10 @@
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable } from "@/features/components/portal/data-table"
+import { Paginator } from "@/features/components/portal/paginator"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -23,15 +27,7 @@ import {
 } from "@/features/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
-import { Skeleton } from "@/features/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
+import { Textarea } from "@/features/components/ui/textarea"
 import { useAcademicGradesQuery } from "@/features/hooks/use-academic-grades"
 import { useEnrollmentDocumentsQuery } from "@/features/hooks/use-enrollment-documents"
 import {
@@ -43,7 +39,7 @@ import {
   useDecideWithdrawalRequestMutation,
   useWithdrawalRequestsQuery,
 } from "@/features/hooks/use-withdrawal-requests"
-import type { AcademicGrade } from "@/features/schemas/academic-grade-schema"
+import { gradeBadgeVariant } from "@/features/lib/grade-presentation"
 import type { TransfereeCredit } from "@/features/schemas/transferee-credit-schema"
 
 const workspaceHeadings: Record<string, string> = {
@@ -58,14 +54,6 @@ function pendingBadgeVariant(
 ): "default" | "destructive" | "outline" {
   if (status === "rejected") return "destructive"
   if (status === "approved") return "default"
-  return "outline"
-}
-
-function gradeBadgeVariant(
-  status: AcademicGrade["status"],
-): "default" | "secondary" | "outline" {
-  if (status === "locked") return "default"
-  if (status === "submitted") return "secondary"
   return "outline"
 }
 
@@ -138,20 +126,13 @@ export function RegistrarRecordsWorkspace({
     { enabled: showDocuments },
   )
 
-  if (!authorized) {
-    return (
-      <section aria-label="Registrar records workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
-  }
-
   const deciding =
     decideCreditMutation.isPending || decideWithdrawalMutation.isPending
+  const reasonRequired = decision?.action === "reject" && !reason.trim()
 
   const confirmDecision = async () => {
     if (!decision) return
-    if (decision.action === "reject" && !reason.trim()) return
+    if (reasonRequired) return
     setError("")
     try {
       if (decision.kind === "credit") {
@@ -218,11 +199,11 @@ export function RegistrarRecordsWorkspace({
   }
 
   return (
-    <section aria-label="Registrar records workspace" className="grid gap-4">
-      <div>
-        <h2>{heading}</h2>
-        <p>Maintain accurate enrollment and academic records.</p>
-      </div>
+    <WorkspacePage
+      title={heading}
+      description="Maintain accurate enrollment and academic records."
+      unauthorized={!authorized}
+    >
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -233,7 +214,7 @@ export function RegistrarRecordsWorkspace({
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Record a transferee credit</CardTitle>
+              <CardTitle level={3}>Record a transferee credit</CardTitle>
             </CardHeader>
             <CardContent>
               {createError && (
@@ -328,46 +309,54 @@ export function RegistrarRecordsWorkspace({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Transferee credits</CardTitle>
+              <CardTitle level={3}>Transferee credits</CardTitle>
             </CardHeader>
             <CardContent>
-              {creditsQuery.isLoading ? (
-                <Skeleton className="h-32" />
-              ) : creditsQuery.isError ? (
-                <Alert variant="destructive">
-                  <AlertDescription>
-                    Transferee credits could not be loaded.
-                  </AlertDescription>
-                </Alert>
-              ) : (creditsQuery.data?.data.length ?? 0) === 0 ? (
-                <p>No transferee credits have been recorded yet.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Units</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(creditsQuery.data?.data ?? []).map((credit) => (
-                      <TableRow key={credit.id}>
-                        <TableCell>{credit.student_number}</TableCell>
-                        <TableCell>
-                          {credit.source_institution} —{" "}
-                          {credit.source_subject_code}
-                        </TableCell>
-                        <TableCell>{credit.credited_units}</TableCell>
-                        <TableCell>
+              <AsyncBoundary
+                query={{
+                  ...creditsQuery,
+                  data: creditsQuery.data?.data,
+                }}
+                isEmpty={(rows) => rows.length === 0}
+                emptyMessage="No transferee credits have been recorded yet."
+                loadingLabel="Loading transferee credits…"
+              >
+                {(credits) => (
+                  <DataTable
+                    caption="Transferee credits"
+                    rowKey={(credit) => credit.id}
+                    rows={credits}
+                    columns={[
+                      {
+                        key: "student",
+                        header: "Student",
+                        render: (credit) => credit.student_number,
+                      },
+                      {
+                        key: "source",
+                        header: "Source",
+                        render: (credit) =>
+                          `${credit.source_institution} — ${credit.source_subject_code}`,
+                      },
+                      {
+                        key: "units",
+                        header: "Units",
+                        render: (credit) => credit.credited_units,
+                      },
+                      {
+                        key: "status",
+                        header: "Status",
+                        render: (credit) => (
                           <Badge variant={pendingBadgeVariant(credit.status)}>
                             {credit.status_label}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {credit.status === "pending" && (
+                        ),
+                      },
+                      {
+                        key: "actions",
+                        header: "Actions",
+                        render: (credit) =>
+                          credit.status === "pending" && (
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 type="button"
@@ -403,41 +392,18 @@ export function RegistrarRecordsWorkspace({
                                 Reject
                               </Button>
                             </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-              <div className="mt-4 flex items-center justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={creditsPage <= 1}
-                  onClick={() =>
-                    setCreditsPage((value) => Math.max(1, value - 1))
-                  }
-                >
-                  Previous page
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Page {creditsQuery.data?.meta.current_page ?? 1} of{" "}
-                  {creditsQuery.data?.meta.last_page ?? 1}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={
-                    (creditsQuery.data?.meta.current_page ?? 1) >=
-                    (creditsQuery.data?.meta.last_page ?? 1)
-                  }
-                  onClick={() => setCreditsPage((value) => value + 1)}
-                >
-                  Next page
-                </Button>
+                          ),
+                      },
+                    ]}
+                  />
+                )}
+              </AsyncBoundary>
+              <div className="mt-4">
+                <Paginator
+                  currentPage={creditsQuery.data?.meta.current_page ?? 1}
+                  lastPage={creditsQuery.data?.meta.last_page ?? 1}
+                  onPageChange={setCreditsPage}
+                />
               </div>
             </CardContent>
           </Card>
@@ -447,43 +413,53 @@ export function RegistrarRecordsWorkspace({
       {showWithdrawals && (
         <Card>
           <CardHeader>
-            <CardTitle>Withdrawal requests</CardTitle>
+            <CardTitle level={3}>Withdrawal requests</CardTitle>
           </CardHeader>
           <CardContent>
-            {withdrawalsQuery.isLoading ? (
-              <Skeleton className="h-32" />
-            ) : withdrawalsQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  Withdrawal requests could not be loaded.
-                </AlertDescription>
-              </Alert>
-            ) : (withdrawalsQuery.data?.data.length ?? 0) === 0 ? (
-              <p>No withdrawal requests are pending review.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Enrollment</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(withdrawalsQuery.data?.data ?? []).map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell>{request.student_number}</TableCell>
-                      <TableCell>#{request.enrollment_id}</TableCell>
-                      <TableCell>{request.reason}</TableCell>
-                      <TableCell>
+            <AsyncBoundary
+              query={{
+                ...withdrawalsQuery,
+                data: withdrawalsQuery.data?.data,
+              }}
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No withdrawal requests are pending review."
+              loadingLabel="Loading withdrawal requests…"
+            >
+              {(requests) => (
+                <DataTable
+                  caption="Withdrawal requests"
+                  rowKey={(request) => request.id}
+                  rows={requests}
+                  columns={[
+                    {
+                      key: "student",
+                      header: "Student",
+                      render: (request) => request.student_number,
+                    },
+                    {
+                      key: "enrollment",
+                      header: "Enrollment",
+                      render: (request) => `#${request.enrollment_id}`,
+                    },
+                    {
+                      key: "reason",
+                      header: "Reason",
+                      render: (request) => request.reason,
+                    },
+                    {
+                      key: "status",
+                      header: "Status",
+                      render: (request) => (
                         <Badge variant={pendingBadgeVariant(request.status)}>
                           {request.status_label}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {request.status === "pending" && (
+                      ),
+                    },
+                    {
+                      key: "actions",
+                      header: "Actions",
+                      render: (request) =>
+                        request.status === "pending" && (
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
@@ -519,41 +495,18 @@ export function RegistrarRecordsWorkspace({
                               Reject
                             </Button>
                           </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={withdrawalsPage <= 1}
-                onClick={() =>
-                  setWithdrawalsPage((value) => Math.max(1, value - 1))
-                }
-              >
-                Previous page
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {withdrawalsQuery.data?.meta.current_page ?? 1} of{" "}
-                {withdrawalsQuery.data?.meta.last_page ?? 1}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  (withdrawalsQuery.data?.meta.current_page ?? 1) >=
-                  (withdrawalsQuery.data?.meta.last_page ?? 1)
-                }
-                onClick={() => setWithdrawalsPage((value) => value + 1)}
-              >
-                Next page
-              </Button>
+                        ),
+                    },
+                  ]}
+                />
+              )}
+            </AsyncBoundary>
+            <div className="mt-4">
+              <Paginator
+                currentPage={withdrawalsQuery.data?.meta.current_page ?? 1}
+                lastPage={withdrawalsQuery.data?.meta.last_page ?? 1}
+                onPageChange={setWithdrawalsPage}
+              />
             </div>
           </CardContent>
         </Card>
@@ -562,73 +515,60 @@ export function RegistrarRecordsWorkspace({
       {showGrades && (
         <Card>
           <CardHeader>
-            <CardTitle>Academic records</CardTitle>
+            <CardTitle level={3}>Academic records</CardTitle>
           </CardHeader>
           <CardContent>
-            {gradesQuery.isLoading ? (
-              <Skeleton className="h-32" />
-            ) : gradesQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  Academic records could not be loaded.
-                </AlertDescription>
-              </Alert>
-            ) : (gradesQuery.data?.data.length ?? 0) === 0 ? (
-              <p>No academic records exist yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(gradesQuery.data?.data ?? []).map((grade) => (
-                    <TableRow key={grade.id}>
-                      <TableCell>{grade.student_id}</TableCell>
-                      <TableCell>{grade.student_number}</TableCell>
-                      <TableCell>{grade.subject_code}</TableCell>
-                      <TableCell>{grade.final_grade ?? "—"}</TableCell>
-                      <TableCell>
+            <AsyncBoundary
+              query={{ ...gradesQuery, data: gradesQuery.data?.data }}
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No academic records exist yet."
+              loadingLabel="Loading academic records…"
+            >
+              {(grades) => (
+                <DataTable
+                  caption="Academic records"
+                  rowKey={(grade) => grade.id}
+                  rows={grades}
+                  columns={[
+                    {
+                      key: "student_id",
+                      header: "Student ID",
+                      render: (grade) => grade.student_id,
+                    },
+                    {
+                      key: "student",
+                      header: "Student",
+                      render: (grade) => grade.student_number,
+                    },
+                    {
+                      key: "subject",
+                      header: "Subject",
+                      render: (grade) => grade.subject_code,
+                    },
+                    {
+                      key: "grade",
+                      header: "Grade",
+                      render: (grade) => grade.final_grade ?? "—",
+                    },
+                    {
+                      key: "status",
+                      header: "Status",
+                      render: (grade) => (
                         <Badge variant={gradeBadgeVariant(grade.status)}>
                           {grade.status_label}
                         </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={gradesPage <= 1}
-                onClick={() => setGradesPage((value) => Math.max(1, value - 1))}
-              >
-                Previous page
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {gradesQuery.data?.meta.current_page ?? 1} of{" "}
-                {gradesQuery.data?.meta.last_page ?? 1}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  (gradesQuery.data?.meta.current_page ?? 1) >=
-                  (gradesQuery.data?.meta.last_page ?? 1)
-                }
-                onClick={() => setGradesPage((value) => value + 1)}
-              >
-                Next page
-              </Button>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </AsyncBoundary>
+            <div className="mt-4">
+              <Paginator
+                currentPage={gradesQuery.data?.meta.current_page ?? 1}
+                lastPage={gradesQuery.data?.meta.last_page ?? 1}
+                onPageChange={setGradesPage}
+              />
             </div>
           </CardContent>
         </Card>
@@ -637,73 +577,56 @@ export function RegistrarRecordsWorkspace({
       {showDocuments && (
         <Card>
           <CardHeader>
-            <CardTitle>Enrollment documents</CardTitle>
+            <CardTitle level={3}>Enrollment documents</CardTitle>
           </CardHeader>
           <CardContent>
-            {documentsQuery.isLoading ? (
-              <Skeleton className="h-32" />
-            ) : documentsQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  Enrollment documents could not be loaded.
-                </AlertDescription>
-              </Alert>
-            ) : (documentsQuery.data?.data.length ?? 0) === 0 ? (
-              <p>No enrollment documents have been generated yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Document type</TableHead>
-                    <TableHead>Document number</TableHead>
-                    <TableHead>Generated at</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(documentsQuery.data?.data ?? []).map((document) => (
-                    <TableRow key={document.id}>
-                      <TableCell>{document.student_number}</TableCell>
-                      <TableCell>{document.document_type_label}</TableCell>
-                      <TableCell className="font-mono">
-                        {document.document_number}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(document.generated_at).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={documentsPage <= 1}
-                onClick={() =>
-                  setDocumentsPage((value) => Math.max(1, value - 1))
-                }
-              >
-                Previous page
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {documentsQuery.data?.meta.current_page ?? 1} of{" "}
-                {documentsQuery.data?.meta.last_page ?? 1}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  (documentsQuery.data?.meta.current_page ?? 1) >=
-                  (documentsQuery.data?.meta.last_page ?? 1)
-                }
-                onClick={() => setDocumentsPage((value) => value + 1)}
-              >
-                Next page
-              </Button>
+            <AsyncBoundary
+              query={{ ...documentsQuery, data: documentsQuery.data?.data }}
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No enrollment documents have been generated yet."
+              loadingLabel="Loading enrollment documents…"
+            >
+              {(documents) => (
+                <DataTable
+                  caption="Enrollment documents"
+                  rowKey={(document) => document.id}
+                  rows={documents}
+                  columns={[
+                    {
+                      key: "student",
+                      header: "Student",
+                      render: (document) => document.student_number,
+                    },
+                    {
+                      key: "type",
+                      header: "Document type",
+                      render: (document) => document.document_type_label,
+                    },
+                    {
+                      key: "number",
+                      header: "Document number",
+                      render: (document) => (
+                        <span className="font-mono">
+                          {document.document_number}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "generated_at",
+                      header: "Generated at",
+                      render: (document) =>
+                        new Date(document.generated_at).toLocaleString(),
+                    },
+                  ]}
+                />
+              )}
+            </AsyncBoundary>
+            <div className="mt-4">
+              <Paginator
+                currentPage={documentsQuery.data?.meta.current_page ?? 1}
+                lastPage={documentsQuery.data?.meta.last_page ?? 1}
+                onPageChange={setDocumentsPage}
+              />
             </div>
           </CardContent>
         </Card>
@@ -724,26 +647,36 @@ export function RegistrarRecordsWorkspace({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {decision?.action === "reject" && (
-            <Field>
+            <Field data-invalid={reasonRequired}>
               <FieldLabel htmlFor="registrar-record-decision-reason">
                 Reason
               </FieldLabel>
-              <textarea
+              <Textarea
                 id="registrar-record-decision-reason"
-                className="min-h-20 w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 dark:bg-input/30"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 disabled={deciding}
+                aria-describedby={
+                  reasonRequired
+                    ? "registrar-record-decision-reason-error"
+                    : undefined
+                }
               />
+              {reasonRequired && (
+                <p
+                  id="registrar-record-decision-reason-error"
+                  className="text-sm text-destructive"
+                >
+                  Reason is required to reject.
+                </p>
+              )}
             </Field>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deciding}>Cancel</AlertDialogCancel>
             <Button
               type="button"
-              disabled={
-                deciding || (decision?.action === "reject" && !reason.trim())
-              }
+              disabled={deciding || reasonRequired}
               onClick={() => void confirmDecision()}
             >
               {deciding ? "Saving decision" : "Confirm decision"}
@@ -751,6 +684,6 @@ export function RegistrarRecordsWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </WorkspacePage>
   )
 }

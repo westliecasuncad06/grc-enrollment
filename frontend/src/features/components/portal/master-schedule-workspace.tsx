@@ -1,15 +1,15 @@
 "use client"
 
 import { useAuth } from "@/features/auth/use-auth"
-import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { ScheduleDecisionControls } from "@/features/components/portal/schedule-decision-workspace"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Skeleton } from "@/features/components/ui/skeleton"
-import { ScheduleDecisionControls } from "@/features/components/portal/schedule-decision-workspace"
 import {
   useAcademicTermsQuery,
   useSectionsQuery,
@@ -25,64 +25,55 @@ export function MasterScheduleWorkspace() {
   const subjectsQuery = useSubjectsQuery({ enabled: authorized })
   const sectionsQuery = useSectionsQuery({ enabled: authorized })
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
-  if (!authorized)
-    return (
-      <section aria-label="Master schedule workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
-  const loading =
-    termsQuery.isLoading ||
-    subjectsQuery.isLoading ||
-    sectionsQuery.isLoading ||
-    proposalsQuery.isLoading
-  const failed =
-    termsQuery.isError ||
-    subjectsQuery.isError ||
-    sectionsQuery.isError ||
-    proposalsQuery.isError
-  const retry = () =>
-    void Promise.all([
-      termsQuery.refetch(),
-      subjectsQuery.refetch(),
-      sectionsQuery.refetch(),
-      proposalsQuery.refetch(),
-    ])
   const published = (sectionsQuery.data ?? []).filter(
     (section) => section.status === "published",
   )
+  const combinedQuery = {
+    isPending:
+      termsQuery.isPending ||
+      subjectsQuery.isPending ||
+      sectionsQuery.isPending ||
+      proposalsQuery.isPending,
+    isError:
+      termsQuery.isError ||
+      subjectsQuery.isError ||
+      sectionsQuery.isError ||
+      proposalsQuery.isError,
+    error:
+      termsQuery.error ??
+      subjectsQuery.error ??
+      sectionsQuery.error ??
+      proposalsQuery.error,
+    data: published,
+    refetch: () => {
+      void termsQuery.refetch()
+      void subjectsQuery.refetch()
+      void sectionsQuery.refetch()
+      void proposalsQuery.refetch()
+    },
+  }
+
   return (
-    <section aria-label="Master schedule workspace" className="grid gap-4">
-      <div>
-        <h2>Master schedule</h2>
-        <p>
-          Published sections are the authoritative schedule visible beyond
-          planning.
-        </p>
-      </div>
-      {loading ? (
-        <Skeleton className="h-48" />
-      ) : failed ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            The master schedule could not be loaded.{" "}
-            <button type="button" onClick={retry}>
-              Retry master schedule data
-            </button>
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Published sections</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {published.length === 0 ? (
-                <p>No published sections are available.</p>
-              ) : (
+    <WorkspacePage
+      title="Master schedule"
+      description="Published sections are the authoritative schedule visible beyond planning."
+      unauthorized={!authorized}
+    >
+      <AsyncBoundary
+        query={combinedQuery}
+        isEmpty={(sections) => sections.length === 0}
+        emptyMessage="No published sections are available."
+        loadingLabel="Loading the master schedule…"
+      >
+        {(sections) => (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle level={3}>Published sections</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <ul className="grid gap-3 md:grid-cols-2">
-                  {published.map((section) => {
+                  {sections.map((section) => {
                     const subject = (subjectsQuery.data ?? []).find(
                       (item) => item.id === section.subject_id,
                     )
@@ -110,22 +101,22 @@ export function MasterScheduleWorkspace() {
                     )
                   })}
                 </ul>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Executive decisions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ScheduleDecisionControls
-                role="executive_director"
-                proposals={proposalsQuery.data ?? []}
-              />
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </section>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle level={3}>Executive decisions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScheduleDecisionControls
+                  actorRole="executive_director"
+                  proposals={proposalsQuery.data ?? []}
+                />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

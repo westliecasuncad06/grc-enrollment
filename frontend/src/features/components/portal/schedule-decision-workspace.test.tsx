@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
 import { sectionsQueryKey } from "@/features/hooks/use-reference-data"
@@ -198,5 +199,19 @@ describe("ScheduleDecisionWorkspace", () => {
     expect(
       screen.getByText("This workspace is not available for your role."),
     ).toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(proposals)))
+    const { container } = renderWithSession(<ScheduleDecisionWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByRole("button", { name: "Approve as Dean" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

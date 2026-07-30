@@ -6,6 +6,8 @@ import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -32,7 +34,6 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import {
   facultyAvailabilitiesQueryKey,
   facultySubjectPreferencesQueryKey,
@@ -247,14 +248,10 @@ export function FacultyInputWorkspace() {
   const subjects = subjectsQuery.data ?? []
 
   return (
-    <section aria-label="Faculty input workspace" className="grid gap-4">
-      <div>
-        <h2>Availability and preferences</h2>
-        <p>
-          State when you can teach and rank the subjects you prefer per academic
-          term.
-        </p>
-      </div>
+    <WorkspacePage
+      title="Availability and preferences"
+      description="State when you can teach and rank the subjects you prefer per academic term."
+    >
       {(termsQuery.isError ||
         subjectsQuery.isError ||
         availabilitiesQuery.isError ||
@@ -270,7 +267,7 @@ export function FacultyInputWorkspace() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Availability windows</CardTitle>
+            <CardTitle level={3}>Availability windows</CardTitle>
             <CardDescription>
               Use ISO weekdays and 24-hour HH:mm:ss times.
             </CardDescription>
@@ -398,52 +395,55 @@ export function FacultyInputWorkspace() {
                 </div>
               </FieldGroup>
             </form>
-            {availabilitiesQuery.isLoading ? (
-              <Skeleton className="h-20" />
-            ) : availabilitiesQuery.data?.length ? (
-              <ul
-                className="grid gap-2"
-                aria-label="Saved availability windows"
-              >
-                {availabilitiesQuery.data.map((row) => (
-                  <li
-                    key={row.id}
-                    className="flex items-center justify-between gap-2 rounded-md border p-3"
-                  >
-                    <span>{availabilitySummary(row)}</span>
-                    <span className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        aria-label="Edit availability"
-                        onClick={() => startAvailabilityEdit(row)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        aria-label="Remove availability"
-                        onClick={() =>
-                          setRemoval({ kind: "availability", row })
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>No availability windows yet.</p>
-            )}
+            <AsyncBoundary
+              query={availabilitiesQuery}
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No availability windows yet."
+              loadingLabel="Loading your availability windows…"
+            >
+              {(rows) => (
+                <ul
+                  className="grid gap-2"
+                  aria-label="Saved availability windows"
+                >
+                  {rows.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex items-center justify-between gap-2 rounded-md border p-3"
+                    >
+                      <span>{availabilitySummary(row)}</span>
+                      <span className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label="Edit availability"
+                          onClick={() => startAvailabilityEdit(row)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label="Remove availability"
+                          onClick={() =>
+                            setRemoval({ kind: "availability", row })
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </AsyncBoundary>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Subject preferences</CardTitle>
+            <CardTitle level={3}>Subject preferences</CardTitle>
             <CardDescription>
               Rank each requested subject once for the selected term.
             </CardDescription>
@@ -558,54 +558,60 @@ export function FacultyInputWorkspace() {
                 </div>
               </FieldGroup>
             </form>
-            {preferencesQuery.isLoading ? (
-              <Skeleton className="h-20" />
-            ) : preferencesQuery.data?.length ? (
-              <ul className="grid gap-2" aria-label="Saved subject preferences">
-                {preferencesQuery.data.map((row) => {
-                  const subject = subjects.find(
-                    (item) => item.id === row.subject_id,
-                  )
-                  return (
-                    <li
-                      key={row.id}
-                      className="flex items-center justify-between gap-2 rounded-md border p-3"
-                    >
-                      <span>
-                        #{row.rank} ·{" "}
-                        {subject
-                          ? `${subject.code} — ${subject.title}`
-                          : "Subject unavailable"}
-                      </span>
-                      <span className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-label="Edit subject preference"
-                          onClick={() => startPreferenceEdit(row)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-label="Remove subject preference"
-                          onClick={() =>
-                            setRemoval({ kind: "preference", row })
-                          }
-                        >
-                          Remove
-                        </Button>
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : (
-              <p>No subject preferences yet.</p>
-            )}
+            <AsyncBoundary
+              query={preferencesQuery}
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No subject preferences yet."
+              loadingLabel="Loading your subject preferences…"
+            >
+              {(rows) => (
+                <ul
+                  className="grid gap-2"
+                  aria-label="Saved subject preferences"
+                >
+                  {rows.map((row) => {
+                    const subject = subjects.find(
+                      (item) => item.id === row.subject_id,
+                    )
+                    return (
+                      <li
+                        key={row.id}
+                        className="flex items-center justify-between gap-2 rounded-md border p-3"
+                      >
+                        <span>
+                          #{row.rank} ·{" "}
+                          {subject
+                            ? `${subject.code} — ${subject.title}`
+                            : "Subject unavailable"}
+                        </span>
+                        <span className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label="Edit subject preference"
+                            onClick={() => startPreferenceEdit(row)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label="Remove subject preference"
+                            onClick={() =>
+                              setRemoval({ kind: "preference", row })
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </AsyncBoundary>
           </CardContent>
         </Card>
       </div>
@@ -642,6 +648,6 @@ export function FacultyInputWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </WorkspacePage>
   )
 }

@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
 import { curriculumReplacementSchema } from "@/features/schemas/curriculum-schema"
@@ -349,5 +350,24 @@ describe("CurriculumWorkspace", () => {
         "The submitted subjects contain a direct or transitive prerequisite cycle.",
       ),
     ).not.toHaveLength(0)
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).endsWith("/programs")
+              ? programs
+              : url(input).endsWith("/subjects")
+                ? subjects
+                : curriculum,
+          ),
+        ),
+      ),
+    )
+    const { container } = renderWorkspace()
+    await screen.findByRole("option", { name: "BSCS 2026" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

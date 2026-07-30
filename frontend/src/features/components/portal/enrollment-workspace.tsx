@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -156,14 +157,10 @@ export function EnrollmentWorkspace() {
   const isLoading = termsQuery.isLoading || eligibleSubjectsQuery.isFetching
 
   return (
-    <section
-      aria-label="Enrollment submission workspace"
-      className="grid gap-4"
+    <WorkspacePage
+      title="Select your subjects"
+      description="Select one section per eligible subject, then submit."
     >
-      <div>
-        <h2>Select your subjects</h2>
-        <p>Select one section per eligible subject, then submit.</p>
-      </div>
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="enrollment-term">Academic term</FieldLabel>
@@ -238,7 +235,7 @@ export function EnrollmentWorkspace() {
                 aria-label={`${subject.code} ${subject.title}`}
               >
                 <CardHeader>
-                  <CardTitle>
+                  <CardTitle level={3}>
                     {subject.code} — {subject.title} ({subject.units} units)
                   </CardTitle>
                 </CardHeader>
@@ -281,7 +278,7 @@ export function EnrollmentWorkspace() {
       {selectedEntries.length > 0 && !hasActiveEnrollmentThisTerm && (
         <Card>
           <CardHeader>
-            <CardTitle>Review your enrollment</CardTitle>
+            <CardTitle level={3}>Review your enrollment</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
             <Table>
@@ -360,7 +357,7 @@ export function EnrollmentWorkspace() {
       {(enrollmentsQuery.data ?? []).length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Your enrollments</CardTitle>
+            <CardTitle level={3}>Your enrollments</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -400,6 +397,6 @@ export function EnrollmentWorkspace() {
           </CardContent>
         </Card>
       )}
-    </section>
+    </WorkspacePage>
   )
 }

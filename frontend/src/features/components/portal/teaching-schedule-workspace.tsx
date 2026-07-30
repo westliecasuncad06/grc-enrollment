@@ -1,7 +1,9 @@
 "use client"
 
-import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable } from "@/features/components/portal/data-table"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
 import {
   Card,
@@ -9,15 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Skeleton } from "@/features/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
 import {
   useAcademicTermsQuery,
   useSectionsQuery,
@@ -42,70 +35,45 @@ export function TeachingScheduleWorkspace() {
     subjectsQuery.data ?? [],
     termsQuery.data ?? [],
   )
-  const isLoading =
-    termsQuery.isLoading || subjectsQuery.isLoading || sectionsQuery.isLoading
-  const hasError =
-    termsQuery.isError || subjectsQuery.isError || sectionsQuery.isError
+  const combinedQuery = {
+    isPending:
+      termsQuery.isPending ||
+      subjectsQuery.isPending ||
+      sectionsQuery.isPending,
+    isError:
+      termsQuery.isError || subjectsQuery.isError || sectionsQuery.isError,
+    error: termsQuery.error ?? subjectsQuery.error ?? sectionsQuery.error,
+    data: rows,
+    refetch: () => {
+      void termsQuery.refetch()
+      void subjectsQuery.refetch()
+      void sectionsQuery.refetch()
+    },
+  }
 
   return (
-    <section aria-label="Teaching schedule workspace" className="grid gap-4">
-      <div>
-        <h2>Teaching schedule</h2>
-        <p>This schedule contains sections assigned to your faculty account.</p>
-      </div>
-      {hasError && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Your teaching schedule could not be loaded. Refresh the page and try
-            again.
-          </AlertDescription>
-        </Alert>
-      )}
-      {isLoading ? (
-        <Skeleton className="h-48" />
-      ) : rows.length === 0 ? (
-        <p>No teaching schedule is available for your account.</p>
-      ) : (
-        <>
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Term</TableHead>
-                  <TableHead>Days</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.sectionId}>
-                    <TableCell>
-                      {row.subjectCode} · {row.subjectTitle}
-                    </TableCell>
-                    <TableCell>{row.termLabel}</TableCell>
-                    <TableCell>{row.days}</TableCell>
-                    <TableCell>{row.time}</TableCell>
-                    <TableCell>{row.room}</TableCell>
-                    <TableCell>
-                      <Badge>{row.statusLabel}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="grid gap-3 md:hidden">
-            {rows.map((row) => (
+    <WorkspacePage
+      title="Teaching schedule"
+      description="This schedule contains sections assigned to your faculty account."
+    >
+      <AsyncBoundary
+        query={combinedQuery}
+        isEmpty={(schedule) => schedule.length === 0}
+        emptyMessage="No teaching schedule is available for your account."
+        loadingLabel="Loading your teaching schedule…"
+      >
+        {(schedule) => (
+          <DataTable
+            caption="Teaching schedule"
+            rowKey={(row) => row.sectionId}
+            rows={schedule}
+            renderCard={(row) => (
               <Card
-                key={row.sectionId}
                 role="article"
                 aria-label={`${row.subjectCode} ${row.subjectTitle}`}
               >
                 <CardHeader>
-                  <CardTitle>
+                  <CardTitle level={3}>
                     {row.subjectCode} · {row.subjectTitle}
                   </CardTitle>
                 </CardHeader>
@@ -123,10 +91,26 @@ export function TeachingScheduleWorkspace() {
                   <Badge className="mt-3">{row.statusLabel}</Badge>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
+            )}
+            columns={[
+              {
+                key: "subject",
+                header: "Subject",
+                render: (row) => `${row.subjectCode} · ${row.subjectTitle}`,
+              },
+              { key: "term", header: "Term", render: (row) => row.termLabel },
+              { key: "days", header: "Days", render: (row) => row.days },
+              { key: "time", header: "Time", render: (row) => row.time },
+              { key: "room", header: "Room", render: (row) => row.room },
+              {
+                key: "status",
+                header: "Status",
+                render: (row) => <Badge>{row.statusLabel}</Badge>,
+              },
+            ]}
+          />
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

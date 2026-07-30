@@ -40,6 +40,7 @@ interface ApiClientErrorOptions {
   code?: string
   fieldErrors?: Record<string, string[]>
   requestId?: string
+  retryAfterSeconds?: number
   status?: number
 }
 
@@ -48,6 +49,7 @@ export class ApiClientError extends Error {
   readonly code?: string
   readonly fieldErrors?: Record<string, string[]>
   readonly requestId?: string
+  readonly retryAfterSeconds?: number
   readonly status?: number
 
   constructor({
@@ -57,6 +59,7 @@ export class ApiClientError extends Error {
     code,
     fieldErrors,
     requestId,
+    retryAfterSeconds,
     status,
   }: ApiClientErrorOptions) {
     super(message, { cause })
@@ -65,6 +68,7 @@ export class ApiClientError extends Error {
     this.code = code
     this.fieldErrors = fieldErrors
     this.requestId = requestId
+    this.retryAfterSeconds = retryAfterSeconds
     this.status = status
   }
 }
@@ -86,6 +90,19 @@ function buildApiUrl(path: string): string {
       cause,
     })
   }
+}
+
+/** Laravel's throttle middleware always sends this as a plain integer count of seconds. */
+function readRetryAfterSeconds(response: Response): number | undefined {
+  const header = response.headers.get("Retry-After")
+
+  if (header === null) {
+    return undefined
+  }
+
+  const seconds = Number(header)
+
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -166,6 +183,7 @@ async function request(
     }
 
     const parsedError = apiErrorEnvelopeSchema.safeParse(payload)
+    const retryAfterSeconds = readRetryAfterSeconds(response)
 
     if (parsedError.success) {
       throw new ApiClientError({
@@ -174,6 +192,7 @@ async function request(
         code: parsedError.data.error.code,
         fieldErrors: parsedError.data.error.errors,
         requestId: parsedError.data.error.request_id,
+        retryAfterSeconds,
         status: response.status,
       })
     }
@@ -181,6 +200,7 @@ async function request(
     throw new ApiClientError({
       kind: "http",
       message: "The public API returned an unexpected error response.",
+      retryAfterSeconds,
       status: response.status,
     })
   }

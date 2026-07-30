@@ -30,6 +30,13 @@ export interface AuthGateway {
   signOut(): Promise<void>
 
   /**
+   * Clears the stored token without a server round-trip. For when the token
+   * is already known-invalid (the API rejected it with 401) — a revoke call
+   * would just 401 again.
+   */
+  clearSession(): void
+
+  /**
    * Whether the last session actually persisted (browser storage can be
    * disabled or full). Drives the "cannot be restored after refresh" warning.
    */

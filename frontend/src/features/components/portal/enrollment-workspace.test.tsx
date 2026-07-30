@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { EnrollmentWorkspace } from "@/features/components/portal/enrollment-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -248,6 +249,101 @@ describe("EnrollmentWorkspace", () => {
     expect(screen.getByLabelText("Section")).toHaveValue("5")
   })
 
+  it("shows a clear message and preserves the selection when submission conflicts", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [eligibleSubject] })),
+        )
+      if (target.includes("/enrollments") && init?.method === "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "CONFLICT",
+                message:
+                  "This section filled up while you were reviewing your selection.",
+                errors: {},
+                request_id: "request-409",
+              },
+            }),
+            { status: 409 },
+          ),
+        )
+      if (target.includes("/enrollments"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await user.selectOptions(await screen.findByLabelText("Section"), "5")
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+
+    expect(
+      await screen.findByText(
+        "Your enrollment could not be submitted. Check the connection and try again.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Section")).toHaveValue("5")
+  })
+
+  it("shows a clear message when the eligible-subject pool cannot be reached", async () => {
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (target.includes("/eligible-subjects"))
+        return Promise.reject(new TypeError("Failed to fetch"))
+      if (target.includes("/enrollments"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(
+      await screen.findByText(
+        "Your eligible-subject pool could not be loaded. Refresh the page and try again.",
+        {},
+        { timeout: 3_000 },
+      ),
+    ).toBeInTheDocument()
+  })
+
   it("hides selection when the student already has an active enrollment this term", async () => {
     fetchMock.mockImplementation(
       mockRoutes({
@@ -278,5 +374,20 @@ describe("EnrollmentWorkspace", () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Section")).not.toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    const { container } = renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await screen.findByLabelText("Section")
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { FacultyAssignmentWorkspace } from "@/features/components/portal/faculty-assignment-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -256,17 +257,47 @@ describe("FacultyAssignmentWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByText(
-      "Assignment data could not be loaded. Refresh and try again.",
-      {},
-      { timeout: 3_000 },
-    )
-    await user.click(
-      screen.getByRole("button", { name: "Retry assignment data" }),
-    )
+    await screen.findByText(/Unavailable/, {}, { timeout: 3_000 })
+    await user.click(screen.getByRole("button", { name: "Try again" }))
     expect(
       await screen.findByRole("option", { name: "Prof. Reyes" }),
     ).toBeInTheDocument()
     expect(directoryAttempts).toBe(3)
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input, init) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).endsWith("/academic-terms")
+              ? terms
+              : url(input).endsWith("/subjects")
+                ? subjects
+                : url(input).endsWith("/faculty-members")
+                  ? directory
+                  : url(input).endsWith("/faculty-availabilities")
+                    ? availability
+                    : url(input).endsWith("/faculty-subject-preferences")
+                      ? preferences
+                      : init?.method === "PATCH"
+                        ? { data: unassigned.data[0] }
+                        : unassigned,
+          ),
+          { status: 200 },
+        ),
+      ),
+    )
+    const { container } = renderWithSession(<FacultyAssignmentWorkspace />, {
+      session: {
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    await screen.findByRole("option", { name: "CS101 · A" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

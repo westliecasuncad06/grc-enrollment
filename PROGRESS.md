@@ -1,23 +1,129 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:** `main`
-(worked in place, no worktree, per this session's own instructions)
+**Last updated:** 2026-07-31 · **PRD version:** v3.2 · **Branch:**
+`phase-8a-accessibility-states` (Phase 7b is on `main`, pushed to
+`origin/main`). Phase 8a itself is complete and quality-gated on this branch
+but **not yet merged** — no merge/push has been requested this session.
 
 ## Current Objective
 
-Roadmap Phase 7b, "Transfers, Withdrawals & the Registrar Staff Portal"
-(PRD §3.8, §4.2 rule 7, §5.3 FR-FIN-003/004): withdrawal requests,
-transferee credits, widened Registrar Staff read access to academic
-records and enrollment documents, the class roster API, and the six
-portal modules that depend on them — Faculty's Class Rosters and Grade
-Submission, and all four of Registrar Staff's modules (Credit Mappings,
-Drops & Withdrawals, Academic Records, Enrollment Documents). Scoped to
-the "records core" by explicit user choice at kickoff; the Dean/Executive
-Director dashboards are deliberately deferred again, to a "Phase 7c",
-since they are the only part of the original Phase 7b scope with no
-PRD-specified content. **Phase 7b is complete, quality-gated, live-verified
-against real data on the real dev database, and ready to merge to local
-`main`.**
+**Phase 8a is done** (see *Verified Completed — Phase 8a* below). The next
+decision is the same fork noted at the end of Phase 7b and not yet
+re-resolved: **Phase 8b** (Playwright E2E for §14.3, §14.4 security
+verification, §14.5 performance verification, and §12.6's profile/password/
+help features — all deferred out of 8a) versus **Phase 7c** (Dean/Executive
+Director dashboards, still blocked on the same institutional-content gap
+recorded in *Known Issues*). Ask the user before starting either, and before
+merging this branch to `main`.
+
+## Verified Completed — Phase 8a (accessibility & required states)
+
+PRD §12.3 form behavior, §12.4 required states, §12.5 WCAG 2.1 AA, and the
+presentation-layer part of §12.6. Design doc:
+`docs/superpowers/specs/2026-07-30-phase-8a-accessibility-states-design.md`;
+plan: `docs/superpowers/plans/2026-07-30-phase-8a-accessibility-states.md`;
+decision record: `docs/adr/0014-presentation-layer-state-contract.md`.
+Frontend-only — no backend or migration changes.
+
+- **Task 1 — tooling.** Added `eslint-plugin-jsx-a11y@6.10.2` and
+  `vitest-axe@0.1.0` as dev dependencies. `eslint-plugin-jsx-a11y`'s
+  `peerDependencies` range tops out at ESLint 9 (stale metadata — the plugin
+  works fine under the installed ESLint 10.8.0) and it bundles
+  `minimatch@3.1.5` → `brace-expansion@1.1.18`, which carries a DoS advisory
+  (GHSA-mh99-v99m-4gvg). Both fixed via `frontend/package.json` `overrides`
+  (same mechanism already used there for `postcss`/`sharp`): `{"eslint":
+  "$eslint"}` accepts the installed ESLint version for peer resolution, and
+  `brace-expansion` is forced to `^5.0.8`. Verified `npm ci` (matching CI
+  exactly) succeeds with 0 vulnerabilities. Enabling the plugin surfaced 5
+  violations, all fixed: a redundant `role="region"` on an already-semantic
+  `<section>` in `portal-module-page.tsx`; a confirmed false positive in
+  `ui/pagination.tsx`'s `PaginationLink` (content arrives via a `...props`
+  spread the linter can't trace — documented with a scoped disable comment);
+  and 3 call sites where `ScheduleDecisionControls`' `role: UserRole` prop
+  (domain data — which actor role, not ARIA) collided with `jsx-a11y/aria-role`
+  — renamed to `actorRole` at the source rather than suppressed.
+  `vitest-axe`'s `toHaveNoViolations` matcher registered in
+  `src/tests/setup.tsx`; smoke-tested (flags an unlabeled `<button>`, passes
+  a labeled one) before relying on it in the workspace migration.
+- **Task 2 — status-aware error contract.** `getStatePresentation`
+  (`lib/api-error-presentation.ts`) maps `ApiClientError` to PRD §12.4's
+  named states (403/404/409/429/5xx/offline) — see ADR 0014 for the full
+  status-to-copy table and the reasoning behind each retryable/non-retryable
+  choice. `query-client.ts`'s `shouldRetryQuery` replaces the old blanket
+  `retry: 1`: retries at most once, only for `kind: "connection"` or
+  `status >= 500` — a 429 is never auto-retried, since that would worsen the
+  throttle. `AuthGateway` gained `clearSession()`; `AuthProvider` now
+  registers the 401 handler itself, so a rejected token drives real
+  sign-out through `AuthContext` state instead of only clearing storage.
+  `applyApiFieldErrors` gained `setFocus` wiring so a 422 focuses the first
+  invalid field.
+- **Task 3 — shared primitives.** New `WorkspacePage`, `AsyncBoundary`,
+  `DataTable`, `Paginator`, `StatusRegion` (`components/portal/`), plus
+  fixes to existing primitives: `CardTitle` gained a real `level` prop
+  (renders `h2`–`h6`, not a `<div>`); `FieldError`/`useFieldError` wire
+  `aria-describedby`/`aria-invalid`; `Skeleton` is `aria-hidden` (was
+  silent to assistive tech in a way that also risked double-announcement);
+  `Alert` uses `role="status"` for non-destructive variants instead of
+  hardcoding `role="alert"` everywhere (a success receipt no longer
+  interrupts assistively). New `Textarea` primitive replacing 2 raw
+  `<textarea>`s.
+- **Task 4 — portal shell & CSS.** `.portal-nav-link:focus-visible` added
+  (was entirely unstyled); `aria-current="page"` on the active nav link;
+  `.portal-content:focus` → `:focus-visible` with a visible outline
+  (previously `outline: none` killed the skip-link's landing ring); new
+  `Breadcrumb` replacing a hardcoded `<p>Role workspace / ...</p>`.
+- **Task 5 — migrated all 19 `*-workspace.tsx` files** onto
+  `WorkspacePage`/`AsyncBoundary`/`DataTable`/`Paginator`, replacing ~26
+  hand-rolled loading/error/empty sites and 6 duplicated paginators.
+  `enrollment-workspace.tsx`, `registrar-enrollment-workspace.tsx`, and
+  `registrar-records-workspace.tsx` deliberately keep independent,
+  hand-written `Alert` blocks for their *mutation* failures (submit/approve/
+  reject/void) rather than routing them through `AsyncBoundary` — a failed
+  mutation must preserve in-progress form state (selected section, typed
+  reason), which `AsyncBoundary` (built to replace a query's entire render
+  output) does not own. This split is recorded as a deliberate, documented
+  asymmetry in ADR 0014, not an oversight.
+- **Task 6 — tests.** Wrote the 3 previously-missing workspace tests
+  (`class-rosters`, `grade-submission`, `registrar-records`). Added a
+  `vitest-axe` "no detectable accessibility violations" test to all 19
+  workspace test files. That pass surfaced one real production defect —
+  `TeachingScheduleWorkspace`'s `DataTable` `renderCard` used `CardTitle
+  level={4}` with no intervening `Card`/h3 between it and `WorkspacePage`'s
+  own `h2`, a genuine heading-order (h2→h4) violation; fixed to `level={3}`,
+  the default every other `DataTable` consumer gets automatically because
+  each wraps its table in its own `Card`. Added real end-to-end integration
+  tests for the states PRD §12.4 names — distinct from the unit-level
+  coverage already in `api-error-presentation.test.ts` and
+  `async-boundary.test.tsx` — driving an actual workspace through a mocked
+  `fetch` returning a real HTTP envelope (not a hand-constructed
+  `ApiClientError`): 403 and 404 on `registrar-records-workspace.test.tsx`'s
+  credit-mappings query, 429 with a `Retry-After` header on its
+  drops-withdrawals query, 409 on `enrollment-workspace.test.tsx`'s
+  submission mutation (verifying the selected section survives the
+  failure), and offline (`kind: "connection"`, via a rejected `fetch`) on
+  its eligible-subjects query.
+- **Task 7 — docs.** `docs/adr/0014-presentation-layer-state-contract.md`
+  records the HTTP-status → presentation mapping and the query/mutation
+  two-tier split. This reconciliation.
+- **Gate.** See *Commands and Tests Run — Phase 8a*. Full frontend gate
+  green (format, lint at `--max-warnings=0` including jsx-a11y, oxlint,
+  typecheck, 65 files/354 tests, build, `npm audit` 0 vulnerabilities);
+  backend no-regression confirmed at 641/641 (unchanged from Phase 7b, as
+  expected — this slice touched no backend file). Live HTTP proof against
+  the real dev database confirmed real 403 (student denied
+  `/class-rosters`), 404 (`PATCH` a nonexistent enrollment id), and 429
+  (login throttle, with a genuine `Retry-After` header) responses match
+  exactly what `getStatePresentation` expects. **Not completed this
+  session:** the manual WCAG 2.1 AA pass (keyboard-only traversal,
+  screen-reader spot check, 200% zoom, responsive breakpoints,
+  reduced-motion) and any visual/browser confirmation of the UI — the
+  Chrome browser extension was not connected this session (same limitation
+  Phase 7b recorded for its design pass). No live 409 trigger exists in the
+  backend today (grep confirms nothing currently raises one — every
+  business rule that could conflict returns 422 instead), so the 409 path
+  is proven at the unit/integration level only, not against a real
+  endpoint; this is a gap in the *backend's* state coverage, not evidence
+  against the frontend contract.
 
 ## Verified Completed — Phase 7a (money path, merged `fc56148`)
 
@@ -222,8 +328,61 @@ against real data on the real dev database, and ready to merge to local
 
 ## Work in Progress
 
-None. Phase 7b is complete, quality-gated, and live-verified — ready to
-merge to local `main`. See *Exact Next Steps* for what comes after.
+None. Phase 8a is complete and fully quality-gated on
+`phase-8a-accessibility-states`, not yet merged to `main` — merging needs an
+explicit user request. One caveat carried forward, not treated as blocking:
+the manual WCAG 2.1 AA pass (keyboard traversal, screen reader, zoom,
+responsive breakpoints) could not run this session (no browser connection)
+and should happen before or shortly after merge. See *Exact Next Steps*.
+
+## Files Changed — Phase 8a
+
+No migrations, no backend files — frontend-only.
+
+**New:** `src/features/lib/api-error-presentation.ts`,
+`src/features/components/portal/{workspace-page,async-boundary,data-table,
+paginator,status-region}.tsx` (+ each `.test.tsx`),
+`src/features/components/common/breadcrumb.tsx` (+ test),
+`src/features/components/ui/textarea.tsx` (+ test),
+`src/features/lib/grade-presentation.ts`,
+`src/tests/vitest-axe.d.ts`, `docs/adr/0014-presentation-layer-state-contract.md`.
+
+**Modified — error contract and auth:** `src/features/services/api-client.ts`
+(`retryAfterSeconds`, `readRetryAfterSeconds`); `src/features/lib/
+query-client.ts` (`shouldRetryQuery` replaces blanket `retry: 1`);
+`src/features/auth/{auth-types,api-auth-gateway,auth-context}.ts(x)`
+(`clearSession()`, `AuthProvider` now owns the 401 handler);
+`src/app/providers.tsx` (401 handler moved out); `src/features/lib/
+api-form-errors.ts` (`setFocus` wiring); `src/features/components/common/
+public-api-readiness.tsx` (adopts the shared `getStatePresentation`).
+
+**Modified — primitives:** `src/features/components/ui/{card,field,
+skeleton,alert}.tsx`.
+
+**Modified — portal shell:** `src/app/globals.css`, `src/features/
+components/layouts/portal-shell.tsx`, `src/features/components/pages/
+portal-module-page.tsx`.
+
+**Modified — all 19 workspaces migrated:** every
+`src/features/components/portal/*-workspace.tsx` and its `.test.tsx`
+(class-rosters, grade-submission, registrar-records, audit-logs,
+master-schedule, eligible-subjects, student-queue-payment,
+student-grades-com, schedule-decision, schedule-proposals, sections,
+faculty-assignment, enrollment, registrar-enrollment, curriculum,
+faculty-input, accounting-payment, admission-provisioning,
+teaching-schedule); `src/features/components/pages/portal-module-page.test.tsx`
+and `src/features/portal/module-registry.test.tsx` (region-name
+expectations updated for each migration).
+
+**Tooling:** `frontend/package.json` (+`eslint-plugin-jsx-a11y`,
+`vitest-axe`, 2 new `overrides` entries), `frontend/eslint.config.js`
+(+`jsxA11y.flatConfigs.recommended`), `src/tests/setup.tsx` (`vitest-axe`
+matcher + jsdom Pointer Events polyfill for Radix `Select`).
+
+**Docs:** `docs/runbooks/mariadb-local.md` (new "server will not start"
+section, unrelated infra fix at the start of this session — see *Commands
+and Tests Run — Phase 8a*); `docs/adr/0014-presentation-layer-state-contract.md`
+(new); `PROGRESS.md` (this reconciliation).
 
 ## Files Changed — Phase 7a
 
@@ -392,6 +551,30 @@ updated for the new/widened access); `PROGRESS.md` (this reconciliation).
 | **Live HTTP, real dev DB:** `faculty.seed@grc.test` reads `GET /class-rosters?section_id=1` | returned all 4 roster rows for the section, including the just-withdrawn student correctly shown `dropped` |
 | **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` reads `GET /academic-grades` and `GET /enrollment-documents` (Task 3 widening) | both returned real rows (4 and 3 respectively) — the widened read access works live |
 
+## Commands and Tests Run — Phase 8a
+
+A XAMPP/MariaDB startup failure (Aria checkpoint/recovery corruption in the
+`mysql` system schema, unrelated to any application table) was fixed at the
+start of this session, before any Phase 8a work — see
+`docs/runbooks/mariadb-local.md`'s "Server will not start" section for the
+root cause and fix. All commands below ran against the repaired database.
+
+| Command | Result |
+|---|---|
+| `npm run format:check` | 3 files needed formatting (files this session touched); fixed with `prettier --write` on those 3, then re-checked clean |
+| `npm run lint` (`eslint . --max-warnings=0`, includes jsx-a11y) | passed, 0 warnings |
+| `npm run lint:fast` (oxlint) | passed, exit 0; 1 pre-existing warning (`field.tsx`'s `useFieldError` export alongside a component — a Fast Refresh advisory, not an error, unrelated to this phase's changes) |
+| `npm run typecheck` | passed |
+| `npm test` (`vitest run`, default multi-worker pool — no `--no-file-parallelism` needed this run) | **65 files / 354 tests passed** (up from 48 files/243 tests at the end of Phase 7b — +17 files, +111 tests); the 26-file `components/portal/` subset was also independently re-run with `--no-file-parallelism` after each fix during development, per the Known Issues caution below |
+| `npm run build` (Turbopack) | compiled successfully, same 5 routes |
+| `npm audit --audit-level=moderate` | 0 vulnerabilities |
+| `composer test` (backend, no-regression check — this phase touched no backend file) | **641 passed / 2,419 assertions**, unchanged from Phase 7b |
+| **Live HTTP, real dev DB:** `student.seed@grc.test` reads `GET /transferee-credits` | **200**, empty list — this endpoint is broadly readable and scope-filtered, not role-gated, so it does not itself produce a 403 |
+| **Live HTTP, real dev DB:** same student reads `GET /class-rosters` (Faculty/Registrar-only) | **403** `{"error":{"code":"FORBIDDEN","message":"You are not authorized to perform this action."}}` — a genuine cross-role denial, matching `getStatePresentation`'s 403 branch exactly |
+| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` sends `PATCH /enrollments/999999999` (nonexistent id) | **404** `{"error":{"code":"NOT_FOUND","message":"The requested resource was not found."}}` — route-model binding's automatic 404, matching the 404 branch exactly |
+| **Live HTTP, real dev DB:** 32 rapid login attempts with a bad password | first several **401**, then **429** with a real `Retry-After: 5` header and `X-RateLimit-*` headers — confirms `readRetryAfterSeconds` parses a real header, not just a test double |
+| **Not run this session:** manual WCAG 2.1 AA pass (keyboard-only traversal, screen-reader spot check, 200% zoom, responsive breakpoints, reduced-motion) | Chrome browser extension was not connected — see *Known Issues* |
+
 ## Technical Decisions
 
 - **`void` is scoped to `pending_payment`, not any pre-`enrolled` state.**
@@ -528,8 +711,56 @@ updated for the new/widened access); `PROGRESS.md` (this reconciliation).
 - **Merge to local `main`.** This background session worked directly on
   `main` throughout (no per-phase worktree, per this session's own
   instructions), so "merge" is a clean-state confirmation, not an actual
-  branch merge. Push to `origin` is deferred to explicit confirmation —
-  see *Exact Next Steps*.
+  branch merge. **Correction (2026-07-30, next session):** the line below
+  originally said push to `origin` was still deferred — that was stale by
+  the time it was read; `main` was already pushed and `main == origin/main`
+  at `d206574` when the next session started.
+
+### Phase 8a
+
+- **Query errors route through `AsyncBoundary`/`getStatePresentation`;
+  mutation errors keep hand-written, state-preserving `Alert` blocks.** See
+  ADR 0014 for the full reasoning. This is a genuine two-tier split, not a
+  partial migration — mutation failures in `enrollment-workspace.tsx`,
+  `registrar-enrollment-workspace.tsx`, and `registrar-records-workspace.tsx`
+  render one generic message regardless of status (they do not yet
+  distinguish a 409 mutation conflict from a 5xx), because the alternative
+  (routing them through `AsyncBoundary`) would blank out the form the user
+  was mid-editing. Wiring `getStatePresentation` into those `catch` blocks
+  while preserving local state is additive future work, not a defect in
+  this slice.
+- **19-workspace migration surfaced its own recurring fix patterns, applied
+  consistently rather than case-by-case.** `WorkspacePage`'s region
+  accessible name is its title text with no "workspace" suffix, differing
+  from the old hardcoded `aria-label="X workspace"` strings — this
+  intentionally makes the accessible name match what a screen reader
+  actually announces, but it meant `portal-module-page.test.tsx` and
+  `module-registry.test.tsx`'s expectation maps needed updating after every
+  one of the 19 migrations (legitimate test maintenance following a
+  deliberate UX improvement, not test rot). `DataTable` always renders both
+  a desktop table and a mobile card list simultaneously in jsdom (no real
+  CSS media queries), so several tests needed `within(table)` scoping to
+  avoid duplicate-match failures. `AsyncBoundary`'s real error copy ("Try
+  again" + the server's message) replaced several tests' old hardcoded
+  strings ("Retry X data").
+- **`TeachingScheduleWorkspace`'s `DataTable level={4}` heading-order fix
+  was verified not to be needed anywhere else.** Every other `DataTable`
+  consumer wraps its table in its own `Card`, so `DataTable`'s internal
+  default (`level={4}`, auto-carded) lands correctly one level below that
+  `Card`'s own `h3`. `TeachingScheduleWorkspace` is the only workspace
+  whose `DataTable` sits directly under `WorkspacePage`'s `h2` with no
+  intervening `Card`, confirmed by code review across all 19 workspaces
+  before scoping the fix to this one file.
+- **No production code path currently raises a real 409.** Confirmed by
+  grep — `ApiExceptionRenderer` maps 409 generically for any
+  `ConflictHttpException`, but nothing in `app/` throws one; every
+  business rule that could conflict (e.g., a repeat withdrawal approval)
+  currently returns 422 instead. The frontend's 409 handling is
+  forward-looking infrastructure matching PRD §12.4's named state, proven
+  correct via a real HTTP envelope in `enrollment-workspace.test.tsx`, not
+  yet provable against a live backend endpoint. A future slice that adds a
+  genuine optimistic-concurrency check (e.g., rejecting a stale-state
+  approval) would be the first real backend consumer of this path.
 
 ## Known Issues and Blockers
 
@@ -551,33 +782,73 @@ updated for the new/widened access); `PROGRESS.md` (this reconciliation).
 - **Transferee-credit equivalence rules and withdrawal seat-release
   policy** (this phase's two new §17 items) join queue-ticket
   numbering/reset and COM format on the still-unconfirmed list.
+- **Phase 8a's manual WCAG 2.1 AA pass did not run this session** — the
+  Chrome browser extension was not connected, so keyboard-only traversal,
+  screen-reader spot check, 200% zoom, responsive breakpoints, and
+  reduced-motion confirmation are outstanding. Everything automatable
+  (jsx-a11y lint, `vitest-axe` on every workspace, the full test/build/audit
+  gate) is done and green; this is specifically the visual/interactive
+  portion that needs a connected browser or a human pass.
+- **No production code path raises a real 409** (see Technical Decisions →
+  Phase 8a). Not a defect — PRD §12.4 names the state and the frontend
+  handles it correctly per the unit/integration tests — but it means the
+  live-HTTP-proof convention this document otherwise follows couldn't
+  cover 409 the way it covered 403/404/429.
+- **Two-tier error presentation (query vs. mutation) is a known,
+  documented asymmetry, not a partial migration** — see ADR 0014 and
+  Technical Decisions → Phase 8a. A future slice may want to close this
+  gap for `enrollment-workspace.tsx`, `registrar-enrollment-workspace.tsx`,
+  and `registrar-records-workspace.tsx`'s mutation error messages.
 
 ## Uncommitted or Risky Changes
 
-None once this reconciliation is committed. The real dev database's only
-Phase 7b-specific state is the live-proof data created through the real
-API during this session's verification: one fresh enrollment
-(`proof.withdraw@grc.test`) carried to `enrolled` then `withdrawn` via a
-real approved withdrawal request, and one transferee credit approved for
-the same student — deliberate verification, not a side effect, and safe
-to leave in place as further demo data.
+**Phase 8a's full diff is uncommitted** as of this reconciliation — working
+tree on `phase-8a-accessibility-states` has ~95 modified/new files (see
+*Files Changed — Phase 8a*), none staged or committed. Committing was not
+requested this session; per `AGENTS.md`, nothing is committed without an
+explicit ask. Once committed, nothing about the diff itself is risky:
+frontend-only, no migrations, no backend files touched, full gate green.
+
+The real dev database's only persistent state from this session is
+carried over unchanged from Phase 7b: one fresh enrollment
+(`proof.withdraw@grc.test`) taken to `enrolled` then `withdrawn` via a real
+approved withdrawal request, and one transferee credit approved for the
+same student — deliberate verification, not a side effect, safe to leave
+in place as further demo data. Phase 8a's own live-HTTP proof (this
+session) created no persistent state — the 403/404/429 checks read
+existing rows or hit routes with no side effects, and the 32 throttled
+login attempts used a nonexistent email, so no account lockout or real
+user state was affected.
 
 ## Exact Next Steps
 
-1. **Ask the user before pushing to `origin`.** This session worked
-   directly on `main` with no worktree; the working tree should be
-   committed once this reconciliation is in place, but pushing a shared
-   branch is an explicit-permission action per this session's own
-   instructions, not something a prior general merge authorization covers.
-2. Decide what comes next: **Phase 7c** (Dean/Executive Director
-   dashboards — blocked on an institutional content decision, see *Known
-   Issues*) or **Phase 8** (polish/accessibility/E2E/performance), which
-   has no such blocker. Either is a legitimate next step; ask the user
-   rather than assuming.
-3. Before writing code for whichever is chosen, follow `AGENTS.md`:
-   confirm current `git status`/`git log`, and use
-   `superpowers:brainstorming` → `superpowers:writing-plans` for a new
-   plan/spec pair.
+**Superseded 2026-07-31 (this session).** Steps 1–3 below are historical —
+Phase 8 (not 7c) was already chosen by the time this session started, and
+that choice has now been executed as Phase 8a. See *Current Objective* at
+the top of this document for the live fork.
+
+1. ~~Ask the user before pushing to `origin`.~~ Already pushed (Phase 7b, on
+   `main`).
+2. ~~Decide what comes next: Phase 7c or Phase 8.~~ Phase 8 chosen; its
+   first slice (8a) is now complete.
+3. ~~Before writing code for whichever is chosen, follow `AGENTS.md`.~~ Done
+   — spec at
+   `docs/superpowers/specs/2026-07-30-phase-8a-accessibility-states-design.md`,
+   plan at
+   `docs/superpowers/plans/2026-07-30-phase-8a-accessibility-states.md`.
+
+**Current, not yet acted on:**
+
+1. Ask the user before committing Phase 8a's ~95 modified/new files (see
+   *Uncommitted or Risky Changes*), and again before merging
+   `phase-8a-accessibility-states` to `main` or pushing. None of the three
+   has been requested yet — do not do any of them without an explicit ask.
+2. Ask the user whether to run the deferred manual WCAG 2.1 AA pass before
+   or after merging (needs a connected browser).
+3. Ask the user to choose between **Phase 8b** (Playwright E2E, security,
+   performance, §12.6's remaining profile/password/help features) and
+   **Phase 7c** (still blocked on institutional content, see *Known
+   Issues*) for the next slice of work.
 
 ## Do Not Change
 
@@ -618,6 +889,13 @@ to leave in place as further demo data.
   treat either as confirmed institutional policy elsewhere.
 - No ML runtime behavior before Phase 9; do not touch the paused
   `ml-service`.
+- `query-client.ts`'s `shouldRetryQuery` must never retry a 4xx other than
+  via `kind: "connection"`/5xx — retrying a 429 specifically worsens the
+  throttle it exists to prevent (ADR 0014).
+- `getStatePresentation`'s status→presentation table is the single source
+  of truth for PRD §12.4 copy; do not hand-roll a second status-to-message
+  mapping in a new workspace without a documented reason (see ADR 0014's
+  "Alternatives considered").
 
 ---
 
@@ -665,6 +943,15 @@ Two scores that look surprising, explained:
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
 
+**Phase 8a is complete but not yet reflected above**, per this table's own
+rule (scored against merged work only) — `phase-8a-accessibility-states` is
+neither committed nor merged to `main` yet (see *Uncommitted or Risky
+Changes*). Once merged, Row 10 ("Verification & deployment — E2E, security,
+perf, ISO 25010, handoff") is the natural home for the §12.4/§12.5 work
+that landed, since Row 8 ("Nine role portals — 40 modules") measures
+module *count*, which Phase 8a does not change — it improves quality on
+already-connected modules, not the connected count.
+
 ---
 
 # ■ System Snapshot
@@ -676,7 +963,7 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 | **Live API routes** | **48** |
 | **Database tables** | **26** |
 | **Backend tests** | **641 passing (2,419 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **48 files, 243 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
+| **Frontend tests** | **48 files, 243 tests, Vitest** on `main` — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. (`phase-8a-accessibility-states`, uncommitted, is at 65 files/354 tests — not reflected here until merged.) |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
 | **Portals functional** | **9 of 9** have at least one connected module (29 of 40 modules total) — Registrar Staff is no longer fully placeholder |
 
@@ -1078,10 +1365,21 @@ just engineering time.
 
 ## Phase 8 — Polish, Accessibility, E2E, Performance
 
-PRD §12.4 required states on every page; WCAG 2.1 AA (§12.5); Playwright E2E
-for §14.3's 15 critical journeys (no `e2e/` directory exists yet); §14.5
-performance on the eligible-subject query and approval queues; §14.4 security
-verification.
+### Phase 8a — Accessibility & Required States ✅ (unmerged)
+
+PRD §12.4 required states on every page, WCAG 2.1 AA (§12.5), §12.3 form
+behavior, and the presentation-layer part of §12.6. Complete and
+quality-gated on `phase-8a-accessibility-states` — see *Verified Completed
+— Phase 8a*. Not yet committed or merged to `main`; the manual WCAG
+keyboard/screen-reader/zoom pass is the one piece not run this session
+(no browser connection).
+
+### Phase 8b — E2E, Performance, Security (not started)
+
+Playwright E2E for §14.3's 15 critical journeys (no `e2e/` directory exists
+yet); §14.5 performance on the eligible-subject query and approval queues;
+§14.4 security verification; §12.6's remaining profile/password/help
+features (need new backend endpoints, deferred out of 8a for that reason).
 
 ## Phase 9 — Process 4.0, Machine Learning (LAST)
 

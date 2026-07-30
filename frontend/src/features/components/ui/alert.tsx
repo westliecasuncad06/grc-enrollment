@@ -24,10 +24,17 @@ function Alert({
   variant,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
+  // `destructive` interrupts assertively (role="alert"), matching its
+  // urgency. Everything else — success receipts, informational notices — is
+  // announced politely (role="status") instead of demanding the same
+  // immediate attention as an actual error.
+  const role = variant === "destructive" ? "alert" : "status"
+
   return (
     <div
       data-slot="alert"
-      role="alert"
+      role={role}
+      aria-live={role === "status" ? "polite" : undefined}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />

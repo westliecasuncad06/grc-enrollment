@@ -81,11 +81,17 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
     : null
 
   if (ModuleComponent) {
+    // This wraps every connected workspace in a second, near-identically
+    // named region (the workspace's own WorkspacePage renders its own
+    // labelled section inside). Left as-is here deliberately — de-duplicating
+    // it requires threading each multiplexed workspace's per-module heading
+    // (e.g. RegistrarRecordsWorkspace's `workspaceHeadings[initialModuleId]`)
+    // into that inner section's own label so it can become the sole region,
+    // which is Task 5 (workspace migration) work, not a shell-only change.
     return (
       <main className="portal-module-page">
         <section
           className="portal-module-empty"
-          role="region"
           aria-label={`${module.label} workspace`}
         >
           <Badge variant="outline">{definition.roleLabel}</Badge>

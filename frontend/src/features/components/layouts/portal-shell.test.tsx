@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AuthSession } from "@/features/auth/auth-types"
 import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
+import { PortalModulePage } from "@/features/components/pages/portal-module-page"
 import { PortalOverviewPage } from "@/features/components/pages/portal-overview-page"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { routerMock } from "@/tests/navigation-mock"
@@ -204,5 +205,51 @@ describe("PortalShell", () => {
 
     expect(screen.getAllByText("Preview portal").length).toBeGreaterThan(0)
     expect(screen.queryByText("Demo portal")).not.toBeInTheDocument()
+  })
+
+  it("marks the active nav link with aria-current", () => {
+    renderShell("student")
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Role portal navigation",
+    })
+
+    expect(
+      within(navigation).getByRole("link", { name: "Portal overview" }),
+    ).toHaveAttribute("aria-current", "page")
+  })
+
+  it("shows a single current-page breadcrumb on the overview", () => {
+    renderShell("student")
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" })
+    expect(within(breadcrumb).getByText("Portal overview")).toHaveAttribute(
+      "aria-current",
+      "page",
+    )
+    expect(within(breadcrumb).queryByRole("link")).not.toBeInTheDocument()
+  })
+
+  it("shows a two-level breadcrumb linking back to the overview from a module", () => {
+    const module = rolePortalDefinitions.student.modules[0]
+    renderWithSession(
+      <PortalShell>
+        <PortalModulePage moduleId={module.id} />
+      </PortalShell>,
+      {
+        route: `/portal/${module.id}`,
+        routeParams: { moduleId: module.id },
+        session: sessionFor("student"),
+      },
+    )
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" })
+    expect(
+      within(breadcrumb).getByRole("link", { name: "Portal overview" }),
+    ).toHaveAttribute("href", "/portal")
+    expect(within(breadcrumb).getByText(module.label)).toHaveAttribute(
+      "aria-current",
+      "page",
+    )
   })
 })

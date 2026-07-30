@@ -6,6 +6,8 @@ import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -21,7 +23,6 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import {
   useScheduleProposalsQuery,
   scheduleProposalsQueryKey,
@@ -72,111 +73,110 @@ export function ScheduleProposalsWorkspace() {
         )
     }
   }
-  const loading = termsQuery.isLoading || proposalsQuery.isLoading
-  const failed = termsQuery.isError || proposalsQuery.isError
-  const retryReferences = () => {
-    void Promise.all([termsQuery.refetch(), proposalsQuery.refetch()])
+  const combinedQuery = {
+    isPending: termsQuery.isPending || proposalsQuery.isPending,
+    isError: termsQuery.isError || proposalsQuery.isError,
+    error: termsQuery.error ?? proposalsQuery.error,
+    data:
+      termsQuery.data && proposalsQuery.data
+        ? { terms: termsQuery.data, proposals: proposalsQuery.data }
+        : undefined,
+    refetch: () => {
+      void termsQuery.refetch()
+      void proposalsQuery.refetch()
+    },
   }
   return (
-    <section aria-label="Schedule proposals workspace" className="grid gap-4">
-      <div>
-        <h2>Schedule proposals</h2>
-        <p>
-          Create a draft proposal for review. Dean and executive decisions are
-          intentionally unavailable in this Program Chair workspace.
-        </p>
-      </div>
-      {(requestError || failed) && (
+    <WorkspacePage
+      title="Schedule proposals"
+      description="Create a draft proposal for review. Dean and executive decisions are intentionally unavailable in this Program Chair workspace."
+    >
+      {requestError && (
         <Alert variant="destructive">
-          <AlertDescription>
-            {requestError ||
-              "Schedule proposals could not be loaded. Refresh and try again."}
-          </AlertDescription>
-          {failed && (
-            <Button type="button" variant="outline" onClick={retryReferences}>
-              Retry proposal data
-            </Button>
-          )}
+          <AlertDescription>{requestError}</AlertDescription>
         </Alert>
       )}
-      {loading ? (
-        <Skeleton className="h-48" />
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Create draft proposal</CardTitle>
-              <CardDescription>
-                Only one active proposal is allowed for each academic term.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                noValidate
-                onSubmit={(event) => void form.handleSubmit(save)(event)}
-              >
-                <FieldGroup>
-                  <Field
-                    data-invalid={Boolean(
-                      form.formState.errors.academic_term_id,
-                    )}
-                  >
-                    <FieldLabel htmlFor="proposal-term">
-                      Academic term
-                    </FieldLabel>
-                    <select
-                      id="proposal-term"
-                      {...form.register("academic_term_id", {
-                        valueAsNumber: true,
-                      })}
+      <AsyncBoundary
+        query={combinedQuery}
+        loadingLabel="Loading schedule reference data…"
+      >
+        {({ terms, proposals }) => (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle level={3}>Create draft proposal</CardTitle>
+                <CardDescription>
+                  Only one active proposal is allowed for each academic term.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  noValidate
+                  onSubmit={(event) => void form.handleSubmit(save)(event)}
+                >
+                  <FieldGroup>
+                    <Field
+                      data-invalid={Boolean(
+                        form.formState.errors.academic_term_id,
+                      )}
                     >
-                      <option value={0}>Select an academic term</option>
-                      {(termsQuery.data ?? []).map((term) => (
-                        <option key={term.id} value={term.id}>
-                          {formatAcademicTerm(term)}
-                        </option>
-                      ))}
-                    </select>
-                    <FieldError>
-                      {form.formState.errors.academic_term_id?.message}
-                    </FieldError>
-                  </Field>
-                  <Button type="submit" disabled={mutation.isPending}>
-                    {mutation.isPending
-                      ? "Creating draft proposal"
-                      : "Create draft proposal"}
-                  </Button>
-                </FieldGroup>
-              </form>
-            </CardContent>
-          </Card>
-          <section aria-label="Existing schedule proposals">
-            <h3>Existing proposals</h3>
-            {(proposalsQuery.data ?? []).length === 0 ? (
-              <p>No proposals have been created.</p>
-            ) : (
-              <ul className="grid gap-2 md:grid-cols-2">
-                {(proposalsQuery.data ?? []).map((proposal) => (
-                  <li key={proposal.id} className="rounded-md border p-3">
-                    <p>
-                      {(termsQuery.data ?? []).find(
-                        (term) => term.id === proposal.academic_term_id,
-                      )
-                        ? formatAcademicTerm(
-                            (termsQuery.data ?? []).find(
-                              (term) => term.id === proposal.academic_term_id,
-                            )!,
-                          )
-                        : "Academic term unavailable"}
-                    </p>
-                    <p>{proposal.status_label}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
-    </section>
+                      <FieldLabel htmlFor="proposal-term">
+                        Academic term
+                      </FieldLabel>
+                      <select
+                        id="proposal-term"
+                        {...form.register("academic_term_id", {
+                          valueAsNumber: true,
+                        })}
+                      >
+                        <option value={0}>Select an academic term</option>
+                        {terms.map((term) => (
+                          <option key={term.id} value={term.id}>
+                            {formatAcademicTerm(term)}
+                          </option>
+                        ))}
+                      </select>
+                      <FieldError>
+                        {form.formState.errors.academic_term_id?.message}
+                      </FieldError>
+                    </Field>
+                    <Button type="submit" disabled={mutation.isPending}>
+                      {mutation.isPending
+                        ? "Creating draft proposal"
+                        : "Create draft proposal"}
+                    </Button>
+                  </FieldGroup>
+                </form>
+              </CardContent>
+            </Card>
+            <section aria-label="Existing schedule proposals">
+              <h3>Existing proposals</h3>
+              {proposals.length === 0 ? (
+                <p>No proposals have been created.</p>
+              ) : (
+                <ul className="grid gap-2 md:grid-cols-2">
+                  {proposals.map((proposal) => (
+                    <li key={proposal.id} className="rounded-md border p-3">
+                      <p>
+                        {terms.find(
+                          (term) => term.id === proposal.academic_term_id,
+                        )
+                          ? formatAcademicTerm(
+                              terms.find(
+                                (term) => term.id === proposal.academic_term_id,
+                              )!,
+                            )
+                          : "Academic term unavailable"}
+                      </p>
+                      <p>{proposal.status_label}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

@@ -6,6 +6,8 @@ import { useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -24,7 +26,6 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import {
   useCurriculaQuery,
   curriculaQueryKey,
@@ -182,248 +183,253 @@ export function CurriculumWorkspace() {
         ),
       { shouldDirty: true, shouldValidate: true },
     )
-  const isLoading =
-    programsQuery.isLoading ||
-    subjectsQuery.isLoading ||
-    curriculaQuery.isLoading
+  const referenceDataQuery = {
+    isPending:
+      programsQuery.isPending ||
+      subjectsQuery.isPending ||
+      curriculaQuery.isPending,
+    isError:
+      programsQuery.isError || subjectsQuery.isError || curriculaQuery.isError,
+    error: programsQuery.error ?? subjectsQuery.error ?? curriculaQuery.error,
+    data: true as const,
+    refetch: () => {
+      void programsQuery.refetch()
+      void subjectsQuery.refetch()
+      void curriculaQuery.refetch()
+    },
+  }
   return (
-    <section aria-label="Curriculum workspace" className="grid gap-4">
-      <div>
-        <h2>Curriculum editor</h2>
-        <p>
-          Maintain complete program curriculum mappings and prerequisite rules.
-        </p>
-      </div>
-      {(requestError ||
-        programsQuery.isError ||
-        subjectsQuery.isError ||
-        curriculaQuery.isError) && (
+    <WorkspacePage
+      title="Curriculum editor"
+      description="Maintain complete program curriculum mappings and prerequisite rules."
+    >
+      {requestError && (
         <Alert variant="destructive">
-          <AlertDescription>
-            {requestError ||
-              "Curriculum data could not be loaded. Refresh and retry."}
-          </AlertDescription>
+          <AlertDescription>{requestError}</AlertDescription>
         </Alert>
       )}
-      {isLoading ? (
-        <Skeleton className="h-48" />
-      ) : (
-        <>
-          <div className="flex gap-2">
-            <Field>
-              <FieldLabel htmlFor="curriculum-select">Curriculum</FieldLabel>
-              <select
-                id="curriculum-select"
-                value={selectedId}
-                onChange={(event) => requestEdit(Number(event.target.value))}
-              >
-                <option value={0}>New curriculum</option>
-                {(curriculaQuery.data ?? []).map((curriculum) => (
-                  <option key={curriculum.id} value={curriculum.id}>
-                    {curriculum.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div className="flex items-end">
-              <Button type="button" variant="outline" onClick={startNew}>
-                New curriculum
-              </Button>
-            </div>
-          </div>
-          <form
-            noValidate
-            onSubmit={(event) => void form.handleSubmit(save)(event)}
-          >
-            <FieldGroup>
-              <Field data-invalid={Boolean(form.formState.errors.program_id)}>
-                <FieldLabel htmlFor="curriculum-program">Program</FieldLabel>
+      <AsyncBoundary
+        query={referenceDataQuery}
+        loadingLabel="Loading curriculum data…"
+      >
+        {() => (
+          <>
+            <div className="flex gap-2">
+              <Field>
+                <FieldLabel htmlFor="curriculum-select">Curriculum</FieldLabel>
                 <select
-                  id="curriculum-program"
-                  disabled={selectedId > 0}
-                  {...form.register("program_id", { valueAsNumber: true })}
+                  id="curriculum-select"
+                  value={selectedId}
+                  onChange={(event) => requestEdit(Number(event.target.value))}
                 >
-                  <option value={0}>Select a program</option>
-                  {(programsQuery.data ?? []).map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.code} — {program.name}
+                  <option value={0}>New curriculum</option>
+                  {(curriculaQuery.data ?? []).map((curriculum) => (
+                    <option key={curriculum.id} value={curriculum.id}>
+                      {curriculum.name}
                     </option>
                   ))}
                 </select>
-                <FieldError>
-                  {form.formState.errors.program_id?.message}
-                </FieldError>
               </Field>
-              <Field data-invalid={Boolean(form.formState.errors.name)}>
-                <FieldLabel htmlFor="curriculum-name">
-                  Curriculum name
-                </FieldLabel>
-                <input id="curriculum-name" {...form.register("name")} />
-                <FieldError>{form.formState.errors.name?.message}</FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="effective-school-year">
-                  Effective school year
-                </FieldLabel>
-                <input
-                  id="effective-school-year"
-                  {...form.register("effective_school_year")}
-                />
-                <FieldError>
-                  {form.formState.errors.effective_school_year?.message}
-                </FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
-                <select id="curriculum-status" {...form.register("status")}>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </Field>
-              <section aria-label="Curriculum subject placements">
-                <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                  <h3>Subject placements</h3>
-                  <Field>
-                    <FieldLabel htmlFor="subject-to-place">
-                      Subject to place
-                    </FieldLabel>
-                    <select
-                      id="subject-to-place"
-                      value={placementSubjectId}
-                      onChange={(event) =>
-                        setPlacementSubjectId(Number(event.target.value))
-                      }
-                    >
-                      <option value={0}>Select a subject</option>
-                      {(subjectsQuery.data ?? []).map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.code} — {subject.title}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addPlacement}
+              <div className="flex items-end">
+                <Button type="button" variant="outline" onClick={startNew}>
+                  New curriculum
+                </Button>
+              </div>
+            </div>
+            <form
+              noValidate
+              onSubmit={(event) => void form.handleSubmit(save)(event)}
+            >
+              <FieldGroup>
+                <Field data-invalid={Boolean(form.formState.errors.program_id)}>
+                  <FieldLabel htmlFor="curriculum-program">Program</FieldLabel>
+                  <select
+                    id="curriculum-program"
+                    disabled={selectedId > 0}
+                    {...form.register("program_id", { valueAsNumber: true })}
                   >
-                    Add subject placement
-                  </Button>
-                </div>
-                <ul>
-                  {formSubjects.map((placement, index) => (
-                    <li
-                      key={placement.subject_id}
-                      className="grid gap-2 md:grid-cols-5"
-                    >
-                      <span>
-                        {(subjectsQuery.data ?? []).find(
-                          (subject) => subject.id === placement.subject_id,
-                        )?.code ?? placement.subject_id}
-                      </span>
-                      <Field>
-                        <FieldLabel
-                          htmlFor={`placement-${placement.subject_id}-year`}
-                        >
-                          Placement {placement.subject_id} year level
-                        </FieldLabel>
-                        <select
-                          id={`placement-${placement.subject_id}-year`}
-                          value={placement.year_level}
-                          onChange={(event) =>
-                            updatePlacement(index, {
-                              year_level: Number(event.target.value),
-                            })
-                          }
-                        >
-                          {[1, 2, 3, 4].map((year) => (
-                            <option key={year} value={year}>
-                              {year}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field>
-                        <FieldLabel
-                          htmlFor={`placement-${placement.subject_id}-semester`}
-                        >
-                          Placement {placement.subject_id} semester
-                        </FieldLabel>
-                        <select
-                          id={`placement-${placement.subject_id}-semester`}
-                          value={placement.semester}
-                          onChange={(event) =>
-                            updatePlacement(index, {
-                              semester: event.target.value,
-                            })
-                          }
-                        >
-                          {["1st", "2nd", "3rd"].map((semester) => (
-                            <option key={semester} value={semester}>
-                              {semester}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field>
-                        <FieldLabel
-                          htmlFor={`placement-${placement.subject_id}-required`}
-                        >
-                          Placement {placement.subject_id} is required
-                        </FieldLabel>
-                        <input
-                          id={`placement-${placement.subject_id}-required`}
-                          type="checkbox"
-                          checked={placement.is_required}
-                          onChange={(event) =>
-                            updatePlacement(index, {
-                              is_required: event.target.checked,
-                            })
-                          }
-                        />
-                      </Field>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          form.setValue(
-                            "subjects",
-                            form
-                              .getValues("subjects")
-                              .filter((_, row) => row !== index),
-                            { shouldDirty: true, shouldValidate: true },
-                          )
+                    <option value={0}>Select a program</option>
+                    {(programsQuery.data ?? []).map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.code} — {program.name}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldError>
+                    {form.formState.errors.program_id?.message}
+                  </FieldError>
+                </Field>
+                <Field data-invalid={Boolean(form.formState.errors.name)}>
+                  <FieldLabel htmlFor="curriculum-name">
+                    Curriculum name
+                  </FieldLabel>
+                  <input id="curriculum-name" {...form.register("name")} />
+                  <FieldError>{form.formState.errors.name?.message}</FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="effective-school-year">
+                    Effective school year
+                  </FieldLabel>
+                  <input
+                    id="effective-school-year"
+                    {...form.register("effective_school_year")}
+                  />
+                  <FieldError>
+                    {form.formState.errors.effective_school_year?.message}
+                  </FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
+                  <select id="curriculum-status" {...form.register("status")}>
+                    <option value="draft">Draft</option>
+                    <option value="active">Active</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </Field>
+                <section aria-label="Curriculum subject placements">
+                  <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                    <h3>Subject placements</h3>
+                    <Field>
+                      <FieldLabel htmlFor="subject-to-place">
+                        Subject to place
+                      </FieldLabel>
+                      <select
+                        id="subject-to-place"
+                        value={placementSubjectId}
+                        onChange={(event) =>
+                          setPlacementSubjectId(Number(event.target.value))
                         }
                       >
-                        Remove placement
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-                <FieldError>
-                  {form.formState.errors.subjects?.message}
-                </FieldError>
-              </section>
-              <PrerequisiteEditor
-                subjects={formSubjects}
-                subjectCatalog={subjectsQuery.data ?? []}
-                graphError={form.formState.errors.subjects?.message}
-                onChange={(subjects) =>
-                  form.setValue("subjects", subjects, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-              />
-              <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? "Saving curriculum" : "Save curriculum"}
-              </Button>
-            </FieldGroup>
-          </form>
-        </>
-      )}
+                        <option value={0}>Select a subject</option>
+                        {(subjectsQuery.data ?? []).map((subject) => (
+                          <option key={subject.id} value={subject.id}>
+                            {subject.code} — {subject.title}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addPlacement}
+                    >
+                      Add subject placement
+                    </Button>
+                  </div>
+                  <ul>
+                    {formSubjects.map((placement, index) => (
+                      <li
+                        key={placement.subject_id}
+                        className="grid gap-2 md:grid-cols-5"
+                      >
+                        <span>
+                          {(subjectsQuery.data ?? []).find(
+                            (subject) => subject.id === placement.subject_id,
+                          )?.code ?? placement.subject_id}
+                        </span>
+                        <Field>
+                          <FieldLabel
+                            htmlFor={`placement-${placement.subject_id}-year`}
+                          >
+                            Placement {placement.subject_id} year level
+                          </FieldLabel>
+                          <select
+                            id={`placement-${placement.subject_id}-year`}
+                            value={placement.year_level}
+                            onChange={(event) =>
+                              updatePlacement(index, {
+                                year_level: Number(event.target.value),
+                              })
+                            }
+                          >
+                            {[1, 2, 3, 4].map((year) => (
+                              <option key={year} value={year}>
+                                {year}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field>
+                          <FieldLabel
+                            htmlFor={`placement-${placement.subject_id}-semester`}
+                          >
+                            Placement {placement.subject_id} semester
+                          </FieldLabel>
+                          <select
+                            id={`placement-${placement.subject_id}-semester`}
+                            value={placement.semester}
+                            onChange={(event) =>
+                              updatePlacement(index, {
+                                semester: event.target.value,
+                              })
+                            }
+                          >
+                            {["1st", "2nd", "3rd"].map((semester) => (
+                              <option key={semester} value={semester}>
+                                {semester}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field>
+                          <FieldLabel
+                            htmlFor={`placement-${placement.subject_id}-required`}
+                          >
+                            Placement {placement.subject_id} is required
+                          </FieldLabel>
+                          <input
+                            id={`placement-${placement.subject_id}-required`}
+                            type="checkbox"
+                            checked={placement.is_required}
+                            onChange={(event) =>
+                              updatePlacement(index, {
+                                is_required: event.target.checked,
+                              })
+                            }
+                          />
+                        </Field>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            form.setValue(
+                              "subjects",
+                              form
+                                .getValues("subjects")
+                                .filter((_, row) => row !== index),
+                              { shouldDirty: true, shouldValidate: true },
+                            )
+                          }
+                        >
+                          Remove placement
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  <FieldError>
+                    {form.formState.errors.subjects?.message}
+                  </FieldError>
+                </section>
+                <PrerequisiteEditor
+                  subjects={formSubjects}
+                  subjectCatalog={subjectsQuery.data ?? []}
+                  graphError={form.formState.errors.subjects?.message}
+                  onChange={(subjects) =>
+                    form.setValue("subjects", subjects, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+                <Button type="submit" disabled={mutation.isPending}>
+                  {mutation.isPending ? "Saving curriculum" : "Save curriculum"}
+                </Button>
+              </FieldGroup>
+            </form>
+          </>
+        )}
+      </AsyncBoundary>
       <AlertDialog
         open={discardTarget !== null}
         onOpenChange={(open) => !open && setDiscardTarget(null)}
@@ -455,6 +461,6 @@ export function CurriculumWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </WorkspacePage>
   )
 }

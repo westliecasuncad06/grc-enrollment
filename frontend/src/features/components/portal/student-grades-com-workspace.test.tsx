@@ -1,5 +1,6 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { StudentGradesComWorkspace } from "@/features/components/portal/student-grades-com-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -104,7 +105,44 @@ describe("StudentGradesComWorkspace", () => {
       session: studentSession,
     })
 
-    expect(await screen.findByText(/CS101/)).toBeInTheDocument()
+    const table = await screen.findByRole("table", { name: "Grades" })
+    expect(within(table).getByText(/CS101/)).toBeInTheDocument()
     expect(screen.getByText(/COM000009/)).toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) => {
+      const target =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url
+      if (target.includes("/academic-grades"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [grade],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [document],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    })
+    const { container } = renderWithSession(<StudentGradesComWorkspace />, {
+      session: studentSession,
+    })
+
+    await screen.findByRole("table", { name: "Grades" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

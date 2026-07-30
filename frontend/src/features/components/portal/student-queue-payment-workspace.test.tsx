@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { StudentQueuePaymentWorkspace } from "@/features/components/portal/student-queue-payment-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -82,5 +83,23 @@ describe("StudentQueuePaymentWorkspace", () => {
 
     expect(await screen.findByText(/Q000009/)).toBeInTheDocument()
     expect(screen.getByText(/Pending Payment/)).toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [enrollment],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    const { container } = renderWithSession(<StudentQueuePaymentWorkspace />, {
+      session: studentSession,
+    })
+
+    await screen.findByText(/Q000009/)
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

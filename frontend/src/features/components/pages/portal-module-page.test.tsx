@@ -42,10 +42,7 @@ const admissionWorkspaceHeadings: Record<string, string> = {
   "credential-issuance": "Credential issuance",
 }
 
-const facultyWorkspaceRegions: Record<string, string> = {
-  "availability-preferences": "Faculty input workspace",
-  "teaching-schedule": "Teaching schedule workspace",
-}
+const facultyWorkspaceRegions: Record<string, string> = {}
 
 const curriculumWorkspaceModules = new Set([
   "curriculum",
@@ -53,28 +50,35 @@ const curriculumWorkspaceModules = new Set([
 ])
 
 const schedulingWorkspaceRegions: Record<string, string> = {
-  "sections-schedules": "Sections and schedules workspace",
-  "faculty-assignment": "Faculty assignment workspace",
-  "schedule-proposals": "Schedule proposals workspace",
-  "schedule-approvals": "Schedule decision workspace",
-  "master-schedule": "Master schedule workspace",
-  "audit-logs": "Audit logs workspace",
-  "eligible-subjects": "Eligible subjects workspace",
-  enrollment: "Enrollment submission workspace",
-  "enrollment-approvals": "Registrar enrollment workspace",
-  "overrides-voids": "Registrar enrollment workspace",
-  "payment-queue": "Accounting payment workspace",
-  "serving-number": "Accounting payment workspace",
-  "payment-confirmation": "Accounting payment workspace",
-  "com-finalization": "Accounting payment workspace",
-  "queue-payment": "Payment queue status workspace",
-  "grades-com": "Academic records workspace",
-  "credit-mappings": "Registrar records workspace",
-  "drops-withdrawals": "Registrar records workspace",
-  "academic-records": "Registrar records workspace",
-  "enrollment-documents": "Registrar records workspace",
-  "class-rosters": "Class rosters workspace",
-  "grade-submission": "Grade submission workspace",
+  // These 6 have been migrated onto WorkspacePage (Phase 8a Task 5), whose
+  // region name is derived directly from its visible <h2> heading text —
+  // matching what a screen-reader user actually hears — rather than a
+  // separate, longer aria-label string with a "workspace" suffix that
+  // repeated the surrounding page context.
+  "credit-mappings": "Credit mappings",
+  "drops-withdrawals": "Drops & withdrawals",
+  "academic-records": "Academic records",
+  "enrollment-documents": "Enrollment documents",
+  "class-rosters": "Class rosters",
+  "grade-submission": "Grade submission",
+  "master-schedule": "Master schedule",
+  "audit-logs": "Audit logs",
+  "teaching-schedule": "Teaching schedule",
+  "eligible-subjects": "Eligible subjects",
+  enrollment: "Select your subjects",
+  "enrollment-approvals": "Enrollment approvals",
+  "overrides-voids": "Overrides & voids",
+  "queue-payment": "Queue & payment status",
+  "grades-com": "Your academic records",
+  "schedule-approvals": "Schedule approvals",
+  "schedule-proposals": "Schedule proposals",
+  "sections-schedules": "Sections and schedules",
+  "faculty-assignment": "Faculty assignment",
+  "availability-preferences": "Availability and preferences",
+  "payment-queue": "Payment queue",
+  "serving-number": "Serving number",
+  "payment-confirmation": "Payment confirmation",
+  "com-finalization": "COM finalization",
 }
 
 describe("PortalModulePage", () => {
@@ -99,10 +103,11 @@ describe("PortalModulePage", () => {
         ).not.toHaveLength(0)
         const admissionHeading = admissionWorkspaceHeadings[module.id]
         if (admissionHeading) {
+          // Migrated onto WorkspacePage (Phase 8a Task 5): its region name is
+          // the same per-module heading text checked just below, not a fixed
+          // "Admission provisioning workspace" string.
           expect(
-            screen.getByRole("region", {
-              name: "Admission provisioning workspace",
-            }),
+            screen.getByRole("region", { name: admissionHeading }),
           ).toBeInTheDocument()
           expect(
             screen.getByRole("heading", { name: admissionHeading }),
@@ -116,7 +121,7 @@ describe("PortalModulePage", () => {
         } else if (curriculumWorkspaceModules.has(module.id)) {
           expect(
             screen.getAllByRole("region", {
-              name: "Curriculum workspace",
+              name: "Curriculum editor",
             }),
           ).not.toHaveLength(0)
         } else if (schedulingWorkspaceRegions[module.id]) {

@@ -55,6 +55,7 @@ function PaginationLink({
       size={size}
       className={className}
     >
+      {/* eslint-disable-next-line jsx-a11y/anchor-has-content -- content arrives via the ...props spread (ComponentProps<"a"> includes children); every caller passes visible link text. */}
       <a
         aria-current={isActive ? "page" : undefined}
         data-slot="pagination-link"

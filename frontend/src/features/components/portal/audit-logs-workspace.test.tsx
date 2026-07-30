@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -103,5 +104,29 @@ describe("AuditLogsWorkspace", () => {
       screen.getByText("This workspace is not available for your role."),
     ).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("schedule-proposals")
+              ? { data: [] }
+              : auditLogs,
+          ),
+        ),
+      ),
+    )
+    const { container } = renderWithSession(<AuditLogsWorkspace />, {
+      session: {
+        userId: "8",
+        displayName: "Registrar",
+        role: "registrar_head",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByText(/section.updated/)
+    expect(await axe(container)).toHaveNoViolations()
   })
 })
