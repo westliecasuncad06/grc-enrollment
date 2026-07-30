@@ -72,6 +72,32 @@ tags:
       and deciding enrollments is role-scoped (Student own, Registrar Head
       all, Accounting Staff pending_payment only) via
       App\Models\Enrollment::scopeVisibleTo and EnrollmentPolicy.
+  - name: Withdrawals
+    description: >
+      Student-initiated withdrawal requests (FR-FIN-004, PRD §4.2 rule 7):
+      a Student requests withdrawal from an `enrolled` enrollment; Registrar
+      Staff approves or rejects the request (PRD §3.8's literal role
+      assignment — the Registrar Head reads every request but does not
+      decide one). Approval drops every still-active enrolled subject and
+      — only when `config('enrollment.withdrawal.releases_seats')` is true
+      (default; §17-pending) — releases each affected section's seat
+      exactly once, even under a repeated approval attempt.
+  - name: Transferee Credits
+    description: >
+      Registrar Staff records, edits, and decides credited external
+      subjects (FR-FIN-003, PRD §3.8/§10.3); the Registrar Head and the
+      owning Student read only. Every write is audited, including plain
+      content edits, so the record and its control history cannot diverge.
+      Approved credits are record-only — cross-institution grade
+      equivalence is an open PRD §17 decision, so they are never read by
+      `BuildEligibleSubjectPool`.
+  - name: Class Rosters
+    description: >
+      The enrolled-student roster per section (PRD §3.2 "View assigned
+      teaching schedules and class rosters"). Faculty sees only sections
+      they are assigned to teach; Registrar Staff and Registrar Head see
+      every section, the same keeper-of-the-record visibility they have
+      elsewhere.
   - name: Academic Records
     description: >
       Grade encoding (PRD §4.3, §5.3 DFD 3.1): draft → submitted → locked.
@@ -80,8 +106,9 @@ tags:
       submitted grade, the moment it becomes part of the official record
       `BuildEligibleSubjectPool` reads for prerequisite evaluation. Reads
       are role-scoped: Student own, Faculty own sections, Registrar Head
-      all. `final_grade` carries no scale or passing-mark assertion — PRD
-      §17 leaves the official grading scale an open decision.
+      and Registrar Staff all (PRD §3.8, widened in Phase 7b). `final_grade`
+      carries no scale or passing-mark assertion — PRD §17 leaves the
+      official grading scale an open decision.
   - name: Payments
     description: >
       The payment queue (PRD §5.3 FR-FIN-006), payment confirmation
@@ -93,7 +120,8 @@ tags:
       and how many tickets may be `serving` at once unconfirmed, so only
       the two-step order (`waiting` → `serving` → `served`) is enforced.
       Payment confirmation is idempotent and generates no PDF — the COM is
-      structured data a Student renders as a print-stylesheet page.
+      structured data a Student, the Registrar Head, or Registrar Staff
+      (PRD §3.8, widened in Phase 7b) renders as a print-stylesheet page.
   - name: Notifications
     description: >
       Private, user-owned in-app notifications. Every authenticated role may
@@ -1585,6 +1613,388 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/enrollments/{enrollment}/withdraw:
+    post:
+      operationId: postEnrollmentWithdraw
+      summary: Request withdrawal from an enrolled enrollment
+      description: >
+        Student only, and only for their own enrollment currently `enrolled`
+        (FR-FIN-004, PRD §4.2 rule 7). Creates a `pending` withdrawal
+        request; `reason` is required. Rejects a second pending request
+        against the same enrollment. Does not touch the enrollment or
+        release any seat — that happens only once Registrar Staff approves
+        the request (see `PATCH /api/v1/withdrawal-requests/{withdrawalRequest}`).
+        No `role:` middleware — `EnrollmentPolicy::withdraw` resolves the
+        instance-level ownership check.
+      security:
+        - bearerAuth: []
+      tags:
+        - Withdrawals
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: enrollment
+          in: path
+          required: true
+          description: Enrollment ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWithdrawalRequestRequest"
+      responses:
+        "201":
+          description: The withdrawal request was created, with status pending.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No enrollment exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the enrollment is not currently
+            `enrolled`, or a withdrawal request is already pending for it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/withdrawal-requests:
+    get:
+      operationId: getWithdrawalRequests
+      summary: List withdrawal requests (role-scoped)
+      description: >
+        Role-scoped per PRD §3.8 (see
+        App\Models\WithdrawalRequest::scopeVisibleTo): a Student sees only
+        requests against their own enrollments; Registrar Staff and
+        Registrar Head see every request.
+      security:
+        - bearerAuth: []
+      tags:
+        - Withdrawals
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The role-scoped, paginated withdrawal request list.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedWithdrawalRequestCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/withdrawal-requests/{withdrawalRequest}:
+    patch:
+      operationId: patchWithdrawalRequest
+      summary: Approve or reject a pending withdrawal request
+      description: >
+        Registrar Staff only (PRD §3.8's literal role assignment; the
+        Registrar Head reads every request but does not decide one). No
+        `role:` middleware — WithdrawalRequestPolicy resolves the ability.
+        `approve`, in one transaction: the request moves to `approved`; the
+        enrollment moves to `withdrawn`; every still-active enrolled subject
+        moves to `dropped`; and — only when
+        `config('enrollment.withdrawal.releases_seats')` is true (default) —
+        each affected section's `enrolled_count` is decremented exactly
+        once, even under a repeated approval attempt. `reject` requires a
+        reason, recorded only in the audit row.
+      security:
+        - bearerAuth: []
+      tags:
+        - Withdrawals
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: withdrawalRequest
+          in: path
+          required: true
+          description: Withdrawal request ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWithdrawalRequestRequest"
+      responses:
+        "200":
+          description: The decision was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No withdrawal request exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the request is no longer
+            pending, or a required reason is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transferee-credits:
+    get:
+      operationId: getTransfereeCredits
+      summary: List transferee credits (role-scoped)
+      description: >
+        Role-scoped per PRD §3.8/§10.3 (see
+        App\Models\TransfereeCredit::scopeVisibleTo): a Student sees only
+        their own credits; Registrar Staff and Registrar Head see every
+        credit. Approved credits are record-only — they are never read by
+        BuildEligibleSubjectPool, since cross-institution grade equivalence
+        is an open PRD §17 decision.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+        - name: student_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The role-scoped, paginated transferee credit list.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedTransfereeCreditCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postTransfereeCredit
+      summary: Record a transferee credit
+      description: >
+        Registrar Staff only. `subject_id` is optional — a transferred
+        subject may not map onto any local subject — and `source_grade`
+        stays a free string with no equivalence rule encoded. Always
+        created with status pending.
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreTransfereeCreditRequest"
+      responses:
+        "201":
+          description: The recorded, pending transferee credit.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransfereeCreditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The submitted data is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transferee-credits/{transfereeCredit}:
+    patch:
+      operationId: patchTransfereeCredit
+      summary: Edit a pending transferee credit, or approve/reject it
+      description: >
+        Registrar Staff only — no ownership dimension, unlike
+        AcademicGradePolicy's own-section check. No `role:` middleware —
+        TransfereeCreditPolicy resolves the ability. With no `action`, this
+        is a plain content edit, allowed only while the credit is still
+        pending. `action: approve` or `action: reject` is a pure status
+        transition requiring the credit currently be pending; `reject`
+        requires a reason, recorded only in the audit row. Every write is
+        audited, including plain edits (FR-FIN-003).
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: transfereeCredit
+          in: path
+          required: true
+          description: Transferee credit ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTransfereeCreditRequest"
+      responses:
+        "200":
+          description: The edit or decision was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransfereeCreditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No transferee credit exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, the credit is no longer
+            editable, or the action does not match the credit's current
+            status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/enrollment-documents:
     get:
       operationId: getEnrollmentDocuments
@@ -1592,8 +2002,9 @@ paths:
       description: >
         Role-scoped per FR-FIN-010 (see
         App\Models\EnrollmentDocument::scopeVisibleTo): a Student sees only
-        their own documents; the Registrar Head, as keeper of the official
-        record, sees every one.
+        their own documents; the Registrar Head and Registrar Staff (PRD
+        §3.8, widened in Phase 7b), as keepers of the official record, see
+        every one.
       security:
         - bearerAuth: []
       tags:
@@ -1662,7 +2073,8 @@ paths:
         Role-scoped per DFD 3.1 (see App\Models\AcademicGrade::scopeVisibleTo):
         a Student sees only their own grade records; Faculty sees only
         grades tied to a section they are assigned to teach; the Registrar
-        Head sees every grade, as keeper of the official academic record.
+        Head and Registrar Staff (PRD §3.8, widened in Phase 7b) see every
+        grade, as keepers of the official academic record.
       security:
         - bearerAuth: []
       tags:
@@ -1852,6 +2264,76 @@ paths:
           description: >
             The submitted data is invalid, the grade is no longer editable,
             or the action does not match the grade's current status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/class-rosters:
+    get:
+      operationId: getClassRosters
+      summary: List the class roster (role-scoped)
+      description: >
+        PRD §3.2 "View assigned teaching schedules and class rosters"; PRD
+        §3.8 keeper-of-the-record read access. See
+        App\Models\EnrollmentSubject::scopeVisibleTo: Faculty sees only
+        sections they are assigned to teach; Registrar Staff and Registrar
+        Head see every section. No Student-facing use case exists for this
+        endpoint.
+      security:
+        - bearerAuth: []
+      tags:
+        - Class Rosters
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: section_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The role-scoped, paginated class roster.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedClassRosterCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
           content:
             application/json:
               schema:
@@ -2153,6 +2635,24 @@ paths:
               - student_profile.provisioned
               - audit_log.list_viewed
               - faculty_directory.list_viewed
+              - enrollment.submitted
+              - enrollment.registrar_approved
+              - enrollment.registrar_rejected
+              - enrollment.voided
+              - academic_grade.created
+              - academic_grade.updated
+              - academic_grade.submitted
+              - academic_grade.locked
+              - queue_ticket.serving_started
+              - queue_ticket.served
+              - enrollment.payment_confirmed
+              - withdrawal_request.created
+              - withdrawal_request.approved
+              - withdrawal_request.rejected
+              - transferee_credit.created
+              - transferee_credit.updated
+              - transferee_credit.approved
+              - transferee_credit.rejected
         - name: auditable_type
           in: query
           required: false
@@ -2167,6 +2667,11 @@ paths:
               - student_profile
               - audit_log
               - faculty_directory
+              - enrollment
+              - academic_grade
+              - queue_ticket
+              - withdrawal_request
+              - transferee_credit
         - name: actor_user_id
           in: query
           required: false
@@ -3651,6 +4156,295 @@ components:
         remarks:
           type: ["string", "null"]
           description: Prohibited when action is submit or lock.
+    CreateWithdrawalRequestRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+    UpdateWithdrawalRequestRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+        reason:
+          type: ["string", "null"]
+          description: Required exactly when action is reject.
+    PaginatedWithdrawalRequestCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/WithdrawalRequestResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    WithdrawalRequestResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/WithdrawalRequestResource"
+    WithdrawalRequestResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - enrollment_id
+        - student_number
+        - reason
+        - status
+        - status_label
+        - processed_at
+        - created_at
+      properties:
+        type:
+          type: string
+          const: withdrawal_request
+        id:
+          type: integer
+        enrollment_id:
+          type: integer
+        student_number:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        status_label:
+          type: string
+        processed_at:
+          type: ["string", "null"]
+          format: date-time
+        created_at:
+          type: ["string", "null"]
+          format: date-time
+    StoreTransfereeCreditRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - student_id
+        - source_institution
+        - source_subject_code
+        - source_subject_title
+        - credited_units
+      properties:
+        student_id:
+          type: integer
+        source_institution:
+          type: string
+        source_subject_code:
+          type: string
+        source_subject_title:
+          type: string
+        source_grade:
+          type: ["string", "null"]
+          description: >
+            A free string with no equivalence rule encoded — PRD §17
+            leaves cross-institution grade equivalence unresolved.
+        credited_units:
+          type: integer
+          minimum: 1
+          maximum: 255
+        subject_id:
+          type: ["integer", "null"]
+          description: >
+            Optional — a transferred subject may not map onto any local
+            subject.
+    UpdateTransfereeCreditRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+        reason:
+          type: ["string", "null"]
+          description: Required exactly when action is reject.
+        source_institution:
+          type: string
+          description: Prohibited when action is approve or reject.
+        source_subject_code:
+          type: string
+          description: Prohibited when action is approve or reject.
+        source_subject_title:
+          type: string
+          description: Prohibited when action is approve or reject.
+        source_grade:
+          type: ["string", "null"]
+          description: Prohibited when action is approve or reject.
+        credited_units:
+          type: integer
+          minimum: 1
+          maximum: 255
+          description: Prohibited when action is approve or reject.
+        subject_id:
+          type: ["integer", "null"]
+          description: Prohibited when action is approve or reject.
+    PaginatedTransfereeCreditCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransfereeCreditResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    TransfereeCreditResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/TransfereeCreditResource"
+    TransfereeCreditResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - student_id
+        - student_number
+        - source_institution
+        - source_subject_code
+        - source_subject_title
+        - source_grade
+        - credited_units
+        - subject_id
+        - subject_code
+        - status
+        - status_label
+        - processed_at
+        - created_at
+      properties:
+        type:
+          type: string
+          const: transferee_credit
+        id:
+          type: integer
+        student_id:
+          type: integer
+        student_number:
+          type: string
+        source_institution:
+          type: string
+        source_subject_code:
+          type: string
+        source_subject_title:
+          type: string
+        source_grade:
+          type: ["string", "null"]
+        credited_units:
+          type: integer
+        subject_id:
+          type: ["integer", "null"]
+        subject_code:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+        status_label:
+          type: string
+        processed_at:
+          type: ["string", "null"]
+          format: date-time
+        created_at:
+          type: ["string", "null"]
+          format: date-time
+    PaginatedClassRosterCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassRosterEntryResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    ClassRosterEntryResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - enrollment_id
+        - section_id
+        - section_code
+        - subject_code
+        - academic_term_id
+        - student_id
+        - student_number
+        - status
+        - status_label
+      properties:
+        type:
+          type: string
+          const: class_roster_entry
+        id:
+          type: integer
+        enrollment_id:
+          type: integer
+        section_id:
+          type: integer
+        section_code:
+          type: string
+        subject_code:
+          type: string
+        academic_term_id:
+          type: integer
+        student_id:
+          type: integer
+        student_number:
+          type: string
+        status:
+          type: string
+          enum:
+            - selected
+            - enrolled
+            - dropped
+        status_label:
+          type: string
     PaginatedQueueTicketCollection:
       type: object
       additionalProperties: false

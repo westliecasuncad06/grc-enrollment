@@ -42,4 +42,19 @@ return [
     // used for sections.viability_threshold (see ADR history, Phase 2).
     'max_regular_units' => env('ENROLLMENT_MAX_REGULAR_UNITS'),
     'overload_max_units' => env('ENROLLMENT_OVERLOAD_MAX_UNITS'),
+
+    // FR-FIN-004 / PRD §17: "Enrollment reservation timeout and seat-release
+    // rules" is an open institutional decision — seats have been reserved
+    // immediately and permanently on submission since Phase 6. Defaulting
+    // this to true (rather than leaving it unenforced like the caps above)
+    // is a deliberate choice: leaving it off would permanently inflate
+    // `sections.enrolled_count` for every approved withdrawal, wrongly
+    // blocking other students from an actually-open section. Idempotency
+    // (never decrementing a section more than once per withdrawal) is
+    // enforced unconditionally in App\Actions\Enrollment\TransitionWithdrawalRequest,
+    // independent of this flag — only whether the release happens at all is
+    // gated here.
+    'withdrawal' => [
+        'releases_seats' => (bool) env('ENROLLMENT_WITHDRAWAL_RELEASES_SEATS', true),
+    ],
 ];

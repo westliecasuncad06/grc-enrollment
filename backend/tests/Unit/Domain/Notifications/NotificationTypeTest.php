@@ -18,6 +18,10 @@ final class NotificationTypeTest extends TestCase
                 'enrollment_voided',
                 'academic_grade_locked',
                 'enrollment_payment_confirmed',
+                'withdrawal_request_approved',
+                'withdrawal_request_rejected',
+                'transferee_credit_approved',
+                'transferee_credit_rejected',
             ],
             array_column(NotificationType::cases(), 'value'),
         );

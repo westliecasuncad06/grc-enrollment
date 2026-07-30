@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Enrollment\ConfirmPayment;
 use App\Actions\Enrollment\ListEnrollments;
+use App\Actions\Enrollment\RequestWithdrawal;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Actions\Enrollment\TransitionEnrollment;
 use App\Http\Controllers\Controller;
@@ -11,8 +12,10 @@ use App\Http\Requests\Api\V1\Enrollment\ConfirmPaymentRequest;
 use App\Http\Requests\Api\V1\Enrollment\IndexEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\StoreEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\UpdateEnrollmentRequest;
+use App\Http\Requests\Api\V1\WithdrawalRequest\StoreWithdrawalRequestRequest;
 use App\Http\Resources\Api\V1\EnrollmentResource;
 use App\Http\Resources\Api\V1\PaymentConfirmationResource;
+use App\Http\Resources\Api\V1\WithdrawalRequestResource;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
 use App\Models\StudentProfile;
@@ -129,6 +132,36 @@ final class EnrollmentController extends Controller
 
         $response = PaymentConfirmationResource::make($result['enrollment'])->response($request);
         $response->setStatusCode($result['created'] ? 201 : 200);
+
+        return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * FR-FIN-004 / PRD §4.2 rule 7: Student-only, own enrollment, only from
+     * `enrolled`. Creates a `pending` `WithdrawalRequest` — never touches
+     * the enrollment or releases a seat directly; that happens only once
+     * Registrar Staff approves it (`WithdrawalRequestController::update`).
+     *
+     * @throws AuthenticationException
+     */
+    public function withdraw(
+        StoreWithdrawalRequestRequest $request,
+        Enrollment $enrollment,
+        RequestWithdrawal $requestWithdrawal,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('withdraw', $enrollment);
+
+        $withdrawalRequest = $requestWithdrawal->execute(
+            $enrollment,
+            $request->validated('reason'),
+            $actor,
+            $contextFactory->fromRequest($request),
+        );
+
+        $response = WithdrawalRequestResource::make($withdrawalRequest)->response($request);
+        $response->setStatusCode(201);
 
         return $this->cachePrivateResponse($response);
     }

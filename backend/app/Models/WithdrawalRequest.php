@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Domain\Enrollment\WithdrawalStatus;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -55,5 +57,27 @@ final class WithdrawalRequest extends Model
     public function processor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'processed_by');
+    }
+
+    /**
+     * PRD §3.8 assigns processing withdrawal requests to Registrar Staff
+     * specifically; the Registrar Head also reads every request (the same
+     * "keeper of the official record" visibility `Enrollment`/`AcademicGrade`
+     * already grant it), but does not process one here — see
+     * `WithdrawalRequestPolicy`'s docblock for that literal-reading choice.
+     *
+     * @param  Builder<WithdrawalRequest>  $query
+     * @return Builder<WithdrawalRequest>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (in_array($user->role, [UserRole::RegistrarStaff, UserRole::RegistrarHead], true)) {
+            return $query;
+        }
+
+        return $query->whereHas(
+            'enrollment.student',
+            fn ($studentQuery) => $studentQuery->where('user_id', $user->id),
+        );
     }
 }

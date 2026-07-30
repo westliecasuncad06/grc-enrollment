@@ -7,10 +7,9 @@ Migrations: `backend/database/migrations/2026_07_27_0000{05,10,11,12,13,14,15,16
 
 **Scope note:** this page originally documented schema landed as verified
 groundwork alongside the PRD §5.1 faculty-input/section-planning/
-approval-workflow slice, with no API layer yet built. Phases 6–7a have since
-landed the full API for every table below except `transferee_credits` and
-`withdrawal_requests` (still schema-only, deferred to Phase 7b) — see each
-table's own **API** note for its routes and OpenAPI tag.
+approval-workflow slice, with no API layer yet built. Phases 6–7b have since
+landed the full API for every table on this page — see each table's own
+**API** note for its routes and OpenAPI tag.
 
 ## `student_profiles`
 
@@ -69,7 +68,10 @@ payment confirmation). OpenAPI tag `Enrollment`.
 |  |  | **unique** `(enrollment_id, section_id)` | PRD §5.3: repeated requests must not duplicate seats |
 
 **API:** written only as part of `POST /api/v1/enrollments` (Phase 6); no
-dedicated route of its own. Embedded in `EnrollmentResource.subjects`.
+dedicated write route of its own, but read via `GET /api/v1/class-rosters`
+(Phase 7b Task 4 — Faculty own sections, Registrar Staff and Registrar Head
+all). Also embedded in `EnrollmentResource.subjects`. OpenAPI tag
+`Class Rosters`.
 
 ## `academic_grades`
 
@@ -89,8 +91,9 @@ dedicated route of its own. Embedded in `EnrollmentResource.subjects`.
 |  |  | **unique** `(student_id, subject_id, academic_term_id)` — `academic_grades_unique_student_subject_term` | |
 
 **API (Phase 7a Task 3):** `GET`/`POST`/`PATCH /api/v1/academic-grades`.
-Role-scoped read (Student own, Faculty own sections, Registrar Head all);
-`POST` is Faculty-only; `PATCH` serves a plain content edit (draft only) or
+Role-scoped read (Student own, Faculty own sections, Registrar Head and
+Registrar Staff all — the latter widened in Phase 7b Task 3); `POST` is
+Faculty-only; `PATCH` serves a plain content edit (draft only) or
 `action: submit`/`lock`. OpenAPI tag `Academic Records`.
 
 ## `queue_tickets`
@@ -150,7 +153,8 @@ confirmation response, not queried separately. Idempotent on
 |  |  | **unique** `(document_type, document_number)` — `enrollment_documents_unique_number_per_type` | |
 
 **API (Phase 7a Task 5):** `GET /api/v1/enrollment-documents` (Student own,
-Registrar Head all). Rows are created only as a side effect of payment
+Registrar Head and Registrar Staff all — the latter widened in Phase 7b
+Task 3). Rows are created only as a side effect of payment
 confirmation, never directly. `storage_path` stays `null` in this slice — no
 PDF pipeline; the Digital COM is served as structured data for the Student
 module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
@@ -171,7 +175,13 @@ module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
 | `processed_at` | `TIMESTAMP` | nullable | |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
-**API:** none yet — schema-only, deferred to Phase 7b.
+**API (Phase 7b Task 2):** `GET`/`POST`/`PATCH /api/v1/transferee-credits`.
+Role-scoped read (Student own, Registrar Staff and Registrar Head all);
+`POST` is Registrar-Staff-only; `PATCH` serves a plain content edit
+(`pending` only) or `action: approve`/`reject` — every write is audited,
+including plain edits (FR-FIN-003). Approved credits are record-only: they
+are never read by `BuildEligibleSubjectPool`, since cross-institution grade
+equivalence is an open PRD §17 decision. OpenAPI tag `Transferee Credits`.
 
 ## `withdrawal_requests`
 
@@ -185,10 +195,23 @@ module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
 | `processed_at` | `TIMESTAMP` | nullable | |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
-Seat-release consequences of an approved withdrawal remain an open PRD §17
-decision and are not encoded here.
+Seat-release mechanics (whether an approved withdrawal decrements
+`sections.enrolled_count`) are config-flagged —
+`config('enrollment.withdrawal.releases_seats')`, default `true` — since
+§17 leaves the underlying policy unconfirmed; dropping the affected
+`enrollment_subjects` rows to `dropped` happens unconditionally either way.
 
-**API:** none yet — schema-only, deferred to Phase 7b.
+**API (Phase 7b Task 1):** `POST /api/v1/enrollments/{enrollment}/withdraw`
+(Student, own `enrolled` enrollment — creates this row, `pending`), `GET
+/api/v1/withdrawal-requests` (Student own, Registrar Staff and Registrar
+Head all), `PATCH /api/v1/withdrawal-requests/{withdrawalRequest}`
+(Registrar-Staff-only `action: approve`/`reject`). `approve` drops every
+still-active `enrollment_subjects` row and, per the config flag above,
+releases the section seat exactly once even under a repeated approval
+attempt (`withdrawal_requests` carries no unique constraint on
+`enrollment_id`, so idempotency is enforced under a row lock in
+`App\Actions\Enrollment\TransitionWithdrawalRequest`, not the schema).
+OpenAPI tag `Withdrawals`.
 
 ## Seeded data
 

@@ -16,6 +16,9 @@ import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/regis
 import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
 import { StudentQueuePaymentWorkspace } from "@/features/components/portal/student-queue-payment-workspace"
 import { StudentGradesComWorkspace } from "@/features/components/portal/student-grades-com-workspace"
+import { RegistrarRecordsWorkspace } from "@/features/components/portal/registrar-records-workspace"
+import { ClassRostersWorkspace } from "@/features/components/portal/class-rosters-workspace"
+import { GradeSubmissionWorkspace } from "@/features/components/portal/grade-submission-workspace"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -41,6 +44,12 @@ export type ConnectedModuleId =
   | "com-finalization"
   | "queue-payment"
   | "grades-com"
+  | "credit-mappings"
+  | "drops-withdrawals"
+  | "academic-records"
+  | "enrollment-documents"
+  | "class-rosters"
+  | "grade-submission"
 
 export type PortalModuleComponent = ComponentType
 
@@ -68,6 +77,12 @@ export const connectedModuleIds = [
   "com-finalization",
   "queue-payment",
   "grades-com",
+  "credit-mappings",
+  "drops-withdrawals",
+  "academic-records",
+  "enrollment-documents",
+  "class-rosters",
+  "grade-submission",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
@@ -119,6 +134,19 @@ const comFinalizationWorkspace: PortalModuleComponent = () => (
   <AccountingPaymentWorkspace initialModuleId="com-finalization" />
 )
 
+const creditMappingsWorkspace: PortalModuleComponent = () => (
+  <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
+)
+const dropsWithdrawalsWorkspace: PortalModuleComponent = () => (
+  <RegistrarRecordsWorkspace initialModuleId="drops-withdrawals" />
+)
+const academicRecordsWorkspace: PortalModuleComponent = () => (
+  <RegistrarRecordsWorkspace initialModuleId="academic-records" />
+)
+const enrollmentDocumentsWorkspace: PortalModuleComponent = () => (
+  <RegistrarRecordsWorkspace initialModuleId="enrollment-documents" />
+)
+
 export const connectedModuleRegistry: Readonly<
   Record<ConnectedModuleId, PortalModuleComponent>
 > = {
@@ -145,6 +173,12 @@ export const connectedModuleRegistry: Readonly<
   "com-finalization": comFinalizationWorkspace,
   "queue-payment": StudentQueuePaymentWorkspace,
   "grades-com": StudentGradesComWorkspace,
+  "credit-mappings": creditMappingsWorkspace,
+  "drops-withdrawals": dropsWithdrawalsWorkspace,
+  "academic-records": academicRecordsWorkspace,
+  "enrollment-documents": enrollmentDocumentsWorkspace,
+  "class-rosters": ClassRostersWorkspace,
+  "grade-submission": GradeSubmissionWorkspace,
 }
 
 export function isConnectedModuleId(

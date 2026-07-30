@@ -109,7 +109,9 @@ final class AcademicGrade extends Model
      * (a grade with no `section_id` is therefore invisible to every
      * Faculty member, which is correct — it belongs to no one's roster);
      * the Registrar Head, as keeper of the official academic record, sees
-     * every grade. Mirrors `Enrollment::scopeVisibleTo` (ADR 0008).
+     * every grade. Registrar Staff gets the same broad read access per
+     * PRD §3.8 ("view permitted academic records") — see Phase 7b Task 3.
+     * Mirrors `Enrollment::scopeVisibleTo` (ADR 0008).
      *
      * @param  Builder<AcademicGrade>  $query
      * @return Builder<AcademicGrade>
@@ -120,7 +122,7 @@ final class AcademicGrade extends Model
             return $query->whereHas('section', fn ($sectionQuery) => $sectionQuery->where('professor_id', $user->id));
         }
 
-        if ($user->role === UserRole::RegistrarHead) {
+        if (in_array($user->role, [UserRole::RegistrarHead, UserRole::RegistrarStaff], true)) {
             return $query;
         }
 

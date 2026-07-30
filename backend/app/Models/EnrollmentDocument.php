@@ -55,7 +55,9 @@ final class EnrollmentDocument extends Model
     /**
      * FR-FIN-010: a Student sees only their own generated documents; the
      * Registrar Head, as keeper of the official record, sees every one.
-     * No other role reads this endpoint — `EnrollmentDocumentPolicy::viewAny`
+     * Registrar Staff gets the same broad read access per PRD §3.8 ("view
+     * permitted ... enrollment documents"), widened in Phase 7b Task 3. No
+     * other role reads this endpoint — `EnrollmentDocumentPolicy::viewAny`
      * restricts every other role to zero rows before this scope ever runs.
      *
      * @param  Builder<EnrollmentDocument>  $query
@@ -63,7 +65,7 @@ final class EnrollmentDocument extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if ($user->role === UserRole::RegistrarHead) {
+        if (in_array($user->role, [UserRole::RegistrarHead, UserRole::RegistrarStaff], true)) {
             return $query;
         }
 

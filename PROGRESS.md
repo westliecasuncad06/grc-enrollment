@@ -1,22 +1,25 @@
 # GRC Enrollment System — Development Progress
 
 **Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:** `main`
-(merged `phase-7-process-3` at `fc56148`, fast-forward)
+(worked in place, no worktree, per this session's own instructions)
 
 ## Current Objective
 
-Roadmap Phase 7a, "Process 3.0 money path" (PRD §5.3, FR-FIN-001–010): grade
-encoding, the Registrar Head's approval/void decisions, the Accounting
-payment queue, idempotent payment confirmation, and the Digital COM —
-followed by the Registrar Head, Accounting Staff, and Student portal
-modules that connect to them. Deliberately deferred to a later "Phase 7b":
-transferee credits, withdrawal/drops, Faculty Class Rosters, the Faculty
-grade-*submission* UI (as opposed to the backend, which this phase built),
-and the Dean/Executive Director dashboards. **Phase 7a is complete,
-quality-gated, live-verified against real data on the real dev database,
-and ready to merge to local `main`.**
+Roadmap Phase 7b, "Transfers, Withdrawals & the Registrar Staff Portal"
+(PRD §3.8, §4.2 rule 7, §5.3 FR-FIN-003/004): withdrawal requests,
+transferee credits, widened Registrar Staff read access to academic
+records and enrollment documents, the class roster API, and the six
+portal modules that depend on them — Faculty's Class Rosters and Grade
+Submission, and all four of Registrar Staff's modules (Credit Mappings,
+Drops & Withdrawals, Academic Records, Enrollment Documents). Scoped to
+the "records core" by explicit user choice at kickoff; the Dean/Executive
+Director dashboards are deliberately deferred again, to a "Phase 7c",
+since they are the only part of the original Phase 7b scope with no
+PRD-specified content. **Phase 7b is complete, quality-gated, live-verified
+against real data on the real dev database, and ready to merge to local
+`main`.**
 
-## Verified Completed
+## Verified Completed — Phase 7a (money path, merged `fc56148`)
 
 - **Task 1 — role-scoped enrollment visibility (FR-FIN-001, FR-FIN-005).**
   `GET /api/v1/enrollments` generalized from the Phase 6 Student-only query
@@ -122,17 +125,9 @@ and ready to merge to local `main`.**
   row (3 per the primary enrollment, 3 for the grade) and notification (4)
   landed in the exact expected order, verified via direct SQL.
 
-## Work in Progress
+## Verified Completed — Phase 7b (records core + Registrar Staff portal)
 
-**Phase 7b — Transfers, Withdrawals & the Registrar Staff Portal**, in
-progress directly on `main` (this background session works in place, not
-via a per-phase worktree). Scoped to the "records core": withdrawal
-requests, transferee credits, class rosters, and the six portal modules
-that depend on them — the Dean/Executive Director dashboards are
-deliberately deferred again, to a 7c, since they are the only part of the
-remaining scope with no PRD-specified content.
-
-- ✅ **Design pass over the 8 Phase 7a portal modules**, done first at the
+- **Design pass over the 8 Phase 7a portal modules**, done first at the
   user's explicit request before new feature work. `RegistrarEnrollmentWorkspace`
   and `AccountingPaymentWorkspace` now render their lists as `Table`s with
   semantic `Badge` status colors (destructive for rejected/cancelled,
@@ -146,14 +141,91 @@ remaining scope with no PRD-specified content.
   All changes matched this codebase's own established design-system
   conventions (the same `Table`/`Badge`/`Field` patterns already used in
   `enrollment-workspace.tsx`, `admission-provisioning-workspace.tsx`) rather
-  than inventing new ones. **The Chrome browser extension was not connected
+  than inventing new ones. The Chrome browser extension was not connected
   in this session, so this was a rigorous code-level design audit against
   the existing component library and established patterns, not a live
-  visual/screenshot review** — flagging this limitation explicitly rather
-  than claiming a visual check that didn't happen. Full frontend gate green
-  throughout (243/243 tests, `tsc`, `eslint`, `prettier` all clean).
+  visual/screenshot review.
+- **Task 1 — withdrawal request API (FR-FIN-004, PRD §4.2 rule 7).**
+  `POST /api/v1/enrollments/{enrollment}/withdraw` (Student, own `enrolled`
+  enrollment, reason required), `GET /api/v1/withdrawal-requests`
+  (Student own, Registrar Staff and Registrar Head all — new
+  `WithdrawalRequest::scopeVisibleTo`), `PATCH
+  /api/v1/withdrawal-requests/{withdrawalRequest}` (Registrar-Staff-only
+  `action: approve`/`reject`, following ADR 0011's constant-trio shape).
+  `approve` drops every still-active `enrollment_subjects` row and, only
+  when `config('enrollment.withdrawal.releases_seats')` is true (new flag,
+  default `true`), decrements the affected section's `enrolled_count`
+  exactly once — proven both by test and live, including a repeat-approval
+  attempt that 422s with no second decrement. `withdrawal_requests` carries
+  no unique constraint on `enrollment_id`, so idempotency is enforced under
+  a row lock in the Action, not the schema.
+- **Task 2 — transferee credits API (FR-FIN-003, PRD §3.8/§10.3).**
+  `GET`/`POST`/`PATCH /api/v1/transferee-credits`. Registrar-Staff-only
+  writes; `PATCH` serves the same plain-edit-vs-`action` shape
+  `UpdateAcademicGradeRequest` established. Every write is audited,
+  including plain content edits (`transferee_credit.updated`), so the
+  record and its control history cannot diverge. Approved credits are
+  deliberately record-only: proven both by test and live (approving a
+  transferee credit mapped to a subject's own prerequisite left the
+  student's `GET /eligible-subjects` verdict for the dependent subject
+  unchanged) that `BuildEligibleSubjectPool` never reads this table —
+  cross-institution grade equivalence stays an open PRD §17 decision.
+- **Task 3 — Registrar Staff read access (PRD §3.8).** Widened
+  `AcademicGradePolicy`/`AcademicGrade::scopeVisibleTo` and
+  `EnrollmentDocumentPolicy`/`EnrollmentDocument::scopeVisibleTo` so
+  Registrar Staff sees every row, the same breadth the Registrar Head
+  already had. No new endpoints — existing routes, wider Policy/scope only.
+- **Task 4 — class roster API.** `GET /api/v1/class-rosters` (filterable
+  by `section_id`/`academic_term_id`, paginated), built on
+  `EnrollmentSubject` with `enrollment.student`/`section.subject` eager
+  loaded. New `EnrollmentSubject::scopeVisibleTo`: Faculty sees only their
+  own sections; Registrar Staff and Registrar Head see all; every other
+  role is denied by `EnrollmentSubjectPolicy::viewAny` before the scope
+  ever runs. The roster endpoint `PROGRESS.md` has recorded as missing
+  since Phase 6.
+- **Tasks 5–7 — six portal modules.** Three schema/service/hook trios
+  (withdrawal requests, transferee credits, class rosters) mirroring
+  `queue-ticket-schema.ts`'s strict-Zod, prefix-key-invalidation pattern.
+  `RegistrarRecordsWorkspace` serves all four Registrar Staff modules
+  (Credit Mappings, Drops & Withdrawals, Academic Records, Enrollment
+  Documents) via `initialModuleId`, region name `"Registrar records
+  workspace"` (distinct from the Student `grades-com` module's existing
+  `"Academic records workspace"`) — unlike `AccountingPaymentWorkspace`,
+  it renders only the module matching `initialModuleId`, not all four at
+  once, since these four are unrelated record types rather than steps of
+  one flow. `ClassRostersWorkspace` (Faculty, read-only, following
+  `teaching-schedule-workspace.tsx`'s responsive table/card pattern).
+  `GradeSubmissionWorkspace` (Faculty, writes through the existing Phase
+  7a academic-grades API — no new backend; reuses the new class-roster
+  read to populate the per-section student list instead of inventing a
+  student-search UI, since none exists elsewhere in this API). Registry
+  grew 23 → 29 `connectedModuleIds`; both boundary tests updated; the six
+  `role-capabilities.ts` descriptions de-"preview"-ified.
+- **Task 8 — docs, gate, live proof.** `docs/api/openapi.yaml`: 3 new
+  tags (`Withdrawals`, `Transferee Credits`, `Class Rosters`), 3 existing
+  tag/route descriptions updated for the Task 3 widening, 7 new paths, and
+  ~15 new schemas — Redocly-clean. `docs/data-dictionary/
+  enrollment-records.md`: replaced both "API: none yet" notes, added the
+  `class-rosters` API note to `enrollment_subjects`, and updated the two
+  Task-3-widened tables' API notes. Full gate green (see *Commands and
+  Tests Run*). **Live HTTP proof, not just tests**, against the real dev
+  database: a fresh proof student (`proof.withdraw@grc.test`) submitted →
+  registrar-approved → paid → `enrolled`; section 1's `enrolled_count`
+  went 4 → 3 on withdrawal approval and stayed at 3 on a repeat approval
+  attempt (422); a transferee credit approved for that same student,
+  mapped to the exact subject its next course's prerequisite requires,
+  left `GET /eligible-subjects`' verdict for that dependent subject
+  unchanged (still ineligible, same reason) — proving the non-interaction
+  live, not just by test; Faculty's live `GET /class-rosters` reflected the
+  post-withdrawal `dropped` status; Registrar Staff's widened
+  `academic-grades`/`enrollment-documents` reads returned real rows live.
 
-## Files Changed
+## Work in Progress
+
+None. Phase 7b is complete, quality-gated, and live-verified — ready to
+merge to local `main`. See *Exact Next Steps* for what comes after.
+
+## Files Changed — Phase 7a
 
 No new migrations — all 6 tables this phase built an API for
 (`enrollments`, `academic_grades`, `queue_tickets`, `payments`,
@@ -208,7 +280,64 @@ enrollment-records.md` (scope note + per-table **API** notes updated
 rather than duplicated into a new file); `PROGRESS.md` (this
 reconciliation).
 
-## Commands and Tests Run
+## Files Changed — Phase 7b
+
+No new migrations — both tables this phase built an API for
+(`transferee_credits`, `withdrawal_requests`) were already schema-only
+since the earlier foundation phase; `enrollment_subjects` gained its first
+dedicated read route but no schema change.
+
+**Backend, domain:** `config/enrollment.php` (+`withdrawal.releases_seats`
+flag, default `true`, env `ENROLLMENT_WITHDRAWAL_RELEASES_SEATS`);
+`app/Domain/Audit/AuditAction.php` (+7: `withdrawal_request.created`/
+`approved`/`rejected`, `transferee_credit.created`/`updated`/`approved`/
+`rejected`), `AuditableType.php` (+`withdrawal_request`,
+`transferee_credit`); `app/Domain/Notifications/NotificationType.php`
+(+4: `withdrawal_request_approved`/`rejected`,
+`transferee_credit_approved`/`rejected`).
+
+**Backend, API — 7 new routes across 2 new + 1 extended controller:**
+`Actions/Enrollment/{RequestWithdrawal,ListWithdrawalRequests,
+TransitionWithdrawalRequest,ListClassRoster}.php`,
+`Actions/Academic/{CreateTransfereeCredit,ListTransfereeCredits,
+UpdateTransfereeCredit}.php` (all new); `Http/Controllers/Api/V1/
+{EnrollmentController.php (extended: `withdraw`),
+WithdrawalRequestController.php, TransfereeCreditController.php,
+ClassRosterController.php}` (3 new); `Http/Requests/Api/V1/
+{WithdrawalRequest,TransfereeCredit,ClassRoster}/` (7 new Form Requests);
+`Http/Resources/Api/V1/{WithdrawalRequestResource.php,
+TransfereeCreditResource.php, ClassRosterEntryResource.php}` (new);
+`Models/{WithdrawalRequest.php, TransfereeCredit.php,
+EnrollmentSubject.php}` (new `scopeVisibleTo`), `Models/AcademicGrade.php`
++`EnrollmentDocument.php` (widened `scopeVisibleTo` to include Registrar
+Staff); `Policies/{WithdrawalRequestPolicy.php, TransfereeCreditPolicy.php,
+EnrollmentSubjectPolicy.php}` (new), `Policies/{EnrollmentPolicy.php
+(+`withdraw`), AcademicGradePolicy.php, EnrollmentDocumentPolicy.php}`
+(widened `viewAny`); `routes/api.php` (7 new routes: `POST
+/enrollments/{enrollment}/withdraw`, `GET`/`PATCH
+/withdrawal-requests[/{id}]`, `GET`/`POST`/`PATCH
+/transferee-credits[/{id}]`, `GET /class-rosters`).
+
+**Frontend:** `src/features/schemas/{withdrawal-request,
+transferee-credit,class-roster}-schema.ts` (new); `services/
+{withdrawal-request,transferee-credit,class-roster}-service.ts` (new);
+`hooks/{use-withdrawal-requests,use-transferee-credits,
+use-class-roster}.ts` (new); `components/portal/{registrar-records,
+class-rosters,grade-submission}-workspace.tsx` (new, 3 files serving 6
+registry entries); `portal/module-registry.tsx` (23 → 29
+`connectedModuleIds`), `portal/role-capabilities.ts` (6 placeholder
+descriptions de-"preview"-ified); `portal/module-registry.test.tsx` +
+`components/pages/portal-module-page.test.tsx` (both boundary tests
+updated for the 6 new modules and their 3 region names).
+
+**Docs:** `docs/api/openapi.yaml` (7 new paths, 3 new tags —
+`Withdrawals`, `Transferee Credits`, `Class Rosters` — ~15 new schemas,
+and the `audit-logs` filter enums brought current); `docs/data-dictionary/
+enrollment-records.md` (both remaining "API: none yet" notes replaced,
+`enrollment_subjects`/`academic_grades`/`enrollment_documents` API notes
+updated for the new/widened access); `PROGRESS.md` (this reconciliation).
+
+## Commands and Tests Run — Phase 7a
 
 | Command | Result |
 |---|---|
@@ -236,6 +365,32 @@ reconciliation).
 | **Direct SQL, real dev DB:** audit trail for enrollment 10 | 3 rows in order: `enrollment.submitted` → `enrollment.registrar_approved` → `enrollment.payment_confirmed` |
 | **Direct SQL, real dev DB:** audit trail for grade 4 | 3 rows in order: `academic_grade.created` → `submitted` → `locked` |
 | **Direct SQL, real dev DB:** notifications for `proof.student1` | 4 rows in order: enrollment submitted, registrar approved, grade locked, payment confirmed |
+
+## Commands and Tests Run — Phase 7b
+
+| Command | Result |
+|---|---|
+| `php artisan test` | **641 passed / 2,419 assertions**, ~40–45s (run after every task) |
+| `vendor\bin\phpstan analyse --memory-limit=512M` | No errors (level 8), run after every task |
+| `vendor\bin\pint --test` | passed, run after every task (one auto-fix pass on first run, over 3 files) |
+| `composer audit --locked` | No security vulnerability advisories found |
+| `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | valid, no warnings |
+| `npx vitest run --no-file-parallelism` | **48 files / 243 tests passed** |
+| `npx tsc --noEmit` | passed |
+| `npx eslint . --max-warnings=0` | passed (2 real violations fixed during development: a duplicate-union-type-constituent and a missed optional-chain) |
+| `npx prettier --check .` | passed after one auto-fix pass over 6 new files |
+| `npm audit --omit=dev` | 0 vulnerabilities |
+| `npx next build` (Turbopack) | compiled successfully, 5 routes |
+| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator` | **zero pending migrations** — confirmed before the live proof, exactly as predicted (no new tables this phase) |
+| **Live HTTP, real dev DB:** submitted a fresh enrollment as `proof.withdraw@grc.test` (`POST /enrollments`, section 1/term 2) | **201**, enrollment #11 created `pending_registrar_approval` |
+| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` approves, `accounting.seed@grc.test` confirms payment | enrollment #11 → `pending_payment` → `enrolled`; section 1 `enrolled_count` at 4 |
+| **Live HTTP, real dev DB:** `proof.withdraw@grc.test` requests withdrawal (`POST /enrollments/11/withdraw`, reason required) | **201**, withdrawal request #2 created `pending` |
+| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` approves the request (`PATCH action=approve /withdrawal-requests/2`) | **200** → `approved`; enrollment #11 → `withdrawn`, `active_academic_term_id` → `null`; its `enrollment_subjects` row → `dropped`; section 1 `enrolled_count` **4 → 3** |
+| **Live HTTP, real dev DB:** repeat the identical approve call | **422** ("requires ... pending; it is currently 'approved'"); section 1 `enrolled_count` confirmed still **3** — FR-FIN-004/§5.3 idempotency proven live, not just by test |
+| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` records a transferee credit for the same student mapped to `CS102` (the exact prerequisite `CS201` requires), then approves it | **201** then **200** → `approved` |
+| **Live HTTP, real dev DB:** `proof.withdraw@grc.test` reads `GET /eligible-subjects` for `CS201` before and after the credit's approval | **unchanged** both times — still ineligible, same "prerequisite not yet completed" reason — proving `BuildEligibleSubjectPool` never reads `transferee_credits`, live not just by test |
+| **Live HTTP, real dev DB:** `faculty.seed@grc.test` reads `GET /class-rosters?section_id=1` | returned all 4 roster rows for the section, including the just-withdrawn student correctly shown `dropped` |
+| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` reads `GET /academic-grades` and `GET /enrollment-documents` (Task 3 widening) | both returned real rows (4 and 3 respectively) — the widened read access works live |
 
 ## Technical Decisions
 
@@ -307,6 +462,75 @@ reconciliation).
   one ("yes proceed to pushed to origin") — this is not a scope
   extrapolation from a general merge authorization.
 
+### Phase 7b
+
+- **Chaining `withToken()` for two different actors within one Sanctum
+  feature test silently reuses the first actor's cached guard resolution.**
+  Discovered while debugging 5 failing `WithdrawalRequestsEndpointTest`
+  cases: a Registrar Staff `PATCH` was denied 403 even though
+  `WithdrawalRequestPolicy::decide()` correctly returned `true` for that
+  role — a `fwrite(STDERR, ...)` diagnostic inside the Policy method
+  revealed the authenticated user was still the *student* from an earlier
+  request in the same test. This is the same gotcha
+  `EnrollmentsEndpointTest.php` already documents (`makeEnrollment()`'s own
+  docblock) but the new withdrawal tests hadn't yet applied: the fix is to
+  seed the "other actor's" data directly via Eloquent
+  (`makeWithdrawalRequest()`) rather than a second login+HTTP-submit, so
+  every test method authenticates as exactly one actor.
+- **Seat release is config-flagged; dropping the subject is not.**
+  `config('enrollment.withdrawal.releases_seats')` (default `true`) gates
+  only whether `Section.enrolled_count` decrements — because seats are
+  reserved immediately and permanently on submission today, *not*
+  releasing them would permanently inflate the count and wrongly block
+  other students, but whether that's the confirmed institutional policy is
+  still §17-open. Marking `enrollment_subjects` rows `dropped` happens
+  unconditionally regardless of the flag, since that fact is simply
+  correct once a withdrawal is approved. Idempotency (no double
+  decrement) is enforced the same way regardless of the flag's value —
+  under a row lock in the Action, re-checking both the request's own
+  status and the enrollment's status before touching either.
+- **Transferee credits never feed `BuildEligibleSubjectPool` — confirmed
+  live, not just asserted.** Cross-institution grade equivalence is an
+  open PRD §17 decision; a foreign "1.50" must not silently unlock a local
+  subject's prerequisite. The Action, the model's `scopeVisibleTo`
+  docblock, and the OpenAPI tag description all say so, and the live
+  proof exercised it end-to-end (approved credit, unchanged
+  `eligible-subjects` verdict) rather than trusting the code comment
+  alone.
+- **`RegistrarRecordsWorkspace` renders only the module matching
+  `initialModuleId`, unlike every other multi-module workspace in this
+  codebase.** `AccountingPaymentWorkspace`/`AdmissionProvisioningWorkspace`
+  always render every card regardless of which link was clicked, because
+  their modules are sequential steps of one flow (queue → serve → confirm
+  → COM; account → outcome → handoff). Registrar Staff's four modules
+  (Credit Mappings, Drops & Withdrawals, Academic Records, Enrollment
+  Documents) are unrelated record types, not steps — showing all four at
+  once on every visit would cram four unrelated tables onto one screen.
+  Every query hook is still called unconditionally per the Rules of
+  Hooks; only the three inactive ones are `enabled: false`.
+- **`GradeSubmissionWorkspace` reuses the new class-roster read to
+  populate its per-section student list, instead of a student-search
+  UI.** No student-directory endpoint exists anywhere in this API (only
+  `POST /student-profiles` and the caller's own `GET /student-profile`),
+  so a from-scratch student picker would need new backend work the plan
+  didn't scope. The class roster already returns exactly the (student_id,
+  student_number) pairs needed for a section, and Faculty already reads
+  it for the Class Rosters module — reusing it here avoids inventing a
+  parallel lookup.
+- **Recompute Row 5 (Process 3.0 backend) from 70% to 95%, and Row 8
+  (nine role portals) from 58% to 73%.** Row 5: all 5 of Process 3.0's
+  subprocesses are now complete except the tail that forwards attrition
+  events to Process 4.0, which stays Phase 9 by design (ML goes last).
+  Row 8: 29/40 modules now connected (72.5%, rounded to 73%).
+  Contributions: Row 5 12% × 95% = 11.40 (was 8.40); Row 8 25% × 73% =
+  18.25 (was 14.50). Overall: 66.60 − 8.40 − 14.50 + 11.40 + 18.25 =
+  73.35 ≈ **73%**. No other row's weight or Done% changed.
+- **Merge to local `main`.** This background session worked directly on
+  `main` throughout (no per-phase worktree, per this session's own
+  instructions), so "merge" is a clean-state confirmation, not an actual
+  branch merge. Push to `origin` is deferred to explicit confirmation —
+  see *Exact Next Steps*.
+
 ## Known Issues and Blockers
 
 - **Frontend full-suite parallel flakiness (this machine only) — unchanged
@@ -314,36 +538,46 @@ reconciliation).
   is unreliable under this machine's memory pressure; `npx vitest run
   --no-file-parallelism` is the trustworthy invocation and is what every
   frontend result recorded in this document used.
-- No new blocking defect found in Phase 7a. The live proof surfaced no gap
-  beyond what's already fixed and recorded above.
-- **Phase 7b is the next §17-heavy slice**: transferee-credit equivalence
-  rules, withdrawal seat-release policy, and (still, as in every prior
-  phase) queue-ticket numbering/reset and COM format remain GRC-unconfirmed
-  — see *Open Institutional Decisions*.
+- No new blocking defect found in Phase 7b beyond the Sanctum
+  multi-actor test gotcha (found and fixed — see Technical Decisions).
+- **Phase 7c (Dean/Executive Director dashboards) is the next slice with
+  no PRD-specified content**: `enrollment-dashboard`, `stuck-students`,
+  `reports` (Dean), `institution-dashboard`, `reports` (Executive
+  Director), and Registrar Head's `compliance-reports`/`policy-settings`
+  all need an institutional definition of what to show before they can be
+  built as more than a placeholder — see *Open Institutional Decisions*.
+  (`honors`, `kpis`, and `attrition-analytics` are separately deferred to
+  Phase 9 — they need trained ML output, not just a content decision.)
+- **Transferee-credit equivalence rules and withdrawal seat-release
+  policy** (this phase's two new §17 items) join queue-ticket
+  numbering/reset and COM format on the still-unconfirmed list.
 
 ## Uncommitted or Risky Changes
 
-None once this reconciliation is committed and merged. The real dev
-database's only Phase 7a-specific state is the live-proof data created
-through the real API during this session's verification (one fresh
-enrollment for `proof.student1@grc.test` carried all the way to `enrolled`
-with a locked grade and a generated COM; a reject and a void exercised on
-two other seeded enrollments) — deliberate verification, not a side
-effect, and safe to leave in place as further demo data.
+None once this reconciliation is committed. The real dev database's only
+Phase 7b-specific state is the live-proof data created through the real
+API during this session's verification: one fresh enrollment
+(`proof.withdraw@grc.test`) carried to `enrolled` then `withdrawn` via a
+real approved withdrawal request, and one transferee credit approved for
+the same student — deliberate verification, not a side effect, and safe
+to leave in place as further demo data.
 
 ## Exact Next Steps
 
-1. Start **Phase 7b** — the deferred remainder of Process 3.0 and its
-   portals: transferee credits, withdrawal/drops, Faculty Class Rosters,
-   the Faculty grade-*submission* UI (the backend already exists from this
-   phase), and the Dean/Executive Director dashboards.
-2. Before writing code, follow `AGENTS.md`: confirm current `git
-   status`/`git log`, and use `superpowers:brainstorming` →
-   `superpowers:writing-plans` for a new phase-7b plan/spec pair.
-3. Optional cleanup (not blocking): remove the
-   `.worktrees/phase-7-process-3` worktree and delete the merged branch
-   once the user confirms the merge and push are stable — ask first, per
-   the Git Safety Protocol.
+1. **Ask the user before pushing to `origin`.** This session worked
+   directly on `main` with no worktree; the working tree should be
+   committed once this reconciliation is in place, but pushing a shared
+   branch is an explicit-permission action per this session's own
+   instructions, not something a prior general merge authorization covers.
+2. Decide what comes next: **Phase 7c** (Dean/Executive Director
+   dashboards — blocked on an institutional content decision, see *Known
+   Issues*) or **Phase 8** (polish/accessibility/E2E/performance), which
+   has no such blocker. Either is a legitimate next step; ask the user
+   rather than assuming.
+3. Before writing code for whichever is chosen, follow `AGENTS.md`:
+   confirm current `git status`/`git log`, and use
+   `superpowers:brainstorming` → `superpowers:writing-plans` for a new
+   plan/spec pair.
 
 ## Do Not Change
 
@@ -369,15 +603,28 @@ effect, and safe to leave in place as further demo data.
 - `void`'s scope (`pending_payment` only) and the `'irregular'`
   block-section placeholder are both clearly flagged as provisional — do
   not treat either as confirmed institutional policy elsewhere.
+- Withdrawal approval, transferee-credit decisions, payment confirmation,
+  COM generation, queue-ticket transitions, and enrollment decisions must
+  all stay idempotent/re-checked under a row lock — never remove
+  `lockForUpdate()` from `TransitionWithdrawalRequest`/
+  `UpdateTransfereeCredit` or the idempotency-first ordering in
+  `ConfirmPayment`.
+- `BuildEligibleSubjectPool` must never read `transferee_credits` —
+  cross-institution grade equivalence is an open PRD §17 decision; only
+  locked `academic_grades` may feed prerequisite evaluation.
+- The `enrollment.withdrawal.releases_seats` config flag and the
+  `'pending'`/`'approved'`/`'rejected'` withdrawal/transferee-credit
+  status vocabularies are both clearly flagged as provisional — do not
+  treat either as confirmed institutional policy elsewhere.
 - No ML runtime behavior before Phase 9; do not touch the paused
   `ml-service`.
 
 ---
 
-# ■ Overall Completion — 67%
+# ■ Overall Completion — 73%
 
 ```
-█████████████████░░░░░░░  67 / 100
+██████████████████░░░░░░░  73 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -389,30 +636,31 @@ against work that is **merged**, not work that is written or planned.
 | 2 | Identity & RBAC — Sanctum, 9 roles, role middleware, Policies, query scopes | 7% | 85% | 5.95 |
 | 3 | Process 1.0 backend — scheduling (PRD §5.1) | 10% | 80% | 8.00 |
 | 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 80% | 8.00 |
-| 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 70% | 8.40 |
+| 5 | Process 3.0 backend — approvals, payment, COM, transfers, withdrawals (PRD §5.3) | 12% | 95% | 11.40 |
 | 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 100% | 5.00 |
 | 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
-| 8 | Nine role portals — 40 modules (spans Phases 5–7b) | 25% | 58% | 14.50 |
+| 8 | Nine role portals — 40 modules (spans Phases 5–7b) | 25% | 73% | 18.25 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
 | 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **66.60 ≈ 67%** |
+| | **Total** | **100%** | | **73.35 ≈ 73%** |
 
 Two scores that look surprising, explained:
 
-- **Row 5 at 70%** — 4 of Process 3.0's 5 subprocesses are complete: 3.1
-  grade encoding, 3.3 final Registrar approval, 3.4 payment queue, 3.5
-  payment confirmation + Digital COM. Only 3.2 (transferee credits and
-  withdrawal) remains, deferred to Phase 7b.
-- **Row 8 at 58%** — 23 of 40 modules are now fully wired to real APIs
-  (forms, mutations, parsed queries, tests), across 8 of 9 roles. 23/40 =
-  57.5%, rounded to 58%; see Decisions. The other 17 remain placeholder
-  empty-states: Registrar Staff's 4 (deferred to Phase 7b along with
-  transferee credits/withdrawal), Faculty's Class Rosters + Grade
-  Submission (2, backend already built this phase — see *Phase 7a — Process
-  3.0 Money Path* below), Registrar Head's remaining 3
-  (attrition-analytics, compliance-reports, policy-settings), Dean's 4 and
-  Executive Director's 3 dashboards/reports, and Program Chair's
-  Demand Forecast (1, deferred to Phase 9 as ML work).
+- **Row 5 at 95%** — all 5 of Process 3.0's subprocesses are now complete:
+  3.1 grade encoding, 3.2 transferee credits/withdrawal (this phase), 3.3
+  final Registrar approval, 3.4 payment queue, 3.5 payment confirmation +
+  Digital COM. The remaining 5% is the tail that forwards attrition events
+  to Process 4.0, deliberately deferred to Phase 9 (ML goes last).
+- **Row 8 at 73%** — 29 of 40 modules are now fully wired to real APIs
+  (forms, mutations, parsed queries, tests), across 9 of 9 roles. 29/40 =
+  72.5%, rounded to 73%; see Decisions. The other 11 remain placeholder
+  empty-states: 7 deferred to Phase 7c, blocked on an institutional
+  content decision (see *Known Issues*) — Dean's Enrollment
+  Dashboard/Stuck Students/Reports, Executive Director's Institution
+  Dashboard/Reports, Registrar Head's Policy Settings/Compliance Reports
+  — and 4 deferred to Phase 9 as ML work: Program Chair's Demand
+  Forecast, Dean's Honors, Executive Director's KPIs, Registrar Head's
+  Attrition Analytics.
 
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
@@ -425,12 +673,12 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | **41** |
+| **Live API routes** | **48** |
 | **Database tables** | **26** |
-| **Backend tests** | **605 passing (2,284 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
+| **Backend tests** | **641 passing (2,419 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
 | **Frontend tests** | **48 files, 243 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
-| **Portals functional** | 8 of 9 have at least one connected module (23 of 40 modules total); Registrar Staff remains fully placeholder, deferred to Phase 7b |
+| **Portals functional** | **9 of 9** have at least one connected module (29 of 40 modules total) — Registrar Staff is no longer fully placeholder |
 
 ---
 
@@ -445,12 +693,12 @@ environments. Credentials are documented in `docs/testing/SEEDED_IDENTITIES.md`.
 |---|---|---|---|---|---|---|
 | 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile, eligible pool, enrollment submission/decisions view, grades, payment/queue status, Digital COM + private notifications | ✅ Phase 6 (2 modules) · ✅ Phase 7a (2 more) — all 4 connected |
 | 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ✅ Phase 5 (3 modules) |
-| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences, grade encoding (draft→submitted) + publication notifications | ✅ Phase 5 (2 modules) · ⬜ Phase 7b (2 more — backend for grade submission already built) |
+| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences, grade encoding (draft→submitted), class roster read + publication notifications | ✅ Phase 5 (2 modules) · ✅ Phase 7b (2 more) — all 4 connected |
 | 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ✅ Phase 5 (5 modules) · ⬜ Phase 9 (1 more) |
-| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7b, 9 (4 more) |
-| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7b, 9 (3 more) |
-| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal, audit logs, enrollment approve/reject/void, grade locking + private notifications | ✅ Phase 5 (1 module) · ✅ Phase 7a (2 more) · ⬜ Phase 7b/9 (3 more) |
-| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7b |
+| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7c (4 more) |
+| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7c (3 more) |
+| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal, audit logs, enrollment approve/reject/void, grade locking, withdrawal/transferee-credit/academic-record/document reads + private notifications | ✅ Phase 5 (1 module) · ✅ Phase 7a (2 more) · ⬜ Phase 7c (3 more) |
+| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ✅ decides withdrawal requests and transferee credits, reads all academic records and enrollment documents + private notifications | ✅ Phase 7b (4 modules) — all connected |
 | 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ✅ payment queue, serving number, idempotent payment confirmation + Digital COM generation | ✅ Phase 7a (4 modules) — all connected |
 
 The local database was reseeded on 2026-07-29. All 12 synthetic
@@ -482,7 +730,7 @@ functional system before any model is trained.
 | 4 | Cross-Cutting Backend & ML Substrate | ✅ Complete (merged and verified) | 100 |
 | 5 | Portals over Existing APIs (6 roles) | ✅ Complete (merged and verified) | 100 |
 | 6 | Process 2.0 + Student Portal | ✅ Complete (merged and verified) | 100 |
-| 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ⬜ Planned | 15 |
+| 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ✅ Records core complete (7a+7b); dashboards deferred to 7c | 90 |
 | 8 | Polish, Accessibility, E2E, Performance | ⬜ Planned | 25 |
 | 9 | **Process 4.0 — Machine Learning** | ⬜ Last | 3 |
 | 10 | Deployment & Handoff | ⬜ Planned | 0 |
@@ -763,15 +1011,70 @@ Registrar Head, Accounting Staff, and Student.
 required payment-confirmation fields and currency rounding, and Digital
 COM format/numbering/signatures/retention all remain GRC-unconfirmed.
 
-## Phase 7b — Transferee Credits, Withdrawal & Remaining Portals
+## Phase 7b — Transferee Credits, Withdrawal & the Registrar Staff Portal ✅
 
-Deferred from Phase 7a by explicit user choice at kickoff. FR-FIN-003/004:
-transferee credit mapping, withdrawal/drops. Delivers the Registrar Staff
-portal, Faculty's Class Rosters and grade-*submission* UI (the backend
-already exists — see Phase 7a), and the Dean/Executive Director dashboards.
+Deferred from Phase 7a by explicit user choice at kickoff; scoped to the
+"records core" (Dean/Executive Director dashboards deferred again, to
+7c, since they're the only part of the original scope with no
+PRD-specified content).
+
+- **Withdrawal requests** (FR-FIN-004, PRD §4.2 rule 7):
+  `POST /api/v1/enrollments/{enrollment}/withdraw` (Student, own
+  `enrolled` enrollment), `GET`/`PATCH /api/v1/withdrawal-requests[/{id}]`
+  (Registrar-Staff-only `approve`/`reject`). Seat release is
+  config-flagged (`enrollment.withdrawal.releases_seats`, default `true`)
+  since §17 leaves the policy unconfirmed; idempotency (no double
+  decrement on a repeat approval) is enforced under a row lock regardless
+  of the flag — proven live, not just by test.
+- **Transferee credits** (FR-FIN-003, PRD §3.8/§10.3):
+  `GET`/`POST`/`PATCH /api/v1/transferee-credits`. Registrar-Staff-only
+  writes; every write audited, including plain content edits. Approved
+  credits never feed `BuildEligibleSubjectPool` — proven live that
+  approving one leaves the student's prerequisite verdict unchanged,
+  since cross-institution grade equivalence is an open §17 decision.
+- **Registrar Staff read widening** (PRD §3.8, no new endpoints): sees
+  every academic grade and enrollment document, the same breadth the
+  Registrar Head already had.
+- **Class roster API**: `GET /api/v1/class-rosters` (Faculty own
+  sections, Registrar Staff and Registrar Head all) — the roster endpoint
+  this document had recorded as missing since Phase 6.
+- **6 portal modules.** Registrar Staff (Credit Mappings, Drops &
+  Withdrawals, Academic Records, Enrollment Documents — one shared
+  `RegistrarRecordsWorkspace`, which deliberately renders only the active
+  module rather than all four at once, since they're unrelated record
+  types), Faculty (Class Rosters, Grade Submission — the latter writing
+  through the Phase 7a academic-grades API with no new backend).
+- **Live-verified, not just tested.** Zero pending migrations confirmed.
+  Walked one freshly-submitted enrollment to `enrolled`, then through a
+  real withdrawal request and Registrar Staff approval — section seat
+  count moved exactly once (4→3) and stayed there on a repeat approval
+  attempt (422). Approved a transferee credit mapped to the exact subject
+  a later course's prerequisite requires and confirmed the student's
+  `GET /eligible-subjects` verdict for that course was unaffected. Read
+  the live class roster (correctly showing the withdrawn student as
+  `dropped`) and the widened academic-grades/enrollment-documents reads
+  as Registrar Staff.
+
+Discovered and fixed a pre-existing Sanctum multi-actor test gotcha along
+the way (see Technical Decisions) — the same one `EnrollmentsEndpointTest`
+already documented, now also applied to the new withdrawal tests.
 
 The most ML-consequential remaining slice before Phase 9 — it produces the
 attrition model's label and most of its features.
+
+## Phase 7c — Dean/Executive Director Dashboards
+
+Not started. The only remaining piece of the original Phase 7b roadmap
+scope, deferred twice now because it has no PRD-specified content: the
+PRD names FR-ANL-003 (§5.4, Process 4.0/Phase 9) as the sole substantive
+requirement touching this area, and never itemizes what fields or KPIs
+Dean's `enrollment-dashboard`/`stuck-students`/`honors`/`reports` or
+Executive Director's `institution-dashboard`/`kpis`/`reports` must show.
+Registrar Head's remaining `attrition-analytics`/`compliance-reports`/
+`policy-settings` are the same shape. Building any of these now would mean
+inventing institutional definitions, which `AGENTS.md` forbids — this
+phase needs an institutional content decision before it can start, not
+just engineering time.
 
 ## Phase 8 — Polish, Accessibility, E2E, Performance
 
@@ -832,8 +1135,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 |---|---|---|
 | Availability Preferences | 5 | ✅ |
 | Teaching Schedule | 5 | ✅ |
-| Class Rosters | 7b | ⬜ deferred from Phase 6, needs its own roster endpoint |
-| Grade Submission | 7b | ⬜ backend (`academic-grades` API) already built in Phase 7a |
+| Class Rosters | 7b | ✅ |
+| Grade Submission | 7b | ✅ |
 
 ### 4. Program Chair — 6 modules
 
@@ -851,19 +1154,19 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Schedule Approvals | 5 | ✅ |
-| Enrollment Dashboard | 7b | ⬜ |
-| Stuck Students | **9** | ⬜ |
+| Enrollment Dashboard | 7c | ⬜ no PRD-specified content |
+| Stuck Students | 7c | ⬜ no PRD-specified content |
 | Honors | **9** | ⬜ |
-| Reports | **9** | ⬜ |
+| Reports | 7c | ⬜ no PRD-specified content |
 
 ### 6. Executive Director — 4 modules
 
 | Module | Phase | Status |
 |---|---|---|
 | Master Schedule | 5 | ✅ |
-| Institution Dashboard | 7b | ⬜ |
+| Institution Dashboard | 7c | ⬜ no PRD-specified content |
 | KPIs | **9** | ⬜ |
-| Reports | **9** | ⬜ |
+| Reports | 7c | ⬜ no PRD-specified content |
 
 ### 7. Registrar Head — 6 modules
 
@@ -872,18 +1175,18 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Audit Logs | 5 | ✅ |
 | Enrollment Approvals | 7a | ✅ |
 | Overrides & Voids | 7a | ✅ |
-| Policy Settings | 8 | ⬜ §17-dependent |
+| Policy Settings | 7c | ⬜ §17-dependent |
 | Attrition Analytics | **9** | ⬜ |
-| Compliance Reports | **9** | ⬜ |
+| Compliance Reports | 7c | ⬜ no PRD-specified content |
 
 ### 8. Registrar Staff — 4 modules
 
 | Module | Phase | Status |
 |---|---|---|
-| Credit Mappings | 7b | ⬜ |
-| Drops & Withdrawals | 7b | ⬜ |
-| Academic Records | 7b | ⬜ |
-| Enrollment Documents | 7b | ⬜ |
+| Credit Mappings | 7b | ✅ |
+| Drops & Withdrawals | 7b | ✅ |
+| Academic Records | 7b | ✅ |
+| Enrollment Documents | 7b | ✅ |
 
 ### 9. Accounting Staff — 4 modules
 
@@ -894,14 +1197,17 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Payment Confirmation | 7a | ✅ |
 | COM Finalization | 7a | ✅ |
 
-**Totals:** 40 modules · **23 done** (13 Phase 5 + 2 Phase 6 + 8 Phase 7a) ·
-8 blocked on Phase 9 · 9 remain for Phase 7b/8.
+**Totals:** 40 modules · **29 done** (13 Phase 5 + 2 Phase 6 + 8 Phase 7a +
+6 Phase 7b) · 4 blocked on Phase 9 (Demand Forecast, Honors, KPIs,
+Attrition Analytics) · 7 remain for Phase 7c (Dean's Enrollment Dashboard/
+Stuck Students/Reports, Executive Director's Institution Dashboard/
+Reports, Registrar Head's Policy Settings/Compliance Reports).
 
 ---
 
 # ■ What Is Built
 
-## API surface — 41 routes
+## API surface — 48 routes
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
@@ -951,6 +1257,19 @@ request's `action` field (ADR 0011).
 write pair with no per-row ownership dimension to split by Policy ability,
 re-checked by `QueueTicketPolicy` as defense in depth.
 
+**No `role:` middleware, role-scoped Policy gate (Phase 7b):**
+`POST /enrollments/{id}/withdraw` (Student, own `enrolled` enrollment —
+`EnrollmentPolicy::withdraw`) · `GET`/`PATCH
+/withdrawal-requests[/{id}]` (Student own / Registrar Staff and Registrar
+Head all reads; Registrar-Staff-only `approve`/`reject` —
+`WithdrawalRequest::scopeVisibleTo` + `WithdrawalRequestPolicy`) ·
+`GET`/`POST`/`PATCH /transferee-credits[/{id}]` (Student own / Registrar
+Staff and Registrar Head all reads; Registrar-Staff-only writes —
+`TransfereeCredit::scopeVisibleTo` + `TransfereeCreditPolicy`) ·
+`GET /class-rosters` (Faculty own sections / Registrar Staff and
+Registrar Head all — `EnrollmentSubject::scopeVisibleTo` +
+`EnrollmentSubjectPolicy`).
+
 ## Database — 26 tables
 
 Identity and reference: `users`, `personal_access_tokens`, `programs`,
@@ -961,12 +1280,16 @@ Scheduling: `sections`, `schedule_proposals`, `faculty_availabilities`,
 `faculty_subject_preferences`.
 Enrollment records: `student_profiles` (own-record read only, Phase 1),
 `enrollments`, `enrollment_subjects` (**Phase 6 — API-backed** via
-`GET`/`POST`/`PATCH /enrollments`), `academic_grades` (**Phase 7a** —
-`GET`/`POST`/`PATCH /academic-grades`), `queue_tickets` (**Phase 7a** —
+`GET`/`POST`/`PATCH /enrollments`; **Phase 7b** — also read via
+`GET /class-rosters`), `academic_grades` (**Phase 7a** —
+`GET`/`POST`/`PATCH /academic-grades`; **Phase 7b** — read widened to
+Registrar Staff), `queue_tickets` (**Phase 7a** —
 `GET`/`PATCH /queue-tickets`), `payments` and `enrollment_documents`
 (**Phase 7a** — written/read via `POST /enrollments/{id}/payment` and
-`GET /enrollment-documents`). Still **schema only, no API**:
-`transferee_credits`, `withdrawal_requests` (Phase 7b).
+`GET /enrollment-documents`; **Phase 7b** — read widened to Registrar
+Staff), `transferee_credits` and `withdrawal_requests` (**Phase 7b** —
+`GET`/`POST`/`PATCH /transferee-credits` and `POST
+/enrollments/{id}/withdraw` + `GET`/`PATCH /withdrawal-requests`).
 
 **Phase 4 additions:** operational `audit_logs` and `notifications`;
 schema-only `prediction_runs`, `section_demand_forecasts`, and
@@ -995,9 +1318,9 @@ shell, branded 404. Plus 18 reviewed shadcn components (12 from Phase 3 + 6
 added in Phase 5: Table, Select, Dialog, Alert Dialog, Pagination, Toaster),
 a strict-Zod API client with PATCH/DELETE support, and TanStack Query.
 
-23 of 40 modules are now real workspaces wired to live API data — see the
-Portal Feature Matrix above. The other 17 remain placeholders. Every
-non-auth, non-health resource group in the 41-route inventory now has at
+29 of 40 modules are now real workspaces wired to live API data — see the
+Portal Feature Matrix above. The other 11 remain placeholders. Every
+non-auth, non-health resource group in the 48-route inventory now has at
 least one UI consumer.
 
 There is one auth path. The dev-only demo mode and its committed credential
@@ -1121,7 +1444,8 @@ used for section viability thresholds.
 | Regular/irregular student classification and block-section reservation | Phase 6 — **mechanism implemented** (`sections.is_block_exclusive`, `student_profiles.enrollment_category`), comparison uses a documented placeholder string pending GRC's real vocabulary (FR-ENR-011) |
 | Section-viability threshold and exception authority | Phase 2 (implemented informational-only) |
 | Room capacity source and conflict rules | Phase 2 (deliberately out of scope, ADR 0010) |
-| Enrollment reservation timeout and seat-release rules | Phase 6 — still unimplemented; seats are reserved immediately and permanently on submission |
+| Enrollment reservation timeout and seat-release rules | Phase 6 — reservation timeout still unimplemented (seats are reserved immediately and permanently on submission). Phase 7b — **withdrawal seat release mechanism implemented**, config-flagged (`enrollment.withdrawal.releases_seats`, default `true`); not yet confirmed as institutional policy |
+| Cross-institution grade/credit equivalence for transferee credits | Phase 7b — **mechanism implemented** (record, audit, display only); `source_grade` stays a free string with no equivalence rule, and approved credits never feed `BuildEligibleSubjectPool` |
 | Queue-ticket reset, priority, "how many serving at once" | Phase 7a — **mechanism implemented** (`waiting`→`serving`→`served` two-step order only); no reset cadence, priority rule, or single-active-ticket constraint enforced |
 | Registrar Head's "authorized edge case" scope for override/void (PRD §3.7) | Phase 7a — **mechanism implemented** (`void` scoped to `pending_payment` only); documented as a scope choice, not confirmed policy, in `EnrollmentPolicy::void` |
 | Payment confirmation required fields and supporting references | Phase 7a — **mechanism implemented** (`external_reference`/`amount` both optional); no required-field rule or currency/rounding policy enforced |
@@ -1149,6 +1473,13 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 70% to 95%, and Row 8 (nine role portals) from 58% to 73%, moving overall completion from 67% to 73%. | Row 5: all 5 of Process 3.0's subprocesses complete except the tail forwarding attrition events to Process 4.0, deferred to Phase 9. Row 8: 29/40 modules connected. No other row's weight or Done% changed. |
+| 2026-07-30 | Split the remainder of Phase 7b again: deliver withdrawal/transferee-credit/class-roster APIs plus the Registrar Staff and Faculty portal modules ("records core") this session; defer the Dean/Executive Director dashboards to a new "Phase 7c". | User's explicit scope choice via `AskUserQuestion`. The dashboards are the only part of the original Phase 7b scope with no PRD-specified content (FR-ANL-003 is the sole substantive requirement, deferred to Phase 9/Process 4.0) — building them now would mean inventing institutional definitions, which `AGENTS.md` forbids. |
+| 2026-07-30 | Gate withdrawal seat release behind `config('enrollment.withdrawal.releases_seats')`, default `true`; drop the `enrollment_subjects` row unconditionally either way. | User's explicit choice via `AskUserQuestion`. Seats are reserved immediately and permanently on submission today, so *not* releasing them on withdrawal would permanently inflate `enrolled_count` and wrongly block other students — but whether release is the confirmed institutional policy is still §17-open, so it's mechanism-implemented, value-flagged, the same shape as `max_regular_units`. |
+| 2026-07-30 | `TransfereeCredit` approval never feeds `BuildEligibleSubjectPool`; the pool keeps reading only locked `academic_grades`. | User's explicit choice via `AskUserQuestion`. Cross-institution grade equivalence is an open PRD §17 decision — a foreign "1.50" must not silently unlock a local subject's prerequisite. Proven live: approving a credit mapped to a subject's own prerequisite left the dependent subject's eligibility verdict unchanged. |
+| 2026-07-30 | Seed the "other actor's" data directly via Eloquent in `WithdrawalRequestsEndpointTest`/`TransfereeCreditsEndpointTest` rather than a second login+HTTP-submit within one test method. | Root-caused a 403-vs-200 test failure to a documented Sanctum gotcha: chaining `withToken()` for two different actors in one test silently reuses the first actor's cached guard resolution. `EnrollmentsEndpointTest.php` already recorded this fix (`makeEnrollment()`'s docblock); the new withdrawal/transferee-credit tests hadn't yet applied it. |
+| 2026-07-30 | `RegistrarRecordsWorkspace` renders only the module matching `initialModuleId`, unlike `AccountingPaymentWorkspace`/`AdmissionProvisioningWorkspace` which always render every card. | Those two workspaces' modules are sequential steps of one flow; Registrar Staff's four (Credit Mappings, Drops & Withdrawals, Academic Records, Enrollment Documents) are unrelated record types — showing all four on every visit would cram four unrelated tables onto one screen. Every query hook is still called unconditionally per the Rules of Hooks; only the inactive ones are `enabled: false`. |
+| 2026-07-30 | `GradeSubmissionWorkspace` populates its per-section student list from the new class-roster read rather than a new student-search UI. | No student-directory endpoint exists anywhere in this API; the roster already returns exactly the (student_id, student_number) pairs a section needs, and Faculty already reads it for the Class Rosters module. |
 | 2026-07-30 | Split Phase 7 into 7a (money path: grade encoding → approval → payment → COM) and 7b (transferee credits, withdrawal, remaining portals), and deliver only 7a this session. | User's explicit choice via `AskUserQuestion` when the phase-7 plan was scoped, given the full phase's size (5 DFD subprocesses, 10 FR-FIN requirements, 16 modules across 7 roles). |
 | 2026-07-30 | Scope Registrar Head's `void` action to `pending_payment` only, not any pre-`enrolled` state. | PRD §3.7's "authorized edge cases" has no further definition. A narrow, documented scope avoids overlapping `registrar_reject` (pre-approval) or the Phase 7b withdrawal flow (post-`enrolled`), and avoids asserting an unconfirmed institutional policy as fact. |
 | 2026-07-30 | `ConfirmPayment` checks for an existing `Payment` row *before* checking the enrollment's current status. | A repeat confirmation call naturally arrives after the enrollment has already moved to `enrolled` — checking status first would incorrectly reject a call FR-FIN-009 requires to succeed idempotently. Proven live: a second call with different, contradictory input returned the original record unchanged. |
@@ -1213,4 +1544,5 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-28 | Phase 4 — Cross-cutting backend & ML substrate | Merged; 503/503 backend tests |
 | 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | Merged; backend 519/519, frontend 216/216 |
 | 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog) | Merged; live-verified; backend 563/563, frontend 224/224 |
-| 2026-07-30 | Phase 7a — Process 3.0 money path (9 tasks, 8 modules, 8 new endpoints, idempotent payment confirmation) | This entry; live-verified; backend 605/605, frontend 243/243 |
+| 2026-07-30 | Phase 7a — Process 3.0 money path (9 tasks, 8 modules, 8 new endpoints, idempotent payment confirmation) | Merged `fc56148`; live-verified; backend 605/605, frontend 243/243 |
+| 2026-07-30 | Phase 7b — Transferee credits, withdrawal, Registrar Staff portal (8 tasks, 6 modules, 7 new endpoints, idempotent withdrawal seat release) | This entry; live-verified; backend 641/641, frontend 243/243 |

@@ -26,6 +26,10 @@ final class AuditableType
 
     public const QUEUE_TICKET = 'queue_ticket';
 
+    public const WITHDRAWAL_REQUEST = 'withdrawal_request';
+
+    public const TRANSFEREE_CREDIT = 'transferee_credit';
+
     /**
      * @return list<string>
      */
@@ -43,6 +47,8 @@ final class AuditableType
             self::ENROLLMENT,
             self::ACADEMIC_GRADE,
             self::QUEUE_TICKET,
+            self::WITHDRAWAL_REQUEST,
+            self::TRANSFEREE_CREDIT,
         ];
     }
 }

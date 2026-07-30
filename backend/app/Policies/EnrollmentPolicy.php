@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Domain\Identity\UserRole;
+use App\Models\Enrollment;
 use App\Models\User;
 
 /**
@@ -66,5 +67,19 @@ final class EnrollmentPolicy
     public function confirmPayment(User $user): bool
     {
         return $user->role === UserRole::AccountingStaff;
+    }
+
+    /**
+     * FR-FIN-004: only the owning Student may request withdrawal from their
+     * own `enrolled` enrollment — an instance-level ownership check, unlike
+     * every other ability here, because this is the first Student action
+     * targeting a specific pre-existing `Enrollment` by route ID rather than
+     * their own resolved `StudentProfile`. Mirrors `AcademicGradePolicy::update`'s
+     * role-plus-ownership shape.
+     */
+    public function withdraw(User $user, Enrollment $enrollment): bool
+    {
+        return $user->role === UserRole::Student
+            && $enrollment->student->user_id === $user->id;
     }
 }

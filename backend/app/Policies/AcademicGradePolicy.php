@@ -7,10 +7,12 @@ use App\Models\AcademicGrade;
 use App\Models\User;
 
 /**
- * Three roles may list grades (PRD §4.3, §5.3 DFD 3.1): the owning Student,
- * Faculty (their own sections' rosters), and the Registrar Head (every
- * grade, as keeper of the official record). "Which rows" is resolved by
- * `AcademicGrade::scopeVisibleTo` — this Policy is the role-level gate.
+ * Four roles may list grades (PRD §4.3, §5.3 DFD 3.1): the owning Student,
+ * Faculty (their own sections' rosters), the Registrar Head (every grade,
+ * as keeper of the official record), and Registrar Staff (every grade too —
+ * PRD §3.8 "view permitted academic records", widened in Phase 7b Task 3).
+ * "Which rows" is resolved by `AcademicGrade::scopeVisibleTo` — this Policy
+ * is the role-level gate.
  *
  * `update` and `submit` share one ownership check (own-section, draft-only
  * content changes and the Faculty's own draft→submitted transition); `lock`
@@ -25,6 +27,7 @@ final class AcademicGradePolicy
             UserRole::Student,
             UserRole::Faculty,
             UserRole::RegistrarHead,
+            UserRole::RegistrarStaff,
         ], true);
     }
 

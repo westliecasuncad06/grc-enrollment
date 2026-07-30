@@ -69,6 +69,12 @@ const schedulingWorkspaceRegions: Record<string, string> = {
   "com-finalization": "Accounting payment workspace",
   "queue-payment": "Payment queue status workspace",
   "grades-com": "Academic records workspace",
+  "credit-mappings": "Registrar records workspace",
+  "drops-withdrawals": "Registrar records workspace",
+  "academic-records": "Registrar records workspace",
+  "enrollment-documents": "Registrar records workspace",
+  "class-rosters": "Class rosters workspace",
+  "grade-submission": "Grade submission workspace",
 }
 
 describe("PortalModulePage", () => {

@@ -68,6 +68,20 @@ final class AuditAction
 
     public const ENROLLMENT_PAYMENT_CONFIRMED = 'enrollment.payment_confirmed';
 
+    public const WITHDRAWAL_REQUEST_CREATED = 'withdrawal_request.created';
+
+    public const WITHDRAWAL_REQUEST_APPROVED = 'withdrawal_request.approved';
+
+    public const WITHDRAWAL_REQUEST_REJECTED = 'withdrawal_request.rejected';
+
+    public const TRANSFEREE_CREDIT_CREATED = 'transferee_credit.created';
+
+    public const TRANSFEREE_CREDIT_UPDATED = 'transferee_credit.updated';
+
+    public const TRANSFEREE_CREDIT_APPROVED = 'transferee_credit.approved';
+
+    public const TRANSFEREE_CREDIT_REJECTED = 'transferee_credit.rejected';
+
     /**
      * @return list<string>
      */
@@ -106,6 +120,13 @@ final class AuditAction
             self::QUEUE_TICKET_SERVING_STARTED,
             self::QUEUE_TICKET_SERVED,
             self::ENROLLMENT_PAYMENT_CONFIRMED,
+            self::WITHDRAWAL_REQUEST_CREATED,
+            self::WITHDRAWAL_REQUEST_APPROVED,
+            self::WITHDRAWAL_REQUEST_REJECTED,
+            self::TRANSFEREE_CREDIT_CREATED,
+            self::TRANSFEREE_CREDIT_UPDATED,
+            self::TRANSFEREE_CREDIT_APPROVED,
+            self::TRANSFEREE_CREDIT_REJECTED,
         ];
     }
 }

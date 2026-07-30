@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
+use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurriculumController;
 use App\Http\Controllers\Api\V1\EligibleSubjectController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
@@ -21,6 +22,8 @@ use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\SubjectController;
+use App\Http\Controllers\Api\V1\TransfereeCreditController;
+use App\Http\Controllers\Api\V1\WithdrawalRequestController;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
 
@@ -94,6 +97,33 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // FR-FIN-010: Student own, Registrar Head all —
         // EnrollmentDocument::scopeVisibleTo.
         Route::get('/enrollment-documents', [EnrollmentDocumentController::class, 'index'])->name('enrollment-documents.index');
+
+        // FR-FIN-004 / PRD §4.2 rule 7: Student-only, own `enrolled`
+        // enrollment. No `role:` middleware — EnrollmentPolicy::withdraw
+        // resolves the instance-level ownership check.
+        Route::post('/enrollments/{enrollment}/withdraw', [EnrollmentController::class, 'withdraw'])->name('enrollments.withdraw');
+
+        // Role-scoped read (Student own, Registrar Staff and Registrar Head
+        // all — WithdrawalRequest::scopeVisibleTo); `decide` (approve/reject)
+        // is Registrar Staff only per PRD §3.8's literal role assignment.
+        // No `role:` middleware — WithdrawalRequestPolicy resolves both.
+        Route::get('/withdrawal-requests', [WithdrawalRequestController::class, 'index'])->name('withdrawal-requests.index');
+        Route::patch('/withdrawal-requests/{withdrawalRequest}', [WithdrawalRequestController::class, 'update'])->name('withdrawal-requests.update');
+
+        // FR-FIN-003 / PRD §3.8, §10.3: Registrar Staff records, edits, and
+        // decides transferee credits (Student and Registrar Head read only
+        // — TransfereeCredit::scopeVisibleTo). No `role:` middleware —
+        // TransfereeCreditPolicy resolves all three per request, the same
+        // shape WithdrawalRequestController uses.
+        Route::get('/transferee-credits', [TransfereeCreditController::class, 'index'])->name('transferee-credits.index');
+        Route::post('/transferee-credits', [TransfereeCreditController::class, 'store'])->name('transferee-credits.store');
+        Route::patch('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'update'])->name('transferee-credits.update');
+
+        // PRD §3.2 "View assigned teaching schedules and class rosters" —
+        // Faculty own sections, Registrar Staff/Head all
+        // (EnrollmentSubject::scopeVisibleTo). No `role:` middleware —
+        // EnrollmentSubjectPolicy resolves the role-level boundary.
+        Route::get('/class-rosters', [ClassRosterController::class, 'index'])->name('class-rosters.index');
 
         // Role-scoped read (Student own, Faculty own sections, Registrar
         // Head all — AcademicGrade::scopeVisibleTo). Writes carry no

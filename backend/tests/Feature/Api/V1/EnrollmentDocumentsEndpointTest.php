@@ -145,4 +145,25 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonCount(2, 'data');
     }
+
+    /**
+     * Phase 7b Task 3: Registrar Staff gets the same broad read access the
+     * Registrar Head already has (PRD §3.8 "view permitted ... enrollment
+     * documents") — mirrors the test directly above.
+     */
+    public function test_a_registrar_staff_sees_every_enrollment_document(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'student.a.staffdoc@grc.test', '2026-0005');
+        $this->makeDocument($studentA, $term);
+        $studentB = $this->makeStudent($curriculum, 'student.b.staffdoc@grc.test', '2026-0006');
+        $this->makeDocument($studentB, $term);
+
+        $registrarStaffToken = $this->tokenForNewUser(UserRole::RegistrarStaff, 'registrar-staff.docview@grc.test');
+
+        $response = $this->withToken($registrarStaffToken)->getJson('/api/v1/enrollment-documents');
+
+        $response->assertOk()->assertJsonCount(2, 'data');
+    }
 }

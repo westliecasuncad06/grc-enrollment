@@ -393,4 +393,28 @@ final class AcademicGradesEndpointTest extends TestCase
         $paged->assertOk()->assertJsonCount(1, 'data');
         $paged->assertJsonPath('meta.total', 2);
     }
+
+    /**
+     * Phase 7b Task 3: Registrar Staff gets the same broad read access the
+     * Registrar Head already has (PRD §3.8 "view permitted academic
+     * records") — mirrors the test directly above.
+     */
+    public function test_a_registrar_staff_sees_every_grade(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject();
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.staffview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $subject, $professor);
+        $studentA = $this->makeStudent($curriculum);
+        $this->makeGrade($studentA, $subject, $section, $term, $professor);
+
+        $studentB = $this->makeStudent($curriculum, 'second.student.staffview@grc.test', '2026-0005');
+        $this->makeGrade($studentB, $subject, $section, $term, $professor);
+
+        $registrarStaffToken = $this->tokenForNewUser(UserRole::RegistrarStaff, 'registrar-staff.gradeview@grc.test');
+
+        $response = $this->withToken($registrarStaffToken)->getJson('/api/v1/academic-grades');
+        $response->assertOk()->assertJsonCount(2, 'data');
+    }
 }

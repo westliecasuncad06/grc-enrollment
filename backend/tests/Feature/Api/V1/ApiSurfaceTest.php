@@ -25,6 +25,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
+            'GET|HEAD api/v1/class-rosters',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/eligible-subjects',
             'GET|HEAD api/v1/enrollment-documents',
@@ -40,6 +41,8 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/subjects',
+            'GET|HEAD api/v1/transferee-credits',
+            'GET|HEAD api/v1/withdrawal-requests',
             'PATCH api/v1/academic-grades/{academicGrade}',
             'PATCH api/v1/curricula/{curriculum}',
             'PATCH api/v1/enrollments/{enrollment}',
@@ -49,17 +52,21 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/queue-tickets/{queueTicket}',
             'PATCH api/v1/schedule-proposals/{scheduleProposal}',
             'PATCH api/v1/sections/{section}',
+            'PATCH api/v1/transferee-credits/{transfereeCredit}',
+            'PATCH api/v1/withdrawal-requests/{withdrawalRequest}',
             'POST api/v1/academic-grades',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
             'POST api/v1/enrollments',
             'POST api/v1/enrollments/{enrollment}/payment',
+            'POST api/v1/enrollments/{enrollment}/withdraw',
             'POST api/v1/faculty-availabilities',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
             'POST api/v1/student-profiles',
+            'POST api/v1/transferee-credits',
         ], $routes);
     }
 
@@ -69,6 +76,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.auth.logout',
             'api.v1.auth.me',
             'api.v1.audit-logs.index',
+            'api.v1.class-rosters.index',
             'api.v1.notifications.index',
             'api.v1.notifications.read',
             'api.v1.programs',
@@ -82,6 +90,12 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.enrollments.store',
             'api.v1.enrollments.update',
             'api.v1.enrollments.payment',
+            'api.v1.enrollments.withdraw',
+            'api.v1.withdrawal-requests.index',
+            'api.v1.withdrawal-requests.update',
+            'api.v1.transferee-credits.index',
+            'api.v1.transferee-credits.store',
+            'api.v1.transferee-credits.update',
             'api.v1.enrollment-documents.index',
             'api.v1.academic-grades.index',
             'api.v1.academic-grades.store',
@@ -310,6 +324,80 @@ final class ApiSurfaceTest extends TestCase
 
             $this->assertSame([], array_values($roleMiddleware));
         }
+    }
+
+    /**
+     * Own-record only for the create side, role-resolved per-request for
+     * the decide side — no `role:` middleware on any of the three routes.
+     * EnrollmentPolicy::withdraw and WithdrawalRequestPolicy resolve the
+     * boundaries instead.
+     */
+    public function test_withdrawal_routes_carry_no_role_middleware(): void
+    {
+        $names = [
+            'api.v1.enrollments.withdraw',
+            'api.v1.withdrawal-requests.index',
+            'api.v1.withdrawal-requests.update',
+        ];
+
+        foreach ($names as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+
+            $roleMiddleware = array_filter(
+                $route->gatherMiddleware(),
+                static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+            );
+
+            $this->assertSame([], array_values($roleMiddleware));
+        }
+    }
+
+    /**
+     * No ownership dimension — Registrar Staff manages every transferee
+     * credit — so, like the withdrawal routes, none of the three carry
+     * `role:` middleware. `TransfereeCreditPolicy` resolves each ability.
+     */
+    public function test_transferee_credit_routes_carry_no_role_middleware(): void
+    {
+        $names = [
+            'api.v1.transferee-credits.index',
+            'api.v1.transferee-credits.store',
+            'api.v1.transferee-credits.update',
+        ];
+
+        foreach ($names as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+
+            $roleMiddleware = array_filter(
+                $route->gatherMiddleware(),
+                static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+            );
+
+            $this->assertSame([], array_values($roleMiddleware));
+        }
+    }
+
+    /**
+     * Faculty/Registrar Staff/Registrar Head, resolved by
+     * `EnrollmentSubjectPolicy` — no `role:` middleware, the same shape as
+     * the withdrawal and transferee-credit routes.
+     */
+    public function test_class_rosters_carry_no_role_middleware(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.class-rosters.index');
+
+        $this->assertNotNull($route);
+
+        $roleMiddleware = array_filter(
+            $route->gatherMiddleware(),
+            static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+        );
+
+        $this->assertSame([], array_values($roleMiddleware));
     }
 
     public function test_the_login_route_is_throttled(): void

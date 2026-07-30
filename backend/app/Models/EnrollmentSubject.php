@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -50,5 +52,25 @@ final class EnrollmentSubject extends Model
     public function section(): BelongsTo
     {
         return $this->belongsTo(Section::class);
+    }
+
+    /**
+     * Backs the class roster read (PRD §3.2 "View assigned teaching
+     * schedules and class rosters"). `EnrollmentSubjectPolicy::viewAny`
+     * already restricts callers to Faculty, Registrar Staff, and Registrar
+     * Head before this scope ever runs, so only Faculty needs narrowing
+     * here — to their own sections, the same `professor_id` check
+     * `Section::scopeVisibleTo` uses.
+     *
+     * @param  Builder<EnrollmentSubject>  $query
+     * @return Builder<EnrollmentSubject>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->role === UserRole::Faculty) {
+            return $query->whereHas('section', fn ($sectionQuery) => $sectionQuery->where('professor_id', $user->id));
+        }
+
+        return $query;
     }
 }
