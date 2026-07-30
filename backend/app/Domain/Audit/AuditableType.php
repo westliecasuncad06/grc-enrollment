@@ -24,6 +24,8 @@ final class AuditableType
 
     public const ACADEMIC_GRADE = 'academic_grade';
 
+    public const QUEUE_TICKET = 'queue_ticket';
+
     /**
      * @return list<string>
      */
@@ -40,6 +42,7 @@ final class AuditableType
             self::FACULTY_DIRECTORY,
             self::ENROLLMENT,
             self::ACADEMIC_GRADE,
+            self::QUEUE_TICKET,
         ];
     }
 }

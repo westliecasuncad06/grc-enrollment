@@ -82,6 +82,14 @@ tags:
       are role-scoped: Student own, Faculty own sections, Registrar Head
       all. `final_grade` carries no scale or passing-mark assertion — PRD
       §17 leaves the official grading scale an open decision.
+  - name: Payments
+    description: >
+      The payment queue (PRD §5.3 FR-FIN-006). Accounting Staff only —
+      gated by both `role:accounting_staff` and QueueTicketPolicy, since
+      neither transition has a per-ticket ownership dimension the way
+      enrollment/grade transitions do. §17 leaves reset cadence, priority,
+      and how many tickets may be `serving` at once unconfirmed; only the
+      two-step order (`waiting` → `serving` → `served`) is enforced.
   - name: Notifications
     description: >
       Private, user-owned in-app notifications. Every authenticated role may
@@ -1690,6 +1698,137 @@ paths:
           description: >
             The submitted data is invalid, the grade is no longer editable,
             or the action does not match the grade's current status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/queue-tickets:
+    get:
+      operationId: getQueueTickets
+      summary: List the payment queue
+      description: >
+        Accounting Staff only. Ordered deterministically by `queue_date`
+        then `id` (arrival order) — PRD §17 leaves any reset or priority
+        policy unconfirmed, so no ordering beyond plain arrival is asserted.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: queue_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - waiting
+              - serving
+              - served
+              - cancelled
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The paginated payment queue.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedQueueTicketCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/queue-tickets/{queueTicket}:
+    patch:
+      operationId: patchQueueTicket
+      summary: Advance one ticket in the payment queue
+      description: >
+        Accounting Staff only. `action: serve` moves `waiting` → `serving`;
+        `action: complete` moves `serving` → `served`. §17 leaves reset
+        cadence, priority, and how many tickets may be `serving` at once
+        unconfirmed — only this two-step order is enforced, never a
+        single-active-ticket rule.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: queueTicket
+          in: path
+          required: true
+          description: Queue ticket ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQueueTicketRequest"
+      responses:
+        "200":
+          description: The transition was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueTicketResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No queue ticket exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The action does not match the ticket's current status.
           content:
             application/json:
               schema:
@@ -3358,6 +3497,82 @@ components:
         remarks:
           type: ["string", "null"]
           description: Prohibited when action is submit or lock.
+    PaginatedQueueTicketCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueTicketResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    QueueTicketResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/QueueTicketResource"
+    QueueTicketResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - enrollment_id
+        - student_number
+        - ticket_number
+        - queue_date
+        - status
+        - status_label
+        - served_at
+      properties:
+        type:
+          type: string
+          const: queue_ticket
+        id:
+          type: integer
+        enrollment_id:
+          type: integer
+        student_number:
+          type: string
+        ticket_number:
+          type: string
+          description: Opaque — PRD §17 leaves the numbering scheme unconfirmed.
+        queue_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+            - waiting
+            - serving
+            - served
+            - cancelled
+        status_label:
+          type: string
+        served_at:
+          type: ["string", "null"]
+          format: date-time
+    UpdateQueueTicketRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - serve
+            - complete
     StoreSectionRequest:
       type: object
       additionalProperties: false

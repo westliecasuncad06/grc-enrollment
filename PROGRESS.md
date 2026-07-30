@@ -121,7 +121,21 @@ interrupted.
   or passing-mark asserted, per PRD §17. 15 new focused tests all green;
   full backend suite 588/588 passing; PHPStan level 8, Pint, and Redocly
   all clean.
-- ⬜ Task 4 — payment queue + serving number API.
+- ✅ **Task 4 — payment queue + serving number API (FR-FIN-006).**
+  `GET /api/v1/queue-tickets` (Accounting Staff only, deterministic
+  `queue_date` then `id` order, filterable by `status`/`queue_date`,
+  paginated) and `PATCH /api/v1/queue-tickets/{queueTicket}` with
+  `action: serve` (`waiting`→`serving`) or `action: complete`
+  (`serving`→`served`), following ADR 0011's constant-trio + row-lock
+  shape. Unlike Enrollment/AcademicGrade, both transitions are gated to the
+  same single role with no per-ticket ownership dimension, so the route
+  carries the coarse `role:accounting_staff` middleware (re-checked by
+  `QueueTicketPolicy`) rather than a bare Policy-only gate. §17 leaves reset
+  cadence, priority, and "how many tickets may be serving at once"
+  unconfirmed — only the two-step order is enforced, documented in the
+  Action's docblock the same way `QueueTicketStatus` already does. 8 new
+  focused tests all green; full backend suite 596/596 passing; PHPStan
+  level 8, Pint, and Redocly all clean.
 - ⬜ Task 5 — payment confirmation + Digital COM API.
 - ⬜ Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).
 - ⬜ Task 9 — docs, full quality gate, live HTTP proof, `PROGRESS.md`

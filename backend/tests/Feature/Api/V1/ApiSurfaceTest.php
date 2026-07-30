@@ -34,6 +34,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/notifications',
             'GET|HEAD api/v1/programs',
+            'GET|HEAD api/v1/queue-tickets',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/student-profile',
@@ -44,6 +45,7 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'PATCH api/v1/notifications/{notification}/read',
+            'PATCH api/v1/queue-tickets/{queueTicket}',
             'PATCH api/v1/schedule-proposals/{scheduleProposal}',
             'PATCH api/v1/sections/{section}',
             'POST api/v1/academic-grades',
@@ -80,6 +82,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.academic-grades.index',
             'api.v1.academic-grades.store',
             'api.v1.academic-grades.update',
+            'api.v1.queue-tickets.index',
+            'api.v1.queue-tickets.update',
             'api.v1.faculty-availabilities.index',
             'api.v1.faculty-members.index',
             'api.v1.faculty-availabilities.store',
@@ -204,6 +208,13 @@ final class ApiSurfaceTest extends TestCase
 
         $this->assertNotNull($auditRoute);
         $this->assertContains('role:registrar_head', $auditRoute->gatherMiddleware());
+
+        foreach (['api.v1.queue-tickets.index', 'api.v1.queue-tickets.update'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:accounting_staff', $route->gatherMiddleware());
+        }
 
         foreach (['api.v1.notifications.index', 'api.v1.notifications.read'] as $name) {
             $route = Route::getRoutes()->getByName($name);

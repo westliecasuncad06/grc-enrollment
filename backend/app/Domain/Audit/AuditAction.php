@@ -62,6 +62,10 @@ final class AuditAction
 
     public const ACADEMIC_GRADE_LOCKED = 'academic_grade.locked';
 
+    public const QUEUE_TICKET_SERVING_STARTED = 'queue_ticket.serving_started';
+
+    public const QUEUE_TICKET_SERVED = 'queue_ticket.served';
+
     /**
      * @return list<string>
      */
@@ -97,6 +101,8 @@ final class AuditAction
             self::ACADEMIC_GRADE_UPDATED,
             self::ACADEMIC_GRADE_SUBMITTED,
             self::ACADEMIC_GRADE_LOCKED,
+            self::QUEUE_TICKET_SERVING_STARTED,
+            self::QUEUE_TICKET_SERVED,
         ];
     }
 }

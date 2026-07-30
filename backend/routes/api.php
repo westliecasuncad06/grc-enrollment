@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProgramController;
+use App\Http\Controllers\Api\V1\QueueTicketController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
@@ -138,6 +139,15 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::middleware('role:registrar_head')->group(function (): void {
             Route::get('/audit-logs', AuditLogController::class)
                 ->name('audit-logs.index');
+        });
+
+        // FR-FIN-006: both transitions are Accounting-only with no
+        // per-ticket ownership dimension (unlike enrollments/academic
+        // grades), so the coarse `role:` middleware fits here — re-checked
+        // by QueueTicketPolicy as defense in depth.
+        Route::middleware('role:accounting_staff')->group(function (): void {
+            Route::get('/queue-tickets', [QueueTicketController::class, 'index'])->name('queue-tickets.index');
+            Route::patch('/queue-tickets/{queueTicket}', [QueueTicketController::class, 'update'])->name('queue-tickets.update');
         });
     });
 });
