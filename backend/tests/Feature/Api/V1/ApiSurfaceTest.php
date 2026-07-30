@@ -27,6 +27,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/eligible-subjects',
+            'GET|HEAD api/v1/enrollment-documents',
             'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-members',
@@ -53,6 +54,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
             'POST api/v1/enrollments',
+            'POST api/v1/enrollments/{enrollment}/payment',
             'POST api/v1/faculty-availabilities',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/schedule-proposals',
@@ -79,6 +81,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.enrollments.index',
             'api.v1.enrollments.store',
             'api.v1.enrollments.update',
+            'api.v1.enrollments.payment',
+            'api.v1.enrollment-documents.index',
             'api.v1.academic-grades.index',
             'api.v1.academic-grades.store',
             'api.v1.academic-grades.update',
@@ -264,7 +268,15 @@ final class ApiSurfaceTest extends TestCase
      */
     public function test_enrollments_carry_no_role_middleware(): void
     {
-        foreach (['api.v1.enrollments.index', 'api.v1.enrollments.store', 'api.v1.enrollments.update'] as $name) {
+        $names = [
+            'api.v1.enrollments.index',
+            'api.v1.enrollments.store',
+            'api.v1.enrollments.update',
+            'api.v1.enrollments.payment',
+            'api.v1.enrollment-documents.index',
+        ];
+
+        foreach ($names as $name) {
             $route = Route::getRoutes()->getByName($name);
 
             $this->assertNotNull($route, "Missing route {$name}.");

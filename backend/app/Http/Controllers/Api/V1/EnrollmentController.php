@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Enrollment\ConfirmPayment;
 use App\Actions\Enrollment\ListEnrollments;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Actions\Enrollment\TransitionEnrollment;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Enrollment\ConfirmPaymentRequest;
 use App\Http\Requests\Api\V1\Enrollment\IndexEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\StoreEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\UpdateEnrollmentRequest;
 use App\Http\Resources\Api\V1\EnrollmentResource;
+use App\Http\Resources\Api\V1\PaymentConfirmationResource;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
 use App\Models\StudentProfile;
@@ -101,6 +104,31 @@ final class EnrollmentController extends Controller
         );
 
         $response = EnrollmentResource::make($enrollment)->response($request);
+
+        return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * FR-FIN-007–009: idempotent — a repeat call returns the existing
+     * payment/document rather than erroring or duplicating either. `201`
+     * is returned only the first time; a repeat call gets `200` since
+     * nothing new was created.
+     *
+     * @throws AuthenticationException
+     */
+    public function confirmPayment(
+        ConfirmPaymentRequest $request,
+        Enrollment $enrollment,
+        ConfirmPayment $confirmPayment,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('confirmPayment', Enrollment::class);
+
+        $result = $confirmPayment->execute($enrollment, $request->validated(), $actor, $contextFactory->fromRequest($request));
+
+        $response = PaymentConfirmationResource::make($result['enrollment'])->response($request);
+        $response->setStatusCode($result['created'] ? 201 : 200);
 
         return $this->cachePrivateResponse($response);
     }

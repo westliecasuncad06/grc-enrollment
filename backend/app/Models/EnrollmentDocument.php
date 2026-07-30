@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Domain\Enrollment\EnrollmentDocumentType;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -48,5 +50,23 @@ final class EnrollmentDocument extends Model
     public function enrollment(): BelongsTo
     {
         return $this->belongsTo(Enrollment::class);
+    }
+
+    /**
+     * FR-FIN-010: a Student sees only their own generated documents; the
+     * Registrar Head, as keeper of the official record, sees every one.
+     * No other role reads this endpoint — `EnrollmentDocumentPolicy::viewAny`
+     * restricts every other role to zero rows before this scope ever runs.
+     *
+     * @param  Builder<EnrollmentDocument>  $query
+     * @return Builder<EnrollmentDocument>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->role === UserRole::RegistrarHead) {
+            return $query;
+        }
+
+        return $query->whereHas('enrollment.student', fn ($studentQuery) => $studentQuery->where('user_id', $user->id));
     }
 }

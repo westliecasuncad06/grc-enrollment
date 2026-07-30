@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\CurriculumController;
 use App\Http\Controllers\Api\V1\EligibleSubjectController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
+use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
@@ -83,6 +84,16 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // `role:` middleware fits, so EnrollmentPolicy resolves the ability
         // per `action`. See ADR 0011.
         Route::patch('/enrollments/{enrollment}', [EnrollmentController::class, 'update'])->name('enrollments.update');
+
+        // FR-FIN-007–009: Accounting-only, idempotent payment confirmation
+        // + Digital COM generation. No `role:` middleware — EnrollmentPolicy
+        // resolves `confirmPayment` the same way it resolves the other two
+        // Registrar Head checkpoints.
+        Route::post('/enrollments/{enrollment}/payment', [EnrollmentController::class, 'confirmPayment'])->name('enrollments.payment');
+
+        // FR-FIN-010: Student own, Registrar Head all —
+        // EnrollmentDocument::scopeVisibleTo.
+        Route::get('/enrollment-documents', [EnrollmentDocumentController::class, 'index'])->name('enrollment-documents.index');
 
         // Role-scoped read (Student own, Faculty own sections, Registrar
         // Head all — AcademicGrade::scopeVisibleTo). Writes carry no

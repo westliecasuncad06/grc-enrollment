@@ -66,6 +66,8 @@ final class AuditAction
 
     public const QUEUE_TICKET_SERVED = 'queue_ticket.served';
 
+    public const ENROLLMENT_PAYMENT_CONFIRMED = 'enrollment.payment_confirmed';
+
     /**
      * @return list<string>
      */
@@ -103,6 +105,7 @@ final class AuditAction
             self::ACADEMIC_GRADE_LOCKED,
             self::QUEUE_TICKET_SERVING_STARTED,
             self::QUEUE_TICKET_SERVED,
+            self::ENROLLMENT_PAYMENT_CONFIRMED,
         ];
     }
 }

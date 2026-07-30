@@ -84,12 +84,16 @@ tags:
       §17 leaves the official grading scale an open decision.
   - name: Payments
     description: >
-      The payment queue (PRD §5.3 FR-FIN-006). Accounting Staff only —
-      gated by both `role:accounting_staff` and QueueTicketPolicy, since
-      neither transition has a per-ticket ownership dimension the way
-      enrollment/grade transitions do. §17 leaves reset cadence, priority,
-      and how many tickets may be `serving` at once unconfirmed; only the
-      two-step order (`waiting` → `serving` → `served`) is enforced.
+      The payment queue (PRD §5.3 FR-FIN-006), payment confirmation
+      (FR-FIN-007/008), and the generated Digital COM (FR-FIN-009/010).
+      Queue transitions are Accounting Staff only — gated by both
+      `role:accounting_staff` and QueueTicketPolicy, since neither
+      transition has a per-ticket ownership dimension the way
+      enrollment/grade transitions do; §17 leaves reset cadence, priority,
+      and how many tickets may be `serving` at once unconfirmed, so only
+      the two-step order (`waiting` → `serving` → `served`) is enforced.
+      Payment confirmation is idempotent and generates no PDF — the COM is
+      structured data a Student renders as a print-stylesheet page.
   - name: Notifications
     description: >
       Private, user-owned in-app notifications. Every authenticated role may
@@ -1492,6 +1496,156 @@ paths:
           description: >
             The submitted data is invalid, the action does not match the
             enrollment's current status, or a required reason is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/enrollments/{enrollment}/payment:
+    post:
+      operationId: postEnrollmentPayment
+      summary: Confirm an externally received payment and generate the Digital COM
+      description: >
+        Accounting Staff only, and only from `pending_payment`
+        (FR-FIN-007/008). One transaction: a `Payment` row, the enrollment's
+        own transition to `enrolled`, and the Digital COM
+        (`EnrollmentDocument`, type `com`). Idempotent (FR-FIN-009): a
+        repeat call — even one arriving after the enrollment has already
+        moved on to `enrolled` — returns the existing payment and document
+        rather than erroring or duplicating either, and receives `200`
+        instead of `201`. No PDF pipeline: `document_number` is an opaque
+        deterministic string and `storage_path` stays null; FR-FIN-010's
+        print/download is served by the Student module rendering the
+        structured response as a print-stylesheet page.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: enrollment
+          in: path
+          required: true
+          description: Enrollment ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmPaymentRequest"
+      responses:
+        "200":
+          description: >
+            An already-confirmed payment — the existing payment and
+            document are returned unchanged (idempotent repeat call).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentConfirmationResponse"
+        "201":
+          description: The payment was confirmed and the Digital COM generated.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentConfirmationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No enrollment exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            The submitted data is invalid, or the enrollment is not
+            currently `pending_payment` and has no existing payment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/enrollment-documents:
+    get:
+      operationId: getEnrollmentDocuments
+      summary: List generated enrollment documents (the Digital COM)
+      description: >
+        Role-scoped per FR-FIN-010 (see
+        App\Models\EnrollmentDocument::scopeVisibleTo): a Student sees only
+        their own documents; the Registrar Head, as keeper of the official
+        record, sees every one.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: enrollment_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: document_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - com
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The role-scoped, paginated document list.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedEnrollmentDocumentCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
           content:
             application/json:
               schema:
@@ -3573,6 +3727,119 @@ components:
           enum:
             - serve
             - complete
+    ConfirmPaymentRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        external_reference:
+          type: ["string", "null"]
+        amount:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 99999999.99
+          description: >
+            Exact decimal, matching the `payments.amount` column's own
+            `decimal(10,2)` capacity — PRD §17 leaves whether this field is
+            required, and any currency/rounding rule, unconfirmed.
+    PaymentConfirmationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - enrollment
+            - payment
+            - document
+          properties:
+            enrollment:
+              $ref: "#/components/schemas/EnrollmentResource"
+            payment:
+              type: object
+              additionalProperties: false
+              required:
+                - external_reference
+                - amount
+                - confirmed_at
+              properties:
+                external_reference:
+                  type: ["string", "null"]
+                amount:
+                  type: ["string", "null"]
+                confirmed_at:
+                  type: ["string", "null"]
+                  format: date-time
+            document:
+              type: object
+              additionalProperties: false
+              required:
+                - document_type
+                - document_number
+                - generated_at
+              properties:
+                document_type:
+                  type: ["string", "null"]
+                  enum:
+                    - com
+                    - null
+                document_number:
+                  type: ["string", "null"]
+                generated_at:
+                  type: ["string", "null"]
+                  format: date-time
+    PaginatedEnrollmentDocumentCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnrollmentDocumentResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    EnrollmentDocumentResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - enrollment_id
+        - student_number
+        - document_type
+        - document_type_label
+        - document_number
+        - generated_at
+      properties:
+        type:
+          type: string
+          const: enrollment_document
+        id:
+          type: integer
+        enrollment_id:
+          type: integer
+        student_number:
+          type: string
+        document_type:
+          type: string
+          enum:
+            - com
+        document_type_label:
+          type: string
+        document_number:
+          type: string
+          description: Opaque — PRD §17 leaves COM numbering unconfirmed.
+        generated_at:
+          type: string
+          format: date-time
     StoreSectionRequest:
       type: object
       additionalProperties: false

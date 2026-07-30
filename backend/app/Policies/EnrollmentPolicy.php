@@ -56,4 +56,15 @@ final class EnrollmentPolicy
     {
         return $user->role === UserRole::RegistrarHead;
     }
+
+    /**
+     * FR-FIN-007: confirming an externally received payment is Accounting
+     * Staff's own action, a third checkpoint after the Registrar Head's two
+     * (`decideApproval`, `void`) — no per-enrollment ownership dimension,
+     * same class-level shape as `QueueTicketPolicy::update`.
+     */
+    public function confirmPayment(User $user): bool
+    {
+        return $user->role === UserRole::AccountingStaff;
+    }
 }

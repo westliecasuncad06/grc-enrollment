@@ -136,7 +136,26 @@ interrupted.
   Action's docblock the same way `QueueTicketStatus` already does. 8 new
   focused tests all green; full backend suite 596/596 passing; PHPStan
   level 8, Pint, and Redocly all clean.
-- ⬜ Task 5 — payment confirmation + Digital COM API.
+- ✅ **Task 5 — payment confirmation + Digital COM API (FR-FIN-007–010).**
+  `POST /api/v1/enrollments/{enrollment}/payment` (Accounting only, only
+  from `pending_payment`): one transaction creates the `Payment` row,
+  transitions the enrollment to `enrolled`, and generates the Digital COM
+  (`EnrollmentDocument`, type `com`, opaque `COM%06d` number), mirroring
+  `SubmitEnrollment`'s five-write shape. **Idempotent** (FR-FIN-009): the
+  Action checks for an existing `Payment` *before* checking the
+  enrollment's status, so a repeat call — even one arriving after the
+  enrollment has already moved on to `enrolled` — returns the existing
+  payment/document rather than erroring or duplicating either (`200`
+  instead of `201`); a dedicated test asserts exactly one row of each
+  survives two calls. No PDF pipeline — `storage_path` stays null, and
+  FR-FIN-010's print/download is served by returning structured COM data
+  for the Student module to render as a print-stylesheet page.
+  `GET /api/v1/enrollment-documents` (Student own, Registrar Head all) via
+  a new `EnrollmentDocument::scopeVisibleTo`. 9 new focused tests all
+  green; full backend suite 605/605 passing; PHPStan level 8, Pint, and
+  Redocly all clean. **All 5 backend API tasks of Phase 7a are now
+  complete** — remaining: 3 frontend portal-module tasks (6–8) and the
+  final docs/gate/live-proof/merge task (9).
 - ⬜ Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).
 - ⬜ Task 9 — docs, full quality gate, live HTTP proof, `PROGRESS.md`
   recompute, merge to `main`, push to `origin`.

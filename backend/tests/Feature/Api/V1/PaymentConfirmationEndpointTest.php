@@ -1,0 +1,178 @@
+<?php
+
+namespace Tests\Feature\Api\V1;
+
+use App\Domain\Audit\AuditAction;
+use App\Domain\Curriculum\CurriculumStatus;
+use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Identity\AcademicStanding;
+use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Identity\UserRole;
+use App\Domain\Identity\UserStatus;
+use App\Domain\Notifications\NotificationType;
+use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\ProgramStatus;
+use App\Models\AcademicTerm;
+use App\Models\AuditLog;
+use App\Models\Curriculum;
+use App\Models\Enrollment;
+use App\Models\EnrollmentDocument;
+use App\Models\Notification;
+use App\Models\Payment;
+use App\Models\Program;
+use App\Models\StudentProfile;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+final class PaymentConfirmationEndpointTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private const PASSWORD = 'correct-horse-battery-staple';
+
+    private function makeTerm(): AcademicTerm
+    {
+        return AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+        ]);
+    }
+
+    private function makeCurriculum(): Curriculum
+    {
+        $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active]);
+
+        return Curriculum::create([
+            'program_id' => $program->id, 'name' => 'BSCS Curriculum',
+            'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active,
+        ]);
+    }
+
+    private function makeStudent(Curriculum $curriculum): StudentProfile
+    {
+        $user = User::create([
+            'name' => 'Test Student', 'email' => 'student.payment@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+        ]);
+
+        return StudentProfile::create([
+            'user_id' => $user->id,
+            'student_number' => '2026-0001',
+            'program_id' => $curriculum->program_id,
+            'curriculum_id' => $curriculum->id,
+            'year_level' => 1,
+            'admission_status' => AdmissionStatus::Admitted,
+            'academic_standing' => AcademicStanding::Good,
+        ]);
+    }
+
+    private function makeEnrollment(StudentProfile $student, AcademicTerm $term, EnrollmentStatus $status = EnrollmentStatus::PendingPayment): Enrollment
+    {
+        return Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => $status,
+            'total_units' => 3,
+            'submitted_at' => now(),
+        ]);
+    }
+
+    private function tokenForNewUser(UserRole $role, string $email): string
+    {
+        User::create([
+            'name' => 'Test '.$role->value, 'email' => $email,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+        ]);
+
+        return (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $email, 'password' => self::PASSWORD,
+        ])->json('data.token');
+    }
+
+    public function test_anonymous_request_is_unauthenticated(): void
+    {
+        $this->postJson('/api/v1/enrollments/1/payment', [])->assertUnauthorized();
+    }
+
+    public function test_a_non_accounting_role_cannot_confirm_payment(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $token = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar.paymentforbidden@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", []);
+
+        $response->assertForbidden();
+        $this->assertDatabaseCount('payments', 0);
+    }
+
+    public function test_confirming_payment_transitions_enrollment_and_generates_com(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.confirm@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'external_reference' => 'OR-000123',
+            'amount' => 1500.00,
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.enrollment.status', 'enrolled');
+        $response->assertJsonPath('data.payment.external_reference', 'OR-000123');
+        $response->assertJsonPath('data.document.document_number', sprintf('COM%06d', $enrollment->id));
+
+        self::assertSame('enrolled', $enrollment->refresh()->status->value);
+        self::assertNotNull($enrollment->payment_confirmed_at);
+        self::assertNotNull($enrollment->enrolled_at);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('enrollment_documents', 1);
+        self::assertSame(AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditLog::query()->sole()->action);
+        self::assertSame(NotificationType::EnrollmentPaymentConfirmed, Notification::query()->sole()->type);
+    }
+
+    public function test_confirming_payment_is_idempotent_and_creates_no_duplicate(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.idempotent@grc.test');
+
+        $first = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'external_reference' => 'OR-000123',
+        ]);
+        $first->assertCreated();
+
+        $second = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'external_reference' => 'OR-999999',
+        ]);
+
+        $second->assertOk();
+        $second->assertJsonPath('data.payment.external_reference', 'OR-000123');
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseCount('enrollment_documents', 1);
+        $this->assertDatabaseCount('audit_logs', 1);
+        $this->assertDatabaseCount('notifications', 1);
+        self::assertSame(Payment::query()->sole()->external_reference, 'OR-000123');
+        self::assertSame(EnrollmentDocument::query()->count(), 1);
+    }
+
+    public function test_payment_cannot_be_confirmed_from_a_non_pending_payment_status(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.wrongstate@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", []);
+
+        $response->assertUnprocessable();
+        $this->assertDatabaseCount('payments', 0);
+    }
+}
