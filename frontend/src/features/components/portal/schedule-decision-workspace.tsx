@@ -5,6 +5,8 @@ import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import type { UserRole } from "@/features/auth/roles"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -22,7 +24,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Skeleton } from "@/features/components/ui/skeleton"
+import { Field, FieldLabel } from "@/features/components/ui/field"
+import { Textarea } from "@/features/components/ui/textarea"
 import { sectionsQueryKey } from "@/features/hooks/use-reference-data"
 import {
   scheduleProposalsQueryKey,
@@ -50,10 +53,10 @@ function requiresReason(action: ScheduleAction) {
 }
 
 export function ScheduleDecisionControls({
-  role,
+  actorRole,
   proposals,
 }: {
-  role: UserRole
+  actorRole: UserRole
   proposals: readonly ScheduleProposal[]
 }) {
   const { session } = useAuth()
@@ -93,8 +96,11 @@ export function ScheduleDecisionControls({
       setReason("")
     },
   })
+  const reasonRequired =
+    pending !== null && requiresReason(pending.action) && !reason.trim()
+
   const confirm = async () => {
-    if (!pending || (requiresReason(pending.action) && !reason.trim())) return
+    if (!pending || reasonRequired) return
     setError("")
     try {
       await mutation.mutateAsync({
@@ -109,7 +115,7 @@ export function ScheduleDecisionControls({
     }
   }
   const selectable = proposals.filter(
-    (proposal) => availableScheduleActions(role, proposal).length > 0,
+    (proposal) => availableScheduleActions(actorRole, proposal).length > 0,
   )
   if (selectable.length === 0)
     return <p>No schedule decisions are currently available.</p>
@@ -127,7 +133,7 @@ export function ScheduleDecisionControls({
               Proposal #{proposal.id} · {proposal.status_label}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {availableScheduleActions(role, proposal).map((action) => (
+              {availableScheduleActions(actorRole, proposal).map((action) => (
                 <Button
                   key={action}
                   type="button"
@@ -160,15 +166,26 @@ export function ScheduleDecisionControls({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {pending && requiresReason(pending.action) && (
-            <label className="grid gap-1" htmlFor="decision-reason">
-              Decision reason
-              <textarea
+            <Field data-invalid={reasonRequired}>
+              <FieldLabel htmlFor="decision-reason">Decision reason</FieldLabel>
+              <Textarea
                 id="decision-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 disabled={mutation.isPending}
+                aria-describedby={
+                  reasonRequired ? "decision-reason-error" : undefined
+                }
               />
-            </label>
+              {reasonRequired && (
+                <p
+                  id="decision-reason-error"
+                  className="text-sm text-destructive"
+                >
+                  A reason is required to return this proposal.
+                </p>
+              )}
+            </Field>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={mutation.isPending}>
@@ -176,12 +193,7 @@ export function ScheduleDecisionControls({
             </AlertDialogCancel>
             <Button
               type="button"
-              disabled={
-                mutation.isPending ||
-                (pending !== null &&
-                  requiresReason(pending.action) &&
-                  !reason.trim())
-              }
+              disabled={mutation.isPending || reasonRequired}
               onClick={() => void confirm()}
             >
               {mutation.isPending ? "Saving decision" : "Confirm decision"}
@@ -197,46 +209,31 @@ export function ScheduleDecisionWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "dean"
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
-  if (!authorized)
-    return (
-      <section aria-label="Schedule decision workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
+
   return (
-    <section aria-label="Schedule decision workspace" className="grid gap-4">
-      <div>
-        <h2>Schedule approvals</h2>
-        <p>Review only the proposals assigned to the Dean checkpoint.</p>
-      </div>
-      {proposalsQuery.isLoading ? (
-        <Skeleton className="h-48" />
-      ) : proposalsQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Schedule proposals could not be loaded.{" "}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void proposalsQuery.refetch()}
-            >
-              Retry proposal data
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Dean decisions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScheduleDecisionControls
-              role="dean"
-              proposals={proposalsQuery.data ?? []}
-            />
-          </CardContent>
-        </Card>
-      )}
-    </section>
+    <WorkspacePage
+      title="Schedule approvals"
+      description="Review only the proposals assigned to the Dean checkpoint."
+      unauthorized={!authorized}
+    >
+      <AsyncBoundary
+        query={proposalsQuery}
+        loadingLabel="Loading schedule proposals…"
+      >
+        {(proposals) => (
+          <Card>
+            <CardHeader>
+              <CardTitle level={3}>Dean decisions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScheduleDecisionControls
+                actorRole="dean"
+                proposals={proposals}
+              />
+            </CardContent>
+          </Card>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

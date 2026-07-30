@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -173,5 +174,27 @@ describe("FacultyInputWorkspace", () => {
       expect.stringContaining("/faculty-availabilities/4"),
       expect.objectContaining({ method: "DELETE" }),
     )
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.endsWith("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (url.endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url.endsWith("/faculty-availabilities"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [availability] })),
+        )
+      if (url.endsWith("/faculty-subject-preferences"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [preference] })),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    const { container } = renderWorkspace()
+    await screen.findByText("Monday · 08:00–10:00")
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

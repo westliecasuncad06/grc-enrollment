@@ -11,6 +11,44 @@ import {
 } from "@/features/portal/role-capabilities"
 import { renderWithSession } from "@/tests/render-app"
 
+// Modules whose workspace component has been migrated onto WorkspacePage
+// (Phase 8a Task 5) derive their region's accessible name directly from the
+// visible <h2> heading text, not a separate aria-label string with a
+// "workspace" suffix — so their expected name is exactly the heading text.
+const migratedRegionNames: Partial<Record<string, string>> = {
+  "class-rosters": "Class rosters",
+  "grade-submission": "Grade submission",
+  "credit-mappings": "Credit mappings",
+  "drops-withdrawals": "Drops & withdrawals",
+  "academic-records": "Academic records",
+  "enrollment-documents": "Enrollment documents",
+  "master-schedule": "Master schedule",
+  "audit-logs": "Audit logs",
+  "teaching-schedule": "Teaching schedule",
+  "eligible-subjects": "Eligible subjects",
+  "queue-payment": "Queue & payment status",
+  "grades-com": "Your academic records",
+  "schedule-approvals": "Schedule approvals",
+  "schedule-proposals": "Schedule proposals",
+  "sections-schedules": "Sections and schedules",
+  "faculty-assignment": "Faculty assignment",
+  enrollment: "Select your subjects",
+  "enrollment-approvals": "Enrollment approvals",
+  "overrides-voids": "Overrides & voids",
+  curriculum: "Curriculum editor",
+  "subjects-prerequisites": "Curriculum editor",
+  "availability-preferences": "Availability and preferences",
+  "payment-queue": "Payment queue",
+  "serving-number": "Serving number",
+  "payment-confirmation": "Payment confirmation",
+  "com-finalization": "COM finalization",
+  "student-accounts": "Student accounts",
+  "admission-status": "Admission status",
+  "credential-issuance": "Credential issuance",
+}
+
+const unmigratedRegionNames: Partial<Record<string, string>> = {}
+
 describe("connectedModuleRegistry", () => {
   it("dispatches exactly the twenty-nine role-owned connected module IDs", () => {
     expect(connectedModuleIds).toHaveLength(29)
@@ -28,62 +66,10 @@ describe("connectedModuleRegistry", () => {
           signedInAt: "2026-07-29T12:00:00Z",
         },
       })
-      const expectedRegion = [
-        "student-accounts",
-        "admission-status",
-        "credential-issuance",
-      ].includes(moduleId)
-        ? "Admission provisioning workspace"
-        : moduleId === "availability-preferences"
-          ? "Faculty input workspace"
-          : moduleId === "teaching-schedule"
-            ? "Teaching schedule workspace"
-            : ["curriculum", "subjects-prerequisites"].includes(moduleId)
-              ? "Curriculum workspace"
-              : moduleId === "sections-schedules"
-                ? "Sections and schedules workspace"
-                : moduleId === "faculty-assignment"
-                  ? "Faculty assignment workspace"
-                  : moduleId === "schedule-proposals"
-                    ? "Schedule proposals workspace"
-                    : moduleId === "schedule-approvals"
-                      ? "Schedule decision workspace"
-                      : moduleId === "master-schedule"
-                        ? "Master schedule workspace"
-                        : moduleId === "audit-logs"
-                          ? "Audit logs workspace"
-                          : moduleId === "eligible-subjects"
-                            ? "Eligible subjects workspace"
-                            : moduleId === "enrollment"
-                              ? "Enrollment submission workspace"
-                              : [
-                                    "enrollment-approvals",
-                                    "overrides-voids",
-                                  ].includes(moduleId)
-                                ? "Registrar enrollment workspace"
-                                : [
-                                      "payment-queue",
-                                      "serving-number",
-                                      "payment-confirmation",
-                                      "com-finalization",
-                                    ].includes(moduleId)
-                                  ? "Accounting payment workspace"
-                                  : moduleId === "queue-payment"
-                                    ? "Payment queue status workspace"
-                                    : moduleId === "grades-com"
-                                      ? "Academic records workspace"
-                                      : [
-                                            "credit-mappings",
-                                            "drops-withdrawals",
-                                            "academic-records",
-                                            "enrollment-documents",
-                                          ].includes(moduleId)
-                                        ? "Registrar records workspace"
-                                        : moduleId === "class-rosters"
-                                          ? "Class rosters workspace"
-                                          : moduleId === "grade-submission"
-                                            ? "Grade submission workspace"
-                                            : "Connected portal workspace"
+      const expectedRegion =
+        migratedRegionNames[moduleId] ??
+        unmigratedRegionNames[moduleId] ??
+        "Connected portal workspace"
       expect(
         view.getByRole("region", { name: expectedRegion }),
       ).toBeInTheDocument()

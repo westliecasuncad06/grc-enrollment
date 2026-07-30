@@ -4,6 +4,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -14,7 +16,6 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldLabel } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import {
   useFacultyAvailabilitiesQuery,
@@ -118,20 +119,6 @@ export function FacultyAssignmentWorkspace() {
       )
     }
   }
-  const loading =
-    termsQuery.isLoading ||
-    subjectsQuery.isLoading ||
-    sectionsQuery.isLoading ||
-    directoryQuery.isLoading ||
-    availabilitiesQuery.isLoading ||
-    preferencesQuery.isLoading
-  const failed =
-    termsQuery.isError ||
-    subjectsQuery.isError ||
-    sectionsQuery.isError ||
-    directoryQuery.isError ||
-    availabilitiesQuery.isError ||
-    preferencesQuery.isError
   const retryReferences = () => {
     void Promise.all([
       termsQuery.refetch(),
@@ -142,146 +129,164 @@ export function FacultyAssignmentWorkspace() {
       preferencesQuery.refetch(),
     ])
   }
+  const referenceDataQuery = {
+    isPending:
+      termsQuery.isPending ||
+      subjectsQuery.isPending ||
+      sectionsQuery.isPending ||
+      directoryQuery.isPending ||
+      availabilitiesQuery.isPending ||
+      preferencesQuery.isPending,
+    isError:
+      termsQuery.isError ||
+      subjectsQuery.isError ||
+      sectionsQuery.isError ||
+      directoryQuery.isError ||
+      availabilitiesQuery.isError ||
+      preferencesQuery.isError,
+    error:
+      termsQuery.error ??
+      subjectsQuery.error ??
+      sectionsQuery.error ??
+      directoryQuery.error ??
+      availabilitiesQuery.error ??
+      preferencesQuery.error,
+    data: true as const,
+    refetch: retryReferences,
+  }
   const subject = (subjectsQuery.data ?? []).find(
     (item) => item.id === section?.subject_id,
   )
   return (
-    <section aria-label="Faculty assignment workspace" className="grid gap-4">
-      <div>
-        <h2>Faculty assignment</h2>
-        <p>
-          Assign active faculty to unassigned planned sections, with their
-          declared constraints in view.
-        </p>
-      </div>
-      {(failed || requestError) && (
+    <WorkspacePage
+      title="Faculty assignment"
+      description="Assign active faculty to unassigned planned sections, with their declared constraints in view."
+    >
+      {requestError && (
         <Alert variant="destructive">
-          <AlertDescription>
-            {requestError ||
-              "Assignment data could not be loaded. Refresh and try again."}
-          </AlertDescription>
-          {failed && (
-            <Button type="button" variant="outline" onClick={retryReferences}>
-              Retry assignment data
-            </Button>
-          )}
+          <AlertDescription>{requestError}</AlertDescription>
         </Alert>
       )}
-      {loading ? (
-        <Skeleton className="h-48" />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Assign faculty</CardTitle>
-            <CardDescription>
-              The API remains authoritative for faculty schedule conflicts; this
-              view provides declared availability and subject-preference
-              context.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <Field>
-              <FieldLabel htmlFor="assignment-term">Academic term</FieldLabel>
-              <select
-                id="assignment-term"
-                value={selectedTermId}
-                onChange={(event) => {
-                  setTermId(Number(event.target.value))
-                  setSectionId(0)
-                  setProfessorId(0)
-                }}
-              >
-                <option value={0}>Select an academic term</option>
-                {(termsQuery.data ?? []).map((term) => (
-                  <option key={term.id} value={term.id}>
-                    {formatAcademicTerm(term)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="assignment-section">
-                Unassigned section
-              </FieldLabel>
-              <select
-                id="assignment-section"
-                value={sectionId}
-                onChange={(event) => setSectionId(Number(event.target.value))}
-              >
-                <option value={0}>Select an unassigned section</option>
-                {unassigned.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {(subjectsQuery.data ?? []).find(
-                      (subject) => subject.id === item.subject_id,
-                    )?.code ?? "Subject"}{" "}
-                    · {item.section_code}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {selectedTermId > 0 && unassigned.length === 0 && (
-              <p>
-                No unassigned sections are available for this academic term.
-              </p>
-            )}
-            <Field>
-              <FieldLabel htmlFor="assignment-faculty">
-                Faculty member
-              </FieldLabel>
-              <select
-                id="assignment-faculty"
-                value={professorId}
-                onChange={(event) => setProfessorId(Number(event.target.value))}
-                disabled={!section}
-              >
-                <option value={0}>Select an active faculty member</option>
-                {(directoryQuery.data ?? []).map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {faculty && (
-              <aside
-                aria-label="Faculty constraint context"
-                className="rounded-md border p-3"
-              >
-                <h3>{faculty.name}’s declared context</h3>
+      <AsyncBoundary
+        query={referenceDataQuery}
+        loadingLabel="Loading faculty assignment data…"
+      >
+        {() => (
+          <Card>
+            <CardHeader>
+              <CardTitle level={3}>Assign faculty</CardTitle>
+              <CardDescription>
+                The API remains authoritative for faculty schedule conflicts;
+                this view provides declared availability and subject-preference
+                context.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <Field>
+                <FieldLabel htmlFor="assignment-term">Academic term</FieldLabel>
+                <select
+                  id="assignment-term"
+                  value={selectedTermId}
+                  onChange={(event) => {
+                    setTermId(Number(event.target.value))
+                    setSectionId(0)
+                    setProfessorId(0)
+                  }}
+                >
+                  <option value={0}>Select an academic term</option>
+                  {(termsQuery.data ?? []).map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {formatAcademicTerm(term)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="assignment-section">
+                  Unassigned section
+                </FieldLabel>
+                <select
+                  id="assignment-section"
+                  value={sectionId}
+                  onChange={(event) => setSectionId(Number(event.target.value))}
+                >
+                  <option value={0}>Select an unassigned section</option>
+                  {unassigned.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {(subjectsQuery.data ?? []).find(
+                        (subject) => subject.id === item.subject_id,
+                      )?.code ?? "Subject"}{" "}
+                      · {item.section_code}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {selectedTermId > 0 && unassigned.length === 0 && (
                 <p>
-                  {availability.length
-                    ? availability
-                        .map(
-                          (item) =>
-                            `${weekday[item.day_of_week]} ${item.starts_at_time.slice(0, 5)}–${item.ends_at_time.slice(0, 5)}`,
-                        )
-                        .join(", ")
-                    : "No availability declared for this term."}
+                  No unassigned sections are available for this academic term.
                 </p>
-                <p>
-                  {preferences.length
-                    ? preferences
-                        .map(
-                          (item) =>
-                            `Preference #${item.rank} for ${subject?.code ?? "this subject"}`,
-                        )
-                        .join(", ")
-                    : `No preference declared for ${subject?.code ?? "this subject"}.`}
-                </p>
-              </aside>
-            )}
-            <Button
-              type="button"
-              onClick={() => void save()}
-              disabled={!section || !faculty || mutation.isPending}
-            >
-              {mutation.isPending
-                ? "Saving faculty assignment"
-                : "Save faculty assignment"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-    </section>
+              )}
+              <Field>
+                <FieldLabel htmlFor="assignment-faculty">
+                  Faculty member
+                </FieldLabel>
+                <select
+                  id="assignment-faculty"
+                  value={professorId}
+                  onChange={(event) =>
+                    setProfessorId(Number(event.target.value))
+                  }
+                  disabled={!section}
+                >
+                  <option value={0}>Select an active faculty member</option>
+                  {(directoryQuery.data ?? []).map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {faculty && (
+                <aside
+                  aria-label="Faculty constraint context"
+                  className="rounded-md border p-3"
+                >
+                  <h3>{faculty.name}’s declared context</h3>
+                  <p>
+                    {availability.length
+                      ? availability
+                          .map(
+                            (item) =>
+                              `${weekday[item.day_of_week]} ${item.starts_at_time.slice(0, 5)}–${item.ends_at_time.slice(0, 5)}`,
+                          )
+                          .join(", ")
+                      : "No availability declared for this term."}
+                  </p>
+                  <p>
+                    {preferences.length
+                      ? preferences
+                          .map(
+                            (item) =>
+                              `Preference #${item.rank} for ${subject?.code ?? "this subject"}`,
+                          )
+                          .join(", ")
+                      : `No preference declared for ${subject?.code ?? "this subject"}.`}
+                  </p>
+                </aside>
+              )}
+              <Button
+                type="button"
+                onClick={() => void save()}
+                disabled={!section || !faculty || mutation.isPending}
+              >
+                {mutation.isPending
+                  ? "Saving faculty assignment"
+                  : "Save faculty assignment"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

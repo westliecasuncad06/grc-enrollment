@@ -122,6 +122,48 @@ describe("getJson", () => {
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
+  it("captures Retry-After as seconds on a throttled response", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "THROTTLED",
+            message: "Too many requests.",
+            errors: {},
+            request_id: "request-004",
+          },
+        }),
+        { status: 429, headers: { "Retry-After": "30" } },
+      ),
+    )
+
+    await expect(getJson("/api/v1/example")).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 30,
+    })
+  })
+
+  it("leaves retryAfterSeconds undefined when the header is absent", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "THROTTLED",
+            message: "Too many requests.",
+            errors: {},
+            request_id: "request-005",
+          },
+        }),
+        { status: 429 },
+      ),
+    )
+
+    await expect(getJson("/api/v1/example")).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: undefined,
+    })
+  })
+
   it("invokes the unauthorized handler when an authenticated PATCH is rejected", async () => {
     const onUnauthorized = vi.fn()
     setAuthTokenProvider(() => "1|expired-token")

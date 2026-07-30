@@ -3,6 +3,9 @@
 import { useMemo, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable } from "@/features/components/portal/data-table"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -14,34 +17,22 @@ import {
 } from "@/features/components/ui/card"
 import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
-import { useClassRosterQuery } from "@/features/hooks/use-class-roster"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import {
   useAcademicGradesQuery,
   useCreateAcademicGradeMutation,
   useUpdateAcademicGradeMutation,
 } from "@/features/hooks/use-academic-grades"
+import { useClassRosterQuery } from "@/features/hooks/use-class-roster"
 import { useSectionsQuery } from "@/features/hooks/use-reference-data"
 import type { AcademicGrade } from "@/features/schemas/academic-grade-schema"
-
-const selectClassName =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 dark:bg-input/30"
-
-function gradeBadgeVariant(
-  status: AcademicGrade["status"],
-): "default" | "secondary" | "outline" {
-  if (status === "locked") return "default"
-  if (status === "submitted") return "secondary"
-  return "outline"
-}
+import { gradeBadgeVariant } from "@/features/lib/grade-presentation"
 
 interface Draft {
   finalGrade: string
@@ -82,14 +73,6 @@ export function GradeSubmissionWorkspace() {
   )
   const createMutation = useCreateAcademicGradeMutation()
   const updateMutation = useUpdateAcademicGradeMutation()
-
-  if (!authorized) {
-    return (
-      <section aria-label="Grade submission workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
-  }
 
   const gradesByStudentId = new Map(
     (gradesQuery.data?.data ?? []).map((grade) => [grade.student_id, grade]),
@@ -179,14 +162,23 @@ export function GradeSubmissionWorkspace() {
   const rosterEntries = (rosterQuery.data?.data ?? []).filter(
     (entry) => entry.status === "enrolled",
   )
-  const isLoading = rosterQuery.isLoading || gradesQuery.isLoading
+  const rosterAndGradesQuery = {
+    isPending: rosterQuery.isPending || gradesQuery.isPending,
+    isError: rosterQuery.isError || gradesQuery.isError,
+    error: rosterQuery.error ?? gradesQuery.error,
+    data: rosterEntries,
+    refetch: () => {
+      void rosterQuery.refetch()
+      void gradesQuery.refetch()
+    },
+  }
 
   return (
-    <section aria-label="Grade submission workspace" className="grid gap-4">
-      <div>
-        <h2>Grade submission</h2>
-        <p>Select a section to record, edit, and submit its roster's grades.</p>
-      </div>
+    <WorkspacePage
+      title="Grade submission"
+      description="Select a section to record, edit, and submit its roster's grades."
+      unauthorized={!authorized}
+    >
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -194,113 +186,122 @@ export function GradeSubmissionWorkspace() {
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Select a section</CardTitle>
+          <CardTitle level={3}>Select a section</CardTitle>
         </CardHeader>
         <CardContent>
-          {sectionsQuery.isLoading ? (
-            <Skeleton className="h-8" />
-          ) : ownSections.length === 0 ? (
-            <p>No sections are currently assigned to your faculty account.</p>
-          ) : (
-            <Field>
-              <FieldLabel htmlFor="grade-section">Section</FieldLabel>
-              <select
-                id="grade-section"
-                className={selectClassName}
-                value={sectionId ?? ""}
-                onChange={(event) =>
-                  setSectionId(
-                    event.target.value ? Number(event.target.value) : null,
-                  )
-                }
-              >
-                <option value="">Choose a section</option>
-                {ownSections.map((section) => (
-                  <option key={section.id} value={section.id}>
-                    Section {section.section_code} ({section.status_label})
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
+          <AsyncBoundary
+            query={{ ...sectionsQuery, data: ownSections }}
+            isEmpty={(sections) => sections.length === 0}
+            emptyMessage="No sections are currently assigned to your faculty account."
+            loadingLabel="Loading your assigned sections…"
+          >
+            {(sections) => (
+              <Field>
+                <FieldLabel htmlFor="grade-section">Section</FieldLabel>
+                <Select
+                  value={sectionId !== null ? String(sectionId) : undefined}
+                  onValueChange={(value) => setSectionId(Number(value))}
+                >
+                  <SelectTrigger id="grade-section" className="w-full">
+                    <SelectValue placeholder="Choose a section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sections.map((section) => (
+                      <SelectItem key={section.id} value={String(section.id)}>
+                        Section {section.section_code} ({section.status_label})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </AsyncBoundary>
         </CardContent>
       </Card>
       {sectionId !== null && (
         <Card>
           <CardHeader>
-            <CardTitle>Roster grades</CardTitle>
+            <CardTitle level={3}>Roster grades</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-32" />
-            ) : rosterQuery.isError || gradesQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  This section's roster and grades could not be loaded. Refresh
-                  the page and try again.
-                </AlertDescription>
-              </Alert>
-            ) : rosterEntries.length === 0 ? (
-              <p>No enrolled students are in this section yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Final grade</TableHead>
-                    <TableHead>Remarks</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rosterEntries.map((entry) => {
-                    const grade = gradesByStudentId.get(entry.student_id)
-                    const draft = draftFor(entry.student_id, grade)
-                    const editable = !grade || grade.status === "draft"
-                    const rowPending =
-                      pendingStudentId === entry.student_id &&
-                      (createMutation.isPending || updateMutation.isPending)
+            <AsyncBoundary
+              query={rosterAndGradesQuery}
+              isEmpty={(rows) => rows.length === 0}
+              emptyMessage="No enrolled students are in this section yet."
+              loadingLabel="Loading the roster and its recorded grades…"
+            >
+              {(rows) => (
+                <DataTable
+                  caption="Roster grades"
+                  rowKey={(entry) => entry.id}
+                  rows={rows}
+                  columns={[
+                    {
+                      key: "student",
+                      header: "Student",
+                      render: (entry) => entry.student_number,
+                    },
+                    {
+                      key: "final_grade",
+                      header: "Final grade",
+                      render: (entry) => {
+                        const grade = gradesByStudentId.get(entry.student_id)
+                        const draft = draftFor(entry.student_id, grade)
+                        const editable = !grade || grade.status === "draft"
+                        const rowPending =
+                          pendingStudentId === entry.student_id &&
+                          (createMutation.isPending || updateMutation.isPending)
 
-                    return (
-                      <TableRow key={entry.id}>
-                        <TableCell className="font-medium">
-                          {entry.student_number}
-                        </TableCell>
-                        <TableCell>
-                          {editable ? (
-                            <Input
-                              inputMode="decimal"
-                              aria-label={`Final grade for ${entry.student_number}`}
-                              value={draft.finalGrade}
-                              disabled={rowPending}
-                              onChange={(event) =>
-                                setDraft(entry.student_id, {
-                                  finalGrade: event.target.value,
-                                })
-                              }
-                            />
-                          ) : (
-                            (grade?.final_grade ?? "—")
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editable ? (
-                            <Input
-                              aria-label={`Remarks for ${entry.student_number}`}
-                              value={draft.remarks}
-                              disabled={rowPending}
-                              onChange={(event) =>
-                                setDraft(entry.student_id, {
-                                  remarks: event.target.value,
-                                })
-                              }
-                            />
-                          ) : (
-                            (grade?.remarks ?? "—")
-                          )}
-                        </TableCell>
-                        <TableCell>
+                        return editable ? (
+                          <Input
+                            inputMode="decimal"
+                            aria-label={`Final grade for ${entry.student_number}`}
+                            value={draft.finalGrade}
+                            disabled={rowPending}
+                            onChange={(event) =>
+                              setDraft(entry.student_id, {
+                                finalGrade: event.target.value,
+                              })
+                            }
+                          />
+                        ) : (
+                          (grade?.final_grade ?? "—")
+                        )
+                      },
+                    },
+                    {
+                      key: "remarks",
+                      header: "Remarks",
+                      render: (entry) => {
+                        const grade = gradesByStudentId.get(entry.student_id)
+                        const draft = draftFor(entry.student_id, grade)
+                        const editable = !grade || grade.status === "draft"
+                        const rowPending =
+                          pendingStudentId === entry.student_id &&
+                          (createMutation.isPending || updateMutation.isPending)
+
+                        return editable ? (
+                          <Input
+                            aria-label={`Remarks for ${entry.student_number}`}
+                            value={draft.remarks}
+                            disabled={rowPending}
+                            onChange={(event) =>
+                              setDraft(entry.student_id, {
+                                remarks: event.target.value,
+                              })
+                            }
+                          />
+                        ) : (
+                          (grade?.remarks ?? "—")
+                        )
+                      },
+                    },
+                    {
+                      key: "status",
+                      header: "Status",
+                      render: (entry) => {
+                        const grade = gradesByStudentId.get(entry.student_id)
+                        return (
                           <Badge
                             variant={gradeBadgeVariant(
                               grade?.status ?? "draft",
@@ -308,49 +309,64 @@ export function GradeSubmissionWorkspace() {
                           >
                             {grade?.status_label ?? "Not recorded"}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {!grade && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              disabled={rowPending}
-                              onClick={() => void recordGrade(entry.student_id)}
-                            >
-                              Record grade
-                            </Button>
-                          )}
-                          {grade?.status === "draft" && (
-                            <div className="flex gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={rowPending}
-                                onClick={() => void saveGrade(grade)}
-                              >
-                                Save
-                              </Button>
+                        )
+                      },
+                    },
+                    {
+                      key: "actions",
+                      header: "Actions",
+                      render: (entry) => {
+                        const grade = gradesByStudentId.get(entry.student_id)
+                        const rowPending =
+                          pendingStudentId === entry.student_id &&
+                          (createMutation.isPending || updateMutation.isPending)
+
+                        return (
+                          <>
+                            {!grade && (
                               <Button
                                 type="button"
                                 size="sm"
                                 disabled={rowPending}
-                                onClick={() => void submitGrade(grade)}
+                                onClick={() =>
+                                  void recordGrade(entry.student_id)
+                                }
                               >
-                                Submit
+                                Record grade
                               </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            )}
+                            )}
+                            {grade?.status === "draft" && (
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={rowPending}
+                                  onClick={() => void saveGrade(grade)}
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={rowPending}
+                                  onClick={() => void submitGrade(grade)}
+                                >
+                                  Submit
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )
+                      },
+                    },
+                  ]}
+                />
+              )}
+            </AsyncBoundary>
           </CardContent>
         </Card>
       )}
-    </section>
+    </WorkspacePage>
   )
 }

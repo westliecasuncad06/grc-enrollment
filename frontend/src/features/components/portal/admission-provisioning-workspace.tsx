@@ -5,6 +5,7 @@ import { useMemo, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { z } from "zod"
 
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -83,7 +84,6 @@ export function AdmissionProvisioningWorkspace({
     setValue,
   } = useForm<AdmissionFormValues>({
     resolver: zodResolver(formSchema),
-    shouldFocusError: false,
     defaultValues: {
       name: "",
       email: "",
@@ -139,21 +139,13 @@ export function AdmissionProvisioningWorkspace({
   }
 
   return (
-    <section
-      aria-label="Admission provisioning workspace"
-      className="grid gap-4"
+    <WorkspacePage
+      title={heading}
+      description="Create an admitted student account, verify its initial outcome, and hand off its temporary credential once."
     >
-      <div>
-        <h2>{heading}</h2>
-        <p>
-          Create an admitted student account, verify its initial outcome, and
-          hand off its temporary credential once.
-        </p>
-      </div>
-
       <Card>
         <CardHeader>
-          <CardTitle>1. Student account details</CardTitle>
+          <CardTitle level={3}>1. Student account details</CardTitle>
           <CardDescription>
             Only the approved account and profile fields are submitted.
           </CardDescription>
@@ -297,7 +289,7 @@ export function AdmissionProvisioningWorkspace({
 
       <Card>
         <CardHeader>
-          <CardTitle>2. Initial admission outcome</CardTitle>
+          <CardTitle level={3}>2. Initial admission outcome</CardTitle>
         </CardHeader>
         <CardContent>
           <p>Admission status: Admitted</p>
@@ -307,7 +299,7 @@ export function AdmissionProvisioningWorkspace({
 
       <Card>
         <CardHeader>
-          <CardTitle>3. Credential handoff</CardTitle>
+          <CardTitle level={3}>3. Credential handoff</CardTitle>
         </CardHeader>
         <CardContent>
           <p>
@@ -349,6 +341,6 @@ export function AdmissionProvisioningWorkspace({
           </span>
         </DialogContent>
       </Dialog>
-    </section>
+    </WorkspacePage>
   )
 }

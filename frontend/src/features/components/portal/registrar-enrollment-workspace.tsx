@@ -3,6 +3,10 @@
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable } from "@/features/components/portal/data-table"
+import { Paginator } from "@/features/components/portal/paginator"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -22,15 +26,7 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldLabel } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
+import { Textarea } from "@/features/components/ui/textarea"
 import {
   useEnrollmentsListQuery,
   useUpdateEnrollmentMutation,
@@ -97,17 +93,11 @@ export function RegistrarEnrollmentWorkspace({
     { enabled: authorized },
   )
   const mutation = useUpdateEnrollmentMutation()
-
-  if (!authorized) {
-    return (
-      <section aria-label="Registrar enrollment workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
-  }
+  const reasonRequired =
+    pending !== null && requiresReason(pending.action) && !reason.trim()
 
   const confirm = async () => {
-    if (!pending || (requiresReason(pending.action) && !reason.trim())) return
+    if (!pending || reasonRequired) return
     setError("")
     try {
       await mutation.mutateAsync({
@@ -125,123 +115,98 @@ export function RegistrarEnrollmentWorkspace({
   }
 
   return (
-    <section aria-label="Registrar enrollment workspace" className="grid gap-4">
-      <div>
-        <h2>{heading}</h2>
-        <p>
-          Approve or reject submissions pending registrar review, or void an
-          already-approved enrollment before payment is confirmed.
-        </p>
-      </div>
+    <WorkspacePage
+      title={heading}
+      description="Approve or reject submissions pending registrar review, or void an already-approved enrollment before payment is confirmed."
+      unauthorized={!authorized}
+    >
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {enrollmentsQuery.isLoading ? (
-        <Skeleton className="h-48" />
-      ) : enrollmentsQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Enrollments could not be loaded.{" "}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void enrollmentsQuery.refetch()}
-            >
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Enrollment queue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(enrollmentsQuery.data?.data.length ?? 0) === 0 ? (
-              <p>No enrollments match this queue.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Enrollment</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Units</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(enrollmentsQuery.data?.data ?? []).map((enrollment) => (
-                    <TableRow key={enrollment.id}>
-                      <TableCell>{enrollment.student_number}</TableCell>
-                      <TableCell>#{enrollment.id}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusBadgeVariant(enrollment.status)}>
-                          {enrollment.status_label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{enrollment.total_units}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          {availableActions(enrollment).map((action) => (
-                            <Button
-                              key={action}
-                              type="button"
-                              size="sm"
-                              variant={
-                                action === "registrar_approve"
-                                  ? "default"
-                                  : "destructive"
-                              }
-                              disabled={mutation.isPending}
-                              onClick={() => {
-                                setPending({ enrollment, action })
-                                setReason("")
-                                setError("")
-                              }}
-                            >
-                              {actionLabel[action]}
-                            </Button>
-                          ))}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+      <Card>
+        <CardHeader>
+          <CardTitle level={3}>Enrollment queue</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AsyncBoundary
+            query={{ ...enrollmentsQuery, data: enrollmentsQuery.data?.data }}
+            isEmpty={(rows) => rows.length === 0}
+            emptyMessage="No enrollments match this queue."
+            loadingLabel="Loading the enrollment queue…"
+          >
+            {(enrollments) => (
+              <DataTable
+                caption="Enrollment queue"
+                rowKey={(enrollment) => enrollment.id}
+                rows={enrollments}
+                columns={[
+                  {
+                    key: "student",
+                    header: "Student",
+                    render: (enrollment) => enrollment.student_number,
+                  },
+                  {
+                    key: "enrollment",
+                    header: "Enrollment",
+                    render: (enrollment) => `#${enrollment.id}`,
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (enrollment) => (
+                      <Badge variant={statusBadgeVariant(enrollment.status)}>
+                        {enrollment.status_label}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    key: "units",
+                    header: "Units",
+                    render: (enrollment) => enrollment.total_units,
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (enrollment) => (
+                      <div className="flex flex-wrap gap-2">
+                        {availableActions(enrollment).map((action) => (
+                          <Button
+                            key={action}
+                            type="button"
+                            size="sm"
+                            variant={
+                              action === "registrar_approve"
+                                ? "default"
+                                : "destructive"
+                            }
+                            disabled={mutation.isPending}
+                            onClick={() => {
+                              setPending({ enrollment, action })
+                              setReason("")
+                              setError("")
+                            }}
+                          >
+                            {actionLabel[action]}
+                          </Button>
+                        ))}
+                      </div>
+                    ),
+                  },
+                ]}
+              />
             )}
-            <div className="mt-4 flex items-center justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                Previous page
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {enrollmentsQuery.data?.meta.current_page ?? 1} of{" "}
-                {enrollmentsQuery.data?.meta.last_page ?? 1}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  (enrollmentsQuery.data?.meta.current_page ?? 1) >=
-                  (enrollmentsQuery.data?.meta.last_page ?? 1)
-                }
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Next page
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </AsyncBoundary>
+          <div className="mt-4">
+            <Paginator
+              currentPage={enrollmentsQuery.data?.meta.current_page ?? 1}
+              lastPage={enrollmentsQuery.data?.meta.last_page ?? 1}
+              onPageChange={setPage}
+            />
+          </div>
+        </CardContent>
+      </Card>
       <AlertDialog
         open={pending !== null}
         onOpenChange={(open) => {
@@ -257,17 +222,27 @@ export function RegistrarEnrollmentWorkspace({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {pending && requiresReason(pending.action) && (
-            <Field>
+            <Field data-invalid={reasonRequired}>
               <FieldLabel htmlFor="registrar-decision-reason">
                 Reason
               </FieldLabel>
-              <textarea
+              <Textarea
                 id="registrar-decision-reason"
-                className="min-h-20 w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 dark:bg-input/30"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 disabled={mutation.isPending}
+                aria-describedby={
+                  reasonRequired ? "registrar-decision-reason-error" : undefined
+                }
               />
+              {reasonRequired && (
+                <p
+                  id="registrar-decision-reason-error"
+                  className="text-sm text-destructive"
+                >
+                  A reason is required to reject or void this enrollment.
+                </p>
+              )}
             </Field>
           )}
           <AlertDialogFooter>
@@ -276,12 +251,7 @@ export function RegistrarEnrollmentWorkspace({
             </AlertDialogCancel>
             <Button
               type="button"
-              disabled={
-                mutation.isPending ||
-                (pending !== null &&
-                  requiresReason(pending.action) &&
-                  !reason.trim())
-              }
+              disabled={mutation.isPending || reasonRequired}
               onClick={() => void confirm()}
             >
               {mutation.isPending ? "Saving decision" : "Confirm decision"}
@@ -289,6 +259,6 @@ export function RegistrarEnrollmentWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </WorkspacePage>
   )
 }

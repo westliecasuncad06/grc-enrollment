@@ -50,6 +50,7 @@ describe("createApiAuthGateway", () => {
     expect(typeof gateway.signIn).toBe("function")
     expect(typeof gateway.restore).toBe("function")
     expect(typeof gateway.signOut).toBe("function")
+    expect(typeof gateway.clearSession).toBe("function")
     expect(typeof gateway.persistenceAvailable).toBe("function")
   })
 
@@ -225,5 +226,17 @@ describe("createApiAuthGateway", () => {
     await gateway.signOut?.()
 
     expect(tokenStore.read()).toBeNull()
+  })
+
+  it("clearSession clears the local token without a server round-trip", () => {
+    const storage = createMemoryStorage()
+    const tokenStore = createAuthTokenStore(storage)
+    tokenStore.write("1|plaintext-token")
+    const gateway = createApiAuthGateway(tokenStore)
+
+    gateway.clearSession()
+
+    expect(tokenStore.read()).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

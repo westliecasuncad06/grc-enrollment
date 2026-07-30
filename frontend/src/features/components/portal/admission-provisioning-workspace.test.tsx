@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -413,5 +414,23 @@ describe("AdmissionProvisioningWorkspace", () => {
     expect(attemptedPasswords).toEqual([firstCredential, retryCredential])
     expect(screen.getByText(retryCredential)).toBeInTheDocument()
     expect(screen.queryByText(firstCredential)).not.toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((request) => {
+      const url = requestUrl(request)
+      if (url.endsWith("/programs")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(programs), { status: 200 }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(curricula), { status: 200 }),
+      )
+    })
+
+    const { container } = renderWorkspace()
+    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

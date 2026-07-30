@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -127,5 +128,33 @@ describe("MasterScheduleWorkspace", () => {
     expect(
       screen.getByText("This workspace is not available for your role."),
     ).toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("academic-terms")
+              ? terms
+              : url(input).includes("subjects")
+                ? subjects
+                : url(input).includes("schedule-proposals")
+                  ? proposals
+                  : sections,
+          ),
+        ),
+      ),
+    )
+    const { container } = renderWithSession(<MasterScheduleWorkspace />, {
+      session: {
+        userId: "6",
+        displayName: "Executive",
+        role: "executive_director",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByText(/ENG101/)
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

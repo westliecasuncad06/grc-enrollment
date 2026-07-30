@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useId, useMemo } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/features/lib/utils"
@@ -222,6 +222,25 @@ function FieldError({
   )
 }
 
+/**
+ * Wires an input to its `FieldError` without every call site hand-rolling an
+ * id: spread `inputProps` onto the input, `errorId` onto `FieldError`.
+ * `data-invalid` alone (the existing `Field` styling hook) has no meaning to
+ * assistive tech — this is what actually associates the error text with the
+ * field and announces its invalid state.
+ */
+function useFieldError(hasError: boolean) {
+  const errorId = useId()
+
+  return {
+    errorId,
+    inputProps: {
+      "aria-invalid": hasError,
+      "aria-describedby": hasError ? errorId : undefined,
+    } as const,
+  }
+}
+
 export {
   Field,
   FieldLabel,
@@ -233,4 +252,5 @@ export {
   FieldSet,
   FieldContent,
   FieldTitle,
+  useFieldError,
 }

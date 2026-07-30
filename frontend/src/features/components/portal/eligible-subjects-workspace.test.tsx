@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { EligibleSubjectsWorkspace } from "@/features/components/portal/eligible-subjects-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -147,5 +148,30 @@ describe("EligibleSubjectsWorkspace", () => {
         url(request).includes("/eligible-subjects?academic_term_id=2"),
       ),
     ).toBe(true)
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("/academic-terms")
+              ? terms
+              : { data: [eligibleSubject, excludedSubject] },
+          ),
+        ),
+      ),
+    )
+    const { container } = renderWithSession(<EligibleSubjectsWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await screen.findByRole("article", { name: /CS101/ })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

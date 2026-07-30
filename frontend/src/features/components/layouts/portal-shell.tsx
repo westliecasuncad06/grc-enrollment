@@ -15,6 +15,7 @@ import { useParams, usePathname, useRouter } from "next/navigation"
 import { startTransition, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { Breadcrumb } from "@/features/components/common/breadcrumb"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/features/components/ui/avatar"
 import { Badge } from "@/features/components/ui/badge"
@@ -64,6 +65,7 @@ function NavigationLink({
   const link = (
     <Link
       href={href}
+      aria-current={isActive ? "page" : undefined}
       className={cn("portal-nav-link", isActive && "portal-nav-link--active")}
     >
       {children}
@@ -245,10 +247,16 @@ export function PortalShell({ children }: { children: ReactNode }) {
               </SheetContent>
             </Sheet>
 
-            <div>
-              <p>Role workspace / {definition.roleLabel}</p>
-              <strong>{currentPageLabel}</strong>
-            </div>
+            <Breadcrumb
+              items={
+                pathname === "/portal"
+                  ? [{ label: "Portal overview" }]
+                  : [
+                      { label: "Portal overview", href: "/portal" },
+                      { label: currentPageLabel },
+                    ]
+              }
+            />
           </div>
 
           <div className="portal-topbar__actions">

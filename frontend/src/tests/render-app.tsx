@@ -29,6 +29,7 @@ export function createStubGateway(
     signIn: () => Promise.resolve(testSession),
     restore: () => Promise.resolve(null),
     signOut: () => Promise.resolve(),
+    clearSession: () => undefined,
     persistenceAvailable: () => true,
     ...overrides,
   }

@@ -3,6 +3,9 @@
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable } from "@/features/components/portal/data-table"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -23,15 +26,6 @@ import {
 } from "@/features/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
-import { Skeleton } from "@/features/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
 import {
   useConfirmPaymentMutation,
   useEnrollmentsListQuery,
@@ -85,14 +79,6 @@ export function AccountingPaymentWorkspace({
   )
   const paymentMutation = useConfirmPaymentMutation()
 
-  if (!authorized) {
-    return (
-      <section aria-label="Accounting payment workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
-  }
-
   const confirmPayment = async () => {
     if (confirming === null) return
     setError("")
@@ -114,14 +100,11 @@ export function AccountingPaymentWorkspace({
   }
 
   return (
-    <section aria-label="Accounting payment workspace" className="grid gap-4">
-      <div>
-        <h2>{heading}</h2>
-        <p>
-          Advance the payment queue, confirm received payments, and finalize the
-          Digital Certificate of Matriculation.
-        </p>
-      </div>
+    <WorkspacePage
+      title={heading}
+      description="Advance the payment queue, confirm received payments, and finalize the Digital Certificate of Matriculation."
+      unauthorized={!authorized}
+    >
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -138,132 +121,129 @@ export function AccountingPaymentWorkspace({
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Payment queue</CardTitle>
+          <CardTitle level={3}>Payment queue</CardTitle>
         </CardHeader>
         <CardContent>
-          {ticketsQuery.isLoading ? (
-            <Skeleton className="h-32" />
-          ) : ticketsQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                The payment queue could not be loaded.{" "}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void ticketsQuery.refetch()}
-                >
-                  Retry
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : (ticketsQuery.data?.data.length ?? 0) === 0 ? (
-            <p>No queue tickets are currently active.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ticket</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(ticketsQuery.data?.data ?? []).map((ticket) => (
-                  <TableRow key={ticket.id}>
-                    <TableCell className="font-medium">
-                      {ticket.ticket_number}
-                    </TableCell>
-                    <TableCell>{ticket.student_number}</TableCell>
-                    <TableCell>
+          <AsyncBoundary
+            query={{ ...ticketsQuery, data: ticketsQuery.data?.data }}
+            isEmpty={(rows) => rows.length === 0}
+            emptyMessage="No queue tickets are currently active."
+            loadingLabel="Loading the payment queue…"
+          >
+            {(tickets) => (
+              <DataTable
+                caption="Payment queue"
+                rowKey={(ticket) => ticket.id}
+                rows={tickets}
+                columns={[
+                  {
+                    key: "ticket",
+                    header: "Ticket",
+                    render: (ticket) => ticket.ticket_number,
+                  },
+                  {
+                    key: "student",
+                    header: "Student",
+                    render: (ticket) => ticket.student_number,
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (ticket) => (
                       <Badge variant={ticketBadgeVariant(ticket.status)}>
                         {ticket.status_label}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {ticket.status === "waiting" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={ticketMutation.isPending}
-                          onClick={() =>
-                            ticketMutation.mutate({
-                              id: ticket.id,
-                              action: "serve",
-                            })
-                          }
-                        >
-                          Call to serve
-                        </Button>
-                      )}
-                      {ticket.status === "serving" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={ticketMutation.isPending}
-                          onClick={() =>
-                            ticketMutation.mutate({
-                              id: ticket.id,
-                              action: "complete",
-                            })
-                          }
-                        >
-                          Mark served
-                        </Button>
-                      )}
-                      {ticket.status === "served" && (
-                        <span className="text-sm text-muted-foreground">
-                          Complete
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                    ),
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (ticket) => (
+                      <>
+                        {ticket.status === "waiting" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={ticketMutation.isPending}
+                            onClick={() =>
+                              ticketMutation.mutate({
+                                id: ticket.id,
+                                action: "serve",
+                              })
+                            }
+                          >
+                            Call to serve
+                          </Button>
+                        )}
+                        {ticket.status === "serving" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={ticketMutation.isPending}
+                            onClick={() =>
+                              ticketMutation.mutate({
+                                id: ticket.id,
+                                action: "complete",
+                              })
+                            }
+                          >
+                            Mark served
+                          </Button>
+                        )}
+                        {ticket.status === "served" && (
+                          <span className="text-sm text-muted-foreground">
+                            Complete
+                          </span>
+                        )}
+                      </>
+                    ),
+                  },
+                ]}
+              />
+            )}
+          </AsyncBoundary>
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Pending payment confirmations</CardTitle>
+          <CardTitle level={3}>Pending payment confirmations</CardTitle>
         </CardHeader>
         <CardContent>
-          {pendingPaymentQuery.isLoading ? (
-            <Skeleton className="h-32" />
-          ) : pendingPaymentQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Pending enrollments could not be loaded.{" "}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void pendingPaymentQuery.refetch()}
-                >
-                  Retry
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : (pendingPaymentQuery.data?.data.length ?? 0) === 0 ? (
-            <p>No enrollments are awaiting payment confirmation.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Enrollment</TableHead>
-                  <TableHead>Units</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(pendingPaymentQuery.data?.data ?? []).map((enrollment) => (
-                  <TableRow key={enrollment.id}>
-                    <TableCell>{enrollment.student_number}</TableCell>
-                    <TableCell>#{enrollment.id}</TableCell>
-                    <TableCell>{enrollment.total_units}</TableCell>
-                    <TableCell>
+          <AsyncBoundary
+            query={{
+              ...pendingPaymentQuery,
+              data: pendingPaymentQuery.data?.data,
+            }}
+            isEmpty={(rows) => rows.length === 0}
+            emptyMessage="No enrollments are awaiting payment confirmation."
+            loadingLabel="Loading pending payment confirmations…"
+          >
+            {(enrollments) => (
+              <DataTable
+                caption="Pending payment confirmations"
+                rowKey={(enrollment) => enrollment.id}
+                rows={enrollments}
+                columns={[
+                  {
+                    key: "student",
+                    header: "Student",
+                    render: (enrollment) => enrollment.student_number,
+                  },
+                  {
+                    key: "enrollment",
+                    header: "Enrollment",
+                    render: (enrollment) => `#${enrollment.id}`,
+                  },
+                  {
+                    key: "units",
+                    header: "Units",
+                    render: (enrollment) => enrollment.total_units,
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (enrollment) => (
                       <Button
                         type="button"
                         size="sm"
@@ -276,12 +256,12 @@ export function AccountingPaymentWorkspace({
                       >
                         Confirm payment
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                    ),
+                  },
+                ]}
+              />
+            )}
+          </AsyncBoundary>
         </CardContent>
       </Card>
       <AlertDialog
@@ -339,6 +319,6 @@ export function AccountingPaymentWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </WorkspacePage>
   )
 }

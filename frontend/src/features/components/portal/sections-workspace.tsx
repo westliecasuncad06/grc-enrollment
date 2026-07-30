@@ -6,6 +6,8 @@ import { useEffect, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -21,7 +23,6 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import {
   useAcademicTermsQuery,
   useSectionsQuery,
@@ -138,229 +139,238 @@ export function SectionsWorkspace() {
         )
     }
   }
-  const loading =
-    termsQuery.isLoading || subjectsQuery.isLoading || sectionsQuery.isLoading
+  const referenceDataQuery = {
+    isPending:
+      termsQuery.isPending ||
+      subjectsQuery.isPending ||
+      sectionsQuery.isPending,
+    isError:
+      termsQuery.isError || subjectsQuery.isError || sectionsQuery.isError,
+    error: termsQuery.error ?? subjectsQuery.error ?? sectionsQuery.error,
+    data: true as const,
+    refetch: retryReferences,
+  }
   return (
-    <section
-      aria-label="Sections and schedules workspace"
-      className="grid gap-4"
+    <WorkspacePage
+      title="Sections and schedules"
+      description="Plan each term's sections, capacity, room, and meeting time."
     >
-      <div>
-        <h2>Sections and schedules</h2>
-        <p>Plan each term’s sections, capacity, room, and meeting time.</p>
-      </div>
-      {(requestError ||
-        termsQuery.isError ||
-        subjectsQuery.isError ||
-        sectionsQuery.isError) && (
+      {requestError && (
         <Alert variant="destructive">
-          <AlertDescription>
-            {requestError ||
-              "Section planning data could not be loaded. Refresh and try again."}
-          </AlertDescription>
-          {(termsQuery.isError ||
-            subjectsQuery.isError ||
-            sectionsQuery.isError) && (
-            <Button type="button" variant="outline" onClick={retryReferences}>
-              Retry section data
-            </Button>
-          )}
+          <AlertDescription>{requestError}</AlertDescription>
         </Alert>
       )}
-      {loading ? (
-        <Skeleton className="h-48" />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {selected
-                ? `Edit section ${selected.section_code}`
-                : "New planned section"}
-            </CardTitle>
-            <CardDescription>
-              Updates replace every writable section field. Meeting details are
-              optional, but any entered time needs valid days and an end time.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <Field>
-                <FieldLabel htmlFor="section-existing">
-                  Existing section
-                </FieldLabel>
-                <select
-                  id="section-existing"
-                  value={selectedId ?? 0}
-                  onChange={(event) =>
-                    Number(event.target.value)
-                      ? edit(Number(event.target.value))
-                      : startNew()
-                  }
-                >
-                  <option value={0}>New section</option>
-                  {visibleSections.map((section) => (
-                    <option key={section.id} value={section.id}>
-                      {section.section_code}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => startNew()}
-                >
-                  New section
-                </Button>
-              </div>
-            </div>
-            <form
-              noValidate
-              onSubmit={(event) => void form.handleSubmit(save)(event)}
-            >
-              <FieldGroup>
-                <Field
-                  data-invalid={Boolean(form.formState.errors.academic_term_id)}
-                >
-                  <FieldLabel htmlFor="section-term">Academic term</FieldLabel>
+      <AsyncBoundary
+        query={referenceDataQuery}
+        loadingLabel="Loading section planning data…"
+      >
+        {() => (
+          <Card>
+            <CardHeader>
+              <CardTitle level={3}>
+                {selected
+                  ? `Edit section ${selected.section_code}`
+                  : "New planned section"}
+              </CardTitle>
+              <CardDescription>
+                Updates replace every writable section field. Meeting details
+                are optional, but any entered time needs valid days and an end
+                time.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 grid gap-3 md:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="section-existing">
+                    Existing section
+                  </FieldLabel>
                   <select
-                    id="section-term"
-                    {...form.register("academic_term_id", {
-                      valueAsNumber: true,
-                    })}
-                    onChange={(event) => {
-                      startNew(Number(event.target.value))
-                    }}
+                    id="section-existing"
+                    value={selectedId ?? 0}
+                    onChange={(event) =>
+                      Number(event.target.value)
+                        ? edit(Number(event.target.value))
+                        : startNew()
+                    }
                   >
-                    <option value={0}>Select an academic term</option>
-                    {(termsQuery.data ?? []).map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {formatAcademicTerm(term)}
+                    <option value={0}>New section</option>
+                    {visibleSections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.section_code}
                       </option>
                     ))}
                   </select>
-                  <FieldError>
-                    {form.formState.errors.academic_term_id?.message}
-                  </FieldError>
                 </Field>
-                <Field data-invalid={Boolean(form.formState.errors.subject_id)}>
-                  <FieldLabel htmlFor="section-subject">Subject</FieldLabel>
-                  <select
-                    id="section-subject"
-                    {...form.register("subject_id", { valueAsNumber: true })}
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => startNew()}
                   >
-                    <option value={0}>Select a subject</option>
-                    {(subjectsQuery.data ?? [])
-                      .filter((subject) => subject.status === "active")
-                      .map((subject) => (
-                        <option key={subject.id} value={subject.id}>
-                          {subject.code} — {subject.title}
+                    New section
+                  </Button>
+                </div>
+              </div>
+              <form
+                noValidate
+                onSubmit={(event) => void form.handleSubmit(save)(event)}
+              >
+                <FieldGroup>
+                  <Field
+                    data-invalid={Boolean(
+                      form.formState.errors.academic_term_id,
+                    )}
+                  >
+                    <FieldLabel htmlFor="section-term">
+                      Academic term
+                    </FieldLabel>
+                    <select
+                      id="section-term"
+                      {...form.register("academic_term_id", {
+                        valueAsNumber: true,
+                      })}
+                      onChange={(event) => {
+                        startNew(Number(event.target.value))
+                      }}
+                    >
+                      <option value={0}>Select an academic term</option>
+                      {(termsQuery.data ?? []).map((term) => (
+                        <option key={term.id} value={term.id}>
+                          {formatAcademicTerm(term)}
                         </option>
                       ))}
-                  </select>
-                  <FieldError>
-                    {form.formState.errors.subject_id?.message}
-                  </FieldError>
-                </Field>
-                <Field
-                  data-invalid={Boolean(form.formState.errors.section_code)}
-                >
-                  <FieldLabel htmlFor="section-code">Section code</FieldLabel>
-                  <input id="section-code" {...form.register("section_code")} />
-                  <FieldError>
-                    {form.formState.errors.section_code?.message}
-                  </FieldError>
-                </Field>
-                <Field
-                  data-invalid={Boolean(form.formState.errors.schedule_days)}
-                >
-                  <FieldLabel htmlFor="section-days">Schedule days</FieldLabel>
-                  <input
-                    id="section-days"
-                    placeholder="MWF or TTh"
-                    {...form.register("schedule_days")}
-                  />
-                  <FieldError>
-                    {form.formState.errors.schedule_days?.message}
-                  </FieldError>
-                </Field>
-                <Field
-                  data-invalid={Boolean(form.formState.errors.starts_at_time)}
-                >
-                  <FieldLabel htmlFor="section-start">Start time</FieldLabel>
-                  <input
-                    id="section-start"
-                    placeholder="08:00:00"
-                    {...form.register("starts_at_time")}
-                  />
-                  <FieldError>
-                    {form.formState.errors.starts_at_time?.message}
-                  </FieldError>
-                </Field>
-                <Field
-                  data-invalid={Boolean(form.formState.errors.ends_at_time)}
-                >
-                  <FieldLabel htmlFor="section-end">End time</FieldLabel>
-                  <input
-                    id="section-end"
-                    placeholder="09:00:00"
-                    {...form.register("ends_at_time")}
-                  />
-                  <FieldError>
-                    {form.formState.errors.ends_at_time?.message}
-                  </FieldError>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="section-room">Room</FieldLabel>
-                  <input id="section-room" {...form.register("room")} />
-                </Field>
-                <Field data-invalid={Boolean(form.formState.errors.capacity)}>
-                  <FieldLabel htmlFor="section-capacity">Capacity</FieldLabel>
-                  <input
-                    id="section-capacity"
-                    type="number"
-                    min={1}
-                    {...form.register("capacity", { valueAsNumber: true })}
-                  />
-                  <FieldError>
-                    {form.formState.errors.capacity?.message}
-                  </FieldError>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="section-threshold">
-                    Viability threshold
-                  </FieldLabel>
-                  <input
-                    id="section-threshold"
-                    type="number"
-                    min={1}
-                    value={viabilityThreshold ?? ""}
-                    onChange={(event) =>
-                      form.setValue(
-                        "viability_threshold",
-                        event.target.value ? Number(event.target.value) : null,
-                      )
-                    }
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="section-status">Status</FieldLabel>
-                  <select id="section-status" {...form.register("status")}>
-                    <option value="planned">Planned</option>
-                    <option value="published">Published</option>
-                    <option value="closed">Closed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </Field>
-                <Button type="submit" disabled={mutation.isPending}>
-                  {mutation.isPending ? "Saving section" : "Save section"}
-                </Button>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-    </section>
+                    </select>
+                    <FieldError>
+                      {form.formState.errors.academic_term_id?.message}
+                    </FieldError>
+                  </Field>
+                  <Field
+                    data-invalid={Boolean(form.formState.errors.subject_id)}
+                  >
+                    <FieldLabel htmlFor="section-subject">Subject</FieldLabel>
+                    <select
+                      id="section-subject"
+                      {...form.register("subject_id", { valueAsNumber: true })}
+                    >
+                      <option value={0}>Select a subject</option>
+                      {(subjectsQuery.data ?? [])
+                        .filter((subject) => subject.status === "active")
+                        .map((subject) => (
+                          <option key={subject.id} value={subject.id}>
+                            {subject.code} — {subject.title}
+                          </option>
+                        ))}
+                    </select>
+                    <FieldError>
+                      {form.formState.errors.subject_id?.message}
+                    </FieldError>
+                  </Field>
+                  <Field
+                    data-invalid={Boolean(form.formState.errors.section_code)}
+                  >
+                    <FieldLabel htmlFor="section-code">Section code</FieldLabel>
+                    <input
+                      id="section-code"
+                      {...form.register("section_code")}
+                    />
+                    <FieldError>
+                      {form.formState.errors.section_code?.message}
+                    </FieldError>
+                  </Field>
+                  <Field
+                    data-invalid={Boolean(form.formState.errors.schedule_days)}
+                  >
+                    <FieldLabel htmlFor="section-days">
+                      Schedule days
+                    </FieldLabel>
+                    <input
+                      id="section-days"
+                      placeholder="MWF or TTh"
+                      {...form.register("schedule_days")}
+                    />
+                    <FieldError>
+                      {form.formState.errors.schedule_days?.message}
+                    </FieldError>
+                  </Field>
+                  <Field
+                    data-invalid={Boolean(form.formState.errors.starts_at_time)}
+                  >
+                    <FieldLabel htmlFor="section-start">Start time</FieldLabel>
+                    <input
+                      id="section-start"
+                      placeholder="08:00:00"
+                      {...form.register("starts_at_time")}
+                    />
+                    <FieldError>
+                      {form.formState.errors.starts_at_time?.message}
+                    </FieldError>
+                  </Field>
+                  <Field
+                    data-invalid={Boolean(form.formState.errors.ends_at_time)}
+                  >
+                    <FieldLabel htmlFor="section-end">End time</FieldLabel>
+                    <input
+                      id="section-end"
+                      placeholder="09:00:00"
+                      {...form.register("ends_at_time")}
+                    />
+                    <FieldError>
+                      {form.formState.errors.ends_at_time?.message}
+                    </FieldError>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="section-room">Room</FieldLabel>
+                    <input id="section-room" {...form.register("room")} />
+                  </Field>
+                  <Field data-invalid={Boolean(form.formState.errors.capacity)}>
+                    <FieldLabel htmlFor="section-capacity">Capacity</FieldLabel>
+                    <input
+                      id="section-capacity"
+                      type="number"
+                      min={1}
+                      {...form.register("capacity", { valueAsNumber: true })}
+                    />
+                    <FieldError>
+                      {form.formState.errors.capacity?.message}
+                    </FieldError>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="section-threshold">
+                      Viability threshold
+                    </FieldLabel>
+                    <input
+                      id="section-threshold"
+                      type="number"
+                      min={1}
+                      value={viabilityThreshold ?? ""}
+                      onChange={(event) =>
+                        form.setValue(
+                          "viability_threshold",
+                          event.target.value
+                            ? Number(event.target.value)
+                            : null,
+                        )
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="section-status">Status</FieldLabel>
+                    <select id="section-status" {...form.register("status")}>
+                      <option value="planned">Planned</option>
+                      <option value="published">Published</option>
+                      <option value="closed">Closed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </Field>
+                  <Button type="submit" disabled={mutation.isPending}>
+                    {mutation.isPending ? "Saving section" : "Save section"}
+                  </Button>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

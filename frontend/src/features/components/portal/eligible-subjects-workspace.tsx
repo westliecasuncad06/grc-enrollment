@@ -1,6 +1,7 @@
 "use client"
 
-import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
 import {
   Card,
@@ -9,7 +10,6 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useEligibleSubjectsQuery } from "@/features/hooks/use-enrollment"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
@@ -70,18 +70,12 @@ export function EligibleSubjectsWorkspace() {
     termsQuery.data,
   )
   const eligibleSubjectsQuery = useEligibleSubjectsQuery(selectedTermId)
-  const isLoading = termsQuery.isLoading || eligibleSubjectsQuery.isFetching
-  const hasError = termsQuery.isError || eligibleSubjectsQuery.isError
-  const subjects = eligibleSubjectsQuery.data ?? []
 
   return (
-    <section aria-label="Eligible subjects workspace" className="grid gap-4">
-      <div>
-        <h2>Eligible subjects</h2>
-        <p>
-          Review which curriculum subjects you can currently select, and why.
-        </p>
-      </div>
+    <WorkspacePage
+      title="Eligible subjects"
+      description="Review which curriculum subjects you can currently select, and why."
+    >
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="eligible-subjects-term">
@@ -103,30 +97,36 @@ export function EligibleSubjectsWorkspace() {
           </select>
         </Field>
       </FieldGroup>
-      {hasError && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Your eligible-subject pool could not be loaded. Refresh the page and
-            try again.
-          </AlertDescription>
-        </Alert>
-      )}
       {selectedTermId === null ? (
         <p>Select an academic term to view your eligible subjects.</p>
-      ) : isLoading ? (
-        <Skeleton className="h-48" />
-      ) : subjects.length === 0 ? (
-        <p>No subjects are placed in your curriculum for this term.</p>
       ) : (
-        <div className="grid gap-3">
-          {subjects.map((subject) => (
-            <SubjectEligibilityCard
-              key={subject.subject_id}
-              subject={subject}
-            />
-          ))}
-        </div>
+        <AsyncBoundary
+          query={{
+            isPending: termsQuery.isPending || eligibleSubjectsQuery.isFetching,
+            isError: termsQuery.isError || eligibleSubjectsQuery.isError,
+            error: termsQuery.error ?? eligibleSubjectsQuery.error,
+            data: eligibleSubjectsQuery.data,
+            refetch: () => {
+              void termsQuery.refetch()
+              void eligibleSubjectsQuery.refetch()
+            },
+          }}
+          isEmpty={(subjects) => subjects.length === 0}
+          emptyMessage="No subjects are placed in your curriculum for this term."
+          loadingLabel="Loading your eligible subjects…"
+        >
+          {(subjects) => (
+            <div className="grid gap-3">
+              {subjects.map((subject) => (
+                <SubjectEligibilityCard
+                  key={subject.subject_id}
+                  subject={subject}
+                />
+              ))}
+            </div>
+          )}
+        </AsyncBoundary>
       )}
-    </section>
+    </WorkspacePage>
   )
 }

@@ -3,8 +3,10 @@
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { Paginator } from "@/features/components/portal/paginator"
 import { ScheduleDecisionControls } from "@/features/components/portal/schedule-decision-workspace"
-import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -12,7 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import { useAuditLogsQuery } from "@/features/hooks/use-audit-logs"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
 import {
@@ -45,14 +46,16 @@ export function AuditLogsWorkspace() {
   const [filters, setFilters] = useState<AuditLogFilters>(defaults)
   const auditQuery = useAuditLogsQuery(filters, authorized)
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
-  if (!authorized)
-    return (
-      <section aria-label="Audit logs workspace">
-        <p>This workspace is not available for your role.</p>
-      </section>
-    )
-  const loading = auditQuery.isLoading || proposalsQuery.isLoading
-  const failed = auditQuery.isError || proposalsQuery.isError
+  const combinedQuery = {
+    isPending: auditQuery.isPending || proposalsQuery.isPending,
+    isError: auditQuery.isError || proposalsQuery.isError,
+    error: auditQuery.error ?? proposalsQuery.error,
+    data: auditQuery.data,
+    refetch: () => {
+      void auditQuery.refetch()
+      void proposalsQuery.refetch()
+    },
+  }
   const apply = (form: HTMLFormElement) => {
     const values = new FormData(form)
     const get = (name: string) => {
@@ -75,13 +78,11 @@ export function AuditLogsWorkspace() {
     })
   }
   return (
-    <section aria-label="Audit logs workspace" className="grid gap-4">
-      <div>
-        <h2>Audit logs</h2>
-        <p>
-          Operational activity is shown without actor names or email addresses.
-        </p>
-      </div>
+    <WorkspacePage
+      title="Audit logs"
+      description="Operational activity is shown without actor names or email addresses."
+      unauthorized={!authorized}
+    >
       <form
         onSubmit={(event) => {
           event.preventDefault()
@@ -125,38 +126,21 @@ export function AuditLogsWorkspace() {
         </label>
         <Button type="submit">Apply audit filters</Button>
       </form>
-      {loading ? (
-        <Skeleton className="h-48" />
-      ) : failed ? (
-        <Alert variant="destructive">
-          <AlertDescription>
-            Audit logs could not be loaded.{" "}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                void Promise.all([
-                  auditQuery.refetch(),
-                  proposalsQuery.refetch(),
-                ])
-              }
-            >
-              Retry audit logs
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Audit history</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(auditQuery.data?.data.length ?? 0) === 0 ? (
-                <p>No audit records match these filters.</p>
-              ) : (
+      <AsyncBoundary
+        query={combinedQuery}
+        isEmpty={(audit) => audit.data.length === 0}
+        emptyMessage="No audit records match these filters."
+        loadingLabel="Loading audit logs…"
+      >
+        {(audit) => (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle level={3}>Audit history</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <ul className="grid gap-3">
-                  {(auditQuery.data?.data ?? []).map((log) => (
+                  {audit.data.map((log) => (
                     <li key={log.id} className="rounded-md border p-3">
                       <p>
                         {log.action} · {log.auditable_type}
@@ -176,57 +160,31 @@ export function AuditLogsWorkspace() {
                     </li>
                   ))}
                 </ul>
-              )}
-              <div className="mt-4 flex justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={(auditQuery.data?.meta.current_page ?? 1) <= 1}
-                  onClick={() =>
-                    setFilters((value) => ({
-                      ...value,
-                      page: Math.max(1, (value.page ?? 1) - 1),
-                    }))
-                  }
-                >
-                  Previous page
-                </Button>
-                <span>
-                  Page {auditQuery.data?.meta.current_page ?? 1} of{" "}
-                  {auditQuery.data?.meta.last_page ?? 1}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={
-                    (auditQuery.data?.meta.current_page ?? 1) >=
-                    (auditQuery.data?.meta.last_page ?? 1)
-                  }
-                  onClick={() =>
-                    setFilters((value) => ({
-                      ...value,
-                      page: (value.page ?? 1) + 1,
-                    }))
-                  }
-                >
-                  Next page
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Published proposal closure</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ScheduleDecisionControls
-                role="registrar_head"
-                proposals={proposalsQuery.data ?? []}
-              />
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </section>
+                <div className="mt-4">
+                  <Paginator
+                    currentPage={audit.meta.current_page}
+                    lastPage={audit.meta.last_page}
+                    onPageChange={(page) =>
+                      setFilters((value) => ({ ...value, page }))
+                    }
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle level={3}>Published proposal closure</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScheduleDecisionControls
+                  actorRole="registrar_head"
+                  proposals={proposalsQuery.data ?? []}
+                />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
   )
 }

@@ -1,6 +1,7 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/registrar-enrollment-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -91,11 +92,18 @@ describe("RegistrarEnrollmentWorkspace", () => {
       session: registrarSession,
     })
 
-    expect(await screen.findByText("#9")).toBeInTheDocument()
-    expect(screen.getByText("#10")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Void" })).toBeInTheDocument()
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(within(table).getByText("#9")).toBeInTheDocument()
+    expect(within(table).getByText("#10")).toBeInTheDocument()
+    expect(
+      within(table).getByRole("button", { name: "Approve" }),
+    ).toBeInTheDocument()
+    expect(
+      within(table).getByRole("button", { name: "Reject" }),
+    ).toBeInTheDocument()
+    expect(
+      within(table).getByRole("button", { name: "Void" }),
+    ).toBeInTheDocument()
   })
 
   it("requires a reason before confirming a rejection", async () => {
@@ -123,7 +131,8 @@ describe("RegistrarEnrollmentWorkspace", () => {
       session: registrarSession,
     })
 
-    await user.click(await screen.findByRole("button", { name: "Reject" }))
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    await user.click(within(table).getByRole("button", { name: "Reject" }))
     expect(
       screen.getByRole("button", { name: "Confirm decision" }),
     ).toBeDisabled()
@@ -142,5 +151,23 @@ describe("RegistrarEnrollmentWorkspace", () => {
         }),
       ),
     )
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [pendingApprovalEnrollment, pendingPaymentEnrollment],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 2 },
+        }),
+      ),
+    )
+    const { container } = renderWithSession(<RegistrarEnrollmentWorkspace />, {
+      session: registrarSession,
+    })
+
+    await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

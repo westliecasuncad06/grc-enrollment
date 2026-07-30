@@ -8,10 +8,7 @@ import { AuthProvider } from "@/features/auth/auth-context"
 import { createBrowserAuthTokenStore } from "@/features/auth/auth-token"
 import { createAppQueryClient } from "@/features/lib/query-client"
 import { Toaster } from "@/features/components/ui/toaster"
-import {
-  setAuthTokenProvider,
-  setUnauthorizedHandler,
-} from "@/features/services/api-client"
+import { setAuthTokenProvider } from "@/features/services/api-client"
 
 /**
  * The application's composition root, replacing Vite's `main.tsx`.
@@ -31,11 +28,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
     // The API client reaches the token through this provider so
     // `auth-token.ts` remains the only module that touches token storage
-    // (PRD §9.1).
+    // (PRD §9.1). The unauthorized handler is registered by `AuthProvider`
+    // itself (auth-context.tsx), since clearing the token alone would leave a
+    // stale authenticated view rendered — it also needs to flip React state.
     setAuthTokenProvider(() => tokenStore.read())
-    setUnauthorizedHandler(() => {
-      tokenStore.clear()
-    })
 
     return createApiAuthGateway(tokenStore)
   })

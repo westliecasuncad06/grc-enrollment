@@ -2,7 +2,8 @@ import "@testing-library/jest-dom/vitest"
 
 import { cleanup } from "@testing-library/react"
 import type { AnchorHTMLAttributes, ReactNode } from "react"
-import { afterEach, vi } from "vitest"
+import { afterEach, expect, vi } from "vitest"
+import * as axeMatchers from "vitest-axe/matchers"
 
 import {
   getPathname,
@@ -39,6 +40,23 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }))
+
+expect.extend(axeMatchers)
+
+// jsdom implements neither the Pointer Events capture API nor
+// `scrollIntoView`. Radix's Select (and other Radix primitives using the same
+// pointer-capture-based open/close handling) call these directly, so without
+// a polyfill any `userEvent.click()` on a Select trigger throws.
+/* eslint-disable @typescript-eslint/unbound-method -- these are plain
+   arrow-function polyfills assigned to the prototype, not extracted method
+   references; there is no `this` to detach. */
+if (typeof window !== "undefined") {
+  window.HTMLElement.prototype.hasPointerCapture ??= () => false
+  window.HTMLElement.prototype.setPointerCapture ??= () => undefined
+  window.HTMLElement.prototype.releasePointerCapture ??= () => undefined
+  window.HTMLElement.prototype.scrollIntoView ??= () => undefined
+}
+/* eslint-enable @typescript-eslint/unbound-method */
 
 afterEach(() => {
   cleanup()

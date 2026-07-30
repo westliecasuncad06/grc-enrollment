@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -145,5 +146,86 @@ describe("TeachingScheduleWorkspace", () => {
         "No teaching schedule is available for your account.",
       ),
     ).toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.endsWith("/academic-terms"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term",
+                  id: 1,
+                  school_year: "2026-2027",
+                  semester: "1st",
+                  starts_at: null,
+                  ends_at: null,
+                  enrollment_opens_at: null,
+                  enrollment_closes_at: null,
+                  status: "active",
+                  status_label: "Active",
+                },
+              ],
+            }),
+          ),
+        )
+      if (url.endsWith("/subjects"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "subject",
+                  id: 101,
+                  code: "CS101",
+                  title: "Programming 1",
+                  units: 3,
+                  status: "active",
+                  status_label: "Active",
+                },
+              ],
+            }),
+          ),
+        )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                type: "section",
+                id: 44,
+                academic_term_id: 1,
+                subject_id: 101,
+                section_code: "CS101-A",
+                professor_id: 5,
+                schedule_days: "MWF",
+                starts_at_time: "08:00:00",
+                ends_at_time: "09:30:00",
+                room: "R201",
+                capacity: 30,
+                viability_threshold: null,
+                enrolled_count: 0,
+                remaining_seats: 30,
+                status: "published",
+                status_label: "Published",
+              },
+            ],
+          }),
+        ),
+      )
+    })
+    const { container } = renderWithSession(<TeachingScheduleWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Faculty",
+        role: "faculty",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByRole("cell", { name: "CS101 · Programming 1" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

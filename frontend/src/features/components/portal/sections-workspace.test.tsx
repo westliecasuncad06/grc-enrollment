@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { SectionsWorkspace } from "@/features/components/portal/sections-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -254,15 +255,37 @@ describe("SectionsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByText(
-      "Section planning data could not be loaded. Refresh and try again.",
-      {},
-      { timeout: 3_000 },
-    )
-    await user.click(screen.getByRole("button", { name: "Retry section data" }))
+    await screen.findByText(/Unavailable/, {}, { timeout: 3_000 })
+    await user.click(screen.getByRole("button", { name: "Try again" }))
     expect(
       await screen.findByRole("option", { name: /2026-2027/ }),
     ).toBeInTheDocument()
     expect(termsAttempts).toBe(3)
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).endsWith("/academic-terms")
+              ? terms
+              : url(input).endsWith("/subjects")
+                ? subjects
+                : sections,
+          ),
+        ),
+      ),
+    )
+    const { container } = renderWithSession(<SectionsWorkspace />, {
+      session: {
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    await screen.findByRole("option", { name: /2026-2027/ })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })

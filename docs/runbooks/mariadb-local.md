@@ -26,6 +26,85 @@ If MariaDB stops responding mid-command ("Lost connection to MySQL server
 during query"), check `netstat -ano | findstr :3306` and the Windows Event Log
 before assuming it was just a slow query.
 
+## Server will not start — Aria checkpoint/recovery failure
+
+A **different** failure mode from the GRANT crash above: `mysqld` aborts on
+every startup attempt, with `mysql_error.log` showing this exact cascade
+(read bottom-up — it is one fault, not several):
+
+```
+Cannot find checkpoint record at LSN (1,0x......)
+[ERROR] mysqld.exe: Aria recovery failed. Please run aria_chk -r on all Aria
+        tables and delete all aria_log.######## files
+[ERROR] Plugin 'Aria' registration as a STORAGE ENGINE failed.
+[ERROR] Could not open mysql.plugin table. Some plugins may be not loaded
+[ERROR] Failed to initialize plugins.
+[ERROR] Aborting
+```
+
+The Aria transaction log's control file points at a checkpoint record that is
+no longer in the log (e.g. after an unclean shutdown). Since every table in
+the `mysql` system schema is Aria, the engine failing to register means
+`mysql.plugin` can't open and the whole server aborts. **This does not
+threaten `grc_enrollment` data** — it is InnoDB, and InnoDB recovers
+independently of the Aria log.
+
+Confirm `mysqld` is fully stopped (`Get-Process mysqld`, `netstat -ano |
+findstr :3306`) before touching anything below.
+
+1. **Back up outside the data directory** (MariaDB treats every subdirectory
+   under `data\` as a schema, so a backup placed inside it becomes a bogus
+   database): copy `C:\xampp\mysql\data\mysql\` and both `aria_log*` files to
+   e.g. `C:\xampp\mysql\data_backup_<date>\`.
+2. **Repair every `.MAI` file in `C:\xampp\mysql\data\mysql\`**, always with
+   `--datadir=C:\xampp\mysql\data --require-control-file` (see gotcha below):
+   ```powershell
+   cd C:\xampp\mysql\data\mysql
+   Get-ChildItem *.MAI | ForEach-Object {
+     & C:\xampp\mysql\bin\aria_chk.exe --datadir=C:\xampp\mysql\data --require-control-file -r $_.Name
+   }
+   ```
+3. **Delete `C:\xampp\mysql\data\aria_log.00000001` and
+   `C:\xampp\mysql\data\aria_log_control`.** Both regenerate on next startup.
+   Leaving `aria_log_control` behind makes the server hunt for the same
+   missing checkpoint again.
+4. **Start MySQL** (XAMPP Control Panel, or `C:\xampp\mysql_start.bat` — note
+   that script's window sometimes doesn't launch mysqld reliably; if the error
+   log shows no new timestamp after a start attempt, invoke
+   `mysqld.exe --defaults-file=mysql\bin\my.ini --standalone` directly instead).
+
+### Gotcha: `--datadir` is required, or repair silently fails to re-stamp tables
+
+Running `aria_chk -r` from *inside* `data\mysql\` with a bare relative
+filename (`aria_chk -r plugin.MAI`) makes it look for `.\aria_log_control` —
+i.e. `data\mysql\aria_log_control` — which does not exist (the real one is one
+level up, in `data\`). It prints `Got error 'Can't find file' when trying to
+use aria control file '.\aria_log_control'` and still exits 0, having repaired
+the table *without* consulting the log. The result: `mysqld` starts and the
+table looks intact (`SHOW GRANTS`, `SELECT` all work), but
+`CHECK TABLE mysql.<table>` reports:
+
+```
+Table is from another system and must be zerofilled or repaired to be usable on this system
+Corrupt
+```
+
+This hit exactly the privilege tables (`plugin`, `db`, `global_priv`,
+`tables_priv`, `columns_priv`, `procs_priv`) after a checkpoint-recovery
+incident — the ones stamped with an LSN from before the log was reset. Fix:
+
+```powershell
+cd C:\xampp\mysql\data\mysql
+& C:\xampp\mysql\bin\aria_chk.exe --datadir=C:\xampp\mysql\data --require-control-file -z <table>.MAI
+```
+`-z` (`--zerofill`) is what actually clears the stale cross-system stamp;
+plain `-r` repair alone does not, even once `--datadir` is fixed.
+`--require-control-file` makes `aria_chk` abort loudly instead of silently
+degrading if it still can't find the log — use it on every invocation during
+this recovery. Restart `mysqld` and re-run `CHECK TABLE` after zerofilling; it
+should report `OK`. Re-run `SHOW GRANTS FOR '<user>'@'<host>';` for `grc_app`,
+`grc_migrator`, `grc_test`, and `pma` afterward to confirm privileges survived.
+
 ## One-time setup: databases and principals
 
 Run as `root` (no password on this instance; connects over `127.0.0.1:3306`).

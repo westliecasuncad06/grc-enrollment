@@ -90,5 +90,9 @@ export function createApiAuthGateway(tokenStore: AuthTokenStore): AuthGateway {
         tokenStore.clear()
       }
     },
+
+    clearSession(): void {
+      tokenStore.clear()
+    },
   }
 }

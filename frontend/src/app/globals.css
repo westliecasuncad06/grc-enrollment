@@ -1291,6 +1291,14 @@
   background: var(--muted);
 }
 
+/* Previously absent entirely — a keyboard user tabbing through the sidebar
+   had no visible indication of which link was focused (WCAG 2.4.7). Ring
+   values match Button/Input's focus-visible:ring-3 focus-visible:ring-ring/50. */
+.portal-nav-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
 .portal-nav-link--active {
   color: var(--foreground);
   background: var(--sidebar-accent);
@@ -1428,8 +1436,13 @@
   padding: clamp(2rem, 4vw, 4.5rem) clamp(1.25rem, 3vw, 3rem);
 }
 
-.portal-content:focus {
-  outline: none;
+/* This is the skip link's target (tabIndex={-1}). Suppressing its outline
+   entirely left a keyboard user with no visible confirmation that the skip
+   link worked — :focus-visible keeps that confirmation for keyboard/skip-link
+   use while still not drawing a ring for an incidental mouse-driven focus. */
+.portal-content:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .portal-overview {

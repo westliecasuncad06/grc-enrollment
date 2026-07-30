@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AuthProvider } from "@/features/auth/auth-context"
 import type { AuthGateway, AuthSession } from "@/features/auth/auth-types"
 import { useAuth } from "@/features/auth/use-auth"
+import { getAuthenticatedJson } from "@/features/services/api-client"
 
 const validSession: AuthSession = {
   userId: "1",
@@ -18,6 +19,7 @@ function createGateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
     signIn: () => Promise.resolve(validSession),
     restore: () => Promise.resolve(null),
     signOut: () => Promise.resolve(),
+    clearSession: () => undefined,
     persistenceAvailable: () => true,
     ...overrides,
   }
@@ -139,5 +141,51 @@ describe("AuthProvider", () => {
     expect(screen.getByLabelText("auth state")).toHaveTextContent(
       "anonymous:none:persistence-on",
     )
+  })
+
+  describe("unauthorized handler", () => {
+    const fetchMock = vi.fn<typeof fetch>()
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it("clears the session and drops to anonymous when an authenticated request 401s", async () => {
+      const clearSession = vi.fn()
+      renderProvider(
+        createGateway({
+          restore: () => Promise.resolve(validSession),
+          clearSession,
+        }),
+      )
+
+      await screen.findByText(/authenticated:Test Student/)
+
+      vi.stubGlobal("fetch", fetchMock)
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "UNAUTHENTICATED",
+              message: "Authentication is required.",
+              errors: {},
+              request_id: "req-3",
+            },
+          }),
+          { status: 401 },
+        ),
+      )
+
+      await expect(
+        getAuthenticatedJson("/some-protected-resource"),
+      ).rejects.toMatchObject({ status: 401 })
+
+      expect(clearSession).toHaveBeenCalled()
+      await waitFor(() => {
+        expect(screen.getByLabelText("auth state")).toHaveTextContent(
+          "anonymous:none:persistence-on",
+        )
+      })
+    })
   })
 })

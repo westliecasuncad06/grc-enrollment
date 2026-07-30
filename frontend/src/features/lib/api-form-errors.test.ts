@@ -1,4 +1,8 @@
-import type { FieldValues, UseFormSetError } from "react-hook-form"
+import type {
+  FieldValues,
+  UseFormSetError,
+  UseFormSetFocus,
+} from "react-hook-form"
 import { describe, expect, it, vi } from "vitest"
 
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
@@ -38,5 +42,51 @@ describe("applyApiFieldErrors", () => {
 
     expect(applyApiFieldErrors(conflictError, setError)).toBe(false)
     expect(setError).not.toHaveBeenCalled()
+  })
+
+  it("focuses the first field with an error when setFocus is provided", () => {
+    const setError = vi.fn<UseFormSetError<FieldValues>>()
+    const setFocus = vi.fn<UseFormSetFocus<FieldValues>>()
+    const validationError = new ApiClientError({
+      kind: "http",
+      message: "The submitted data is invalid.",
+      code: "VALIDATION_FAILED",
+      status: 422,
+      fieldErrors: {
+        email: ["The email has already been taken."],
+        name: ["The name field is required."],
+      },
+    })
+
+    applyApiFieldErrors(validationError, setError, setFocus)
+
+    expect(setFocus).toHaveBeenCalledOnce()
+    expect(setFocus).toHaveBeenCalledWith("email")
+  })
+
+  it("does not call setFocus when there is no validation error", () => {
+    const setError = vi.fn<UseFormSetError<FieldValues>>()
+    const setFocus = vi.fn<UseFormSetFocus<FieldValues>>()
+    const conflictError = new ApiClientError({
+      kind: "http",
+      message: "This record has changed.",
+      status: 409,
+    })
+
+    applyApiFieldErrors(conflictError, setError, setFocus)
+
+    expect(setFocus).not.toHaveBeenCalled()
+  })
+
+  it("does not throw when setFocus is omitted", () => {
+    const setError = vi.fn<UseFormSetError<FieldValues>>()
+    const validationError = new ApiClientError({
+      kind: "http",
+      message: "The submitted data is invalid.",
+      status: 422,
+      fieldErrors: { email: ["Required."] },
+    })
+
+    expect(() => applyApiFieldErrors(validationError, setError)).not.toThrow()
   })
 })

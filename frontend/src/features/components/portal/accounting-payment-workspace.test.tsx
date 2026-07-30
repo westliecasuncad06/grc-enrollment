@@ -1,6 +1,7 @@
 import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { axe } from "vitest-axe"
 
 import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
 import { renderWithSession } from "@/tests/render-app"
@@ -136,12 +137,18 @@ describe("AccountingPaymentWorkspace", () => {
       session: accountingSession,
     })
 
-    expect(await screen.findByText(/Q000009/)).toBeInTheDocument()
+    const queueTable = await screen.findByRole("table", {
+      name: "Payment queue",
+    })
+    expect(within(queueTable).getByText(/Q000009/)).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Call to serve" }),
+      within(queueTable).getByRole("button", { name: "Call to serve" }),
     ).toBeInTheDocument()
+    const pendingTable = await screen.findByRole("table", {
+      name: "Pending payment confirmations",
+    })
     expect(
-      await screen.findByRole("button", { name: "Confirm payment" }),
+      within(pendingTable).getByRole("button", { name: "Confirm payment" }),
     ).toBeInTheDocument()
   })
 
@@ -152,8 +159,11 @@ describe("AccountingPaymentWorkspace", () => {
       session: accountingSession,
     })
 
+    const pendingTable = await screen.findByRole("table", {
+      name: "Pending payment confirmations",
+    })
     await user.click(
-      await screen.findByRole("button", { name: "Confirm payment" }),
+      within(pendingTable).getByRole("button", { name: "Confirm payment" }),
     )
     const dialog = screen.getByRole("alertdialog")
     await user.click(
@@ -161,5 +171,15 @@ describe("AccountingPaymentWorkspace", () => {
     )
 
     expect(await screen.findByText(/COM000009/)).toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations once loaded", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    const { container } = renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await screen.findByRole("table", { name: "Payment queue" })
+    expect(await axe(container)).toHaveNoViolations()
   })
 })
