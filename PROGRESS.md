@@ -1,7 +1,7 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:**
-`phase-7-process-3` (pending fast-forward merge to `main`)
+**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:** `main`
+(merged `phase-7-process-3` at `fc56148`, fast-forward)
 
 ## Current Objective
 
