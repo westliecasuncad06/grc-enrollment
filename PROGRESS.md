@@ -1,142 +1,72 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:** `main`
-(merged `phase-6-process-2` at `783c775`, fast-forward)
+**Last updated:** 2026-07-30 · **PRD version:** v3.2 · **Branch:**
+`phase-7-process-3` (pending fast-forward merge to `main`)
 
 ## Current Objective
 
-Roadmap Phase 6, "Process 2.0 + Student Portal": DFD 2.2 (Eligible Subject
-Pool) and DFD 2.4 (Enrollment Submission) backends, plus the Student
-portal's Eligible Subjects and Enrollment modules (FR-ENR-001–011). Also
-folds in real institutional data the user supplied mid-phase: the actual
-GRC College of Computer Studies subject catalog (88 subjects, two real
-block-section spreadsheets) and the user's confirmed §17-pending grading
-direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC special
-marks). **Phase 6 is complete, quality-gated, live-verified against real
-data, and merged to local `main`.**
+Roadmap Phase 7a, "Process 3.0 money path" (PRD §5.3, FR-FIN-001–010): grade
+encoding, the Registrar Head's approval/void decisions, the Accounting
+payment queue, idempotent payment confirmation, and the Digital COM —
+followed by the Registrar Head, Accounting Staff, and Student portal
+modules that connect to them. Deliberately deferred to a later "Phase 7b":
+transferee credits, withdrawal/drops, Faculty Class Rosters, the Faculty
+grade-*submission* UI (as opposed to the backend, which this phase built),
+and the Dean/Executive Director dashboards. **Phase 7a is complete,
+quality-gated, live-verified against real data on the real dev database,
+and ready to merge to local `main`.**
 
 ## Verified Completed
 
-- **Task 1 — fractional units + real CCS catalog.** `subjects.units` and
-  `enrollments.total_units` widened `integer` → `decimal(_,1)` (Leadership
-  subjects are genuinely 1.5 units). New `CcsSubjectSeeder` adds the 88 real
-  CCS subjects, additive alongside the existing synthetic catalog — no code
-  collisions. An integration test proves the existing Phase 5 Program Chair
-  curriculum/prerequisite editor operates on the real catalog end to end.
-- **Task 2 — grading policy + `PrerequisiteEvaluator`.** New
-  `config/enrollment.php` (comparison direction, passing/failing grade,
-  special marks, unit caps), pre-populated with the user's direction but
-  never hardcoded into logic — `App\Domain\Academic\PrerequisiteEvaluator`
-  returns `needs_verification`, never a silent pass or fail, whenever the
-  policy is unconfigured.
-- **Task 3 — block-section mechanism schema.** `sections.is_block_exclusive`
-  and `student_profiles.enrollment_category`, both nullable, no default —
-  the same mechanism-implemented/value-flagged pattern as
-  `sections.viability_threshold`.
-- **Task 4 — Eligible Subject Pool API.** `GET /api/v1/eligible-subjects`
-  (Student own-record only). Every curriculum subject returns with an
-  explainable verdict: `completed`, `already_selected`, `prerequisite`,
-  `prerequisite_advisory`, `no_sections_available`, `block_restricted`, or
-  `eligible`. Cross-subject conflict exclusion is deliberately deferred to
-  Task 5 — the pool has no draft-selection state to conflict against yet.
-- **Task 5 — Enrollment Submission API.** `GET`/`POST /api/v1/enrollments`.
-  One transaction creates the enrollment, its subjects, one queue ticket,
-  one audit entry, and a notification. The client's pool view is advisory
-  only — every submitted section is re-validated server-side against a
-  freshly rebuilt pool, plus duplicate-subject, schedule-conflict
-  (`SectionConflictDetector`, reused from Phase 2), and — only when
-  configured — overload checks.
-- **Tasks 6–7 — Student portal modules.** `EligibleSubjectsWorkspace`
-  (read-only pool view) and `EnrollmentWorkspace` (per-subject section
-  picker, Digital PEF review table, `AlertDialog` confirmation matching the
-  Phase 5 pattern, receipt with queue ticket number, and the student's own
-  enrollment history for FR-ENR-010's real-time status).
-- **Task 8 — generalized module registry.** `phaseFiveModuleRegistry` /
-  `isPhaseFiveModuleId` / `PhaseFiveModuleId` renamed to
-  `connectedModuleRegistry` / `isConnectedModuleId` / `ConnectedModuleId`,
-  now covering 15 modules (13 Phase 5 + 2 new).
-- **Task 9 — this reconciliation.** Applied the 2 pending migrations to the
-  real dev database (only after Phase 5's takeover discovered that gap;
-  see the Operational Caution below), seeded the real CCS catalog into it,
-  and ran a full live HTTP proof — not just tests — as `student4.seed@grc.test`
-  (a withdrawn, therefore free-to-re-enroll, seeded student): fetched a real
-  eligible pool (5 eligible subjects, 5 correctly excluded by unmet
-  prerequisites or no sections), submitted a real enrollment for 2 sections,
-  and verified all 5 atomic side effects landed in the real database
-  (1 enrollment, 2 enrollment_subjects, 1 queue ticket, 1 audit row, 1
-  notification, both sections' `enrolled_count` incremented exactly once),
-  then verified the duplicate-active-enrollment guard rejects a second
-  attempt with a clean 422.
-
-## Work in Progress
-
-**Phase 7a — Process 3.0 money path**, on worktree branch
-`phase-7-process-3` (not yet merged). Full recompute of this document
-(objective, verified-completed list, files changed, percentages) happens
-once at Task 9, per the approved plan's cadence; this section tracks
-real-time status in the meantime so the phase can resume cleanly if
-interrupted.
-
-- ✅ **Task 1 — role-scoped enrollment visibility (FR-FIN-001, FR-FIN-005).**
-  `GET /api/v1/enrollments` generalized from Student-only to the
-  `scopeVisibleTo` pattern (ADR 0008): Student → own rows; Registrar Head →
-  all, with `status`/`academic_term_id` filters and pagination; Accounting
-  Staff → `pending_payment` only, enforced in both `Enrollment::scopeVisibleTo`
-  and `EnrollmentPolicy::viewAny` (defense in depth). `EnrollmentResource`
-  gained `student_id`/`student_number` so non-owning roles can identify whose
-  row they're viewing. New `IndexEnrollmentRequest` + `ListEnrollments`
-  Action mirror `ListAuditLogs`'s shape. 5 new focused tests (cross-student
-  isolation, Registrar Head all-rows + filters + pagination, Accounting
-  pending-payment-only regardless of requested filter) plus the existing
-  Phase 6 index test, all green; full backend suite 566/566 passing;
-  PHPStan level 8 and Pint clean.
-- ✅ **Task 2 — Registrar decisions API (FR-FIN-001, FR-FIN-002).**
-  `PATCH /api/v1/enrollments/{enrollment}` follows ADR 0011 verbatim (see
-  `TransitionScheduleProposal`): one route, an `action` field,
-  `EnrollmentPolicy` resolving `decideApproval` (`registrar_approve`/
-  `registrar_reject`) or `void` per request, no `role:` middleware.
-  `registrar_approve` moves `pending_registrar_approval` → `pending_payment`;
-  `registrar_reject` moves it to `rejected`; `void` moves `pending_payment` →
-  `cancelled` — a distinct, later checkpoint for cancelling an
-  already-approved-but-unpaid enrollment, scoped this way because §17 doesn't
-  define "authorized edge case" precisely (documented in
-  `EnrollmentPolicy::void`'s docblock). Reject and void require a non-empty
-  reason, recorded only in the audit row (`enrollments` has no
-  `decision_reason` column of its own, unlike `schedule_proposals`). 6 new
-  focused tests (both happy paths, both reason-required checks, wrong-status
-  rejection, cross-role forbidden checks) all green; full backend suite
-  572/572 passing; PHPStan level 8, Pint, and Redocly all clean.
-- ✅ **Task 3 — grade encoding API (PRD §4.3, §5.3 DFD 3.1).**
+- **Task 1 — role-scoped enrollment visibility (FR-FIN-001, FR-FIN-005).**
+  `GET /api/v1/enrollments` generalized from the Phase 6 Student-only query
+  into the `scopeVisibleTo` pattern (ADR 0008): Student → own rows;
+  Registrar Head → all, with `status`/`academic_term_id` filters and
+  pagination; Accounting Staff → `pending_payment` only, enforced in both
+  `Enrollment::scopeVisibleTo` and `EnrollmentPolicy::viewAny` (defense in
+  depth). `EnrollmentResource` gained `student_id`/`student_number` so
+  non-owning roles can identify whose row they're viewing. New
+  `IndexEnrollmentRequest` + `ListEnrollments` Action mirror
+  `ListAuditLogs`'s shape.
+- **Task 2 — Registrar decisions API (FR-FIN-001, FR-FIN-002).**
+  `PATCH /api/v1/enrollments/{enrollment}` follows ADR 0011 verbatim: one
+  route, an `action` field, `EnrollmentPolicy` resolving `decideApproval`
+  (`registrar_approve`/`registrar_reject`) or `void` per request, no
+  `role:` middleware. `registrar_approve` moves `pending_registrar_approval`
+  → `pending_payment`; `registrar_reject` moves it to `rejected`; `void`
+  moves `pending_payment` → `cancelled` — a distinct, later checkpoint for
+  cancelling an already-approved-but-unpaid enrollment (§17 leaves
+  "authorized edge case" undefined, so this scope choice is documented in
+  `EnrollmentPolicy::void`'s docblock, not asserted as confirmed policy).
+  Reject and void require a non-empty reason, recorded only in the audit
+  row (`enrollments` has no `decision_reason` column, unlike
+  `schedule_proposals`).
+- **Task 3 — grade encoding API (PRD §4.3, §5.3 DFD 3.1).**
   `GET`/`POST`/`PATCH /api/v1/academic-grades`, role-scoped read (Student
-  own, Faculty own sections via `section.professor_id`, Registrar Head all
-  — `AcademicGrade::scopeVisibleTo`). `POST` is Faculty-only and re-checks
-  section ownership plus the (student, subject, term) uniqueness
-  server-side. `PATCH` serves three concerns on one route: a plain content
-  edit of `final_grade`/`remarks` while still `draft`, `action: submit`
-  (Faculty, `draft`→`submitted`), and `action: lock` (Registrar Head,
-  `submitted`→`locked` — the moment a grade becomes part of the official
-  record `BuildEligibleSubjectPool` reads for prerequisite evaluation, so
-  it's the one point that notifies the student). `final_grade` stays the
-  exact decimal string the model already carried since Phase 4 — no scale
-  or passing-mark asserted, per PRD §17. 15 new focused tests all green;
-  full backend suite 588/588 passing; PHPStan level 8, Pint, and Redocly
-  all clean.
-- ✅ **Task 4 — payment queue + serving number API (FR-FIN-006).**
+  own, Faculty own sections via `section.professor_id`, Registrar Head
+  all). `POST` is Faculty-only and re-checks section ownership plus the
+  (student, subject, term) uniqueness server-side. `PATCH` serves three
+  concerns on one route: a plain content edit of `final_grade`/`remarks`
+  while still `draft`, `action: submit` (Faculty, `draft`→`submitted`), and
+  `action: lock` (Registrar Head, `submitted`→`locked` — the moment a
+  grade becomes part of the official record `BuildEligibleSubjectPool`
+  reads for prerequisite evaluation, so it's the one point that notifies
+  the student). `final_grade` stays the exact decimal string the model
+  already carried since Phase 4 — no scale or passing-mark asserted, per
+  PRD §17.
+- **Task 4 — payment queue + serving number API (FR-FIN-006).**
   `GET /api/v1/queue-tickets` (Accounting Staff only, deterministic
-  `queue_date` then `id` order, filterable by `status`/`queue_date`,
-  paginated) and `PATCH /api/v1/queue-tickets/{queueTicket}` with
-  `action: serve` (`waiting`→`serving`) or `action: complete`
-  (`serving`→`served`), following ADR 0011's constant-trio + row-lock
-  shape. Unlike Enrollment/AcademicGrade, both transitions are gated to the
-  same single role with no per-ticket ownership dimension, so the route
-  carries the coarse `role:accounting_staff` middleware (re-checked by
-  `QueueTicketPolicy`) rather than a bare Policy-only gate. §17 leaves reset
-  cadence, priority, and "how many tickets may be serving at once"
-  unconfirmed — only the two-step order is enforced, documented in the
-  Action's docblock the same way `QueueTicketStatus` already does. 8 new
-  focused tests all green; full backend suite 596/596 passing; PHPStan
-  level 8, Pint, and Redocly all clean.
-- ✅ **Task 5 — payment confirmation + Digital COM API (FR-FIN-007–010).**
+  `queue_date` then `id` order, filterable, paginated) and
+  `PATCH /api/v1/queue-tickets/{queueTicket}` with `action: serve`
+  (`waiting`→`serving`) or `action: complete` (`serving`→`served`),
+  following ADR 0011's constant-trio + row-lock shape. Both transitions
+  are gated to the same single role with no per-ticket ownership
+  dimension, so the route carries the coarse `role:accounting_staff`
+  middleware (re-checked by `QueueTicketPolicy`) rather than a bare
+  Policy-only gate. §17 leaves reset cadence, priority, and "how many
+  tickets may be serving at once" unconfirmed — only the two-step order is
+  enforced.
+- **Task 5 — payment confirmation + Digital COM API (FR-FIN-007–010).**
   `POST /api/v1/enrollments/{enrollment}/payment` (Accounting only, only
   from `pending_payment`): one transaction creates the `Payment` row,
   transitions the enrollment to `enrolled`, and generates the Digital COM
@@ -146,202 +76,249 @@ interrupted.
   enrollment's status, so a repeat call — even one arriving after the
   enrollment has already moved on to `enrolled` — returns the existing
   payment/document rather than erroring or duplicating either (`200`
-  instead of `201`); a dedicated test asserts exactly one row of each
-  survives two calls. No PDF pipeline — `storage_path` stays null, and
+  instead of `201`). No PDF pipeline — `storage_path` stays null;
   FR-FIN-010's print/download is served by returning structured COM data
-  for the Student module to render as a print-stylesheet page.
-  `GET /api/v1/enrollment-documents` (Student own, Registrar Head all) via
-  a new `EnrollmentDocument::scopeVisibleTo`. 9 new focused tests all
-  green; full backend suite 605/605 passing; PHPStan level 8, Pint, and
-  Redocly all clean. **All 5 backend API tasks of Phase 7a are now
-  complete** — remaining: 3 frontend portal-module tasks (6–8) and the
-  final docs/gate/live-proof/merge task (9).
-- ✅ **Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student ×2).**
-  New schemas/services/hooks for academic grades, queue tickets, and
-  enrollment documents (mirroring `audit-schema.ts`'s pagination pattern);
+  for the Student module to render. `GET /api/v1/enrollment-documents`
+  (Student own, Registrar Head all) via a new
+  `EnrollmentDocument::scopeVisibleTo`.
+- **Tasks 6–8 — 8 portal modules (Registrar Head ×2, Accounting ×4, Student
+  ×2).** New schemas/services/hooks for academic grades, queue tickets, and
+  enrollment documents, mirroring `audit-schema.ts`'s pagination pattern;
   `enrollment-schema.ts` updated for the paginated envelope,
-  `student_id`/`student_number`, registrar-decision and payment-confirmation
-  inputs. `getEnrollments`/`useEnrollmentsQuery` stay a flat own-list for the
-  Student (backward-compatible with the existing Enrollment module); a new
-  `listEnrollments`/`useEnrollmentsListQuery` adds the filterable, paginated
-  role-scoped view for Registrar Head/Accounting.
+  `student_id`/`student_number`, and the registrar-decision/
+  payment-confirmation inputs. `getEnrollments`/`useEnrollmentsQuery` stay
+  a flat own-list for the Student (backward-compatible with the existing
+  Enrollment module); a new `listEnrollments`/`useEnrollmentsListQuery`
+  adds the filterable, paginated role-scoped view for Registrar
+  Head/Accounting. Four workspace components serve the 8 modules,
+  following the Admission-provisioning precedent of one shared component
+  per `initialModuleId`: `RegistrarEnrollmentWorkspace` (Enrollment
+  Approvals + Overrides & Voids), `AccountingPaymentWorkspace` (Payment
+  Queue + Serving Number + Payment Confirmation + COM Finalization), and
+  two standalone Student modules, `StudentQueuePaymentWorkspace` and
+  `StudentGradesComWorkspace` (grades + Digital COM with a `window.print()`
+  affordance — §17 leaves COM format open and no PDF pipeline exists).
+  Registry grew 15 → 23 `connectedModuleIds`; both boundary tests updated.
+- **Task 9 — this reconciliation.** Confirmed zero pending migrations
+  against the real dev database (Phase 7a adds no new tables — all 6 were
+  already schema-only since the earlier foundation phase). Updated
+  `docs/data-dictionary/enrollment-records.md`'s scope note and added an
+  **API** line to each of the 6 tables this phase gave a route to, rather
+  than duplicating the schema documentation in a new file. Ran a full live
+  HTTP proof against the real dev database — not just tests — walking one
+  fresh, really-submitted enrollment (`proof.student1@grc.test`) the whole
+  way: Faculty encoded and submitted a grade → Registrar Head approved the
+  enrollment and locked the grade → Accounting served and completed the
+  queue ticket, then confirmed payment (**verified idempotent**: a second
+  confirmation call with different, contradictory input returned the
+  *original* payment/document unchanged, and direct SQL confirmed exactly
+  one row in both `payments` and `enrollment_documents`) → the student's
+  own `GET /enrollments`, `/academic-grades`, and `/enrollment-documents`
+  all reflected the final state (enrolled, served ticket, locked grade,
+  COM). Also exercised `registrar_reject` and `void` live on two other
+  seeded enrollments, and confirmed Registrar Head/Accounting Staff
+  visibility boundaries hold on the now-`enrolled` row (Accounting
+  correctly stops seeing it once it leaves `pending_payment`). Every audit
+  row (3 per the primary enrollment, 3 for the grade) and notification (4)
+  landed in the exact expected order, verified via direct SQL.
 
-  Four workspace components serve the 8 modules — following the
-  Admission-provisioning precedent of one shared component per
-  `initialModuleId`: `RegistrarEnrollmentWorkspace` (Enrollment Approvals +
-  Overrides & Voids — approve/reject/void with a required-reason dialog),
-  `AccountingPaymentWorkspace` (Payment Queue + Serving Number + Payment
-  Confirmation + COM Finalization — serve/complete queue actions plus a
-  payment-confirmation dialog showing the generated COM), and two
-  standalone Student modules, `StudentQueuePaymentWorkspace` (reads the
-  already-existing own-enrollment data, including its embedded
-  `queue_ticket`) and `StudentGradesComWorkspace` (grades + Digital COM with
-  a `window.print()` affordance, since PRD §17 leaves COM format open and no
-  PDF pipeline exists). Registry grew 15 → 23 `connectedModuleIds`; both
-  boundary tests (`module-registry.test.tsx`, `portal-module-page.test.tsx`)
-  updated. Full frontend gate green: `npx vitest run
-  --no-file-parallelism` 243/243 passing, `tsc --noEmit`, `eslint --max-warnings=0`,
-  `prettier --check`, `npm audit --omit=dev` (0 vulnerabilities), and
-  `next build` all clean.
-- ⬜ Task 9 — docs, full quality gate, live HTTP proof, `PROGRESS.md`
-  recompute, merge to `main`, push to `origin`.
+## Work in Progress
+
+None. Phase 7a is closed and ready to merge. Phase 7b (transferee credits,
+withdrawals, Faculty rosters/grade-submission UI, Dean/Executive Director
+dashboards) has not been started — see *Exact Next Steps*.
 
 ## Files Changed
 
-**Backend, schema/seed:** `database/migrations/2026_07_30_000001_widen_unit_columns…`,
-`…000002_add_block_section_eligibility_mechanism_columns`;
-`database/seeders/CcsSubjectSeeder.php` (new), `DatabaseSeeder.php`;
-`app/Models/Subject.php`, `Enrollment.php`, `Section.php`,
-`StudentProfile.php` (casts/docblocks for the widened/new columns).
+No new migrations — all 6 tables this phase built an API for
+(`enrollments`, `academic_grades`, `queue_tickets`, `payments`,
+`enrollment_documents`, plus `enrollment_subjects` embedded read-only) were
+already schema-only since an earlier foundation phase.
 
-**Backend, domain:** `app/Domain/Academic/PrerequisiteEvaluator.php`,
-`PrerequisiteVerdict.php`, `PrerequisiteVerdictStatus.php` (new);
-`config/enrollment.php` (new); `app/Domain/Enrollment/EligibleSubjectEntry.php`
-(new); `app/Domain/Audit/AuditAction.php`, `AuditableType.php` (+
-`enrollment.submitted` / `enrollment`); `app/Domain/Notifications/NotificationType.php`
-(+ `enrollment_submitted`).
+**Backend, domain:** `app/Domain/Audit/AuditAction.php` (+7 actions:
+`enrollment.registrar_approved`/`registrar_rejected`/`voided`/
+`payment_confirmed`, `academic_grade.created`/`submitted`/`locked`,
+`queue_ticket.serving_started`/`served`), `AuditableType.php` (+
+`academic_grade`, `queue_ticket`); `app/Domain/Notifications/NotificationType.php`
+(+4: `enrollment_registrar_approved`/`registrar_rejected`/`voided`,
+`academic_grade_locked`, `enrollment_payment_confirmed`).
 
-**Backend, API:** `app/Actions/Enrollment/BuildEligibleSubjectPool.php`,
-`SubmitEnrollment.php` (new); `Http/Controllers/Api/V1/EligibleSubjectController.php`,
-`EnrollmentController.php` (new); `Http/Requests/Api/V1/EligibleSubject/`,
-`Enrollment/StoreEnrollmentRequest.php` (new); `Http/Resources/Api/V1/EligibleSubjectResource.php`,
-`EnrollmentResource.php` (new); `Policies/EligibleSubjectPolicy.php`,
-`EnrollmentPolicy.php` (new); `Providers/AppServiceProvider.php`
-(`PrerequisiteEvaluator` binding, 2 new Gates); `routes/api.php` (3 new
-routes: `GET /eligible-subjects`, `GET`/`POST /enrollments`).
+**Backend, API — 8 new routes across 4 new + 1 extended controller:**
+`Actions/Enrollment/{ListEnrollments,TransitionEnrollment,ConfirmPayment,
+ListEnrollmentDocuments,ListQueueTickets,TransitionQueueTicket}.php`,
+`Actions/Academic/{ListAcademicGrades,RecordAcademicGrade,
+UpdateAcademicGrade}.php` (all new); `Http/Controllers/Api/V1/
+{EnrollmentController.php (extended), AcademicGradeController.php,
+EnrollmentDocumentController.php, QueueTicketController.php}` (new);
+`Http/Requests/Api/V1/{Enrollment,AcademicGrade,EnrollmentDocument,
+QueueTicket}/` (8 new Form Requests); `Http/Resources/Api/V1/
+{EnrollmentResource.php (extended), AcademicGradeResource.php,
+EnrollmentDocumentResource.php, PaymentConfirmationResource.php,
+QueueTicketResource.php}`; `Models/{Enrollment.php, EnrollmentDocument.php}`
+(new `scopeVisibleTo`), `Models/AcademicGrade.php` (new `scopeVisibleTo`);
+`Policies/{EnrollmentPolicy.php (extended), AcademicGradePolicy.php,
+EnrollmentDocumentPolicy.php, QueueTicketPolicy.php}`; `routes/api.php`
+(8 new routes: `PATCH /enrollments/{id}`, `POST /enrollments/{id}/payment`,
+`GET /enrollment-documents`, `GET`/`POST`/`PATCH /academic-grades[/{id}]`,
+`GET`/`PATCH /queue-tickets[/{id}]`).
 
-**Frontend:** `src/features/schemas/enrollment-schema.ts`,
-`services/enrollment-service.ts`, `hooks/use-enrollment.ts`,
-`hooks/use-term-selection.ts` (new, shared by both new workspaces);
-`components/portal/eligible-subjects-workspace.tsx`,
-`enrollment-workspace.tsx` (new); `portal/module-registry.tsx` (renamed
-+ 2 new modules), `portal/role-capabilities.ts` (Student module
-descriptions de-"preview"-ified); `components/pages/portal-module-page.tsx`
-(symbol rename only).
+**Frontend:** `src/features/schemas/{academic-grade,queue-ticket,
+enrollment-document}-schema.ts` (new), `enrollment-schema.ts` (paginated
+envelope, `student_id`/`student_number`, registrar-decision/
+payment-confirmation inputs); `services/{academic-grade,queue-ticket,
+enrollment-document}-service.ts` (new), `enrollment-service.ts` (extended:
+`listEnrollments`, `updateEnrollment`, `confirmPayment`);
+`hooks/{use-academic-grades,use-queue-tickets,use-enrollment-documents}.ts`
+(new), `use-enrollment.ts` (extended: `useEnrollmentsListQuery`,
+`useUpdateEnrollmentMutation`, `useConfirmPaymentMutation`);
+`components/portal/{registrar-enrollment,accounting-payment,
+student-queue-payment,student-grades-com}-workspace.tsx` (new, 4 files
+serving 8 registry entries); `portal/module-registry.tsx` (15 → 23
+`connectedModuleIds`), `portal/role-capabilities.ts` (8 placeholder
+descriptions de-"preview"-ified).
 
-**Docs:** `docs/reference/` (new — the two CSV spreadsheets, verbatim, plus
-a provenance README); `docs/api/openapi.yaml` (3 new paths, 5 new schemas);
-`PROGRESS.md` (this reconciliation).
+**Docs:** `docs/api/openapi.yaml` (8 new paths, 2 new tags — `Academic
+Records`, `Payments` — and ~15 new schemas); `docs/data-dictionary/
+enrollment-records.md` (scope note + per-table **API** notes updated
+rather than duplicated into a new file); `PROGRESS.md` (this
+reconciliation).
 
 ## Commands and Tests Run
 
 | Command | Result |
 |---|---|
-| `php artisan test --without-tty` | **563 passed / 2,099 assertions**, ~30s |
-| `composer format:check` (Pint) | passed |
-| `vendor\bin\phpstan analyse --memory-limit=1G --no-progress` | No errors (level 8) |
+| `php artisan test` | **605 passed / 2,284 assertions**, ~35–55s (run after every task) |
+| `vendor\bin\phpstan analyse --memory-limit=1G --no-progress` | No errors (level 8), run after every task |
+| `vendor\bin\pint --test` | passed, run after every task |
 | `composer audit --locked` | No security vulnerability advisories found |
-| `npx @redocly/cli lint docs/api/openapi.yaml` | valid, no warnings |
-| `npx vitest run --no-file-parallelism` | **41 files / 224 tests passed** |
-| `npm run typecheck` (`tsc --noEmit`) | passed |
-| `npm run lint` (`eslint . --max-warnings=0`) | passed (after fixing 1 real `react-hooks/set-state-in-effect` violation in `use-term-selection.ts` and 2 non-null-assertion style errors — see *Technical Decisions*) |
-| `npm run format:check` (Prettier) | passed after one auto-fix pass over 5 new files |
-| `npm audit --audit-level=moderate` | 0 vulnerabilities |
-| `npm run build` (`next build`, Turbopack) | compiled successfully, 5 routes |
-| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator` | exactly the 2 expected Phase 6 migrations pending, both `ALTER TABLE` on already-granted tables — confirmed no new `GRANT` needed |
-| **Real dev DB:** `php artisan migrate --database=mariadb_migrator --force` | both migrations applied, `DONE` |
-| **Real dev DB:** `php artisan db:seed --class="Database\Seeders\CcsSubjectSeeder" --force` | seeded; verified 9+ real CCS codes present via direct query |
-| **Live HTTP, real dev DB:** login as `student4.seed@grc.test`, `GET /api/v1/eligible-subjects?academic_term_id=2` | 5 eligible subjects with real available sections, 5 correctly excluded (4 by unmet prerequisite, 1 by no offered sections) — verified against real seeded curriculum/section data |
-| **Live HTTP, real dev DB:** `POST /api/v1/enrollments` with 2 real sections | **201 Created**; verified via direct SQL: exactly 1 `enrollments` row, 2 `enrollment_subjects` rows, 1 `queue_tickets` row, 1 `audit_logs` row, 1 `notifications` row, both sections' `enrolled_count` incremented by exactly 1 |
-| **Live HTTP, real dev DB:** repeat the same `POST` | **422**, `academic_term_id: "You already have an active enrollment for this term."` — duplicate guard confirmed live |
-| **Live HTTP, real dev DB:** `GET /api/v1/enrollments` | returns both the new and the prior withdrawn enrollment, newest first |
-| `CHECK TABLE mysql.user, mysql.tables_priv` (before/after live testing) | `OK` throughout |
-| `Get-WinEvent -LogName Application` (last 15 min, MariaDB-related) | no entries |
-| **On merged `main`:** `git merge phase-6-process-2` | Fast-forward, `77ae5ac..783c775`, **0 conflicts** — the branch was cut from `main`'s current tip and `main` had no divergent commits |
-| **On merged `main`:** `php artisan test --without-tty` | **563 passed / 2,099 assertions**, 45s |
-| **On merged `main`:** `npx vitest run --no-file-parallelism` | **41 files / 224 tests passed** |
-| **On merged `main`:** `npm run build` (`next build`, Turbopack) | compiled successfully, 5 routes |
+| `npx @redocly/cli lint docs/api/openapi.yaml` | valid, no warnings, run after every task |
+| `npx vitest run --no-file-parallelism` | **48 files / 243 tests passed** |
+| `npx tsc --noEmit` | passed |
+| `npx eslint . --max-warnings=0` | passed (2 real `@typescript-eslint/no-base-to-string` violations in new test files' ad-hoc URL-stringification helpers fixed by reusing the existing `url()` helper pattern) |
+| `npx prettier --check .` | passed after one auto-fix pass over 7 files |
+| `npm audit --omit=dev` | 0 vulnerabilities |
+| `npx next build` (Turbopack) | compiled successfully, 5 routes |
+| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator` | **zero pending migrations** — confirmed before the live proof, exactly as predicted (Phase 7a adds no new tables) |
+| **Live HTTP, real dev DB:** submitted a fresh enrollment as `proof.student1@grc.test` (`POST /enrollments`, section 1/term 2) | **201**, enrollment #10 created `pending_registrar_approval` with a fresh queue ticket `Q000010` |
+| **Live HTTP, real dev DB:** `faculty.seed@grc.test` encodes + submits a grade (`POST`, then `PATCH action=submit /academic-grades`) | grade #4 created `draft` → `submitted` for the same student/subject/section/term |
+| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` approves the enrollment and locks the grade (`PATCH action=registrar_approve /enrollments/10`, `PATCH action=lock /academic-grades/4`) | enrollment → `pending_payment`; grade → `locked` |
+| **Live HTTP, real dev DB:** same Registrar Head rejects a second seeded enrollment and voids a third (`PATCH action=registrar_reject /enrollments/9`, `PATCH action=void /enrollments/7`, both with a reason) | both **200**, → `rejected` / `cancelled` respectively — both other Task 2 actions proven live |
+| **Live HTTP, real dev DB:** `accounting.seed@grc.test` serves then completes the queue ticket (`PATCH action=serve`, `PATCH action=complete` on `/queue-tickets/4`) | `waiting` → `serving` → `served` |
+| **Live HTTP, real dev DB:** Accounting confirms payment (`POST /enrollments/10/payment`, `external_reference: "OR-000123"`) | **201**, enrollment → `enrolled`, Digital COM `COM000010` generated |
+| **Live HTTP, real dev DB:** repeat the identical `POST` with a *different, contradictory* `external_reference` | **200** (not 201) — returned the **original** `OR-000123`/`COM000010` unchanged; direct SQL confirmed exactly 1 row in both `payments` and `enrollment_documents` for enrollment 10 — FR-FIN-009 idempotency proven live |
+| **Live HTTP, real dev DB:** `proof.student1` reads `GET /enrollments`, `/academic-grades`, `/enrollment-documents` | all three reflect the final state: `enrolled` + served ticket, `locked` grade, COM present |
+| **Live HTTP, real dev DB:** Registrar Head still sees enrollment 10 (now `enrolled`); Accounting Staff's `pending_payment`-scoped list no longer does | both confirmed — visibility boundaries hold after a status transition |
+| **Direct SQL, real dev DB:** audit trail for enrollment 10 | 3 rows in order: `enrollment.submitted` → `enrollment.registrar_approved` → `enrollment.payment_confirmed` |
+| **Direct SQL, real dev DB:** audit trail for grade 4 | 3 rows in order: `academic_grade.created` → `submitted` → `locked` |
+| **Direct SQL, real dev DB:** notifications for `proof.student1` | 4 rows in order: enrollment submitted, registrar approved, grade locked, payment confirmed |
 
 ## Technical Decisions
 
-- **Real GRC data changes what "the subject catalog" means for this
-  system.** The user supplied two real CCS block-section spreadsheets
-  mid-phase. Extracted only `code`/`title`/`units` (88 subjects) into an
-  additive seeder — schedule/room/faculty/modality stayed out of scope.
-  13 of 384 source rows had a SCHED ID in the UNITS column (a spreadsheet
-  column-alignment artifact); resolved by majority value per code, fully
-  documented in `docs/reference/README.md`.
-- **Widen `units` columns rather than leave them integer.** The real data
-  makes this non-optional: Leadership subjects are 1.5 units. Cast as
-  `float` (not left as a raw decimal string like
-  `academic_grades.final_grade`) because a unit count carries no §17 policy
-  ambiguity — coercion is safe.
-- **Grading policy is user-directed, not GRC-confirmed — encode both facts.**
-  `config/enrollment.php` ships with the user's explicit 2026-07-30 planning
-  direction (3.00 passing / 5.00 failing / lower-is-better / INC / NC) as
-  its *default*, so the system is demonstrable, but
-  `PrerequisiteEvaluator`'s `needs_verification` path is real, tested, and
-  reachable by clearing the config — never silently bypassed. Every
-  §17-pending value stays overridable via environment variable.
-- **FR-ENR-011's block-exclusive comparison uses a documented placeholder
-  string (`'irregular'`), not an invented enum.** The approved schema gives
-  `sections.is_block_exclusive` (bool) and `student_profiles.enrollment_category`
-  (free string) — nothing defines what the category values *are*. Matching
-  the existing `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE` precedent, the
-  comparison target is one named, clearly-commented placeholder constant,
-  swappable the moment GRC confirms real vocabulary.
-- **FR-ENR-003's "conflicting sections" check lives in Task 5, not Task 4.**
-  The acceptance criterion is "cannot be *submitted* together" — there is no
-  draft-selection state between viewing the pool and the atomic submission
-  for two sections to conflict against. `SectionConflictDetector` (reused
-  unchanged from Phase 2) runs pairwise across the submitted set instead.
-- **`EnrollmentWorkspace` uses plain `useState`, not React Hook Form.** The
-  "form" is N independent per-subject section pickers, not one object with
-  a schema — RHF's `zodResolver` model doesn't fit. FR-ENR-006 ("preserve
-  valid selections on error") falls out naturally: the selection map is
-  never cleared except on success.
-- **Recompute Row 4 (Process 2.0 backend) from 25% to 80%, and Row 8 (nine
-  role portals) from 33% to 38%.** Row 4: 3 of DFD 2.1–2.4's four
-  subprocesses are now complete (2.1 profile read, 2.2 eligible pool, 2.4
-  submission); only 2.3 "Generate Predictive Recommendation" remains,
-  deliberately deferred to Phase 9 as ML work — the same "80%, ML piece
-  deferred" shape already recorded for Row 3 (Process 1.0). Row 8: 15/40
-  modules now connected (32.5% → 37.5%, rounded to 38%). Contributions:
-  Row 4 10% × 80% = 8.00 (was 2.50); Row 8 25% × 38% = 9.50 (was 8.25).
-  Overall: 48.25 → 55.00 ≈ 55%. No other row's weight or Done% changed.
-- **Merge locally, do not push.** Same scope as every prior session:
-  finish Task 9, commit, merge to local `main`. No push without separate
-  explicit authorization.
+- **`void` is scoped to `pending_payment`, not any pre-`enrolled` state.**
+  PRD §3.7 gives the Registrar Head "logged override or void actions for
+  authorized edge cases" with no further definition. Rather than assert an
+  unconfirmed scope, `void` covers exactly one checkpoint — cancelling an
+  already-approved-but-unpaid enrollment — kept deliberately non-overlapping
+  with `registrar_reject` (pre-approval) and the Phase 7b withdrawal flow
+  (post-`enrolled`). Documented as a scope choice, not confirmed policy, in
+  `EnrollmentPolicy::void`'s docblock.
+- **`UpdateAcademicGradeRequest`/`UpdateAcademicGrade` serve three concerns
+  on one PATCH route, one more than ADR 0011's usual two.** Every other
+  ADR-0011 route (schedule proposals, enrollment decisions) is pure
+  status-transition. Grades additionally need a plain content edit (Faculty
+  correcting `final_grade`/`remarks` while still `draft`) that isn't a
+  transition at all — mutual exclusivity is enforced by Zod's `union()` on
+  the frontend and `prohibited_if` plus a `withValidator` check on the
+  backend, so content fields and `action` are never accepted together.
+- **Payment confirmation's idempotency check runs *before* the status
+  check, not after.** A naive implementation would reject a repeat
+  confirmation with "requires `pending_payment`; currently `enrolled`" —
+  technically true but wrong, since FR-FIN-009 requires the repeat to
+  succeed. `ConfirmPayment::execute` checks for an existing `Payment` row
+  first and short-circuits to returning it, regardless of the current
+  status; only a *first* call is checked against `pending_payment`. Proven
+  live, not just by test: a second `POST` with a different, contradictory
+  `external_reference` returned the original value unchanged.
+- **Queue ticket transitions carry the coarse `role:accounting_staff`
+  route middleware; every other Phase 7a write does not.** `Enrollment`/
+  `AcademicGrade` transitions split across multiple roles per action
+  (ADR 0011's reason for existing), but `serve`/`complete` are both
+  Accounting-only with no per-ticket ownership dimension — the same shape
+  `role:registrar_head` already uses for `audit-logs.index`. Using ADR
+  0011's per-action-ability machinery here would be complexity without a
+  role split to justify it.
+- **No PDF pipeline for the Digital COM.** §17 leaves format, numbering,
+  signatures, and retention unconfirmed. `document_number` is an opaque
+  deterministic string (`COM%06d`, the same choice already made for
+  `Q%06d` queue tickets) and `storage_path` stays `null`. FR-FIN-010's
+  "view and print/download" is served by returning structured data that
+  `StudentGradesComWorkspace` renders with a `window.print()` affordance —
+  inventing a generator would assert a document format GRC hasn't approved.
+- **`getEnrollments`/`useEnrollmentsQuery` keep returning a flat array;
+  `listEnrollments`/`useEnrollmentsListQuery` is a new, separate pair for
+  the paginated role-scoped view.** The backend response for
+  `GET /enrollments` became a paginated envelope in Task 1, but the
+  existing Student `EnrollmentWorkspace` (Phase 6) only ever needs its own
+  handful of enrollments — no pagination UI is worth building for that. The
+  service function absorbs the shape change internally (unwraps `.data`)
+  rather than pushing it onto every existing caller.
+- **`docs/data-dictionary/enrollment-records.md` was updated, not
+  duplicated.** The plan anticipated a new data-dictionary page for
+  Process 3.0, but all 6 tables this phase gave an API to were already
+  fully documented there as schema-only groundwork from an earlier phase.
+  Updating that page's stale "no Policy/Resource/Controller exists yet"
+  scope note and adding an **API** line per table is more accurate and
+  avoids duplicating schema documentation across two files.
+- **Recompute Row 5 (Process 3.0 backend) from 15% to 70%, and Row 8 (nine
+  role portals) from 38% to 58%.** Row 5: 4 of Process 3.0's 5 subprocesses
+  are now complete (3.1 grade encoding, 3.3 final approval, 3.4 payment
+  queue, 3.5 payment confirmation + COM); only 3.2 (transferee
+  credits/withdrawal) remains, deferred to Phase 7b. Row 8: 23/40 modules
+  now connected (57.5%, rounded to 58%). Contributions: Row 5 12% × 70% =
+  8.40 (was 1.80); Row 8 25% × 58% = 14.50 (was 9.50). Overall: 55.00 +
+  6.60 + 5.00 = 66.60 ≈ **67%**. No other row's weight or Done% changed.
+- **Merge to local `main`, then push to `origin`.** Unlike every prior
+  session, the user explicitly authorized the push at the start of this
+  one ("yes proceed to pushed to origin") — this is not a scope
+  extrapolation from a general merge authorization.
 
 ## Known Issues and Blockers
 
 - **Frontend full-suite parallel flakiness (this machine only) — unchanged
-  from Phase 5.** `npm test` with Vitest's default multi-worker pool is
-  unreliable under this machine's memory pressure; `npx vitest run
-  --no-file-parallelism` is the trustworthy invocation and is what this
-  session's 41/224 result used throughout.
-- No new blocking defect found in Phase 6. The real-data live proof (Task 9)
-  surfaced no gaps beyond what's already fixed and recorded above.
-- Phase 7 remains the next §17-heavy phase (passing-grade *rule* is now
-  user-directed but still GRC-unconfirmed; queue-ticket numbering, payment
-  confirmation fields, COM format all still open) — see *Open Institutional
-  Decisions*.
+  from prior phases.** `npm test` with Vitest's default multi-worker pool
+  is unreliable under this machine's memory pressure; `npx vitest run
+  --no-file-parallelism` is the trustworthy invocation and is what every
+  frontend result recorded in this document used.
+- No new blocking defect found in Phase 7a. The live proof surfaced no gap
+  beyond what's already fixed and recorded above.
+- **Phase 7b is the next §17-heavy slice**: transferee-credit equivalence
+  rules, withdrawal seat-release policy, and (still, as in every prior
+  phase) queue-ticket numbering/reset and COM format remain GRC-unconfirmed
+  — see *Open Institutional Decisions*.
 
 ## Uncommitted or Risky Changes
 
-None. `main`'s working tree is clean after the fast-forward merge (now at
-`783c775`). The `phase-6-process-2` branch and its worktree at
-`.worktrees/phase-6-process-2` remain on disk, unpushed and not deleted, in
-case a rollback is ever needed. The real dev database carries the 2 Phase 6
-migrations and the `CcsSubjectSeeder`'s 88 rows, applied deliberately as
-part of this session's live verification (not a side effect) — the same
-database the merged `main` code now runs against.
+None once this reconciliation is committed and merged. The real dev
+database's only Phase 7a-specific state is the live-proof data created
+through the real API during this session's verification (one fresh
+enrollment for `proof.student1@grc.test` carried all the way to `enrolled`
+with a locked grade and a generated COM; a reject and a void exercised on
+two other seeded enrollments) — deliberate verification, not a side
+effect, and safe to leave in place as further demo data.
 
 ## Exact Next Steps
 
-1. Start **Phase 7 — Process 3.0 + Remaining Portals** (FR-FIN-001–010):
-   grade encoding, Registrar approval/override, transferee credits,
-   withdrawal, payment queue, Digital COM. This is the most
-   ML-consequential phase before 9 — it produces the attrition model's
-   label and most of its features. Read `PRD.md` §5.3/DFD 3.x first.
+1. Start **Phase 7b** — the deferred remainder of Process 3.0 and its
+   portals: transferee credits, withdrawal/drops, Faculty Class Rosters,
+   the Faculty grade-*submission* UI (the backend already exists from this
+   phase), and the Dean/Executive Director dashboards.
 2. Before writing code, follow `AGENTS.md`: confirm current `git
    status`/`git log`, and use `superpowers:brainstorming` →
-   `superpowers:writing-plans` for a new phase-7 plan/spec pair under
-   `docs/superpowers/`.
+   `superpowers:writing-plans` for a new phase-7b plan/spec pair.
 3. Optional cleanup (not blocking): remove the
-   `.worktrees/phase-6-process-2` worktree and delete the merged branch
-   once the user confirms the merge is stable — ask first, per the Git
-   Safety Protocol.
+   `.worktrees/phase-7-process-3` worktree and delete the merged branch
+   once the user confirms the merge and push are stable — ask first, per
+   the Git Safety Protocol.
 
 ## Do Not Change
 
@@ -353,8 +330,6 @@ database the merged `main` code now runs against.
 - Notification ownership (`user_id` never exposed) and audit privacy (no
   actor name/email ever rendered).
 - `session.userId`-scoped private TanStack Query keys.
-- Temporary admission credentials: never persisted to storage, logs, form
-  state, or query caches.
 - Every submitted enrollment section is re-validated server-side against a
   freshly built eligible pool — never trust the client's cached view.
 - The `enrollments.active_academic_term_id` generated column and the
@@ -362,18 +337,22 @@ database the merged `main` code now runs against.
   violation into a clean 422 — do not remove either half.
 - `PrerequisiteEvaluator`'s `needs_verification` path — never make it
   silently default to pass or fail when the grading policy is unconfigured.
-- The `'irregular'` block-section placeholder is clearly flagged as
-  provisional — do not treat it as confirmed institutional policy elsewhere.
+- Payment confirmation, COM generation, queue-ticket transitions, and
+  enrollment decisions must all stay idempotent/re-checked under a row
+  lock — never remove `lockForUpdate()` or the idempotency-first ordering
+  in `ConfirmPayment`.
+- `void`'s scope (`pending_payment` only) and the `'irregular'`
+  block-section placeholder are both clearly flagged as provisional — do
+  not treat either as confirmed institutional policy elsewhere.
 - No ML runtime behavior before Phase 9; do not touch the paused
   `ml-service`.
-- Do not push to `origin/main` without separate, explicit authorization.
 
 ---
 
-# ■ Overall Completion — 55%
+# ■ Overall Completion — 67%
 
 ```
-██████████████░░░░░░░░░░░  55 / 100
+█████████████████░░░░░░░  67 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -385,28 +364,30 @@ against work that is **merged**, not work that is written or planned.
 | 2 | Identity & RBAC — Sanctum, 9 roles, role middleware, Policies, query scopes | 7% | 85% | 5.95 |
 | 3 | Process 1.0 backend — scheduling (PRD §5.1) | 10% | 80% | 8.00 |
 | 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 80% | 8.00 |
-| 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 15% | 1.80 |
+| 5 | Process 3.0 backend — approvals, payment, COM (PRD §5.3) | 12% | 70% | 8.40 |
 | 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 100% | 5.00 |
 | 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
-| 8 | Nine role portals — 40 modules (spans Phases 5–7) | 25% | 38% | 9.50 |
+| 8 | Nine role portals — 40 modules (spans Phases 5–7b) | 25% | 58% | 14.50 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
 | 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **55.00 ≈ 55%** |
+| | **Total** | **100%** | | **66.60 ≈ 67%** |
 
 Two scores that look surprising, explained:
 
-- **Row 4 at 80%** — 3 of DFD 2.1–2.4's four Process 2.0 subprocesses are
-  complete (2.1 profile read, 2.2 eligible pool, 2.4 submission). Only 2.3
-  "Generate Predictive Recommendation" remains, deliberately deferred to
-  Phase 9 as ML work — the same shape as Row 3's 80% (FR-SCH-006 demand
-  forecast deferred the same way).
-- **Row 5 at 15%** — all 9 Process 3.0 tables are migrated, tested and
-  documented, but not one Controller, Policy, Resource or route exists.
-- **Row 8 at 38%** — 15 of 40 modules are now fully wired to real APIs
-  (forms, mutations, parsed queries, tests), across 6 of 9 roles. 15/40 =
-  37.5%, rounded to 38%; see Decisions. The other 25 modules (Registrar
-  Staff's 4, Accounting's 4, plus the Phase 7/9 modules for the six
-  Phase-5/6 roles) remain placeholder empty-states.
+- **Row 5 at 70%** — 4 of Process 3.0's 5 subprocesses are complete: 3.1
+  grade encoding, 3.3 final Registrar approval, 3.4 payment queue, 3.5
+  payment confirmation + Digital COM. Only 3.2 (transferee credits and
+  withdrawal) remains, deferred to Phase 7b.
+- **Row 8 at 58%** — 23 of 40 modules are now fully wired to real APIs
+  (forms, mutations, parsed queries, tests), across 8 of 9 roles. 23/40 =
+  57.5%, rounded to 58%; see Decisions. The other 17 remain placeholder
+  empty-states: Registrar Staff's 4 (deferred to Phase 7b along with
+  transferee credits/withdrawal), Faculty's Class Rosters + Grade
+  Submission (2, backend already built this phase — see *Phase 7a — Process
+  3.0 Money Path* below), Registrar Head's remaining 3
+  (attrition-analytics, compliance-reports, policy-settings), Dean's 4 and
+  Executive Director's 3 dashboards/reports, and Program Chair's
+  Demand Forecast (1, deferred to Phase 9 as ML work).
 
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
@@ -419,12 +400,12 @@ re-multiply. Do not adjust weights without recording why in Decisions.
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | **33** |
+| **Live API routes** | **41** |
 | **Database tables** | **26** |
-| **Backend tests** | **563 passing (2,099 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **41 files, 224 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
+| **Backend tests** | **605 passing (2,284 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
+| **Frontend tests** | **48 files, 243 tests, Vitest** — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
-| **Portals functional** | 7 of 9 have at least one connected module (15 of 40 modules total); Registrar Staff and Accounting Staff remain fully placeholder pending Phase 7 |
+| **Portals functional** | 8 of 9 have at least one connected module (23 of 40 modules total); Registrar Staff remains fully placeholder, deferred to Phase 7b |
 
 ---
 
@@ -437,15 +418,15 @@ environments. Credentials are documented in `docs/testing/SEEDED_IDENTITIES.md`.
 
 | # | Role | PRD § | Enum value | Seeded identity | Backend authorization | Portal |
 |---|---|---|---|---|---|---|
-| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile, eligible pool, enrollment submission + private notifications | ✅ Phase 6 (2 modules) · ⬜ Phase 7 (2 more) |
+| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile, eligible pool, enrollment submission/decisions view, grades, payment/queue status, Digital COM + private notifications | ✅ Phase 6 (2 modules) · ✅ Phase 7a (2 more) — all 4 connected |
 | 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ✅ Phase 5 (3 modules) |
-| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences + publication notifications | ✅ Phase 5 (2 modules) · ⬜ Phase 6–7 (2 more) |
+| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences, grade encoding (draft→submitted) + publication notifications | ✅ Phase 5 (2 modules) · ⬜ Phase 7b (2 more — backend for grade submission already built) |
 | 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ✅ Phase 5 (5 modules) · ⬜ Phase 9 (1 more) |
-| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7, 9 (4 more) |
-| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7, 9 (3 more) |
-| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal + audit logs + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7–9 (5 more) |
-| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7 |
-| 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7 |
+| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7b, 9 (4 more) |
+| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7b, 9 (3 more) |
+| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal, audit logs, enrollment approve/reject/void, grade locking + private notifications | ✅ Phase 5 (1 module) · ✅ Phase 7a (2 more) · ⬜ Phase 7b/9 (3 more) |
+| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ⚠️ private notifications only | ⬜ Phase 7b |
+| 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ✅ payment queue, serving number, idempotent payment confirmation + Digital COM generation | ✅ Phase 7a (4 modules) — all connected |
 
 The local database was reseeded on 2026-07-29. All 12 synthetic
 `*.seed@grc.test` accounts—the nine role identities plus three additional
@@ -711,15 +692,61 @@ values default to `null` = unenforced), block-section eligibility (schema
 exists, comparison uses a documented placeholder pending GRC's real
 regular/irregular vocabulary).
 
-## Phase 7 — Process 3.0 + Remaining Portals
+## Phase 7a — Process 3.0 Money Path ✅
 
-FR-FIN-001–010: grade encoding, Registrar approval and override, transferee
-credits, withdrawal, payment queue, Digital COM. Delivers the Registrar Head,
-Registrar Staff and Accounting portals plus Faculty grade submission and the
-Student queue/payment/COM modules.
+Nine tasks, all merged: role-scoped enrollment visibility, the Registrar
+Head's approve/reject/void decisions, grade encoding
+(draft→submitted→locked), the Accounting payment queue, idempotent payment
+confirmation + Digital COM generation, and 8 portal modules across
+Registrar Head, Accounting Staff, and Student.
 
-The most ML-consequential phase before 9 — it produces the attrition model's
-label and most of its features.
+- **Registrar decisions** (`PATCH /api/v1/enrollments/{enrollment}`,
+  FR-FIN-001/002). Follows ADR 0011 verbatim: one route, an `action` field,
+  `EnrollmentPolicy` resolving the ability per request. `registrar_approve`/
+  `registrar_reject` decide the initial approval queue; `void` is a
+  distinct later checkpoint, cancelling an already-approved-but-unpaid
+  enrollment — scoped to `pending_payment` because §17 leaves "authorized
+  edge case" undefined.
+- **Grade encoding** (`GET`/`POST`/`PATCH /api/v1/academic-grades`, PRD
+  §4.3 DFD 3.1). Role-scoped read; Faculty writes only their own sections'
+  grades while `draft`; Registrar Head locks a `submitted` grade — the
+  moment it becomes part of the official record
+  `BuildEligibleSubjectPool` already reads for prerequisite evaluation.
+- **Payment queue + confirmation** (`GET`/`PATCH /api/v1/queue-tickets`,
+  `POST /api/v1/enrollments/{enrollment}/payment`, FR-FIN-006–010).
+  Accounting-only; confirmation is a five-write transaction (`Payment` +
+  enrollment→`enrolled` + `EnrollmentDocument` + audit + notification)
+  proven **idempotent live**, not just by test — a repeat call with
+  contradictory input returns the original record unchanged. No PDF
+  pipeline; the Digital COM is structured data the Student portal renders
+  with `window.print()`.
+- **8 portal modules.** Registrar Head (Enrollment Approvals, Overrides &
+  Voids), Accounting Staff (Payment Queue, Serving Number, Payment
+  Confirmation, COM Finalization — all four sharing one workspace
+  component the way Admission's 3 modules already do), Student (Queue &
+  Payment, Grades & Digital COM).
+- **Live-verified, not just tested.** Zero pending migrations confirmed
+  against the real dev database (no new tables — all 6 were already
+  schema-only). Walked one freshly-submitted enrollment the entire way
+  over real HTTP — submit → grade encode/submit/lock → registrar approve →
+  queue serve/complete → payment confirm (with the idempotency repeat) →
+  student's own views — verifying every side effect via direct SQL, plus
+  `registrar_reject` and `void` exercised live on two other enrollments.
+
+§17-blocked, mechanism-implemented-value-flagged: `void`'s exact
+"authorized edge case" scope, queue-ticket numbering/reset/priority,
+required payment-confirmation fields and currency rounding, and Digital
+COM format/numbering/signatures/retention all remain GRC-unconfirmed.
+
+## Phase 7b — Transferee Credits, Withdrawal & Remaining Portals
+
+Deferred from Phase 7a by explicit user choice at kickoff. FR-FIN-003/004:
+transferee credit mapping, withdrawal/drops. Delivers the Registrar Staff
+portal, Faculty's Class Rosters and grade-*submission* UI (the backend
+already exists — see Phase 7a), and the Dean/Executive Director dashboards.
+
+The most ML-consequential remaining slice before Phase 9 — it produces the
+attrition model's label and most of its features.
 
 ## Phase 8 — Polish, Accessibility, E2E, Performance
 
@@ -763,8 +790,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 |---|---|---|
 | Eligible Subjects | 6 | ✅ |
 | Enrollment | 6 | ✅ |
-| Queue & Payment | 7 | ⬜ |
-| Grades & Digital COM | 7 | ⬜ |
+| Queue & Payment | 7a | ✅ |
+| Grades & Digital COM | 7a | ✅ |
 
 ### 2. Admission Staff — 3 modules
 
@@ -780,8 +807,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 |---|---|---|
 | Availability Preferences | 5 | ✅ |
 | Teaching Schedule | 5 | ✅ |
-| Class Rosters | 7 | ⬜ deferred from Phase 6, needs its own roster endpoint |
-| Grade Submission | 7 | ⬜ |
+| Class Rosters | 7b | ⬜ deferred from Phase 6, needs its own roster endpoint |
+| Grade Submission | 7b | ⬜ backend (`academic-grades` API) already built in Phase 7a |
 
 ### 4. Program Chair — 6 modules
 
@@ -799,7 +826,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Schedule Approvals | 5 | ✅ |
-| Enrollment Dashboard | 7 | ⬜ |
+| Enrollment Dashboard | 7b | ⬜ |
 | Stuck Students | **9** | ⬜ |
 | Honors | **9** | ⬜ |
 | Reports | **9** | ⬜ |
@@ -809,7 +836,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Master Schedule | 5 | ✅ |
-| Institution Dashboard | 7 | ⬜ |
+| Institution Dashboard | 7b | ⬜ |
 | KPIs | **9** | ⬜ |
 | Reports | **9** | ⬜ |
 
@@ -818,8 +845,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Audit Logs | 5 | ✅ |
-| Enrollment Approvals | 7 | ⬜ |
-| Overrides & Voids | 7 | ⬜ |
+| Enrollment Approvals | 7a | ✅ |
+| Overrides & Voids | 7a | ✅ |
 | Policy Settings | 8 | ⬜ §17-dependent |
 | Attrition Analytics | **9** | ⬜ |
 | Compliance Reports | **9** | ⬜ |
@@ -828,28 +855,28 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 | Module | Phase | Status |
 |---|---|---|
-| Credit Mappings | 7 | ⬜ |
-| Drops & Withdrawals | 7 | ⬜ |
-| Academic Records | 7 | ⬜ |
-| Enrollment Documents | 7 | ⬜ |
+| Credit Mappings | 7b | ⬜ |
+| Drops & Withdrawals | 7b | ⬜ |
+| Academic Records | 7b | ⬜ |
+| Enrollment Documents | 7b | ⬜ |
 
 ### 9. Accounting Staff — 4 modules
 
 | Module | Phase | Status |
 |---|---|---|
-| Payment Queue | 7 | ⬜ |
-| Serving Number | 7 | ⬜ |
-| Payment Confirmation | 7 | ⬜ |
-| COM Finalization | 7 | ⬜ |
+| Payment Queue | 7a | ✅ |
+| Serving Number | 7a | ✅ |
+| Payment Confirmation | 7a | ✅ |
+| COM Finalization | 7a | ✅ |
 
-**Totals:** 40 modules · **15 done** (13 Phase 5 + 2 Phase 6) · 8 blocked on
-Phase 9 · 17 remain for Phase 7–8.
+**Totals:** 40 modules · **23 done** (13 Phase 5 + 2 Phase 6 + 8 Phase 7a) ·
+8 blocked on Phase 9 · 9 remain for Phase 7b/8.
 
 ---
 
 # ■ What Is Built
 
-## API surface — 33 routes
+## API surface — 41 routes
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
@@ -874,14 +901,30 @@ private and audited)
 **`role:admission_staff`:** `POST /student-profiles`
 
 **No `role:` middleware, own-record only (Student):** `GET /eligible-subjects`
-(`EligibleSubjectPolicy`) · `GET`/`POST /enrollments` (`EnrollmentPolicy`) —
-same pattern as `student-profile.show`, matching the same shape
-`FacultyMemberPolicy`/`EligibleSubjectPolicy` use for a virtual (non-Eloquent)
-resource.
+(`EligibleSubjectPolicy`) — same pattern as `student-profile.show`, matching
+the same shape `FacultyMemberPolicy`/`EligibleSubjectPolicy` use for a
+virtual (non-Eloquent) resource.
+
+**No `role:` middleware, role-scoped Policy gate (Phase 6 + 7a):**
+`GET`/`POST /enrollments` (Student own / Registrar Head all / Accounting
+`pending_payment` only — `Enrollment::scopeVisibleTo` + `EnrollmentPolicy`)
+· `PATCH /enrollments/{id}` — one route serves `registrar_approve`/
+`registrar_reject`/`void`, `EnrollmentPolicy` resolves the ability from the
+request's `action` field (ADR 0011) · `POST /enrollments/{id}/payment`
+(Accounting only, idempotent) · `GET /enrollment-documents` (Student own /
+Registrar Head all) · `GET`/`POST`/`PATCH /academic-grades[/{id}]` (Student
+own / Faculty own sections / Registrar Head all reads; Faculty-only
+create; `PATCH` serves a content edit or `action: submit`/`lock`,
+`AcademicGradePolicy` resolving per request).
 
 **No `role:` middleware:** `PATCH /schedule-proposals/{id}` — one route serves
 six transitions, so `ScheduleProposalPolicy` resolves the ability from the
 request's `action` field (ADR 0011).
+
+**`role:accounting_staff` (Phase 7a):** `GET /queue-tickets` ·
+`PATCH /queue-tickets/{id}` (`action: serve`/`complete`) — the one Phase 7a
+write pair with no per-row ownership dimension to split by Policy ability,
+re-checked by `QueueTicketPolicy` as defense in depth.
 
 ## Database — 26 tables
 
@@ -892,10 +935,13 @@ Curriculum: `subjects`, `curricula`, `curriculum_subjects`,
 Scheduling: `sections`, `schedule_proposals`, `faculty_availabilities`,
 `faculty_subject_preferences`.
 Enrollment records: `student_profiles` (own-record read only, Phase 1),
-`enrollments`, `enrollment_subjects`, `queue_tickets` (**Phase 6 — API-backed**
-via `GET`/`POST /enrollments`). Still **schema only, no API**:
-`academic_grades`, `payments`, `enrollment_documents`, `transferee_credits`,
-`withdrawal_requests` (Phase 7).
+`enrollments`, `enrollment_subjects` (**Phase 6 — API-backed** via
+`GET`/`POST`/`PATCH /enrollments`), `academic_grades` (**Phase 7a** —
+`GET`/`POST`/`PATCH /academic-grades`), `queue_tickets` (**Phase 7a** —
+`GET`/`PATCH /queue-tickets`), `payments` and `enrollment_documents`
+(**Phase 7a** — written/read via `POST /enrollments/{id}/payment` and
+`GET /enrollment-documents`). Still **schema only, no API**:
+`transferee_credits`, `withdrawal_requests` (Phase 7b).
 
 **Phase 4 additions:** operational `audit_logs` and `notifications`;
 schema-only `prediction_runs`, `section_demand_forecasts`, and
@@ -924,9 +970,9 @@ shell, branded 404. Plus 18 reviewed shadcn components (12 from Phase 3 + 6
 added in Phase 5: Table, Select, Dialog, Alert Dialog, Pagination, Toaster),
 a strict-Zod API client with PATCH/DELETE support, and TanStack Query.
 
-15 of 40 modules are now real workspaces wired to live API data — see the
-Portal Feature Matrix above. The other 25 remain placeholders. Every
-non-auth, non-health resource group in the 33-route inventory now has at
+23 of 40 modules are now real workspaces wired to live API data — see the
+Portal Feature Matrix above. The other 17 remain placeholders. Every
+non-auth, non-health resource group in the 41-route inventory now has at
 least one UI consumer.
 
 There is one auth path. The dev-only demo mode and its committed credential
@@ -1051,10 +1097,11 @@ used for section viability thresholds.
 | Section-viability threshold and exception authority | Phase 2 (implemented informational-only) |
 | Room capacity source and conflict rules | Phase 2 (deliberately out of scope, ADR 0010) |
 | Enrollment reservation timeout and seat-release rules | Phase 6 — still unimplemented; seats are reserved immediately and permanently on submission |
-| Queue-ticket reset, priority, serving-number policy, Accounting authority | Phase 7 |
-| Payment confirmation fields and supporting references | Phase 7 |
-| Whether COR and COM are distinct artifacts | Phase 7 |
-| COM format, numbering, signatures, retention | Phase 7 |
+| Queue-ticket reset, priority, "how many serving at once" | Phase 7a — **mechanism implemented** (`waiting`→`serving`→`served` two-step order only); no reset cadence, priority rule, or single-active-ticket constraint enforced |
+| Registrar Head's "authorized edge case" scope for override/void (PRD §3.7) | Phase 7a — **mechanism implemented** (`void` scoped to `pending_payment` only); documented as a scope choice, not confirmed policy, in `EnrollmentPolicy::void` |
+| Payment confirmation required fields and supporting references | Phase 7a — **mechanism implemented** (`external_reference`/`amount` both optional); no required-field rule or currency/rounding policy enforced |
+| Whether COR and COM are distinct artifacts | Phase 7a landed the COM API; still unresolved — `enrollment_documents.document_type` stays deliberately single-valued (`com`) |
+| COM format, numbering, signatures, retention | Phase 7a — **mechanism implemented** (opaque `COM%06d` number, `storage_path` stays null, structured data rendered client-side); no PDF pipeline, signature, or retention rule exists |
 | Honors cutoff, disqualifying grades, tie handling | Phase 9 |
 | Government report fields, format, naming, sign-off | Phase 9 |
 | Attrition intervention workflow and authorized viewers | Phase 9 |
@@ -1077,6 +1124,12 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-30 | Split Phase 7 into 7a (money path: grade encoding → approval → payment → COM) and 7b (transferee credits, withdrawal, remaining portals), and deliver only 7a this session. | User's explicit choice via `AskUserQuestion` when the phase-7 plan was scoped, given the full phase's size (5 DFD subprocesses, 10 FR-FIN requirements, 16 modules across 7 roles). |
+| 2026-07-30 | Scope Registrar Head's `void` action to `pending_payment` only, not any pre-`enrolled` state. | PRD §3.7's "authorized edge cases" has no further definition. A narrow, documented scope avoids overlapping `registrar_reject` (pre-approval) or the Phase 7b withdrawal flow (post-`enrolled`), and avoids asserting an unconfirmed institutional policy as fact. |
+| 2026-07-30 | `ConfirmPayment` checks for an existing `Payment` row *before* checking the enrollment's current status. | A repeat confirmation call naturally arrives after the enrollment has already moved to `enrolled` — checking status first would incorrectly reject a call FR-FIN-009 requires to succeed idempotently. Proven live: a second call with different, contradictory input returned the original record unchanged. |
+| 2026-07-30 | Update `docs/data-dictionary/enrollment-records.md`'s existing scope note rather than create a new Process-3.0 data-dictionary page. | All 6 tables Phase 7a gave an API to were already fully documented there as schema-only groundwork from an earlier phase; a new page would have duplicated that schema documentation. |
+| 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 15% to 70%, and Row 8 (nine role portals) from 38% to 58%, moving overall completion from 55% to 67%. | Row 5: 4 of Process 3.0's 5 subprocesses complete, only transferee credits/withdrawal (3.2) deferred to Phase 7b. Row 8: 23/40 modules connected. No other row's weight or Done% changed. |
+| 2026-07-30 | Merge `phase-7-process-3` into local `main` **and** push to `origin/main`. | Explicit user authorization given at the start of this session ("yes proceed to pushed to origin") — unlike every prior phase, this was a direct instruction, not an extrapolation from a general merge authorization. |
 | 2026-07-30 | Ingest only `code`/`title`/`units` from the user's two real CCS block-section spreadsheets, as an additive seeder alongside the existing synthetic catalog. | User's explicit choice among three CSV-scope options. Schedule/room/faculty/modality columns were out of Phase 6's DFD 2.2/2.4 scope; replacing the synthetic catalog would have broken 500+ existing tests and 4 demo student lifecycles for no Phase 6 benefit. |
 | 2026-07-30 | Pre-populate `config/enrollment.php`'s grading comparison with the user's explicit direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC) rather than leaving it null by default. | User's explicit Phase 6 planning direction, distinct from formal GRC §17 sign-off — recorded as such in the config file's own docblock. Makes the system demonstrable end to end while keeping `PrerequisiteEvaluator`'s `needs_verification` fallback real, tested, and reachable by clearing the value. |
 | 2026-07-30 | Use a documented placeholder string (`'irregular'`) for FR-ENR-011's block-section comparison rather than inventing a confirmed regular/irregular enum. | The approved schema (`is_block_exclusive` bool, `enrollment_category` free string) gives no reference value to compare against. Matches the existing `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE` pattern — demonstrable and testable without asserting GRC's real vocabulary. |
@@ -1134,4 +1187,5 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-28 | Phase 3 — Next.js migration | Merged; 145/145 tests, live proof 17/17 |
 | 2026-07-28 | Phase 4 — Cross-cutting backend & ML substrate | Merged; 503/503 backend tests |
 | 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | Merged; backend 519/519, frontend 216/216 |
-| 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog) | This entry; live-verified; backend 563/563, frontend 224/224 |
+| 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog) | Merged; live-verified; backend 563/563, frontend 224/224 |
+| 2026-07-30 | Phase 7a — Process 3.0 money path (9 tasks, 8 modules, 8 new endpoints, idempotent payment confirmation) | This entry; live-verified; backend 605/605, frontend 243/243 |

@@ -5,13 +5,12 @@ ADR 0007. Same charset/collation/engine as every other table in this codebase.
 
 Migrations: `backend/database/migrations/2026_07_27_0000{05,10,11,12,13,14,15,16,17}_*.php`.
 
-**Scope note:** this page documents schema landed as verified groundwork
-alongside the PRD §5.1 faculty-input/section-planning/approval-workflow slice.
-**No Policy, Resource, Controller, or route exists for any table on this page
-yet.** PRD §4.2 (enrollment lifecycle) and §4.3 (grading lifecycle) describe a
-distinct, later phase — tracked as its own "Enrollment and digital advising"
-line in `PROGRESS.md`, separate from the §5.1 sub-bullets these models were
-found alongside.
+**Scope note:** this page originally documented schema landed as verified
+groundwork alongside the PRD §5.1 faculty-input/section-planning/
+approval-workflow slice, with no API layer yet built. Phases 6–7a have since
+landed the full API for every table below except `transferee_credits` and
+`withdrawal_requests` (still schema-only, deferred to Phase 7b) — see each
+table's own **API** note for its routes and OpenAPI tag.
 
 ## `student_profiles`
 
@@ -52,6 +51,12 @@ written as SQL literals in the migration rather than read from
 enum's own docblock carries a matching warning that changing its terminal set
 requires a new migration to rebuild this column.
 
+**API:** `GET`/`POST /api/v1/enrollments` (Phase 6 — submission, role-scoped
+read since Phase 7a Task 1), `PATCH /api/v1/enrollments/{enrollment}` (Phase
+7a Task 2 — `registrar_approve`/`registrar_reject`/`void`),
+`POST /api/v1/enrollments/{enrollment}/payment` (Phase 7a Task 5 — idempotent
+payment confirmation). OpenAPI tag `Enrollment`.
+
 ## `enrollment_subjects`
 
 | Column | Type | Constraints | Notes |
@@ -62,6 +67,9 @@ requires a new migration to rebuild this column.
 | `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\EnrollmentSubjectStatus` |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 |  |  | **unique** `(enrollment_id, section_id)` | PRD §5.3: repeated requests must not duplicate seats |
+
+**API:** written only as part of `POST /api/v1/enrollments` (Phase 6); no
+dedicated route of its own. Embedded in `EnrollmentResource.subjects`.
 
 ## `academic_grades`
 
@@ -80,6 +88,11 @@ requires a new migration to rebuild this column.
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 |  |  | **unique** `(student_id, subject_id, academic_term_id)` — `academic_grades_unique_student_subject_term` | |
 
+**API (Phase 7a Task 3):** `GET`/`POST`/`PATCH /api/v1/academic-grades`.
+Role-scoped read (Student own, Faculty own sections, Registrar Head all);
+`POST` is Faculty-only; `PATCH` serves a plain content edit (draft only) or
+`action: submit`/`lock`. OpenAPI tag `Academic Records`.
+
 ## `queue_tickets`
 
 | Column | Type | Constraints | Notes |
@@ -91,6 +104,13 @@ requires a new migration to rebuild this column.
 | `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\QueueTicketStatus` |
 | `served_at` | `TIMESTAMP` | nullable | |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
+
+**API (Phase 7a Task 4):** `GET /api/v1/queue-tickets`, `PATCH
+/api/v1/queue-tickets/{queueTicket}` (`action: serve`/`complete`). Accounting
+Staff only — the one write pair in this document gated by a coarse
+`role:accounting_staff` route middleware rather than Policy alone, since
+neither transition has a per-ticket ownership dimension. OpenAPI tag
+`Payments`.
 
 ## `payments`
 
@@ -108,6 +128,12 @@ Records that Accounting confirmed an externally received payment
 (FR-FIN-007) — **not** a payment gateway integration; holds no cardholder or
 bank data.
 
+**API (Phase 7a Task 5):** written only by
+`POST /api/v1/enrollments/{enrollment}/payment` (Accounting only, only from
+`pending_payment`); no dedicated read route — surfaced via the payment
+confirmation response, not queried separately. Idempotent on
+`enrollment_id`'s unique constraint (FR-FIN-009). OpenAPI tag `Payments`.
+
 ## `enrollment_documents`
 
 | Column | Type | Constraints | Notes |
@@ -122,6 +148,13 @@ bank data.
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 |  |  | **unique** `(enrollment_id, document_type)` — `enrollment_documents_unique_type_per_enrollment` | Generating twice must not produce a duplicate document |
 |  |  | **unique** `(document_type, document_number)` — `enrollment_documents_unique_number_per_type` | |
+
+**API (Phase 7a Task 5):** `GET /api/v1/enrollment-documents` (Student own,
+Registrar Head all). Rows are created only as a side effect of payment
+confirmation, never directly. `storage_path` stays `null` in this slice — no
+PDF pipeline; the Digital COM is served as structured data for the Student
+module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
+`Payments`.
 
 ## `transferee_credits`
 
@@ -138,6 +171,8 @@ bank data.
 | `processed_at` | `TIMESTAMP` | nullable | |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
+**API:** none yet — schema-only, deferred to Phase 7b.
+
 ## `withdrawal_requests`
 
 | Column | Type | Constraints | Notes |
@@ -152,6 +187,8 @@ bank data.
 
 Seat-release consequences of an approved withdrawal remain an open PRD §17
 decision and are not encoded here.
+
+**API:** none yet — schema-only, deferred to Phase 7b.
 
 ## Seeded data
 
