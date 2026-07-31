@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -91,6 +91,18 @@ function renderWorkspace() {
   })
 }
 
+/** Opens a `Select` trigger (waiting for it to become enabled first) and picks an item. */
+async function selectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  labelText: string,
+  optionName: string,
+) {
+  const trigger = screen.getByLabelText(labelText)
+  await waitFor(() => expect(trigger).not.toBeDisabled())
+  await user.click(trigger)
+  await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
 describe("CurriculumWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
@@ -110,8 +122,8 @@ describe("CurriculumWorkspace", () => {
       )
     })
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
     await user.click(screen.getByRole("button", { name: "Save curriculum" }))
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/curricula/9"),
@@ -135,8 +147,8 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
     await user.clear(screen.getByLabelText("Curriculum name"))
     await user.type(screen.getByLabelText("Curriculum name"), "Changed")
     await user.click(screen.getByRole("button", { name: "New curriculum" }))
@@ -163,13 +175,13 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
-    await user.selectOptions(screen.getByLabelText("Subject to place"), "12")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await selectOption(user, "Subject to place", "CS102 — Programming 2")
     await user.click(
       screen.getByRole("button", { name: "Add subject placement" }),
     )
-    await user.selectOptions(screen.getByLabelText("Subject to place"), "12")
+    await selectOption(user, "Subject to place", "CS102 — Programming 2")
     await user.click(
       screen.getByRole("button", { name: "Add subject placement" }),
     )
@@ -192,20 +204,14 @@ describe("CurriculumWorkspace", () => {
       )
     })
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
-    await user.selectOptions(screen.getByLabelText("Subject to place"), "12")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await selectOption(user, "Subject to place", "CS102 — Programming 2")
     await user.click(
       screen.getByRole("button", { name: "Add subject placement" }),
     )
-    await user.selectOptions(
-      screen.getByLabelText("Placement 12 year level"),
-      "4",
-    )
-    await user.selectOptions(
-      screen.getByLabelText("Placement 12 semester"),
-      "3rd",
-    )
+    await selectOption(user, "Placement 12 year level", "4")
+    await selectOption(user, "Placement 12 semester", "3rd")
     await user.click(screen.getByLabelText("Placement 12 is required"))
     await user.click(screen.getByRole("button", { name: "Save curriculum" }))
 
@@ -247,16 +253,16 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
     await user.clear(screen.getByLabelText("Curriculum name"))
     await user.type(screen.getByLabelText("Curriculum name"), "Keep this")
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "10")
+    await selectOption(user, "Curriculum", "BSCS 2027")
     expect(screen.getByRole("alertdialog")).toHaveTextContent(
       "Discard unsaved curriculum changes",
     )
     await user.click(screen.getByRole("button", { name: "Keep editing" }))
-    expect(screen.getByLabelText("Curriculum")).toHaveValue("9")
+    expect(screen.getByLabelText("Curriculum")).toHaveTextContent("BSCS 2026")
     expect(screen.getByLabelText("Curriculum name")).toHaveValue("Keep this")
   })
 
@@ -276,13 +282,15 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
     await user.clear(screen.getByLabelText("Curriculum name"))
     await user.type(screen.getByLabelText("Curriculum name"), "Discard this")
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "0")
+    await selectOption(user, "Curriculum", "New curriculum")
     await user.click(screen.getByRole("button", { name: "Discard changes" }))
-    expect(screen.getByLabelText("Curriculum")).toHaveValue("0")
+    expect(screen.getByLabelText("Curriculum")).toHaveTextContent(
+      "New curriculum",
+    )
     expect(screen.getByLabelText("Curriculum name")).toHaveValue("")
   })
 
@@ -302,8 +310,8 @@ describe("CurriculumWorkspace", () => {
       )
     })
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — Computer Science" })
-    await user.selectOptions(screen.getByLabelText("Program"), "1")
+    await screen.findByLabelText("Program")
+    await selectOption(user, "Program", "BSCS — Computer Science")
     await user.type(screen.getByLabelText("Curriculum name"), "New BSCS")
     await user.type(screen.getByLabelText("Effective school year"), "2026-2027")
     await user.click(screen.getByRole("button", { name: "Save curriculum" }))
@@ -342,8 +350,8 @@ describe("CurriculumWorkspace", () => {
       )
     })
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "9")
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
     await user.click(screen.getByRole("button", { name: "Save curriculum" }))
     expect(
       await screen.findAllByText(
@@ -367,7 +375,7 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     const { container } = renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS 2026" })
+    await screen.findByLabelText("Curriculum")
     expect(await axe(container)).toHaveNoViolations()
   })
 })

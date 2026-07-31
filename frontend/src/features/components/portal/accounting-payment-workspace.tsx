@@ -104,6 +104,10 @@ export function AccountingPaymentWorkspace({
       title={heading}
       description="Advance the payment queue, confirm received payments, and finalize the Digital Certificate of Matriculation."
       unauthorized={!authorized}
+      lastUpdated={Math.max(
+        ticketsQuery.dataUpdatedAt,
+        pendingPaymentQuery.dataUpdatedAt,
+      )}
     >
       {error && (
         <Alert variant="destructive">
@@ -121,7 +125,7 @@ export function AccountingPaymentWorkspace({
       )}
       <Card>
         <CardHeader>
-          <CardTitle level={3}>Payment queue</CardTitle>
+          <CardTitle level={2}>Payment queue</CardTitle>
         </CardHeader>
         <CardContent>
           <AsyncBoundary
@@ -207,7 +211,7 @@ export function AccountingPaymentWorkspace({
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle level={3}>Pending payment confirmations</CardTitle>
+          <CardTitle level={2}>Pending payment confirmations</CardTitle>
         </CardHeader>
         <CardContent>
           <AsyncBoundary

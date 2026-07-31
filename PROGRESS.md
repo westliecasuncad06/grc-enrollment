@@ -1,20 +1,136 @@
 # GRC Enrollment System — Development Progress
 
 **Last updated:** 2026-07-31 · **PRD version:** v3.2 · **Branch:**
-`phase-8a-accessibility-states` (Phase 7b is on `main`, pushed to
-`origin/main`). Phase 8a itself is complete and quality-gated on this branch
-but **not yet merged** — no merge/push has been requested this session.
+`phase-8b-ui-coherence-motion` (Phase 8a is merged to `main`, pushed to
+`origin/main` at `8bb7e66`). Phase 8b itself is complete and quality-gated on
+this branch but **not yet committed** — no commit/merge/push has been
+requested this session.
 
 ## Current Objective
 
-**Phase 8a is done** (see *Verified Completed — Phase 8a* below). The next
-decision is the same fork noted at the end of Phase 7b and not yet
-re-resolved: **Phase 8b** (Playwright E2E for §14.3, §14.4 security
-verification, §14.5 performance verification, and §12.6's profile/password/
-help features — all deferred out of 8a) versus **Phase 7c** (Dean/Executive
-Director dashboards, still blocked on the same institutional-content gap
-recorded in *Known Issues*). Ask the user before starting either, and before
-merging this branch to `main`.
+**Phase 8b is done** (see *Verified Completed — Phase 8b* below) — the portal
+UI coherence and motion pass triggered by a user screenshot of the Eligible
+Subjects page showing a duplicated header, a dashed placeholder frame around
+working content, centered layout, and a bare native `<select>`. The next
+decision, once this branch is reviewed: **Phase 8c** (Playwright E2E for
+§14.3, §14.4 security verification, §14.5 performance verification, and
+§12.6's remaining profile/password/help features) versus **Phase 7c**
+(Dean/Executive Director dashboards, still blocked on the same
+institutional-content gap recorded in *Known Issues*). Ask the user before
+starting either, and before committing/merging this branch.
+
+## Verified Completed — Phase 8b (portal UI coherence & motion)
+
+Design spec: `docs/superpowers/specs/2026-07-31-phase-8b-ui-coherence-motion-design.md`;
+plan: `docs/superpowers/plans/2026-07-31-phase-8b-ui-coherence-motion.md`;
+decision record: `docs/adr/0015-page-header-ownership-and-portal-motion.md`.
+Frontend-only — no backend or migration changes.
+
+- **Task 1 — page chrome.** `PortalModulePage`'s connected branch no longer
+  wraps a workspace in a second, module-registry-sourced header — the
+  workspace's own `WorkspacePage` is now the page's sole `<h1>` (was `<h2>`,
+  since a second header used to own the true `<h1>` role). `CardTitle`'s
+  default level moved 3→2 to stay one level below it; every explicit
+  `level={3}`/`level={4}` override across the codebase shifted down by one to
+  match, plus 3 raw `<h3>` headings that would otherwise have skipped a level
+  (`curriculum-workspace.tsx`, `schedule-proposals-workspace.tsx`,
+  `prerequisite-editor.tsx`). `.portal-module-page--connected` replaces the
+  centered-splash-screen layout with a top-aligned column for real content;
+  the original centered/placeholder layout stays for the two still-unbuilt-
+  module branches, where it's correct. `portal-module-page.test.tsx`'s 43
+  cases rewritten against the single header.
+- **Task 2 — house design language.** `WorkspacePage` gained the existing
+  `.eyebrow` micro-label and a serif display heading matching
+  `.portal-overview-header`'s own pattern (previously it and its description
+  carried no classes at all). `.portal-module-card` gained a hover
+  lift/shadow (previously zero interaction feedback despite every card
+  wrapping a link). New `--ease-house`/`--duration-fast/base/slow` tokens,
+  seeded from values already in use (the `ledger-enter` keyframe's curve, the
+  `Sheet` component's duration) — the codebase had no spacing/shadow/duration
+  token layer at all before this. New `.portal-workspace-highlight` utility
+  adapts the landing page's `.enrollment-folio` gold-offset-shadow idiom to a
+  light background, for panels that deliberately want extra weight (the
+  enrollment review panel).
+- **Task 3 — motion.** Added `motion` (framer-motion, current package name)
+  as a dependency — clean install, 0 vulnerabilities, no `overrides` needed.
+  Wrapped in `src/features/components/portal/motion.tsx`
+  (`Reveal`, `StaggerList`/`StaggerItem`, `FadePresence`), each checking
+  `useReducedMotion()` itself since the existing CSS
+  `prefers-reduced-motion` rule cannot reach JS-driven transforms. Added a
+  `matchMedia` stub to `src/tests/setup.tsx` (jsdom has none) following the
+  same pattern as Phase 8a's Pointer Events polyfill.
+  **`AsyncBoundary`'s state transitions are deliberately NOT wrapped in
+  `AnimatePresence`** — an early attempt broke a real workspace test on
+  refetch (see ADR 0015 for the full mechanism); `FadePresence` stays
+  available for narrower, single-workspace use instead.
+- **Task 4 — shared primitive fixes + raw form-control migration.** All 28
+  raw `<select>` and 14 raw `<input>` across 10 workspaces (plus
+  `prerequisite-editor.tsx`) replaced with `ui/select.tsx`/`ui/input.tsx` —
+  Phase 8a had asked for this and it wasn't done. Migrating these off
+  native `register()` onto `Controller`-wrapped `Select` surfaced a genuine,
+  previously-undetected bug: several "auto-select the active academic term"
+  behaviors had silently stopped working, caught only because the new tests
+  assert the *selected* value instead of just option presence (see ADR 0015
+  decision 5 for the two different fixes this required, and decision 6 for a
+  related Radix `Select` controlled-value bug fixed in 4 files). `AsyncBoundary`'s
+  empty state now renders through `ui/empty.tsx` (was a bare `<p>`) —
+  PRD §12.2's required pattern. `DataTable` gained an `emptyMessage` prop
+  (callers no longer need their own ternary guard) and its mobile-card
+  fallback now titles itself with the first column's rendered value instead
+  of a raw database id. `SelectTrigger` gained `transition-colors`, matching
+  its `Input`/`Textarea` siblings.
+- **Task 5 — rebuilt `enrollment-workspace.tsx`.** The exact page from the
+  reporting screenshot, and the only Student workspace Phase 8a's migration
+  had skipped entirely. Now uses `AsyncBoundary`, `DataTable` (both the
+  selection review table and the "Your enrollments" list), real `Select`s,
+  and a single prioritised alert region (error > field errors > receipt —
+  previously up to two could stack simultaneously if a stale receipt
+  survived a new failed attempt; `submit()` now clears it first). The
+  review/summary panel uses the new `.portal-workspace-highlight` treatment
+  and `StaggerList` on the subject-selection cards.
+- **Task 6 — polish across the other 18 workspaces.** `lastUpdated` wired to
+  `WorkspacePage` in 16 of them (using the most-recently-updated query for
+  multi-query/multiplexed pages via `Math.max(...dataUpdatedAt)`;
+  deliberately skipped on `admission-provisioning-workspace.tsx`, a pure
+  create-form with no "your data" list to timestamp). `StaggerList` applied
+  to `eligible-subjects-workspace.tsx`'s card grid (motion is intentionally
+  not applied to `<ul>`/`<li>`-based lists — `StaggerItem` renders a `<div>`,
+  which would be invalid nesting inside a `<ul>`). `StudentQueuePaymentWorkspace`'s
+  `StatusStepper` promoted to `src/features/components/portal/status-stepper.tsx`,
+  now a generic, tested, reusable primitive (domain-specific stage derivation
+  stays with the caller).
+- **Task 7 — dead CSS.** Removed ~200 lines of `globals.css` with zero TSX
+  references (`.readiness-hero`, `.hero-copy`/`.hero-summary`/`.hero-action-row`,
+  `.route-ledger*`, `.phase-folio*`, `.boundary-note*`, including several
+  instances hidden inside compound selectors shared with still-active
+  classes, e.g. `.section-heading h2, .boundary-note h2`). Removed two
+  classNames used in TSX but never defined in CSS (`landing-shell` on the
+  landing page's outer div, `portal-module-section` on the portal overview's
+  module grid) rather than inventing new styling for them — both were purely
+  decorative dead weight already covered by sibling classes.
+- **Task 8 — tests.** No separate pass was needed: every task above was
+  verified with targeted test runs as it landed (see *Commands and Tests Run
+  — Phase 8b*), and every one of the 19 workspace test files retains its
+  `vitest-axe` "no detectable accessibility violations" case, confirmed by a
+  final sweep. 2 new tests added directly to `data-table.test.tsx` for the
+  `emptyMessage` prop and the corrected mobile-card heading; 2 new tests for
+  the promoted `status-stepper.tsx`; 4 new tests for `motion.tsx` including
+  the reduced-motion branch.
+- **Task 9 — docs.** `docs/adr/0015-page-header-ownership-and-portal-motion.md`
+  records the header-ownership decision, the motion-library tradeoffs, the
+  `AsyncBoundary` reversal, and — in detail, since it's genuinely
+  non-obvious and easy to get backwards — the two different fixes for
+  populating a `Controller`-wrapped `Select` from asynchronously-loaded data
+  depending on whether its `Controller` mounts before or after the data is
+  known. This reconciliation.
+- **Gate.** Full frontend gate green throughout (format, lint at
+  `--max-warnings=0`, typecheck, build, `npm audit` 0 vulnerabilities); full
+  suite 67 files / 362 tests (up from 66/358 at the start of this phase).
+  **Not run this session:** live visual verification and the manual WCAG 2.1
+  AA pass — the Chrome browser extension was not connected (same limitation
+  Phase 8a recorded). The DOM-level and test-level evidence is solid (every
+  structural defect from the screenshot is fixed and asserted by a test), but
+  nobody has *looked* at the rendered result yet.
 
 ## Verified Completed — Phase 8a (accessibility & required states)
 
@@ -328,12 +444,54 @@ Frontend-only — no backend or migration changes.
 
 ## Work in Progress
 
-None. Phase 8a is complete and fully quality-gated on
-`phase-8a-accessibility-states`, not yet merged to `main` — merging needs an
-explicit user request. One caveat carried forward, not treated as blocking:
-the manual WCAG 2.1 AA pass (keyboard traversal, screen reader, zoom,
-responsive breakpoints) could not run this session (no browser connection)
-and should happen before or shortly after merge. See *Exact Next Steps*.
+None. Phase 8b is complete and fully quality-gated on
+`phase-8b-ui-coherence-motion`, not yet committed — committing/merging needs
+an explicit user request. One caveat carried forward, not treated as
+blocking: live visual verification and the manual WCAG 2.1 AA pass (keyboard
+traversal, screen reader, zoom, responsive breakpoints) could not run this
+session (no browser connection) and should happen before or shortly after
+merge — the same limitation Phase 8a recorded. See *Exact Next Steps*.
+
+## Files Changed — Phase 8b
+
+No migrations, no backend files — frontend-only. ~95 files touched across
+Tasks 1–9.
+
+**New:** `src/features/components/portal/motion.tsx` (+ test),
+`src/features/components/portal/status-stepper.tsx` (+ test),
+`docs/adr/0015-page-header-ownership-and-portal-motion.md`,
+`docs/superpowers/specs/2026-07-31-phase-8b-ui-coherence-motion-design.md`,
+`docs/superpowers/plans/2026-07-31-phase-8b-ui-coherence-motion.md`.
+
+**Modified — chrome and primitives:**
+`src/features/components/pages/portal-module-page.tsx` (+ test, dedupe
+header), `src/features/components/portal/workspace-page.tsx` (h2→h1,
+eyebrow), `src/features/components/ui/card.tsx` (+ test, default level 3→2),
+`src/features/components/portal/async-boundary.tsx` (Empty state),
+`src/features/components/portal/data-table.tsx` (+ test, `emptyMessage`,
+mobile-card heading fix), `src/features/components/ui/select.tsx`
+(transition-colors), `src/app/globals.css` (new tokens, card hover,
+`.portal-workspace-highlight`, `.portal-module-page--connected`, dead-CSS
+removal), `src/tests/setup.tsx` (`matchMedia` stub).
+
+**Modified — all 19 workspaces** (raw `<select>`/`<input>` → `Select`/`Input`
+where present; `lastUpdated` wiring; `CardTitle` level shifts):
+`admission-provisioning`, `audit-logs`, `curriculum` (+ `prerequisite-editor`),
+`eligible-subjects` (+ `StaggerList`), `enrollment` (full rebuild, Task 5),
+`faculty-assignment`, `faculty-input`, `grade-submission`, `class-rosters`,
+`master-schedule`, `teaching-schedule`, `sections`, `schedule-proposals`
+(+ raw `<h3>`→`<h2>` fix), `schedule-decision`, `student-queue-payment`
+(StatusStepper promotion), `student-grades-com`, `accounting-payment`,
+`registrar-enrollment`, `registrar-records` — each `.test.tsx` updated
+alongside its workspace.
+
+**Modified — dead-class removal only:**
+`src/features/components/pages/landing-page.tsx` (removed `landing-shell`),
+`src/features/components/pages/portal-overview-page.tsx` (removed
+`portal-module-section`).
+
+**Modified — package:** `frontend/package.json`/`package-lock.json`
+(+`motion`).
 
 ## Files Changed — Phase 8a
 
@@ -575,6 +733,28 @@ root cause and fix. All commands below ran against the repaired database.
 | **Live HTTP, real dev DB:** 32 rapid login attempts with a bad password | first several **401**, then **429** with a real `Retry-After: 5` header and `X-RateLimit-*` headers — confirms `readRetryAfterSeconds` parses a real header, not just a test double |
 | **Not run this session:** manual WCAG 2.1 AA pass (keyboard-only traversal, screen-reader spot check, 200% zoom, responsive breakpoints, reduced-motion) | Chrome browser extension was not connected — see *Known Issues* |
 
+## Commands and Tests Run — Phase 8b
+
+| Command | Result |
+|---|---|
+| `npm install motion` | clean install, 4 packages added, 0 vulnerabilities, no `overrides` needed |
+| `npm run lint` (`eslint . --max-warnings=0`, includes jsx-a11y) | passed, 0 warnings — run repeatedly through the phase, not just at the end |
+| `npm run typecheck` | passed |
+| `npm test` (`vitest run`) | **67 files / 362 tests passed** (up from 65 files/354 tests at the end of Phase 8a — +2 files, +8 tests: `motion.test.tsx`, `status-stepper.test.tsx`, plus 2 new cases each in `data-table.test.tsx` and the `curriculum`/`schedule-proposals`/`sections`/`admission-provisioning` 403/404/429 coverage already present) |
+| `npm run build` (Turbopack) | compiled successfully, same 5 routes |
+| `npm audit --audit-level=moderate` | 0 vulnerabilities |
+| `composer test` (backend, no-regression check — this phase touched no backend file) | **641 passed / 2,419 assertions**, unchanged from Phase 8a |
+| **Not run this session:** live visual verification, manual WCAG 2.1 AA pass | Chrome browser extension was not connected — see *Known Issues*. Every structural fix (duplicate header, placeholder frame, centering, raw `<select>`) is confirmed at the DOM/test level via the rewritten `portal-module-page.test.tsx` and the per-workspace test suites, but nobody has visually confirmed the rendered result yet. |
+
+**Re-confirmed at reconciliation (2026-07-31):** full gate re-run from a
+clean state — `format:check` (found 11 files not yet reformatted after the
+Task 9 edits; fixed with `prettier --write`, then re-verified clean),
+`lint` (0 warnings), `typecheck` (clean), `vitest run --no-file-parallelism`
+(67 files / 362 tests passed), `next build` (compiled successfully, same 5
+routes), `npm audit --audit-level=moderate` (0 vulnerabilities), and
+`composer test` (641 passed / 2,419 assertions, unchanged). All match the
+table above exactly.
+
 ## Technical Decisions
 
 - **`void` is scoped to `pending_payment`, not any pre-`enrolled` state.**
@@ -762,6 +942,72 @@ root cause and fix. All commands below ran against the repaired database.
   genuine optimistic-concurrency check (e.g., rejecting a stale-state
   approval) would be the first real backend consumer of this path.
 
+### Phase 8b
+
+- **Two different fixes for the same-looking problem — see ADR 0015 for the
+  full mechanism.** Migrating "auto-select the active academic term" fields
+  from native `register()` onto `Controller`-wrapped `Select` broke the
+  auto-selection in `schedule-proposals-workspace.tsx` and
+  `sections-workspace.tsx` (fixed with a `key`-remounted `Controller` owning
+  its own `defaultValue`, and removing the field from the form's top-level
+  `defaultValues`) but the identical-looking fix *broke* the same behavior in
+  `faculty-input-workspace.tsx` (fixed instead by restoring the classic
+  `useEffect` + `setValue()` pattern). The difference: whether the
+  `Controller` mounts for the first time before or after the async data is
+  known (gated behind `AsyncBoundary`, or not). Confirmed by debug tracing,
+  not guessed — an earlier attempt at the wrong fix for each case was tried,
+  observed to fail, and reverted before landing the correct one.
+- **This was a real, previously undetected bug**, not a side effect of the
+  migration. The old tests only asserted that a matching `<option>` existed
+  in the DOM — trivially true for a native `<select>` regardless of which
+  option is actually selected — never that the *right* one was selected.
+  The new `Controller`-based tests assert the displayed value, and caught it.
+- **`AsyncBoundary`'s state transitions stay un-animated by design.** An
+  early implementation wrapped every loading/error/empty/success transition
+  in `AnimatePresence`; this broke a synchronous test assertion in
+  `audit-logs-workspace.test.tsx` because a refetch (filter change) now had
+  to wait for a real exit animation before new content mounted.
+  `AsyncBoundary` backs ~26 query sites across 19 workspaces, too broad a
+  surface for one shared crossfade tuning — reverted, and `FadePresence`
+  stays available in `motion.tsx` for single-workspace uses instead.
+- **`CardTitle`'s default heading level shifted 3→2**, since `WorkspacePage`'s
+  own heading moved from `<h2>` to `<h1>` (Task 1's page-chrome fix removed
+  the second, module-registry-sourced header that used to occupy the true
+  `<h1>` role). Every explicit `level={3}`/`level={4}` override in the
+  codebase — `class-rosters-workspace.tsx`'s nested roster-entry cards,
+  `data-table.tsx`'s mobile-card fallback, and others — shifted down by one
+  to keep matching, verified by re-running `vitest-axe`'s heading-order
+  check across the full portal suite rather than by inspection alone. Three
+  raw `<h3>` elements with no intervening heading (not using `CardTitle` at
+  all) needed a matching manual fix: `curriculum-workspace.tsx`'s "Subject
+  placements", `schedule-proposals-workspace.tsx`'s "Existing proposals",
+  and `prerequisite-editor.tsx`'s "Prerequisites" all became `<h2>`.
+- **Radix `Select`'s `value` prop must never toggle between `undefined` and
+  a string** — doing so trips React's controlled/uncontrolled detection and,
+  observed directly, silently breaks the placeholder from reappearing once a
+  value is cleared. Fixed with a consistent `value={x ? String(x) : ""}`
+  convention (empty string, Radix's own reserved "unselected" signal) in
+  every `Select` this phase touched, including two from Phase 8a that
+  carried the same latent pattern without ever having exercised it
+  (`class-rosters-workspace.tsx`, `grade-submission-workspace.tsx`).
+- **Motion is intentionally not applied to `<ul>`/`<li>` lists.**
+  `StaggerItem` always renders a wrapping `<div>`, which is invalid between
+  a `<ul>` and its `<li>` children. Several workspaces (schedule proposals'
+  existing-proposals list, faculty input's saved-availability list) keep
+  their semantic list markup and simply don't get the stagger treatment —
+  a scope boundary recorded in ADR 0015, not an oversight.
+- **`lastUpdated` deliberately not wired on `admission-provisioning-workspace.tsx`.**
+  It's a pure create-form with a one-time credential receipt, not a
+  browsable "your data" list — there's nothing there a staleness timestamp
+  would meaningfully describe.
+- **This session's `npm test` runs used the default multi-worker pool
+  successfully, every time, with no flakiness observed** — contrary to the
+  "Frontend full-suite parallel flakiness (this machine only)" note recorded
+  below from an earlier phase. Not confident enough to say that issue is
+  resolved (machine/environment conditions may simply have been favorable
+  this session), so the earlier caution is left in place rather than
+  removed, but recorded here as a data point.
+
 ## Known Issues and Blockers
 
 - **Frontend full-suite parallel flakiness (this machine only) — unchanged
@@ -799,53 +1045,50 @@ root cause and fix. All commands below ran against the repaired database.
   Technical Decisions → Phase 8a. A future slice may want to close this
   gap for `enrollment-workspace.tsx`, `registrar-enrollment-workspace.tsx`,
   and `registrar-records-workspace.tsx`'s mutation error messages.
+- **Phase 8b's manual WCAG 2.1 AA pass and live visual verification did not
+  run this session** — the Chrome browser extension was not connected, the
+  same limitation Phase 8a recorded. Every structural fix from the
+  reporting screenshot (duplicate header, dashed placeholder frame,
+  centered layout, bare native `<select>`) is confirmed at the DOM/test
+  level, but nobody has visually confirmed the rendered result. This should
+  run before or shortly after this branch merges.
+- **No production code path raises a real 409** (unchanged from Phase 8a —
+  see Technical Decisions → Phase 8a). Still true after Phase 8b; not a new
+  gap.
 
 ## Uncommitted or Risky Changes
 
-**Phase 8a's full diff is uncommitted** as of this reconciliation — working
-tree on `phase-8a-accessibility-states` has ~95 modified/new files (see
-*Files Changed — Phase 8a*), none staged or committed. Committing was not
+**Phase 8b's full diff is uncommitted** as of this reconciliation — working
+tree on `phase-8b-ui-coherence-motion` has ~95 modified/new files (see
+*Files Changed — Phase 8b*), none staged or committed. Committing was not
 requested this session; per `AGENTS.md`, nothing is committed without an
 explicit ask. Once committed, nothing about the diff itself is risky:
-frontend-only, no migrations, no backend files touched, full gate green.
+frontend-only, no migrations, no backend files touched, full gate green,
+one new runtime dependency (`motion`) with a clean audit.
 
-The real dev database's only persistent state from this session is
-carried over unchanged from Phase 7b: one fresh enrollment
-(`proof.withdraw@grc.test`) taken to `enrolled` then `withdrawn` via a real
-approved withdrawal request, and one transferee credit approved for the
-same student — deliberate verification, not a side effect, safe to leave
-in place as further demo data. Phase 8a's own live-HTTP proof (this
-session) created no persistent state — the 403/404/429 checks read
-existing rows or hit routes with no side effects, and the 32 throttled
-login attempts used a nonexistent email, so no account lockout or real
-user state was affected.
+Phase 8a is safely merged to `main` and pushed to `origin` at `8bb7e66` —
+not at risk. The real dev database's only persistent state is carried over
+unchanged from Phase 7b (see that phase's entry); Phase 8b's own commands
+this session (an `npm install` and the full local test/build/lint gate)
+touched no database state at all.
 
 ## Exact Next Steps
 
-**Superseded 2026-07-31 (this session).** Steps 1–3 below are historical —
-Phase 8 (not 7c) was already chosen by the time this session started, and
-that choice has now been executed as Phase 8a. See *Current Objective* at
+**Superseded 2026-07-31 (this session).** Phase 8a is merged; the
+Phase 8b/Phase 7c fork was resolved in favor of Phase 8b, and that work is
+now complete on `phase-8b-ui-coherence-motion`. See *Current Objective* at
 the top of this document for the live fork.
-
-1. ~~Ask the user before pushing to `origin`.~~ Already pushed (Phase 7b, on
-   `main`).
-2. ~~Decide what comes next: Phase 7c or Phase 8.~~ Phase 8 chosen; its
-   first slice (8a) is now complete.
-3. ~~Before writing code for whichever is chosen, follow `AGENTS.md`.~~ Done
-   — spec at
-   `docs/superpowers/specs/2026-07-30-phase-8a-accessibility-states-design.md`,
-   plan at
-   `docs/superpowers/plans/2026-07-30-phase-8a-accessibility-states.md`.
 
 **Current, not yet acted on:**
 
-1. Ask the user before committing Phase 8a's ~95 modified/new files (see
+1. Ask the user before committing Phase 8b's ~95 modified/new files (see
    *Uncommitted or Risky Changes*), and again before merging
-   `phase-8a-accessibility-states` to `main` or pushing. None of the three
+   `phase-8b-ui-coherence-motion` to `main` or pushing. None of the three
    has been requested yet — do not do any of them without an explicit ask.
-2. Ask the user whether to run the deferred manual WCAG 2.1 AA pass before
-   or after merging (needs a connected browser).
-3. Ask the user to choose between **Phase 8b** (Playwright E2E, security,
+2. Ask the user whether to run the deferred live visual verification and
+   manual WCAG 2.1 AA pass before or after merging (needs a connected
+   browser).
+3. Ask the user to choose between **Phase 8c** (Playwright E2E, security,
    performance, §12.6's remaining profile/password/help features) and
    **Phase 7c** (still blocked on institutional content, see *Known
    Issues*) for the next slice of work.
@@ -896,6 +1139,20 @@ the top of this document for the live fork.
   of truth for PRD §12.4 copy; do not hand-roll a second status-to-message
   mapping in a new workspace without a documented reason (see ADR 0014's
   "Alternatives considered").
+- `AsyncBoundary`'s state transitions must stay un-animated — do not wrap
+  them in `AnimatePresence`/`FadePresence`. A prior attempt broke a real
+  refetch test because the loading state's exit animation had to finish
+  before new content could mount (ADR 0015, decision 4).
+- Radix `Select`'s controlled `value` must never toggle between `undefined`
+  and a string — always `value={x ? String(x) : ""}`, with `""` reserved
+  for "no selection." Toggling to `undefined` trips React's
+  controlled/uncontrolled detection and can silently fail to redisplay the
+  placeholder (ADR 0015, decision 6).
+- When wiring a `Controller`-wrapped `Select` to auto-populate from data
+  that loads asynchronously, the fix depends on whether the `Controller`
+  mounts before or after that data is known — see ADR 0015, decision 5, for
+  the two mutually exclusive patterns. Picking the wrong one fails silently
+  (no error, the auto-selection just doesn't happen).
 
 ---
 
@@ -943,14 +1200,20 @@ Two scores that look surprising, explained:
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
 
-**Phase 8a is complete but not yet reflected above**, per this table's own
-rule (scored against merged work only) — `phase-8a-accessibility-states` is
+**Phase 8a is merged** (`main` at `8bb7e66`) but not yet reflected above —
+the table has not been recomputed since. Once it is, Row 10 ("Verification
+& deployment — E2E, security, perf, ISO 25010, handoff") is the natural
+home for the §12.4/§12.5 work that landed, since Row 8 ("Nine role portals
+— 40 modules") measures module *count*, which Phase 8a does not change —
+it improves quality on already-connected modules, not the connected count.
+
+**Phase 8b is complete but not yet reflected above**, per this table's own
+rule (scored against merged work only) — `phase-8b-ui-coherence-motion` is
 neither committed nor merged to `main` yet (see *Uncommitted or Risky
-Changes*). Once merged, Row 10 ("Verification & deployment — E2E, security,
-perf, ISO 25010, handoff") is the natural home for the §12.4/§12.5 work
-that landed, since Row 8 ("Nine role portals — 40 modules") measures
-module *count*, which Phase 8a does not change — it improves quality on
-already-connected modules, not the connected count.
+Changes*). Same reasoning as Phase 8a applies: Phase 8b changes no module
+*count* (it fixes chrome, migrates form controls, and adds motion across
+all 19 already-connected workspaces), so once merged it also lands in
+Row 10, not Row 8.
 
 ---
 
@@ -963,7 +1226,7 @@ already-connected modules, not the connected count.
 | **Live API routes** | **48** |
 | **Database tables** | **26** |
 | **Backend tests** | **641 passing (2,419 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **48 files, 243 tests, Vitest** on `main` — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. (`phase-8a-accessibility-states`, uncommitted, is at 65 files/354 tests — not reflected here until merged.) |
+| **Frontend tests** | **65 files, 354 tests, Vitest** on `main` (Phase 8a, merged) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. (`phase-8b-ui-coherence-motion`, uncommitted, is at 67 files/362 tests — not reflected here until merged.) |
 | **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
 | **Portals functional** | **9 of 9** have at least one connected module (29 of 40 modules total) — Registrar Staff is no longer fully placeholder |
 
@@ -1365,21 +1628,37 @@ just engineering time.
 
 ## Phase 8 — Polish, Accessibility, E2E, Performance
 
-### Phase 8a — Accessibility & Required States ✅ (unmerged)
+### Phase 8a — Accessibility & Required States ✅ (merged)
 
 PRD §12.4 required states on every page, WCAG 2.1 AA (§12.5), §12.3 form
-behavior, and the presentation-layer part of §12.6. Complete and
-quality-gated on `phase-8a-accessibility-states` — see *Verified Completed
-— Phase 8a*. Not yet committed or merged to `main`; the manual WCAG
-keyboard/screen-reader/zoom pass is the one piece not run this session
-(no browser connection).
+behavior, and the presentation-layer part of §12.6. Complete and merged to
+`main`, pushed to `origin` at `8bb7e66` — see *Verified Completed —
+Phase 8a*. The manual WCAG keyboard/screen-reader/zoom pass was the one
+piece not run before merge (no browser connection that session).
 
-### Phase 8b — E2E, Performance, Security (not started)
+### Phase 8b — Portal UI Coherence & Motion ✅ (unmerged)
+
+Fixed the duplicate page header, dashed placeholder frame, and centered
+layout on every connected workspace (`PortalModulePage`/`WorkspacePage`
+now share a single header); migrated the last raw `<select>`/`<input>`
+elements onto `ui/select.tsx`/`ui/input.tsx` across 10 workspaces; rebuilt
+`enrollment-workspace.tsx` (the one Student workspace Phase 8a's migration
+skipped); adopted the landing/login pages' existing print-ledger design
+language into portal chrome instead of inventing a new look; added the
+`motion` library for entrance/stagger/presence animation, gated everywhere
+by `useReducedMotion()`. Complete and quality-gated on
+`phase-8b-ui-coherence-motion` — see *Verified Completed — Phase 8b* and
+ADR 0015. Not yet committed or merged to `main`; the manual WCAG pass and
+live visual verification are the pieces not run this session (no browser
+connection).
+
+### Phase 8c — E2E, Performance, Security (not started)
 
 Playwright E2E for §14.3's 15 critical journeys (no `e2e/` directory exists
 yet); §14.5 performance on the eligible-subject query and approval queues;
 §14.4 security verification; §12.6's remaining profile/password/help
-features (need new backend endpoints, deferred out of 8a for that reason).
+features (need new backend endpoints, deferred out of 8a/8b for that
+reason).
 
 ## Phase 9 — Process 4.0, Machine Learning (LAST)
 

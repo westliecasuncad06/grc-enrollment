@@ -215,6 +215,7 @@ export function ScheduleDecisionWorkspace() {
       title="Schedule approvals"
       description="Review only the proposals assigned to the Dean checkpoint."
       unauthorized={!authorized}
+      lastUpdated={proposalsQuery.dataUpdatedAt}
     >
       <AsyncBoundary
         query={proposalsQuery}
@@ -223,7 +224,7 @@ export function ScheduleDecisionWorkspace() {
         {(proposals) => (
           <Card>
             <CardHeader>
-              <CardTitle level={3}>Dean decisions</CardTitle>
+              <CardTitle level={2}>Dean decisions</CardTitle>
             </CardHeader>
             <CardContent>
               <ScheduleDecisionControls

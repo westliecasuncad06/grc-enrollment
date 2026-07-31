@@ -101,6 +101,15 @@
   --sidebar-accent-foreground: #493a08;
   --sidebar-border: #d9d4cb;
   --sidebar-ring: var(--grc-primary);
+  /* Seeded from values already in use (ledger-enter's curve/duration, the
+     Sheet transition, and the de facto Tailwind-default hover speed) rather
+     than invented — see ADR 0015. Motion on this page (globals.css `.reveal`
+     and the `motion` library wrapper in `portal/motion.tsx`) reads from
+     these instead of repeating literals. */
+  --ease-house: cubic-bezier(0.2, 0.75, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 650ms;
   color: var(--foreground);
   background: var(--background);
   font-family: "IBM Plex Sans Variable", sans-serif;
@@ -268,9 +277,7 @@
 }
 
 .institution-name,
-.system-name,
-.phase-folio span,
-.phase-folio strong {
+.system-name {
   margin: 0;
 }
 
@@ -290,62 +297,6 @@
   text-transform: uppercase;
 }
 
-.phase-folio {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: center;
-  gap: 0.25rem 1.1rem;
-  min-width: 12rem;
-  padding-left: 1.25rem;
-  border-left: 1px solid var(--border);
-  text-align: right;
-}
-
-.phase-folio::before {
-  grid-row: 1 / span 2;
-  width: 0.35rem;
-  height: 100%;
-  background: var(--institutional-gold);
-  content: "";
-}
-
-.phase-folio span {
-  color: var(--muted-foreground);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.phase-folio strong {
-  font-size: 0.95rem;
-  font-weight: 650;
-}
-
-.readiness-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(20rem, 0.72fr);
-  align-items: center;
-  gap: clamp(3rem, 7vw, 7.5rem);
-  min-height: 40rem;
-  padding: clamp(4.5rem, 9vw, 9rem) clamp(1.25rem, 6vw, 6.5rem);
-}
-
-.readiness-hero::before {
-  position: absolute;
-  top: 3.5rem;
-  left: clamp(1.25rem, 3vw, 3rem);
-  width: 0.28rem;
-  height: clamp(7rem, 16vw, 13rem);
-  background: var(--primary);
-  content: "";
-}
-
-.hero-copy {
-  max-width: 51rem;
-}
-
 .eyebrow {
   display: flex;
   align-items: center;
@@ -363,130 +314,12 @@
   height: 1rem;
 }
 
-.hero-copy h1 {
-  max-width: 13ch;
-  margin: 1.35rem 0 1.6rem;
-  font-family: "Newsreader Variable", Georgia, serif;
-  font-size: clamp(4rem, 8vw, 7.6rem);
-  font-weight: 470;
-  letter-spacing: -0.065em;
-  line-height: 0.85;
-  text-wrap: balance;
-}
-
-.hero-copy h1 em {
-  display: block;
-  color: var(--primary);
-  font-weight: 390;
-}
-
-.hero-summary {
-  max-width: 43rem;
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: clamp(1.05rem, 1.7vw, 1.3rem);
-  line-height: 1.65;
-  text-wrap: pretty;
-}
-
-.hero-action-row {
-  display: flex;
-  align-items: center;
-  gap: 1.2rem;
-  margin-top: 2.2rem;
-}
-
 .hero-status {
   max-width: 19rem;
   margin: 0;
   color: var(--muted-foreground);
   font-size: 0.84rem;
   line-height: 1.45;
-}
-
-.route-ledger {
-  position: relative;
-  padding: 1.4rem;
-  color: #ffffff;
-  background: var(--ink);
-  border-top: 0.3rem solid var(--primary);
-  border-radius: calc(var(--radius) * 1.2);
-  box-shadow: 0.8rem 0.8rem 0
-    color-mix(in srgb, var(--institutional-gold) 34%, transparent);
-}
-
-.route-ledger__heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.2rem 0.2rem 1rem;
-  color: #dedfe1;
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.route-ledger ol {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-block: 1px solid color-mix(in srgb, white 17%, transparent);
-}
-
-.route-ledger li {
-  display: grid;
-  grid-template-columns: 2rem 1fr auto;
-  align-items: center;
-  gap: 0.9rem;
-  min-height: 5rem;
-  padding: 0.85rem 0.2rem;
-  border-bottom: 1px solid color-mix(in srgb, white 14%, transparent);
-}
-
-.route-ledger li:last-child {
-  border-bottom: 0;
-}
-
-.route-ledger li > span {
-  color: var(--institutional-gold);
-  font-family: "Newsreader Variable", Georgia, serif;
-  font-size: 1.05rem;
-}
-
-.route-ledger li div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
-}
-
-.route-ledger small {
-  color: #adb0b5;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.route-ledger strong {
-  font-size: 0.98rem;
-  font-weight: 560;
-}
-
-.route-ledger li svg {
-  width: 1.05rem;
-  height: 1.05rem;
-  color: #c8c9cd;
-}
-
-.route-ledger > p {
-  margin: 1.1rem 0 0;
-  color: #c8c9cd;
-  font-size: 0.78rem;
-  line-height: 1.55;
 }
 
 .boundary-section {
@@ -503,8 +336,7 @@
   margin-bottom: 2.4rem;
 }
 
-.section-heading h2,
-.boundary-note h2 {
+.section-heading h2 {
   margin: 0.7rem 0 0;
   font-family: "Newsreader Variable", Georgia, serif;
   font-size: clamp(2.25rem, 4.2vw, 4rem);
@@ -607,48 +439,6 @@
   overflow-wrap: anywhere;
   font-size: 0.78rem;
   font-weight: 540;
-}
-
-.boundary-note {
-  display: grid;
-  grid-template-columns: auto minmax(18rem, 0.85fr) minmax(18rem, 1.15fr);
-  align-items: center;
-  gap: clamp(1.5rem, 4vw, 4rem);
-  margin: clamp(3rem, 6vw, 6rem) clamp(1.25rem, 6vw, 6.5rem);
-  padding: clamp(2rem, 4vw, 3.5rem);
-  color: #ffffff;
-  background: var(--ink);
-  border-radius: calc(var(--radius) * 1.2);
-}
-
-.boundary-note .eyebrow {
-  color: var(--institutional-gold);
-}
-
-.boundary-note h2 {
-  font-size: clamp(2rem, 3.7vw, 3.4rem);
-}
-
-.boundary-note > p {
-  margin: 0;
-  color: #caccd0;
-  font-size: 0.92rem;
-  line-height: 1.7;
-}
-
-.boundary-note__icon {
-  display: grid;
-  place-items: center;
-  width: 4.5rem;
-  height: 4.5rem;
-  color: var(--ink);
-  background: var(--institutional-gold);
-  border-radius: 50%;
-}
-
-.boundary-note__icon svg {
-  width: 1.8rem;
-  height: 1.8rem;
 }
 
 .site-footer {
@@ -1546,6 +1336,17 @@
 
 .portal-module-card {
   min-height: 16rem;
+  /* Every module card wraps a link to its workspace, but previously gave no
+     hover affordance at all — flat ring-1, zero feedback (see the Phase 8b
+     design audit). */
+  transition:
+    box-shadow var(--duration-fast) var(--ease-house),
+    transform var(--duration-fast) var(--ease-house);
+}
+
+.portal-module-card:hover {
+  box-shadow: 0 0.35rem 0.85rem color-mix(in srgb, var(--ink) 10%, transparent);
+  transform: translateY(-0.15rem);
 }
 
 .portal-module-card [data-slot="card-header"] {
@@ -1606,6 +1407,61 @@
   display: grid;
   min-height: calc(100svh - 13rem);
   place-items: center;
+}
+
+/* Connected workspaces are real, working screens — not a placeholder to
+   center like the "not built yet" states below, which is what the base
+   .portal-module-page rule above was designed for (see ADR 0015). */
+.portal-module-page--connected {
+  display: flex;
+  min-height: auto;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.portal-workspace {
+  width: 100%;
+  max-width: 76rem;
+}
+
+.portal-workspace-header {
+  padding-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.portal-workspace-title {
+  margin: 0.4rem 0 0.5rem;
+  font-family: "Newsreader Variable", Georgia, serif;
+  font-size: clamp(1.9rem, 3.2vw, 2.75rem);
+  font-weight: 480;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+.portal-workspace-description {
+  max-width: 46rem;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.portal-module-page__return {
+  align-self: flex-start;
+}
+
+/* A restrained, light-background adaptation of the landing page's
+   `.enrollment-folio` idiom (gold offset shadow + red cap rule) — used
+   sparingly to draw attention to one panel among a workspace's light cards
+   (a review/summary panel, a receipt) without the landing page's full
+   ink-inverted treatment, which would look out of place surrounded by
+   ordinary Cards on the paper-textured background. See ADR 0015. */
+.portal-workspace-highlight {
+  border-top: 0.3rem solid var(--primary);
+  box-shadow: 0.5rem 0.5rem 0
+    color-mix(in srgb, var(--institutional-gold) 28%, transparent);
 }
 
 .portal-module-empty {
@@ -1714,12 +1570,10 @@
     padding: clamp(2rem, 4vw, 4rem);
   }
 
-  .readiness-hero,
   .landing-hero {
     grid-template-columns: 1fr;
   }
 
-  .route-ledger,
   .enrollment-folio {
     width: min(100%, 38rem);
   }
@@ -1736,14 +1590,6 @@
   .section-heading {
     grid-template-columns: 1fr;
     gap: 1.25rem;
-  }
-
-  .boundary-note {
-    grid-template-columns: auto 1fr;
-  }
-
-  .boundary-note > p {
-    grid-column: 2;
   }
 
   .journey-list {
@@ -1819,14 +1665,6 @@
     align-items: flex-start;
   }
 
-  .phase-folio {
-    min-width: auto;
-  }
-
-  .phase-folio span {
-    display: none;
-  }
-
   .public-masthead {
     grid-template-columns: 1fr auto;
   }
@@ -1835,36 +1673,24 @@
     display: none;
   }
 
-  .readiness-hero,
   .landing-hero {
     min-height: auto;
     padding-block: 4.5rem;
   }
 
-  .readiness-hero::before,
   .landing-hero::before {
     top: 2.5rem;
     height: 4rem;
   }
 
-  .hero-copy h1,
   .landing-hero h1 {
     font-size: clamp(3.6rem, 17vw, 5.3rem);
   }
 
-  .hero-action-row,
   .landing-actions,
   .site-footer {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .boundary-note {
-    grid-template-columns: 1fr;
-  }
-
-  .boundary-note > p {
-    grid-column: auto;
   }
 
   .journey-list {
@@ -1904,26 +1730,6 @@
   .site-masthead {
     flex-direction: column;
     gap: 1rem;
-  }
-
-  .phase-folio {
-    width: 100%;
-    padding-top: 0.8rem;
-    padding-left: 0;
-    border-top: 1px solid var(--border);
-    border-left: 0;
-    text-align: left;
-  }
-
-  .phase-folio::before {
-    width: 2rem;
-    height: 0.28rem;
-  }
-
-  .route-ledger {
-    padding: 1rem;
-    box-shadow: 0.45rem 0.45rem 0
-      color-mix(in srgb, var(--institutional-gold) 34%, transparent);
   }
 }
 

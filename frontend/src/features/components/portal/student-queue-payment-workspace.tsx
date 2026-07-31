@@ -1,11 +1,12 @@
 "use client"
 
-import { CheckIcon } from "lucide-react"
-
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import {
+  StatusStepper,
+  type StatusStepperStage,
+} from "@/features/components/portal/status-stepper"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
-import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import {
   Card,
@@ -15,17 +16,10 @@ import {
 } from "@/features/components/ui/card"
 import { useEnrollmentsQuery } from "@/features/hooks/use-enrollment"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
-import { cn } from "@/features/lib/utils"
 
 const STOPPED_STATUSES = new Set(["rejected", "cancelled", "withdrawn"])
 
-interface Stage {
-  label: string
-  done: boolean
-  current: boolean
-}
-
-function stagesFor(enrollment: Enrollment): readonly Stage[] {
+function stagesFor(enrollment: Enrollment): readonly StatusStepperStage[] {
   const approved = enrollment.registrar_decided_at !== null
   const paid = enrollment.payment_confirmed_at !== null
   const enrolled = enrollment.enrolled_at !== null
@@ -50,69 +44,6 @@ function stagesFor(enrollment: Enrollment): readonly Stage[] {
   ]
 }
 
-function StatusStepper({ enrollment }: { enrollment: Enrollment }) {
-  if (STOPPED_STATUSES.has(enrollment.status)) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          This enrollment is {enrollment.status_label.toLowerCase()} and is not
-          progressing further.
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
-  const stages = stagesFor(enrollment)
-
-  return (
-    <ol className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-0">
-      {stages.map((stage, index) => (
-        <li key={stage.label} className="flex flex-1 items-center gap-3">
-          <div className="flex flex-col items-center gap-1 sm:w-full">
-            <span
-              className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
-                stage.done
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : stage.current
-                    ? "border-primary text-primary"
-                    : "border-border text-muted-foreground",
-              )}
-            >
-              {stage.done ? (
-                <CheckIcon aria-hidden="true" className="size-4" />
-              ) : (
-                index + 1
-              )}
-            </span>
-            <span
-              className={cn(
-                "text-center text-xs",
-                stage.done || stage.current
-                  ? "font-medium text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              {stage.label}
-            </span>
-          </div>
-          {index < stages.length - 1 && (
-            <div
-              aria-hidden="true"
-              className={cn(
-                "hidden h-px flex-1 sm:block",
-                stages[index + 1]?.done || stages[index + 1]?.current
-                  ? "bg-primary"
-                  : "bg-border",
-              )}
-            />
-          )}
-        </li>
-      ))}
-    </ol>
-  )
-}
-
 export function StudentQueuePaymentWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "student"
@@ -123,6 +54,7 @@ export function StudentQueuePaymentWorkspace() {
       title="Queue & payment status"
       description="Track your enrollment's approval, queue position, and payment status."
       unauthorized={!authorized}
+      lastUpdated={enrollmentsQuery.dataUpdatedAt}
     >
       <AsyncBoundary
         query={{
@@ -137,7 +69,7 @@ export function StudentQueuePaymentWorkspace() {
           activeEnrollment && (
             <Card>
               <CardHeader>
-                <CardTitle level={3} className="flex items-center gap-2">
+                <CardTitle level={2} className="flex items-center gap-2">
                   Enrollment #{activeEnrollment.id}
                   <Badge variant="secondary">
                     {activeEnrollment.status_label}
@@ -145,7 +77,14 @@ export function StudentQueuePaymentWorkspace() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-6">
-                <StatusStepper enrollment={activeEnrollment} />
+                <StatusStepper
+                  stages={stagesFor(activeEnrollment)}
+                  stoppedMessage={
+                    STOPPED_STATUSES.has(activeEnrollment.status)
+                      ? `This enrollment is ${activeEnrollment.status_label.toLowerCase()} and is not progressing further.`
+                      : undefined
+                  }
+                />
                 <dl className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border p-3">
                     <dt className="text-xs text-muted-foreground">

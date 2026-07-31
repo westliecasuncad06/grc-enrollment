@@ -79,10 +79,7 @@ export function PortalOverviewPage() {
         </AlertDescription>
       </Alert>
 
-      <section
-        className="portal-module-section"
-        aria-label={`${definition.roleLabel} portal modules`}
-      >
+      <section aria-label={`${definition.roleLabel} portal modules`}>
         <div className="portal-section-heading">
           <div>
             <p className="eyebrow">Assigned workspace</p>

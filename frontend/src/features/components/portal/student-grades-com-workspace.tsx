@@ -48,6 +48,7 @@ export function StudentGradesComWorkspace() {
       title="Your academic records"
       description="Review your recorded grades and print your Digital COM."
       unauthorized={!authorized}
+      lastUpdated={gradesQuery.dataUpdatedAt}
     >
       <AsyncBoundary
         query={combinedQuery}
@@ -57,7 +58,7 @@ export function StudentGradesComWorkspace() {
           <>
             <Card>
               <CardHeader>
-                <CardTitle level={3}>Grades</CardTitle>
+                <CardTitle level={2}>Grades</CardTitle>
               </CardHeader>
               <CardContent>
                 {grades.length === 0 ? (
@@ -99,7 +100,7 @@ export function StudentGradesComWorkspace() {
             </Card>
             <Card className="print:shadow-none">
               <CardHeader>
-                <CardTitle level={3} className="flex items-center gap-2">
+                <CardTitle level={2} className="flex items-center gap-2">
                   <FileCheck2 aria-hidden="true" className="size-5" />
                   Digital Certificate of Matriculation
                 </CardTitle>

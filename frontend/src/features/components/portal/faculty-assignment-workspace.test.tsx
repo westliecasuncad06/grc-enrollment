@@ -101,6 +101,16 @@ function url(input: RequestInfo | URL) {
       : input.url
 }
 
+/** Opens a `Select` trigger and picks an item. */
+async function selectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  labelText: string,
+  optionName: string,
+) {
+  await user.click(screen.getByLabelText(labelText))
+  await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
 describe("FacultyAssignmentWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
@@ -138,9 +148,9 @@ describe("FacultyAssignmentWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: "CS101 · A" })
-    await user.selectOptions(screen.getByLabelText("Unassigned section"), "5")
-    await user.selectOptions(screen.getByLabelText("Faculty member"), "12")
+    await screen.findByLabelText("Unassigned section")
+    await selectOption(user, "Unassigned section", "CS101 · A")
+    await selectOption(user, "Faculty member", "Prof. Reyes")
     expect(screen.getByText(/Monday/)).toBeInTheDocument()
     expect(screen.getByText(/Preference #1/)).toBeInTheDocument()
     expect(screen.queryByText("private@example.test")).not.toBeInTheDocument()
@@ -198,9 +208,9 @@ describe("FacultyAssignmentWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: "CS101 · A" })
-    await user.selectOptions(screen.getByLabelText("Unassigned section"), "5")
-    await user.selectOptions(screen.getByLabelText("Faculty member"), "12")
+    await screen.findByLabelText("Unassigned section")
+    await selectOption(user, "Unassigned section", "CS101 · A")
+    await selectOption(user, "Faculty member", "Prof. Reyes")
     await user.click(
       screen.getByRole("button", { name: "Save faculty assignment" }),
     )
@@ -259,9 +269,9 @@ describe("FacultyAssignmentWorkspace", () => {
     })
     await screen.findByText(/Unavailable/, {}, { timeout: 3_000 })
     await user.click(screen.getByRole("button", { name: "Try again" }))
-    expect(
-      await screen.findByRole("option", { name: "Prof. Reyes" }),
-    ).toBeInTheDocument()
+    await screen.findByLabelText("Unassigned section")
+    await selectOption(user, "Unassigned section", "CS101 · A")
+    await selectOption(user, "Faculty member", "Prof. Reyes")
     expect(directoryAttempts).toBe(3)
   })
 
@@ -297,7 +307,7 @@ describe("FacultyAssignmentWorkspace", () => {
       },
     })
 
-    await screen.findByRole("option", { name: "CS101 · A" })
+    await screen.findByLabelText("Unassigned section")
     expect(await axe(container)).toHaveNoViolations()
   })
 })

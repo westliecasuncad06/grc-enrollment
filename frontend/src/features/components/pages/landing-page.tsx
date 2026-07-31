@@ -73,7 +73,7 @@ const enrollmentJourney = [
 
 export function LandingPage() {
   return (
-    <div className="institutional-shell landing-shell">
+    <div className="institutional-shell">
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>

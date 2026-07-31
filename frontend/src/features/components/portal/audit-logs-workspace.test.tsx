@@ -68,10 +68,12 @@ describe("AuditLogsWorkspace", () => {
       },
     })
     await screen.findByText(/section.updated/)
-    expect(screen.getByRole("combobox", { name: "Action" })).toHaveValue("")
-    expect(screen.getByRole("combobox", { name: "Entity type" })).toHaveValue(
-      "",
+    expect(screen.getByRole("combobox", { name: "Action" })).toHaveTextContent(
+      "All actions",
     )
+    expect(
+      screen.getByRole("combobox", { name: "Entity type" }),
+    ).toHaveTextContent("All entity types")
     await user.click(
       await screen.findByRole("button", { name: "Apply audit filters" }),
     )

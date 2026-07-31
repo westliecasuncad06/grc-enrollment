@@ -16,6 +16,13 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldLabel } from "@/features/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import {
   useFacultyAvailabilitiesQuery,
@@ -161,6 +168,7 @@ export function FacultyAssignmentWorkspace() {
     <WorkspacePage
       title="Faculty assignment"
       description="Assign active faculty to unassigned planned sections, with their declared constraints in view."
+      lastUpdated={sectionsQuery.dataUpdatedAt}
     >
       {requestError && (
         <Alert variant="destructive">
@@ -174,7 +182,7 @@ export function FacultyAssignmentWorkspace() {
         {() => (
           <Card>
             <CardHeader>
-              <CardTitle level={3}>Assign faculty</CardTitle>
+              <CardTitle level={2}>Assign faculty</CardTitle>
               <CardDescription>
                 The API remains authoritative for faculty schedule conflicts;
                 this view provides declared availability and subject-preference
@@ -184,42 +192,48 @@ export function FacultyAssignmentWorkspace() {
             <CardContent className="grid gap-4">
               <Field>
                 <FieldLabel htmlFor="assignment-term">Academic term</FieldLabel>
-                <select
-                  id="assignment-term"
-                  value={selectedTermId}
-                  onChange={(event) => {
-                    setTermId(Number(event.target.value))
+                <Select
+                  value={selectedTermId > 0 ? String(selectedTermId) : ""}
+                  onValueChange={(value) => {
+                    setTermId(Number(value))
                     setSectionId(0)
                     setProfessorId(0)
                   }}
                 >
-                  <option value={0}>Select an academic term</option>
-                  {(termsQuery.data ?? []).map((term) => (
-                    <option key={term.id} value={term.id}>
-                      {formatAcademicTerm(term)}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="assignment-term" className="w-full">
+                    <SelectValue placeholder="Select an academic term" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(termsQuery.data ?? []).map((term) => (
+                      <SelectItem key={term.id} value={String(term.id)}>
+                        {formatAcademicTerm(term)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor="assignment-section">
                   Unassigned section
                 </FieldLabel>
-                <select
-                  id="assignment-section"
-                  value={sectionId}
-                  onChange={(event) => setSectionId(Number(event.target.value))}
+                <Select
+                  value={sectionId > 0 ? String(sectionId) : ""}
+                  onValueChange={(value) => setSectionId(Number(value))}
                 >
-                  <option value={0}>Select an unassigned section</option>
-                  {unassigned.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {(subjectsQuery.data ?? []).find(
-                        (subject) => subject.id === item.subject_id,
-                      )?.code ?? "Subject"}{" "}
-                      · {item.section_code}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="assignment-section" className="w-full">
+                    <SelectValue placeholder="Select an unassigned section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unassigned.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {(subjectsQuery.data ?? []).find(
+                          (subject) => subject.id === item.subject_id,
+                        )?.code ?? "Subject"}{" "}
+                        · {item.section_code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               {selectedTermId > 0 && unassigned.length === 0 && (
                 <p>
@@ -230,21 +244,22 @@ export function FacultyAssignmentWorkspace() {
                 <FieldLabel htmlFor="assignment-faculty">
                   Faculty member
                 </FieldLabel>
-                <select
-                  id="assignment-faculty"
-                  value={professorId}
-                  onChange={(event) =>
-                    setProfessorId(Number(event.target.value))
-                  }
+                <Select
+                  value={professorId > 0 ? String(professorId) : ""}
+                  onValueChange={(value) => setProfessorId(Number(value))}
                   disabled={!section}
                 >
-                  <option value={0}>Select an active faculty member</option>
-                  {(directoryQuery.data ?? []).map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="assignment-faculty" className="w-full">
+                    <SelectValue placeholder="Select an active faculty member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(directoryQuery.data ?? []).map((member) => (
+                      <SelectItem key={member.id} value={String(member.id)}>
+                        {member.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               {faculty && (
                 <aside

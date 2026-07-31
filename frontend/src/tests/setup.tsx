@@ -46,15 +46,31 @@ expect.extend(axeMatchers)
 // jsdom implements neither the Pointer Events capture API nor
 // `scrollIntoView`. Radix's Select (and other Radix primitives using the same
 // pointer-capture-based open/close handling) call these directly, so without
-// a polyfill any `userEvent.click()` on a Select trigger throws.
+// a polyfill any `userEvent.click()` on a Select trigger throws. jsdom also
+// implements no `matchMedia` at all — `motion`'s `useReducedMotion` (and any
+// future `prefers-reduced-motion` check) calls it directly, so without a
+// stub any component using it throws under test. The stub always reports "no
+// preference"; tests that need to assert the reduced-motion branch stub this
+// per-test instead of relying on the default.
 /* eslint-disable @typescript-eslint/unbound-method -- these are plain
-   arrow-function polyfills assigned to the prototype, not extracted method
-   references; there is no `this` to detach. */
+   arrow-function polyfills assigned to the prototype/window, not extracted
+   method references; there is no `this` to detach. */
 if (typeof window !== "undefined") {
   window.HTMLElement.prototype.hasPointerCapture ??= () => false
   window.HTMLElement.prototype.setPointerCapture ??= () => undefined
   window.HTMLElement.prototype.releasePointerCapture ??= () => undefined
   window.HTMLElement.prototype.scrollIntoView ??= () => undefined
+  window.matchMedia ??= (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList
 }
 /* eslint-enable @typescript-eslint/unbound-method */
 

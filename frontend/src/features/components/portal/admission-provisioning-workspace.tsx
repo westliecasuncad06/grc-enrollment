@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMemo, useState } from "react"
-import { useForm, useWatch } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { z } from "zod"
 
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
@@ -29,6 +29,13 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import { useStudentProvisioning } from "@/features/hooks/use-student-provisioning"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { generateTemporaryCredential } from "@/features/lib/temporary-credential"
@@ -94,7 +101,6 @@ export function AdmissionProvisioningWorkspace({
     },
   })
   const selectedProgramId = useWatch({ control, name: "program_id" })
-  const programRegistration = register("program_id", { valueAsNumber: true })
   const curricula = useMemo(
     () =>
       (curriculaQuery.data ?? []).filter(
@@ -145,7 +151,7 @@ export function AdmissionProvisioningWorkspace({
     >
       <Card>
         <CardHeader>
-          <CardTitle level={3}>1. Student account details</CardTitle>
+          <CardTitle level={2}>1. Student account details</CardTitle>
           <CardDescription>
             Only the approved account and profile fields are submitted.
           </CardDescription>
@@ -192,65 +198,110 @@ export function AdmissionProvisioningWorkspace({
               </Field>
               <Field data-invalid={Boolean(errors.program_id)}>
                 <FieldLabel htmlFor="admission-program">Program</FieldLabel>
-                <select
-                  id="admission-program"
-                  disabled={isProvisioning || programsQuery.isLoading}
-                  aria-invalid={Boolean(errors.program_id)}
-                  {...programRegistration}
-                  onChange={(event) => {
-                    void programRegistration.onChange(event)
-                    setValue("curriculum_id", 0, { shouldValidate: true })
-                  }}
-                >
-                  <option value={0}>Select a program</option>
-                  {(programsQuery.data ?? []).map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.code} — {program.name}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="program_id"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? String(field.value) : ""}
+                      onValueChange={(value) => {
+                        field.onChange(Number(value))
+                        setValue("curriculum_id", 0, { shouldValidate: true })
+                      }}
+                      disabled={isProvisioning || programsQuery.isLoading}
+                    >
+                      <SelectTrigger
+                        id="admission-program"
+                        className="w-full"
+                        aria-invalid={Boolean(errors.program_id)}
+                      >
+                        <SelectValue placeholder="Select a program" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(programsQuery.data ?? []).map((program) => (
+                          <SelectItem
+                            key={program.id}
+                            value={String(program.id)}
+                          >
+                            {program.code} — {program.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <FieldError>{errors.program_id?.message}</FieldError>
               </Field>
               <Field data-invalid={Boolean(errors.curriculum_id)}>
                 <FieldLabel htmlFor="admission-curriculum">
                   Curriculum
                 </FieldLabel>
-                <select
-                  id="admission-curriculum"
-                  disabled={
-                    isProvisioning ||
-                    curriculaQuery.isLoading ||
-                    selectedProgramId === 0
-                  }
-                  aria-invalid={Boolean(errors.curriculum_id)}
-                  {...register("curriculum_id", { valueAsNumber: true })}
-                >
-                  <option value={0}>Select a curriculum</option>
-                  {curricula.map((curriculum) => (
-                    <option key={curriculum.id} value={curriculum.id}>
-                      {curriculum.name} ({curriculum.effective_school_year})
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="curriculum_id"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? String(field.value) : ""}
+                      onValueChange={(value) => field.onChange(Number(value))}
+                      disabled={
+                        isProvisioning ||
+                        curriculaQuery.isLoading ||
+                        selectedProgramId === 0
+                      }
+                    >
+                      <SelectTrigger
+                        id="admission-curriculum"
+                        className="w-full"
+                        aria-invalid={Boolean(errors.curriculum_id)}
+                      >
+                        <SelectValue placeholder="Select a curriculum" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {curricula.map((curriculum) => (
+                          <SelectItem
+                            key={curriculum.id}
+                            value={String(curriculum.id)}
+                          >
+                            {curriculum.name} (
+                            {curriculum.effective_school_year})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <FieldError>{errors.curriculum_id?.message}</FieldError>
               </Field>
               <Field data-invalid={Boolean(errors.year_level)}>
                 <FieldLabel htmlFor="admission-year-level">
                   Year level
                 </FieldLabel>
-                <select
-                  id="admission-year-level"
-                  disabled={isProvisioning}
-                  aria-invalid={Boolean(errors.year_level)}
-                  {...register("year_level", { valueAsNumber: true })}
-                >
-                  <option value={0}>Select a year level</option>
-                  {[1, 2, 3, 4].map((year) => (
-                    <option key={year} value={year}>
-                      Year {year}
-                    </option>
-                  ))}
-                </select>
+                <Controller
+                  control={control}
+                  name="year_level"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? String(field.value) : ""}
+                      onValueChange={(value) => field.onChange(Number(value))}
+                      disabled={isProvisioning}
+                    >
+                      <SelectTrigger
+                        id="admission-year-level"
+                        className="w-full"
+                        aria-invalid={Boolean(errors.year_level)}
+                      >
+                        <SelectValue placeholder="Select a year level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4].map((year) => (
+                          <SelectItem key={year} value={String(year)}>
+                            Year {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <FieldError>{errors.year_level?.message}</FieldError>
               </Field>
               {requestError && (
@@ -289,7 +340,7 @@ export function AdmissionProvisioningWorkspace({
 
       <Card>
         <CardHeader>
-          <CardTitle level={3}>2. Initial admission outcome</CardTitle>
+          <CardTitle level={2}>2. Initial admission outcome</CardTitle>
         </CardHeader>
         <CardContent>
           <p>Admission status: Admitted</p>
@@ -299,7 +350,7 @@ export function AdmissionProvisioningWorkspace({
 
       <Card>
         <CardHeader>
-          <CardTitle level={3}>3. Credential handoff</CardTitle>
+          <CardTitle level={2}>3. Credential handoff</CardTitle>
         </CardHeader>
         <CardContent>
           <p>

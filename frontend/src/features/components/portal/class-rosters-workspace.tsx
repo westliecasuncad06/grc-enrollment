@@ -57,10 +57,11 @@ export function ClassRostersWorkspace() {
       title="Class rosters"
       description="Review the enrolled roster for each of your assigned sections."
       unauthorized={!authorized}
+      lastUpdated={rosterQuery.dataUpdatedAt}
     >
       <Card>
         <CardHeader>
-          <CardTitle level={3}>Select a section</CardTitle>
+          <CardTitle level={2}>Select a section</CardTitle>
         </CardHeader>
         <CardContent>
           <AsyncBoundary
@@ -73,7 +74,7 @@ export function ClassRostersWorkspace() {
               <Field>
                 <FieldLabel htmlFor="roster-section">Section</FieldLabel>
                 <Select
-                  value={sectionId !== null ? String(sectionId) : undefined}
+                  value={sectionId !== null ? String(sectionId) : ""}
                   onValueChange={(value) => setSectionId(Number(value))}
                 >
                   <SelectTrigger id="roster-section" className="w-full">
@@ -95,7 +96,7 @@ export function ClassRostersWorkspace() {
       {sectionId !== null && (
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Roster</CardTitle>
+            <CardTitle level={2}>Roster</CardTitle>
           </CardHeader>
           <CardContent>
             <AsyncBoundary
@@ -112,7 +113,7 @@ export function ClassRostersWorkspace() {
                   renderCard={(entry) => (
                     <Card role="article" aria-label={entry.student_number}>
                       <CardHeader>
-                        <CardTitle level={4}>{entry.student_number}</CardTitle>
+                        <CardTitle level={3}>{entry.student_number}</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <dl className="grid grid-cols-2 gap-2 text-sm">

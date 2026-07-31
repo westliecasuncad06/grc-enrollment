@@ -8,6 +8,7 @@ import {
   AlertTitle,
 } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
+import { Empty, EmptyDescription } from "@/features/components/ui/empty"
 import { Skeleton } from "@/features/components/ui/skeleton"
 import { getStatePresentation } from "@/features/lib/api-error-presentation"
 
@@ -32,7 +33,16 @@ export interface AsyncBoundaryProps<T> {
  * The loading/error/empty decision every workspace re-implemented by hand
  * (~26 sites across 19 files): a single, consistently-announced status
  * region for loading, a status-aware error presentation with retry, and one
- * place to define "empty" per query.
+ * place to define "empty" per query (PRD §12.2's `Empty` pattern).
+ *
+ * Deliberately not `AnimatePresence`-wrapped: an earlier attempt crossfaded
+ * every state transition here, but on a refetch (filter change, pagination)
+ * that meant a real exit animation had to complete before new content
+ * mounted, and `AsyncBoundary` backs ~26 query sites across 19 workspaces —
+ * one shared component's motion cannot be tuned per-caller. Motion for
+ * specific, lower-blast-radius moments (a receipt appearing, a staggered
+ * list) uses `Reveal`/`StaggerList` directly in the workspace that needs it.
+ * See ADR 0015.
  */
 export function AsyncBoundary<T>({
   query,
@@ -75,12 +85,12 @@ export function AsyncBoundary<T>({
     )
   }
 
-  if (query.data === undefined) {
-    return <p>{emptyMessage}</p>
-  }
-
-  if (isEmpty?.(query.data)) {
-    return <p>{emptyMessage}</p>
+  if (query.data === undefined || isEmpty?.(query.data)) {
+    return (
+      <Empty>
+        <EmptyDescription>{emptyMessage}</EmptyDescription>
+      </Empty>
+    )
   }
 
   return <>{children(query.data)}</>

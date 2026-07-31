@@ -178,6 +178,7 @@ export function GradeSubmissionWorkspace() {
       title="Grade submission"
       description="Select a section to record, edit, and submit its roster's grades."
       unauthorized={!authorized}
+      lastUpdated={gradesQuery.dataUpdatedAt}
     >
       {error && (
         <Alert variant="destructive">
@@ -186,7 +187,7 @@ export function GradeSubmissionWorkspace() {
       )}
       <Card>
         <CardHeader>
-          <CardTitle level={3}>Select a section</CardTitle>
+          <CardTitle level={2}>Select a section</CardTitle>
         </CardHeader>
         <CardContent>
           <AsyncBoundary
@@ -199,7 +200,7 @@ export function GradeSubmissionWorkspace() {
               <Field>
                 <FieldLabel htmlFor="grade-section">Section</FieldLabel>
                 <Select
-                  value={sectionId !== null ? String(sectionId) : undefined}
+                  value={sectionId !== null ? String(sectionId) : ""}
                   onValueChange={(value) => setSectionId(Number(value))}
                 >
                   <SelectTrigger id="grade-section" className="w-full">
@@ -221,7 +222,7 @@ export function GradeSubmissionWorkspace() {
       {sectionId !== null && (
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Roster grades</CardTitle>
+            <CardTitle level={2}>Roster grades</CardTitle>
           </CardHeader>
           <CardContent>
             <AsyncBoundary

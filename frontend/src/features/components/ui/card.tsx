@@ -38,11 +38,11 @@ type CardTitleProps = Omit<React.ComponentProps<"h2">, "children"> & {
   children?: React.ReactNode
 }
 
-// A real heading (default h3, matching a Card's typical nesting one level
-// below a workspace's h2) rather than a div — CardTitle is used ~76 times
-// across the portal, and until this produced zero navigable sub-headings
-// below each page's h1.
-function CardTitle({ className, level = 3, ...props }: CardTitleProps) {
+// A real heading (default h2, matching a Card's typical nesting one level
+// below a workspace's own h1 — see WorkspacePage and ADR 0015) rather than a
+// div — CardTitle is used ~76 times across the portal, and until Phase 8a
+// this produced zero navigable sub-headings below each page's h1.
+function CardTitle({ className, level = 2, ...props }: CardTitleProps) {
   const Heading = `h${level}` as const
 
   return (

@@ -2,8 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useState } from "react"
+import { Controller, useForm } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -23,6 +23,13 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/features/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import {
   useScheduleProposalsQuery,
   scheduleProposalsQueryKey,
@@ -46,9 +53,16 @@ export function ScheduleProposalsWorkspace() {
   const proposalsQuery = useScheduleProposalsQuery()
   const activeTerm = getActiveAcademicTerm(termsQuery.data)
   const [requestError, setRequestError] = useState("")
+  // No form-level `defaultValues` for `academic_term_id`: `useForm`'s
+  // `defaultValues` seeds the field's value synchronously at creation time,
+  // before the active term is known, and — once seeded — takes precedence
+  // over `Controller`'s own `defaultValue` prop even after `Controller`
+  // later mounts with the real value (react-hook-form only honors a
+  // `Controller`'s `defaultValue` for a field it has never seen a
+  // form-level default for). Leaving it unset here lets the `Controller`
+  // below own the field's one true default once the active term is known.
   const form = useForm<ScheduleProposalInput>({
     resolver: zodResolver(scheduleProposalInputSchema),
-    defaultValues: { academic_term_id: 0 },
   })
   const mutation = useMutation({
     mutationFn: createScheduleProposal,
@@ -58,10 +72,6 @@ export function ScheduleProposalsWorkspace() {
         exact: true,
       }),
   })
-  useEffect(() => {
-    if (activeTerm && form.getValues("academic_term_id") === 0)
-      form.setValue("academic_term_id", activeTerm.id)
-  }, [activeTerm, form])
   const save = async (input: ScheduleProposalInput) => {
     setRequestError("")
     try {
@@ -90,6 +100,7 @@ export function ScheduleProposalsWorkspace() {
     <WorkspacePage
       title="Schedule proposals"
       description="Create a draft proposal for review. Dean and executive decisions are intentionally unavailable in this Program Chair workspace."
+      lastUpdated={proposalsQuery.dataUpdatedAt}
     >
       {requestError && (
         <Alert variant="destructive">
@@ -104,7 +115,7 @@ export function ScheduleProposalsWorkspace() {
           <>
             <Card>
               <CardHeader>
-                <CardTitle level={3}>Create draft proposal</CardTitle>
+                <CardTitle level={2}>Create draft proposal</CardTitle>
                 <CardDescription>
                   Only one active proposal is allowed for each academic term.
                 </CardDescription>
@@ -123,19 +134,37 @@ export function ScheduleProposalsWorkspace() {
                       <FieldLabel htmlFor="proposal-term">
                         Academic term
                       </FieldLabel>
-                      <select
-                        id="proposal-term"
-                        {...form.register("academic_term_id", {
-                          valueAsNumber: true,
-                        })}
-                      >
-                        <option value={0}>Select an academic term</option>
-                        {terms.map((term) => (
-                          <option key={term.id} value={term.id}>
-                            {formatAcademicTerm(term)}
-                          </option>
-                        ))}
-                      </select>
+                      <Controller
+                        key={activeTerm?.id ?? "unselected"}
+                        control={form.control}
+                        name="academic_term_id"
+                        defaultValue={activeTerm?.id ?? 0}
+                        render={({ field }) => (
+                          <Select
+                            value={field.value ? String(field.value) : ""}
+                            onValueChange={(value) =>
+                              field.onChange(Number(value))
+                            }
+                          >
+                            <SelectTrigger
+                              id="proposal-term"
+                              className="w-full"
+                            >
+                              <SelectValue placeholder="Select an academic term" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {terms.map((term) => (
+                                <SelectItem
+                                  key={term.id}
+                                  value={String(term.id)}
+                                >
+                                  {formatAcademicTerm(term)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
                       <FieldError>
                         {form.formState.errors.academic_term_id?.message}
                       </FieldError>
@@ -150,7 +179,7 @@ export function ScheduleProposalsWorkspace() {
               </CardContent>
             </Card>
             <section aria-label="Existing schedule proposals">
-              <h3>Existing proposals</h3>
+              <h2>Existing proposals</h2>
               {proposals.length === 0 ? (
                 <p>No proposals have been created.</p>
               ) : (
