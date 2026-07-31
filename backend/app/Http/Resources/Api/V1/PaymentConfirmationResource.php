@@ -33,12 +33,12 @@ final class PaymentConfirmationResource extends JsonResource
             'payment' => [
                 'external_reference' => $payment?->external_reference,
                 'amount' => $payment?->amount,
-                'confirmed_at' => $payment?->confirmed_at?->toIso8601String(),
+                'confirmed_at' => $payment?->confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             ],
             'document' => [
                 'document_type' => $document?->document_type->value,
                 'document_number' => $document?->document_number,
-                'generated_at' => $document?->generated_at?->toIso8601String(),
+                'generated_at' => $document?->generated_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             ],
         ];
     }

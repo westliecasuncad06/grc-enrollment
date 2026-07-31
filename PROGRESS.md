@@ -1,23 +1,93 @@
 # GRC Enrollment System — Development Progress
 
 **Last updated:** 2026-07-31 · **PRD version:** v3.2 · **Branch:**
-`phase-8b-ui-coherence-motion` (Phase 8a is merged to `main`, pushed to
-`origin/main` at `8bb7e66`). Phase 8b itself is complete and quality-gated on
-this branch but **not yet committed** — no commit/merge/push has been
-requested this session.
+`phase-8c-e2e-foundation` (Phase 8a and Phase 8b are both merged to `main`,
+pushed to `origin/main` — Phase 8a at `8bb7e66`, Phase 8b's merge commit at
+`2da5501`). Phase 8c itself is complete and quality-gated on this branch but
+**not yet committed** — no commit/merge/push has been requested this
+session.
 
 ## Current Objective
 
-**Phase 8b is done** (see *Verified Completed — Phase 8b* below) — the portal
-UI coherence and motion pass triggered by a user screenshot of the Eligible
-Subjects page showing a duplicated header, a dashed placeholder frame around
-working content, centered layout, and a bare native `<select>`. The next
-decision, once this branch is reviewed: **Phase 8c** (Playwright E2E for
-§14.3, §14.4 security verification, §14.5 performance verification, and
-§12.6's remaining profile/password/help features) versus **Phase 7c**
-(Dean/Executive Director dashboards, still blocked on the same
+**Phase 8c is done** (see *Verified Completed — Phase 8c* below) — a
+Playwright E2E foundation covering 13 of PRD §14.3's 15 critical journeys
+against the real Next.js frontend, real Laravel API, and an isolated MariaDB
+test database, plus browser-based accessibility coverage
+(`@axe-core/playwright`) that finally closes the manual WCAG 2.1 AA /
+live-visual-verification gap deferred in both Phase 8a and Phase 8b. Along
+the way it found and fixed two genuine, previously invisible defects — see
+*Technical Decisions → Phase 8c* and ADR 0016 — that no prior test layer
+could have caught. The next decision, once this branch is reviewed:
+**Phase 8d** (§14.4 security verification, §14.5 performance verification,
+§12.6's remaining profile/password/help features — plus the two application
+gaps ADR 0016 documented: the missing Executive Director schedule-approval
+navigation, and the missing student-facing Withdraw button) versus
+**Phase 7c** (Dean/Executive Director dashboards, still blocked on the same
 institutional-content gap recorded in *Known Issues*). Ask the user before
 starting either, and before committing/merging this branch.
+
+## Verified Completed — Phase 8c (Playwright E2E foundation)
+
+Design spec: `docs/superpowers/specs/2026-07-31-phase-8c-e2e-foundation-design.md`;
+plan: `docs/superpowers/plans/2026-07-31-phase-8c-e2e-foundation.md`;
+decision record: `docs/adr/0016-e2e-architecture-and-live-contract-fixes.md`.
+Frontend and backend both touched: the frontend not at all beyond test
+infra; the backend for two genuine bug fixes found along the way (see
+below) — no migrations either way.
+
+- **Task 1 — `e2e/` package and Playwright config.** New root-level npm
+  package (`@playwright/test` ^1.62.0, `@axe-core/playwright` ^4.10.2, per
+  the pre-existing `/e2e/node_modules/` `.gitignore` reservation and
+  `version-compatibility.md`'s pin). `playwright.config.ts` splits a
+  `chromium` project from a `throttle-isolated` project (serial, 1 worker,
+  depends on `chromium`) — see Task 3.
+- **Task 2 — stack orchestration and state reset.** `php artisan serve
+  --env=testing` verified empirically to correctly route every request to
+  `grc_enrollment_test`, not the dev database (see ADR 0016 decision 6).
+  `e2e/scripts/reset-db.mjs` runs `migrate:fresh --seed --env=testing`
+  once per suite run, not per test. Found and fixed a real infrastructure
+  bug along the way: `.env.testing`'s `CACHE_STORE=array` silently disabled
+  the rate limiter over real HTTP (PHP's built-in dev server spawns a fresh
+  process per request; the array driver's state doesn't survive between
+  them) — changed to `file`, confirmed not to affect PHPUnit (which
+  overrides `CACHE_STORE` directly via `phpunit.xml`). Full detail: ADR
+  0016 decision 5.
+- **Task 3 — the 13 testable journeys.** `e2e/tests/*.spec.ts`, one file
+  per journey group, `e2e/fixtures/{auth,api-client,seed-identities,
+  select}.ts` shared helpers. Journeys 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13
+  fully covered; 4 & 5 covered together (5's Executive Director half via
+  API — see below); 15 covered for its authorization half only; 14 skipped
+  with a documented reason (ml-service dormant, Phase 9 boundary). Found and
+  fixed a real, previously invisible live-contract bug: 7 of 11
+  date-serializing API Resources used a Carbon format the frontend's own
+  Zod schemas reject, breaking every workspace that rendered a real
+  timestamp — see *Technical Decisions* and ADR 0016 decision 7. Also
+  found, and left deliberately untouched as an application-scope decision,
+  two real UI gaps: no module id reaches `ScheduleDecisionWorkspace` for
+  `executive_director` (component and backend both support it; only the
+  navigation is missing), and no student-facing "Withdraw" button exists
+  despite the mutation hook being fully implemented — ADR 0016 decision 8.
+- **Task 4 — accessibility in a real browser.** `e2e/tests/accessibility.spec.ts`:
+  `@axe-core/playwright` against the landing page, login page, portal
+  overview, and Eligible Subjects (the page from the original Phase 8b
+  screenshot) — zero critical/serious violations. A 200%-zoom viewport pass
+  on Eligible Subjects confirms no horizontal overflow. A
+  `prefers-reduced-motion: reduce` pass confirms Phase 8b's `motion`
+  library JS-driven transforms are genuinely suppressed, not just the CSS
+  ones — closing the manual WCAG/visual-verification gap deferred in both
+  Phase 8a and Phase 8b.
+- **Task 5 — CI job.** New `e2e` job in `.github/workflows/ci.yml`,
+  composing the `backend` job's MariaDB service container and env
+  configuration with the `frontend` job's Node setup, plus Playwright
+  browser install, both servers started in the background, a `wait-on`
+  health gate, then the suite itself, with report/log artifact upload on
+  failure. Not yet run on GitHub — per ADR 0012, a workflow is only proven
+  by actually running, which needs a push.
+- **Task 6 — docs.** ADR 0016 (comprehensive — architecture decisions plus
+  every defect found and fixed or documented); `README.md`'s stale Vite
+  `--port=5173` instruction corrected plus a new `e2e/` setup section;
+  `docs/architecture/version-compatibility.md`'s Playwright row updated
+  from "when E2E begins" to a real status.
 
 ## Verified Completed — Phase 8b (portal UI coherence & motion)
 
@@ -452,6 +522,32 @@ traversal, screen reader, zoom, responsive breakpoints) could not run this
 session (no browser connection) and should happen before or shortly after
 merge — the same limitation Phase 8a recorded. See *Exact Next Steps*.
 
+## Files Changed — Phase 8c
+
+**New — `e2e/` package (root-level, its own `package.json`):**
+`e2e/package.json`, `e2e/package-lock.json`, `e2e/tsconfig.json`,
+`e2e/playwright.config.ts`, `e2e/scripts/reset-db.mjs`,
+`e2e/fixtures/{auth,api-client,seed-identities,select}.ts`,
+`e2e/tests/{auth,authorization,validation-and-throttling,
+faculty-availability,scheduling-and-approval,enrollment,
+registrar-approval,payment-and-com,grade-submission,withdrawal,
+prediction-service-failure,accessibility}.spec.ts` (12 spec files).
+
+**New — docs:** `docs/adr/0016-e2e-architecture-and-live-contract-fixes.md`,
+`docs/superpowers/specs/2026-07-31-phase-8c-e2e-foundation-design.md`,
+`docs/superpowers/plans/2026-07-31-phase-8c-e2e-foundation.md`.
+
+**Modified — backend, real bug fixes (see Technical Decisions):**
+`app/Http/Resources/Api/V1/{EnrollmentResource,EnrollmentDocumentResource,
+AcademicGradeResource,PaymentConfirmationResource,QueueTicketResource,
+TransfereeCreditResource,WithdrawalRequestResource}.php` (date-format fix,
+14 fields across 7 files), `backend/.env.testing` +
+`backend/.env.testing.example` (`CACHE_STORE` array→file).
+
+**Modified — CI and docs:** `.github/workflows/ci.yml` (new `e2e` job),
+`README.md` (stale Vite port fix + new `e2e/` setup section),
+`docs/architecture/version-compatibility.md` (Playwright row).
+
 ## Files Changed — Phase 8b
 
 No migrations, no backend files — frontend-only. ~95 files touched across
@@ -755,6 +851,35 @@ routes), `npm audit --audit-level=moderate` (0 vulnerabilities), and
 `composer test` (641 passed / 2,419 assertions, unchanged). All match the
 table above exactly.
 
+## Commands and Tests Run — Phase 8c
+
+| Command | Result |
+|---|---|
+| `npm install` (in `e2e/`) | clean install, 8 packages, 0 vulnerabilities |
+| `npx playwright install --with-deps chromium` | installed Chromium 151.0.7922.34 |
+| `npm run reset-db` (`php artisan migrate:fresh --seed --env=testing --force`) | ran repeatedly through the phase; always clean |
+| `npx playwright test` (full suite, `--workers=1`, freshly seeded DB) | **18 passed, 1 skipped (journey 14)** — 13 journeys + 5 accessibility checks, confirmed green together in one run at reconciliation, not just individually during development |
+| `composer test` (backend, no-regression check for the 2 Resource-file fixes) | **641 passed / 2,419 assertions**, unchanged — confirmed both before and after the `CACHE_STORE`/date-format fixes |
+| **Not run this session:** the new `e2e` GitHub Actions job | Per ADR 0012, a workflow is only proven by actually running on GitHub — needs a push. Locally verified: YAML parses (`python -c "import yaml..."`), and every step it runs was independently verified working (the exact `--env=testing` server start, `reset-db.mjs`, `npx playwright test`) during local development. |
+
+Two real defects were found and fixed mid-development, each confirmed with
+its own before/after check rather than assumed fixed:
+- **Rate limiter silently inert over real HTTP** — `.env.testing`'s
+  `CACHE_STORE=array`. Confirmed broken: 31 rapid login attempts against a
+  running `--env=testing` server never returned 429. Fixed
+  (`CACHE_STORE=file`); confirmed fixed: same 31-attempt journey now
+  reliably returns 429 on attempt 31, and `composer test` re-run afterward
+  still 641/641 (phpunit.xml's own `CACHE_STORE=array` override is
+  unaffected).
+- **Date-serialization contract break** — 7 of 11 Resources used
+  `->toIso8601String()` against Zod schemas expecting the `Z`-suffixed
+  form. Confirmed broken: `GET /api/v1/enrollments` as Registrar Head
+  rendered "Unexpected API response" the moment a real row had a non-null
+  timestamp. Fixed (aligned all 7 to the existing `->utc()->format(...)`
+  convention already correct in 4 other Resources); confirmed fixed: the
+  same live request now parses cleanly, and `composer test` re-run
+  afterward still 641/641 (no test encoded the old format as expected).
+
 ## Technical Decisions
 
 - **`void` is scoped to `pending_payment`, not any pre-`enrolled` state.**
@@ -1008,6 +1133,64 @@ table above exactly.
   this session), so the earlier caution is left in place rather than
   removed, but recorded here as a data point.
 
+### Phase 8c
+
+- **`e2e/` is its own root-level npm package**, settled by the pre-existing
+  `/e2e/node_modules/` `.gitignore` reservation rather than decided fresh —
+  see ADR 0016 decision 1.
+- **Run-scoped `migrate:fresh --seed`, not per-test reset** — one reset per
+  suite run. `migrate:fresh` is DDL against a database dedicated to
+  testing, not the `GRANT` statement shape documented to have crashed this
+  MariaDB install; the two are not the same risk. ADR 0016 decision 2.
+- **API-arranged preconditions must be genuinely self-contained, not just
+  "check the seed, else fail."** Learned by hitting it directly: journeys 7
+  and 8's first implementations assumed a specific seeded student would
+  still be in the needed state, and both broke on a second local run once
+  that state had already been consumed. Fixed by submitting a fresh
+  enrollment from scratch when no usable existing state is found. ADR 0016
+  decision 3.
+- **Journey 12 (throttle) runs in its own isolated Playwright project.**
+  `routes/api.php`'s login limiter is keyed per IP, not per credential —
+  every worker shares one IP, so a tripped limiter would otherwise block
+  every other journey's sign-in. ADR 0016 decision 4.
+- **`CACHE_STORE=file`, not `array`, in `.env.testing`** — the rate limiter
+  needs cache state that survives across PHP-CLI-server-per-request
+  processes, which the array driver does not provide; PHPUnit is unaffected
+  since `phpunit.xml` overrides the value directly. A `--env=e2e` file with
+  its own `APP_ENV=e2e` value was tried first and abandoned — per-request
+  child processes resolve their env file from the `APP_ENV` value, not the
+  `--env` flag, so it would have needed every environment-restricted
+  seeder's allowlist extended too. ADR 0016 decision 5.
+- **Running `php artisan test` and the E2E suite back-to-back locally, in
+  either order, requires re-seeding between them** — both resolve
+  `DB_DATABASE=grc_enrollment_test` from `.env.testing`, and PHPUnit's
+  initial migration reset wipes whatever the E2E seeding had put there.
+  Does not affect CI, where the two run as fully independent jobs with
+  independent database containers. ADR 0016 decision 5.
+- **Two Resource-layer date-serialization bugs, fixed** (see *Commands and
+  Tests Run — Phase 8c* for the before/after confirmation): 7 of 11
+  date-serializing API Resources used `->toIso8601String()` (emits a
+  `+00:00` offset) against frontend Zod schemas built for the `Z`-suffixed
+  form already correct in 4 other Resources. This broke every workspace
+  that rendered a real non-null timestamp, invisible to both PHPUnit
+  (checks the backend against itself) and Vitest (mocked fixtures were
+  hand-written to already satisfy the schema). The central justification
+  for this phase existing at all — only a real frontend against a real
+  backend exposes a seam like this. ADR 0016 decision 7.
+- **Two real UI gaps found, documented, and deliberately not fixed**: no
+  module id reaches `ScheduleDecisionWorkspace` for `executive_director`
+  (component and backend both support the role; only navigation is
+  missing — journey 5's Executive Director half runs over the API
+  instead), and no student-facing "Withdraw" button exists despite the
+  mutation hook being fully implemented (journey 13 exercises the backend's
+  idempotency guard over the API, verifying the outcome through the
+  Registrar Staff UI that does exist). Wiring either is an application
+  feature change, out of an E2E-foundation phase's scope — recorded for a
+  future slice rather than silently patched. ADR 0016 decision 8.
+- **Journey #14 skipped, #15 partial** — ml-service dormant (Phase 9
+  boundary) and `compliance-reports` has no report content yet (Phase 7c,
+  blocked on institutional content) respectively. ADR 0016 decision 9.
+
 ## Known Issues and Blockers
 
 - **Frontend full-suite parallel flakiness (this machine only) — unchanged
@@ -1028,13 +1211,15 @@ table above exactly.
 - **Transferee-credit equivalence rules and withdrawal seat-release
   policy** (this phase's two new §17 items) join queue-ticket
   numbering/reset and COM format on the still-unconfirmed list.
-- **Phase 8a's manual WCAG 2.1 AA pass did not run this session** — the
-  Chrome browser extension was not connected, so keyboard-only traversal,
-  screen-reader spot check, 200% zoom, responsive breakpoints, and
-  reduced-motion confirmation are outstanding. Everything automatable
-  (jsx-a11y lint, `vitest-axe` on every workspace, the full test/build/audit
-  gate) is done and green; this is specifically the visual/interactive
-  portion that needs a connected browser or a human pass.
+- **Phase 8a's manual WCAG 2.1 AA pass was deferred, and is now closed by
+  Phase 8c's automated `@axe-core/playwright` coverage** — real-browser axe
+  scans of the landing page, login page, portal overview, and Eligible
+  Subjects (zero critical/serious violations), a 200%-zoom pass, and a
+  `prefers-reduced-motion` pass confirming the motion library's JS-driven
+  transforms are genuinely suppressed. A human keyboard-only/screen-reader
+  spot check was still not performed and remains genuinely optional manual
+  polish, not a blocking gap — the automated coverage is broad and now
+  permanent (runs in CI on every push), not a one-off.
 - **No production code path raises a real 409** (see Technical Decisions →
   Phase 8a). Not a defect — PRD §12.4 names the state and the frontend
   handles it correctly per the unit/integration tests — but it means the
@@ -1045,51 +1230,75 @@ table above exactly.
   Technical Decisions → Phase 8a. A future slice may want to close this
   gap for `enrollment-workspace.tsx`, `registrar-enrollment-workspace.tsx`,
   and `registrar-records-workspace.tsx`'s mutation error messages.
-- **Phase 8b's manual WCAG 2.1 AA pass and live visual verification did not
-  run this session** — the Chrome browser extension was not connected, the
-  same limitation Phase 8a recorded. Every structural fix from the
-  reporting screenshot (duplicate header, dashed placeholder frame,
-  centered layout, bare native `<select>`) is confirmed at the DOM/test
-  level, but nobody has visually confirmed the rendered result. This should
-  run before or shortly after this branch merges.
+- **Phase 8b's manual WCAG 2.1 AA pass and live visual verification were
+  deferred, and are now closed by Phase 8c** — Playwright's real Chromium
+  browser confirmed the structural fixes from the reporting screenshot
+  (duplicate header, dashed placeholder frame, centered layout, bare native
+  `<select>`) are genuinely gone: every journey navigates real connected
+  workspaces and asserts on real rendered content, not mocked DOM.
 - **No production code path raises a real 409** (unchanged from Phase 8a —
-  see Technical Decisions → Phase 8a). Still true after Phase 8b; not a new
-  gap.
+  see Technical Decisions → Phase 8a). Still true after Phase 8b and 8c;
+  not a new gap.
+- **Two real UI gaps found by Phase 8c, deliberately not fixed this
+  session**: `ScheduleDecisionWorkspace` has no reachable module id for
+  `executive_director` (component and backend both support the role — only
+  navigation is missing), and no student-facing "Withdraw" button exists
+  despite the mutation hook being fully implemented. Both documented in ADR
+  0016 decision 8 and flagged as candidate scope for the next slice.
+- **The new `e2e` GitHub Actions job has not run on GitHub yet** — per ADR
+  0012, a workflow is only proven correct by actually running; this needs a
+  push, which per `AGENTS.md` needs an explicit request.
+- **Running `php artisan test` and the E2E suite locally, in either order,
+  requires re-seeding (`npm run reset-db`) before continuing with whichever
+  runs second** — both draw `DB_DATABASE=grc_enrollment_test` from
+  `backend/.env.testing`, and PHPUnit's initial migration reset wipes
+  whatever the E2E seeding had put there. Does not affect CI, where the two
+  suites run in fully independent jobs with independent database
+  containers. See ADR 0016 decision 5.
 
 ## Uncommitted or Risky Changes
 
-**Phase 8b's full diff is uncommitted** as of this reconciliation — working
-tree on `phase-8b-ui-coherence-motion` has ~95 modified/new files (see
-*Files Changed — Phase 8b*), none staged or committed. Committing was not
-requested this session; per `AGENTS.md`, nothing is committed without an
-explicit ask. Once committed, nothing about the diff itself is risky:
-frontend-only, no migrations, no backend files touched, full gate green,
-one new runtime dependency (`motion`) with a clean audit.
+**Phase 8c's full diff is uncommitted** as of this reconciliation — working
+tree on `phase-8c-e2e-foundation` (see *Files Changed — Phase 8c*), none
+staged or committed. Committing was not requested this session; per
+`AGENTS.md`, nothing is committed without an explicit ask. Once committed,
+the diff carries slightly more risk than Phase 8b's did — it touches 7
+backend Resource files (a real behavior fix, not a refactor; `composer
+test` confirmed 641/641 both before and after) and `backend/.env.testing`
+(gitignored locally, but its committed `.example` twin changed too) — but
+nothing migrates, nothing changes an API's request shape, and every change
+is independently confirmed working (see *Commands and Tests Run — Phase
+8c*).
 
-Phase 8a is safely merged to `main` and pushed to `origin` at `8bb7e66` —
-not at risk. The real dev database's only persistent state is carried over
-unchanged from Phase 7b (see that phase's entry); Phase 8b's own commands
-this session (an `npm install` and the full local test/build/lint gate)
-touched no database state at all.
+Phase 8a and Phase 8b are both safely merged to `main` and pushed to
+`origin` — Phase 8a at `8bb7e66`, Phase 8b's merge commit at `2da5501` — not
+at risk. The real dev database's only persistent state is carried over
+unchanged from Phase 7b (see that phase's entry); Phase 8c's own database
+work happened entirely against the isolated `grc_enrollment_test` database,
+never the dev database (`grc_enrollment`) — confirmed by construction, since
+every command used `--env=testing` explicitly.
 
 ## Exact Next Steps
 
-**Superseded 2026-07-31 (this session).** Phase 8a is merged; the
-Phase 8b/Phase 7c fork was resolved in favor of Phase 8b, and that work is
-now complete on `phase-8b-ui-coherence-motion`. See *Current Objective* at
-the top of this document for the live fork.
+**Superseded 2026-07-31 (this session).** Phase 8a and Phase 8b are both
+merged; the Phase 8c/Phase 7c fork was resolved in favor of Phase 8c, and
+that work is now complete on `phase-8c-e2e-foundation`. See *Current
+Objective* at the top of this document for the live fork.
 
 **Current, not yet acted on:**
 
-1. Ask the user before committing Phase 8b's ~95 modified/new files (see
-   *Uncommitted or Risky Changes*), and again before merging
-   `phase-8b-ui-coherence-motion` to `main` or pushing. None of the three
-   has been requested yet — do not do any of them without an explicit ask.
-2. Ask the user whether to run the deferred live visual verification and
-   manual WCAG 2.1 AA pass before or after merging (needs a connected
-   browser).
-3. Ask the user to choose between **Phase 8c** (Playwright E2E, security,
-   performance, §12.6's remaining profile/password/help features) and
+1. Ask the user before committing Phase 8c's files (see *Uncommitted or
+   Risky Changes*), and again before merging `phase-8c-e2e-foundation` to
+   `main` or pushing. None of the three has been requested yet — do not do
+   any of them without an explicit ask.
+2. Once pushed, confirm the new `e2e` CI job actually runs green on GitHub
+   — it has not run there yet (ADR 0012: a workflow is only proven by
+   running).
+3. Ask the user to choose between **Phase 8d** (§14.4 security
+   verification, §14.5 performance verification, §12.6's remaining
+   profile/password/help features, and the two application gaps ADR 0016
+   documented — the missing Executive Director schedule-approval
+   navigation and the missing student-facing Withdraw button) and
    **Phase 7c** (still blocked on institutional content, see *Known
    Issues*) for the next slice of work.
 
@@ -1153,6 +1362,18 @@ the top of this document for the live fork.
   mounts before or after that data is known — see ADR 0015, decision 5, for
   the two mutually exclusive patterns. Picking the wrong one fails silently
   (no error, the auto-selection just doesn't happen).
+- Every date-serializing API Resource must use
+  `->utc()->format('Y-m-d\TH:i:s\Z')` for timestamps — never
+  `->toIso8601String()` or bare `->toJSON()`. The frontend's `z.iso.datetime()`
+  schemas only accept the `Z`-suffixed form; 7 Resources got this wrong for
+  the project's entire history until Phase 8c's E2E suite caught it (ADR
+  0016, decision 7).
+- `backend/.env.testing`'s `CACHE_STORE` must stay `file`, not `array` —
+  the E2E suite's rate-limiter journey depends on cache state surviving
+  across PHP-CLI-server-per-request processes, which the array driver does
+  not provide. `phpunit.xml` overrides this independently for PHPUnit, so
+  changing `.env.testing` back would silently break only the E2E suite,
+  with no test failure pointing at why (ADR 0016, decision 5).
 
 ---
 
@@ -1200,20 +1421,20 @@ Two scores that look surprising, explained:
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
 
-**Phase 8a is merged** (`main` at `8bb7e66`) but not yet reflected above —
-the table has not been recomputed since. Once it is, Row 10 ("Verification
-& deployment — E2E, security, perf, ISO 25010, handoff") is the natural
-home for the §12.4/§12.5 work that landed, since Row 8 ("Nine role portals
-— 40 modules") measures module *count*, which Phase 8a does not change —
-it improves quality on already-connected modules, not the connected count.
+**Phase 8a and Phase 8b are both merged** (`main` at `2da5501`, which
+includes `8bb7e66`) but not yet reflected above — the table has not been
+recomputed since. Once it is, Row 10 ("Verification & deployment — E2E,
+security, perf, ISO 25010, handoff") is the natural home for both: neither
+changes Row 8's module *count* (8a improved required-state/accessibility
+quality on already-connected modules; 8b fixed chrome, migrated form
+controls, and added motion across all 19 already-connected workspaces).
 
-**Phase 8b is complete but not yet reflected above**, per this table's own
-rule (scored against merged work only) — `phase-8b-ui-coherence-motion` is
-neither committed nor merged to `main` yet (see *Uncommitted or Risky
-Changes*). Same reasoning as Phase 8a applies: Phase 8b changes no module
-*count* (it fixes chrome, migrates form controls, and adds motion across
-all 19 already-connected workspaces), so once merged it also lands in
-Row 10, not Row 8.
+**Phase 8c is complete but not yet reflected above**, per this table's own
+rule — `phase-8c-e2e-foundation` is neither committed nor merged to `main`
+yet (see *Uncommitted or Risky Changes*). Same reasoning applies a third
+time: an E2E test foundation changes no module count either, so once merged
+it also lands in Row 10 — and is arguably the row's most direct contributor
+yet, being literally what Row 10 names ("E2E, security, perf...").
 
 ---
 
@@ -1226,8 +1447,9 @@ Row 10, not Row 8.
 | **Live API routes** | **48** |
 | **Database tables** | **26** |
 | **Backend tests** | **641 passing (2,419 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **65 files, 354 tests, Vitest** on `main` (Phase 8a, merged) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. (`phase-8b-ui-coherence-motion`, uncommitted, is at 67 files/362 tests — not reflected here until merged.) |
-| **CI** | 4 GitHub Actions jobs — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9) |
+| **Frontend tests** | **67 files, 362 tests, Vitest** on `main` (Phase 8a + 8b, both merged) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. Phase 8c adds no frontend Vitest files (it adds a separate `e2e/` Playwright suite — 12 spec files, 19 tests, 13 journeys — see *Verified Completed — Phase 8c*). |
+| **E2E tests** | **12 spec files, 19 tests (18 passed, 1 skipped), Playwright, 13 journeys** — `phase-8c-e2e-foundation`, uncommitted, not reflected in CI yet. |
+| **CI** | 4 GitHub Actions jobs live — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9). A 5th, E2E, is written on `phase-8c-e2e-foundation` but has not run on GitHub yet (needs a push). |
 | **Portals functional** | **9 of 9** have at least one connected module (29 of 40 modules total) — Registrar Staff is no longer fully placeholder |
 
 ---
@@ -1636,7 +1858,7 @@ behavior, and the presentation-layer part of §12.6. Complete and merged to
 Phase 8a*. The manual WCAG keyboard/screen-reader/zoom pass was the one
 piece not run before merge (no browser connection that session).
 
-### Phase 8b — Portal UI Coherence & Motion ✅ (unmerged)
+### Phase 8b — Portal UI Coherence & Motion ✅ (merged)
 
 Fixed the duplicate page header, dashed placeholder frame, and centered
 layout on every connected workspace (`PortalModulePage`/`WorkspacePage`
@@ -1646,19 +1868,35 @@ elements onto `ui/select.tsx`/`ui/input.tsx` across 10 workspaces; rebuilt
 skipped); adopted the landing/login pages' existing print-ledger design
 language into portal chrome instead of inventing a new look; added the
 `motion` library for entrance/stagger/presence animation, gated everywhere
-by `useReducedMotion()`. Complete and quality-gated on
-`phase-8b-ui-coherence-motion` — see *Verified Completed — Phase 8b* and
-ADR 0015. Not yet committed or merged to `main`; the manual WCAG pass and
-live visual verification are the pieces not run this session (no browser
-connection).
+by `useReducedMotion()`. Complete and merged to `main` (merge commit
+`2da5501`) — see *Verified Completed — Phase 8b* and ADR 0015.
 
-### Phase 8c — E2E, Performance, Security (not started)
+### Phase 8c — Playwright E2E Foundation ✅ (unmerged)
 
-Playwright E2E for §14.3's 15 critical journeys (no `e2e/` directory exists
-yet); §14.5 performance on the eligible-subject query and approval queues;
+Filled the pre-reserved `e2e/` slot: 13 of §14.3's 15 critical journeys
+against the real Next.js frontend, real Laravel API, and an isolated
+MariaDB test database — not mocks. Journey #14 skipped (ml-service dormant,
+Phase 9 boundary); journey #15 partial (no report content yet, Phase 7c).
+Closed the manual WCAG 2.1 AA / live-visual-verification gap deferred in
+both Phase 8a and Phase 8b, via `@axe-core/playwright` in a real browser.
+Found and fixed two genuine, previously invisible defects along the way — a
+date-serialization contract break across 7 API Resources, and a rate
+limiter silently inert over real HTTP — that no prior test layer could have
+caught; found and documented (not fixed) two real application UI gaps.
+Complete and quality-gated on `phase-8c-e2e-foundation` — see *Verified
+Completed — Phase 8c* and ADR 0016. Not yet committed or merged to `main`.
+
+### Phase 8d — Performance, Security, §12.6 Remaining Features (not started)
+
+§14.5 performance on the eligible-subject query and approval queues (no
+numeric targets exist in the PRD — "define target values during
+architecture validation and pilot baselining" — so this means recording
+measured `EXPLAIN ANALYZE` baselines, not asserting invented thresholds);
 §14.4 security verification; §12.6's remaining profile/password/help
-features (need new backend endpoints, deferred out of 8a/8b for that
-reason).
+features (need new backend endpoints, deferred out of 8a/8b/8c for that
+reason). Candidate additions surfaced by Phase 8c, not yet scoped in: wiring
+`ScheduleDecisionWorkspace` navigation for Executive Director, and building
+the student-facing Withdraw button (ADR 0016 decision 8).
 
 ## Phase 9 — Process 4.0, Machine Learning (LAST)
 
