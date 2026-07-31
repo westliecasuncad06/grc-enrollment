@@ -109,6 +109,16 @@ function url(input: RequestInfo | URL) {
       : input.url
 }
 
+/** Opens a `Select` trigger and picks an item. */
+async function selectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  labelText: string,
+  optionName: string | RegExp,
+) {
+  await user.click(await screen.findByLabelText(labelText))
+  await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
 function mockRoutes(
   overrides: {
     enrollments?: unknown
@@ -163,7 +173,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await user.selectOptions(await screen.findByLabelText("Section"), "5")
+    await selectOption(user, "Section", /Section A/)
     expect(
       await screen.findByText("Review your enrollment"),
     ).toBeInTheDocument()
@@ -237,7 +247,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await user.selectOptions(await screen.findByLabelText("Section"), "5")
+    await selectOption(user, "Section", /Section A/)
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
 
@@ -246,7 +256,7 @@ describe("EnrollmentWorkspace", () => {
         "This section is not currently eligible for selection.",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText("Section")).toHaveValue("5")
+    expect(screen.getByLabelText("Section")).toHaveTextContent("Section A")
   })
 
   it("shows a clear message and preserves the selection when submission conflicts", async () => {
@@ -295,7 +305,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await user.selectOptions(await screen.findByLabelText("Section"), "5")
+    await selectOption(user, "Section", /Section A/)
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
 
@@ -304,7 +314,7 @@ describe("EnrollmentWorkspace", () => {
         "Your enrollment could not be submitted. Check the connection and try again.",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText("Section")).toHaveValue("5")
+    expect(screen.getByLabelText("Section")).toHaveTextContent("Section A")
   })
 
   it("shows a clear message when the eligible-subject pool cannot be reached", async () => {
@@ -336,11 +346,15 @@ describe("EnrollmentWorkspace", () => {
     })
 
     expect(
-      await screen.findByText(
-        "Your eligible-subject pool could not be loaded. Refresh the page and try again.",
-        {},
-        { timeout: 3_000 },
+      await screen.findByText("Connection interrupted", {}, { timeout: 3_000 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "The public enrollment API is not available right now. Confirm that the Laravel service is running, then try again.",
       ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Try again" }),
     ).toBeInTheDocument()
   })
 

@@ -72,4 +72,37 @@ describe("DataTable", () => {
 
     expect(screen.getByText("custom card for 2026-0001")).toBeInTheDocument()
   })
+
+  it("titles the default mobile card with the first column's value, not the raw row key", () => {
+    render(
+      <DataTable
+        caption="Class roster"
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.id}
+      />,
+    )
+
+    expect(
+      screen.getByRole("heading", { level: 3, name: "2026-0001" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("1")).not.toBeInTheDocument()
+  })
+
+  it("renders the empty message instead of an empty table when rows is empty", () => {
+    render(
+      <DataTable
+        caption="Class roster"
+        columns={columns}
+        rows={[]}
+        rowKey={(row: Row) => row.id}
+        emptyMessage="No students are enrolled in this section yet."
+      />,
+    )
+
+    expect(
+      screen.getByText("No students are enrolled in this section yet."),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("table")).not.toBeInTheDocument()
+  })
 })

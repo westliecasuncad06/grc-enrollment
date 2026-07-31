@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
-import { useForm, useWatch } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -26,6 +26,14 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/features/components/ui/field"
+import { Input } from "@/features/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import {
   useCurriculaQuery,
   curriculaQueryKey,
@@ -202,6 +210,7 @@ export function CurriculumWorkspace() {
     <WorkspacePage
       title="Curriculum editor"
       description="Maintain complete program curriculum mappings and prerequisite rules."
+      lastUpdated={curriculaQuery.dataUpdatedAt}
     >
       {requestError && (
         <Alert variant="destructive">
@@ -217,18 +226,25 @@ export function CurriculumWorkspace() {
             <div className="flex gap-2">
               <Field>
                 <FieldLabel htmlFor="curriculum-select">Curriculum</FieldLabel>
-                <select
-                  id="curriculum-select"
-                  value={selectedId}
-                  onChange={(event) => requestEdit(Number(event.target.value))}
+                <Select
+                  value={String(selectedId)}
+                  onValueChange={(value) => requestEdit(Number(value))}
                 >
-                  <option value={0}>New curriculum</option>
-                  {(curriculaQuery.data ?? []).map((curriculum) => (
-                    <option key={curriculum.id} value={curriculum.id}>
-                      {curriculum.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="curriculum-select" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">New curriculum</SelectItem>
+                    {(curriculaQuery.data ?? []).map((curriculum) => (
+                      <SelectItem
+                        key={curriculum.id}
+                        value={String(curriculum.id)}
+                      >
+                        {curriculum.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               <div className="flex items-end">
                 <Button type="button" variant="outline" onClick={startNew}>
@@ -243,18 +259,37 @@ export function CurriculumWorkspace() {
               <FieldGroup>
                 <Field data-invalid={Boolean(form.formState.errors.program_id)}>
                   <FieldLabel htmlFor="curriculum-program">Program</FieldLabel>
-                  <select
-                    id="curriculum-program"
-                    disabled={selectedId > 0}
-                    {...form.register("program_id", { valueAsNumber: true })}
-                  >
-                    <option value={0}>Select a program</option>
-                    {(programsQuery.data ?? []).map((program) => (
-                      <option key={program.id} value={program.id}>
-                        {program.code} — {program.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={form.control}
+                    name="program_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        disabled={selectedId > 0}
+                      >
+                        <SelectTrigger
+                          id="curriculum-program"
+                          className="w-full"
+                          aria-invalid={Boolean(
+                            form.formState.errors.program_id,
+                          )}
+                        >
+                          <SelectValue placeholder="Select a program" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(programsQuery.data ?? []).map((program) => (
+                            <SelectItem
+                              key={program.id}
+                              value={String(program.id)}
+                            >
+                              {program.code} — {program.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                   <FieldError>
                     {form.formState.errors.program_id?.message}
                   </FieldError>
@@ -263,14 +298,18 @@ export function CurriculumWorkspace() {
                   <FieldLabel htmlFor="curriculum-name">
                     Curriculum name
                   </FieldLabel>
-                  <input id="curriculum-name" {...form.register("name")} />
+                  <Input
+                    id="curriculum-name"
+                    aria-invalid={Boolean(form.formState.errors.name)}
+                    {...form.register("name")}
+                  />
                   <FieldError>{form.formState.errors.name?.message}</FieldError>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="effective-school-year">
                     Effective school year
                   </FieldLabel>
-                  <input
+                  <Input
                     id="effective-school-year"
                     {...form.register("effective_school_year")}
                   />
@@ -280,33 +319,60 @@ export function CurriculumWorkspace() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
-                  <select id="curriculum-status" {...form.register("status")}>
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                  <Controller
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          id="curriculum-status"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </Field>
                 <section aria-label="Curriculum subject placements">
                   <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                    <h3>Subject placements</h3>
+                    <h2>Subject placements</h2>
                     <Field>
                       <FieldLabel htmlFor="subject-to-place">
                         Subject to place
                       </FieldLabel>
-                      <select
-                        id="subject-to-place"
-                        value={placementSubjectId}
-                        onChange={(event) =>
-                          setPlacementSubjectId(Number(event.target.value))
+                      <Select
+                        value={
+                          placementSubjectId > 0
+                            ? String(placementSubjectId)
+                            : ""
+                        }
+                        onValueChange={(value) =>
+                          setPlacementSubjectId(Number(value))
                         }
                       >
-                        <option value={0}>Select a subject</option>
-                        {(subjectsQuery.data ?? []).map((subject) => (
-                          <option key={subject.id} value={subject.id}>
-                            {subject.code} — {subject.title}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger id="subject-to-place" className="w-full">
+                          <SelectValue placeholder="Select a subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(subjectsQuery.data ?? []).map((subject) => (
+                            <SelectItem
+                              key={subject.id}
+                              value={String(subject.id)}
+                            >
+                              {subject.code} — {subject.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </Field>
                     <Button
                       type="button"
@@ -333,21 +399,28 @@ export function CurriculumWorkspace() {
                           >
                             Placement {placement.subject_id} year level
                           </FieldLabel>
-                          <select
-                            id={`placement-${placement.subject_id}-year`}
-                            value={placement.year_level}
-                            onChange={(event) =>
+                          <Select
+                            value={String(placement.year_level)}
+                            onValueChange={(value) =>
                               updatePlacement(index, {
-                                year_level: Number(event.target.value),
+                                year_level: Number(value),
                               })
                             }
                           >
-                            {[1, 2, 3, 4].map((year) => (
-                              <option key={year} value={year}>
-                                {year}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger
+                              id={`placement-${placement.subject_id}-year`}
+                              className="w-full"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 3, 4].map((year) => (
+                                <SelectItem key={year} value={String(year)}>
+                                  {year}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </Field>
                         <Field>
                           <FieldLabel
@@ -355,21 +428,26 @@ export function CurriculumWorkspace() {
                           >
                             Placement {placement.subject_id} semester
                           </FieldLabel>
-                          <select
-                            id={`placement-${placement.subject_id}-semester`}
+                          <Select
                             value={placement.semester}
-                            onChange={(event) =>
-                              updatePlacement(index, {
-                                semester: event.target.value,
-                              })
+                            onValueChange={(value) =>
+                              updatePlacement(index, { semester: value })
                             }
                           >
-                            {["1st", "2nd", "3rd"].map((semester) => (
-                              <option key={semester} value={semester}>
-                                {semester}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger
+                              id={`placement-${placement.subject_id}-semester`}
+                              className="w-full"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {["1st", "2nd", "3rd"].map((semester) => (
+                                <SelectItem key={semester} value={semester}>
+                                  {semester}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </Field>
                         <Field>
                           <FieldLabel

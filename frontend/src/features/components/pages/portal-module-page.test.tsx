@@ -36,49 +36,44 @@ const allowedModuleCases = userRoles.flatMap((role) =>
   rolePortalDefinitions[role].modules.map((module) => ({ module, role })),
 )
 
-const admissionWorkspaceHeadings: Record<string, string> = {
-  "student-accounts": "Student accounts",
-  "admission-status": "Admission status",
-  "credential-issuance": "Credential issuance",
-}
-
-const facultyWorkspaceRegions: Record<string, string> = {}
-
-const curriculumWorkspaceModules = new Set([
-  "curriculum",
-  "subjects-prerequisites",
-])
-
-const schedulingWorkspaceRegions: Record<string, string> = {
-  // These 6 have been migrated onto WorkspacePage (Phase 8a Task 5), whose
-  // region name is derived directly from its visible <h2> heading text —
-  // matching what a screen-reader user actually hears — rather than a
-  // separate, longer aria-label string with a "workspace" suffix that
-  // repeated the surrounding page context.
+// Since Phase 8b (ADR 0015), a connected workspace's own WorkspacePage
+// heading is the page's *only* heading — this shell no longer wraps it in a
+// second, module-registry-sourced <h1>. Each workspace's heading text is its
+// own, established in earlier phases and unaffected by this shell change; it
+// is not always identical to the module registry's label (e.g.
+// "Eligible Subjects" vs. "Eligible subjects"). Kept in sync with
+// `module-registry.test.tsx`'s identical `migratedRegionNames` map, which
+// covers the same 29 connected module IDs.
+const workspaceHeadings: Record<string, string> = {
+  "class-rosters": "Class rosters",
+  "grade-submission": "Grade submission",
   "credit-mappings": "Credit mappings",
   "drops-withdrawals": "Drops & withdrawals",
   "academic-records": "Academic records",
   "enrollment-documents": "Enrollment documents",
-  "class-rosters": "Class rosters",
-  "grade-submission": "Grade submission",
   "master-schedule": "Master schedule",
   "audit-logs": "Audit logs",
   "teaching-schedule": "Teaching schedule",
   "eligible-subjects": "Eligible subjects",
-  enrollment: "Select your subjects",
-  "enrollment-approvals": "Enrollment approvals",
-  "overrides-voids": "Overrides & voids",
   "queue-payment": "Queue & payment status",
   "grades-com": "Your academic records",
   "schedule-approvals": "Schedule approvals",
   "schedule-proposals": "Schedule proposals",
   "sections-schedules": "Sections and schedules",
   "faculty-assignment": "Faculty assignment",
+  enrollment: "Select your subjects",
+  "enrollment-approvals": "Enrollment approvals",
+  "overrides-voids": "Overrides & voids",
+  curriculum: "Curriculum editor",
+  "subjects-prerequisites": "Curriculum editor",
   "availability-preferences": "Availability and preferences",
   "payment-queue": "Payment queue",
   "serving-number": "Serving number",
   "payment-confirmation": "Payment confirmation",
   "com-finalization": "COM finalization",
+  "student-accounts": "Student accounts",
+  "admission-status": "Admission status",
+  "credential-issuance": "Credential issuance",
 }
 
 describe("PortalModulePage", () => {
@@ -88,59 +83,30 @@ describe("PortalModulePage", () => {
       const definition = rolePortalDefinitions[role]
       renderModule(role, module.id)
 
-      expect(
-        screen.getByRole("heading", { name: module.label }),
-      ).toBeInTheDocument()
-      expect(screen.getByText(module.description)).toBeInTheDocument()
+      // The sidebar profile block always renders the role label, regardless
+      // of which module is open — unaffected by the connected/placeholder
+      // branch below.
       expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(
         0,
       )
+
       if (isConnectedModuleId(module.id)) {
+        const heading = workspaceHeadings[module.id]
+        expect(heading).toBeDefined()
         expect(
-          screen.getAllByRole("region", {
-            name: `${module.label} workspace`,
-          }),
-        ).not.toHaveLength(0)
-        const admissionHeading = admissionWorkspaceHeadings[module.id]
-        if (admissionHeading) {
-          // Migrated onto WorkspacePage (Phase 8a Task 5): its region name is
-          // the same per-module heading text checked just below, not a fixed
-          // "Admission provisioning workspace" string.
-          expect(
-            screen.getByRole("region", { name: admissionHeading }),
-          ).toBeInTheDocument()
-          expect(
-            screen.getByRole("heading", { name: admissionHeading }),
-          ).toBeInTheDocument()
-        } else if (facultyWorkspaceRegions[module.id]) {
-          expect(
-            screen.getByRole("region", {
-              name: facultyWorkspaceRegions[module.id],
-            }),
-          ).toBeInTheDocument()
-        } else if (curriculumWorkspaceModules.has(module.id)) {
-          expect(
-            screen.getAllByRole("region", {
-              name: "Curriculum editor",
-            }),
-          ).not.toHaveLength(0)
-        } else if (schedulingWorkspaceRegions[module.id]) {
-          expect(
-            screen.getByRole("region", {
-              name: schedulingWorkspaceRegions[module.id],
-            }),
-          ).toBeInTheDocument()
-        } else {
-          expect(
-            screen.getByRole("region", {
-              name: "Connected portal workspace",
-            }),
-          ).toBeInTheDocument()
-        }
+          screen.getByRole("heading", { level: 1, name: heading }),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByRole("region", { name: heading }),
+        ).toBeInTheDocument()
         expect(
           screen.queryByRole("heading", { name: "Demo module preview" }),
         ).not.toBeInTheDocument()
       } else {
+        expect(
+          screen.getByRole("heading", { level: 1, name: module.label }),
+        ).toBeInTheDocument()
+        expect(screen.getByText(module.description)).toBeInTheDocument()
         expect(
           screen.getByRole("region", {
             name: `${module.label} module preview`,

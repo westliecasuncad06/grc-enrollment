@@ -58,6 +58,7 @@ export function MasterScheduleWorkspace() {
       title="Master schedule"
       description="Published sections are the authoritative schedule visible beyond planning."
       unauthorized={!authorized}
+      lastUpdated={sectionsQuery.dataUpdatedAt}
     >
       <AsyncBoundary
         query={combinedQuery}
@@ -69,7 +70,7 @@ export function MasterScheduleWorkspace() {
           <>
             <Card>
               <CardHeader>
-                <CardTitle level={3}>Published sections</CardTitle>
+                <CardTitle level={2}>Published sections</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="grid gap-3 md:grid-cols-2">
@@ -105,7 +106,7 @@ export function MasterScheduleWorkspace() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle level={3}>Executive decisions</CardTitle>
+                <CardTitle level={2}>Executive decisions</CardTitle>
               </CardHeader>
               <CardContent>
                 <ScheduleDecisionControls

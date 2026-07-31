@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 
 describe("WorkspacePage", () => {
-  it("renders a labelled section with a real h2 heading", () => {
+  it("renders a labelled section with a real h1 heading", () => {
     render(
       <WorkspacePage title="Class rosters" description="Review your sections.">
         <p>Body content</p>
@@ -12,7 +12,7 @@ describe("WorkspacePage", () => {
     )
 
     const heading = screen.getByRole("heading", {
-      level: 2,
+      level: 1,
       name: "Class rosters",
     })
     expect(heading).toBeInTheDocument()
@@ -31,7 +31,7 @@ describe("WorkspacePage", () => {
     )
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Class rosters" }),
+      screen.getByRole("heading", { level: 1, name: "Class rosters" }),
     ).toBeInTheDocument()
     expect(
       screen.getByText("This workspace is not available for your role."),

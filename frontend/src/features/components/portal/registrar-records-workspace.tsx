@@ -203,6 +203,12 @@ export function RegistrarRecordsWorkspace({
       title={heading}
       description="Maintain accurate enrollment and academic records."
       unauthorized={!authorized}
+      lastUpdated={Math.max(
+        creditsQuery.dataUpdatedAt,
+        withdrawalsQuery.dataUpdatedAt,
+        gradesQuery.dataUpdatedAt,
+        documentsQuery.dataUpdatedAt,
+      )}
     >
       {error && (
         <Alert variant="destructive">
@@ -214,7 +220,7 @@ export function RegistrarRecordsWorkspace({
         <>
           <Card>
             <CardHeader>
-              <CardTitle level={3}>Record a transferee credit</CardTitle>
+              <CardTitle level={2}>Record a transferee credit</CardTitle>
             </CardHeader>
             <CardContent>
               {createError && (
@@ -309,7 +315,7 @@ export function RegistrarRecordsWorkspace({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle level={3}>Transferee credits</CardTitle>
+              <CardTitle level={2}>Transferee credits</CardTitle>
             </CardHeader>
             <CardContent>
               <AsyncBoundary
@@ -413,7 +419,7 @@ export function RegistrarRecordsWorkspace({
       {showWithdrawals && (
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Withdrawal requests</CardTitle>
+            <CardTitle level={2}>Withdrawal requests</CardTitle>
           </CardHeader>
           <CardContent>
             <AsyncBoundary
@@ -515,7 +521,7 @@ export function RegistrarRecordsWorkspace({
       {showGrades && (
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Academic records</CardTitle>
+            <CardTitle level={2}>Academic records</CardTitle>
           </CardHeader>
           <CardContent>
             <AsyncBoundary
@@ -577,7 +583,7 @@ export function RegistrarRecordsWorkspace({
       {showDocuments && (
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Enrollment documents</CardTitle>
+            <CardTitle level={2}>Enrollment documents</CardTitle>
           </CardHeader>
           <CardContent>
             <AsyncBoundary

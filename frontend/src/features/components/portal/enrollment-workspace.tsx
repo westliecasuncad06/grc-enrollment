@@ -4,6 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable } from "@/features/components/portal/data-table"
+import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
@@ -20,19 +23,19 @@ import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
-import { Skeleton } from "@/features/components/ui/skeleton"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
+import { Skeleton } from "@/features/components/ui/skeleton"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import {
   eligibleSubjectsQueryKey,
@@ -47,6 +50,62 @@ import { createEnrollment } from "@/features/services/enrollment-service"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
 const TERMINAL_STATUSES = new Set(["rejected", "cancelled", "withdrawn"])
+
+function SectionChoice({
+  subject,
+  selectedSectionId,
+  onChoose,
+  onClear,
+}: {
+  subject: EligibleSubject
+  selectedSectionId: number | undefined
+  onChoose: (sectionId: number) => void
+  onClear: () => void
+}) {
+  return (
+    <Card role="article" aria-label={`${subject.code} ${subject.title}`}>
+      <CardHeader>
+        <CardTitle level={2}>
+          {subject.code} — {subject.title} ({subject.units} units)
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Field>
+          <FieldLabel htmlFor={`section-choice-${subject.subject_id}`}>
+            Section
+          </FieldLabel>
+          <Select
+            value={selectedSectionId ? String(selectedSectionId) : ""}
+            onValueChange={(value) => {
+              const sectionId = Number(value)
+              if (sectionId) onChoose(sectionId)
+              else onClear()
+            }}
+          >
+            <SelectTrigger
+              id={`section-choice-${subject.subject_id}`}
+              className="w-full"
+            >
+              <SelectValue placeholder="Not selected" />
+            </SelectTrigger>
+            <SelectContent>
+              {subject.available_sections.map((section) => (
+                <SelectItem key={section.id} value={String(section.id)}>
+                  Section {section.section_code}
+                  {section.schedule_days
+                    ? ` · ${section.schedule_days} ${section.starts_at_time}–${section.ends_at_time}`
+                    : ""}{" "}
+                  · {section.remaining_seats} seat
+                  {section.remaining_seats === 1 ? "" : "s"} open
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </CardContent>
+    </Card>
+  )
+}
 
 export function EnrollmentWorkspace() {
   const { session } = useAuth()
@@ -135,6 +194,7 @@ export function EnrollmentWorkspace() {
   }
 
   const submit = async () => {
+    setReceipt(null)
     setSubmitError("")
     setFieldErrors([])
     try {
@@ -154,7 +214,32 @@ export function EnrollmentWorkspace() {
     }
   }
 
-  const isLoading = termsQuery.isLoading || eligibleSubjectsQuery.isFetching
+  // At most one of these ever renders — a fresh submit attempt clears the
+  // others (see `submit()`), so a stale receipt can never sit stacked above
+  // a failure from a later attempt.
+  const banner =
+    fieldErrors.length > 0 ? (
+      <Alert variant="destructive">
+        <AlertDescription>
+          <ul className="grid gap-1">
+            {fieldErrors.map((message, index) => (
+              <li key={index}>{message}</li>
+            ))}
+          </ul>
+        </AlertDescription>
+      </Alert>
+    ) : submitError ? (
+      <Alert variant="destructive">
+        <AlertDescription>{submitError}</AlertDescription>
+      </Alert>
+    ) : receipt ? (
+      <Alert>
+        <AlertDescription>
+          Enrollment submitted and pending registrar approval. Queue ticket:{" "}
+          {receipt.ticketNumber}.
+        </AlertDescription>
+      </Alert>
+    ) : null
 
   return (
     <WorkspacePage
@@ -164,52 +249,31 @@ export function EnrollmentWorkspace() {
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="enrollment-term">Academic term</FieldLabel>
-          <select
-            id="enrollment-term"
-            value={selectedTermId ?? 0}
-            onChange={(event) => {
+          <Select
+            value={selectedTermId !== null ? String(selectedTermId) : ""}
+            onValueChange={(value) => {
               setSelections({})
               setReceipt(null)
-              setSelectedTermId(Number(event.target.value) || null)
+              setSelectedTermId(Number(value) || null)
             }}
+            disabled={termsQuery.isLoading}
           >
-            <option value={0}>Select an academic term</option>
-            {(termsQuery.data ?? []).map((term) => (
-              <option key={term.id} value={term.id}>
-                {formatAcademicTerm(term)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="enrollment-term" className="w-full">
+              <SelectValue placeholder="Select an academic term" />
+            </SelectTrigger>
+            <SelectContent>
+              {(termsQuery.data ?? []).map((term) => (
+                <SelectItem key={term.id} value={String(term.id)}>
+                  {formatAcademicTerm(term)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       </FieldGroup>
 
-      {receipt && (
-        <Alert>
-          <AlertDescription>
-            Enrollment submitted and pending registrar approval. Queue ticket:{" "}
-            {receipt.ticketNumber}.
-          </AlertDescription>
-        </Alert>
-      )}
-      {(submitError || eligibleSubjectsQuery.isError) && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {submitError ||
-              "Your eligible-subject pool could not be loaded. Refresh the page and try again."}
-          </AlertDescription>
-        </Alert>
-      )}
-      {fieldErrors.length > 0 && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            <ul className="grid gap-1">
-              {fieldErrors.map((message, index) => (
-                <li key={index}>{message}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
+      {banner}
+
       {selectedTermId !== null && hasActiveEnrollmentThisTerm && (
         <Alert>
           <AlertDescription>
@@ -221,89 +285,88 @@ export function EnrollmentWorkspace() {
 
       {selectedTermId === null ? (
         <p>Select an academic term to begin enrollment.</p>
-      ) : isLoading ? (
-        <Skeleton className="h-48" />
-      ) : selectableSubjects.length === 0 ? (
-        <p>No subjects currently have open sections available to select.</p>
       ) : (
         !hasActiveEnrollmentThisTerm && (
-          <div className="grid gap-3">
-            {selectableSubjects.map((subject) => (
-              <Card
-                key={subject.subject_id}
-                role="article"
-                aria-label={`${subject.code} ${subject.title}`}
-              >
-                <CardHeader>
-                  <CardTitle level={3}>
-                    {subject.code} — {subject.title} ({subject.units} units)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Field>
-                    <FieldLabel
-                      htmlFor={`section-choice-${subject.subject_id}`}
-                    >
-                      Section
-                    </FieldLabel>
-                    <select
-                      id={`section-choice-${subject.subject_id}`}
-                      value={selections[subject.subject_id] ?? 0}
-                      onChange={(event) => {
-                        const sectionId = Number(event.target.value)
-                        if (sectionId)
-                          chooseSection(subject.subject_id, sectionId)
-                        else clearSection(subject.subject_id)
-                      }}
-                    >
-                      <option value={0}>Not selected</option>
-                      {subject.available_sections.map((section) => (
-                        <option key={section.id} value={section.id}>
-                          Section {section.section_code}
-                          {section.schedule_days
-                            ? ` · ${section.schedule_days} ${section.starts_at_time}–${section.ends_at_time}`
-                            : ""}{" "}
-                          · {section.remaining_seats} seats open
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <AsyncBoundary
+            query={{
+              isPending:
+                termsQuery.isPending || eligibleSubjectsQuery.isFetching,
+              isError: termsQuery.isError || eligibleSubjectsQuery.isError,
+              error: termsQuery.error ?? eligibleSubjectsQuery.error,
+              data: eligibleSubjectsQuery.data,
+              refetch: () => {
+                void termsQuery.refetch()
+                void eligibleSubjectsQuery.refetch()
+              },
+            }}
+            isEmpty={(all) =>
+              all.filter(
+                (subject) =>
+                  subject.is_eligible && subject.available_sections.length > 0,
+              ).length === 0
+            }
+            emptyMessage="No subjects currently have open sections available to select."
+            loadingLabel="Loading your eligible subjects…"
+            loadingFallback={<Skeleton className="h-48" />}
+          >
+            {() => (
+              <StaggerList className="grid gap-3">
+                {selectableSubjects.map((subject) => (
+                  <StaggerItem key={subject.subject_id}>
+                    <SectionChoice
+                      subject={subject}
+                      selectedSectionId={selections[subject.subject_id]}
+                      onChoose={(sectionId) =>
+                        chooseSection(subject.subject_id, sectionId)
+                      }
+                      onClear={() => clearSection(subject.subject_id)}
+                    />
+                  </StaggerItem>
+                ))}
+              </StaggerList>
+            )}
+          </AsyncBoundary>
         )
       )}
 
       {selectedEntries.length > 0 && !hasActiveEnrollmentThisTerm && (
-        <Card>
+        <Card className="portal-workspace-highlight">
           <CardHeader>
-            <CardTitle level={3}>Review your enrollment</CardTitle>
+            <CardTitle level={2}>Review your enrollment</CardTitle>
+            <CardDescription>
+              Confirm your selections before submitting.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Section</TableHead>
-                  <TableHead>Units</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {selectedEntries.map((entry) => (
-                  <TableRow key={entry.subject.subject_id}>
-                    <TableCell>
-                      {entry.subject.code} — {entry.subject.title}
-                    </TableCell>
-                    <TableCell>{entry.section.section_code}</TableCell>
-                    <TableCell>{entry.subject.units}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <p>
-              Total units: <Badge>{totalUnits}</Badge>
-            </p>
+            <DataTable
+              caption="Selected subjects"
+              rowKey={(entry) => entry.subject.subject_id}
+              rows={selectedEntries}
+              columns={[
+                {
+                  key: "subject",
+                  header: "Subject",
+                  render: (entry) =>
+                    `${entry.subject.code} — ${entry.subject.title}`,
+                },
+                {
+                  key: "section",
+                  header: "Section",
+                  render: (entry) => entry.section.section_code,
+                },
+                {
+                  key: "units",
+                  header: "Units",
+                  render: (entry) => entry.subject.units,
+                },
+              ]}
+            />
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <span className="text-sm font-medium text-muted-foreground">
+                Total units
+              </span>
+              <Badge className="text-base">{totalUnits}</Badge>
+            </div>
             <Button
               type="button"
               onClick={() => setConfirmOpen(true)}
@@ -357,43 +420,47 @@ export function EnrollmentWorkspace() {
       {(enrollmentsQuery.data ?? []).length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Your enrollments</CardTitle>
+            <CardTitle level={2}>Your enrollments</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Term</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Units</TableHead>
-                  <TableHead>Queue ticket</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(enrollmentsQuery.data ?? []).map((enrollment) => (
-                  <TableRow key={enrollment.id}>
-                    <TableCell>
-                      {termsQuery.data?.find(
-                        (term) => term.id === enrollment.academic_term_id,
-                      )
-                        ? formatAcademicTerm(
-                            termsQuery.data.find(
-                              (term) => term.id === enrollment.academic_term_id,
-                            )!,
-                          )
-                        : enrollment.academic_term_id}
-                    </TableCell>
-                    <TableCell>
-                      <Badge>{enrollment.status_label}</Badge>
-                    </TableCell>
-                    <TableCell>{enrollment.total_units}</TableCell>
-                    <TableCell>
-                      {enrollment.queue_ticket?.ticket_number ?? "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              caption="Your enrollments"
+              rowKey={(enrollment) => enrollment.id}
+              rows={enrollmentsQuery.data ?? []}
+              columns={[
+                {
+                  key: "term",
+                  header: "Term",
+                  render: (enrollment) => {
+                    const term = termsQuery.data?.find(
+                      (candidate) =>
+                        candidate.id === enrollment.academic_term_id,
+                    )
+                    return term
+                      ? formatAcademicTerm(term)
+                      : enrollment.academic_term_id
+                  },
+                },
+                {
+                  key: "status",
+                  header: "Status",
+                  render: (enrollment) => (
+                    <Badge>{enrollment.status_label}</Badge>
+                  ),
+                },
+                {
+                  key: "units",
+                  header: "Units",
+                  render: (enrollment) => enrollment.total_units,
+                },
+                {
+                  key: "queue_ticket",
+                  header: "Queue ticket",
+                  render: (enrollment) =>
+                    enrollment.queue_ticket?.ticket_number ?? "—",
+                },
+              ]}
+            />
           </CardContent>
         </Card>
       )}

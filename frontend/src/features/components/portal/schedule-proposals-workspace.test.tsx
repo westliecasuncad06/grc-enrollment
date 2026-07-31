@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -44,6 +44,15 @@ function url(input: RequestInfo | URL) {
       : input.url
 }
 
+/** Waits for the term reference data to load and the active-term default to apply. */
+async function waitForActiveTermSelected() {
+  await waitFor(() => {
+    expect(screen.getByLabelText("Academic term")).toHaveTextContent(
+      "2026-2027 · 1st",
+    )
+  })
+}
+
 describe("ScheduleProposalsWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
@@ -73,7 +82,7 @@ describe("ScheduleProposalsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2026-2027/ })
+    await waitForActiveTermSelected()
     await user.click(
       screen.getByRole("button", { name: "Create draft proposal" }),
     )
@@ -121,7 +130,7 @@ describe("ScheduleProposalsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2026-2027/ })
+    await waitForActiveTermSelected()
     await user.click(
       screen.getByRole("button", { name: "Create draft proposal" }),
     )
@@ -164,9 +173,7 @@ describe("ScheduleProposalsWorkspace", () => {
     })
     await screen.findByText(/Unavailable/, {}, { timeout: 3_000 })
     await user.click(screen.getByRole("button", { name: "Try again" }))
-    expect(
-      await screen.findByRole("option", { name: /2026-2027/ }),
-    ).toBeInTheDocument()
+    await waitForActiveTermSelected()
     expect(termAttempts).toBe(3)
   })
 
@@ -188,7 +195,7 @@ describe("ScheduleProposalsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2026-2027/ })
+    await waitForActiveTermSelected()
     expect(await axe(container)).toHaveNoViolations()
   })
 })

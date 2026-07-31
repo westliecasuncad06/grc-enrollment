@@ -60,11 +60,12 @@ describe("PrerequisiteEditor", () => {
         },
       },
     )
-    await user.selectOptions(
-      screen.getByLabelText("Subject for prerequisite"),
-      "2",
+    await user.click(screen.getByLabelText("Subject for prerequisite"))
+    await user.click(await screen.findByRole("option", { name: "CS102" }))
+    await user.click(screen.getByLabelText("Prerequisite subject"))
+    await user.click(
+      await screen.findByRole("option", { name: "CS101 — Programming 1" }),
     )
-    await user.selectOptions(screen.getByLabelText("Prerequisite subject"), "1")
     await user.click(screen.getByRole("button", { name: "Add prerequisite" }))
     expect(screen.getByRole("alert")).toHaveTextContent(
       "would create a prerequisite cycle",

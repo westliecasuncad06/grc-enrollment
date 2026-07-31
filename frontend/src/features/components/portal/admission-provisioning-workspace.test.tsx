@@ -99,6 +99,18 @@ function renderWorkspace(
   )
 }
 
+/** Opens a `Select` trigger (waiting for it to become enabled first) and picks an item. */
+async function selectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  labelText: string,
+  optionName: string,
+) {
+  const trigger = screen.getByLabelText(labelText)
+  await waitFor(() => expect(trigger).not.toBeDisabled())
+  await user.click(trigger)
+  await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
 async function completeForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Student name"), "Amina Santos")
   await user.type(
@@ -106,9 +118,9 @@ async function completeForm(user: ReturnType<typeof userEvent.setup>) {
     "amina.santos@grc.test",
   )
   await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
-  await user.selectOptions(screen.getByLabelText("Program"), "11")
-  await user.selectOptions(screen.getByLabelText("Curriculum"), "22")
-  await user.selectOptions(screen.getByLabelText("Year level"), "1")
+  await selectOption(user, "Program", "BSCS — BS Computer Science")
+  await selectOption(user, "Curriculum", "BSCS 2026 Curriculum (2026-2027)")
+  await selectOption(user, "Year level", "Year 1")
 }
 
 describe("AdmissionProvisioningWorkspace", () => {
@@ -144,7 +156,6 @@ describe("AdmissionProvisioningWorkspace", () => {
     })
 
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
     await completeForm(user)
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
@@ -216,7 +227,6 @@ describe("AdmissionProvisioningWorkspace", () => {
     })
 
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
     await completeForm(user)
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
@@ -247,19 +257,24 @@ describe("AdmissionProvisioningWorkspace", () => {
     })
 
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
-    await user.selectOptions(screen.getByLabelText("Program"), "11")
-    await user.selectOptions(screen.getByLabelText("Curriculum"), "22")
-    expect(screen.getByLabelText("Curriculum")).toHaveValue("22")
+    await selectOption(user, "Program", "BSCS — BS Computer Science")
+    await selectOption(user, "Curriculum", "BSCS 2026 Curriculum (2026-2027)")
+    expect(screen.getByLabelText("Curriculum")).toHaveTextContent(
+      "BSCS 2026 Curriculum (2026-2027)",
+    )
 
-    await user.selectOptions(screen.getByLabelText("Program"), "12")
+    await selectOption(user, "Program", "BSIT — BS Information Technology")
 
-    expect(screen.getByLabelText("Curriculum")).toHaveValue("0")
+    expect(screen.getByLabelText("Curriculum")).toHaveTextContent(
+      "Select a curriculum",
+    )
+    await user.click(screen.getByLabelText("Curriculum"))
     expect(
       screen.getByRole("option", {
         name: "BSIT 2026 Curriculum (2026-2027)",
       }),
     ).toBeInTheDocument()
+    await user.keyboard("{Escape}")
 
     await user.type(screen.getByLabelText("Student name"), "Amina Santos")
     await user.type(
@@ -267,7 +282,7 @@ describe("AdmissionProvisioningWorkspace", () => {
       "amina.santos@grc.test",
     )
     await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
-    await user.selectOptions(screen.getByLabelText("Year level"), "1")
+    await selectOption(user, "Year level", "Year 1")
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
     )
@@ -299,7 +314,6 @@ describe("AdmissionProvisioningWorkspace", () => {
     })
 
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
     await completeForm(user)
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
@@ -335,7 +349,6 @@ describe("AdmissionProvisioningWorkspace", () => {
     })
 
     renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
     await completeForm(user)
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
@@ -393,7 +406,6 @@ describe("AdmissionProvisioningWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Credential issuance" }),
     ).toBeInTheDocument()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
     await completeForm(user)
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
@@ -430,7 +442,9 @@ describe("AdmissionProvisioningWorkspace", () => {
     })
 
     const { container } = renderWorkspace()
-    await screen.findByRole("option", { name: "BSCS — BS Computer Science" })
+    await waitFor(() => {
+      expect(screen.getByLabelText("Program")).not.toBeDisabled()
+    })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

@@ -117,8 +117,11 @@ describe("FacultyInputWorkspace", () => {
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
     renderWorkspace()
-    await screen.findByRole("option", { name: "CS101 — Programming 1" })
-    await user.selectOptions(screen.getByLabelText("Preferred subject"), "101")
+    const subjectTrigger = await screen.findByLabelText("Preferred subject")
+    await user.click(subjectTrigger)
+    await user.click(
+      await screen.findByRole("option", { name: "CS101 — Programming 1" }),
+    )
     await user.clear(screen.getByLabelText("Preference rank"))
     await user.type(screen.getByLabelText("Preference rank"), "1")
     await user.click(

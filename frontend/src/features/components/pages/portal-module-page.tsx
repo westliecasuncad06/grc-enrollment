@@ -81,30 +81,24 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
     : null
 
   if (ModuleComponent) {
-    // This wraps every connected workspace in a second, near-identically
-    // named region (the workspace's own WorkspacePage renders its own
-    // labelled section inside). Left as-is here deliberately — de-duplicating
-    // it requires threading each multiplexed workspace's per-module heading
-    // (e.g. RegistrarRecordsWorkspace's `workspaceHeadings[initialModuleId]`)
-    // into that inner section's own label so it can become the sole region,
-    // which is Task 5 (workspace migration) work, not a shell-only change.
+    // The workspace's own WorkspacePage renders the page's sole header (a
+    // real <h1> since Phase 8b) and labelled region — this shell no longer
+    // duplicates it with a second header sourced from the module registry.
+    // Module label/description remain in use for navigation (sidebar,
+    // breadcrumb) only. See ADR 0015.
     return (
-      <main className="portal-module-page">
-        <section
-          className="portal-module-empty"
-          aria-label={`${module.label} workspace`}
+      <main className="portal-module-page portal-module-page--connected">
+        <ModuleComponent />
+        <Button
+          asChild
+          variant="outline"
+          className="portal-module-page__return"
         >
-          <Badge variant="outline">{definition.roleLabel}</Badge>
-          <h1>{module.label}</h1>
-          <p>{module.description}</p>
-          <ModuleComponent />
-          <Button asChild variant="outline">
-            <Link href="/portal">
-              <ArrowLeft data-icon="inline-start" aria-hidden="true" />
-              Return to portal overview
-            </Link>
-          </Button>
-        </section>
+          <Link href="/portal">
+            <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+            Return to portal overview
+          </Link>
+        </Button>
       </main>
     )
   }

@@ -1,6 +1,7 @@
 "use client"
 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
 import {
@@ -10,6 +11,13 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useEligibleSubjectsQuery } from "@/features/hooks/use-enrollment"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
@@ -75,26 +83,28 @@ export function EligibleSubjectsWorkspace() {
     <WorkspacePage
       title="Eligible subjects"
       description="Review which curriculum subjects you can currently select, and why."
+      lastUpdated={eligibleSubjectsQuery.dataUpdatedAt}
     >
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="eligible-subjects-term">
             Academic term
           </FieldLabel>
-          <select
-            id="eligible-subjects-term"
-            value={selectedTermId ?? 0}
-            onChange={(event) =>
-              setSelectedTermId(Number(event.target.value) || null)
-            }
+          <Select
+            value={selectedTermId !== null ? String(selectedTermId) : ""}
+            onValueChange={(value) => setSelectedTermId(Number(value))}
           >
-            <option value={0}>Select an academic term</option>
-            {(termsQuery.data ?? []).map((term) => (
-              <option key={term.id} value={term.id}>
-                {formatAcademicTerm(term)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="eligible-subjects-term" className="w-full">
+              <SelectValue placeholder="Select an academic term" />
+            </SelectTrigger>
+            <SelectContent>
+              {(termsQuery.data ?? []).map((term) => (
+                <SelectItem key={term.id} value={String(term.id)}>
+                  {formatAcademicTerm(term)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       </FieldGroup>
       {selectedTermId === null ? (
@@ -116,14 +126,13 @@ export function EligibleSubjectsWorkspace() {
           loadingLabel="Loading your eligible subjects…"
         >
           {(subjects) => (
-            <div className="grid gap-3">
+            <StaggerList className="grid gap-3">
               {subjects.map((subject) => (
-                <SubjectEligibilityCard
-                  key={subject.subject_id}
-                  subject={subject}
-                />
+                <StaggerItem key={subject.subject_id}>
+                  <SubjectEligibilityCard subject={subject} />
+                </StaggerItem>
               ))}
-            </div>
+            </StaggerList>
           )}
         </AsyncBoundary>
       )}

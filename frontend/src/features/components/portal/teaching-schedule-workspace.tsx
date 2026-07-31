@@ -55,6 +55,7 @@ export function TeachingScheduleWorkspace() {
     <WorkspacePage
       title="Teaching schedule"
       description="This schedule contains sections assigned to your faculty account."
+      lastUpdated={sectionsQuery.dataUpdatedAt}
     >
       <AsyncBoundary
         query={combinedQuery}
@@ -73,7 +74,7 @@ export function TeachingScheduleWorkspace() {
                 aria-label={`${row.subjectCode} ${row.subjectTitle}`}
               >
                 <CardHeader>
-                  <CardTitle level={3}>
+                  <CardTitle level={2}>
                     {row.subjectCode} · {row.subjectTitle}
                   </CardTitle>
                 </CardHeader>

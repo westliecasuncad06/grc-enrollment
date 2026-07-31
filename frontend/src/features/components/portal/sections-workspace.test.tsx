@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -82,6 +82,25 @@ function url(input: RequestInfo | URL) {
       : input.url
 }
 
+/** Waits for the term reference data to load and the active-term default to apply. */
+async function waitForActiveTermSelected() {
+  await waitFor(() => {
+    expect(screen.getByLabelText("Academic term")).toHaveTextContent(
+      "2026-2027 · 1st",
+    )
+  })
+}
+
+/** Opens a `Select` trigger and picks an item. */
+async function selectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  labelText: string,
+  optionName: string,
+) {
+  await user.click(screen.getByLabelText(labelText))
+  await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
 describe("SectionsWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
@@ -113,8 +132,8 @@ describe("SectionsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2026-2027/ })
-    await user.selectOptions(screen.getByLabelText("Subject"), "7")
+    await waitForActiveTermSelected()
+    await selectOption(user, "Subject", "CS101 — Programming 1")
     await user.type(screen.getByLabelText("Section code"), "A")
     await user.clear(screen.getByLabelText("Capacity"))
     await user.type(screen.getByLabelText("Capacity"), "0")
@@ -153,8 +172,8 @@ describe("SectionsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2026-2027/ })
-    await user.selectOptions(screen.getByLabelText("Subject"), "7")
+    await waitForActiveTermSelected()
+    await selectOption(user, "Subject", "CS101 — Programming 1")
     await user.type(screen.getByLabelText("Section code"), "A")
     await user.clear(screen.getByLabelText("Capacity"))
     await user.type(screen.getByLabelText("Capacity"), "30")
@@ -199,9 +218,9 @@ describe("SectionsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2nd/ })
-    await user.selectOptions(screen.getByLabelText("Academic term"), "3")
-    await user.selectOptions(screen.getByLabelText("Subject"), "7")
+    await waitForActiveTermSelected()
+    await selectOption(user, "Academic term", "2026-2027 · 2nd")
+    await selectOption(user, "Subject", "CS101 — Programming 1")
     await user.type(screen.getByLabelText("Section code"), "B")
     await user.clear(screen.getByLabelText("Capacity"))
     await user.type(screen.getByLabelText("Capacity"), "30")
@@ -257,9 +276,7 @@ describe("SectionsWorkspace", () => {
     })
     await screen.findByText(/Unavailable/, {}, { timeout: 3_000 })
     await user.click(screen.getByRole("button", { name: "Try again" }))
-    expect(
-      await screen.findByRole("option", { name: /2026-2027/ }),
-    ).toBeInTheDocument()
+    await waitForActiveTermSelected()
     expect(termsAttempts).toBe(3)
   })
 
@@ -285,7 +302,7 @@ describe("SectionsWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("option", { name: /2026-2027/ })
+    await waitForActiveTermSelected()
     expect(await axe(container)).toHaveNoViolations()
   })
 })

@@ -5,6 +5,14 @@ import { useState } from "react"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import { Field, FieldLabel } from "@/features/components/ui/field"
+import { Input } from "@/features/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import type { CurriculumSubjectInput } from "@/features/schemas/curriculum-schema"
 import type { Subject } from "@/features/schemas/reference-data-schema"
 
@@ -85,7 +93,7 @@ export function PrerequisiteEditor({
 
   return (
     <section aria-label="Prerequisite editor" className="grid gap-3">
-      <h3>Prerequisites</h3>
+      <h2>Prerequisites</h2>
       {(error || graphError) && (
         <Alert variant="destructive">
           <AlertDescription>{error || graphError}</AlertDescription>
@@ -96,39 +104,48 @@ export function PrerequisiteEditor({
           <FieldLabel htmlFor="prerequisite-subject">
             Subject for prerequisite
           </FieldLabel>
-          <select
-            id="prerequisite-subject"
-            value={subjectId}
-            onChange={(event) => setSubjectId(Number(event.target.value))}
+          <Select
+            value={subjectId > 0 ? String(subjectId) : ""}
+            onValueChange={(value) => setSubjectId(Number(value))}
           >
-            <option value={0}>Select a placed subject</option>
-            {subjects.map((subject) => (
-              <option key={subject.subject_id} value={subject.subject_id}>
-                {nameFor(subject.subject_id)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="prerequisite-subject" className="w-full">
+              <SelectValue placeholder="Select a placed subject" />
+            </SelectTrigger>
+            <SelectContent>
+              {subjects.map((subject) => (
+                <SelectItem
+                  key={subject.subject_id}
+                  value={String(subject.subject_id)}
+                >
+                  {nameFor(subject.subject_id)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="prerequisite-edge">
             Prerequisite subject
           </FieldLabel>
-          <select
-            id="prerequisite-edge"
-            value={prerequisiteId}
-            onChange={(event) => setPrerequisiteId(Number(event.target.value))}
+          <Select
+            value={prerequisiteId > 0 ? String(prerequisiteId) : ""}
+            onValueChange={(value) => setPrerequisiteId(Number(value))}
           >
-            <option value={0}>Select prerequisite</option>
-            {subjectCatalog.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.code} — {subject.title}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="prerequisite-edge" className="w-full">
+              <SelectValue placeholder="Select prerequisite" />
+            </SelectTrigger>
+            <SelectContent>
+              {subjectCatalog.map((subject) => (
+                <SelectItem key={subject.id} value={String(subject.id)}>
+                  {subject.code} — {subject.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="minimum-grade">Minimum grade</FieldLabel>
-          <input
+          <Input
             id="minimum-grade"
             value={minimumGrade}
             onChange={(event) => setMinimumGrade(event.target.value)}

@@ -119,6 +119,7 @@ export function RegistrarEnrollmentWorkspace({
       title={heading}
       description="Approve or reject submissions pending registrar review, or void an already-approved enrollment before payment is confirmed."
       unauthorized={!authorized}
+      lastUpdated={enrollmentsQuery.dataUpdatedAt}
     >
       {error && (
         <Alert variant="destructive">
@@ -127,7 +128,7 @@ export function RegistrarEnrollmentWorkspace({
       )}
       <Card>
         <CardHeader>
-          <CardTitle level={3}>Enrollment queue</CardTitle>
+          <CardTitle level={2}>Enrollment queue</CardTitle>
         </CardHeader>
         <CardContent>
           <AsyncBoundary

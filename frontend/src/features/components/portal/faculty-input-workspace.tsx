@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -34,6 +34,13 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import {
   facultyAvailabilitiesQueryKey,
   facultySubjectPreferencesQueryKey,
@@ -113,6 +120,15 @@ export function FacultyInputWorkspace() {
     | null
   >(null)
   const [requestError, setRequestError] = useState("")
+  // Unlike the Controller-only-`defaultValue` pattern used elsewhere (see
+  // ADR 0015), these two forms render unconditionally — not gated behind
+  // AsyncBoundary — so each `academic_term_id` Controller mounts immediately,
+  // well before the active term is known, and stays mounted (no `key` swap)
+  // once it resolves. That makes the classic `useEffect` + `form.setValue()`
+  // populate-once-loaded pattern the correct one here: the Controller is
+  // already stably registered by the time the effect fires, so the update
+  // reaches it cleanly (the opposite of the late-mounting-Controller race
+  // this same pattern would hit if the field were AsyncBoundary-gated).
   const availabilityForm = useForm<FacultyAvailabilityInput>({
     resolver: zodResolver(facultyAvailabilityInputSchema),
     defaultValues: emptyAvailability,
@@ -251,6 +267,7 @@ export function FacultyInputWorkspace() {
     <WorkspacePage
       title="Availability and preferences"
       description="State when you can teach and rank the subjects you prefer per academic term."
+      lastUpdated={availabilitiesQuery.dataUpdatedAt}
     >
       {(termsQuery.isError ||
         subjectsQuery.isError ||
@@ -267,7 +284,7 @@ export function FacultyInputWorkspace() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Availability windows</CardTitle>
+            <CardTitle level={2}>Availability windows</CardTitle>
             <CardDescription>
               Use ISO weekdays and 24-hour HH:mm:ss times.
             </CardDescription>
@@ -288,20 +305,31 @@ export function FacultyInputWorkspace() {
                   <FieldLabel htmlFor="availability-term">
                     Academic term
                   </FieldLabel>
-                  <select
-                    id="availability-term"
-                    disabled={isSaving || termsQuery.isLoading}
-                    {...availabilityForm.register("academic_term_id", {
-                      valueAsNumber: true,
-                    })}
-                  >
-                    <option value={0}>Select an academic term</option>
-                    {terms.map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {formatAcademicTerm(term)}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={availabilityForm.control}
+                    name="academic_term_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        disabled={isSaving || termsQuery.isLoading}
+                      >
+                        <SelectTrigger
+                          id="availability-term"
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select an academic term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {terms.map((term) => (
+                            <SelectItem key={term.id} value={String(term.id)}>
+                              {formatAcademicTerm(term)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                   <FieldError>
                     {
                       availabilityForm.formState.errors.academic_term_id
@@ -315,19 +343,28 @@ export function FacultyInputWorkspace() {
                   )}
                 >
                   <FieldLabel htmlFor="availability-day">Day</FieldLabel>
-                  <select
-                    id="availability-day"
-                    disabled={isSaving}
-                    {...availabilityForm.register("day_of_week", {
-                      valueAsNumber: true,
-                    })}
-                  >
-                    {weekdays.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={availabilityForm.control}
+                    name="day_of_week"
+                    render={({ field }) => (
+                      <Select
+                        value={String(field.value)}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        disabled={isSaving}
+                      >
+                        <SelectTrigger id="availability-day" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {weekdays.map(([value, label]) => (
+                            <SelectItem key={value} value={String(value)}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                   <FieldError>
                     {availabilityForm.formState.errors.day_of_week?.message}
                   </FieldError>
@@ -443,7 +480,7 @@ export function FacultyInputWorkspace() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle level={3}>Subject preferences</CardTitle>
+            <CardTitle level={2}>Subject preferences</CardTitle>
             <CardDescription>
               Rank each requested subject once for the selected term.
             </CardDescription>
@@ -464,20 +501,28 @@ export function FacultyInputWorkspace() {
                   <FieldLabel htmlFor="preference-term">
                     Academic term
                   </FieldLabel>
-                  <select
-                    id="preference-term"
-                    disabled={isSaving || termsQuery.isLoading}
-                    {...preferenceForm.register("academic_term_id", {
-                      valueAsNumber: true,
-                    })}
-                  >
-                    <option value={0}>Select an academic term</option>
-                    {terms.map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {formatAcademicTerm(term)}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={preferenceForm.control}
+                    name="academic_term_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        disabled={isSaving || termsQuery.isLoading}
+                      >
+                        <SelectTrigger id="preference-term" className="w-full">
+                          <SelectValue placeholder="Select an academic term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {terms.map((term) => (
+                            <SelectItem key={term.id} value={String(term.id)}>
+                              {formatAcademicTerm(term)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                   <FieldError>
                     {preferenceForm.formState.errors.academic_term_id?.message}
                   </FieldError>
@@ -490,20 +535,34 @@ export function FacultyInputWorkspace() {
                   <FieldLabel htmlFor="preference-subject">
                     Preferred subject
                   </FieldLabel>
-                  <select
-                    id="preference-subject"
-                    disabled={isSaving || subjectsQuery.isLoading}
-                    {...preferenceForm.register("subject_id", {
-                      valueAsNumber: true,
-                    })}
-                  >
-                    <option value={0}>Select a subject</option>
-                    {subjects.map((subject) => (
-                      <option key={subject.id} value={subject.id}>
-                        {subject.code} — {subject.title}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={preferenceForm.control}
+                    name="subject_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        disabled={isSaving || subjectsQuery.isLoading}
+                      >
+                        <SelectTrigger
+                          id="preference-subject"
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select a subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subjects.map((subject) => (
+                            <SelectItem
+                              key={subject.id}
+                              value={String(subject.id)}
+                            >
+                              {subject.code} — {subject.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                   <FieldError>
                     {preferenceForm.formState.errors.subject_id?.message}
                   </FieldError>

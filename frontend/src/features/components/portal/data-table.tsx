@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { Empty, EmptyDescription } from "@/features/components/ui/empty"
 import {
   Table,
   TableBody,
@@ -33,6 +34,8 @@ export interface DataTableProps<Row> {
   rowKey: (row: Row) => string | number
   /** Overrides the auto-generated card for narrow viewports; falls back to a column-label/value list built from `columns`. */
   renderCard?: (row: Row) => ReactNode
+  /** When set, renders this instead of an empty table/card list once `rows` is empty — callers no longer need their own ternary guard. */
+  emptyMessage?: string
 }
 
 /**
@@ -46,7 +49,16 @@ export function DataTable<Row>({
   rows,
   rowKey,
   renderCard,
+  emptyMessage,
 }: DataTableProps<Row>) {
+  if (rows.length === 0 && emptyMessage) {
+    return (
+      <Empty>
+        <EmptyDescription>{emptyMessage}</EmptyDescription>
+      </Empty>
+    )
+  }
+
   return (
     <>
       <div className="hidden md:block">
@@ -81,11 +93,17 @@ export function DataTable<Row>({
           ) : (
             <Card key={rowKey(row)}>
               <CardHeader>
-                <CardTitle level={4}>{String(rowKey(row))}</CardTitle>
+                {/* The first column is the row's natural identifying value
+                    (a code, a name, a number) in every current caller —
+                    a real database id was shown here before, which meant
+                    nothing to a reader. */}
+                <CardTitle level={3}>
+                  {columns[0]?.render(row) ?? String(rowKey(row))}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <dl className="grid grid-cols-2 gap-2 text-sm">
-                  {columns.map((column) => (
+                  {columns.slice(1).map((column) => (
                     <div key={column.key} className="contents">
                       <dt className="text-muted-foreground">{column.header}</dt>
                       <dd>{column.render(row)}</dd>

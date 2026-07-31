@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -14,6 +14,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import { Input } from "@/features/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import { useAuditLogsQuery } from "@/features/hooks/use-audit-logs"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
 import {
@@ -23,6 +32,9 @@ import {
 } from "@/features/schemas/audit-schema"
 
 const defaults: AuditLogFilters = { page: 1, per_page: 20 }
+// Radix `Select.Item` reserves an empty-string value to mean "no selection";
+// "all" is a safe sentinel since neither enum contains it (see ADR 0015).
+const ALL_FILTER_VALUE = "all"
 function snapshot(value: Record<string, unknown> | null) {
   if (value === null) return "No recorded values."
   const redact = (input: unknown, key = ""): unknown => {
@@ -44,6 +56,11 @@ export function AuditLogsWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "registrar_head"
   const [filters, setFilters] = useState<AuditLogFilters>(defaults)
+  const [actionFilter, setActionFilter] = useState(ALL_FILTER_VALUE)
+  const [entityTypeFilter, setEntityTypeFilter] = useState(ALL_FILTER_VALUE)
+  const [actorUserId, setActorUserId] = useState("")
+  const [fromDate, setFromDate] = useState("")
+  const [toDate, setToDate] = useState("")
   const auditQuery = useAuditLogsQuery(filters, authorized)
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
   const combinedQuery = {
@@ -56,23 +73,20 @@ export function AuditLogsWorkspace() {
       void proposalsQuery.refetch()
     },
   }
-  const apply = (form: HTMLFormElement) => {
-    const values = new FormData(form)
-    const get = (name: string) => {
-      const value = values.get(name)
-      return typeof value === "string" ? value.trim() : ""
-    }
-    const actor = get("actor_user_id")
-    const action = auditActions.find((value) => value === get("action"))
+  const apply = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const action = auditActions.find((value) => value === actionFilter)
     const auditableType = auditableTypes.find(
-      (value) => value === get("auditable_type"),
+      (value) => value === entityTypeFilter,
     )
     setFilters({
       action,
       auditable_type: auditableType,
-      actor_user_id: actor ? Number(actor) : undefined,
-      from: get("from") || undefined,
-      to: get("to") || undefined,
+      actor_user_id: actorUserId.trim()
+        ? Number(actorUserId.trim())
+        : undefined,
+      from: fromDate || undefined,
+      to: toDate || undefined,
       page: 1,
       per_page: 20,
     })
@@ -82,49 +96,80 @@ export function AuditLogsWorkspace() {
       title="Audit logs"
       description="Operational activity is shown without actor names or email addresses."
       unauthorized={!authorized}
+      lastUpdated={auditQuery.dataUpdatedAt}
     >
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          apply(event.currentTarget)
-        }}
-        className="grid gap-2 md:grid-cols-3"
-      >
-        <label>
-          Action
-          <select name="action" defaultValue="">
-            <option value="">All actions</option>
-            {auditActions.map((action) => (
-              <option key={action} value={action}>
-                {action}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Entity type
-          <select name="auditable_type" defaultValue="">
-            <option value="">All entity types</option>
-            {auditableTypes.map((auditableType) => (
-              <option key={auditableType} value={auditableType}>
-                {auditableType}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Actor user ID
-          <input name="actor_user_id" inputMode="numeric" />
-        </label>
-        <label>
-          From
-          <input name="from" type="date" />
-        </label>
-        <label>
-          To
-          <input name="to" type="date" />
-        </label>
-        <Button type="submit">Apply audit filters</Button>
+      <form onSubmit={apply}>
+        <FieldGroup className="grid gap-3 md:grid-cols-3">
+          <Field>
+            <FieldLabel htmlFor="audit-filter-action">Action</FieldLabel>
+            <Select value={actionFilter} onValueChange={setActionFilter}>
+              <SelectTrigger id="audit-filter-action" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_FILTER_VALUE}>All actions</SelectItem>
+                {auditActions.map((action) => (
+                  <SelectItem key={action} value={action}>
+                    {action}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="audit-filter-entity-type">
+              Entity type
+            </FieldLabel>
+            <Select
+              value={entityTypeFilter}
+              onValueChange={setEntityTypeFilter}
+            >
+              <SelectTrigger id="audit-filter-entity-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_FILTER_VALUE}>
+                  All entity types
+                </SelectItem>
+                {auditableTypes.map((auditableType) => (
+                  <SelectItem key={auditableType} value={auditableType}>
+                    {auditableType}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="audit-filter-actor">Actor user ID</FieldLabel>
+            <Input
+              id="audit-filter-actor"
+              inputMode="numeric"
+              value={actorUserId}
+              onChange={(event) => setActorUserId(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="audit-filter-from">From</FieldLabel>
+            <Input
+              id="audit-filter-from"
+              type="date"
+              value={fromDate}
+              onChange={(event) => setFromDate(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="audit-filter-to">To</FieldLabel>
+            <Input
+              id="audit-filter-to"
+              type="date"
+              value={toDate}
+              onChange={(event) => setToDate(event.target.value)}
+            />
+          </Field>
+          <Button type="submit" className="self-end">
+            Apply audit filters
+          </Button>
+        </FieldGroup>
       </form>
       <AsyncBoundary
         query={combinedQuery}
@@ -136,7 +181,7 @@ export function AuditLogsWorkspace() {
           <>
             <Card>
               <CardHeader>
-                <CardTitle level={3}>Audit history</CardTitle>
+                <CardTitle level={2}>Audit history</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="grid gap-3">
@@ -173,7 +218,7 @@ export function AuditLogsWorkspace() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle level={3}>Published proposal closure</CardTitle>
+                <CardTitle level={2}>Published proposal closure</CardTitle>
               </CardHeader>
               <CardContent>
                 <ScheduleDecisionControls
