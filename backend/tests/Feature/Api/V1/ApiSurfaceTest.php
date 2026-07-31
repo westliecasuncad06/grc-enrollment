@@ -27,6 +27,9 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/class-rosters',
             'GET|HEAD api/v1/curricula',
+            'GET|HEAD api/v1/dashboards/enrollment-summary',
+            'GET|HEAD api/v1/dashboards/institution-summary',
+            'GET|HEAD api/v1/dashboards/policy-settings',
             'GET|HEAD api/v1/eligible-subjects',
             'GET|HEAD api/v1/enrollment-documents',
             'GET|HEAD api/v1/enrollments',
@@ -39,6 +42,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/queue-tickets',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/sections',
+            'GET|HEAD api/v1/stuck-enrollments',
             'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/subjects',
             'GET|HEAD api/v1/transferee-credits',
@@ -119,6 +123,10 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.schedule-proposals.update',
             'api.v1.student-profile.show',
             'api.v1.student-profiles.store',
+            'api.v1.dashboards.enrollment-summary',
+            'api.v1.dashboards.institution-summary',
+            'api.v1.dashboards.policy-settings',
+            'api.v1.stuck-enrollments.index',
         ];
 
         foreach ($guarded as $name) {
@@ -398,6 +406,31 @@ final class ApiSurfaceTest extends TestCase
         );
 
         $this->assertSame([], array_values($roleMiddleware));
+    }
+
+    /**
+     * enrollment-summary is shared between two roles (`role:dean,
+     * executive_director`); institution-summary, policy-settings, and
+     * stuck-enrollments are each single-role. See DashboardPolicy/
+     * StuckEnrollmentPolicy for the record-level re-check.
+     */
+    public function test_dashboard_routes_have_the_exact_role_boundaries(): void
+    {
+        $enrollmentSummary = Route::getRoutes()->getByName('api.v1.dashboards.enrollment-summary');
+        $this->assertNotNull($enrollmentSummary);
+        $this->assertContains('role:dean,executive_director', $enrollmentSummary->gatherMiddleware());
+
+        $institutionSummary = Route::getRoutes()->getByName('api.v1.dashboards.institution-summary');
+        $this->assertNotNull($institutionSummary);
+        $this->assertContains('role:executive_director', $institutionSummary->gatherMiddleware());
+
+        $policySettings = Route::getRoutes()->getByName('api.v1.dashboards.policy-settings');
+        $this->assertNotNull($policySettings);
+        $this->assertContains('role:registrar_head', $policySettings->gatherMiddleware());
+
+        $stuckEnrollments = Route::getRoutes()->getByName('api.v1.stuck-enrollments.index');
+        $this->assertNotNull($stuckEnrollments);
+        $this->assertContains('role:dean', $stuckEnrollments->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void

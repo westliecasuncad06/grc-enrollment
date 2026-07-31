@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test"
 
-import { ApiArranger, loginAs } from "../fixtures/api-client"
 import { authenticateViaApi } from "../fixtures/auth"
 import { selectOption } from "../fixtures/select"
 
@@ -13,19 +12,15 @@ import { selectOption } from "../fixtures/select"
 // proposal in the exact state UpdateScheduleProposalRequest requires for
 // dean_approve — there is no separate "submit for review" step.
 //
-// Executive Director's half of journey 5 is exercised over the API, not the
-// UI: ScheduleDecisionWorkspace is fully built to handle the
-// executive_director role (its own test suite renders it with that role
-// directly) and the backend fully accepts executive_approve — but
-// role-capabilities.ts never wires a module id to ScheduleDecisionWorkspace
-// for executive_director (only master-schedule, a separate read-only
-// component, plus three placeholders). A real, previously undetected
-// routing gap — vitest never caught it because rendering the component
-// directly with a hand-picked session bypasses the module registry
-// entirely. Not fixed here: wiring new navigation is an application feature
-// change, out of this E2E-foundation phase's scope (see the spec's
-// Non-goals) — recorded honestly rather than silently worked around with
-// invented UI, the same way journey 13 handled its own missing-UI case.
+// The Executive Director's half of journey 5 drives the real UI at
+// /portal/master-schedule, not the API. An earlier version of this spec
+// navigated to /portal/schedule-approvals (the Dean's own workspace) and,
+// finding nothing there for this role, fell back to the API — recorded at
+// the time as a routing gap in ScheduleDecisionWorkspace. That was wrong:
+// the Executive Director's approval controls live on Master Schedule
+// (MasterScheduleWorkspace embeds ScheduleDecisionControls with
+// actorRole="executive_director"), which was already in their module list
+// the whole time. See ADR 0016 decision 8's correction.
 
 test("journeys 4 & 5 — section creation, proposal submission, and Dean/Executive Director approval", async ({
   page,
@@ -81,27 +76,31 @@ test("journeys 4 & 5 — section creation, proposal submission, and Dean/Executi
     page.getByRole("button", { name: "Approve as Dean" }),
   ).toHaveCount(0)
 
-  // Journey 5b: Executive Director approves — over the API (see the
-  // routing-gap note above; no module id reaches ScheduleDecisionWorkspace
-  // for this role today).
-  const executiveSession = await loginAs(request, "executive_director")
-  const executiveArranger = new ApiArranger(request, executiveSession)
+  // Journey 5b: Executive Director approves, via the real Master Schedule UI.
+  await authenticateViaApi(page, request, "executive_director")
+  await page.goto("/portal/master-schedule")
+  await expect(
+    page.getByRole("heading", { name: "Master schedule" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Executive decisions" }),
+  ).toBeVisible()
 
-  const proposals = (await executiveArranger.get(
-    "/api/v1/schedule-proposals?per_page=50",
-  )) as { data: { id: number; status: string }[] }
-  const deanApproved = proposals.data.find(
-    (p) => p.status === "dean_approved",
-  )
-  if (!deanApproved) {
-    throw new Error(
-      "No dean_approved proposal found for the Executive Director step.",
-    )
-  }
+  await page
+    .getByRole("button", { name: "Approve as Executive Director" })
+    .first()
+    .click()
+  await page.getByRole("button", { name: "Confirm decision" }).click()
+  await expect(
+    page.getByRole("button", { name: "Approve as Executive Director" }),
+  ).toHaveCount(0)
 
-  const decision = (await executiveArranger.patch(
-    `/api/v1/schedule-proposals/${deanApproved.id}`,
-    { action: "executive_approve" },
-  )) as { data: { status: string } }
-  expect(decision.data.status).toBe("executive_approved")
+  // Regression coverage for the empty-published-sections bug this journey's
+  // correction uncovered (ADR 0016 decision 8) lives in
+  // master-schedule-workspace.test.tsx, not here: SectionSeeder seeds every
+  // demo section as already "published", so a genuinely empty published-
+  // sections list cannot occur against this suite's standard seed without
+  // artificially unpublishing them first — real complexity for coverage the
+  // Vitest unit test already gives precisely, by mocking the empty case
+  // directly.
 })

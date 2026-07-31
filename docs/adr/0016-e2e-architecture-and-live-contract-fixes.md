@@ -162,31 +162,45 @@ fixtures; neither one, by construction, can catch the seam between them
 being subtly wrong. Only running the real frontend against the real backend
 does.
 
-### 8. Two real UI gaps, found and documented, not silently worked around
+### 8. One real UI gap, and one claim in this ADR that was itself wrong
 
-- **`ScheduleDecisionWorkspace` has no reachable module id for
-  `executive_director`.** The component itself is built and unit-tested to
-  handle that role (`schedule-decision-workspace.test.tsx` renders it with
-  `role: "executive_director"` directly), and the backend fully accepts
-  `executive_approve` — but `role-capabilities.ts`'s module list for
-  Executive Director only wires up `master-schedule` (a separate read-only
-  `MasterScheduleWorkspace`) plus three placeholders. Vitest's
-  component-level render bypasses the module registry entirely, so this was
-  invisible until a journey tried to navigate there as a real user would.
-  Journey 5's Executive Director half is tested over the API instead;
-  wiring the missing navigation is an application feature change, left for
-  a future slice.
-- **No student-facing "Withdraw" button exists.**
-  `useCreateWithdrawalRequestMutation` is fully implemented and exported but
-  called from zero components. `POST /enrollments/{id}/withdraw` is
-  genuinely student-initiated per PRD §4.2 rule 7, and fully idempotency-
-  guarded server-side (`StoreWithdrawalRequestRequest` rejects a second
-  pending request with a clear 422) — journey 13 exercises that guard over
-  the API, then verifies the *observable* outcome (exactly one row, not two)
-  through the one piece of UI that does exist: Registrar Staff's Drops &
-  Withdrawals queue.
+**Correction (2026-07-31, Phase 7c):** this decision originally claimed
+`ScheduleDecisionWorkspace` had no reachable module id for
+`executive_director`, and that journey 5's Executive Director half had to be
+tested over the API as a result. That claim was wrong. The Executive
+Director's approval controls *are* reachable — through `master-schedule`,
+which *is* in their module list. `MasterScheduleWorkspace` embeds
+`ScheduleDecisionControls` with `actorRole="executive_director"`, and
+`legalActions` in `scheduling-service.ts` grants that role `executive_approve`
+on `dean_approved` proposals. The E2E journey navigated to the wrong module
+id (`schedule-approvals`, the Dean's own workspace) found nothing, and the
+miss got written up as a missing feature rather than traced further. Journey
+5 now drives the real `/portal/master-schedule` UI for the Executive
+Director's half, exactly like every other journey.
 
-Both are recorded as real, honest gaps — the same treatment journey #14
+**What tracing it further actually found — a real bug**: `MasterScheduleWorkspace`
+wrapped *both* the published-sections list and the `ScheduleDecisionControls`
+card in one `AsyncBoundary`, gated on `published.length === 0`. With no
+section published yet, the Executive Director saw only "No published
+sections are available" — and had no way to approve the very first proposal,
+which is precisely the action that publishes the very first section. Fixed
+by splitting into two independent `AsyncBoundary`s: the sections list stays
+gated on section emptiness; the decision controls are gated only on the
+proposals query, and `ScheduleDecisionControls` already self-handles zero
+eligible proposals ("No schedule decisions are currently available."). A
+regression test (`master-schedule-workspace.test.tsx`) covers the empty-
+sections-but-approvable-proposal case directly.
+
+**No student-facing "Withdraw" button exists** — this claim was
+re-verified and stands. `useCreateWithdrawalRequestMutation` is fully
+implemented and exported but called from zero components.
+`POST /enrollments/{id}/withdraw` is genuinely student-initiated per PRD
+§4.2 rule 7, and fully idempotency-guarded server-side
+(`StoreWithdrawalRequestRequest` rejects a second pending request with a
+clear 422) — journey 13 exercises that guard over the API, then verifies the
+*observable* outcome (exactly one row, not two) through the one piece of UI
+that does exist: Registrar Staff's Drops & Withdrawals queue. Recorded as a
+real, honest gap — the same treatment journey #14
 (skipped, ml-service dormant) and journey #15 (partial, no report content
 yet) already got, not silently patched over with invented UI or silently
 left unexplained.
@@ -219,8 +233,16 @@ left unexplained.
 - The date-format fix (decision 7) generalizes: **any new Resource must use
   `->utc()->format('Y-m-d\TH:i:s\Z')` for timestamps, never
   `->toIso8601String()` or bare `->toJSON()`.**
-- The two documented UI gaps (decision 8) are now tracked, not silently
-  reintroduced by a future session assuming they were never noticed.
+- The missing Withdraw button (decision 8) is now tracked, not silently
+  reintroduced by a future session assuming it was never noticed. The
+  Executive Director schedule-approval "gap" was not real — but the
+  empty-state bug it led to tracing down was, and is fixed (Phase 7c).
+- **A miss this ADR's own history is worth internalizing**: a claim written
+  here without re-tracing why a UI element wasn't where expected got treated
+  as settled fact for a full session, including a corrected commit message.
+  When an E2E journey can't find something, the next step is tracing the
+  component tree (is it rendered somewhere else under a different route?),
+  not concluding the feature is unbuilt.
 
 ## Alternatives considered
 

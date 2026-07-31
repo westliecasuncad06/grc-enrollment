@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use App\Domain\Academic\PrerequisiteEvaluator;
+use App\Policies\DashboardPolicy;
 use App\Policies\EligibleSubjectPolicy;
 use App\Policies\FacultyMemberPolicy;
+use App\Policies\StuckEnrollmentPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -31,5 +33,9 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::define('view-faculty-directory', [FacultyMemberPolicy::class, 'viewAny']);
         Gate::define('view-eligible-subjects', [EligibleSubjectPolicy::class, 'viewAny']);
+        Gate::define('view-enrollment-summary', [DashboardPolicy::class, 'viewEnrollmentSummary']);
+        Gate::define('view-institution-summary', [DashboardPolicy::class, 'viewInstitutionSummary']);
+        Gate::define('view-policy-settings', [DashboardPolicy::class, 'viewPolicySettings']);
+        Gate::define('view-stuck-enrollments', [StuckEnrollmentPolicy::class, 'viewAny']);
     }
 }

@@ -28,28 +28,19 @@ export function MasterScheduleWorkspace() {
   const published = (sectionsQuery.data ?? []).filter(
     (section) => section.status === "published",
   )
-  const combinedQuery = {
+  const sectionsListQuery = {
     isPending:
       termsQuery.isPending ||
       subjectsQuery.isPending ||
-      sectionsQuery.isPending ||
-      proposalsQuery.isPending,
+      sectionsQuery.isPending,
     isError:
-      termsQuery.isError ||
-      subjectsQuery.isError ||
-      sectionsQuery.isError ||
-      proposalsQuery.isError,
-    error:
-      termsQuery.error ??
-      subjectsQuery.error ??
-      sectionsQuery.error ??
-      proposalsQuery.error,
+      termsQuery.isError || subjectsQuery.isError || sectionsQuery.isError,
+    error: termsQuery.error ?? subjectsQuery.error ?? sectionsQuery.error,
     data: published,
     refetch: () => {
       void termsQuery.refetch()
       void subjectsQuery.refetch()
       void sectionsQuery.refetch()
-      void proposalsQuery.refetch()
     },
   }
 
@@ -60,64 +51,77 @@ export function MasterScheduleWorkspace() {
       unauthorized={!authorized}
       lastUpdated={sectionsQuery.dataUpdatedAt}
     >
-      <AsyncBoundary
-        query={combinedQuery}
-        isEmpty={(sections) => sections.length === 0}
-        emptyMessage="No published sections are available."
-        loadingLabel="Loading the master schedule…"
-      >
-        {(sections) => (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Published sections</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="grid gap-3 md:grid-cols-2">
-                  {sections.map((section) => {
-                    const subject = (subjectsQuery.data ?? []).find(
-                      (item) => item.id === section.subject_id,
-                    )
-                    const term = (termsQuery.data ?? []).find(
-                      (item) => item.id === section.academic_term_id,
-                    )
-                    return (
-                      <li key={section.id} className="rounded-md border p-3">
-                        <p className="font-medium">
-                          {subject
-                            ? `${subject.code} · ${subject.title}`
-                            : `Section #${section.id}`}
-                        </p>
-                        <p>
-                          {term
-                            ? formatAcademicTerm(term)
-                            : "Academic term unavailable"}
-                        </p>
-                        <p>
-                          {section.section_code} ·{" "}
-                          {section.schedule_days ?? "Meeting time pending"} ·{" "}
-                          {section.room ?? "Room pending"}
-                        </p>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Executive decisions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScheduleDecisionControls
-                  actorRole="executive_director"
-                  proposals={proposalsQuery.data ?? []}
-                />
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </AsyncBoundary>
+      {/*
+       * Two independent boundaries, deliberately not one combined boundary:
+       * an empty published-sections list must never hide the decision
+       * controls, since approving the very first proposal is exactly what
+       * publishes the very first section. A prior version gated both cards
+       * on `published.length === 0`, which locked the Executive Director
+       * out of approving anything until a section already existed.
+       */}
+      <Card>
+        <CardHeader>
+          <CardTitle level={2}>Published sections</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AsyncBoundary
+            query={sectionsListQuery}
+            isEmpty={(sections) => sections.length === 0}
+            emptyMessage="No published sections are available."
+            loadingLabel="Loading the master schedule…"
+          >
+            {(sections) => (
+              <ul className="grid gap-3 md:grid-cols-2">
+                {sections.map((section) => {
+                  const subject = (subjectsQuery.data ?? []).find(
+                    (item) => item.id === section.subject_id,
+                  )
+                  const term = (termsQuery.data ?? []).find(
+                    (item) => item.id === section.academic_term_id,
+                  )
+                  return (
+                    <li key={section.id} className="rounded-md border p-3">
+                      <p className="font-medium">
+                        {subject
+                          ? `${subject.code} · ${subject.title}`
+                          : `Section #${section.id}`}
+                      </p>
+                      <p>
+                        {term
+                          ? formatAcademicTerm(term)
+                          : "Academic term unavailable"}
+                      </p>
+                      <p>
+                        {section.section_code} ·{" "}
+                        {section.schedule_days ?? "Meeting time pending"} ·{" "}
+                        {section.room ?? "Room pending"}
+                      </p>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </AsyncBoundary>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle level={2}>Executive decisions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AsyncBoundary
+            query={proposalsQuery}
+            loadingLabel="Loading schedule proposals…"
+          >
+            {(proposals) => (
+              <ScheduleDecisionControls
+                actorRole="executive_director"
+                proposals={proposals}
+              />
+            )}
+          </AsyncBoundary>
+        </CardContent>
+      </Card>
     </WorkspacePage>
   )
 }

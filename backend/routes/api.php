@@ -8,6 +8,10 @@ use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurriculumController;
+use App\Http\Controllers\Api\V1\Dashboard\EnrollmentSummaryController;
+use App\Http\Controllers\Api\V1\Dashboard\InstitutionSummaryController;
+use App\Http\Controllers\Api\V1\Dashboard\PolicySettingsController;
+use App\Http\Controllers\Api\V1\Dashboard\StuckEnrollmentController;
 use App\Http\Controllers\Api\V1\EligibleSubjectController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
@@ -180,6 +184,27 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::middleware('role:registrar_head')->group(function (): void {
             Route::get('/audit-logs', AuditLogController::class)
                 ->name('audit-logs.index');
+            Route::get('/dashboards/policy-settings', PolicySettingsController::class)
+                ->name('dashboards.policy-settings');
+        });
+
+        // Phase 7c: aggregate-only counts, never row-level enrollment data,
+        // for the two roles Enrollment::scopeVisibleTo()/EnrollmentPolicy
+        // otherwise exclude entirely (see ADR 0017). stuck-enrollments is the
+        // one PRD-authorized exception (§3.5's "stuck-student reports"),
+        // scoped to Dean only and returning student_number, never a full
+        // Enrollment or student record.
+        Route::middleware('role:dean,executive_director')->group(function (): void {
+            Route::get('/dashboards/enrollment-summary', EnrollmentSummaryController::class)
+                ->name('dashboards.enrollment-summary');
+        });
+        Route::middleware('role:executive_director')->group(function (): void {
+            Route::get('/dashboards/institution-summary', InstitutionSummaryController::class)
+                ->name('dashboards.institution-summary');
+        });
+        Route::middleware('role:dean')->group(function (): void {
+            Route::get('/stuck-enrollments', StuckEnrollmentController::class)
+                ->name('stuck-enrollments.index');
         });
 
         // FR-FIN-006: both transitions are Accounting-only with no

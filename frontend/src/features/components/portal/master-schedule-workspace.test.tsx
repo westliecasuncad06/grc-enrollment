@@ -75,6 +75,22 @@ const terms = {
   ],
 }
 const proposals = { data: [] }
+const noPublishedSections = { data: [] }
+const deanApprovedProposal = {
+  data: [
+    {
+      type: "schedule_proposal",
+      id: 9,
+      academic_term_id: 2,
+      submitted_by: 4,
+      status: "dean_approved",
+      status_label: "Dean approved",
+      decided_by: 5,
+      decided_at: "2026-07-29T12:00:00Z",
+      decision_reason: null,
+    },
+  ],
+}
 function url(input: RequestInfo | URL) {
   return typeof input === "string"
     ? input
@@ -114,6 +130,44 @@ describe("MasterScheduleWorkspace", () => {
     })
     expect(await screen.findByText(/ENG101/)).toBeInTheDocument()
     expect(screen.queryByText("B")).not.toBeInTheDocument()
+  })
+
+  it("shows executive decision controls even when no sections are published yet", async () => {
+    // Regression test: the decision controls used to sit inside the same
+    // AsyncBoundary as the published-sections list, so an empty schedule
+    // locked the Executive Director out of approving the very first
+    // proposal — the one action that would publish the very first section.
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("academic-terms")
+              ? terms
+              : url(input).includes("subjects")
+                ? subjects
+                : url(input).includes("schedule-proposals")
+                  ? deanApprovedProposal
+                  : noPublishedSections,
+          ),
+        ),
+      ),
+    )
+    renderWithSession(<MasterScheduleWorkspace />, {
+      session: {
+        userId: "6",
+        displayName: "Executive",
+        role: "executive_director",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    expect(
+      await screen.findByText("No published sections are available."),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("button", {
+        name: "Approve as Executive Director",
+      }),
+    ).toBeInTheDocument()
   })
 
   it("withholds the master schedule from non-executive roles", () => {
