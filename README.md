@@ -81,14 +81,16 @@ php artisan key:generate
 php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-React SPA:
+Next.js frontend:
 
 ```powershell
 Set-Location frontend
 npm ci
 Copy-Item .env.example .env.local
-npm run dev -- --host=localhost --port=5173
+npm run dev
 ```
+
+`next dev` serves on port 3000 by default, matching `CORS_ALLOWED_ORIGINS` above — do not pass `--port=5173`, a leftover from the pre-Next.js Vite SPA (ADR 0013).
 
 Private prediction service:
 
@@ -105,6 +107,20 @@ the private liveness contract is
 bundled XAMPP MariaDB instance — see
 [`docs/runbooks/mariadb-local.md`](docs/runbooks/mariadb-local.md) before
 running `php artisan migrate` or issuing any database `GRANT`.
+
+Playwright E2E suite (`e2e/`), against the same MariaDB instance's isolated
+`grc_enrollment_test` database — see ADR 0016:
+
+```powershell
+Set-Location e2e
+npm ci
+npm run install-browsers
+npm run reset-db
+# In separate terminals: the backend on --env=testing, then the frontend.
+Set-Location ..\backend; php artisan serve --host=127.0.0.1 --port=8000 --env=testing
+Set-Location ..\frontend; npm run dev
+Set-Location ..\e2e; npm test
+```
 
 ## Quality Gates
 
@@ -132,6 +148,9 @@ npm audit
 .\.venv\Scripts\python.exe -m mypy app
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m pip check
+
+# e2e/ — both servers must already be running, see Setup above
+npm test
 ```
 
 ## Security

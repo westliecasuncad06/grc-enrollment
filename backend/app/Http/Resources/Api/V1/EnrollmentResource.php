@@ -49,10 +49,10 @@ final class EnrollmentResource extends JsonResource
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
             'total_units' => $this->resource->total_units,
-            'submitted_at' => $this->resource->submitted_at?->toIso8601String(),
-            'registrar_decided_at' => $this->resource->registrar_decided_at?->toIso8601String(),
-            'payment_confirmed_at' => $this->resource->payment_confirmed_at?->toIso8601String(),
-            'enrolled_at' => $this->resource->enrolled_at?->toIso8601String(),
+            'submitted_at' => $this->resource->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'registrar_decided_at' => $this->resource->registrar_decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'payment_confirmed_at' => $this->resource->payment_confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'enrolled_at' => $this->resource->enrolled_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'subjects' => array_values(
                 $this->resource->enrollmentSubjects
                     ->map(fn (EnrollmentSubject $enrollmentSubject): array => [

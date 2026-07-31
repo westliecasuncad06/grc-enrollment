@@ -41,8 +41,8 @@ final class WithdrawalRequestResource extends JsonResource
             'reason' => $this->resource->reason,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
-            'processed_at' => $this->resource->processed_at?->toIso8601String(),
-            'created_at' => $this->resource->created_at?->toIso8601String(),
+            'processed_at' => $this->resource->processed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'created_at' => $this->resource->created_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 }

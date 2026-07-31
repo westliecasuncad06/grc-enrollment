@@ -40,7 +40,7 @@ final class EnrollmentDocumentResource extends JsonResource
             'document_type' => $this->resource->document_type->value,
             'document_type_label' => $this->resource->document_type->label(),
             'document_number' => $this->resource->document_number,
-            'generated_at' => $this->resource->generated_at->toIso8601String(),
+            'generated_at' => $this->resource->generated_at->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 }

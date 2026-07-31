@@ -51,8 +51,8 @@ final class AcademicGradeResource extends JsonResource
             'remarks' => $this->resource->remarks,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
-            'submitted_at' => $this->resource->submitted_at?->toIso8601String(),
-            'locked_at' => $this->resource->locked_at?->toIso8601String(),
+            'submitted_at' => $this->resource->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'locked_at' => $this->resource->locked_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 }

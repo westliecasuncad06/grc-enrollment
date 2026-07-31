@@ -39,7 +39,7 @@ final class QueueTicketResource extends JsonResource
             'queue_date' => $this->resource->queue_date->toDateString(),
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
-            'served_at' => $this->resource->served_at?->toIso8601String(),
+            'served_at' => $this->resource->served_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 }
