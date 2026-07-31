@@ -43,7 +43,7 @@ const allowedModuleCases = userRoles.flatMap((role) =>
 // is not always identical to the module registry's label (e.g.
 // "Eligible Subjects" vs. "Eligible subjects"). Kept in sync with
 // `module-registry.test.tsx`'s identical `migratedRegionNames` map, which
-// covers the same 29 connected module IDs.
+// covers the same 33 connected module IDs.
 const workspaceHeadings: Record<string, string> = {
   "class-rosters": "Class rosters",
   "grade-submission": "Grade submission",
@@ -74,6 +74,10 @@ const workspaceHeadings: Record<string, string> = {
   "student-accounts": "Student accounts",
   "admission-status": "Admission status",
   "credential-issuance": "Credential issuance",
+  "enrollment-dashboard": "Enrollment dashboard",
+  "institution-dashboard": "Institution dashboard",
+  "stuck-students": "Stuck students",
+  "policy-settings": "Policy settings",
 }
 
 describe("PortalModulePage", () => {

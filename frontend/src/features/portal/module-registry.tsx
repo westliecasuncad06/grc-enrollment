@@ -19,6 +19,10 @@ import { StudentGradesComWorkspace } from "@/features/components/portal/student-
 import { RegistrarRecordsWorkspace } from "@/features/components/portal/registrar-records-workspace"
 import { ClassRostersWorkspace } from "@/features/components/portal/class-rosters-workspace"
 import { GradeSubmissionWorkspace } from "@/features/components/portal/grade-submission-workspace"
+import { EnrollmentDashboardWorkspace } from "@/features/components/portal/enrollment-dashboard-workspace"
+import { InstitutionDashboardWorkspace } from "@/features/components/portal/institution-dashboard-workspace"
+import { StuckStudentsWorkspace } from "@/features/components/portal/stuck-students-workspace"
+import { PolicySettingsWorkspace } from "@/features/components/portal/policy-settings-workspace"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -50,6 +54,10 @@ export type ConnectedModuleId =
   | "enrollment-documents"
   | "class-rosters"
   | "grade-submission"
+  | "enrollment-dashboard"
+  | "institution-dashboard"
+  | "stuck-students"
+  | "policy-settings"
 
 export type PortalModuleComponent = ComponentType
 
@@ -83,6 +91,10 @@ export const connectedModuleIds = [
   "enrollment-documents",
   "class-rosters",
   "grade-submission",
+  "enrollment-dashboard",
+  "institution-dashboard",
+  "stuck-students",
+  "policy-settings",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
@@ -179,6 +191,10 @@ export const connectedModuleRegistry: Readonly<
   "enrollment-documents": enrollmentDocumentsWorkspace,
   "class-rosters": ClassRostersWorkspace,
   "grade-submission": GradeSubmissionWorkspace,
+  "enrollment-dashboard": EnrollmentDashboardWorkspace,
+  "institution-dashboard": InstitutionDashboardWorkspace,
+  "stuck-students": StuckStudentsWorkspace,
+  "policy-settings": PolicySettingsWorkspace,
 }
 
 export function isConnectedModuleId(

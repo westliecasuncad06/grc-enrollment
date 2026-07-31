@@ -57,4 +57,17 @@ return [
     'withdrawal' => [
         'releases_seats' => (bool) env('ENROLLMENT_WITHDRAWAL_RELEASES_SEATS', true),
     ],
+
+    // Phase 7c / Dean's "stuck-student reports" (PRD §3.5, FR-ANL-003). The
+    // PRD never defines what makes an enrollment "stuck" — unlike the other
+    // §17 entries this file flags, that question was never even registered
+    // as an open institutional decision. Null (the default) means no
+    // threshold is confirmed: the stuck-students view still shows every
+    // non-terminal enrollment's dwell time in its current status (that part
+    // is arithmetic, not policy), but nothing is labeled "stuck" until GRC
+    // sets a value here — the same mechanism-implemented/value-flagged
+    // pattern as max_regular_units above.
+    'dashboard' => [
+        'stuck_threshold_days' => env('DASHBOARD_STUCK_THRESHOLD_DAYS'),
+    ],
 ];

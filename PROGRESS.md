@@ -1,30 +1,107 @@
 # GRC Enrollment System — Development Progress
 
 **Last updated:** 2026-07-31 · **PRD version:** v3.2 · **Branch:**
-`phase-8c-e2e-foundation` (Phase 8a and Phase 8b are both merged to `main`,
-pushed to `origin/main` — Phase 8a at `8bb7e66`, Phase 8b's merge commit at
-`2da5501`). Phase 8c itself is complete and quality-gated on this branch but
-**not yet committed** — no commit/merge/push has been requested this
-session.
+`phase-7c-dashboards` (Phase 8a, Phase 8b, and Phase 8c are all merged to
+`main`, pushed to `origin/main` — Phase 8a at `8bb7e66`, Phase 8b's merge
+commit at `2da5501`, Phase 8c's merge commit at `6d1745b`). Phase 7c itself is
+complete and quality-gated on this branch but **not yet committed** — no
+commit/merge/push has been requested this session.
 
 ## Current Objective
 
-**Phase 8c is done** (see *Verified Completed — Phase 8c* below) — a
-Playwright E2E foundation covering 13 of PRD §14.3's 15 critical journeys
-against the real Next.js frontend, real Laravel API, and an isolated MariaDB
-test database, plus browser-based accessibility coverage
-(`@axe-core/playwright`) that finally closes the manual WCAG 2.1 AA /
-live-visual-verification gap deferred in both Phase 8a and Phase 8b. Along
-the way it found and fixed two genuine, previously invisible defects — see
-*Technical Decisions → Phase 8c* and ADR 0016 — that no prior test layer
-could have caught. The next decision, once this branch is reviewed:
-**Phase 8d** (§14.4 security verification, §14.5 performance verification,
-§12.6's remaining profile/password/help features — plus the two application
-gaps ADR 0016 documented: the missing Executive Director schedule-approval
-navigation, and the missing student-facing Withdraw button) versus
-**Phase 7c** (Dean/Executive Director dashboards, still blocked on the same
-institutional-content gap recorded in *Known Issues*). Ask the user before
-starting either, and before committing/merging this branch.
+**Phase 7c is done** (see *Verified Completed — Phase 7c* below) — a
+factual-only reading of the Dean/Executive Director dashboard slice that
+PROGRESS.md had recorded as blocked twice before. A full PRD audit found the
+blocker was real but narrower than recorded: the dashboards' row-count
+arithmetic (status distributions, funnel counts, section fill, dwell time)
+needs no institutional decision, only the *threshold* that labels a dwell
+time "stuck" does — and that ships the same mechanism-implemented,
+value-flagged way as `max_regular_units`. Connected 4 of the 7 remaining
+modules (`enrollment-dashboard`, `stuck-students`, `institution-dashboard`,
+`policy-settings`); left 3 genuinely §17-blocked (`compliance-reports`, and
+the shared `reports` id for both Dean and Executive Director). Along the way,
+corrected a factual error this document and ADR 0016 both carried from Phase
+8c (the Executive Director's schedule-approval controls were reachable the
+whole time) and fixed the real bug tracing that correction found — see
+*Technical Decisions → Phase 7c* and ADR 0016/0017. The next decision, once
+this branch is reviewed: **Phase 8d** (§14.4 security verification, §14.5
+performance verification, §12.6's remaining profile/password/help features,
+plus the still-open student-facing Withdraw button gap) is the only
+remaining non-ML slice before Phase 9. Ask the user before starting it, and
+before committing/merging this branch.
+
+## Verified Completed — Phase 7c (factual dashboards, dwell-time signals, policy visibility)
+
+Design spec: `docs/superpowers/specs/2026-07-31-phase-7c-dashboards-design.md`;
+plan: `docs/superpowers/plans/2026-07-31-phase-7c-dashboards.md`; decision
+record: `docs/adr/0017-dashboard-aggregation-layer.md` (new decisions) and
+`docs/adr/0016-e2e-architecture-and-live-contract-fixes.md` (correction).
+Both backend and frontend touched; no migrations.
+
+- **Task 1 — corrected a factual error and fixed the real bug behind it.**
+  ADR 0016 decision 8 originally claimed no module id reached
+  `ScheduleDecisionWorkspace` for `executive_director`. Re-verified against
+  the actual component tree: `MasterScheduleWorkspace` (in that role's
+  module list) embeds `ScheduleDecisionControls` with
+  `actorRole="executive_director"`, and `legalActions` already grants that
+  role `executive_approve` — the controls were reachable the whole session.
+  Tracing the miss further found the real defect: both the "Published
+  sections" and "Executive decisions" cards sat inside one `AsyncBoundary`
+  gated on `published.length === 0`, so with no section published yet the
+  Executive Director couldn't approve the very first proposal — exactly the
+  action that would publish the first section. Fixed by splitting into two
+  independent boundaries (`master-schedule-workspace.tsx`); upgraded E2E
+  journey 5 to drive the real UI instead of the API workaround it used
+  before. See ADR 0016 decision 8's correction.
+- **Task 2 — the first aggregation layer in this codebase.** Every prior
+  Action returned a paginator or a single model; this phase's four new
+  Actions (`App\Actions\Dashboard\*`) return typed readonly value objects
+  built from `DB::table(...)`/`selectRaw` conditional aggregation, grouped
+  strictly off `EnrollmentStatus::cases()`/`GradeStatus::cases()` (the two
+  PRD-authoritative enums), never string literals. New config key
+  `dashboard.stuck_threshold_days` (default `null`) follows the same
+  mechanism-implemented/value-flagged pattern as `max_regular_units`. See
+  ADR 0017.
+- **Task 3 — `stuck-students`, factual half and judgment half kept
+  separate.** Every non-terminal enrollment's dwell time in its current
+  status renders unconditionally (arithmetic, not policy); rows are only
+  *flagged* once `dashboard.stuck_threshold_days` is set, which it isn't by
+  default — the page states plainly that no institutional threshold is
+  configured rather than guessing. Scoped to `Draft`/
+  `PendingRegistrarApproval`/`PendingPayment` specifically (not the broader
+  `active()` scope, which also includes `Enrolled`) — found via live-data
+  inspection that an already-enrolled student isn't "stuck" in the
+  enrollment process. Minimal fields only (`student_number`, status, dwell
+  days) — no name or email crosses the boundary.
+- **Task 4 — four new workspaces, aggregate-only by design.** Dean's
+  `enrollment-dashboard`/`stuck-students`, Executive Director's
+  `institution-dashboard`, Registrar Head's `policy-settings` (read-only).
+  Dean and Executive Director get counts, never rows: `Enrollment::
+  scopeVisibleTo`/`EnrollmentPolicy::viewAny()` currently exclude both roles
+  entirely, and widening that scope would hand both roles row-level access
+  to every student's record — exactly what PRD §3.6/§9.4 constrain against.
+  The new `DashboardPolicy`/`StuckEnrollmentPolicy` follow
+  `EligibleSubjectPolicy`'s documented "computed view, not a stored
+  resource" precedent instead. `compliance-reports` and the shared
+  `reports` id (Dean + Executive Director) stay placeholder — genuinely
+  §17-blocked (no field list, format, or sign-off authority for either).
+- **Task 5 — tests.** Backend: `DashboardPolicyTest` (4 tests) and
+  `DashboardEndpointsTest` (10 tests, including a no-student-identity-leak
+  string-scan and a full role-boundary matrix); `ApiSurfaceTest` extended
+  with the 4 new routes' exact golden list and role boundaries. Frontend:
+  4 new workspace test files (13 tests, `vitest-axe` on each), plus fixes to
+  the pre-existing `module-registry.test.tsx`/`portal-module-page.test.tsx`
+  golden lists (29→33 connected modules). E2E: 2 new journeys (16 Dean, 17
+  Executive Director) added to `e2e/tests/dashboards.spec.ts`, deliberately
+  not asserting which seeded student number appears in `stuck-students` —
+  journeys 6/7/8 all mutate shared seed state, and file order is not
+  guaranteed under 2 CI workers, so only structural/format assertions are
+  safe (see the spec's own header comment).
+- **Task 6 — docs.** New ADR 0017 (aggregation layer: the third Action
+  return shape, aggregate-only endpoints over widening authorization, the
+  `Enum::cases()` group-by rule, the never-sum-`payments.amount` rule, the
+  in-progress-only `stuck-students` scoping). ADR 0016 decision 8 corrected.
+  This document's feature matrix, §17 table, and roadmap updated below.
 
 ## Verified Completed — Phase 8c (Playwright E2E foundation)
 
@@ -55,18 +132,22 @@ below) — no migrations either way.
 - **Task 3 — the 13 testable journeys.** `e2e/tests/*.spec.ts`, one file
   per journey group, `e2e/fixtures/{auth,api-client,seed-identities,
   select}.ts` shared helpers. Journeys 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13
-  fully covered; 4 & 5 covered together (5's Executive Director half via
-  API — see below); 15 covered for its authorization half only; 14 skipped
-  with a documented reason (ml-service dormant, Phase 9 boundary). Found and
-  fixed a real, previously invisible live-contract bug: 7 of 11
-  date-serializing API Resources used a Carbon format the frontend's own
-  Zod schemas reject, breaking every workspace that rendered a real
-  timestamp — see *Technical Decisions* and ADR 0016 decision 7. Also
-  found, and left deliberately untouched as an application-scope decision,
-  two real UI gaps: no module id reaches `ScheduleDecisionWorkspace` for
-  `executive_director` (component and backend both support it; only the
-  navigation is missing), and no student-facing "Withdraw" button exists
-  despite the mutation hook being fully implemented — ADR 0016 decision 8.
+  fully covered; 4 & 5 covered together; 15 covered for its authorization
+  half only; 14 skipped with a documented reason (ml-service dormant,
+  Phase 9 boundary). Found and fixed a real, previously invisible
+  live-contract bug: 7 of 11 date-serializing API Resources used a Carbon
+  format the frontend's own Zod schemas reject, breaking every workspace
+  that rendered a real timestamp — see *Technical Decisions* and ADR 0016
+  decision 7. Also found, and left deliberately untouched as an
+  application-scope decision, one real UI gap: no student-facing
+  "Withdraw" button exists despite the mutation hook being fully
+  implemented — ADR 0016 decision 8. **Corrected in Phase 7c:** this entry
+  originally also claimed no module id reached `ScheduleDecisionWorkspace`
+  for `executive_director`; that was wrong — the Executive Director's
+  approval controls were reachable the whole time, via `master-schedule`.
+  Journey 5 originally tested that role's half over the API as a result;
+  it now drives the real UI. See ADR 0016 decision 8 and *Verified
+  Completed — Phase 7c*.
 - **Task 4 — accessibility in a real browser.** `e2e/tests/accessibility.spec.ts`:
   `@axe-core/playwright` against the landing page, login page, portal
   overview, and Eligible Subjects (the page from the original Phase 8b
@@ -514,13 +595,57 @@ Frontend-only — no backend or migration changes.
 
 ## Work in Progress
 
-None. Phase 8b is complete and fully quality-gated on
-`phase-8b-ui-coherence-motion`, not yet committed — committing/merging needs
-an explicit user request. One caveat carried forward, not treated as
-blocking: live visual verification and the manual WCAG 2.1 AA pass (keyboard
-traversal, screen reader, zoom, responsive breakpoints) could not run this
-session (no browser connection) and should happen before or shortly after
-merge — the same limitation Phase 8a recorded. See *Exact Next Steps*.
+None. Phase 7c is complete and fully quality-gated on `phase-7c-dashboards`,
+not yet committed — committing/merging needs an explicit user request. See
+*Exact Next Steps*.
+
+## Files Changed — Phase 7c
+
+**New — backend, dashboard aggregation layer:**
+`app/Domain/Dashboard/{EnrollmentSummary,InstitutionSummary,
+YearOverYearCount,PolicySettingsSummary,PolicyValueState,PolicyValueStatus,
+StuckEnrollmentRow}.php`, `app/Actions/Dashboard/{BuildEnrollmentSummary,
+BuildInstitutionSummary,BuildPolicySettingsSummary,ListStuckEnrollments}.php`,
+`app/Http/Resources/Api/V1/Dashboard/{EnrollmentSummaryResource,
+InstitutionSummaryResource,PolicySettingsResource,StuckEnrollmentResource}.php`,
+`app/Http/Requests/Api/V1/Dashboard/IndexDashboardRequest.php`,
+`app/Http/Controllers/Api/V1/Dashboard/{EnrollmentSummaryController,
+InstitutionSummaryController,PolicySettingsController,
+StuckEnrollmentController}.php`, `app/Policies/{DashboardPolicy,
+StuckEnrollmentPolicy}.php`.
+
+**New — backend tests:** `tests/Feature/Policies/DashboardPolicyTest.php`,
+`tests/Feature/Api/V1/DashboardEndpointsTest.php`.
+
+**New — frontend:** `features/schemas/dashboard-schema.ts`,
+`features/services/dashboard-service.ts`, `features/hooks/use-dashboard.ts`,
+`features/components/portal/{enrollment-dashboard-workspace,
+institution-dashboard-workspace,stuck-students-workspace,
+policy-settings-workspace}.tsx` and their `.test.tsx` twins (13 tests,
+`vitest-axe` on each).
+
+**New — E2E:** `e2e/tests/dashboards.spec.ts` (journeys 16, 17).
+
+**New — docs:** `docs/adr/0017-dashboard-aggregation-layer.md`,
+`docs/superpowers/specs/2026-07-31-phase-7c-dashboards-design.md`,
+`docs/superpowers/plans/2026-07-31-phase-7c-dashboards.md`.
+
+**Modified — backend, ADR 0016 correction and bug fix:**
+`config/enrollment.php` (`dashboard.stuck_threshold_days`),
+`routes/api.php` (4 new routes), `app/Providers/AppServiceProvider.php`
+(4 new `Gate::define()`), `tests/Feature/Api/V1/ApiSurfaceTest.php` (golden
+route list, role-boundary matrix).
+
+**Modified — frontend:** `features/portal/module-registry.tsx` (4 new
+connected module ids, 29→33), `features/components/portal/
+master-schedule-workspace.tsx` (independent `AsyncBoundary`s, the real bug
+fix), plus its `.test.tsx` and the two golden-list test files
+(`module-registry.test.tsx`, `portal-module-page.test.tsx`).
+
+**Modified — E2E and docs:** `e2e/tests/scheduling-and-approval.spec.ts`
+(journey 5 upgraded to drive the real UI), `docs/adr/
+0016-e2e-architecture-and-live-contract-fixes.md` (decision 8 corrected),
+this document.
 
 ## Files Changed — Phase 8c
 
@@ -880,6 +1005,34 @@ its own before/after check rather than assumed fixed:
   same live request now parses cleanly, and `composer test` re-run
   afterward still 641/641 (no test encoded the old format as expected).
 
+## Commands and Tests Run — Phase 7c
+
+| Command | Result |
+|---|---|
+| `composer format:check` (Pint) | clean |
+| `composer analyse` (Larastan level 8) | **0 errors** |
+| `composer test` | **656 passed / 2,513 assertions** (up from 641 baseline) |
+| `composer audit` | clean |
+| `npx prettier --check .` (frontend) | clean (4 files auto-fixed with `--write` mid-development) |
+| `npx eslint . --max-warnings=0` | clean |
+| `npx oxlint` (lint:fast) | 1 pre-existing warning, unrelated file (`ui/field.tsx`), exit code 0 |
+| `npx tsc --noEmit` (frontend) | clean |
+| `npx vitest run --no-file-parallelism` | **376 passed** (up from 362 baseline), 71 files |
+| `npx next build` (Turbopack) | compiled successfully, same 5 routes |
+| `npm audit --audit-level=moderate` (frontend) | 0 vulnerabilities |
+| `npm run reset-db` (e2e) | ran repeatedly through the phase; always clean |
+| `npx playwright test` (full suite, `--workers=1`, freshly seeded DB) | **20 passed, 1 skipped (journey 14)** — 15 journeys + 5 accessibility checks, confirmed green together in one run at reconciliation |
+| `CI=true npx playwright test` (2 workers, freshly seeded DB) | 7 failed — but across journeys 6, 7, 8, 9, 4/5, **and** 16/17, confirming a pre-existing PHP-built-in-server concurrency limitation unrelated to Phase 7c, not a regression; re-confirmed clean afterward with `--workers=1` |
+| Live HTTP authorization-boundary proof (all 4 new routes × Student/Dean/ExecDir/RegistrarHead) | Student 403 on all 4; Dean 200 on `enrollment-summary`/`stuck-enrollments`, 403 on the other 2; ExecDir 200 on `enrollment-summary`/`institution-summary`, 403 on the other 2; RegistrarHead 200 on `policy-settings` only — matches the intended matrix exactly |
+| No-student-identity-leak string scan (all 4 new payloads) | confirmed: no student name or email appears in any dashboard response, only `student_number` on `stuck-enrollments` |
+
+One real, unprompted design refinement found via live-data inspection, not a
+test failure: `stuck-students`' first implementation used
+`Enrollment::scopeActive()`, which surfaced already-`Enrolled` students as
+"stuck" candidates. Confirmed wrong by inspecting real dev-DB output; fixed
+by scoping to `Draft`/`PendingRegistrarApproval`/`PendingPayment`
+specifically; re-confirmed via the same live query.
+
 ## Technical Decisions
 
 - **`void` is scoped to `pending_payment`, not any pre-`enrolled` state.**
@@ -1177,19 +1330,99 @@ its own before/after check rather than assumed fixed:
   hand-written to already satisfy the schema). The central justification
   for this phase existing at all — only a real frontend against a real
   backend exposes a seam like this. ADR 0016 decision 7.
-- **Two real UI gaps found, documented, and deliberately not fixed**: no
-  module id reaches `ScheduleDecisionWorkspace` for `executive_director`
-  (component and backend both support the role; only navigation is
-  missing — journey 5's Executive Director half runs over the API
-  instead), and no student-facing "Withdraw" button exists despite the
-  mutation hook being fully implemented (journey 13 exercises the backend's
-  idempotency guard over the API, verifying the outcome through the
-  Registrar Staff UI that does exist). Wiring either is an application
-  feature change, out of an E2E-foundation phase's scope — recorded for a
-  future slice rather than silently patched. ADR 0016 decision 8.
+- **One real UI gap found, documented, and deliberately not fixed**: no
+  student-facing "Withdraw" button exists despite the mutation hook being
+  fully implemented (journey 13 exercises the backend's idempotency guard
+  over the API, verifying the outcome through the Registrar Staff UI that
+  does exist). Wiring it is an application feature change, out of an
+  E2E-foundation phase's scope — recorded for a future slice rather than
+  silently patched. ADR 0016 decision 8. **A second claim recorded here at
+  the time — that no module id reached `ScheduleDecisionWorkspace` for
+  `executive_director` — was wrong, corrected in Phase 7c**: the Executive
+  Director's approval controls were reachable the whole time via
+  `master-schedule`. Tracing the actual miss further surfaced a real bug
+  instead (the controls were gated behind the same empty-state boundary as
+  the published-sections list, so with none published yet the Executive
+  Director couldn't approve the first proposal) — fixed in Phase 7c.
 - **Journey #14 skipped, #15 partial** — ml-service dormant (Phase 9
   boundary) and `compliance-reports` has no report content yet (Phase 7c,
   blocked on institutional content) respectively. ADR 0016 decision 9.
+
+### Phase 7c
+
+- **Aggregate-only endpoints, never row-level, for Dean and Executive
+  Director.** `Enrollment::scopeVisibleTo`/`EnrollmentPolicy::viewAny()`
+  currently exclude both roles entirely; widening them would hand both
+  roles read access to every student's enrollment record, which PRD
+  §3.6/§9.4 constrain against. The dashboards instead get their own
+  `DB::table(...)` aggregation Actions returning counts, following
+  `EligibleSubjectPolicy`'s "computed view, not a stored resource"
+  precedent. `stuck-students` is the one PRD-authorized exception (§3.5),
+  so it gets a separate, narrower endpoint with minimal fields only. See
+  ADR 0017.
+- **The first SQL-aggregation layer in this codebase, a third Action return
+  shape.** Every prior Action returned a paginator or a single Eloquent
+  model; the four new dashboard Actions return typed readonly value objects
+  built from `selectRaw` conditional aggregation. Grouping is driven
+  exclusively off `Enum::cases()`/`->value`, never string literals — most
+  of the enums a dashboard would want to group by are marked "PROVISIONAL
+  VOCABULARY" in their own docblocks, so keying UI off literals would
+  silently break the moment GRC confirms real values. `EnrollmentStatus`
+  and `GradeStatus` are the two PRD-authoritative exceptions actually used.
+  See ADR 0017.
+- **`stuck-students` scoped to `Draft`/`PendingRegistrarApproval`/
+  `PendingPayment`, not `Enrollment::scopeActive()`.** The broader `active()`
+  scope also includes `Enrolled`, which live-data inspection against the
+  dev database showed was semantically wrong — an already-enrolled student
+  has completed the process, not stalled in it. This is a row-selection
+  refinement derived directly from the PRD-authoritative lifecycle order,
+  not a new institutional definition; the dwell-time *threshold* stays
+  separately gated behind `dashboard.stuck_threshold_days` (default
+  `null`). Found live, not by a failing test.
+- **`policy-settings` is read-only, backed by a hardcoded list of 11
+  `PolicyValueState` entries, not a settings table.** Making it writable
+  would require deciding which values are Registrar-editable at runtime —
+  an unmade decision — and today every value is env-var-only. The endpoint
+  reports each value's real `config('enrollment.*')` state
+  (configured/provisional/unset) or, for the 5 values with no config key at
+  all (e.g. `sections.viability_threshold`), a `no_mechanism` state with a
+  `prd_reference` pointing at the open §17 question.
+- **ADR 0016's decision 8 was factually wrong about one of its two claims,
+  corrected here.** "No module id reaches `ScheduleDecisionWorkspace` for
+  `executive_director`" was false — `MasterScheduleWorkspace` (already in
+  that role's module list) embeds the same decision controls. Tracing the
+  miss further, rather than accepting the first negative result, found the
+  real defect: both cards on that page shared one `AsyncBoundary` gated on
+  `published.length === 0`, hiding the approval controls whenever no
+  section was yet published — exactly the state before the first approval.
+  Fixed by splitting into two independent boundaries. The lesson recorded
+  in ADR 0016's own "Consequences" section: when an E2E journey can't find
+  something, the next step is tracing the component tree, not concluding
+  the feature is unbuilt.
+- **DataTable's dual desktop-table/mobile-card rendering needs
+  `within(...)` scoping in tests.** jsdom does not evaluate the `md:hidden`
+  media query that hides the mobile fallback, so both render simultaneously
+  in every Vitest test — any text in a table cell also appears in its
+  mobile-card twin, producing "Found multiple elements" failures unless
+  queries are scoped via `within(screen.getByRole("table", { name:
+  caption }))`. Also surfaced a real, separate accessibility bug in the two
+  new DataTable consumers (`policy-settings-workspace.tsx`,
+  `stuck-students-workspace.tsx`): both rendered `DataTable` directly under
+  `WorkspacePage`'s `<h1>` with no intervening `<h2>`, so the mobile card's
+  hardcoded `CardTitle level={3}` skipped a heading level. Fixed by wrapping
+  each in the same `Card > CardHeader > CardTitle level={2}` shape every
+  other `DataTable` consumer already uses.
+- **E2E journeys 16/17 cannot assert which seeded student number appears in
+  `stuck-students`.** Journeys 6, 7, and 8 each hunt for "any"
+  matching-status enrollment across the shared seeded database and mutate
+  whichever they find (their own header comments document this
+  explicitly), and `playwright.config.ts` runs 2 workers in CI with
+  `fullyParallel: true`, so file execution order is not guaranteed. Verified
+  by running the full suite once serially (clean) and once with 2 workers
+  (multiple pre-existing, unrelated journeys — 6, 7, 8, 9, and 4/5 — also
+  failed, confirming this is a pre-existing PHP-built-in-server concurrency
+  limitation, not a Phase 7c regression). The new journeys assert structure
+  (row format, invariant notice text) instead of specific identities.
 
 ## Known Issues and Blockers
 
@@ -1200,14 +1433,16 @@ its own before/after check rather than assumed fixed:
   frontend result recorded in this document used.
 - No new blocking defect found in Phase 7b beyond the Sanctum
   multi-actor test gotcha (found and fixed — see Technical Decisions).
-- **Phase 7c (Dean/Executive Director dashboards) is the next slice with
-  no PRD-specified content**: `enrollment-dashboard`, `stuck-students`,
-  `reports` (Dean), `institution-dashboard`, `reports` (Executive
-  Director), and Registrar Head's `compliance-reports`/`policy-settings`
-  all need an institutional definition of what to show before they can be
-  built as more than a placeholder — see *Open Institutional Decisions*.
-  (`honors`, `kpis`, and `attrition-analytics` are separately deferred to
-  Phase 9 — they need trained ML output, not just a content decision.)
+- **Phase 7c connected 4 of the 7 remaining modules; 3 stay placeholder,
+  genuinely §17-blocked**: `compliance-reports` (all four of §17's
+  dimensions — fields, format, naming, sign-off — are unconfirmed) and the
+  shared `reports` id for both Dean and Executive Director (no field list,
+  format, or export type enumerated anywhere in the PRD). `enrollment-
+  dashboard`, `stuck-students`, `institution-dashboard`, and
+  `policy-settings` are now connected — see *Verified Completed — Phase
+  7c*. (`honors`, `kpis`, and `attrition-analytics` remain separately
+  deferred to Phase 9 — they need trained ML output, not just a content
+  decision.)
 - **Transferee-credit equivalence rules and withdrawal seat-release
   policy** (this phase's two new §17 items) join queue-ticket
   numbering/reset and COM format on the still-unconfirmed list.
@@ -1239,12 +1474,13 @@ its own before/after check rather than assumed fixed:
 - **No production code path raises a real 409** (unchanged from Phase 8a —
   see Technical Decisions → Phase 8a). Still true after Phase 8b and 8c;
   not a new gap.
-- **Two real UI gaps found by Phase 8c, deliberately not fixed this
-  session**: `ScheduleDecisionWorkspace` has no reachable module id for
-  `executive_director` (component and backend both support the role — only
-  navigation is missing), and no student-facing "Withdraw" button exists
-  despite the mutation hook being fully implemented. Both documented in ADR
-  0016 decision 8 and flagged as candidate scope for the next slice.
+- **One real UI gap found by Phase 8c, deliberately not fixed that
+  session**: no student-facing "Withdraw" button exists despite the
+  mutation hook being fully implemented. Documented in ADR 0016 decision 8.
+  (A second item recorded alongside it — a claimed routing gap for
+  `ScheduleDecisionWorkspace`/`executive_director` — was itself wrong; see
+  *Verified Completed — Phase 7c* for the correction and the real bug
+  tracing it further actually found.)
 - **The new `e2e` GitHub Actions job has not run on GitHub yet** — per ADR
   0012, a workflow is only proven correct by actually running; this needs a
   push, which per `AGENTS.md` needs an explicit request.
@@ -1258,49 +1494,49 @@ its own before/after check rather than assumed fixed:
 
 ## Uncommitted or Risky Changes
 
-**Phase 8c's full diff is uncommitted** as of this reconciliation — working
-tree on `phase-8c-e2e-foundation` (see *Files Changed — Phase 8c*), none
-staged or committed. Committing was not requested this session; per
-`AGENTS.md`, nothing is committed without an explicit ask. Once committed,
-the diff carries slightly more risk than Phase 8b's did — it touches 7
-backend Resource files (a real behavior fix, not a refactor; `composer
-test` confirmed 641/641 both before and after) and `backend/.env.testing`
-(gitignored locally, but its committed `.example` twin changed too) — but
-nothing migrates, nothing changes an API's request shape, and every change
-is independently confirmed working (see *Commands and Tests Run — Phase
-8c*).
+**Phase 7c's full diff is uncommitted** as of this reconciliation — working
+tree on `phase-7c-dashboards` (branched from `main` after Phase 8c's merge;
+see *Files Changed — Phase 7c*), none staged or committed. Committing was
+not requested this session; per `AGENTS.md`, nothing is committed without an
+explicit ask. The diff adds a new backend domain (`app/Domain/Dashboard`,
+`app/Actions/Dashboard`) and four new routes rather than modifying
+shipped behavior, plus one real frontend bug fix
+(`master-schedule-workspace.tsx`'s `AsyncBoundary` split, covered by a new
+regression test) and one ADR correction — nothing migrates, nothing changes
+an existing API's request shape, and every change is independently
+confirmed working (see *Commands and Tests Run — Phase 7c*).
 
-Phase 8a and Phase 8b are both safely merged to `main` and pushed to
-`origin` — Phase 8a at `8bb7e66`, Phase 8b's merge commit at `2da5501` — not
-at risk. The real dev database's only persistent state is carried over
-unchanged from Phase 7b (see that phase's entry); Phase 8c's own database
-work happened entirely against the isolated `grc_enrollment_test` database,
-never the dev database (`grc_enrollment`) — confirmed by construction, since
-every command used `--env=testing` explicitly.
+Phase 8a, Phase 8b, and Phase 8c are all safely merged to `main` and pushed
+to `origin` — Phase 8a at `8bb7e66`, Phase 8b's merge commit at `2da5501`,
+Phase 8c's merge commit at `6d1745b` — not at risk. The real dev database's
+only persistent state is carried over unchanged from Phase 7b (see that
+phase's entry); Phase 7c's own database work (the E2E journeys) happened
+entirely against the isolated `grc_enrollment_test` database, never the dev
+database (`grc_enrollment`) — the backend server was switched to
+`--env=testing` for that work and switched back to plain dev afterward,
+confirmed via `config('database.connections.mysql.database')` resolving to
+`grc_enrollment` again before this reconciliation.
 
 ## Exact Next Steps
 
-**Superseded 2026-07-31 (this session).** Phase 8a and Phase 8b are both
-merged; the Phase 8c/Phase 7c fork was resolved in favor of Phase 8c, and
-that work is now complete on `phase-8c-e2e-foundation`. See *Current
-Objective* at the top of this document for the live fork.
+**Superseded 2026-07-31 (this session).** Phase 8a, Phase 8b, and Phase 8c
+are all merged; Phase 7c is now complete on `phase-7c-dashboards`. See
+*Current Objective* at the top of this document for the live state.
 
 **Current, not yet acted on:**
 
-1. Ask the user before committing Phase 8c's files (see *Uncommitted or
-   Risky Changes*), and again before merging `phase-8c-e2e-foundation` to
+1. Ask the user before committing Phase 7c's files (see *Uncommitted or
+   Risky Changes*), and again before merging `phase-7c-dashboards` to
    `main` or pushing. None of the three has been requested yet — do not do
    any of them without an explicit ask.
-2. Once pushed, confirm the new `e2e` CI job actually runs green on GitHub
-   — it has not run there yet (ADR 0012: a workflow is only proven by
+2. Once Phase 8c's own diff is merged and pushed (it already is, at
+   `6d1745b`), confirm the new `e2e` CI job actually runs green on GitHub —
+   it has not run there yet (ADR 0012: a workflow is only proven by
    running).
-3. Ask the user to choose between **Phase 8d** (§14.4 security
-   verification, §14.5 performance verification, §12.6's remaining
-   profile/password/help features, and the two application gaps ADR 0016
-   documented — the missing Executive Director schedule-approval
-   navigation and the missing student-facing Withdraw button) and
-   **Phase 7c** (still blocked on institutional content, see *Known
-   Issues*) for the next slice of work.
+3. **Phase 8d** (§14.4 security verification, §14.5 performance
+   verification, §12.6's remaining profile/password/help features, and the
+   still-open student-facing Withdraw button gap — ADR 0016 decision 8) is
+   the only remaining non-ML slice. Ask the user before starting it.
 
 ## Do Not Change
 
@@ -1377,10 +1613,10 @@ Objective* at the top of this document for the live fork.
 
 ---
 
-# ■ Overall Completion — 73%
+# ■ Overall Completion — 74%
 
 ```
-██████████████████░░░░░░░  73 / 100
+██████████████████░░░░░░░  74 / 100
 ```
 
 The number is weighted, auditable, and recomputable. Every row below is scored
@@ -1397,44 +1633,36 @@ against work that is **merged**, not work that is written or planned.
 | 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
 | 8 | Nine role portals — 40 modules (spans Phases 5–7b) | 25% | 73% | 18.25 |
 | 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
-| 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 25% | 1.25 |
-| | **Total** | **100%** | | **73.35 ≈ 73%** |
+| 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 35% | 1.75 |
+| | **Total** | **100%** | | **73.85 ≈ 74%** |
 
 Two scores that look surprising, explained:
 
 - **Row 5 at 95%** — all 5 of Process 3.0's subprocesses are now complete:
-  3.1 grade encoding, 3.2 transferee credits/withdrawal (this phase), 3.3
-  final Registrar approval, 3.4 payment queue, 3.5 payment confirmation +
-  Digital COM. The remaining 5% is the tail that forwards attrition events
-  to Process 4.0, deliberately deferred to Phase 9 (ML goes last).
-- **Row 8 at 73%** — 29 of 40 modules are now fully wired to real APIs
-  (forms, mutations, parsed queries, tests), across 9 of 9 roles. 29/40 =
-  72.5%, rounded to 73%; see Decisions. The other 11 remain placeholder
-  empty-states: 7 deferred to Phase 7c, blocked on an institutional
-  content decision (see *Known Issues*) — Dean's Enrollment
-  Dashboard/Stuck Students/Reports, Executive Director's Institution
-  Dashboard/Reports, Registrar Head's Policy Settings/Compliance Reports
-  — and 4 deferred to Phase 9 as ML work: Program Chair's Demand
-  Forecast, Dean's Honors, Executive Director's KPIs, Registrar Head's
-  Attrition Analytics.
+  3.1 grade encoding, 3.2 transferee credits/withdrawal, 3.3 final
+  Registrar approval, 3.4 payment queue, 3.5 payment confirmation + Digital
+  COM. The remaining 5% is the tail that forwards attrition events to
+  Process 4.0, deliberately deferred to Phase 9 (ML goes last).
+- **Row 8 stays at 73% (29/40)** — unchanged from Phase 7b, per this
+  table's own rule: `phase-7c-dashboards` is complete and quality-gated
+  (see *Verified Completed — Phase 7c*) but not yet merged to `main` (see
+  *Uncommitted or Risky Changes*), so its 4 newly-connected modules
+  (33/40 = 82.5% → 83%) are not counted here yet. The moment it merges,
+  this row recomputes to 83% and the total rises to ≈76%.
+- **Row 10 at 35%, up from 25%** — Phase 8c's Playwright E2E foundation
+  (13 of PRD §14.3's 15 critical journeys) is merged to `main`, plus the
+  accessibility scans that closed Phase 8a/8b's deferred manual WCAG pass.
+  §14.4 security, §14.5 performance, and ISO 25010/handoff are still
+  entirely unstarted — the bump reflects E2E specifically, not the whole
+  row.
 
 **Recompute rule:** when a phase closes, update its row's *Done* column and
 re-multiply. Do not adjust weights without recording why in Decisions.
 
-**Phase 8a and Phase 8b are both merged** (`main` at `2da5501`, which
-includes `8bb7e66`) but not yet reflected above — the table has not been
-recomputed since. Once it is, Row 10 ("Verification & deployment — E2E,
-security, perf, ISO 25010, handoff") is the natural home for both: neither
-changes Row 8's module *count* (8a improved required-state/accessibility
-quality on already-connected modules; 8b fixed chrome, migrated form
-controls, and added motion across all 19 already-connected workspaces).
-
-**Phase 8c is complete but not yet reflected above**, per this table's own
-rule — `phase-8c-e2e-foundation` is neither committed nor merged to `main`
-yet (see *Uncommitted or Risky Changes*). Same reasoning applies a third
-time: an E2E test foundation changes no module count either, so once merged
-it also lands in Row 10 — and is arguably the row's most direct contributor
-yet, being literally what Row 10 names ("E2E, security, perf...").
+**Phase 8a, Phase 8b, and Phase 8c are all merged** to `main` (Phase 8a at
+`8bb7e66`, Phase 8b's merge commit at `2da5501`, Phase 8c's merge commit at
+`6d1745b`) and are reflected in Row 10 above. **Phase 7c is complete but not
+yet merged**, per this table's own rule — see the Row 8 note.
 
 ---
 
@@ -1444,13 +1672,13 @@ yet, being literally what Row 10 names ("E2E, security, perf...").
 |---|---|
 | **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
 | **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | **48** |
-| **Database tables** | **26** |
-| **Backend tests** | **641 passing (2,419 assertions)** · Larastan level 8 clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **67 files, 362 tests, Vitest** on `main` (Phase 8a + 8b, both merged) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. Phase 8c adds no frontend Vitest files (it adds a separate `e2e/` Playwright suite — 12 spec files, 19 tests, 13 journeys — see *Verified Completed — Phase 8c*). |
-| **E2E tests** | **12 spec files, 19 tests (18 passed, 1 skipped), Playwright, 13 journeys** — `phase-8c-e2e-foundation`, uncommitted, not reflected in CI yet. |
-| **CI** | 4 GitHub Actions jobs live — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9). A 5th, E2E, is written on `phase-8c-e2e-foundation` but has not run on GitHub yet (needs a push). |
-| **Portals functional** | **9 of 9** have at least one connected module (29 of 40 modules total) — Registrar Staff is no longer fully placeholder |
+| **Live API routes** | **48 on `main`; 52 on `phase-7c-dashboards`** (+4 dashboard routes, uncommitted) |
+| **Database tables** | **26** (unchanged — Phase 7c added no migrations) |
+| **Backend tests** | **641 passing on `main`; 656 passing (2,513 assertions) on `phase-7c-dashboards`** · Larastan level 8 clean, Pint clean, `composer audit` clean |
+| **Frontend tests** | **67 files, 362 tests on `main`** (Phase 8a + 8b + 8c) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. **71 files, 376 tests on `phase-7c-dashboards`** (4 new workspace test files, 2 golden-list fixes). |
+| **E2E tests** | **13 spec files, 21 tests (20 passed, 1 skipped), Playwright, 15 journeys** on `phase-7c-dashboards` (uncommitted; Phase 8c's original 12 files/19 tests/13 journeys are merged to `main`) — see *Verified Completed — Phase 7c*. |
+| **CI** | 4 GitHub Actions jobs live — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9). A 5th, E2E, is merged to `main` (Phase 8c) but has not run on GitHub yet (needs a push). |
+| **Portals functional** | **9 of 9** have at least one connected module — **29 of 40 modules on `main`; 33 of 40 on `phase-7c-dashboards`** (uncommitted) |
 
 ---
 
@@ -1834,19 +2062,22 @@ already documented, now also applied to the new withdrawal tests.
 The most ML-consequential remaining slice before Phase 9 — it produces the
 attrition model's label and most of its features.
 
-## Phase 7c — Dean/Executive Director Dashboards
+## Phase 7c — Dean/Executive Director Dashboards ✅ (quality-gated, unmerged)
 
-Not started. The only remaining piece of the original Phase 7b roadmap
-scope, deferred twice now because it has no PRD-specified content: the
-PRD names FR-ANL-003 (§5.4, Process 4.0/Phase 9) as the sole substantive
-requirement touching this area, and never itemizes what fields or KPIs
-Dean's `enrollment-dashboard`/`stuck-students`/`honors`/`reports` or
-Executive Director's `institution-dashboard`/`kpis`/`reports` must show.
-Registrar Head's remaining `attrition-analytics`/`compliance-reports`/
-`policy-settings` are the same shape. Building any of these now would mean
-inventing institutional definitions, which `AGENTS.md` forbids — this
-phase needs an institutional content decision before it can start, not
-just engineering time.
+Deferred twice before on the assumption that the whole slice needed an
+institutional content decision first. A full PRD audit found that was only
+half true: the dashboards' arithmetic (status distributions, funnel counts,
+section fill, dwell time) needs no institutional judgment at all, only the
+*threshold* that labels a dwell time "stuck" does — and PRD §17 never even
+registered that question, let alone the shape of "what a dashboard shows."
+Connected `enrollment-dashboard`, `stuck-students`, `institution-dashboard`,
+and `policy-settings` (33/40 modules); left `compliance-reports` and the
+shared `reports` id (Dean + Executive Director) as placeholders — those
+three are genuinely §17-blocked (no field list, format, or sign-off
+authority exists for any of them). `honors`/`kpis`/`attrition-analytics`
+stay deferred to Phase 9 as ML work, unaffected by this phase. Complete and
+quality-gated on `phase-7c-dashboards` — see *Verified Completed — Phase
+7c* and ADR 0017. Not yet committed or merged to `main`.
 
 ## Phase 8 — Polish, Accessibility, E2E, Performance
 
@@ -1871,7 +2102,7 @@ language into portal chrome instead of inventing a new look; added the
 by `useReducedMotion()`. Complete and merged to `main` (merge commit
 `2da5501`) — see *Verified Completed — Phase 8b* and ADR 0015.
 
-### Phase 8c — Playwright E2E Foundation ✅ (unmerged)
+### Phase 8c — Playwright E2E Foundation ✅ (merged)
 
 Filled the pre-reserved `e2e/` slot: 13 of §14.3's 15 critical journeys
 against the real Next.js frontend, real Laravel API, and an isolated
@@ -1882,9 +2113,11 @@ both Phase 8a and Phase 8b, via `@axe-core/playwright` in a real browser.
 Found and fixed two genuine, previously invisible defects along the way — a
 date-serialization contract break across 7 API Resources, and a rate
 limiter silently inert over real HTTP — that no prior test layer could have
-caught; found and documented (not fixed) two real application UI gaps.
-Complete and quality-gated on `phase-8c-e2e-foundation` — see *Verified
-Completed — Phase 8c* and ADR 0016. Not yet committed or merged to `main`.
+caught; found and documented (not fixed) two real application UI gaps (one
+of which — the claimed `ScheduleDecisionWorkspace` routing gap — turned out
+to be a misdiagnosis, corrected in Phase 7c). Complete and merged to `main`
+(merge commit `6d1745b`) — see *Verified Completed — Phase 8c* and ADR
+0016.
 
 ### Phase 8d — Performance, Security, §12.6 Remaining Features (not started)
 
@@ -1894,9 +2127,11 @@ architecture validation and pilot baselining" — so this means recording
 measured `EXPLAIN ANALYZE` baselines, not asserting invented thresholds);
 §14.4 security verification; §12.6's remaining profile/password/help
 features (need new backend endpoints, deferred out of 8a/8b/8c for that
-reason). Candidate additions surfaced by Phase 8c, not yet scoped in: wiring
-`ScheduleDecisionWorkspace` navigation for Executive Director, and building
-the student-facing Withdraw button (ADR 0016 decision 8).
+reason). One candidate surfaced by Phase 8c, not yet scoped in: building the
+student-facing Withdraw button (ADR 0016 decision 8). (The other Phase-8c
+candidate — wiring `ScheduleDecisionWorkspace` navigation for Executive
+Director — turned out to already exist; Phase 7c corrected the record and
+fixed the real empty-state bug that tracing it down actually found.)
 
 ## Phase 9 — Process 4.0, Machine Learning (LAST)
 
@@ -1969,8 +2204,8 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Schedule Approvals | 5 | ✅ |
-| Enrollment Dashboard | 7c | ⬜ no PRD-specified content |
-| Stuck Students | 7c | ⬜ no PRD-specified content |
+| Enrollment Dashboard | 7c | ✅ |
+| Stuck Students | 7c | ✅ (dwell time factual; threshold unset, flagged not confirmed) |
 | Honors | **9** | ⬜ |
 | Reports | 7c | ⬜ no PRD-specified content |
 
@@ -1979,7 +2214,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Master Schedule | 5 | ✅ |
-| Institution Dashboard | 7c | ⬜ no PRD-specified content |
+| Institution Dashboard | 7c | ✅ |
 | KPIs | **9** | ⬜ |
 | Reports | 7c | ⬜ no PRD-specified content |
 
@@ -1990,7 +2225,7 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Audit Logs | 5 | ✅ |
 | Enrollment Approvals | 7a | ✅ |
 | Overrides & Voids | 7a | ✅ |
-| Policy Settings | 7c | ⬜ §17-dependent |
+| Policy Settings | 7c | ✅ (read-only view of current config) |
 | Attrition Analytics | **9** | ⬜ |
 | Compliance Reports | 7c | ⬜ no PRD-specified content |
 
@@ -2022,7 +2257,7 @@ Reports, Registrar Head's Policy Settings/Compliance Reports).
 
 # ■ What Is Built
 
-## API surface — 48 routes
+## API surface — 48 routes on `main`, 52 on `phase-7c-dashboards`
 
 **Public:** `GET /api/v1/health` · `POST /api/v1/auth/login`
 
@@ -2085,6 +2320,18 @@ Staff and Registrar Head all reads; Registrar-Staff-only writes —
 Registrar Head all — `EnrollmentSubject::scopeVisibleTo` +
 `EnrollmentSubjectPolicy`).
 
+**No `role:` middleware, role-scoped Policy gate (Phase 7c, uncommitted on
+`phase-7c-dashboards`):** `GET /dashboards/enrollment-summary` (Dean and
+Executive Director — `DashboardPolicy::viewEnrollmentSummary`) ·
+`GET /dashboards/institution-summary` (Executive Director only —
+`DashboardPolicy::viewInstitutionSummary`) ·
+`GET /dashboards/policy-settings` (Registrar Head only, read-only —
+`DashboardPolicy::viewPolicySettings`) ·
+`GET /stuck-enrollments` (Dean only, minimal fields —
+`StuckEnrollmentPolicy::viewAny`). All four are aggregate-only or
+minimal-field views, following `EligibleSubjectPolicy`'s "computed view, not
+a stored resource" precedent — see ADR 0017.
+
 ## Database — 26 tables
 
 Identity and reference: `users`, `personal_access_tokens`, `programs`,
@@ -2133,10 +2380,11 @@ shell, branded 404. Plus 18 reviewed shadcn components (12 from Phase 3 + 6
 added in Phase 5: Table, Select, Dialog, Alert Dialog, Pagination, Toaster),
 a strict-Zod API client with PATCH/DELETE support, and TanStack Query.
 
-29 of 40 modules are now real workspaces wired to live API data — see the
-Portal Feature Matrix above. The other 11 remain placeholders. Every
-non-auth, non-health resource group in the 48-route inventory now has at
-least one UI consumer.
+29 of 40 modules are real workspaces wired to live API data on `main`; 33 of
+40 on `phase-7c-dashboards` (uncommitted) — see the Portal Feature Matrix
+above. The remaining 7 stay placeholders, genuinely §17-blocked. Every
+non-auth, non-health resource group in the route inventory now has at least
+one UI consumer.
 
 There is one auth path. The dev-only demo mode and its committed credential
 file were deleted in Phase 3.
@@ -2266,6 +2514,8 @@ used for section viability thresholds.
 | Payment confirmation required fields and supporting references | Phase 7a — **mechanism implemented** (`external_reference`/`amount` both optional); no required-field rule or currency/rounding policy enforced |
 | Whether COR and COM are distinct artifacts | Phase 7a landed the COM API; still unresolved — `enrollment_documents.document_type` stays deliberately single-valued (`com`) |
 | COM format, numbering, signatures, retention | Phase 7a — **mechanism implemented** (opaque `COM%06d` number, `storage_path` stays null, structured data rendered client-side); no PDF pipeline, signature, or retention rule exists |
+| "Stuck student" dwell-time threshold (PRD §3.5's "stuck-student reports" — the phrase appears twice in the whole PRD, with no duration, status set, or threshold) | Phase 7c — **mechanism implemented** (`config('dashboard.stuck_threshold_days')`, default `null`); every in-progress enrollment's dwell time renders unconditionally (arithmetic), but no row is labeled "stuck" until GRC sets a value — this question was never even registered in §17 before now |
+| Which policy values are Registrar-Head-editable, and via what UI | Phase 7c — `policy-settings` ships **read-only**; deciding this needs a settings-table design this phase deliberately did not build (today every value is env-var-only) |
 | Honors cutoff, disqualifying grades, tie handling | Phase 9 |
 | Government report fields, format, naming, sign-off | Phase 9 |
 | Attrition intervention workflow and authorized viewers | Phase 9 |
@@ -2288,6 +2538,12 @@ Newest first. Full reasoning for older entries is in
 
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-31 | Recompute Row 10 (verification & deployment) from 25% to 35%, moving overall completion from 73% to 74%. Row 8 (nine role portals) stays at 73% pending merge. | Phase 8a, 8b, and 8c are all now merged to `main` (`6d1745b` for 8c); Row 10's bump reflects Phase 8c's E2E foundation specifically. Row 8's 4 newly-connected Phase 7c modules (→83%) are not counted until `phase-7c-dashboards` merges, per the table's own "merged, not written or planned" rule. |
+| 2026-07-31 | Build Phase 7c as factual-only dashboards plus a flagged dwell-time threshold, rather than treating the whole slice as blocked. | User's explicit choice via `AskUserQuestion`, after a full PRD audit found only the "stuck" threshold and the report-content modules were genuinely undecided — the dashboards' row counts are arithmetic over PRD-authoritative status enums, not institutional judgment. Follows the project's own established mechanism-implemented/value-flagged pattern (`max_regular_units`, `sections.viability_threshold`). |
+| 2026-07-31 | Give Dean and Executive Director aggregate-only dashboard endpoints (counts, never rows) instead of widening `Enrollment::scopeVisibleTo`/`EnrollmentPolicy::viewAny()` to include them. | Both roles currently have zero read access to enrollment records. Widening the existing scope would hand both roles row-level access to every student's enrollment, which PRD §3.6 ("cannot alter detailed student academic records unless separately authorized") and §9.4 constrain against. New `DashboardPolicy`-gated `DB::table(...)` aggregation Actions avoid touching the existing authorization boundary at all. |
+| 2026-07-31 | Scope `stuck-students` to `Draft`/`PendingRegistrarApproval`/`PendingPayment`, not `Enrollment::scopeActive()`. | Live-data inspection against the dev database showed `active()` (which also includes `Enrolled`) surfaced already-enrolled students as "stuck" candidates — semantically wrong, since they've completed the process. The narrower scope is derived directly from the PRD-authoritative lifecycle order, not a new institutional definition; the threshold that labels dwell time "stuck" stays separately §17-flagged. |
+| 2026-07-31 | Ship `policy-settings` read-only, backed by a hardcoded list of `PolicyValueState` entries rather than a settings table. | Making it writable requires deciding which values are Registrar-editable at runtime — an unmade institutional decision — and every value today is env-var-only with no settings-table schema. The module's own description already promised "see where confirmed values will eventually be configured," not edit them. |
+| 2026-07-31 | Correct ADR 0016 decision 8's claim that no module id reaches `ScheduleDecisionWorkspace` for `executive_director`, and fix the real bug found tracing it. | User's explicit choice via `AskUserQuestion` ("fix both"). Direct re-verification against the component tree showed the claim was false (`MasterScheduleWorkspace` already embeds the same controls); the actual defect was both cards sharing one `AsyncBoundary` gated on `published.length === 0`, hiding the Executive Director's approval controls whenever no section was yet published. |
 | 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 70% to 95%, and Row 8 (nine role portals) from 58% to 73%, moving overall completion from 67% to 73%. | Row 5: all 5 of Process 3.0's subprocesses complete except the tail forwarding attrition events to Process 4.0, deferred to Phase 9. Row 8: 29/40 modules connected. No other row's weight or Done% changed. |
 | 2026-07-30 | Split the remainder of Phase 7b again: deliver withdrawal/transferee-credit/class-roster APIs plus the Registrar Staff and Faculty portal modules ("records core") this session; defer the Dean/Executive Director dashboards to a new "Phase 7c". | User's explicit scope choice via `AskUserQuestion`. The dashboards are the only part of the original Phase 7b scope with no PRD-specified content (FR-ANL-003 is the sole substantive requirement, deferred to Phase 9/Process 4.0) — building them now would mean inventing institutional definitions, which `AGENTS.md` forbids. |
 | 2026-07-30 | Gate withdrawal seat release behind `config('enrollment.withdrawal.releases_seats')`, default `true`; drop the `enrollment_subjects` row unconditionally either way. | User's explicit choice via `AskUserQuestion`. Seats are reserved immediately and permanently on submission today, so *not* releasing them on withdrawal would permanently inflate `enrolled_count` and wrongly block other students — but whether release is the confirmed institutional policy is still §17-open, so it's mechanism-implemented, value-flagged, the same shape as `max_regular_units`. |
@@ -2360,4 +2616,8 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | Merged; backend 519/519, frontend 216/216 |
 | 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog) | Merged; live-verified; backend 563/563, frontend 224/224 |
 | 2026-07-30 | Phase 7a — Process 3.0 money path (9 tasks, 8 modules, 8 new endpoints, idempotent payment confirmation) | Merged `fc56148`; live-verified; backend 605/605, frontend 243/243 |
-| 2026-07-30 | Phase 7b — Transferee credits, withdrawal, Registrar Staff portal (8 tasks, 6 modules, 7 new endpoints, idempotent withdrawal seat release) | This entry; live-verified; backend 641/641, frontend 243/243 |
+| 2026-07-30 | Phase 7b — Transferee credits, withdrawal, Registrar Staff portal (8 tasks, 6 modules, 7 new endpoints, idempotent withdrawal seat release) | Merged; live-verified; backend 641/641, frontend 243/243 |
+| 2026-07-31 | Phase 8a — Accessibility & required states (PRD §12.3–§12.5) | Merged `8bb7e66` |
+| 2026-07-31 | Phase 8b — Portal UI coherence & motion (shared header, form control migration, `motion` library) | Merged `2da5501` (ADR 0015) |
+| 2026-07-31 | Phase 8c — Playwright E2E foundation (13 of 15 critical journeys, `@axe-core/playwright`, 2 real defects found and fixed) | Merged `6d1745b` (ADR 0016) |
+| 2026-07-31 | Phase 7c — Factual dashboards, dwell-time signals, policy visibility (4 modules connected, ADR 0016 correction + real bug fix) | This entry; live-verified; backend 656/656, frontend 376/376, E2E 20/21 (1 skipped) |
