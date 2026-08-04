@@ -116,6 +116,15 @@ const regularViewer = {
   reason: "open",
 }
 
+const addDropClosed = {
+  is_open: false,
+  reason: "enrollment_still_open",
+  reason_message:
+    "The add/drop window opens once enrollment closes for this term.",
+  opens_at: null,
+  closes_at: null,
+}
+
 function mockRegularSchedule(input: RequestInfo | URL) {
   const target = url(input)
   if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
@@ -130,6 +139,7 @@ function mockRegularSchedule(input: RequestInfo | URL) {
             enrollment_closes_at: null,
             audiences: [],
             viewer: regularViewer,
+            add_drop: addDropClosed,
           },
         }),
       ),
@@ -160,6 +170,7 @@ const createdEnrollment = {
     status: "pending_registrar_approval",
     status_label: "Pending Registrar Approval",
     total_units: 3,
+    requires_overload_approval: false,
     submitted_at: "2026-07-30T00:00:00Z",
     registrar_decided_at: null,
     payment_confirmed_at: null,
@@ -176,6 +187,7 @@ const createdEnrollment = {
     // No queue ticket yet at submission — it is issued only once Registrar
     // Staff approves (Phase 6).
     queue_ticket: null,
+    assessment: null,
   },
 }
 
@@ -498,12 +510,117 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    expect(
-      await screen.findByText(
-        "You already have an active enrollment for this term. View its status below.",
-      ),
-    ).toBeInTheDocument()
+    expect(await screen.findByText("Enrollment #9")).toBeInTheDocument()
     expect(screen.queryByLabelText("Section")).not.toBeInTheDocument()
+  })
+
+  it("shows the overall stepper and embeds the Queue & Payment panel once an enrollment exists", async () => {
+    fetchMock.mockImplementation(
+      mockRoutes({
+        enrollments: {
+          data: [
+            {
+              ...createdEnrollment.data,
+              status: "pending_payment",
+              registrar_decided_at: "2026-07-31T00:00:00Z",
+              queue_ticket: {
+                ticket_number: "Q000001",
+                queue_date: "2026-07-31",
+                status: "waiting",
+                status_label: "Waiting",
+                priority: "regular",
+                priority_label: "Regular",
+                position: 0,
+              },
+            },
+          ],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 1 },
+        },
+      }),
+    )
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(await screen.findByText("Enrollment #9")).toBeInTheDocument()
+    expect(screen.getAllByText(/Q000001/).length).toBeGreaterThan(0)
+    // Not yet enrolled -- the Add/Drop panel only appears once `enrolled`.
+    expect(
+      screen.queryByRole("heading", { name: "Add/Drop requests" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("embeds the Add/Drop panel once the enrollment is enrolled", async () => {
+    fetchMock.mockImplementation(
+      mockRoutes({
+        enrollments: {
+          data: [
+            {
+              ...createdEnrollment.data,
+              status: "enrolled",
+              registrar_decided_at: "2026-07-31T00:00:00Z",
+              payment_confirmed_at: "2026-08-01T00:00:00Z",
+              enrolled_at: "2026-08-01T00:00:00Z",
+            },
+          ],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 1 },
+        },
+      }),
+    )
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(
+      await screen.findByRole("heading", { name: "Add/Drop requests" }),
+    ).toBeInTheDocument()
+  })
+
+  it("embeds the Withdraw panel once the enrollment is enrolled", async () => {
+    fetchMock.mockImplementation(
+      mockRoutes({
+        enrollments: {
+          data: [
+            {
+              ...createdEnrollment.data,
+              status: "enrolled",
+              registrar_decided_at: "2026-07-31T00:00:00Z",
+              payment_confirmed_at: "2026-08-01T00:00:00Z",
+              enrolled_at: "2026-08-01T00:00:00Z",
+            },
+          ],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 1 },
+        },
+      }),
+    )
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(
+      await screen.findByRole("heading", { name: "Withdraw from this term" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Withdraw" }),
+    ).toBeInTheDocument()
   })
 
   it("shows a closed banner and disables selection and submission when the enrollment window is closed", async () => {
@@ -527,6 +644,14 @@ describe("EnrollmentWorkspace", () => {
                   closes_at: null,
                   is_open: false,
                   reason: "before_window",
+                },
+                add_drop: {
+                  is_open: false,
+                  reason: "enrollment_still_open",
+                  reason_message:
+                    "The add/drop window opens once enrollment closes for this term.",
+                  opens_at: null,
+                  closes_at: null,
                 },
               },
             }),
@@ -561,7 +686,7 @@ describe("EnrollmentWorkspace", () => {
     expect(await screen.findByLabelText("Section")).toBeDisabled()
   })
 
-  it("a regular student selects a block, reviews, confirms, and submits", async () => {
+  it("a regular student selects a section, reviews, confirms, and submits", async () => {
     const user = userEvent.setup()
     let submitCall: [RequestInfo | URL, RequestInit | undefined] | null = null
     fetchMock.mockImplementation((input, init) => {
@@ -582,14 +707,14 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    expect(await screen.findByText("Select your block")).toBeInTheDocument()
-    await user.click(await screen.findByText("Block IT201"))
+    expect(await screen.findByText("Select your section")).toBeInTheDocument()
+    await user.click(await screen.findByText("IT201"))
     expect(
-      await screen.findByText("Review your block"),
+      await screen.findByText("Review your section"),
     ).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     expect(
-      screen.getByText(/enrolls you in all 2 subjects of block IT201/),
+      screen.getByText(/enrolls you in all 2 subjects of section IT201/),
     ).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
 
@@ -604,7 +729,7 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("shows an explicit empty state when no blocks exist for a regular student's curriculum", async () => {
+  it("shows an explicit empty state when no sections exist for a regular student's curriculum", async () => {
     fetchMock.mockImplementation(mockRegularRoutes({ blocks: [] }))
     renderWithSession(<EnrollmentWorkspace />, {
       session: {
@@ -617,12 +742,12 @@ describe("EnrollmentWorkspace", () => {
 
     expect(
       await screen.findByText(
-        "No blocks were generated for your year level and curriculum yet. Contact the Registrar.",
+        "No sections were generated for your year level and curriculum yet. Contact the Registrar.",
       ),
     ).toBeInTheDocument()
   })
 
-  it("disables block selection when the enrollment window is closed", async () => {
+  it("disables section selection when the enrollment window is closed", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)
       if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
@@ -637,6 +762,7 @@ describe("EnrollmentWorkspace", () => {
                 enrollment_closes_at: null,
                 audiences: [],
                 viewer: { ...regularViewer, is_open: false, reason: "before_window" },
+                add_drop: addDropClosed,
               },
             }),
           ),
@@ -652,9 +778,9 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    const block = await screen.findByText("Block IT201")
+    const block = await screen.findByText("IT201")
     await userEvent.setup().click(block)
-    expect(screen.queryByText("Review your block")).not.toBeInTheDocument()
+    expect(screen.queryByText("Review your section")).not.toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

@@ -7,6 +7,8 @@ const queueTicketStatusValues = [
   "cancelled",
 ] as const
 
+const queueTicketPriorityValues = ["regular", "priority"] as const
+
 export const queueTicketResourceSchema = z
   .object({
     type: z.literal("queue_ticket"),
@@ -17,6 +19,8 @@ export const queueTicketResourceSchema = z
     queue_date: z.iso.date(),
     status: z.enum(queueTicketStatusValues),
     status_label: z.string().min(1),
+    priority: z.enum(queueTicketPriorityValues),
+    priority_label: z.string().min(1),
     served_at: z.iso.datetime().nullable(),
   })
   .strict()
@@ -60,7 +64,7 @@ export const queueTicketFiltersSchema = z
   .strict()
 
 export const updateQueueTicketInputSchema = z
-  .object({ action: z.enum(["serve", "complete"]) })
+  .object({ action: z.enum(["serve", "complete", "skip", "mark_priority"]) })
   .strict()
 
 export type QueueTicket = z.infer<typeof queueTicketResourceSchema>

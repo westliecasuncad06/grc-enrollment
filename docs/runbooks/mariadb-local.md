@@ -168,6 +168,16 @@ which looks like an application bug until you check `SHOW GRANTS FOR
 add/drop slice) missed this step and stayed 500 until caught during the Phase
 10 live walkthrough; its grant was added the same way as the four above.
 
+The assessment/fees slice adds two more tables — grant both immediately
+after running their migrations, before hitting `GET /api/v1/enrollments`
+(which eager-loads `assessment.items` and 500s exactly like
+`enrollment_change_requests` did if either grant is missing):
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.assessments TO 'grc_app'@'127.0.0.1';
+GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.assessment_items TO 'grc_app'@'127.0.0.1';
+```
+
 ## Rolling back
 
 ```powershell

@@ -68,6 +68,10 @@ final class AuditAction
 
     public const QUEUE_TICKET_SERVED = 'queue_ticket.served';
 
+    public const QUEUE_TICKET_SKIPPED = 'queue_ticket.skipped';
+
+    public const QUEUE_TICKET_MARKED_PRIORITY = 'queue_ticket.marked_priority';
+
     public const ENROLLMENT_PAYMENT_CONFIRMED = 'enrollment.payment_confirmed';
 
     public const WITHDRAWAL_REQUEST_CREATED = 'withdrawal_request.created';
@@ -148,6 +152,8 @@ final class AuditAction
             self::ACADEMIC_GRADE_LOCKED,
             self::QUEUE_TICKET_SERVING_STARTED,
             self::QUEUE_TICKET_SERVED,
+            self::QUEUE_TICKET_SKIPPED,
+            self::QUEUE_TICKET_MARKED_PRIORITY,
             self::ENROLLMENT_PAYMENT_CONFIRMED,
             self::WITHDRAWAL_REQUEST_CREATED,
             self::WITHDRAWAL_REQUEST_APPROVED,

@@ -8,6 +8,8 @@ use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentBlock;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentWindowResolver;
+use App\Domain\Enrollment\OverloadEvaluator;
+use App\Domain\Enrollment\OverloadVerdict;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermEnrollmentWindow;
@@ -132,13 +134,13 @@ final class StoreEnrollmentRequest extends FormRequest
             ->first(fn (EnrollmentBlock $candidate): bool => $candidate->blockCode === $blockCode);
 
         if ($block === null) {
-            $validator->errors()->add('block_code', 'This block is not available for your year level and curriculum.');
+            $validator->errors()->add('block_code', 'This section is not available for your year level and curriculum.');
 
             return;
         }
 
         if (! $block->isSelectable) {
-            $validator->errors()->add('block_code', $block->reasons[0]['message'] ?? 'This block is not currently selectable.');
+            $validator->errors()->add('block_code', $block->reasons[0]['message'] ?? 'This section is not currently selectable.');
 
             return;
         }
@@ -313,23 +315,35 @@ final class StoreEnrollmentRequest extends FormRequest
     }
 
     /**
+     * Only the `Rejected` verdict blocks submission here — `RequiresApproval`
+     * is not an error; `SubmitEnrollment` records that flag on the
+     * enrollment itself, and `UpdateEnrollmentRequest` gates
+     * `registrar_approve` on it being acknowledged. See
+     * `App\Domain\Enrollment\OverloadEvaluator`.
+     *
      * @param  Collection<int, Section>  $sections
      */
     private function rejectOverload(Validator $validator, Collection $sections): void
     {
-        $maxRegularUnits = config('enrollment.max_regular_units');
-
-        if ($maxRegularUnits === null || ! is_numeric($maxRegularUnits)) {
-            return;
-        }
-
         $totalUnits = (float) $sections->sum(fn (Section $section): float => $section->subject->units);
+        $maxRegularUnits = $this->numericConfigValue('enrollment.max_regular_units');
+        $overloadMaxUnits = $this->numericConfigValue('enrollment.overload_max_units');
 
-        if ($totalUnits > (float) $maxRegularUnits) {
+        $verdict = OverloadEvaluator::evaluate($totalUnits, $maxRegularUnits, $overloadMaxUnits);
+
+        if ($verdict === OverloadVerdict::Rejected) {
+            $cap = $overloadMaxUnits ?? $maxRegularUnits;
             $validator->errors()->add(
                 'sections',
-                sprintf('This selection totals %s units, exceeding the maximum regular load of %s units.', $totalUnits, $maxRegularUnits),
+                sprintf('This selection totals %s units, exceeding the maximum allowed load of %s units.', $totalUnits, $cap),
             );
         }
+    }
+
+    private function numericConfigValue(string $key): ?float
+    {
+        $raw = config($key);
+
+        return is_numeric($raw) ? (float) $raw : null;
     }
 }

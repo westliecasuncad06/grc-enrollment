@@ -17,5 +17,6 @@ final readonly class EnrollmentScheduleSummary
         public ?CarbonImmutable $termClosesAt,
         public array $audiences,
         public ?AudienceAvailability $viewer,
+        public AddDropAvailability $addDrop,
     ) {}
 }

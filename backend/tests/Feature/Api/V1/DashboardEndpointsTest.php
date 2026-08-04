@@ -268,6 +268,11 @@ final class DashboardEndpointsTest extends TestCase
         self::assertSame('unset', $values['enrollment.dashboard.stuck_threshold_days']['status']);
         self::assertSame('no_mechanism', $values['sections.viability_threshold']['status']);
         self::assertNotNull($values['sections.viability_threshold']['prd_reference']);
+
+        self::assertSame('provisional', $values['fees.tuition_per_unit']['status']);
+        self::assertSame('450.00', $values['fees.tuition_per_unit']['current_value']);
+        self::assertSame('provisional', $values['fees.miscellaneous']['status']);
+        self::assertStringContainsString('Registration', $values['fees.miscellaneous']['current_value']);
     }
 
     public function test_institution_summary_counts_students_by_program(): void

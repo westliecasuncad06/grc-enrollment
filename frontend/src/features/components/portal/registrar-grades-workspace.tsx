@@ -3,11 +3,10 @@
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AcademicRecordView } from "@/features/components/portal/academic-record-view"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
 import { Paginator } from "@/features/components/portal/paginator"
-import { ProspectusDocument } from "@/features/components/portal/prospectus-document"
-import { GradeSlipDocument } from "@/features/components/portal/grade-slip-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
@@ -30,20 +29,11 @@ import {
 import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/features/components/ui/select"
-import {
   useAcademicGradesQuery,
   useUpdateAcademicGradeMutation,
 } from "@/features/hooks/use-academic-grades"
-import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { gradeBadgeVariant } from "@/features/lib/grade-presentation"
 import type { AcademicGrade } from "@/features/schemas/academic-grade-schema"
-import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
 const workspaceHeadings: Record<string, string> = {
   "grade-approvals": "Grade approvals",
@@ -76,14 +66,12 @@ export function RegistrarGradesWorkspace({
   const [studentIdInput, setStudentIdInput] = useState("")
   const [studentId, setStudentId] = useState<number | null>(null)
   const [studentIdError, setStudentIdError] = useState("")
-  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
 
   const approvalsQuery = useAcademicGradesQuery(
     { status: "submitted", page: approvalsPage, per_page: 20 },
     { enabled: showApprovals },
   )
   const lockMutation = useUpdateAcademicGradeMutation()
-  const termsQuery = useAcademicTermsQuery({ enabled: showTranscripts })
 
   const confirmLock = async () => {
     if (!lockTarget) return
@@ -108,7 +96,6 @@ export function RegistrarGradesWorkspace({
       return
     }
     setStudentIdError("")
-    setSelectedTermId(null)
     setStudentId(parsed)
   }
 
@@ -248,61 +235,7 @@ export function RegistrarGradesWorkspace({
             </CardContent>
           </Card>
 
-          {studentId !== null && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle level={2}>Prospectus</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ProspectusDocument studentId={studentId} />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle level={2}>Grade slip</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  <Field className="max-w-xs">
-                    <FieldLabel htmlFor="transcript-term">
-                      Academic term
-                    </FieldLabel>
-                    <Select
-                      value={
-                        selectedTermId !== null ? String(selectedTermId) : ""
-                      }
-                      onValueChange={(value) =>
-                        setSelectedTermId(Number(value) || null)
-                      }
-                      disabled={termsQuery.isLoading}
-                    >
-                      <SelectTrigger id="transcript-term" className="w-full">
-                        <SelectValue placeholder="Select an academic term" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(termsQuery.data ?? []).map((term) => (
-                          <SelectItem key={term.id} value={String(term.id)}>
-                            {formatAcademicTerm(term)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  {selectedTermId !== null ? (
-                    <GradeSlipDocument
-                      academicTermId={selectedTermId}
-                      studentId={studentId}
-                    />
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Select an academic term to view its grade slip.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          )}
+          {studentId !== null && <AcademicRecordView studentId={studentId} />}
         </>
       )}
 

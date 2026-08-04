@@ -7,13 +7,7 @@ import {
 } from "@/features/portal/role-capabilities"
 
 const expectedModuleIds = {
-  student: [
-    "enrollment",
-    "eligible-subjects",
-    "queue-payment",
-    "grades-com",
-    "add-drop-requests",
-  ],
+  student: ["enrollment", "eligible-subjects", "grades", "digital-com"],
   admission_staff: [
     "student-accounts",
     "admission-status",
@@ -65,12 +59,7 @@ const expectedModuleIds = {
     "enrollment-change-requests",
     "enrollment-documents",
   ],
-  accounting_staff: [
-    "payment-queue",
-    "serving-number",
-    "payment-confirmation",
-    "com-finalization",
-  ],
+  accounting_staff: ["payment-queue", "payment-records"],
 } as const
 
 describe("rolePortalDefinitions", () => {

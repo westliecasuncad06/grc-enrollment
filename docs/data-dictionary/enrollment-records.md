@@ -38,6 +38,7 @@ the approved student-provisioning slice.
 | `academic_term_id` | `BIGINT UNSIGNED` | not null, FK → `academic_terms.id`, `RESTRICT` on delete | |
 | `status` | `VARCHAR(255)` | not null | **Authoritative** PRD §4.2 lifecycle — see `App\Domain\Enrollment\EnrollmentStatus` |
 | `total_units` | `SMALLINT UNSIGNED` | not null, default `0` | |
+| `requires_overload_approval` | `BOOLEAN` | not null, default `false` | FR-ENR-004. Set by `SubmitEnrollment` via `App\Domain\Enrollment\OverloadEvaluator` — see `config('enrollment.max_regular_units')`/`overload_max_units`, both default `null` (no cap enforced, this column always `false`) |
 | `submitted_at`, `registrar_decided_at`, `payment_confirmed_at`, `enrolled_at` | `TIMESTAMP` | nullable | |
 | `active_academic_term_id` | `BIGINT UNSIGNED GENERATED ALWAYS AS (...) STORED` | nullable | Mirrors `academic_term_id` while `status` is non-terminal; `NULL` on `rejected`/`cancelled`/`withdrawn` |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
@@ -102,18 +103,82 @@ Faculty-only; `PATCH` serves a plain content edit (draft only) or
 |---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
 | `enrollment_id` | `BIGINT UNSIGNED` | not null, **unique**, FK → `enrollments.id`, `CASCADE` on delete | One ticket per enrollment |
-| `ticket_number` | `VARCHAR(255)` | not null, **unique** | Opaque string — numbering scheme, reset cadence, and priority rules unconfirmed (PRD §17) |
+| `ticket_number` | `VARCHAR(255)` | not null, **unique with `queue_date`** (not alone — see below) | Resets daily (`Q001`, `Q002`, …), not derived from the enrollment id |
 | `queue_date` | `DATE` | not null | |
-| `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\QueueTicketStatus` |
+| `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\QueueTicketStatus` (adds `cancelled` via the `skip` transition) |
+| `priority` | `VARCHAR(255)` | not null, default `regular` | **Provisional** — see `App\Domain\Enrollment\QueueTicketPriority`. Cashier-set after issuance; no eligibility rule is encoded |
 | `served_at` | `TIMESTAMP` | nullable | |
+| `served_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | Never exposed via `QueueTicketResource` — actor identity stays private, same convention as every audited action |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
-**API (Phase 7a Task 4):** `GET /api/v1/queue-tickets`, `PATCH
-/api/v1/queue-tickets/{queueTicket}` (`action: serve`/`complete`). Accounting
-Staff only — the one write pair in this document gated by a coarse
+`ticket_number`'s uniqueness moved from a bare column constraint to the
+composite `(queue_date, ticket_number)` in
+`2026_08_06_000003_reshape_queue_tickets_for_daily_reset_and_priority.php` —
+the numbering scheme, reset cadence, and priority rules all remain PRD §17
+unconfirmed, but now have a real mechanism rather than none at all.
+
+**API (Phase 7a Task 4, extended in the assessment/fees slice):** `GET
+/api/v1/queue-tickets`, `PATCH /api/v1/queue-tickets/{queueTicket}`
+(`action: serve`/`complete`/`skip`/`mark_priority`). Accounting Staff only —
+the one write pair in this document gated by a coarse
 `role:accounting_staff` route middleware rather than Policy alone, since
-neither transition has a per-ticket ownership dimension. OpenAPI tag
-`Payments`.
+neither transition has a per-ticket ownership dimension. Calling `serve` on
+a new ticket implicitly completes whatever was already `serving` that day
+(single-active-serving), enforced in `App\Actions\Enrollment\
+TransitionQueueTicket`, not the schema. `App\Models\QueueTicket::position()`
+computes how many `waiting` tickets stand ahead of a given one (priority
+tickets always precede regular ones); embedded only in
+`EnrollmentResource.queue_ticket.position` for a student's own ticket —
+never a full queue listing, for privacy. OpenAPI tag `Payments`.
+
+## `assessments`
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
+| `enrollment_id` | `BIGINT UNSIGNED` | not null, **unique**, FK → `enrollments.id`, `CASCADE` on delete | One assessment per enrollment — the idempotency mechanism, same role as `payments.enrollment_id` |
+| `total_amount` | `DECIMAL(10,2)` | not null | **Not cast to float on the model** — money stays an exact decimal string. Unlike `payments.amount`, NOT NULL: an assessment with no total is meaningless |
+| `currency` | `VARCHAR(255)` | not null | |
+| `assessed_at` | `TIMESTAMP` | not null | |
+| `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
+
+What an enrollment was assessed to owe (PRD §5.3 process 3.3 "computes the
+approved assessment"), computed once by `App\Actions\Billing\AssessEnrollment`
+inside `App\Actions\Enrollment\TransitionEnrollment`'s `registrar_approve`
+branch — the same transaction that already issues the `queue_tickets` row.
+Every rate is read from `config/fees.php`, itself flagged **provisional**
+per PRD §17 (payment confirmation fields and supporting reference
+requirements remain an open institutional decision). Never recomputed: not
+on a later `void` (which orphans the assessment the same way it already
+orphans the `QueueTicket`), and not on a post-payment add/drop (no
+reassessment/adjustment-billing policy exists yet — a §17 gap, not an
+oversight).
+
+**API:** embedded only — no dedicated route. Nested as `assessment` on
+`EnrollmentResource`, visible to every role that may view the enrollment at
+all (Student own, Registrar Head/Staff all, Accounting Staff
+`pending_payment` only). OpenAPI tag `Enrollment`.
+
+## `assessment_items`
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
+| `assessment_id` | `BIGINT UNSIGNED` | not null, FK → `assessments.id`, `CASCADE` on delete | |
+| `category` | `VARCHAR(255)` | not null | `tuition` or `miscellaneous` — see `App\Domain\Billing\AssessmentItemCategory` |
+| `label` | `VARCHAR(255)` | not null | |
+| `quantity` | `DECIMAL(6,1)` | nullable | Units, tuition line only — matches `subjects.units`/`enrollments.total_units` precision; **deliberately not an integer**, since Leadership subjects are genuinely 1.5 units |
+| `unit_amount` | `DECIMAL(10,2)` | nullable | Per-unit rate, tuition line only |
+| `amount` | `DECIMAL(10,2)` | not null | **Not cast to float on the model** |
+| `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
+
+One printed line of an `assessments` row. See
+`App\Domain\Billing\AssessmentComputation` for how these are computed
+(half-up rounding at two decimal places via `bcmath` — also provisional,
+GRC has never confirmed a rounding policy).
+
+**API:** embedded only, as `assessment.items` on `EnrollmentResource`. No
+dedicated route. OpenAPI tag `Enrollment`.
 
 ## `payments`
 
@@ -131,11 +196,18 @@ Records that Accounting confirmed an externally received payment
 (FR-FIN-007) — **not** a payment gateway integration; holds no cardholder or
 bank data.
 
-**API (Phase 7a Task 5):** written only by
-`POST /api/v1/enrollments/{enrollment}/payment` (Accounting only, only from
-`pending_payment`); no dedicated read route — surfaced via the payment
-confirmation response, not queried separately. Idempotent on
-`enrollment_id`'s unique constraint (FR-FIN-009). OpenAPI tag `Payments`.
+**API (Phase 7a Task 5, extended in the assessment/fees slice):** written
+only by `POST /api/v1/enrollments/{enrollment}/payment` (no `role:`
+middleware — `EnrollmentPolicy::confirmPayment` resolves Accounting-only,
+only from `pending_payment`). Also `GET /api/v1/payments` (Accounting
+Staff's own history, plus Registrar Head oversight — `PaymentPolicy`, no
+`role:` middleware, `confirmed_on` date filter) — added because `payments`
+rows must remain visible to Accounting even after `ConfirmPayment` moves
+the owning enrollment out of `pending_payment` and it disappears from
+`Enrollment::scopeVisibleTo`'s accounting view; widening that scope instead
+would have handed Accounting visibility into every historical enrollment,
+not just its own payment records. Idempotent on `enrollment_id`'s unique
+constraint (FR-FIN-009). OpenAPI tag `Payments`.
 
 ## `enrollment_documents`
 
@@ -215,13 +287,20 @@ OpenAPI tag `Withdrawals`.
 
 ## Seeded data
 
-`database/seeders/DemoEnrollmentSeeder.php` seeds four students at different
-points of the PRD §4.2 lifecycle (`enrolled`, `pending_registrar_approval`,
-`pending_payment`, `withdrawn`), exercising every table on this page plus the
-unique-active-enrollment rule. `local`/`testing` environments only; fails
-closed outside those environments. Every synthetic student login uses the
-shared development password `password`, stored only as a Laravel hash. See
-`tests/Feature/Database/DemoEnrollmentSeederTest.php` and
+`database/seeders/DemoEnrollmentSeeder.php` seeds eight students with real
+locked grade history spanning year 1 semester 1 through year 4 semester 2
+(four Regular, four Irregular — see `docs/testing/SEEDED_IDENTITIES.md`),
+proving `EnrollmentCategoryClassifier`'s derivation rather than hard-coding a
+category. None of the eight carries an `enrollment` row of its own — every
+one is left free to submit a real, fresh enrollment through the UI/API
+against the current `semester_ongoing` term, at which point the tables on
+this page (and the unique-active-enrollment rule) come into play for real.
+The same seeder also creates 10 real-named professor accounts
+(`prof.<surname>@grc.test`), each owning every block section of one of the
+10 distinct subjects those students' generated blocks offer. `local`/`testing`
+environments only; fails closed outside those environments. Every synthetic
+login uses the shared development password `password`, stored only as a
+Laravel hash. See `tests/Feature/Database/DemoEnrollmentSeederTest.php` and
 `EnrollmentRecordsMigrationTest.php`.
 
 ## Reversibility

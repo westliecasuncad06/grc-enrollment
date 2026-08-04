@@ -15,12 +15,15 @@ use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\Assessment;
+use App\Models\AssessmentItem;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
 use App\Models\EnrollmentSubject;
 use App\Models\Payment;
 use App\Models\Program;
+use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
@@ -49,12 +52,21 @@ final class EnrollmentRecordsMigrationTest extends TestCase
         ]));
 
         $this->assertTrue(Schema::hasColumns('queue_tickets', [
-            'id', 'enrollment_id', 'ticket_number', 'queue_date', 'status', 'served_at',
+            'id', 'enrollment_id', 'ticket_number', 'queue_date', 'status', 'priority', 'served_at', 'served_by',
         ]));
 
         $this->assertTrue(Schema::hasColumns('payments', [
             'id', 'enrollment_id', 'confirmed_by', 'external_reference',
             'amount', 'confirmed_at',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('assessments', [
+            'id', 'enrollment_id', 'total_amount', 'currency', 'assessed_at',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('assessment_items', [
+            'id', 'assessment_id', 'category', 'label', 'quantity',
+            'unit_amount', 'amount',
         ]));
 
         $this->assertTrue(Schema::hasColumns('enrollment_documents', [
@@ -136,6 +148,48 @@ final class EnrollmentRecordsMigrationTest extends TestCase
      * unique constraint is what makes a duplicate impossible rather than merely
      * unlikely.
      */
+    /**
+     * The daily-reset queue (see the 2026_08_06_000003 migration's own
+     * docblock) needs `ticket_number` to repeat across days, so the unique
+     * constraint moved from a bare `ticket_number` to the composite
+     * `(queue_date, ticket_number)` — still enough to make a same-day
+     * duplicate impossible.
+     */
+    public function test_the_same_ticket_number_is_allowed_on_different_days_but_not_the_same_day(): void
+    {
+        // One student, three different terms — sidesteps the
+        // one-active-enrollment-per-student-per-term constraint tested
+        // above, since this test is only exercising queue_tickets' own
+        // constraint, not enrollments'.
+        $student = $this->makeStudent();
+        $enrollmentA = $this->makeEnrollment($student, $this->makeTerm(), EnrollmentStatus::PendingPayment);
+        $enrollmentB = $this->makeEnrollment($student, AcademicTerm::create([
+            'school_year' => '2025-2026', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]), EnrollmentStatus::PendingPayment);
+
+        QueueTicket::create([
+            'enrollment_id' => $enrollmentA->id, 'ticket_number' => 'Q001',
+            'queue_date' => '2026-08-01', 'status' => 'waiting',
+        ]);
+
+        // Same ticket number, a different day — allowed.
+        QueueTicket::create([
+            'enrollment_id' => $enrollmentB->id, 'ticket_number' => 'Q001',
+            'queue_date' => '2026-08-02', 'status' => 'waiting',
+        ]);
+        $this->assertDatabaseCount('queue_tickets', 2);
+
+        // Same ticket number, the same day — rejected.
+        $enrollmentC = $this->makeEnrollment($student, AcademicTerm::create([
+            'school_year' => '2024-2025', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]), EnrollmentStatus::PendingPayment);
+        $this->expectException(QueryException::class);
+        QueueTicket::create([
+            'enrollment_id' => $enrollmentC->id, 'ticket_number' => 'Q001',
+            'queue_date' => '2026-08-01', 'status' => 'waiting',
+        ]);
+    }
+
     public function test_an_enrollment_cannot_have_two_payments(): void
     {
         $enrollment = $this->makeEnrollment($this->makeStudent(), $this->makeTerm(), EnrollmentStatus::PendingPayment);
@@ -153,6 +207,54 @@ final class EnrollmentRecordsMigrationTest extends TestCase
         $this->expectException(QueryException::class);
 
         Payment::create($payment);
+    }
+
+    /**
+     * PRD §5.3 process 3.3 "computes the approved assessment" — this Action
+     * is meant to run exactly once per enrollment (see
+     * App\Actions\Billing\AssessEnrollment's own idempotency check). The
+     * unique constraint is the same belt-and-suspenders guarantee
+     * `test_an_enrollment_cannot_have_two_payments` above already relies on.
+     */
+    public function test_an_enrollment_cannot_have_two_assessments(): void
+    {
+        $enrollment = $this->makeEnrollment($this->makeStudent(), $this->makeTerm(), EnrollmentStatus::PendingPayment);
+
+        $assessment = [
+            'enrollment_id' => $enrollment->id,
+            'total_amount' => '2400.00',
+            'currency' => 'PHP',
+            'assessed_at' => now(),
+        ];
+
+        Assessment::create($assessment);
+
+        $this->expectException(QueryException::class);
+
+        Assessment::create($assessment);
+    }
+
+    public function test_an_assessment_item_belongs_to_its_assessment(): void
+    {
+        $enrollment = $this->makeEnrollment($this->makeStudent(), $this->makeTerm(), EnrollmentStatus::PendingPayment);
+        $assessment = Assessment::create([
+            'enrollment_id' => $enrollment->id,
+            'total_amount' => '2400.00',
+            'currency' => 'PHP',
+            'assessed_at' => now(),
+        ]);
+
+        $item = AssessmentItem::create([
+            'assessment_id' => $assessment->id,
+            'category' => 'tuition',
+            'label' => 'Tuition',
+            'quantity' => '3.0',
+            'unit_amount' => '450.00',
+            'amount' => '1350.00',
+        ]);
+
+        $this->assertSame($assessment->id, $item->refresh()->assessment_id);
+        $this->assertCount(1, $assessment->items()->get());
     }
 
     public function test_an_enrollment_cannot_have_two_documents_of_the_same_type(): void

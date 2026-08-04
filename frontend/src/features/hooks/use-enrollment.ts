@@ -112,11 +112,13 @@ export function useUpdateEnrollmentMutation() {
       id,
       action,
       reason,
+      overload_acknowledged,
     }: {
       id: number
       action: "registrar_approve" | "registrar_reject" | "void"
       reason?: string
-    }) => updateEnrollment(id, { action, reason }),
+      overload_acknowledged?: boolean
+    }) => updateEnrollment(id, { action, reason, overload_acknowledged }),
     onSuccess: () => invalidate(),
   })
 }

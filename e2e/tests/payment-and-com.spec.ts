@@ -67,11 +67,20 @@ test("journey 8 — Accounting confirms payment and the Digital COM becomes avai
     }
   }
 
+  // KNOWN STALE beyond the path/heading fixed below: the assessment/fees
+  // slice replaced the "Pending payment confirmations" table (one
+  // Confirm-payment button per row) with a guided single-ticket NOW
+  // SERVING flow — a ticket must be called (`serve`) before its Confirm
+  // payment button exists at all. This spec does not call a ticket first,
+  // so it will not find the button below even once the pre-existing
+  // SEED_STUDENT_SCENARIOS fixture-mismatch (flagged in ADR 0021) is
+  // fixed. Left for the same already-flagged E2E follow-up slice rather
+  // than rewritten here.
   await authenticateViaApi(page, request, "accounting_staff")
-  await page.goto("/portal/payment-confirmation")
+  await page.goto("/portal/payment-queue")
 
   await expect(
-    page.getByRole("heading", { name: "Payment confirmation", exact: true }),
+    page.getByRole("heading", { name: "Payment queue", exact: true }),
   ).toBeVisible()
 
   const pendingTable = page.getByRole("table", {

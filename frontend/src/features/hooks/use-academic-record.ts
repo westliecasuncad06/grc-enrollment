@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
 import {
+  getAcademicRecord,
   getGradeSlip,
   getProspectus,
 } from "@/features/services/academic-record-service"
@@ -12,6 +13,11 @@ export const prospectusQueryKey = (
   userId: string | null,
   studentId: number | undefined,
 ) => ["prospectus", userId, studentId ?? "own"] as const
+
+export const academicRecordQueryKey = (
+  userId: string | null,
+  studentId: number | undefined,
+) => ["academic-record", userId, studentId ?? "own"] as const
 
 export const gradeSlipQueryKey = (
   userId: string | null,
@@ -28,6 +34,19 @@ export function useProspectusQuery(
   return useQuery({
     queryKey: prospectusQueryKey(session?.userId ?? null, studentId),
     queryFn: ({ signal }) => getProspectus(studentId, signal),
+    enabled: enabled && session !== null,
+  })
+}
+
+export function useAcademicRecordQuery(
+  studentId?: number,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: academicRecordQueryKey(session?.userId ?? null, studentId),
+    queryFn: ({ signal }) => getAcademicRecord(studentId, signal),
     enabled: enabled && session !== null,
   })
 }

@@ -129,6 +129,59 @@ final class EnrollmentScheduleEndpointTest extends TestCase
         );
     }
 
+    public function test_add_drop_is_open_only_after_enrollment_closes_and_before_the_deadline(): void
+    {
+        $now = CarbonImmutable::now();
+        $term = AcademicTerm::create([
+            'school_year' => '2028-2029',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+            'enrollment_opens_at' => $now->subDays(10),
+            'enrollment_closes_at' => $now->subDay(),
+            'add_drop_deadline_at' => $now->addDay(),
+        ]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.add-drop-open@grc.test');
+
+        $response = $this->withToken($token)->getJson("/api/v1/academic-terms/{$term->id}/enrollment-windows");
+
+        $response->assertOk();
+        self::assertTrue($response->json('data.add_drop.is_open'));
+        self::assertSame('open', $response->json('data.add_drop.reason'));
+        self::assertSame('The add/drop window is open.', $response->json('data.add_drop.reason_message'));
+        self::assertSame(
+            $now->subDay()->utc()->format('Y-m-d\TH:i:s\Z'),
+            $response->json('data.add_drop.opens_at'),
+        );
+        self::assertSame(
+            $now->addDay()->utc()->format('Y-m-d\TH:i:s\Z'),
+            $response->json('data.add_drop.closes_at'),
+        );
+    }
+
+    public function test_add_drop_is_closed_while_enrollment_is_still_open(): void
+    {
+        $now = CarbonImmutable::now();
+        $term = AcademicTerm::create([
+            'school_year' => '2028-2029',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+            'enrollment_opens_at' => $now->subDay(),
+            'enrollment_closes_at' => $now->addDay(),
+            'add_drop_deadline_at' => $now->addDays(10),
+        ]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.add-drop-still-open@grc.test');
+
+        $response = $this->withToken($token)->getJson("/api/v1/academic-terms/{$term->id}/enrollment-windows");
+
+        $response->assertOk();
+        self::assertFalse($response->json('data.add_drop.is_open'));
+        self::assertSame('enrollment_still_open', $response->json('data.add_drop.reason'));
+        self::assertSame(
+            'The add/drop window opens once enrollment closes for this term.',
+            $response->json('data.add_drop.reason_message'),
+        );
+    }
+
     public function test_a_regular_student_receives_a_viewer_block_for_their_own_year_level(): void
     {
         $term = AcademicTerm::create([

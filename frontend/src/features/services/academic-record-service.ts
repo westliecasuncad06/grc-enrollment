@@ -1,6 +1,8 @@
 import {
+  academicRecordEnvelopeSchema,
   gradeSlipEnvelopeSchema,
   prospectusEnvelopeSchema,
+  type AcademicRecord,
   type GradeSlip,
   type Prospectus,
 } from "@/features/schemas/academic-record-schema"
@@ -11,6 +13,7 @@ import {
 
 export const PROSPECTUS_PATH = "/api/v1/prospectus"
 export const GRADE_SLIP_PATH = "/api/v1/grade-slip"
+export const ACADEMIC_RECORD_PATH = "/api/v1/academic-record"
 
 function parse<T>(
   schema: {
@@ -61,4 +64,21 @@ export async function getGradeSlip(
     signal,
   )
   return parse(gradeSlipEnvelopeSchema, payload, "grade slip").data
+}
+
+/**
+ * The student Grades screen's read model: every term the student has a
+ * grade in, latest term first. `studentId` omitted means "my own" — same
+ * convention as `getProspectus`.
+ */
+export async function getAcademicRecord(
+  studentId?: number,
+  signal?: AbortSignal,
+): Promise<AcademicRecord> {
+  const query = studentId !== undefined ? `?student_id=${studentId}` : ""
+  const payload = await getAuthenticatedJson(
+    `${ACADEMIC_RECORD_PATH}${query}`,
+    signal,
+  )
+  return parse(academicRecordEnvelopeSchema, payload, "academic record").data
 }

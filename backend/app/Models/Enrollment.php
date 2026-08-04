@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $academic_term_id
  * @property EnrollmentStatus $status
  * @property float $total_units
+ * @property bool $requires_overload_approval
  * @property ?CarbonImmutable $submitted_at
  * @property ?CarbonImmutable $registrar_decided_at
  * @property ?CarbonImmutable $payment_confirmed_at
@@ -30,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read Collection<int, EnrollmentSubject> $enrollmentSubjects
  * @property-read ?QueueTicket $queueTicket
  * @property-read ?Payment $payment
+ * @property-read ?Assessment $assessment
  * @property-read Collection<int, EnrollmentDocument> $documents
  */
 final class Enrollment extends Model
@@ -46,6 +48,7 @@ final class Enrollment extends Model
         'academic_term_id',
         'status',
         'total_units',
+        'requires_overload_approval',
         'submitted_at',
         'registrar_decided_at',
         'payment_confirmed_at',
@@ -60,6 +63,7 @@ final class Enrollment extends Model
         return [
             'status' => EnrollmentStatus::class,
             'total_units' => 'float',
+            'requires_overload_approval' => 'boolean',
             'submitted_at' => 'immutable_datetime',
             'registrar_decided_at' => 'immutable_datetime',
             'payment_confirmed_at' => 'immutable_datetime',
@@ -143,6 +147,14 @@ final class Enrollment extends Model
     public function payment(): HasOne
     {
         return $this->hasOne(Payment::class);
+    }
+
+    /**
+     * @return HasOne<Assessment, $this>
+     */
+    public function assessment(): HasOne
+    {
+        return $this->hasOne(Assessment::class);
     }
 
     /**

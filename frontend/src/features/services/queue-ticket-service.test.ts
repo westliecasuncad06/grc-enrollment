@@ -27,6 +27,8 @@ const ticket = {
   queue_date: "2026-07-30",
   status: "waiting",
   status_label: "Waiting",
+  priority: "regular",
+  priority_label: "Regular",
   served_at: null,
 } as const
 

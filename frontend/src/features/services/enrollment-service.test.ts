@@ -66,6 +66,7 @@ const enrollment = {
   status: "pending_registrar_approval",
   status_label: "Pending Registrar Approval",
   total_units: 3,
+  requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
   registrar_decided_at: null,
   payment_confirmed_at: null,
@@ -84,7 +85,11 @@ const enrollment = {
     queue_date: "2026-07-30",
     status: "waiting",
     status_label: "Waiting",
+    priority: "regular",
+    priority_label: "Regular",
+    position: 0,
   },
+  assessment: null,
 } as const
 
 describe("enrollment-service", () => {

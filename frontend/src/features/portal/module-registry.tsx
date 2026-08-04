@@ -17,9 +17,9 @@ import { EligibleSubjectsWorkspace } from "@/features/components/portal/eligible
 import { EnrollmentWorkspace } from "@/features/components/portal/enrollment-workspace"
 import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/registrar-enrollment-workspace"
 import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
-import { StudentQueuePaymentWorkspace } from "@/features/components/portal/student-queue-payment-workspace"
-import { StudentGradesComWorkspace } from "@/features/components/portal/student-grades-com-workspace"
-import { StudentAddDropWorkspace } from "@/features/components/portal/student-add-drop-workspace"
+import { PaymentRecordsWorkspace } from "@/features/components/portal/payment-records-workspace"
+import { StudentGradesWorkspace } from "@/features/components/portal/student-grades-workspace"
+import { StudentDigitalComWorkspace } from "@/features/components/portal/student-digital-com-workspace"
 import { EnrollmentChangeRequestsWorkspace } from "@/features/components/portal/enrollment-change-requests-workspace"
 import { RegistrarRecordsWorkspace } from "@/features/components/portal/registrar-records-workspace"
 import { RegistrarGradesWorkspace } from "@/features/components/portal/registrar-grades-workspace"
@@ -51,12 +51,9 @@ export type ConnectedModuleId =
   | "enrollment-approvals"
   | "overrides-voids"
   | "payment-queue"
-  | "serving-number"
-  | "payment-confirmation"
-  | "com-finalization"
-  | "queue-payment"
-  | "grades-com"
-  | "add-drop-requests"
+  | "payment-records"
+  | "grades"
+  | "digital-com"
   | "enrollment-change-requests"
   | "credit-mappings"
   | "drops-withdrawals"
@@ -93,12 +90,9 @@ export const connectedModuleIds = [
   "enrollment-approvals",
   "overrides-voids",
   "payment-queue",
-  "serving-number",
-  "payment-confirmation",
-  "com-finalization",
-  "queue-payment",
-  "grades-com",
-  "add-drop-requests",
+  "payment-records",
+  "grades",
+  "digital-com",
   "enrollment-change-requests",
   "credit-mappings",
   "drops-withdrawals",
@@ -174,18 +168,6 @@ const overridesVoidsWorkspace: PortalModuleComponent = () => (
   <RegistrarEnrollmentWorkspace initialModuleId="overrides-voids" />
 )
 
-const paymentQueueWorkspace: PortalModuleComponent = () => (
-  <AccountingPaymentWorkspace initialModuleId="payment-queue" />
-)
-const servingNumberWorkspace: PortalModuleComponent = () => (
-  <AccountingPaymentWorkspace initialModuleId="serving-number" />
-)
-const paymentConfirmationWorkspace: PortalModuleComponent = () => (
-  <AccountingPaymentWorkspace initialModuleId="payment-confirmation" />
-)
-const comFinalizationWorkspace: PortalModuleComponent = () => (
-  <AccountingPaymentWorkspace initialModuleId="com-finalization" />
-)
 
 const creditMappingsWorkspace: PortalModuleComponent = () => (
   <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
@@ -222,13 +204,10 @@ export const connectedModuleRegistry: Readonly<
   "academic-transcripts": academicTranscriptsWorkspace,
   "enrollment-approvals": enrollmentApprovalsWorkspace,
   "overrides-voids": overridesVoidsWorkspace,
-  "payment-queue": paymentQueueWorkspace,
-  "serving-number": servingNumberWorkspace,
-  "payment-confirmation": paymentConfirmationWorkspace,
-  "com-finalization": comFinalizationWorkspace,
-  "queue-payment": StudentQueuePaymentWorkspace,
-  "grades-com": StudentGradesComWorkspace,
-  "add-drop-requests": StudentAddDropWorkspace,
+  "payment-queue": AccountingPaymentWorkspace,
+  "payment-records": PaymentRecordsWorkspace,
+  grades: StudentGradesWorkspace,
+  "digital-com": StudentDigitalComWorkspace,
   "enrollment-change-requests": EnrollmentChangeRequestsWorkspace,
   "credit-mappings": creditMappingsWorkspace,
   "drops-withdrawals": dropsWithdrawalsWorkspace,

@@ -2,6 +2,7 @@
 
 namespace App\Actions\Organization;
 
+use App\Domain\Enrollment\AddDropWindowResolver;
 use App\Domain\Enrollment\AudienceAvailability;
 use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentAvailability;
@@ -47,6 +48,12 @@ final class BuildEnrollmentScheduleSummary
             $term->enrollment_closes_at,
             $audiences,
             $this->viewerAvailability($term, $viewer, $existingWindows, $now),
+            AddDropWindowResolver::resolve(
+                $term->status,
+                $term->enrollment_closes_at,
+                $term->add_drop_deadline_at,
+                $now,
+            ),
         );
     }
 

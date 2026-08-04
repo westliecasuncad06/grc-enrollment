@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domain\Enrollment\AddDropAvailability;
 use App\Domain\Enrollment\AudienceAvailability;
 use App\Domain\Enrollment\EnrollmentScheduleSummary;
 use Illuminate\Http\Request;
@@ -34,6 +35,13 @@ final class EnrollmentScheduleResource extends JsonResource
      *         closes_at: ?string,
      *         is_open: bool,
      *         reason: string
+     *     },
+     *     add_drop: array{
+     *         is_open: bool,
+     *         reason: string,
+     *         reason_message: string,
+     *         opens_at: ?string,
+     *         closes_at: ?string
      *     }
      * }
      */
@@ -52,6 +60,27 @@ final class EnrollmentScheduleResource extends JsonResource
             'viewer' => $this->resource->viewer !== null
                 ? self::availabilityArray($this->resource->viewer)
                 : null,
+            'add_drop' => self::addDropArray($this->resource->addDrop),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     is_open: bool,
+     *     reason: string,
+     *     reason_message: string,
+     *     opens_at: ?string,
+     *     closes_at: ?string
+     * }
+     */
+    private static function addDropArray(AddDropAvailability $addDrop): array
+    {
+        return [
+            'is_open' => $addDrop->isOpen,
+            'reason' => $addDrop->reason->value,
+            'reason_message' => $addDrop->reason->message(),
+            'opens_at' => $addDrop->opensAt?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'closes_at' => $addDrop->closesAt?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 

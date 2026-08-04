@@ -20,9 +20,12 @@ const MODALITY_LABEL: Record<string, string> = {
 }
 
 /**
- * One block a regular student may choose as a unit — every subject in it
+ * One section a regular student may choose as a unit — every subject in it
  * enrolls together, so this shows the full weekly schedule rather than a
- * single section detail.
+ * single subject's detail. `block.block_code` is the school's own section
+ * code (e.g. "BSCS101"), shown as-is — "block" stays as the underlying
+ * mechanism (choosing it enrolls every subject at once) but never appears
+ * as a word in front of the student.
  */
 export function EnrollmentBlockChoice({
   block,
@@ -63,7 +66,7 @@ export function EnrollmentBlockChoice({
     >
       <CardHeader>
         <CardTitle level={2} className="flex flex-wrap items-center gap-2">
-          Block {block.block_code}
+          {block.block_code}
           <Badge variant={block.seats_remaining > 0 ? "secondary" : "outline"}>
             {block.seats_remaining} seat{block.seats_remaining === 1 ? "" : "s"} left
           </Badge>
@@ -112,7 +115,7 @@ export function EnrollmentBlockChoice({
             {
               key: "professor",
               header: "Professor",
-              render: (subject) => subject.professor_name ?? "Not yet assigned",
+              render: (subject) => subject.professor_name ?? "To be announced",
             },
             {
               key: "modality",

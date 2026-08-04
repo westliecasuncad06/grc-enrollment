@@ -8,13 +8,13 @@ use App\Domain\Dashboard\PolicyValueStatus;
 
 /**
  * Read-only by design (see PRD §3.7 and the spec's Non-goals): reports which
- * `config('enrollment.*')` policy values are configured, which have a
- * mechanism but no confirmed value, and — for the PRD §17 items with no
- * config key or mechanism at all yet — that absence, with a pointer to the
- * PRD line. Making any of this writable would require first deciding which
- * values are Registrar-editable at runtime, which PRD §3.7's own "where the
- * product supports configuration" leaves unresolved; today configuration is
- * env-var-only with no settings table.
+ * `config('enrollment.*')` and `config('fees.*')` policy values are
+ * configured, which have a mechanism but no confirmed value, and — for the
+ * PRD §17 items with no config key or mechanism at all yet — that absence,
+ * with a pointer to the PRD line. Making any of this writable would require
+ * first deciding which values are Registrar-editable at runtime, which PRD
+ * §3.7's own "where the product supports configuration" leaves unresolved;
+ * today configuration is env-var-only with no settings table.
  */
 final readonly class BuildPolicySettingsSummary
 {
@@ -104,7 +104,31 @@ final readonly class BuildPolicySettingsSummary
                 label: 'Payment confirmation required fields',
                 currentValue: null,
                 status: PolicyValueStatus::NoMechanism,
-                description: 'external_reference and amount are both optional at the database and validation layer; no currency or rounding rule is enforced.',
+                description: 'external_reference stays optional and no partial-payment/mismatch rule is enforced against the assessed total (see fees.* below) — Accounting may still confirm any amount, or none at all.',
+                prdReference: 'PRD §17 — Payment confirmation fields and supporting reference requirements.',
+            ),
+            new PolicyValueState(
+                key: 'fees.currency',
+                label: 'Tuition and fee currency',
+                currentValue: (string) config('fees.currency'),
+                status: PolicyValueStatus::Provisional,
+                description: 'Assumed PHP. No GRC sign-off exists for currency or for the rounding rule AssessmentComputation applies (half-up at two decimal places).',
+                prdReference: 'PRD §17 — Payment confirmation fields and supporting reference requirements.',
+            ),
+            new PolicyValueState(
+                key: 'fees.tuition_per_unit',
+                label: 'Tuition rate per unit',
+                currentValue: (string) config('fees.tuition_per_unit'),
+                status: PolicyValueStatus::Provisional,
+                description: 'A flat per-unit rate applied to every enrollment\'s total_units at Registrar approval — no per-program or per-year differentiation exists, and this figure is not a GRC-approved tuition schedule.',
+                prdReference: 'PRD §17 — Payment confirmation fields and supporting reference requirements.',
+            ),
+            new PolicyValueState(
+                key: 'fees.miscellaneous',
+                label: 'Miscellaneous fees',
+                currentValue: self::miscellaneousFeesSummary(),
+                status: PolicyValueStatus::Provisional,
+                description: 'Flat fees charged on every assessment regardless of program or year level. File-editable only (config/fees.php) — not env-overridable, since a list of {label, amount} rows has no safe flat-string env representation.',
                 prdReference: 'PRD §17 — Payment confirmation fields and supporting reference requirements.',
             ),
             new PolicyValueState(
@@ -124,5 +148,33 @@ final readonly class BuildPolicySettingsSummary
                 prdReference: 'PRD §17 — Government report fields, file format, naming, and sign-off.',
             ),
         ]);
+    }
+
+    private static function miscellaneousFeesSummary(): string
+    {
+        $raw = config('fees.miscellaneous');
+
+        if (! is_array($raw) || $raw === []) {
+            return 'None configured';
+        }
+
+        $labels = [];
+
+        foreach ($raw as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+
+            $label = $entry['label'] ?? null;
+            $amount = $entry['amount'] ?? null;
+
+            if (! is_string($label) || ! is_string($amount)) {
+                continue;
+            }
+
+            $labels[] = "{$label} {$amount}";
+        }
+
+        return $labels === [] ? 'None configured' : implode(', ', $labels);
     }
 }

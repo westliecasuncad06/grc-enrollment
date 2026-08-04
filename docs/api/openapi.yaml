@@ -2806,11 +2806,13 @@ paths:
       operationId: patchQueueTicket
       summary: Advance one ticket in the payment queue
       description: >
-        Accounting Staff only. `action: serve` moves `waiting` → `serving`;
-        `action: complete` moves `serving` → `served`. §17 leaves reset
-        cadence, priority, and how many tickets may be `serving` at once
-        unconfirmed — only this two-step order is enforced, never a
-        single-active-ticket rule.
+        Accounting Staff only. `action: serve` moves `waiting` → `serving`
+        (and implicitly completes whatever else was `serving` that day —
+        single-active-serving); `action: complete` moves `serving` →
+        `served`; `action: skip` moves either `waiting` or `serving` to
+        `cancelled`; `action: mark_priority` flags a `waiting` ticket
+        `priority` without changing its status. §17 leaves reset cadence and
+        priority eligibility unconfirmed.
       security:
         - bearerAuth: []
       tags:
@@ -2853,6 +2855,71 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: The action does not match the ticket's current status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/payments:
+    get:
+      operationId: getPayments
+      summary: List confirmed payments
+      description: >
+        Accounting Staff's own payment history, plus Registrar Head
+        oversight — no `role:` middleware, `PaymentPolicy` resolves both
+        roles with no further per-row scoping. Reads `payments` directly
+        rather than `Enrollment::scopeVisibleTo`, since a payment record
+        must remain visible after ConfirmPayment moves the owning
+        enrollment out of `pending_payment`. Ordered most recently
+        confirmed first.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: confirmed_on
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: The paginated payment history.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPaymentCollection"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
           content:
             application/json:
               schema:
@@ -4554,12 +4621,14 @@ components:
         - status
         - status_label
         - total_units
+        - requires_overload_approval
         - submitted_at
         - registrar_decided_at
         - payment_confirmed_at
         - enrolled_at
         - subjects
         - queue_ticket
+        - assessment
       properties:
         type:
           type: string
@@ -4594,6 +4663,14 @@ components:
         total_units:
           type: number
           format: float
+        requires_overload_approval:
+          type: boolean
+          description: >
+            FR-ENR-004. True when the submission exceeded
+            config('enrollment.max_regular_units') but stayed within
+            config('enrollment.overload_max_units'). registrar_approve is
+            rejected on a flagged enrollment unless the request also sends
+            overload_acknowledged: true.
         submitted_at:
           type: ["string", "null"]
           format: date-time
@@ -4640,11 +4717,15 @@ components:
             - queue_date
             - status
             - status_label
+            - priority
+            - priority_label
+            - position
           properties:
             ticket_number:
               type: string
               description: >
-                Opaque — PRD §17 leaves the numbering scheme unconfirmed.
+                Resets daily (Q001, Q002, ...) — PRD §17 leaves the exact
+                numbering scheme unconfirmed.
             queue_date:
               type: string
               format: date
@@ -4657,6 +4738,74 @@ components:
                 - cancelled
             status_label:
               type: string
+            priority:
+              type: string
+              enum:
+                - regular
+                - priority
+            priority_label:
+              type: string
+            position:
+              type: ["integer", "null"]
+              description: >
+                How many other waiting tickets stand ahead of this one
+                today. Null once the ticket has left waiting. Never the
+                full queue — only the holder's own count, for privacy.
+        assessment:
+          type: ["object", "null"]
+          additionalProperties: false
+          description: >
+            PRD §5.3 process 3.3 "computes the approved assessment" —
+            null for any enrollment that has never reached
+            registrar_approve. See App\Actions\Billing\AssessEnrollment.
+            Every value here is provisional per PRD §17; see
+            config/fees.php.
+          required:
+            - total_amount
+            - currency
+            - assessed_at
+            - items
+          properties:
+            total_amount:
+              type: ["string", "null"]
+              description: >
+                Decimal string, never a float — money must not go
+                through binary floating point.
+            currency:
+              type: string
+            assessed_at:
+              type: string
+              format: date-time
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - category
+                  - category_label
+                  - label
+                  - quantity
+                  - unit_amount
+                  - amount
+                properties:
+                  category:
+                    type: string
+                    enum:
+                      - tuition
+                      - miscellaneous
+                  category_label:
+                    type: string
+                  label:
+                    type: string
+                  quantity:
+                    type: ["string", "null"]
+                    description: Units, for the tuition line only.
+                  unit_amount:
+                    type: ["string", "null"]
+                    description: Per-unit rate, for the tuition line only.
+                  amount:
+                    type: ["string", "null"]
     StoreEnrollmentRequest:
       type: object
       additionalProperties: false
@@ -4692,6 +4841,12 @@ components:
         reason:
           type: ["string", "null"]
           description: Required exactly when action is registrar_reject or void.
+        overload_acknowledged:
+          type: boolean
+          description: >
+            Required true when action is registrar_approve AND the target
+            enrollment's own requires_overload_approval is true (FR-ENR-004).
+            Ignored otherwise.
     PaginatedAcademicGradeCollection:
       type: object
       additionalProperties: false
@@ -5139,6 +5294,8 @@ components:
         - queue_date
         - status
         - status_label
+        - priority
+        - priority_label
         - served_at
       properties:
         type:
@@ -5152,7 +5309,9 @@ components:
           type: string
         ticket_number:
           type: string
-          description: Opaque — PRD §17 leaves the numbering scheme unconfirmed.
+          description: >
+            Resets daily (Q001, Q002, ...) — PRD §17 leaves the exact
+            numbering scheme unconfirmed.
         queue_date:
           type: string
           format: date
@@ -5164,6 +5323,13 @@ components:
             - served
             - cancelled
         status_label:
+          type: string
+        priority:
+          type: string
+          enum:
+            - regular
+            - priority
+        priority_label:
           type: string
         served_at:
           type: ["string", "null"]
@@ -5179,6 +5345,55 @@ components:
           enum:
             - serve
             - complete
+            - skip
+            - mark_priority
+    PaginatedPaymentCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - links
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    PaymentResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - enrollment_id
+        - student_number
+        - external_reference
+        - amount
+        - confirmed_at
+      properties:
+        type:
+          type: string
+          const: payment
+        id:
+          type: integer
+        enrollment_id:
+          type: integer
+        student_number:
+          type: string
+        external_reference:
+          type: ["string", "null"]
+        amount:
+          type: ["string", "null"]
+          description: >
+            Decimal string, never a float — money must not go through
+            binary floating point.
+        confirmed_at:
+          type: string
+          format: date-time
     ConfirmPaymentRequest:
       type: object
       additionalProperties: false

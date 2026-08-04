@@ -92,16 +92,20 @@ final readonly class BuildEnrollmentBlockPool
             $reasons[] = ['code' => 'window_closed', 'message' => 'Enrollment for your year level is not currently open.'];
         }
 
+        // A missing professor never withholds a section — assignment can
+        // trail behind publication, and a student choosing among sections
+        // shouldn't be blocked waiting for that to happen. Day, time, and
+        // room are the actual commitment a student makes by choosing a
+        // section, so those still have to be set.
         $incomplete = array_filter(
             $sections,
-            fn (Section $section): bool => $section->professor_id === null
-                || $section->schedule_days === null
+            fn (Section $section): bool => $section->schedule_days === null
                 || $section->starts_at_time === null
                 || $section->ends_at_time === null
                 || $section->room === null,
         );
         if ($incomplete !== []) {
-            $reasons[] = ['code' => 'incomplete_schedule', 'message' => 'This block is not fully scheduled yet — check back once every subject has a professor, day, time, and room.'];
+            $reasons[] = ['code' => 'incomplete_schedule', 'message' => 'This section is not fully scheduled yet — check back once every subject has a day, time, and room.'];
         }
 
         $placements = CurriculumSubject::query()
@@ -143,7 +147,7 @@ final readonly class BuildEnrollmentBlockPool
             null,
         ) ?? 0;
         if ($seatsRemaining <= 0) {
-            $reasons[] = ['code' => 'block_full', 'message' => 'At least one subject in this block has no open seats.'];
+            $reasons[] = ['code' => 'block_full', 'message' => 'At least one subject in this section has no open seats.'];
         }
 
         $totalUnits = array_sum(array_map(fn (Section $section): float => (float) $section->subject->units, $sections));

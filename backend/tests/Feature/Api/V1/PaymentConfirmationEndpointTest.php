@@ -16,6 +16,7 @@ use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\Assessment;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
@@ -80,6 +81,16 @@ final class PaymentConfirmationEndpointTest extends TestCase
             'status' => $status,
             'total_units' => 3,
             'submitted_at' => now(),
+        ]);
+    }
+
+    private function makeAssessment(Enrollment $enrollment, string $totalAmount): Assessment
+    {
+        return Assessment::create([
+            'enrollment_id' => $enrollment->id,
+            'total_amount' => $totalAmount,
+            'currency' => 'PHP',
+            'assessed_at' => now(),
         ]);
     }
 
@@ -196,6 +207,61 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $this->assertDatabaseCount('notifications', 1);
         self::assertSame(Payment::query()->sole()->external_reference, 'OR-000123');
         self::assertSame(EnrollmentDocument::query()->count(), 1);
+    }
+
+    public function test_an_omitted_amount_defaults_to_the_assessed_total(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.defaultamount@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'external_reference' => 'OR-000456',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.payment.amount', '2400.00');
+        self::assertSame('2400.00', Payment::query()->sole()->amount);
+    }
+
+    public function test_an_explicit_amount_is_recorded_as_is_even_when_it_differs_from_the_assessment(): void
+    {
+        // §17 has no partial-payment or mismatch policy — an amount the
+        // cashier actually typed is trusted, never rejected against the
+        // assessment.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.explicitamount@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'amount' => 2000.00,
+        ]);
+
+        $response->assertCreated();
+        self::assertSame('2000.00', Payment::query()->sole()->amount);
+    }
+
+    public function test_an_omitted_amount_with_no_assessment_stays_null(): void
+    {
+        // The legacy path: an enrollment created directly (not through
+        // registrar_approve, as every fixture in this suite still does) has
+        // no assessment to default from.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.noassessment@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", []);
+
+        $response->assertCreated();
+        self::assertNull(Payment::query()->sole()->amount);
     }
 
     public function test_payment_cannot_be_confirmed_from_a_non_pending_payment_status(): void

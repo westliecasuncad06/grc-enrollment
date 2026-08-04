@@ -223,6 +223,21 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         );
     }
 
+    public function test_a_section_without_an_assigned_professor_remains_selectable(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101', ['professor_id' => null]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_selectable', true);
+        $response->assertJsonPath('data.0.subjects.0.professor_name', null);
+    }
+
     public function test_a_non_block_exclusive_section_does_not_appear_as_a_block(): void
     {
         $term = $this->makeTerm();

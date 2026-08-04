@@ -54,6 +54,29 @@ const queueTicketSchema = z
     queue_date: z.string().min(1),
     status: z.enum(["waiting", "serving", "served", "cancelled"]),
     status_label: z.string().min(1),
+    priority: z.enum(["regular", "priority"]),
+    priority_label: z.string().min(1),
+    position: z.number().int().nonnegative().nullable(),
+  })
+  .strict()
+
+const assessmentItemSchema = z
+  .object({
+    category: z.enum(["tuition", "miscellaneous"]),
+    category_label: z.string().min(1),
+    label: z.string().min(1),
+    quantity: z.string().nullable(),
+    unit_amount: z.string().nullable(),
+    amount: z.string().nullable(),
+  })
+  .strict()
+
+const assessmentSchema = z
+  .object({
+    total_amount: z.string().nullable(),
+    currency: z.string().min(1),
+    assessed_at: z.iso.datetime(),
+    items: z.array(assessmentItemSchema),
   })
   .strict()
 
@@ -77,12 +100,14 @@ export const enrollmentSchema = z
     status: z.enum(enrollmentStatusValues),
     status_label: z.string().min(1),
     total_units: z.number().nonnegative(),
+    requires_overload_approval: z.boolean(),
     submitted_at: z.iso.datetime().nullable(),
     registrar_decided_at: z.iso.datetime().nullable(),
     payment_confirmed_at: z.iso.datetime().nullable(),
     enrolled_at: z.iso.datetime().nullable(),
     subjects: z.array(enrollmentSubjectSchema),
     queue_ticket: queueTicketSchema.nullable(),
+    assessment: assessmentSchema.nullable(),
   })
   .strict()
 
@@ -151,6 +176,9 @@ export const updateEnrollmentInputSchema = z
   .object({
     action: z.enum(["registrar_approve", "registrar_reject", "void"]),
     reason: z.string().min(1).optional(),
+    // Required only when the target enrollment's own
+    // requires_overload_approval is true — see UpdateEnrollmentRequest.
+    overload_acknowledged: z.boolean().optional(),
   })
   .strict()
 
@@ -192,6 +220,8 @@ export const paymentConfirmationEnvelopeSchema = z
 export type EligibleSubjectReason = z.infer<typeof eligibleSubjectReasonSchema>
 export type EligibleSubject = z.infer<typeof eligibleSubjectSchema>
 export type Enrollment = z.infer<typeof enrollmentSchema>
+export type EnrollmentAssessment = z.infer<typeof assessmentSchema>
+export type EnrollmentAssessmentItem = z.infer<typeof assessmentItemSchema>
 export type EnrollmentFilters = z.input<typeof enrollmentFiltersSchema>
 export type StoreEnrollmentInput = z.infer<typeof storeEnrollmentInputSchema>
 export type UpdateEnrollmentInput = z.infer<typeof updateEnrollmentInputSchema>

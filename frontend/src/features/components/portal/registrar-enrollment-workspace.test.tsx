@@ -33,12 +33,14 @@ const pendingApprovalEnrollment = {
   status: "pending_registrar_approval",
   status_label: "Pending Registrar Approval",
   total_units: 3,
+  requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
   registrar_decided_at: null,
   payment_confirmed_at: null,
   enrolled_at: null,
   subjects: [],
   queue_ticket: null,
+  assessment: null,
 } as const
 
 const pendingPaymentEnrollment = {
@@ -46,6 +48,13 @@ const pendingPaymentEnrollment = {
   id: 10,
   status: "pending_payment",
   status_label: "Pending Payment",
+} as const
+
+const overloadFlaggedEnrollment = {
+  ...pendingApprovalEnrollment,
+  id: 11,
+  total_units: 24,
+  requires_overload_approval: true,
 } as const
 
 const registrarStaffSession = {
@@ -240,6 +249,96 @@ describe("RegistrarEnrollmentWorkspace", () => {
         }),
       ),
     )
+  })
+
+  it("requires acknowledgement before approving an overload-flagged enrollment", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: { ...overloadFlaggedEnrollment, status: "pending_payment" },
+            }),
+          ),
+        )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [overloadFlaggedEnrollment],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(within(table).getByText("Overload")).toBeInTheDocument()
+    await user.click(within(table).getByRole("button", { name: "Approve" }))
+
+    expect(
+      screen.getByRole("button", { name: "Confirm decision" }),
+    ).toBeDisabled()
+
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /I acknowledge this enrollment exceeds/,
+      }),
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm decision" }))
+
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/enrollments/11"),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "registrar_approve",
+            overload_acknowledged: true,
+          }),
+        }),
+      ),
+    )
+  })
+
+  it("does not require acknowledgement for an enrollment that was never flagged", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: { ...pendingApprovalEnrollment, status: "pending_payment" },
+            }),
+          ),
+        )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [pendingApprovalEnrollment],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(within(table).queryByText("Overload")).not.toBeInTheDocument()
+    await user.click(within(table).getByRole("button", { name: "Approve" }))
+
+    expect(
+      screen.getByRole("button", { name: "Confirm decision" }),
+    ).not.toBeDisabled()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

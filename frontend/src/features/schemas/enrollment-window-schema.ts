@@ -41,6 +41,30 @@ const audienceAvailabilitySchema = z
   })
   .strict()
 
+/**
+ * Mirrors `App\Domain\Enrollment\AddDropAvailabilityReason`. `opens_at` is
+ * the term's `enrollment_closes_at` (the add/drop window opens once
+ * enrollment closes) and `closes_at` is the Registrar's own
+ * `add_drop_deadline_at` — see that enum's own docblock.
+ */
+export const addDropAvailabilityReasonSchema = z.enum([
+  "term_not_ongoing",
+  "enrollment_still_open",
+  "deadline_not_configured",
+  "deadline_passed",
+  "open",
+])
+
+const addDropAvailabilitySchema = z
+  .object({
+    is_open: z.boolean(),
+    reason: addDropAvailabilityReasonSchema,
+    reason_message: z.string().min(1),
+    opens_at: optionalUtcDateTimeSchema,
+    closes_at: optionalUtcDateTimeSchema,
+  })
+  .strict()
+
 export const enrollmentScheduleSchema = z
   .object({
     type: z.literal("enrollment_schedule"),
@@ -56,6 +80,7 @@ export const enrollmentScheduleSchema = z
     enrollment_closes_at: optionalUtcDateTimeSchema,
     audiences: z.array(audienceAvailabilitySchema),
     viewer: audienceAvailabilitySchema.nullable(),
+    add_drop: addDropAvailabilitySchema,
   })
   .strict()
 
@@ -97,6 +122,10 @@ export type EnrollmentAvailabilityReason = z.infer<
 >
 export type EnrollmentAudience = z.infer<typeof enrollmentAudienceSchema>
 export type AudienceAvailability = z.infer<typeof audienceAvailabilitySchema>
+export type AddDropAvailabilityReason = z.infer<
+  typeof addDropAvailabilityReasonSchema
+>
+export type AddDropAvailability = z.infer<typeof addDropAvailabilitySchema>
 export type EnrollmentSchedule = z.infer<typeof enrollmentScheduleSchema>
 export type SaveEnrollmentScheduleInput = z.infer<
   typeof saveEnrollmentScheduleInputSchema

@@ -44,6 +44,8 @@ final class AuditVocabularyTest extends TestCase
                 'academic_grade.locked',
                 'queue_ticket.serving_started',
                 'queue_ticket.served',
+                'queue_ticket.skipped',
+                'queue_ticket.marked_priority',
                 'enrollment.payment_confirmed',
                 'withdrawal_request.created',
                 'withdrawal_request.approved',

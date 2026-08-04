@@ -108,8 +108,47 @@ describe("ProspectusDocument", () => {
 
     expect(await screen.findByText(/BS Information Technology/)).toBeInTheDocument()
     expect(screen.getByText(/Year 1 · 1st Semester/)).toBeInTheDocument()
-    expect(screen.getByText("with Distinction")).toBeInTheDocument()
+    // The Grade column shows the mark itself (numeric/C/NC), never the
+    // "Good"/"Very Good" label -- that label only appears in the Status badge.
+    expect(screen.getByText("1.50")).toBeInTheDocument()
+    expect(screen.queryByText("with Distinction")).not.toBeInTheDocument()
     expect(screen.getByText("Not taken")).toBeInTheDocument()
+  })
+
+  it("colors a failed, incomplete, or not-taken row distinctly from a passed one", async () => {
+    const failedEntry = {
+      ...takenEntry,
+      subject_id: 20,
+      code: "CS999",
+      mark: "5.00",
+      mark_label: "Failed",
+      status_label: "Locked",
+    }
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            semesters: [
+              {
+                year_level: 1,
+                semester: "1st",
+                semester_label: "1st Semester",
+                entries: [takenEntry, failedEntry, untakenEntry],
+              },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    const failedRow = (await screen.findByText("5.00")).closest("tr")!
+    const passedRow = screen.getByText("1.50").closest("tr")!
+    const notTakenRow = screen.getByText("CS102").closest("tr")!
+
+    expect(failedRow.className).not.toBe(passedRow.className)
+    expect(notTakenRow.className).not.toBe(passedRow.className)
   })
 
   it("requests another student's prospectus when studentId is provided", async () => {

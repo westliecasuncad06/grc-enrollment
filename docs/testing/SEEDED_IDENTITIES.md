@@ -28,7 +28,7 @@ rows in place rather than creating duplicates.
 |---|---|---|
 | `student` | Seed Student | `student.seed@grc.test` |
 | `admission_staff` | Seed Admission Staff | `admission.seed@grc.test` |
-| `faculty` | Seed Faculty | `faculty.seed@grc.test` |
+| `faculty` | Testing Faculty | `faculty.seed@grc.test` |
 | `program_chair` | Seed Program Chair | `chair.seed@grc.test` |
 | `dean` | Seed Dean | `dean.seed@grc.test` |
 | `executive_director` | Seed Executive Director | `executive.seed@grc.test` |
@@ -99,6 +99,43 @@ term — a year-4 student's 7 completed ordinals use all 7 non-ongoing terms
 1:1; shorter histories use however many of the most recent terms they need.
 Every locked grade is recorded with `section_id = null` (no owning section
 for historical results).
+
+## 10 connected professor identities
+
+**Source:** `backend/database/seeders/DemoEnrollmentSeeder.php`. Every block
+section generated for the four regular seeded students (see above) used to be
+owned by the single `faculty.seed@grc.test` account. Since then, each of the
+10 distinct subjects those blocks offer (`BLOCK_SUBJECTS_BY_YEAR`) has its own
+real professor — a genuine 1:1 mapping, exactly like a real department: one
+instructor teaching every block's section of their own course.
+
+| Subject | Name | Email |
+|---|---|---|
+| CS201 | Ramon Bautista | `prof.bautista@grc.test` |
+| MATH102 | Teresa Villanueva | `prof.villanueva@grc.test` |
+| GE102 | Christian Dela Cruz | `prof.dela-cruz@grc.test` |
+| LEAD 2 | Angelica Reyes | `prof.reyes@grc.test` |
+| CS301 | Michael Santos | `prof.santos@grc.test` |
+| LEAD 4 | Josephine Mendoza | `prof.mendoza@grc.test` |
+| CS303 | Ferdinand Aquino | `prof.aquino@grc.test` |
+| LEAD 6 | Grace Manalo | `prof.manalo@grc.test` |
+| CS402 | Rafael Torres | `prof.torres@grc.test` |
+| LEAD8 | Cecilia Fernandez | `prof.fernandez@grc.test` |
+
+All 10 use the shared password `password`, role `faculty`, college CCS. Each
+one also has a declared weekday (Mon–Fri, 08:00–17:00) `FacultyAvailability`
+window covering every `BLOCK_SCHEDULES` slot their sections meet at, and a
+rank-1 `FacultySubjectPreference` for their own subject — real Faculty Input
+rows, not just a `professor_id` pointer, so logging in as any of them shows a
+genuine Teaching Schedule, Class Roster, and Grade Submission workspace.
+
+### Why not the whole 211-professor catalog
+
+`CatalogFacultySeeder` seeds 206 real-named faculty from the CCS CSV catalog,
+but only a handful of them declare any availability — most render "No
+availability declared" in the Faculty Assignment workspace, since that CSV
+carries no availability data. The 10 identities above are the ones this
+project actually exercises end to end for teaching-side workflows.
 
 ### Why a dedicated curriculum (`BSCS-DEMO`)
 

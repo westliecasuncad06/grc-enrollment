@@ -195,4 +195,146 @@ final class QueueTicketsEndpointTest extends TestCase
         $response->assertForbidden();
         self::assertSame('waiting', $ticket->refresh()->status->value);
     }
+
+    public function test_skip_cancels_a_waiting_ticket(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.skipwaiting@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'skip']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+        self::assertSame(AuditAction::QUEUE_TICKET_SKIPPED, AuditLog::query()->sole()->action);
+    }
+
+    public function test_skip_cancels_a_serving_ticket(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001', '2026-08-01', QueueTicketStatus::Serving);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.skipserving@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'skip']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+    }
+
+    public function test_skip_cannot_be_performed_from_served(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001', '2026-08-01', QueueTicketStatus::Served);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.skipserved@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'skip']);
+
+        $response->assertUnprocessable();
+    }
+
+    public function test_serving_a_new_ticket_completes_whatever_was_already_being_served_that_day(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'first.serving@grc.test', '2026-0001');
+        $studentB = $this->makeStudent($curriculum, 'second.serving@grc.test', '2026-0002');
+        $alreadyServing = $this->makeTicket($studentA, $term, 'Q000001', '2026-08-01', QueueTicketStatus::Serving);
+        $nextUp = $this->makeTicket($studentB, $term, 'Q000002', '2026-08-01', QueueTicketStatus::Waiting);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.singleactive@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$nextUp->id}", ['action' => 'serve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'serving');
+        self::assertSame('served', $alreadyServing->refresh()->status->value);
+        self::assertNotNull($alreadyServing->refresh()->served_at);
+    }
+
+    public function test_serving_a_ticket_records_who_served_it(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001');
+        $accounting = User::create([
+            'name' => 'Cashier One', 'email' => 'accounting.servedby@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::AccountingStaff, 'status' => UserStatus::Active,
+        ]);
+        $token = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => 'accounting.servedby@grc.test', 'password' => self::PASSWORD,
+        ])->json('data.token');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'serve'])->assertOk();
+
+        self::assertSame($accounting->id, $ticket->refresh()->served_by);
+    }
+
+    public function test_mark_priority_flags_a_waiting_ticket(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.markpriority@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'mark_priority']);
+
+        $response->assertOk()->assertJsonPath('data.priority', 'priority');
+        // Not a status transition — the ticket stays waiting.
+        $response->assertJsonPath('data.status', 'waiting');
+        self::assertSame(AuditAction::QUEUE_TICKET_MARKED_PRIORITY, AuditLog::query()->sole()->action);
+    }
+
+    public function test_mark_priority_cannot_be_performed_once_serving(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001', '2026-08-01', QueueTicketStatus::Serving);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.priorityserving@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'mark_priority']);
+
+        $response->assertUnprocessable();
+    }
+
+    public function test_position_counts_priority_tickets_ahead_of_regular_ones_regardless_of_issuance_order(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'position.a@grc.test', '2026-0001');
+        $studentB = $this->makeStudent($curriculum, 'position.b@grc.test', '2026-0002');
+        $studentC = $this->makeStudent($curriculum, 'position.c@grc.test', '2026-0003');
+
+        // Issued in this order: regular, regular, priority. A later-issued
+        // priority ticket still jumps ahead of every regular one.
+        $firstRegular = $this->makeTicket($studentA, $term, 'Q001', '2026-08-01');
+        $secondRegular = $this->makeTicket($studentB, $term, 'Q002', '2026-08-01');
+        $laterPriority = $this->makeTicket($studentC, $term, 'Q003', '2026-08-01');
+        $laterPriority->update(['priority' => 'priority']);
+
+        self::assertSame(0, $laterPriority->position(), 'The only priority ticket has nothing ahead of it.');
+        self::assertSame(1, $firstRegular->position(), 'One priority ticket stands ahead of the first regular one.');
+        self::assertSame(2, $secondRegular->position(), 'The priority ticket plus the earlier regular one stand ahead.');
+    }
+
+    public function test_ticket_numbers_reset_per_day(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id, 'academic_term_id' => $term->id,
+            'status' => EnrollmentStatus::PendingRegistrarApproval, 'total_units' => 3, 'submitted_at' => now(),
+        ]);
+        $staffToken = $this->tokenForNewUser(UserRole::RegistrarStaff, 'registrar.staff.dailyreset@grc.test');
+
+        $response = $this->withToken($staffToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertOk()->assertJsonPath('data.queue_ticket.ticket_number', 'Q001');
+    }
 }

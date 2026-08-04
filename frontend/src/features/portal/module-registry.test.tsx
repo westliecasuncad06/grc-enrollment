@@ -26,8 +26,8 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "audit-logs": "Audit logs",
   "teaching-schedule": "Teaching schedule",
   "eligible-subjects": "Eligible subjects",
-  "queue-payment": "Queue & payment status",
-  "grades-com": "Your academic records",
+  grades: "Grades",
+  "digital-com": "Digital COM",
   "schedule-approvals": "Enrollment planning review",
   "schedule-proposals": "Schedule proposals",
   "sections-schedules": "Sections and schedules",
@@ -35,7 +35,6 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   enrollment: "Select your subjects",
   "grade-approvals": "Grade approvals",
   "academic-transcripts": "Academic transcripts",
-  "add-drop-requests": "Add/Drop requests",
   "enrollment-change-requests": "Add/Drop requests",
   "enrollment-approvals": "Enrollment approvals",
   "overrides-voids": "Overrides & voids",
@@ -44,9 +43,7 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "academic-terms": "Enrollment",
   "availability-preferences": "Availability and preferences",
   "payment-queue": "Payment queue",
-  "serving-number": "Serving number",
-  "payment-confirmation": "Payment confirmation",
-  "com-finalization": "COM finalization",
+  "payment-records": "Payment records",
   "student-accounts": "Student accounts",
   "admission-status": "Admission status",
   "credential-issuance": "Credential issuance",
@@ -59,8 +56,8 @@ const migratedRegionNames: Partial<Record<string, string>> = {
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the thirty-eight role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(38)
+  it("dispatches exactly the thirty-five role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(35)
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )

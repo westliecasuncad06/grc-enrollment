@@ -14,7 +14,9 @@ final class QueueTicketResource extends JsonResource
     /**
      * Exact key set. `student_number` (never email or name) lets Accounting
      * identify whose ticket this is, matching `EnrollmentResource`'s
-     * precedent.
+     * precedent. `served_by` is deliberately absent — actor identity is
+     * never rendered to students, and Accounting identifies its own staff
+     * from context, not this response.
      *
      * @return array{
      *     type: string,
@@ -25,6 +27,8 @@ final class QueueTicketResource extends JsonResource
      *     queue_date: string,
      *     status: string,
      *     status_label: string,
+     *     priority: string,
+     *     priority_label: string,
      *     served_at: ?string
      * }
      */
@@ -39,6 +43,8 @@ final class QueueTicketResource extends JsonResource
             'queue_date' => $this->resource->queue_date->toDateString(),
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
+            'priority' => $this->resource->priority->value,
+            'priority_label' => $this->resource->priority->label(),
             'served_at' => $this->resource->served_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }

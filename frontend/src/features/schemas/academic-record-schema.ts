@@ -119,6 +119,46 @@ export const gradeSlipEnvelopeSchema = z
   .object({ data: gradeSlipSchema })
   .strict()
 
+/**
+ * One term's slice of `academicRecordSchema` — identical row/total fields
+ * to `gradeSlipSchema`, minus the student-identity fields (hoisted to the
+ * record's top level instead). `AcademicRecordView` reconstructs a full
+ * `GradeSlip` by merging the record's student fields into whichever term
+ * is selected, so `GradeSlipDocument` can render either shape unmodified.
+ */
+export const academicRecordTermSchema = z
+  .object({
+    academic_term_id: z.number().int().positive(),
+    school_year: z.string().min(1),
+    semester: z.string().min(1),
+    term_label: z.string().min(1),
+    rows: z.array(gradeSlipRowSchema),
+    total_academic_units: z.number().nonnegative(),
+    gpa_units: z.number().nonnegative(),
+    gpa: z.string().nullable(),
+    excluded_from_gpa_count: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export const academicRecordSchema = z
+  .object({
+    type: z.literal("academic_record"),
+    student_id: z.number().int().positive(),
+    student_number: z.string().min(1),
+    program_code: z.string().min(1),
+    program_name: z.string().min(1),
+    year_level: z.number().int().min(1).max(4),
+    enrollment_category: z.string().nullable(),
+    enrollment_category_label: z.string().nullable(),
+    // Latest term first -- the backend sorts this; the frontend never re-sorts.
+    terms: z.array(academicRecordTermSchema),
+  })
+  .strict()
+
+export const academicRecordEnvelopeSchema = z
+  .object({ data: academicRecordSchema })
+  .strict()
+
 export type ProspectusEntry = z.infer<typeof prospectusEntrySchema>
 export type ProspectusSemester = z.infer<typeof prospectusSemesterSchema>
 export type ProspectusUnplacedEntry = z.infer<
@@ -127,3 +167,5 @@ export type ProspectusUnplacedEntry = z.infer<
 export type Prospectus = z.infer<typeof prospectusSchema>
 export type GradeSlipRow = z.infer<typeof gradeSlipRowSchema>
 export type GradeSlip = z.infer<typeof gradeSlipSchema>
+export type AcademicRecordTerm = z.infer<typeof academicRecordTermSchema>
+export type AcademicRecord = z.infer<typeof academicRecordSchema>

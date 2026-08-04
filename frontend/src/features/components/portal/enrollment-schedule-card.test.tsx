@@ -88,6 +88,14 @@ function scheduleFixture(overrides: Partial<{ status: string; audiences: unknown
           reason: "open",
         })),
       viewer: null,
+      add_drop: {
+        is_open: false,
+        reason: "enrollment_still_open",
+        reason_message:
+          "The add/drop window opens once enrollment closes for this term.",
+        opens_at: "2028-07-15T00:00:00Z",
+        closes_at: null,
+      },
     },
   }
 }

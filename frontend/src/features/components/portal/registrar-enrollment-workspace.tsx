@@ -106,6 +106,7 @@ export function RegistrarEnrollmentWorkspace({
     action: RegistrarAction
   } | null>(null)
   const [reason, setReason] = useState("")
+  const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
   const [error, setError] = useState("")
   const heading =
     workspaceHeadings[initialModuleId] ??
@@ -128,18 +129,27 @@ export function RegistrarEnrollmentWorkspace({
   const mutation = useUpdateEnrollmentMutation()
   const reasonRequired =
     pending !== null && requiresReason(pending.action) && !reason.trim()
+  const overloadAcknowledgementRequired =
+    pending !== null &&
+    pending.action === "registrar_approve" &&
+    pending.enrollment.requires_overload_approval &&
+    !overloadAcknowledged
 
   const confirm = async () => {
-    if (!pending || reasonRequired) return
+    if (!pending || reasonRequired || overloadAcknowledgementRequired) return
     setError("")
     try {
       await mutation.mutateAsync({
         id: pending.enrollment.id,
         action: pending.action,
         reason: reason.trim() || undefined,
+        overload_acknowledged: pending.enrollment.requires_overload_approval
+          ? overloadAcknowledged
+          : undefined,
       })
       setPending(null)
       setReason("")
+      setOverloadAcknowledged(false)
     } catch {
       setError(
         "The enrollment decision could not be saved. Check the connection and try again.",
@@ -198,7 +208,14 @@ export function RegistrarEnrollmentWorkspace({
                   {
                     key: "units",
                     header: "Units",
-                    render: (enrollment) => enrollment.total_units,
+                    render: (enrollment) => (
+                      <div className="flex items-center gap-2">
+                        {enrollment.total_units}
+                        {enrollment.requires_overload_approval && (
+                          <Badge variant="outline">Overload</Badge>
+                        )}
+                      </div>
+                    ),
                   },
                   {
                     key: "actions",
@@ -219,6 +236,7 @@ export function RegistrarEnrollmentWorkspace({
                             onClick={() => {
                               setPending({ enrollment, action })
                               setReason("")
+                              setOverloadAcknowledged(false)
                               setError("")
                             }}
                           >
@@ -279,13 +297,44 @@ export function RegistrarEnrollmentWorkspace({
               )}
             </Field>
           )}
+          {pending?.action === "registrar_approve" &&
+            pending.enrollment.requires_overload_approval && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  <p>
+                    This enrollment totals {pending.enrollment.total_units}{" "}
+                    units, exceeding the regular load. Approving it requires
+                    explicit overload acknowledgement.
+                  </p>
+                  <label className="mt-2 flex items-center gap-2 text-sm font-normal">
+                    <input
+                      type="checkbox"
+                      checked={overloadAcknowledged}
+                      onChange={(event) =>
+                        setOverloadAcknowledged(event.target.checked)
+                      }
+                      disabled={mutation.isPending}
+                      aria-describedby="overload-acknowledgement-description"
+                    />
+                    <span id="overload-acknowledgement-description">
+                      I acknowledge this enrollment exceeds the regular unit
+                      load.
+                    </span>
+                  </label>
+                </AlertDescription>
+              </Alert>
+            )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={mutation.isPending}>
               Cancel
             </AlertDialogCancel>
             <Button
               type="button"
-              disabled={mutation.isPending || reasonRequired}
+              disabled={
+                mutation.isPending ||
+                reasonRequired ||
+                overloadAcknowledgementRequired
+              }
               onClick={() => void confirm()}
             >
               {mutation.isPending ? "Saving decision" : "Confirm decision"}

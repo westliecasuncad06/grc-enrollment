@@ -10,12 +10,15 @@ use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
+use App\Models\FacultyAvailability;
+use App\Models\FacultySubjectPreference;
 use App\Models\Program;
 use App\Models\Section;
 use App\Models\StudentProfile;
@@ -116,11 +119,12 @@ final class DemoEnrollmentSeeder extends Seeder
     /**
      * The current ongoing term's own subjects (ordinal 8's year-2 slot is
      * absent — see `SEMESTER_SUBJECTS`), one entry per year level 1–4 — what
-     * a REGULAR student in that year is actually about to enrol into. Each
-     * gets one generated block section so `BuildEnrollmentBlockPool` has
-     * something to offer; `SectionSeeder` already publishes an ordinary
-     * (non-block) section for every one of these same subject codes, so
-     * irregular students on the same curriculum can still enrol per subject.
+     * a REGULAR student in that year is actually about to enrol into. Every
+     * block for that year level (see `BLOCK_CODES_BY_YEAR`) offers the same
+     * subject list, just on a different schedule; `SectionSeeder` already
+     * publishes an ordinary (non-block) section for every one of these same
+     * subject codes, so irregular students on the same curriculum can still
+     * enrol per subject.
      *
      * @var array<int, list<string>>
      */
@@ -129,6 +133,63 @@ final class DemoEnrollmentSeeder extends Seeder
         2 => ['CS301', 'LEAD 4'],
         3 => ['CS303', 'LEAD 6'],
         4 => ['CS402', 'LEAD8'],
+    ];
+
+    /**
+     * Year levels 1–3 offer a real choice — three block sections, so a
+     * regular student picks among them instead of being handed the only
+     * option. Year 4 keeps a single block: PRD scope only asked for a real
+     * choice at years 1–3. Codes follow the school's own convention —
+     * program prefix, year level, two-digit section number — not a "DEMO"
+     * placeholder, so the enrollment screen shows exactly what a student
+     * would see in production (e.g. "BSCS101", not "Block DEMO1A").
+     *
+     * @var array<int, list<string>>
+     */
+    private const BLOCK_CODES_BY_YEAR = [
+        1 => ['BSCS101', 'BSCS102', 'BSCS103'],
+        2 => ['BSCS201', 'BSCS202', 'BSCS203'],
+        3 => ['BSCS301', 'BSCS302', 'BSCS303'],
+        4 => ['BSCS401'],
+    ];
+
+    /**
+     * One distinct weekly schedule per block letter (A/B/C), so the three
+     * blocks in a year level are a meaningfully different choice — not the
+     * same slot copy-pasted under three codes. Indexed positionally against
+     * `BLOCK_CODES_BY_YEAR`'s inner arrays.
+     *
+     * @var list<array{days: string, start_hour: int, room: string}>
+     */
+    private const BLOCK_SCHEDULES = [
+        ['days' => 'MWF', 'start_hour' => 8, 'room' => 'RM-401'],
+        ['days' => 'TTh', 'start_hour' => 8, 'room' => 'RM-402'],
+        ['days' => 'MWF', 'start_hour' => 13, 'room' => 'RM-403'],
+    ];
+
+    /**
+     * One real professor per `BLOCK_SUBJECTS_BY_YEAR` subject — a perfect
+     * 1:1 mapping across all 10 distinct subjects those four year levels
+     * offer. Each professor owns every block's section of their own subject
+     * (see `seedRegularBlocks`), exactly like a real department: one
+     * instructor, many sections of the same course. Replaces the single
+     * `faculty.seed@grc.test` account that previously owned all 448 demo
+     * sections. Names are invented placeholders; emails use the reserved
+     * `.test` TLD (RFC 2606).
+     *
+     * @var array<string, array{name: string, email_local: string}>
+     */
+    private const PROFESSORS = [
+        'CS201' => ['name' => 'Ramon Bautista', 'email_local' => 'bautista'],
+        'MATH102' => ['name' => 'Teresa Villanueva', 'email_local' => 'villanueva'],
+        'GE102' => ['name' => 'Christian Dela Cruz', 'email_local' => 'dela-cruz'],
+        'LEAD 2' => ['name' => 'Angelica Reyes', 'email_local' => 'reyes'],
+        'CS301' => ['name' => 'Michael Santos', 'email_local' => 'santos'],
+        'LEAD 4' => ['name' => 'Josephine Mendoza', 'email_local' => 'mendoza'],
+        'CS303' => ['name' => 'Ferdinand Aquino', 'email_local' => 'aquino'],
+        'LEAD 6' => ['name' => 'Grace Manalo', 'email_local' => 'manalo'],
+        'CS402' => ['name' => 'Rafael Torres', 'email_local' => 'torres'],
+        'LEAD8' => ['name' => 'Cecilia Fernandez', 'email_local' => 'fernandez'],
     ];
 
     /**
@@ -191,15 +252,16 @@ final class DemoEnrollmentSeeder extends Seeder
     }
 
     /**
-     * One generated block per year level 1–4, on the current ongoing term,
-     * so `BuildEnrollmentBlockPool` has something real to offer the four
-     * REGULAR seeded students (0001–0004) — otherwise "Select your block"
-     * renders "No blocks were generated" and none of them can actually
+     * Generated blocks for year levels 1–4 on the current ongoing term, so
+     * `BuildEnrollmentBlockPool` has something real to offer the four
+     * REGULAR seeded students (0001–0004) — otherwise "Select your section"
+     * renders "No sections were generated" and none of them can actually
      * complete a fresh enrollment, defeating the entire point of this
-     * roster. `college` is a required column on `academic_term_section_plans`
-     * but is never read by the block-pool lookup itself (which matches on
-     * `year_level`/`curriculum_id` only) — `'demo'` is a harmless
-     * placeholder, not a real `CollegeCode`.
+     * roster. Years 1–3 get three blocks (a real choice); year 4 gets one —
+     * see `BLOCK_CODES_BY_YEAR`. `college` is a required column on
+     * `academic_term_section_plans` but is never read by the block-pool
+     * lookup itself (which matches on `year_level`/`curriculum_id` only) —
+     * `'demo'` is a harmless placeholder, not a real `CollegeCode`.
      */
     private function seedRegularBlocks(Curriculum $curriculum, User $encoder): void
     {
@@ -211,7 +273,11 @@ final class DemoEnrollmentSeeder extends Seeder
             return;
         }
 
+        $professorsBySubject = $this->seedProfessors($currentTerm);
+
         foreach (self::BLOCK_SUBJECTS_BY_YEAR as $yearLevel => $subjectCodes) {
+            $blockCodes = self::BLOCK_CODES_BY_YEAR[$yearLevel];
+
             $plan = AcademicTermSectionPlan::updateOrCreate(
                 [
                     'academic_term_id' => $currentTerm->id,
@@ -220,7 +286,7 @@ final class DemoEnrollmentSeeder extends Seeder
                     'year_level' => $yearLevel,
                 ],
                 [
-                    'section_count' => 1,
+                    'section_count' => count($blockCodes),
                     'students_per_block' => 40,
                     'status' => SectionPlanStatus::Submitted,
                     'submitted_by' => $encoder->id,
@@ -228,33 +294,97 @@ final class DemoEnrollmentSeeder extends Seeder
                 ],
             );
 
-            $blockCode = sprintf('DEMO%d01', $yearLevel);
+            foreach ($blockCodes as $blockIndex => $blockCode) {
+                $schedule = self::BLOCK_SCHEDULES[$blockIndex];
 
-            foreach ($subjectCodes as $index => $subjectCode) {
-                $subject = $this->subject($subjectCode);
-                $startHour = 8 + $index;
+                foreach ($subjectCodes as $subjectIndex => $subjectCode) {
+                    $subject = $this->subject($subjectCode);
+                    $startHour = $schedule['start_hour'] + $subjectIndex;
 
-                Section::updateOrCreate(
-                    [
-                        'academic_term_id' => $currentTerm->id,
-                        'subject_id' => $subject->id,
-                        'section_code' => $blockCode,
-                    ],
-                    [
-                        'section_plan_id' => $plan->id,
-                        'professor_id' => $encoder->id,
-                        'schedule_days' => 'MWF',
-                        'starts_at_time' => sprintf('%02d:00:00', $startHour),
-                        'ends_at_time' => sprintf('%02d:00:00', $startHour + 1),
-                        'room' => 'RM-401',
-                        'capacity' => 40,
-                        'capacity_source' => 'plan',
-                        'is_block_exclusive' => true,
-                        'status' => SectionStatus::Published,
-                    ],
-                );
+                    Section::updateOrCreate(
+                        [
+                            'academic_term_id' => $currentTerm->id,
+                            'subject_id' => $subject->id,
+                            'section_code' => $blockCode,
+                        ],
+                        [
+                            'section_plan_id' => $plan->id,
+                            'professor_id' => $this->professorFor($professorsBySubject, $subjectCode)->id,
+                            'schedule_days' => $schedule['days'],
+                            'starts_at_time' => sprintf('%02d:00:00', $startHour),
+                            'ends_at_time' => sprintf('%02d:00:00', $startHour + 1),
+                            'room' => $schedule['room'],
+                            'capacity' => 40,
+                            'capacity_source' => 'plan',
+                            'is_block_exclusive' => true,
+                            'status' => SectionStatus::Published,
+                        ],
+                    );
+                }
             }
         }
+    }
+
+    /**
+     * One `User` (role Faculty, college CCS) per `PROFESSORS` entry, each
+     * with a declared weekday 08:00–17:00 availability (covering every
+     * `BLOCK_SCHEDULES` slot their sections actually meet at) and a rank-1
+     * `FacultySubjectPreference` for their own subject — real Faculty Input
+     * rows, not just a `professor_id` pointer, so `faculty.<name>@grc.test`
+     * has a genuine Teaching Schedule/Class Roster/Grade Submission story.
+     *
+     * @return array<string, User> subject code => the professor who owns it
+     */
+    private function seedProfessors(AcademicTerm $currentTerm): array
+    {
+        $professorsBySubject = [];
+
+        foreach (self::PROFESSORS as $subjectCode => $definition) {
+            $professor = User::updateOrCreate(
+                ['email' => "prof.{$definition['email_local']}@grc.test"],
+                [
+                    'name' => $definition['name'],
+                    'password' => self::PASSWORD,
+                    'role' => UserRole::Faculty,
+                    'college' => CollegeCode::Ccs,
+                    'status' => UserStatus::Active,
+                ],
+            );
+
+            foreach ([1, 2, 3, 4, 5] as $dayOfWeek) {
+                FacultyAvailability::updateOrCreate(
+                    [
+                        'professor_id' => $professor->id,
+                        'academic_term_id' => $currentTerm->id,
+                        'day_of_week' => $dayOfWeek,
+                        'starts_at_time' => '08:00:00',
+                    ],
+                    ['ends_at_time' => '17:00:00'],
+                );
+            }
+
+            FacultySubjectPreference::updateOrCreate(
+                [
+                    'professor_id' => $professor->id,
+                    'academic_term_id' => $currentTerm->id,
+                    'subject_id' => $this->subject($subjectCode)->id,
+                ],
+                ['rank' => 1],
+            );
+
+            $professorsBySubject[$subjectCode] = $professor;
+        }
+
+        return $professorsBySubject;
+    }
+
+    /**
+     * @param  array<string, User>  $professorsBySubject
+     */
+    private function professorFor(array $professorsBySubject, string $subjectCode): User
+    {
+        return $professorsBySubject[$subjectCode]
+            ?? throw new RuntimeException("No professor mapped for subject '{$subjectCode}'.");
     }
 
     /**

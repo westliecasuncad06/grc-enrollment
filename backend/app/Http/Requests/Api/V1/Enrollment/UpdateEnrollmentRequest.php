@@ -45,6 +45,7 @@ final class UpdateEnrollmentRequest extends FormRequest
                 'nullable',
                 'string',
             ],
+            'overload_acknowledged' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -66,6 +67,18 @@ final class UpdateEnrollmentRequest extends FormRequest
                     'action',
                     "This action requires the enrollment to currently be '{$requiredStatus->value}'; ".
                     "it is currently '{$enrollment->status->value}'.",
+                );
+
+                return;
+            }
+
+            // FR-ENR-004: an enrollment SubmitEnrollment flagged as needing
+            // overload approval cannot be approved silently — Registrar
+            // Staff must explicitly acknowledge it in the same request.
+            if ($action === 'registrar_approve' && $enrollment->requires_overload_approval && $this->boolean('overload_acknowledged') !== true) {
+                $validator->errors()->add(
+                    'overload_acknowledged',
+                    'This enrollment exceeds the regular unit load and requires explicit overload acknowledgement before it can be approved.',
                 );
             }
         });

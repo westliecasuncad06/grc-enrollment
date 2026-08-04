@@ -62,7 +62,7 @@ final class GradeSlipResource extends JsonResource
             'semester' => $term->semester,
             'term_label' => "{$term->school_year} · {$term->semester}",
             'rows' => array_map(
-                fn (AcademicGrade $grade): array => $this->rowToArray($grade),
+                fn (AcademicGrade $grade): array => self::rowToArray($grade),
                 $this->resource->grades,
             ),
             'total_academic_units' => $this->resource->totalAcademicUnits,
@@ -74,6 +74,9 @@ final class GradeSlipResource extends JsonResource
     }
 
     /**
+     * Shared with `AcademicRecordResource`, which reuses this exact row
+     * shape per term rather than duplicating it.
+     *
      * @return array{
      *     academic_grade_id: int,
      *     code: string,
@@ -89,7 +92,7 @@ final class GradeSlipResource extends JsonResource
      *     counts_toward_gpa: bool
      * }
      */
-    private function rowToArray(AcademicGrade $grade): array
+    public static function rowToArray(AcademicGrade $grade): array
     {
         $section = $grade->section;
 

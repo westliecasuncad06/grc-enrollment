@@ -9,6 +9,7 @@ use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Notifications\NotificationType;
+use App\Models\Assessment;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
 use App\Models\Notification;
@@ -64,7 +65,7 @@ final readonly class ConfirmPayment
 
             if ($existingPayment !== null) {
                 return [
-                    'enrollment' => $lockedEnrollment->load(['student', 'payment', 'documents']),
+                    'enrollment' => $lockedEnrollment->load(['student', 'payment', 'documents', 'assessment.items']),
                     'created' => false,
                 ];
             }
@@ -78,11 +79,20 @@ final readonly class ConfirmPayment
 
             $confirmedAt = now();
 
+            // An explicitly supplied amount is always trusted as-is — §17
+            // has no partial-payment or mismatch policy, so a value that
+            // differs from the assessment is recorded, not rejected. Only a
+            // fully-omitted amount falls back to what was assessed; an
+            // enrollment with no assessment (created directly, as most test
+            // fixtures still do) keeps today's behavior of staying null.
+            $assessment = Assessment::query()->where('enrollment_id', $lockedEnrollment->id)->first();
+            $amount = $validated['amount'] ?? $assessment?->total_amount;
+
             $payment = Payment::create([
                 'enrollment_id' => $lockedEnrollment->id,
                 'confirmed_by' => $actor->id,
                 'external_reference' => $validated['external_reference'] ?? null,
-                'amount' => $validated['amount'] ?? null,
+                'amount' => $amount,
                 'confirmed_at' => $confirmedAt,
             ]);
 
@@ -127,7 +137,7 @@ final readonly class ConfirmPayment
             ]);
 
             return [
-                'enrollment' => $lockedEnrollment->load(['student', 'payment', 'documents']),
+                'enrollment' => $lockedEnrollment->load(['student', 'payment', 'documents', 'assessment.items']),
                 'created' => true,
             ];
         });

@@ -50,19 +50,28 @@ const registrarHeadSession = {
   signedInAt: "2026-07-29T12:00:00Z",
 } as const
 
-const term = {
-  type: "academic-term",
-  id: 2,
-  school_year: "2026-2027",
-  semester: "2nd",
-  starts_at: null,
-  ends_at: null,
-  enrollment_opens_at: null,
-  enrollment_closes_at: null,
-  add_drop_deadline_at: null,
-  grading_deadline_at: null,
-  status: "semester_ongoing",
-  status_label: "Semester ongoing",
+const academicRecord = {
+  type: "academic_record",
+  student_id: 4,
+  student_number: "2026-0001",
+  program_code: "BSIT",
+  program_name: "BS Information Technology",
+  year_level: 2,
+  enrollment_category: "regular",
+  enrollment_category_label: "Regular",
+  terms: [
+    {
+      academic_term_id: 2,
+      school_year: "2026-2027",
+      semester: "2nd",
+      term_label: "2026-2027 · 2nd",
+      rows: [],
+      total_academic_units: 0,
+      gpa_units: 0,
+      gpa: null,
+      excluded_from_gpa_count: 0,
+    },
+  ],
 } as const
 
 const prospectus = {
@@ -154,12 +163,14 @@ describe("RegistrarGradesWorkspace", () => {
     )
   })
 
-  it("looks up a student and renders their prospectus and grade slip", async () => {
+  it("looks up a student and renders their academic record", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input) => {
       const target = url(input)
-      if (target.includes("/academic-terms"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [term] })))
+      if (target.includes("/academic-record"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: academicRecord })),
+        )
       if (target.includes("/prospectus"))
         return Promise.resolve(
           new Response(JSON.stringify({ data: prospectus })),
@@ -176,9 +187,13 @@ describe("RegistrarGradesWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "View records" }))
 
     expect(await screen.findByText(/BS Information Technology/)).toBeInTheDocument()
-    expect(url(fetchMock.mock.calls.find((call) => url(call[0]).includes("/prospectus"))![0])).toContain(
-      "student_id=4",
-    )
+    expect(
+      url(
+        fetchMock.mock.calls.find((call) =>
+          url(call[0]).includes("/academic-record"),
+        )![0],
+      ),
+    ).toContain("student_id=4")
   })
 
   it("rejects a non-numeric student ID without querying the API", async () => {

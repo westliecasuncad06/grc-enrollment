@@ -7,6 +7,8 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Enrollment\OverloadEvaluator;
+use App\Domain\Enrollment\OverloadVerdict;
 use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\AcademicTerm;
@@ -90,11 +92,30 @@ final readonly class SubmitEnrollment
 
             $totalUnits = (float) $sections->sum(fn (Section $section): float => $section->subject->units);
 
+            // Recomputed from the locked, just-verified sections — not
+            // trusted from StoreEnrollmentRequest's own pre-check — the
+            // same authoritative-server pattern the oversold check above
+            // already follows. A Rejected verdict here would mean the
+            // section list changed between validation and this lock (the
+            // same narrow race the oversold check guards against); it is
+            // surfaced the identical way.
+            $overloadVerdict = OverloadEvaluator::evaluate(
+                $totalUnits,
+                self::numericConfigValue('enrollment.max_regular_units'),
+                self::numericConfigValue('enrollment.overload_max_units'),
+            );
+            if ($overloadVerdict === OverloadVerdict::Rejected) {
+                throw ValidationException::withMessages([
+                    'sections' => "This selection totals {$totalUnits} units, exceeding the maximum allowed load. Refresh and try again.",
+                ]);
+            }
+
             $enrollment = Enrollment::create([
                 'student_id' => $student->id,
                 'academic_term_id' => $term->id,
                 'status' => EnrollmentStatus::PendingRegistrarApproval,
                 'total_units' => $totalUnits,
+                'requires_overload_approval' => $overloadVerdict === OverloadVerdict::RequiresApproval,
                 'submitted_at' => now(),
             ]);
 
@@ -120,6 +141,7 @@ final readonly class SubmitEnrollment
                     'section_ids' => $sectionIds,
                     'block_code' => $blockCode,
                     'total_units' => $enrollment->total_units,
+                    'requires_overload_approval' => $enrollment->requires_overload_approval,
                 ],
                 null,
                 $context,
@@ -146,7 +168,14 @@ final readonly class SubmitEnrollment
                 ),
             );
 
-            return $enrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'queueTicket']);
+            return $enrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items']);
         });
+    }
+
+    private static function numericConfigValue(string $key): ?float
+    {
+        $raw = config($key);
+
+        return is_numeric($raw) ? (float) $raw : null;
     }
 }

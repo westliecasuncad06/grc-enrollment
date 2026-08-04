@@ -1,10 +1,18 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-08-04 · **PRD version:** v3.2 · **Branch:** `main`
-at `f4cca33` (Phase 7c is merged). The working tree contains a large,
-uncommitted enrollment-startup/organization-data WIP that predates this
-session, plus this session's grading-system/enrollment-completion slice;
-none of it has been committed or pushed.
+**Last updated:** 2026-08-05 · **PRD version:** v3.2 · **Branch:** `main`
+at `85a6357` (Phase 7c and the grading/enrollment-completion slice — ADR
+0021 — are both merged). The working tree currently carries two further
+uncommitted slices on top: the 2026-08-04 section-terminology/Grades-sidebar
+fix, and the 2026-08-05 assessment/fees, guided Cashier flow, overload
+approval, and 10-connected-professor slice (ADR 0022). **See *Session
+History* at the bottom of this file for the current narrative** — the
+*Current Objective* section immediately below is preserved as historical
+record of the manual-enrollment-startup slice and is no longer the live
+state; the *Exact Next Steps* section has a 2026-08-05 pointer to what's
+actually next. Nothing since `85a6357` has been committed or pushed — the
+user has repeated, multiple times, that they will say explicitly when that
+should happen.
 
 ## Current Objective
 
@@ -1614,24 +1622,38 @@ confirmed via `config('database.connections.mysql.database')` resolving to
 
 ## Exact Next Steps
 
-**Superseded 2026-07-31 (this session).** Phase 8a, Phase 8b, and Phase 8c
-are all merged; Phase 7c is now complete on `phase-7c-dashboards`. See
-*Current Objective* at the top of this document for the live state.
+**Superseded 2026-08-05 (this session).** Phases 5–8c are merged to `main`
+(latest merged commit `85a6357`, the ADR 0021 grading/enrollment-completion
+slice). Everything below Phase 8d in the roadmap headers further down this
+file predates several sessions' worth of work that happened directly on
+`main`'s working tree without a numbered phase — see *Session History* at
+the bottom of this file (entries `2026-08-02` through `2026-08-05`) for the
+real, current narrative. The old item 3 below (Withdraw button gap, ADR
+0016 decision 8) is now **done** — see the 2026-08-05 session entry.
 
 **Current, not yet acted on:**
 
-1. Ask the user before committing Phase 7c's files (see *Uncommitted or
-   Risky Changes*), and again before merging `phase-7c-dashboards` to
-   `main` or pushing. None of the three has been requested yet — do not do
-   any of them without an explicit ask.
-2. Once Phase 8c's own diff is merged and pushed (it already is, at
-   `6d1745b`), confirm the new `e2e` CI job actually runs green on GitHub —
-   it has not run there yet (ADR 0012: a workflow is only proven by
-   running).
-3. **Phase 8d** (§14.4 security verification, §14.5 performance
-   verification, §12.6's remaining profile/password/help features, and the
-   still-open student-facing Withdraw button gap — ADR 0016 decision 8) is
-   the only remaining non-ML slice. Ask the user before starting it.
+1. **Ask the user before committing or merging anything.** The working
+   tree currently carries two uncommitted slices on top of `85a6357`: the
+   block/section terminology + Grades sidebar polish (2026-08-04), and the
+   assessment/fees, guided Cashier flow, unit-cap/overload approval, queue
+   daily-reset, student Withdraw button, and 10 connected-professor slice
+   (2026-08-05, see ADR 0022). The user has repeated this constraint
+   explicitly and often — do not commit or merge without an explicit ask,
+   even though every item above is verified and test-covered.
+2. Once this session's work is committed (when asked), recompute the
+   *Overall Completion* table's Row 8 and the module totals for real
+   against that commit — see that table's own flagged caveat above.
+3. Confirm the `e2e` CI job actually runs green on GitHub — unconfirmed
+   since Phase 8c merged (ADR 0012: a workflow is only proven by running).
+4. §14.4 security verification, §14.5 performance verification, and
+   §12.6's remaining profile/password/help features (the rest of the old
+   "Phase 8d") remain unstarted. Ask the user before starting.
+5. Known follow-up, deliberately deferred each time it's been found: the
+   Playwright E2E suite's `SEED_STUDENT_SCENARIOS` fixture model predates
+   the 8-student/grade-history seed redesign (ADR 0021) and now also the
+   10-professor seed (ADR 0022) — several specs need rewriting against the
+   current fixture shape. Its own follow-up slice, not attempted piecemeal.
 
 ## Do Not Change
 
@@ -1738,12 +1760,21 @@ Two scores that look surprising, explained:
   Registrar approval, 3.4 payment queue, 3.5 payment confirmation + Digital
   COM. The remaining 5% is the tail that forwards attrition events to
   Process 4.0, deliberately deferred to Phase 9 (ML goes last).
-- **Row 8 stays at 73% (29/40)** — unchanged from Phase 7b, per this
-  table's own rule: `phase-7c-dashboards` is complete and quality-gated
-  (see *Verified Completed — Phase 7c*) but not yet merged to `main` (see
-  *Uncommitted or Risky Changes*), so its 4 newly-connected modules
-  (33/40 = 82.5% → 83%) are not counted here yet. The moment it merges,
-  this row recomputes to 83% and the total rises to ≈76%.
+- **Row 8's 29/40 figure is stale and no longer trustworthy — flagged
+  2026-08-05, not recomputed here.** It was accurate as of Phase 7b, but
+  Phase 7c actually merged (`f4cca33`, per this file's own header) and at
+  least one further slice (`85a6357`, "grading system, auto-derived
+  standing, and enrollment-cycle completion" — added Grade Approvals,
+  Academic Transcripts, and Add/Drop Requests) merged after it, without
+  this row ever being recomputed. Reconstructing the exact merged-only
+  module count now requires diffing `role-capabilities.ts`/
+  `module-registry.tsx` against each historical merge commit — not
+  attempted here. **For current, accurate module counts, use the ■ Portal
+  Feature Matrix below instead of this row** — it reflects the actual
+  working tree (43 modules, 36 done per role instance / 35 distinct IDs),
+  including this session's still-uncommitted slice. Whoever next merges
+  work into `main` should recompute Row 8 for real against that commit,
+  not against this stale 29/40.
 - **Row 10 at 35%, up from 25%** — Phase 8c's Playwright E2E foundation
   (13 of PRD §14.3's 15 critical journeys) is merged to `main`, plus the
   accessibility scans that closed Phase 8a/8b's deferred manual WCAG pass.
@@ -2247,13 +2278,14 @@ evaluation (§15.9).
 
 ---
 
-# ■ Portal Feature Matrix — 40 Modules
+# ■ Portal Feature Matrix — 43 Modules
 
 Source of truth: `frontend/src/features/portal/role-capabilities.ts` and
 `frontend/src/features/portal/module-registry.tsx`. A ✅ module is dispatched
 by `connectedModuleRegistry` to a real workspace component backed by parsed
 API services and tests. Every other module is still a placeholder empty-state
 rendering *"This module is not connected to workflow or authorization APIs."*
+**Not yet merged to `main`** — see *Uncommitted or Risky Changes*.
 
 Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
@@ -2262,9 +2294,9 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | Module | Phase | Status |
 |---|---|---|
 | Eligible Subjects | 6 | ✅ |
-| Enrollment | 6 | ✅ |
-| Queue & Payment | 7a | ✅ |
-| Grades & Digital COM | 7a | ✅ |
+| Enrollment | 6 | ✅ (now also embeds Queue & Payment, Add/Drop, and Withdraw — see 2026-08-04/05 session notes) |
+| Grades | 7a | ✅ |
+| Digital COM | 7a | ✅ |
 
 ### 2. Admission Staff — 3 modules
 
@@ -2313,40 +2345,51 @@ Status: ⬜ placeholder · 🔨 in progress · ✅ done
 | KPIs | **9** | ⬜ |
 | Reports | 7c | ⬜ no PRD-specified content |
 
-### 7. Registrar Head — 6 modules
+### 7. Registrar Head — 9 modules
 
 | Module | Phase | Status |
 |---|---|---|
-| Audit Logs | 5 | ✅ |
-| Enrollment Approvals | 7a | ✅ |
+| Enrollment (Academic Terms) | 5 | ✅ |
+| Grade Approvals | 2026-08-04 | ✅ mandatory, permanent lock; re-derives Regular/Irregular standing |
+| Academic Transcripts | 2026-08-04 | ✅ look up any student's prospectus/grade slip |
 | Overrides & Voids | 7a | ✅ |
-| Policy Settings | 7c | ✅ (read-only view of current config) |
+| Add/Drop Requests | 2026-08-04 | ✅ decides student add/drop/change-section requests |
 | Attrition Analytics | **9** | ⬜ |
 | Compliance Reports | 7c | ⬜ no PRD-specified content |
+| Audit Logs | 5 | ✅ |
+| Policy Settings | 7c | ✅ (read-only view of current config; now also surfaces `fees.*` and overload-cap rows — see 2026-08-05 session) |
 
-### 8. Registrar Staff — 4 modules
+### 8. Registrar Staff — 6 modules
 
 | Module | Phase | Status |
 |---|---|---|
+| Enrollment Approvals | 2026-08-04 | ✅ approver moved here from Registrar Head (ADR 0021); now also acknowledges FR-ENR-004 overload flags before approving — see 2026-08-05 session |
 | Credit Mappings | 7b | ✅ |
 | Drops & Withdrawals | 7b | ✅ |
 | Academic Records | 7b | ✅ |
+| Add/Drop Requests | 2026-08-04 | ✅ read visibility, same requests Registrar Head decides |
 | Enrollment Documents | 7b | ✅ |
 
-### 9. Accounting Staff — 4 modules
+### 9. Accounting Staff — 2 modules
 
 | Module | Phase | Status |
 |---|---|---|
-| Payment Queue | 7a | ✅ |
-| Serving Number | 7a | ✅ |
-| Payment Confirmation | 7a | ✅ |
-| COM Finalization | 7a | ✅ |
+| Payment Queue | 2026-08-05 | ✅ redesigned into one guided flow (Now Serving/Waiting/Served today) replacing the four separate Phase 7a modules below |
+| Payment Records | 2026-08-05 | ✅ new — date-filterable history of every payment confirmed, for both Accounting and Registrar Head |
 
-**Totals:** 40 modules · **29 done** (13 Phase 5 + 2 Phase 6 + 8 Phase 7a +
-6 Phase 7b) · 4 blocked on Phase 9 (Demand Forecast, Honors, KPIs,
-Attrition Analytics) · 7 remain for Phase 7c (Dean's Enrollment Dashboard/
-Stuck Students/Reports, Executive Director's Institution Dashboard/
-Reports, Registrar Head's Policy Settings/Compliance Reports).
+**Removed this session (2026-08-05):** Serving Number, Payment Confirmation,
+and COM Finalization no longer exist as separate nav modules — folded into
+the single guided Payment Queue flow (see *Verified Completed* below).
+
+**Totals:** 43 modules · **36 done** counted per role instance (35 distinct
+connected IDs — `enrollment-change-requests` is one module dispatched to
+both Registrar Head and Registrar Staff) · 4 blocked on Phase 9 (Demand
+Forecast, Honors, KPIs, Attrition Analytics) · 3 remain with no PRD-specified
+content (Dean's Reports, Executive Director's Reports, Registrar Head's
+Compliance Reports). **This count is ahead of `main`** — see *Uncommitted or
+Risky Changes*; Row 8 of the completion table below intentionally still
+scores against the last-merged 29/40, per that table's own "merged only"
+rule.
 
 ---
 
@@ -3560,3 +3603,197 @@ re-run alone with `--no-file-parallelism`):
   added (prospectus, grade slip, grade approvals, add/drop requests, etc.).
   No test enforces sync with the real routes, so this is known, undetected
   drift rather than a silent regression.
+
+## 2026-08-04 — Section terminology correction and Grades sidebar polish
+
+Small user-reported fix on top of the grading slice above, before the larger
+assessment/fees slice began. Two issues from a live screenshot: (1) the
+enrollment screen said "Block" and showed placeholder block codes
+(`DEMO1A`) instead of the real school section codes students actually see
+(`IT101`, `BSCS401`, etc.); a section with no professor assigned yet was
+also being excluded from selection, when professor assignment should be
+allowed to follow later. (2) The Grades sidebar ordered semester chips by
+"latest completed" instead of always showing 1st semester to the left of
+2nd.
+
+**Delivered:** every user-facing "Block"/"block" string in
+`enrollment-workspace.tsx`/`enrollment-block-choice.tsx` reworded to
+"Section"/"section" (internal variable/prop names and the `block_code`
+field deliberately left unchanged — API contract, not copy); removed the
+`professor_id === null` exclusion from `BuildEnrollmentBlockPool`'s
+`incomplete` filter, reworded the incomplete-schedule/full-section messages
+to drop "professor"; `DemoEnrollmentSeeder`'s `BLOCK_CODES_BY_YEAR` renamed
+from `DEMO1A/1B/1C`-style placeholders to real-looking codes
+(`BSCS101`/`BSCS102`/`BSCS103`, etc.), matching the convention other
+colleges' real catalog data already used. `academic-record-view.tsx` gained
+a `semesterOrdinal()` helper so `groupBySchoolYear()` always sorts 1st
+before 2nd regardless of API order, plus sidebar polish (per-year divider,
+bold active year, `grid grid-cols-2` chip layout).
+
+Student self-selection was already correct and unchanged — a student always
+picks their own section; the system never auto-assigns one.
+
+**Verification:** backend feature test added
+(`test_a_section_without_an_assigned_professor_remains_selectable`); all 12
+`enrollment-workspace.test.tsx` assertions updated and passing; PHPStan/Pint
+clean.
+
+## 2026-08-05 — Assessment & fees, guided Cashier flow, overload approval, 10 connected professors
+
+Full design and rationale: `docs/adr/0022-assessment-fees-cashier-and-overload.md`.
+User-directed slice (Taglish request, approved via structured multiple-choice:
+per-unit tuition + misc fees / one guided Cashier flow / 10 real professor
+accounts / all four process gaps) closing five gaps a codebase exploration
+found between "the enrollment cycle runs end to end" (ADR 0021) and "every
+PRD-documented sub-process actually has a UI and a real value behind it":
+no assessment/fees anywhere, four Cashier nav modules dispatching to one
+undifferentiated screen with no NOW SERVING display, no way for a student to
+withdraw despite the backend already supporting it, no FR-ENR-004 unit-cap
+enforcement, no daily queue reset, and 206 of 211 seeded faculty accounts
+disconnected from any section.
+
+**Delivered, by part (all under `App\Domain\Billing`/`App\Actions\Billing`
+unless noted, all following the established §17 "provisional, not
+GRC-approved" config convention — see `config/fees.php`):**
+
+- **Assessment & fees.** `AssessmentComputation` (pure static, `bcmath`
+  half-up rounding — `bcadd(bcmul($units, $rate, 4), '0.005', 2)`, never
+  float multiplication for money) computing a per-unit tuition line plus
+  file-configured miscellaneous fee lines; new `assessments`/
+  `assessment_items` tables (`quantity` deliberately `decimal(6,1)`, not
+  integer — 1.5-unit Leadership subjects would silently truncate);
+  `AssessEnrollment` called once, idempotently, inside
+  `TransitionEnrollment`'s `registrar_approve` branch, folded into the
+  *same* audit row and notification (no second `AuditRecorder::record()`
+  call — `EnrollmentsEndpointTest`'s `->sole()` assertions require this);
+  a new nullable `assessment` key on `EnrollmentResource`, visible to every
+  role that can already see the enrollment; `ConfirmPayment` now defaults an
+  omitted `amount` to the assessed total (an explicitly supplied amount is
+  still trusted as-is — no partial-payment policy exists to reject a
+  mismatch against).
+- **Guided Cashier flow.** Accounting's nav cut from 4 modules to 2:
+  `payment-queue` rewritten into one screen (Now Serving card with Confirm
+  payment/Skip/Call next, a Waiting queue table, a Served-today table,
+  amount due pre-filled from the assessment) and a new `payment-records`
+  history module (also visible to Registrar Head) backed by a new
+  `GET /api/v1/payments` endpoint. `serving-number`, `payment-confirmation`,
+  and `com-finalization` no longer exist as separate nav items.
+- **Queue overhaul.** `ticket_number` changed from a global
+  enrollment-id-derived value to a per-day sequence (`Q001`, `Q002`, ...),
+  gated by a new composite `(queue_date, ticket_number)` unique constraint
+  replacing the old global-unique one; new `priority` column
+  (cashier-markable, §17-flagged, not an eligibility policy this project
+  invents) and `served_by`; `skip` revives the previously-dead
+  `QueueTicketStatus::Cancelled` case; serving a new ticket now
+  bulk-completes whichever ticket was already `serving` that day
+  (single-active-serving, unaudited per-row — mirrors `ConfirmPayment`'s
+  existing bulk `EnrollmentSubject` transition precedent); a new
+  server-computed `position()` on `QueueTicket` (priority-tickets-ahead,
+  then regular-tickets-ahead) lets a student see "3 students are ahead of
+  you" without ever exposing the full queue.
+- **Unit cap + overload approval (FR-ENR-004).** `OverloadEvaluator` (pure
+  static) evaluates a submission's total units against the two *already
+  existing* but previously-unenforced `max_regular_units`/
+  `overload_max_units` config keys: within cap → unaffected; over cap but
+  within the overload ceiling → permitted but flagged
+  (`requires_overload_approval`, Registrar Staff must tick an
+  acknowledgement checkbox before approving); beyond the overload ceiling →
+  hard 422 reject. Both keys stay `null` by default, so this changes
+  nothing until GRC sets a real value — the same
+  mechanism-implemented/value-flagged pattern as `viability_threshold`.
+- **Student process gaps.** A new `EnrollmentWithdrawPanel` (reason
+  required, `AlertDialog`-confirmed) finally calls the
+  `useCreateWithdrawalRequestMutation` hook that has had zero callers since
+  it was built; `EnrollmentQueuePaymentPanel` now shows the assessed amount
+  due with its line-item breakdown and the queue position message.
+- **10 connected professors.** `DemoEnrollmentSeeder` now creates 10 real
+  Faculty accounts (`prof.<surname>@grc.test`), a perfect 1:1 mapping onto
+  the 10 distinct subjects the demo blocks offer (`CS201`, `MATH102`,
+  `GE102`, `LEAD 2`, `CS301`, `LEAD 4`, `CS303`, `LEAD 6`, `CS402`,
+  `LEAD8`) — each owns every block section of their own subject across
+  every block code and year level, replacing the single shared
+  `faculty.seed@grc.test` placeholder that previously owned all 448 demo
+  sections. Each also gets a declared Mon–Fri 08:00–17:00
+  `FacultyAvailability` and a rank-1 `FacultySubjectPreference` — real
+  Faculty Input rows, not just a `professor_id` pointer.
+
+**One real bug found by the new seeder test, not by the implementation
+itself:** the first draft of
+`test_each_connected_professor_owns_every_block_section_of_their_subject`
+queried *every* `is_block_exclusive` section for a subject code, and failed
+on `LEAD8` — `ProgramChairScheduleSampleSeeder` (a separate, pre-existing
+fixture seeder) also generates its own block-exclusive sections for a
+synthetic BSIT curriculum that happens to reuse the `LEAD8` subject code
+(section `IT401`, owned by that seeder's own "Sample Faculty"). Not a
+defect in `DemoEnrollmentSeeder` — the test's query was scoped too broadly.
+Fixed by scoping the assertion to sections belonging to the `BSCS-DEMO`
+curriculum's own section plans specifically.
+
+**Verification:** backend — Pint clean, PHPStan level 8 clean (23
+pre-existing baseline, zero new), full `DemoEnrollmentSeederTest` run green
+(44 tests, 154+19 assertions across two runs) after the scoping fix above,
+plus new/extended feature tests across `EnrollmentsEndpointTest`,
+`PaymentConfirmationEndpointTest`, `PaymentsEndpointTest` (new),
+`QueueTicketsEndpointTest`, `EnrollmentRecordsMigrationTest`,
+`AuditVocabularyTest`, `DashboardEndpointsTest`. Frontend — `tsc --noEmit`
+clean, targeted Vitest passing across every touched/new component
+(`accounting-payment-workspace`, `payment-records-workspace`,
+`enrollment-withdraw-panel`, `enrollment-queue-payment-panel`,
+`registrar-enrollment-workspace`, `enrollment-workspace`), the 7-fixture
+`.strict()`-schema update required by the new `assessment`/
+`requires_overload_approval` `EnrollmentResource` keys done in the same
+pass as the backend change (this schema is runtime-breaking on any
+mismatch, not just test-breaking). `docs/api/openapi.yaml` and
+`docs/data-dictionary/enrollment-records.md`/`faculty-input.md` updated and
+`@redocly/cli lint` clean.
+
+**Full-repo verification, completed after the above:**
+- Backend: `vendor/bin/pint --dirty` clean; `vendor/bin/phpstan analyse`
+  (full repo) at the same 23 pre-existing baseline errors, zero new; full
+  `php artisan test` — **1045 passed, 3779 assertions, 0 failures**
+  (797s), including the `DemoEnrollmentSeederTest` scoping fix below.
+- Frontend: `npx tsc --noEmit` clean; `npx eslint .` — 3 pre-existing
+  errors found, 2 confirmed unmodified since `85a6357` (left alone, out of
+  scope) and 1 in this slice's own `registrar-enrollment-workspace.tsx`
+  (fixed: `pending && pending.action === ...` → `pending?.action === ...`,
+  satisfying `@typescript-eslint/prefer-optional-chain`); full
+  `npx vitest run --no-file-parallelism` — **529 passed, 89 files, 0
+  failures** (394s), no flaky timeouts this run.
+- **One real test-scoping bug, caught by the fresh reseed, not the
+  implementation:** the first draft of
+  `test_each_connected_professor_owns_every_block_section_of_their_subject`
+  queried every `is_block_exclusive` section for a subject code
+  platform-wide and failed on `LEAD8` —
+  `ProgramChairScheduleSampleSeeder`'s separate, pre-existing BSIT fixture
+  also generates a block-exclusive section for that code (`IT401`, owned
+  by its own "Sample Faculty"). Fixed by scoping the assertion to
+  `BSCS-DEMO`'s own section plans (see ADR 0022 for the full writeup).
+- `php artisan migrate:fresh --database=mariadb_migrator --seed --force`
+  against the dev database, then a direct read of `assessments`/
+  `assessment_items`/`queue_tickets`/`payments` through the **app**
+  connection (`grc_app`, not the migrator) confirmed the new tables'
+  grants are live — no `SELECT command denied`. 10 professors confirmed
+  seeded; `prof.bautista@grc.test` confirmed owning exactly 3 CS201
+  sections (one per year-1 block).
+- **Live Playwright-MCP walkthrough, full cycle, no bugs found:** student
+  (`student.seed@grc.test`) submitted a BSCS101 section — the picker
+  showed real professor names (Bautista/Villanueva/Dela Cruz/Reyes) on
+  every subject, confirming Task G live. Registrar Staff approved it; the
+  student immediately saw `₱5775.00` (10.5 × 450 + 1050 misc) with its
+  full Tuition/Registration/Library/Laboratory breakdown and "You're next
+  in line." Accounting called `Q001`, confirmed payment with the amount
+  field pre-filled `5775.00`, and the confirmation generated
+  `COM000001`; Payment Records immediately listed it. Logging in as
+  `prof.bautista@grc.test` showed "Ramon Bautista" in the sidebar (not a
+  placeholder), all 3 CS201 sections on Teaching Schedule, the newly-paid
+  student on the BSCS101 Class Roster as "Enrolled," and a working Grade
+  Submission flow (recorded "Good," submitted). Registrar Head locked the
+  grade; the student's grade slip's PROFESSOR column then showed **"Ramon
+  Bautista"** — not "Testing Faculty." Finally, the student's own
+  Enrollment page now showed the Withdraw panel with its button, only
+  once the enrollment reached `Enrolled` (correctly absent while
+  `pending_payment`).
+
+**Nothing in this entry has been committed or merged** — the user has
+repeated, multiple times across this session, that they will say
+explicitly when that should happen.

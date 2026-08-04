@@ -64,5 +64,15 @@ plain uniqueness check rather than graph logic.
 
 ## Seeded data
 
-None. No acceptance criterion required seeded fixtures for this sub-project;
-tests create records directly.
+`DemoEnrollmentSeeder` seeds both tables for its 10 connected demo
+professors (see `docs/testing/SEEDED_IDENTITIES.md` § "10 connected
+professor identities"): a `FacultyAvailability` row per weekday
+(Mon–Fri, 08:00–17:00) and a single rank-1 `FacultySubjectPreference` for
+each professor's own subject. `ProgramChairScheduleSampleSeeder` also
+seeds one `FacultyAvailability` row and ranked `FacultySubjectPreference`
+rows per college for its own separate "Sample Faculty" fixtures. Every
+other faculty account from `CatalogFacultySeeder`'s 206-row CSV import
+declares no availability at all — that seeder only writes
+`FacultySubjectPreference` rows from the CSV's subject column, so most of
+that roster still renders "No availability declared" in the Faculty
+Assignment workspace.

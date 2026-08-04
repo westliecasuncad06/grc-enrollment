@@ -37,7 +37,7 @@ export function useUpdateQueueTicketMutation() {
       action,
     }: {
       id: number
-      action: "serve" | "complete"
+      action: "serve" | "complete" | "skip" | "mark_priority"
     }) => updateQueueTicket(id, { action }),
     onSuccess: () =>
       queryClient.invalidateQueries({

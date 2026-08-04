@@ -19,16 +19,28 @@ const paginationMeta = {
   total: 1,
 }
 
-const waitingTicket = {
+const servingTicket = {
   type: "queue_ticket",
   id: 1,
   enrollment_id: 9,
   student_number: "2026-0001",
-  ticket_number: "Q000009",
+  ticket_number: "Q001",
   queue_date: "2026-07-30",
+  status: "serving",
+  status_label: "Serving",
+  priority: "regular",
+  priority_label: "Regular",
+  served_at: null,
+} as const
+
+const waitingTicket = {
+  ...servingTicket,
+  id: 2,
+  enrollment_id: 10,
+  student_number: "2026-0002",
+  ticket_number: "Q002",
   status: "waiting",
   status_label: "Waiting",
-  served_at: null,
 } as const
 
 const pendingPaymentEnrollment = {
@@ -39,13 +51,20 @@ const pendingPaymentEnrollment = {
   academic_term_id: 2,
   status: "pending_payment",
   status_label: "Pending Payment",
-  total_units: 3,
+  total_units: 10.5,
+  requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
   registrar_decided_at: "2026-07-30T00:00:00Z",
   payment_confirmed_at: null,
   enrolled_at: null,
   subjects: [],
   queue_ticket: null,
+  assessment: {
+    total_amount: "5775.00",
+    currency: "PHP",
+    assessed_at: "2026-07-30T00:00:00Z",
+    items: [],
+  },
 } as const
 
 const accountingSession = {
@@ -63,14 +82,16 @@ function url(input: RequestInfo | URL) {
       : input.url
 }
 
-function mockRoutes() {
+function mockRoutes(
+  overrides: { tickets?: readonly unknown[] } = {},
+) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const target = url(input)
     if (target.includes("/queue-tickets"))
       return Promise.resolve(
         new Response(
           JSON.stringify({
-            data: [waitingTicket],
+            data: overrides.tickets ?? [servingTicket, waitingTicket],
             links: paginationLinks,
             meta: paginationMeta,
           }),
@@ -84,7 +105,7 @@ function mockRoutes() {
               enrollment: { ...pendingPaymentEnrollment, status: "enrolled" },
               payment: {
                 external_reference: null,
-                amount: null,
+                amount: "5775.00",
                 confirmed_at: "2026-07-30T00:00:00Z",
               },
               document: {
@@ -131,46 +152,131 @@ describe("AccountingPaymentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("offers to call a waiting ticket and confirm a pending payment", async () => {
+  it("shows the currently serving ticket with its amount due", async () => {
     fetchMock.mockImplementation(mockRoutes())
     renderWithSession(<AccountingPaymentWorkspace />, {
       session: accountingSession,
     })
 
-    const queueTable = await screen.findByRole("table", {
-      name: "Payment queue",
-    })
-    expect(within(queueTable).getByText(/Q000009/)).toBeInTheDocument()
+    expect(await screen.findByText("Q001")).toBeInTheDocument()
+    expect(screen.getByText(/10.5 units/)).toBeInTheDocument()
+    expect(screen.getByText(/₱5775.00/)).toBeInTheDocument()
     expect(
-      within(queueTable).getByRole("button", { name: "Call to serve" }),
+      screen.getByRole("button", { name: "Confirm payment" }),
     ).toBeInTheDocument()
-    const pendingTable = await screen.findByRole("table", {
-      name: "Pending payment confirmations",
-    })
+    expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument()
     expect(
-      within(pendingTable).getByRole("button", { name: "Confirm payment" }),
+      screen.getByRole("button", { name: "Call next →" }),
     ).toBeInTheDocument()
+
+    const waitingRow = await screen.findByRole("table", { name: "Waiting" })
+    expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
   })
 
-  it("confirms a payment and shows the generated Digital COM", async () => {
+  it("calls the next waiting ticket when nobody is being served", async () => {
+    const user = userEvent.setup()
+    let servedRequest: RequestInit | undefined
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-tickets/2") && init?.method === "PATCH") {
+        servedRequest = init
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: { ...waitingTicket, status: "serving" } }),
+          ),
+        )
+      }
+      return mockRoutes({ tickets: [waitingTicket] })(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    expect(
+      await screen.findByText("No one is currently being served."),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Call next →" }))
+
+    await vi.waitFor(() => expect(servedRequest).toBeDefined())
+    expect(JSON.parse(servedRequest?.body as string)).toEqual({
+      action: "serve",
+    })
+  })
+
+  it("confirms a payment pre-filled with the assessed total and shows the generated Digital COM", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRoutes())
     renderWithSession(<AccountingPaymentWorkspace />, {
       session: accountingSession,
     })
 
-    const pendingTable = await screen.findByRole("table", {
-      name: "Pending payment confirmations",
-    })
-    await user.click(
-      within(pendingTable).getByRole("button", { name: "Confirm payment" }),
-    )
+    await screen.findByText("Q001")
+    await user.click(screen.getByRole("button", { name: "Confirm payment" }))
     const dialog = screen.getByRole("alertdialog")
+    expect(within(dialog).getByLabelText("Amount")).toHaveValue("5775.00")
     await user.click(
       within(dialog).getByRole("button", { name: "Confirm payment" }),
     )
 
     expect(await screen.findByText(/COM000009/)).toBeInTheDocument()
+  })
+
+  it("skips the currently serving ticket", async () => {
+    const user = userEvent.setup()
+    let skipRequest: RequestInit | undefined
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-tickets/1") && init?.method === "PATCH") {
+        skipRequest = init
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: { ...servingTicket, status: "cancelled" } }),
+          ),
+        )
+      }
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await screen.findByText("Q001")
+    await user.click(screen.getByRole("button", { name: "Skip" }))
+
+    await vi.waitFor(() => expect(skipRequest).toBeDefined())
+    expect(JSON.parse(skipRequest?.body as string)).toEqual({
+      action: "skip",
+    })
+  })
+
+  it("marks a waiting ticket priority", async () => {
+    const user = userEvent.setup()
+    let priorityRequest: RequestInit | undefined
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-tickets/2") && init?.method === "PATCH") {
+        priorityRequest = init
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: { ...waitingTicket, priority: "priority" } }),
+          ),
+        )
+      }
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    const waitingTable = await screen.findByRole("table", { name: "Waiting" })
+    await user.click(
+      within(waitingTable).getByRole("button", { name: "Mark priority" }),
+    )
+
+    await vi.waitFor(() => expect(priorityRequest).toBeDefined())
+    expect(JSON.parse(priorityRequest?.body as string)).toEqual({
+      action: "mark_priority",
+    })
   })
 
   it("has no detectable accessibility violations once loaded", async () => {
@@ -179,7 +285,7 @@ describe("AccountingPaymentWorkspace", () => {
       session: accountingSession,
     })
 
-    await screen.findByRole("table", { name: "Payment queue" })
+    await screen.findByText("Q001")
     expect(await axe(container)).toHaveNoViolations()
   })
 })

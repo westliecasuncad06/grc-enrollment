@@ -2,13 +2,16 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Billing\AssessEnrollment;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\QueueTicketPriority;
 use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
+use App\Models\Assessment;
 use App\Models\Enrollment;
 use App\Models\Notification;
 use App\Models\QueueTicket;
@@ -79,6 +82,7 @@ final class TransitionEnrollment
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly NotificationRecorder $notificationRecorder,
+        private readonly AssessEnrollment $assessEnrollment,
     ) {}
 
     public function execute(
@@ -126,17 +130,31 @@ final class TransitionEnrollment
             $afterValues = self::snapshot($lockedEnrollment);
             $auditReason = in_array($action, self::REASON_REQUIRED_ACTIONS, true) ? $reason : null;
 
-            // Opaque per the queue_tickets migration's own docblock: PRD §17
-            // leaves the numbering scheme, daily reset, and priority policy
-            // unconfirmed. The enrollment ID guarantees the required global
-            // uniqueness without asserting any of that unconfirmed policy.
+            // Per the queue_tickets migration's own docblock: PRD §17 leaves
+            // the numbering scheme and priority policy unconfirmed. The
+            // ticket resets daily — a simple per-day count is enough to
+            // guarantee the (queue_date, ticket_number) uniqueness this
+            // needs; every ticket starts Regular, since no eligibility rule
+            // is encoded anywhere (Accounting marks priority afterward, an
+            // audited action — see TransitionQueueTicket).
+            $queueDate = now()->toDateString();
             $queueTicket = $action === 'registrar_approve'
                 ? QueueTicket::create([
                     'enrollment_id' => $lockedEnrollment->id,
-                    'ticket_number' => sprintf('Q%06d', $lockedEnrollment->id),
-                    'queue_date' => now()->toDateString(),
+                    'ticket_number' => sprintf('Q%03d', QueueTicket::query()->where('queue_date', $queueDate)->count() + 1),
+                    'queue_date' => $queueDate,
                     'status' => QueueTicketStatus::Waiting,
+                    'priority' => QueueTicketPriority::Regular,
                 ])
+                : null;
+
+            // PRD §5.3 process 3.3 "computes the approved assessment" — done
+            // here, in the same transaction as the queue ticket above, so
+            // nothing may reach `pending_payment` without one. Folded into
+            // this same audit row's after_values below, not a second row —
+            // see AssessEnrollment's own docblock for why.
+            $assessment = $action === 'registrar_approve'
+                ? $this->assessEnrollment->execute($lockedEnrollment)
                 : null;
 
             $this->auditRecorder->record(
@@ -145,7 +163,7 @@ final class TransitionEnrollment
                 AuditableType::ENROLLMENT,
                 $lockedEnrollment->id,
                 $beforeValues,
-                $queueTicket === null ? $afterValues : [...$afterValues, 'queue_ticket_number' => $queueTicket->ticket_number],
+                self::auditAfterValues($afterValues, $queueTicket, $assessment),
                 $auditReason,
                 $context,
             );
@@ -156,7 +174,7 @@ final class TransitionEnrollment
                 'message' => self::notificationMessage($action, $lockedEnrollment, $reason, $queueTicket),
             ]);
 
-            if ($action === 'registrar_approve') {
+            if ($action === 'registrar_approve' && $queueTicket !== null) {
                 $this->notificationRecorder->recordManyForRole(
                     UserRole::AccountingStaff,
                     NotificationType::EnrollmentRegistrarApproved,
@@ -164,8 +182,27 @@ final class TransitionEnrollment
                 );
             }
 
-            return $lockedEnrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'queueTicket']);
+            return $lockedEnrollment->refresh()->load([
+                'student', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items',
+            ]);
         });
+    }
+
+    /**
+     * @param  array{student_id: int, academic_term_id: int, status: string, registrar_decided_at: ?string}  $afterValues
+     * @return array<string, mixed>
+     */
+    private static function auditAfterValues(array $afterValues, ?QueueTicket $queueTicket, ?Assessment $assessment): array
+    {
+        if ($queueTicket !== null) {
+            $afterValues = [...$afterValues, 'queue_ticket_number' => $queueTicket->ticket_number];
+        }
+
+        if ($assessment !== null) {
+            $afterValues = [...$afterValues, 'assessment_total_amount' => $assessment->total_amount, 'assessment_item_count' => $assessment->items->count()];
+        }
+
+        return $afterValues;
     }
 
     private static function notificationMessage(string $action, Enrollment $enrollment, ?string $reason, ?QueueTicket $queueTicket): string

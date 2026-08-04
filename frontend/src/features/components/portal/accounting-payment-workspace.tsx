@@ -21,6 +21,7 @@ import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
@@ -34,62 +35,97 @@ import {
   useQueueTicketsQuery,
   useUpdateQueueTicketMutation,
 } from "@/features/hooks/use-queue-tickets"
-import type { PaymentConfirmation } from "@/features/schemas/enrollment-schema"
+import type {
+  Enrollment,
+  PaymentConfirmation,
+} from "@/features/schemas/enrollment-schema"
 import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
 
-const workspaceHeadings: Record<string, string> = {
-  "payment-queue": "Payment queue",
-  "serving-number": "Serving number",
-  "payment-confirmation": "Payment confirmation",
-  "com-finalization": "COM finalization",
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
-function ticketBadgeVariant(
-  status: QueueTicket["status"],
-): "default" | "secondary" | "outline" {
-  if (status === "serving") return "default"
-  if (status === "served") return "secondary"
-  return "outline"
+/** Priority tickets always precede regular ones; within a tier, earlier id first — mirrors QueueTicket::position() server-side. */
+function byQueueOrder(a: QueueTicket, b: QueueTicket): number {
+  if (a.priority !== b.priority) return a.priority === "priority" ? -1 : 1
+  return a.id - b.id
 }
 
-export function AccountingPaymentWorkspace({
-  initialModuleId = "payment-queue",
-}: {
-  initialModuleId?: string
-}) {
+/**
+ * The Cashier's guided flow: one NOW SERVING panel driving call-next,
+ * skip, and payment confirmation, plus the waiting line and today's served
+ * tickets — replaces the four separate payment-queue/serving-number/
+ * payment-confirmation/com-finalization modules with a single screen a
+ * cashier can work top to bottom without navigating away.
+ */
+export function AccountingPaymentWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "accounting_staff"
-  const [confirming, setConfirming] = useState<number | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const [externalReference, setExternalReference] = useState("")
   const [amount, setAmount] = useState("")
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
   const [error, setError] = useState("")
-  const heading =
-    workspaceHeadings[initialModuleId] ?? workspaceHeadings["payment-queue"]
 
   const ticketsQuery = useQueueTicketsQuery(
-    { page: 1, per_page: 20 },
+    { queue_date: todayIsoDate(), page: 1, per_page: 100 },
     { enabled: authorized },
   )
   const ticketMutation = useUpdateQueueTicketMutation()
   const pendingPaymentQuery = useEnrollmentsListQuery(
-    { status: "pending_payment", page: 1, per_page: 20 },
+    { status: "pending_payment", page: 1, per_page: 100 },
     { enabled: authorized },
   )
   const paymentMutation = useConfirmPaymentMutation()
 
+  const tickets = ticketsQuery.data?.data ?? []
+  const enrollments = pendingPaymentQuery.data?.data ?? []
+  const enrollmentFor = (ticket: QueueTicket): Enrollment | undefined =>
+    enrollments.find((enrollment) => enrollment.id === ticket.enrollment_id)
+
+  const nowServing = tickets.find((ticket) => ticket.status === "serving")
+  const waiting = [...tickets]
+    .filter((ticket) => ticket.status === "waiting")
+    .sort(byQueueOrder)
+  const servedToday = tickets.filter((ticket) => ticket.status === "served")
+  const nowServingEnrollment = nowServing
+    ? enrollmentFor(nowServing)
+    : undefined
+
+  const callNext = () => {
+    const next = waiting[0]
+    if (!next) return
+    ticketMutation.mutate({ id: next.id, action: "serve" })
+  }
+
+  const skipCurrent = () => {
+    if (!nowServing) return
+    ticketMutation.mutate({ id: nowServing.id, action: "skip" })
+  }
+
+  const markPriority = (ticket: QueueTicket) => {
+    ticketMutation.mutate({ id: ticket.id, action: "mark_priority" })
+  }
+
+  const openConfirm = () => {
+    setExternalReference("")
+    setAmount(nowServingEnrollment?.assessment?.total_amount ?? "")
+    setError("")
+    setConfirming(true)
+  }
+
   const confirmPayment = async () => {
-    if (confirming === null) return
+    if (!nowServing) return
     setError("")
     try {
       const result = await paymentMutation.mutateAsync({
-        id: confirming,
+        id: nowServing.enrollment_id,
         externalReference: externalReference.trim() || undefined,
         amount: amount.trim() ? Number(amount) : undefined,
       })
       setLastConfirmation(result)
-      setConfirming(null)
+      setConfirming(false)
       setExternalReference("")
       setAmount("")
     } catch {
@@ -101,8 +137,8 @@ export function AccountingPaymentWorkspace({
 
   return (
     <WorkspacePage
-      title={heading}
-      description="Advance the payment queue, confirm received payments, and finalize the Digital Certificate of Matriculation."
+      title="Payment queue"
+      description="Call the next student, confirm their payment, and generate the Digital COM."
       unauthorized={!authorized}
       lastUpdated={Math.max(
         ticketsQuery.dataUpdatedAt,
@@ -123,155 +159,191 @@ export function AccountingPaymentWorkspace({
           </AlertDescription>
         </Alert>
       )}
-      <Card>
-        <CardHeader>
-          <CardTitle level={2}>Payment queue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AsyncBoundary
-            query={{ ...ticketsQuery, data: ticketsQuery.data?.data }}
-            isEmpty={(rows) => rows.length === 0}
-            emptyMessage="No queue tickets are currently active."
-            loadingLabel="Loading the payment queue…"
-          >
-            {(tickets) => (
-              <DataTable
-                caption="Payment queue"
-                rowKey={(ticket) => ticket.id}
-                rows={tickets}
-                columns={[
-                  {
-                    key: "ticket",
-                    header: "Ticket",
-                    render: (ticket) => ticket.ticket_number,
-                  },
-                  {
-                    key: "student",
-                    header: "Student",
-                    render: (ticket) => ticket.student_number,
-                  },
-                  {
-                    key: "status",
-                    header: "Status",
-                    render: (ticket) => (
-                      <Badge variant={ticketBadgeVariant(ticket.status)}>
-                        {ticket.status_label}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    key: "actions",
-                    header: "Actions",
-                    render: (ticket) => (
-                      <>
-                        {ticket.status === "waiting" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={ticketMutation.isPending}
-                            onClick={() =>
-                              ticketMutation.mutate({
-                                id: ticket.id,
-                                action: "serve",
-                              })
-                            }
-                          >
-                            Call to serve
-                          </Button>
-                        )}
-                        {ticket.status === "serving" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={ticketMutation.isPending}
-                            onClick={() =>
-                              ticketMutation.mutate({
-                                id: ticket.id,
-                                action: "complete",
-                              })
-                            }
-                          >
-                            Mark served
-                          </Button>
-                        )}
-                        {ticket.status === "served" && (
-                          <span className="text-sm text-muted-foreground">
-                            Complete
-                          </span>
-                        )}
-                      </>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </AsyncBoundary>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle level={2}>Pending payment confirmations</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AsyncBoundary
-            query={{
-              ...pendingPaymentQuery,
-              data: pendingPaymentQuery.data?.data,
-            }}
-            isEmpty={(rows) => rows.length === 0}
-            emptyMessage="No enrollments are awaiting payment confirmation."
-            loadingLabel="Loading pending payment confirmations…"
-          >
-            {(enrollments) => (
-              <DataTable
-                caption="Pending payment confirmations"
-                rowKey={(enrollment) => enrollment.id}
-                rows={enrollments}
-                columns={[
-                  {
-                    key: "student",
-                    header: "Student",
-                    render: (enrollment) => enrollment.student_number,
-                  },
-                  {
-                    key: "enrollment",
-                    header: "Enrollment",
-                    render: (enrollment) => `#${enrollment.id}`,
-                  },
-                  {
-                    key: "units",
-                    header: "Units",
-                    render: (enrollment) => enrollment.total_units,
-                  },
-                  {
-                    key: "actions",
-                    header: "Actions",
-                    render: (enrollment) => (
+      <AsyncBoundary
+        query={{
+          isPending: ticketsQuery.isPending || pendingPaymentQuery.isPending,
+          isError: ticketsQuery.isError || pendingPaymentQuery.isError,
+          error: ticketsQuery.error ?? pendingPaymentQuery.error,
+          data: tickets,
+          refetch: () => {
+            void ticketsQuery.refetch()
+            void pendingPaymentQuery.refetch()
+          },
+        }}
+        loadingLabel="Loading the payment queue…"
+      >
+        {() => (
+          <>
+            <Card className="portal-workspace-highlight">
+              <CardHeader>
+                <CardTitle level={2}>Now serving</CardTitle>
+                <CardDescription>
+                  {waiting.length} waiting · {servedToday.length} served today
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                {nowServing ? (
+                  <div className="grid gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-3xl font-bold">
+                        {nowServing.ticket_number}
+                      </span>
+                      {nowServing.priority === "priority" && (
+                        <Badge variant="outline">Priority</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {nowServing.student_number}
+                      {nowServingEnrollment
+                        ? ` · ${nowServingEnrollment.total_units} units`
+                        : ""}
+                    </p>
+                    <p className="text-sm font-medium">
+                      Amount due{" "}
+                      {nowServingEnrollment?.assessment?.total_amount
+                        ? `₱${nowServingEnrollment.assessment.total_amount}`
+                        : "—"}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
-                        size="sm"
-                        onClick={() => {
-                          setConfirming(enrollment.id)
-                          setExternalReference("")
-                          setAmount("")
-                          setError("")
-                        }}
+                        disabled={ticketMutation.isPending}
+                        onClick={openConfirm}
                       >
                         Confirm payment
                       </Button>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </AsyncBoundary>
-        </CardContent>
-      </Card>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={ticketMutation.isPending}
+                        onClick={skipCurrent}
+                      >
+                        Skip
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={ticketMutation.isPending || waiting.length === 0}
+                        onClick={callNext}
+                      >
+                        Call next →
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      No one is currently being served.
+                    </p>
+                    <Button
+                      type="button"
+                      disabled={ticketMutation.isPending || waiting.length === 0}
+                      onClick={callNext}
+                      className="w-fit"
+                    >
+                      Call next →
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle level={2}>Waiting ({waiting.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  caption="Waiting"
+                  rowKey={(ticket) => ticket.id}
+                  rows={waiting}
+                  columns={[
+                    {
+                      key: "ticket",
+                      header: "Ticket",
+                      render: (ticket) => (
+                        <span className="flex items-center gap-2">
+                          {ticket.ticket_number}
+                          {ticket.priority === "priority" && (
+                            <Badge variant="outline">Priority</Badge>
+                          )}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "student",
+                      header: "Student",
+                      render: (ticket) => ticket.student_number,
+                    },
+                    {
+                      key: "amount",
+                      header: "Amount due",
+                      render: (ticket) => {
+                        const total = enrollmentFor(ticket)?.assessment
+                          ?.total_amount
+                        return total ? `₱${total}` : "—"
+                      },
+                    },
+                    {
+                      key: "actions",
+                      header: "Actions",
+                      render: (ticket) =>
+                        ticket.priority === "regular" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={ticketMutation.isPending}
+                            onClick={() => markPriority(ticket)}
+                          >
+                            Mark priority
+                          </Button>
+                        ) : null,
+                    },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle level={2}>Served today ({servedToday.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DataTable
+                  caption="Served today"
+                  rowKey={(ticket) => ticket.id}
+                  rows={servedToday}
+                  columns={[
+                    {
+                      key: "ticket",
+                      header: "Ticket",
+                      render: (ticket) => ticket.ticket_number,
+                    },
+                    {
+                      key: "student",
+                      header: "Student",
+                      render: (ticket) => ticket.student_number,
+                    },
+                    {
+                      key: "served_at",
+                      header: "Served at",
+                      render: (ticket) =>
+                        ticket.served_at
+                          ? new Date(ticket.served_at).toLocaleTimeString()
+                          : "—",
+                    },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </AsyncBoundary>
       <AlertDialog
-        open={confirming !== null}
+        open={confirming}
         onOpenChange={(open) => {
-          if (!open && !paymentMutation.isPending) setConfirming(null)
+          if (!open && !paymentMutation.isPending) setConfirming(false)
         }}
       >
         <AlertDialogContent>
@@ -295,9 +367,7 @@ export function AccountingPaymentWorkspace({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="payment-amount">
-                Amount (optional)
-              </FieldLabel>
+              <FieldLabel htmlFor="payment-amount">Amount</FieldLabel>
               <Input
                 id="payment-amount"
                 inputMode="decimal"

@@ -6,9 +6,16 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { EnrollmentBlockChoice } from "@/features/components/portal/enrollment-block-choice"
+import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
+import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
+import {
+  StatusStepper,
+  type StatusStepperStage,
+} from "@/features/components/portal/status-stepper"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
@@ -29,7 +36,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import { Field, FieldLabel } from "@/features/components/ui/field"
 import {
   Select,
   SelectContent,
@@ -50,12 +57,41 @@ import {
 } from "@/features/hooks/use-enrollment"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
-import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
+import type { Enrollment, EligibleSubject } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
 import { createEnrollment } from "@/features/services/enrollment-service"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
 const TERMINAL_STATUSES = new Set(["rejected", "cancelled", "withdrawn"])
+
+/**
+ * The single progress indicator for the whole enrollment process — from
+ * picking a block/subjects through to being fully `enrolled`. Replaces the
+ * separate steppers the old Queue & Payment module used to own, now that
+ * that module's content is embedded here as a stage instead of a page of
+ * its own.
+ */
+function overallStages(
+  selectionLabel: string,
+  enrollment: Enrollment | undefined,
+): readonly StatusStepperStage[] {
+  const submitted = enrollment !== undefined
+  const approved = enrollment?.registrar_decided_at != null
+  const paid = enrollment?.payment_confirmed_at != null
+  const enrolled = enrollment?.enrolled_at != null
+
+  return [
+    { label: selectionLabel, done: submitted, current: !submitted },
+    { label: "Submitted", done: submitted, current: submitted && !approved },
+    {
+      label: "Registrar approved",
+      done: approved,
+      current: approved && !paid,
+    },
+    { label: "Payment confirmed", done: paid, current: paid && !enrolled },
+    { label: "Enrolled", done: enrolled, current: false },
+  ]
+}
 
 function SectionChoice({
   subject,
@@ -120,9 +156,7 @@ export function EnrollmentWorkspace() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const termsQuery = useAcademicTermsQuery()
-  const { selectedTermId, setSelectedTermId } = useTermSelection(
-    termsQuery.data,
-  )
+  const { selectedTermId } = useTermSelection(termsQuery.data)
   const eligibleSubjectsQuery = useEligibleSubjectsQuery(selectedTermId)
   const enrollmentsQuery = useEnrollmentsQuery()
   const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId)
@@ -157,11 +191,13 @@ export function EnrollmentWorkspace() {
     (block) => block.block_code === selectedBlockCode,
   )
 
-  const hasActiveEnrollmentThisTerm = (enrollmentsQuery.data ?? []).some(
+  const activeEnrollment = (enrollmentsQuery.data ?? []).find(
     (enrollment) =>
       enrollment.academic_term_id === selectedTermId &&
       !TERMINAL_STATUSES.has(enrollment.status),
   )
+  const hasActiveEnrollmentThisTerm = activeEnrollment !== undefined
+  const addDrop = scheduleQuery.data?.add_drop
 
   const selectedEntries = Object.entries(selections)
     .map(([subjectId, sectionId]) => {
@@ -278,61 +314,34 @@ export function EnrollmentWorkspace() {
     ) : receipt ? (
       <Alert>
         <AlertDescription>
-          Enrollment submitted and pending registrar approval. You&apos;ll get
-          a queue number once it&apos;s approved — check Queue &amp; Payment
-          for status.
+          Enrollment submitted and pending registrar approval. Its status is
+          shown below — you&apos;ll get a queue number once it&apos;s
+          approved.
         </AlertDescription>
       </Alert>
     ) : null
 
   return (
     <WorkspacePage
-      title={isRegularAudience ? "Select your block" : "Select your subjects"}
+      title={isRegularAudience ? "Select your section" : "Select your subjects"}
       description={
         isRegularAudience
-          ? "Choose the block that enrolls you in every subject for your year level at once."
+          ? "Choose the section that enrolls you in every subject for your year level at once."
           : "Select one section per eligible subject, then submit."
       }
     >
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="enrollment-term">Academic term</FieldLabel>
-          <Select
-            value={selectedTermId !== null ? String(selectedTermId) : ""}
-            onValueChange={(value) => {
-              setSelections({})
-              setSelectedBlockCode(null)
-              setReceipt(false)
-              setSelectedTermId(Number(value) || null)
-            }}
-            disabled={termsQuery.isLoading}
-          >
-            <SelectTrigger id="enrollment-term" className="w-full">
-              <SelectValue placeholder="Select an academic term" />
-            </SelectTrigger>
-            <SelectContent>
-              {(termsQuery.data ?? []).map((term) => (
-                <SelectItem key={term.id} value={String(term.id)}>
-                  {formatAcademicTerm(term)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </FieldGroup>
+      {selectedTermId !== null && (
+        <StatusStepper
+          stages={overallStages(
+            isRegularAudience ? "Select section" : "Select subjects",
+            activeEnrollment,
+          )}
+        />
+      )}
 
       <EnrollmentAvailabilityBanner viewer={viewer} />
 
       {banner}
-
-      {selectedTermId !== null && hasActiveEnrollmentThisTerm && (
-        <Alert>
-          <AlertDescription>
-            You already have an active enrollment for this term. View its status
-            below.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {selectedTermId === null ? (
         <p>Select an academic term to begin enrollment.</p>
@@ -351,12 +360,12 @@ export function EnrollmentWorkspace() {
               },
             }}
             isEmpty={(all) => all.length === 0}
-            emptyMessage="No blocks were generated for your year level and curriculum yet. Contact the Registrar."
-            loadingLabel="Loading your blocks…"
+            emptyMessage="No sections were generated for your year level and curriculum yet. Contact the Registrar."
+            loadingLabel="Loading your sections…"
             loadingFallback={<Skeleton className="h-48" />}
           >
             {() => (
-              <div role="radiogroup" aria-label="Blocks">
+              <div role="radiogroup" aria-label="Sections">
                 <StaggerList className="grid gap-3">
                   {blocks.map((block) => (
                     <StaggerItem key={block.block_code}>
@@ -421,15 +430,15 @@ export function EnrollmentWorkspace() {
           !hasActiveEnrollmentThisTerm && (
             <Card className="portal-workspace-highlight">
               <CardHeader>
-                <CardTitle level={2}>Review your block</CardTitle>
+                <CardTitle level={2}>Review your section</CardTitle>
                 <CardDescription>
-                  Confirm block {selectedBlock.block_code} before submitting —
-                  every subject below enrolls together.
+                  Confirm section {selectedBlock.block_code} before
+                  submitting — every subject below enrolls together.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
                 <DataTable
-                  caption="Selected block subjects"
+                  caption="Selected section subjects"
                   rowKey={(subject) => subject.section_id}
                   rows={selectedBlock.subjects}
                   columns={[
@@ -528,7 +537,7 @@ export function EnrollmentWorkspace() {
               {isRegularAudience && selectedBlock ? (
                 <>
                   This enrolls you in all {selectedBlock.subjects.length}{" "}
-                  subjects of block {selectedBlock.block_code}, totaling{" "}
+                  subjects of section {selectedBlock.block_code}, totaling{" "}
                   {selectedBlock.total_units} units for{" "}
                 </>
               ) : (
@@ -562,6 +571,25 @@ export function EnrollmentWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {activeEnrollment && (
+        <EnrollmentQueuePaymentPanel enrollment={activeEnrollment} />
+      )}
+
+      {activeEnrollment?.status === "enrolled" && (
+        <EnrollmentAddDropPanel
+          enrollment={activeEnrollment}
+          windowOpen={addDrop?.is_open ?? false}
+          windowMessage={
+            addDrop?.reason_message ?? "Loading add/drop availability…"
+          }
+          windowClosesAt={addDrop?.closes_at ?? null}
+        />
+      )}
+
+      {activeEnrollment?.status === "enrolled" && (
+        <EnrollmentWithdrawPanel enrollment={activeEnrollment} />
+      )}
 
       {(enrollmentsQuery.data ?? []).length > 0 && (
         <Card>

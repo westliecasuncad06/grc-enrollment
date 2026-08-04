@@ -22,6 +22,7 @@ final class ApiSurfaceTest extends TestCase
             'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'GET|HEAD api/v1/academic-grades',
+            'GET|HEAD api/v1/academic-record',
             'GET|HEAD api/v1/academic-term-section-plans',
             'GET|HEAD api/v1/academic-term-workflows',
             'GET|HEAD api/v1/academic-terms',
@@ -44,6 +45,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/grade-slip',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/notifications',
+            'GET|HEAD api/v1/payments',
             'GET|HEAD api/v1/programs',
             'GET|HEAD api/v1/prospectus',
             'GET|HEAD api/v1/queue-tickets',
@@ -133,6 +135,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
             'api.v1.enrollment-documents.index',
+            'api.v1.payments.index',
             'api.v1.academic-grades.index',
             'api.v1.academic-grades.store',
             'api.v1.academic-grades.update',
@@ -440,6 +443,24 @@ final class ApiSurfaceTest extends TestCase
 
             $this->assertSame([], array_values($roleMiddleware));
         }
+    }
+
+    /**
+     * Two roles (Accounting Staff, Registrar Head), neither exclusive — no
+     * `role:` middleware. `PaymentPolicy::viewAny` resolves the boundary.
+     */
+    public function test_payments_carries_no_role_middleware(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.payments.index');
+
+        $this->assertNotNull($route);
+
+        $roleMiddleware = array_filter(
+            $route->gatherMiddleware(),
+            static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+        );
+
+        $this->assertSame([], array_values($roleMiddleware));
     }
 
     /**

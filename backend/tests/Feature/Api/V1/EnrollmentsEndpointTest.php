@@ -259,6 +259,42 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertSame(1, $section->enrolled_count);
     }
 
+    public function test_the_enrollment_resource_has_the_exact_key_set(): void
+    {
+        // Nothing else in this suite pins EnrollmentResource's full shape —
+        // it is otherwise enforced only by a PHPDoc, docs/api/openapi.yaml,
+        // and the frontend's .strict() Zod schema, none of which run
+        // against the backend. A key added here without this test still
+        // passing green would silently break the live frontend at runtime.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101', 3.0);
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ]);
+
+        $response->assertCreated();
+        self::assertSame(
+            [
+                'type', 'id', 'student_id', 'student_number', 'academic_term_id',
+                'status', 'status_label', 'total_units', 'requires_overload_approval',
+                'submitted_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
+                'subjects', 'queue_ticket', 'assessment',
+            ],
+            array_keys($response->json('data')),
+        );
+        self::assertSame(
+            ['section_id', 'subject_code', 'subject_title', 'status', 'status_label'],
+            array_keys($response->json('data.subjects.0')),
+        );
+    }
+
     public function test_a_block_submission_enrolls_every_subject_in_the_block_atomically(): void
     {
         $term = $this->makeTerm();
@@ -357,7 +393,7 @@ final class EnrollmentsEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable();
-        $response->assertJsonPath('error.errors.block_code.0', 'This block is not available for your year level and curriculum.');
+        $response->assertJsonPath('error.errors.block_code.0', 'This section is not available for your year level and curriculum.');
     }
 
     public function test_submission_against_a_term_that_is_not_semester_ongoing_is_rejected(): void
@@ -628,6 +664,97 @@ final class EnrollmentsEndpointTest extends TestCase
         $unconfigured->assertCreated();
     }
 
+    public function test_a_submission_within_the_overload_allowance_is_permitted_but_flagged(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101', 3.0);
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        config(['enrollment.max_regular_units' => 2, 'enrollment.overload_max_units' => 4]);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.requires_overload_approval', true);
+        $this->assertDatabaseCount('enrollments', 1);
+    }
+
+    public function test_a_submission_beyond_the_overload_allowance_is_still_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101', 3.0);
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        config(['enrollment.max_regular_units' => 1, 'enrollment.overload_max_units' => 2]);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ]);
+
+        $response->assertUnprocessable();
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    public function test_registrar_approve_is_rejected_without_acknowledging_a_flagged_overload(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $enrollment->update(['requires_overload_approval' => true]);
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.overloadunacked@grc.test');
+
+        $response = $this->withToken($staffToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('overload_acknowledged', $response->json('error.errors'));
+        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+    }
+
+    public function test_registrar_approve_succeeds_once_a_flagged_overload_is_acknowledged(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $enrollment->update(['requires_overload_approval' => true]);
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.overloadacked@grc.test');
+
+        $response = $this->withToken($staffToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'registrar_approve',
+            'overload_acknowledged' => true,
+        ]);
+
+        $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
+    }
+
+    public function test_registrar_approve_does_not_require_acknowledgement_when_not_flagged(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.nooverload@grc.test');
+
+        $response = $this->withToken($staffToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
+    }
+
     public function test_index_returns_only_the_authenticated_students_own_enrollments(): void
     {
         $term = $this->makeTerm();
@@ -761,6 +888,15 @@ final class EnrollmentsEndpointTest extends TestCase
         // not at submission (Phase 6).
         $response->assertJsonPath('data.queue_ticket.status', 'waiting');
         $this->assertDatabaseCount('queue_tickets', 1);
+
+        // PRD §5.3 process 3.3 "computes the approved assessment" — computed
+        // in the same step, folded into the same single audit row (see
+        // AssessEnrollment's docblock), not a second AuditLog/Notification.
+        $this->assertDatabaseCount('assessments', 1);
+        // makeEnrollment() sets total_units = 3.0; default config/fees.php
+        // is 450.00/unit + 350.00 + 200.00 + 500.00 misc = 1350.00 + 1050.00.
+        $response->assertJsonPath('data.assessment.total_amount', '2400.00');
+        $response->assertJsonCount(4, 'data.assessment.items');
     }
 
     public function test_a_registrar_head_role_cannot_perform_registrar_approve(): void
@@ -777,6 +913,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
         $this->assertDatabaseCount('queue_tickets', 0);
+        $this->assertDatabaseCount('assessments', 0);
     }
 
     public function test_registrar_reject_requires_a_reason_and_transitions_to_rejected(): void

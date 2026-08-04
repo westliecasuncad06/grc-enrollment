@@ -5,8 +5,13 @@ namespace Tests\Feature\Database;
 use App\Domain\Academic\GradeStatus;
 use App\Models\AcademicGrade;
 use App\Models\AuditLog;
+use App\Models\Curriculum;
 use App\Models\Enrollment;
+use App\Models\FacultyAvailability;
+use App\Models\FacultySubjectPreference;
+use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\Subject;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoEnrollmentSeeder;
@@ -153,6 +158,105 @@ final class DemoEnrollmentSeederTest extends TestCase
                 "Seeded student {$student->email} does not use the shared development password.",
             );
         }
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function connectedProfessorProvider(): array
+    {
+        return [
+            'CS201' => ['CS201', 'Ramon Bautista', 'prof.bautista@grc.test'],
+            'MATH102' => ['MATH102', 'Teresa Villanueva', 'prof.villanueva@grc.test'],
+            'GE102' => ['GE102', 'Christian Dela Cruz', 'prof.dela-cruz@grc.test'],
+            'LEAD 2' => ['LEAD 2', 'Angelica Reyes', 'prof.reyes@grc.test'],
+            'CS301' => ['CS301', 'Michael Santos', 'prof.santos@grc.test'],
+            'LEAD 4' => ['LEAD 4', 'Josephine Mendoza', 'prof.mendoza@grc.test'],
+            'CS303' => ['CS303', 'Ferdinand Aquino', 'prof.aquino@grc.test'],
+            'LEAD 6' => ['LEAD 6', 'Grace Manalo', 'prof.manalo@grc.test'],
+            'CS402' => ['CS402', 'Rafael Torres', 'prof.torres@grc.test'],
+            'LEAD8' => ['LEAD8', 'Cecilia Fernandez', 'prof.fernandez@grc.test'],
+        ];
+    }
+
+    /**
+     * Every block section of a subject, within the dedicated `BSCS-DEMO`
+     * curriculum's own blocks (`BSCS101`..`BSCS401`) — across every block
+     * code, in every year level that offers it — must be owned by that
+     * subject's one real professor, not the old shared
+     * `faculty.seed@grc.test` placeholder.
+     *
+     * Deliberately scoped to `BSCS-DEMO`, not "every `is_block_exclusive`
+     * section of this subject code platform-wide": `LEAD8` (and other
+     * Leadership codes) also appears in the synthetic BSIT curriculum that
+     * `ProgramChairScheduleSampleSeeder` generates its own block sections
+     * for (e.g. `IT401`), owned by that seeder's own "Sample Faculty" — an
+     * unrelated fixture for a different testing purpose.
+     */
+    #[DataProvider('connectedProfessorProvider')]
+    public function test_each_connected_professor_owns_every_block_section_of_their_subject(
+        string $subjectCode,
+        string $expectedName,
+        string $expectedEmail,
+    ): void {
+        $this->seed(DatabaseSeeder::class);
+
+        $professor = User::query()->where('email', $expectedEmail)->firstOrFail();
+        $this->assertSame($expectedName, $professor->name);
+        $this->assertSame('faculty', $professor->role->value);
+        $this->assertSame('ccs', $professor->college?->value);
+
+        $curriculum = Curriculum::query()->where('name', 'BSCS Grade History Demo 2026')->firstOrFail();
+        $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
+        $sections = Section::query()
+            ->where('subject_id', $subject->id)
+            ->where('is_block_exclusive', true)
+            ->whereHas('sectionPlan', fn ($query) => $query->where('curriculum_id', $curriculum->id))
+            ->get();
+
+        $this->assertNotEmpty($sections);
+        foreach ($sections as $section) {
+            $this->assertSame(
+                $professor->id,
+                $section->professor_id,
+                "Section {$section->section_code} of {$subjectCode} is not owned by {$expectedEmail}.",
+            );
+        }
+    }
+
+    #[DataProvider('connectedProfessorProvider')]
+    public function test_each_connected_professor_has_declared_availability_and_a_subject_preference(
+        string $subjectCode,
+        string $expectedName,
+        string $expectedEmail,
+    ): void {
+        $this->seed(DatabaseSeeder::class);
+
+        $professor = User::query()->where('email', $expectedEmail)->firstOrFail();
+        $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
+
+        $this->assertSame(
+            5,
+            FacultyAvailability::query()->where('professor_id', $professor->id)->count(),
+            "{$expectedName} should have one declared availability window per weekday.",
+        );
+
+        $preference = FacultySubjectPreference::query()
+            ->where('professor_id', $professor->id)
+            ->where('subject_id', $subject->id)
+            ->sole();
+        $this->assertSame(1, $preference->rank);
+    }
+
+    public function test_reseeding_ten_connected_professors_creates_no_duplicates(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $professorCount = User::query()->where('email', 'like', 'prof.%@grc.test')->count();
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertSame(10, $professorCount);
+        $this->assertSame(10, User::query()->where('email', 'like', 'prof.%@grc.test')->count());
     }
 
     /**

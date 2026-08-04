@@ -47,3 +47,40 @@ export function allowedMarksForSubject(
 ): readonly GradeMarkValue[] {
   return isCompletionOnly ? completionOnlyMarkValues : academicMarkValues
 }
+
+/**
+ * A mark's pass/fail standing, independent of `AcademicGrade["status"]`
+ * (which tracks draft/submitted/locked workflow state, not the mark
+ * itself). Drives color coding on the prospectus and grade slip so a
+ * student can spot a problem mark or an unattempted subject at a glance.
+ */
+export type MarkTone = "passed" | "failed" | "incomplete" | "not-taken"
+
+export function markTone(mark: GradeMarkValue | null): MarkTone {
+  if (mark === null) return "not-taken"
+  if (mark === "5.00") return "failed"
+  if (mark === "NC" || mark === "INC" || mark === "DRP") return "incomplete"
+  return "passed"
+}
+
+/** Maps a mark's tone onto the shared `Badge` component's `variant` prop. */
+export function markToneBadgeVariant(
+  tone: MarkTone,
+): "success" | "destructive" | "warning" | "outline" {
+  if (tone === "failed") return "destructive"
+  if (tone === "incomplete") return "warning"
+  if (tone === "not-taken") return "outline"
+  return "success"
+}
+
+/**
+ * Screen-only row tint — print output stays black-on-white (`.print-document`
+ * in globals.css overrides colors unconditionally), so this must never be
+ * the only signal a tone is communicated with; pair it with text/badges.
+ */
+export function markToneRowClass(tone: MarkTone): string {
+  if (tone === "failed") return "bg-destructive/5"
+  if (tone === "incomplete") return "bg-warning/5"
+  if (tone === "not-taken") return "bg-muted/40"
+  return ""
+}

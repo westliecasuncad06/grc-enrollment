@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AcademicGradeController;
+use App\Http\Controllers\Api\V1\AcademicRecordController;
 use App\Http\Controllers\Api\V1\AcademicTermController;
 use App\Http\Controllers\Api\V1\AcademicTermSectionPlanController;
 use App\Http\Controllers\Api\V1\AcademicTermWorkflowController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ProspectusController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
@@ -130,6 +132,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // EnrollmentDocument::scopeVisibleTo.
         Route::get('/enrollment-documents', [EnrollmentDocumentController::class, 'index'])->name('enrollment-documents.index');
 
+        // Accounting Staff's own payment history, plus Registrar Head
+        // oversight — a narrower read than widening Enrollment::scopeVisibleTo,
+        // since `payments` rows never disappear the way an enrollment does
+        // once ConfirmPayment moves it out of pending_payment. No `role:`
+        // middleware — PaymentPolicy::viewAny resolves both roles; no
+        // per-row scoping distinguishes them further.
+        Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+
         // FR-FIN-004 / PRD §4.2 rule 7: Student-only, own `enrolled`
         // enrollment. No `role:` middleware — EnrollmentPolicy::withdraw
         // resolves the instance-level ownership check.
@@ -188,6 +198,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // role: middleware, matching /eligible-subjects' shape.
         Route::get('/prospectus', ProspectusController::class)->name('prospectus.show');
         Route::get('/grade-slip', GradeSlipController::class)->name('grade-slip.show');
+        Route::get('/academic-record', AcademicRecordController::class)->name('academic-record.show');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's

@@ -17,6 +17,12 @@ import {
   TableRow,
 } from "@/features/components/ui/table"
 import { useProspectusQuery } from "@/features/hooks/use-academic-record"
+import {
+  markTone,
+  markToneBadgeVariant,
+  markToneRowClass,
+} from "@/features/lib/grade-presentation"
+import { cn } from "@/features/lib/utils"
 import type { ProspectusSemester } from "@/features/schemas/academic-record-schema"
 
 /**
@@ -108,22 +114,33 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {semester.entries.map((entry) => (
-            <TableRow key={entry.subject_id}>
-              <TableCell>
-                {entry.code}
-                {entry.offered_either_semester && (
-                  <Badge variant="outline" className="ml-2 print:hidden">
-                    1st/2nd Sem
+          {semester.entries.map((entry) => {
+            const tone = markTone(entry.mark)
+
+            return (
+              <TableRow
+                key={entry.subject_id}
+                className={cn("print:bg-transparent", markToneRowClass(tone))}
+              >
+                <TableCell>
+                  {entry.code}
+                  {entry.offered_either_semester && (
+                    <Badge variant="outline" className="ml-2 print:hidden">
+                      1st/2nd Sem
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>{entry.title}</TableCell>
+                <TableCell>{entry.units}</TableCell>
+                <TableCell>{entry.mark ?? "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={markToneBadgeVariant(tone)}>
+                    {entry.status_label ?? "Not taken"}
                   </Badge>
-                )}
-              </TableCell>
-              <TableCell>{entry.title}</TableCell>
-              <TableCell>{entry.units}</TableCell>
-              <TableCell>{entry.mark_label ?? "—"}</TableCell>
-              <TableCell>{entry.status_label ?? "Not taken"}</TableCell>
-            </TableRow>
-          ))}
+                </TableCell>
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
     </div>

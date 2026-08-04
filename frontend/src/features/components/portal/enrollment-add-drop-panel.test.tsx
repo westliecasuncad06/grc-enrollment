@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
-import { StudentAddDropWorkspace } from "@/features/components/portal/student-add-drop-workspace"
+import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
+import type { Enrollment } from "@/features/schemas/enrollment-schema"
 import { renderWithSession } from "@/tests/render-app"
 
 function url(input: RequestInfo | URL) {
@@ -24,7 +25,7 @@ const paginationMeta = {
   total: 1,
 }
 
-const enrolledEnrollment = {
+const enrolledEnrollment: Enrollment = {
   type: "enrollment",
   id: 9,
   student_id: 4,
@@ -33,6 +34,7 @@ const enrolledEnrollment = {
   status: "enrolled",
   status_label: "Enrolled",
   total_units: 3,
+  requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
   registrar_decided_at: "2026-07-30T00:00:00Z",
   payment_confirmed_at: "2026-07-30T00:00:00Z",
@@ -51,14 +53,12 @@ const enrolledEnrollment = {
     queue_date: "2026-07-30",
     status: "waiting",
     status_label: "Waiting",
+    priority: "regular",
+    priority_label: "Regular",
+    position: 0,
   },
-} as const
-
-const pendingApprovalEnrollment = {
-  ...enrolledEnrollment,
-  status: "pending_registrar_approval",
-  status_label: "Pending Registrar Approval",
-} as const
+  assessment: null,
+}
 
 const heldSection = {
   type: "section",
@@ -120,7 +120,7 @@ const studentSession = {
   signedInAt: "2026-07-29T12:00:00Z",
 } as const
 
-function mockRoutes(overrides: { enrollment?: unknown; onPost?: () => unknown } = {}) {
+function mockRoutes(overrides: { onPost?: () => unknown } = {}) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const target = url(input)
     if (target.includes("/change-requests") && init?.method === "POST")
@@ -135,16 +135,6 @@ function mockRoutes(overrides: { enrollment?: unknown; onPost?: () => unknown } 
           JSON.stringify({ data: [changeRequest], links: paginationLinks, meta: paginationMeta }),
         ),
       )
-    if (target.includes("/enrollments"))
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            data: [overrides.enrollment ?? enrolledEnrollment],
-            links: paginationLinks,
-            meta: paginationMeta,
-          }),
-        ),
-      )
     if (target.includes("/subjects"))
       return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
     if (target.includes("/sections"))
@@ -155,36 +145,32 @@ function mockRoutes(overrides: { enrollment?: unknown; onPost?: () => unknown } 
   }
 }
 
-describe("StudentAddDropWorkspace", () => {
+describe("EnrollmentAddDropPanel", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("does not render for an unauthorized role", () => {
+  it("shows the closed-window message instead of the form when the window is not open", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [] })))
-    renderWithSession(<StudentAddDropWorkspace />, {
-      session: {
-        userId: "1",
-        displayName: "Registrar Head",
-        role: "registrar_head",
-        signedInAt: "2026-07-29T12:00:00Z",
-      },
-    })
-    expect(
-      screen.getByText("This workspace is not available for your role."),
-    ).toBeInTheDocument()
-  })
-
-  it("shows a not-yet-enrolled message before the enrollment is fully confirmed", async () => {
-    fetchMock.mockImplementation(mockRoutes({ enrollment: pendingApprovalEnrollment }))
-    renderWithSession(<StudentAddDropWorkspace />, { session: studentSession })
+    renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={false}
+        windowMessage="The add/drop window opens once enrollment closes for this term."
+        windowClosesAt={null}
+      />,
+      { session: studentSession },
+    )
 
     expect(
-      await screen.findByText(/open only once your enrollment is fully confirmed/),
+      screen.getByText(
+        "The add/drop window opens once enrollment closes for this term.",
+      ),
     ).toBeInTheDocument()
+    expect(screen.queryByRole("table", { name: "Your subjects" })).not.toBeInTheDocument()
   })
 
-  it("lists current subjects and submits a drop request with a reason", async () => {
+  it("lists current subjects and submits a drop request with a reason when the window is open", async () => {
     const user = userEvent.setup()
     let postBody: unknown = null
     fetchMock.mockImplementation((input, init) => {
@@ -197,12 +183,6 @@ describe("StudentAddDropWorkspace", () => {
         return Promise.resolve(
           new Response(JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta })),
         )
-      if (target.includes("/enrollments"))
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ data: [enrolledEnrollment], links: paginationLinks, meta: paginationMeta }),
-          ),
-        )
       if (target.includes("/subjects"))
         return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
       if (target.includes("/sections"))
@@ -210,7 +190,15 @@ describe("StudentAddDropWorkspace", () => {
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
 
-    renderWithSession(<StudentAddDropWorkspace />, { session: studentSession })
+    renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={true}
+        windowMessage="The add/drop window is open."
+        windowClosesAt="2026-08-20T00:00:00Z"
+      />,
+      { session: studentSession },
+    )
 
     const table = await screen.findByRole("table", { name: "Your subjects" })
     expect(within(table).getByText("Programming 1")).toBeInTheDocument()
@@ -229,63 +217,34 @@ describe("StudentAddDropWorkspace", () => {
     )
   })
 
-  it("surfaces the backend's specific validation message instead of a generic fallback", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((input, init) => {
-      const target = url(input)
-      if (target.includes("/change-requests") && init?.method === "POST")
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              error: {
-                code: "VALIDATION_FAILED",
-                message: "The submitted data is invalid.",
-                errors: {
-                  enrollment: [
-                    "The add/drop window opens once enrollment closes for this term.",
-                  ],
-                },
-                request_id: "test-request-id",
-              },
-            }),
-            { status: 422 },
-          ),
-        )
-      if (target.includes("/enrollment-change-requests"))
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta })),
-        )
-      if (target.includes("/enrollments"))
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ data: [enrolledEnrollment], links: paginationLinks, meta: paginationMeta }),
-          ),
-        )
-      if (target.includes("/subjects"))
-        return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
-      if (target.includes("/sections"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [heldSection, addableSection] })))
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    })
-
-    renderWithSession(<StudentAddDropWorkspace />, { session: studentSession })
-
-    const table = await screen.findByRole("table", { name: "Your subjects" })
-    await user.click(within(table).getByRole("button", { name: "Drop" }))
-    const dialog = await screen.findByRole("alertdialog")
-    await user.type(within(dialog).getByLabelText("Reason"), "Overloaded this term.")
-    await user.click(within(dialog).getByRole("button", { name: "Submit request" }))
+  it("shows the deadline reminder when the window is open", () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [] })))
+    renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={true}
+        windowMessage="The add/drop window is open."
+        windowClosesAt="2026-08-20T00:00:00Z"
+      />,
+      { session: studentSession },
+    )
 
     expect(
-      await screen.findByText(
-        "The add/drop window opens once enrollment closes for this term.",
-      ),
+      screen.getByText(/The add\/drop window closes/),
     ).toBeInTheDocument()
   })
 
   it("shows the student's own request history", async () => {
     fetchMock.mockImplementation(mockRoutes())
-    renderWithSession(<StudentAddDropWorkspace />, { session: studentSession })
+    renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={true}
+        windowMessage="The add/drop window is open."
+        windowClosesAt={null}
+      />,
+      { session: studentSession },
+    )
 
     const table = await screen.findByRole("table", {
       name: "Your add/drop requests",
@@ -295,9 +254,15 @@ describe("StudentAddDropWorkspace", () => {
 
   it("has no detectable accessibility violations once loaded", async () => {
     fetchMock.mockImplementation(mockRoutes())
-    const { container } = renderWithSession(<StudentAddDropWorkspace />, {
-      session: studentSession,
-    })
+    const { container } = renderWithSession(
+      <EnrollmentAddDropPanel
+        enrollment={enrolledEnrollment}
+        windowOpen={true}
+        windowMessage="The add/drop window is open."
+        windowClosesAt={null}
+      />,
+      { session: studentSession },
+    )
 
     await screen.findByRole("table", { name: "Your subjects" })
     expect(await axe(container)).toHaveNoViolations()
