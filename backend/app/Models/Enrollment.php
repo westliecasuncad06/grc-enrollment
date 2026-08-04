@@ -81,12 +81,13 @@ final class Enrollment extends Model
 
     /**
      * PRD §5.3 FR-FIN-001/005: a Student sees only their own enrollments; the
-     * Registrar Head sees every enrollment (the approval queue); Accounting
-     * Staff sees only `pending_payment` rows — FR-FIN-005 is an
-     * authorization boundary, not a display filter, so it belongs here (and
-     * is re-checked by `EnrollmentPolicy`), not only in a frontend filter.
-     * `EnrollmentPolicy::viewAny()` already restricts every other role to
-     * zero rows before this scope ever runs.
+     * Registrar Head and Registrar Staff each see every enrollment (Staff
+     * works the approval queue, Head retains oversight and the `void`
+     * checkpoint); Accounting Staff sees only `pending_payment` rows —
+     * FR-FIN-005 is an authorization boundary, not a display filter, so it
+     * belongs here (and is re-checked by `EnrollmentPolicy`), not only in a
+     * frontend filter. `EnrollmentPolicy::viewAny()` already restricts every
+     * other role to zero rows before this scope ever runs.
      *
      * @param  Builder<Enrollment>  $query
      * @return Builder<Enrollment>
@@ -97,7 +98,7 @@ final class Enrollment extends Model
             return $query->where('status', EnrollmentStatus::PendingPayment->value);
         }
 
-        if ($user->role === UserRole::RegistrarHead) {
+        if ($user->role === UserRole::RegistrarHead || $user->role === UserRole::RegistrarStaff) {
             return $query;
         }
 

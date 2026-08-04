@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?int $section_id
  * @property int $academic_term_id
  * @property ?string $final_grade
+ * @property ?GradeMark $mark
  * @property ?string $remarks
  * @property GradeStatus $status
  * @property int $encoded_by
@@ -38,6 +40,7 @@ final class AcademicGrade extends Model
         'section_id',
         'academic_term_id',
         'final_grade',
+        'mark',
         'remarks',
         'status',
         'encoded_by',
@@ -58,6 +61,7 @@ final class AcademicGrade extends Model
     {
         return [
             'status' => GradeStatus::class,
+            'mark' => GradeMark::class,
             'submitted_at' => 'immutable_datetime',
             'locked_at' => 'immutable_datetime',
         ];

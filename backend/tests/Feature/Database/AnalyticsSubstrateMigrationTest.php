@@ -335,7 +335,7 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
         return AcademicTerm::create([
             'school_year' => '2026-2027',
             'semester' => 'term-'.uniqid(),
-            'status' => AcademicTermStatus::Active,
+            'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 

@@ -31,7 +31,7 @@ final class FacultySubjectPreferencePolicyTest extends TestCase
 
     private function makePreference(User $professor): FacultySubjectPreference
     {
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Intro', 'units' => 3, 'status' => SubjectStatus::Active]);
 
         return FacultySubjectPreference::create([

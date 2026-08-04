@@ -1,9 +1,12 @@
 import type { ComponentType } from "react"
 
+import { useAuth } from "@/features/auth/use-auth"
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
 import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
+import { ProgramChairEnrollmentWorkspace } from "@/features/components/portal/program-chair-enrollment-workspace"
+import { AcademicTermWorkspace } from "@/features/components/portal/academic-term-workspace"
 import { FacultyAssignmentWorkspace } from "@/features/components/portal/faculty-assignment-workspace"
 import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
 import { SectionsWorkspace } from "@/features/components/portal/sections-workspace"
@@ -16,7 +19,10 @@ import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/regis
 import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
 import { StudentQueuePaymentWorkspace } from "@/features/components/portal/student-queue-payment-workspace"
 import { StudentGradesComWorkspace } from "@/features/components/portal/student-grades-com-workspace"
+import { StudentAddDropWorkspace } from "@/features/components/portal/student-add-drop-workspace"
+import { EnrollmentChangeRequestsWorkspace } from "@/features/components/portal/enrollment-change-requests-workspace"
 import { RegistrarRecordsWorkspace } from "@/features/components/portal/registrar-records-workspace"
+import { RegistrarGradesWorkspace } from "@/features/components/portal/registrar-grades-workspace"
 import { ClassRostersWorkspace } from "@/features/components/portal/class-rosters-workspace"
 import { GradeSubmissionWorkspace } from "@/features/components/portal/grade-submission-workspace"
 import { EnrollmentDashboardWorkspace } from "@/features/components/portal/enrollment-dashboard-workspace"
@@ -30,7 +36,7 @@ export type ConnectedModuleId =
   | "credential-issuance"
   | "availability-preferences"
   | "teaching-schedule"
-  | "curriculum"
+  | "program-chair-enrollment"
   | "subjects-prerequisites"
   | "sections-schedules"
   | "faculty-assignment"
@@ -40,6 +46,8 @@ export type ConnectedModuleId =
   | "audit-logs"
   | "eligible-subjects"
   | "enrollment"
+  | "grade-approvals"
+  | "academic-transcripts"
   | "enrollment-approvals"
   | "overrides-voids"
   | "payment-queue"
@@ -48,6 +56,8 @@ export type ConnectedModuleId =
   | "com-finalization"
   | "queue-payment"
   | "grades-com"
+  | "add-drop-requests"
+  | "enrollment-change-requests"
   | "credit-mappings"
   | "drops-withdrawals"
   | "academic-records"
@@ -58,6 +68,7 @@ export type ConnectedModuleId =
   | "institution-dashboard"
   | "stuck-students"
   | "policy-settings"
+  | "academic-terms"
 
 export type PortalModuleComponent = ComponentType
 
@@ -67,7 +78,7 @@ export const connectedModuleIds = [
   "credential-issuance",
   "availability-preferences",
   "teaching-schedule",
-  "curriculum",
+  "program-chair-enrollment",
   "subjects-prerequisites",
   "sections-schedules",
   "faculty-assignment",
@@ -77,6 +88,8 @@ export const connectedModuleIds = [
   "audit-logs",
   "eligible-subjects",
   "enrollment",
+  "grade-approvals",
+  "academic-transcripts",
   "enrollment-approvals",
   "overrides-voids",
   "payment-queue",
@@ -85,6 +98,8 @@ export const connectedModuleIds = [
   "com-finalization",
   "queue-payment",
   "grades-com",
+  "add-drop-requests",
+  "enrollment-change-requests",
   "credit-mappings",
   "drops-withdrawals",
   "academic-records",
@@ -95,6 +110,7 @@ export const connectedModuleIds = [
   "institution-dashboard",
   "stuck-students",
   "policy-settings",
+  "academic-terms",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
@@ -118,12 +134,37 @@ const teachingScheduleWorkspace: PortalModuleComponent = () => (
 )
 
 const curriculumWorkspace: PortalModuleComponent = () => <CurriculumWorkspace />
-const sectionsWorkspace: PortalModuleComponent = () => <SectionsWorkspace />
+const programChairEnrollmentWorkspace: PortalModuleComponent = () => (
+  <ProgramChairEnrollmentWorkspace />
+)
+const academicTermWorkspace: PortalModuleComponent = () => (
+  <AcademicTermWorkspace />
+)
+const SectionsModuleWorkspace: PortalModuleComponent = () => {
+  const { session } = useAuth()
+
+  return session?.role === "program_chair" ? (
+    <ProgramChairEnrollmentWorkspace
+      workspaceTitle="Sections and schedules"
+      workspaceDescription="Track the approval of your submitted plan and review every generated section schedule."
+      initialView="tiles"
+    />
+  ) : (
+    <SectionsWorkspace />
+  )
+}
 const facultyAssignmentWorkspace: PortalModuleComponent = () => (
   <FacultyAssignmentWorkspace />
 )
 const scheduleProposalsWorkspace: PortalModuleComponent = () => (
   <ScheduleProposalsWorkspace />
+)
+
+const gradeApprovalsWorkspace: PortalModuleComponent = () => (
+  <RegistrarGradesWorkspace initialModuleId="grade-approvals" />
+)
+const academicTranscriptsWorkspace: PortalModuleComponent = () => (
+  <RegistrarGradesWorkspace initialModuleId="academic-transcripts" />
 )
 
 const enrollmentApprovalsWorkspace: PortalModuleComponent = () => (
@@ -167,9 +208,9 @@ export const connectedModuleRegistry: Readonly<
   "credential-issuance": credentialIssuanceWorkspace,
   "availability-preferences": availabilityPreferencesWorkspace,
   "teaching-schedule": teachingScheduleWorkspace,
-  curriculum: curriculumWorkspace,
+  "program-chair-enrollment": programChairEnrollmentWorkspace,
   "subjects-prerequisites": curriculumWorkspace,
-  "sections-schedules": sectionsWorkspace,
+  "sections-schedules": SectionsModuleWorkspace,
   "faculty-assignment": facultyAssignmentWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,
@@ -177,6 +218,8 @@ export const connectedModuleRegistry: Readonly<
   "audit-logs": AuditLogsWorkspace,
   "eligible-subjects": EligibleSubjectsWorkspace,
   enrollment: EnrollmentWorkspace,
+  "grade-approvals": gradeApprovalsWorkspace,
+  "academic-transcripts": academicTranscriptsWorkspace,
   "enrollment-approvals": enrollmentApprovalsWorkspace,
   "overrides-voids": overridesVoidsWorkspace,
   "payment-queue": paymentQueueWorkspace,
@@ -185,6 +228,8 @@ export const connectedModuleRegistry: Readonly<
   "com-finalization": comFinalizationWorkspace,
   "queue-payment": StudentQueuePaymentWorkspace,
   "grades-com": StudentGradesComWorkspace,
+  "add-drop-requests": StudentAddDropWorkspace,
+  "enrollment-change-requests": EnrollmentChangeRequestsWorkspace,
   "credit-mappings": creditMappingsWorkspace,
   "drops-withdrawals": dropsWithdrawalsWorkspace,
   "academic-records": academicRecordsWorkspace,
@@ -195,6 +240,7 @@ export const connectedModuleRegistry: Readonly<
   "institution-dashboard": InstitutionDashboardWorkspace,
   "stuck-students": StuckStudentsWorkspace,
   "policy-settings": PolicySettingsWorkspace,
+  "academic-terms": academicTermWorkspace,
 }
 
 export function isConnectedModuleId(

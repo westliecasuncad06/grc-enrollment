@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Domain\Audit\AuditableType;
+use App\Domain\Audit\AuditAction;
 use App\Domain\Scheduling\ScheduleProposalStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -21,12 +25,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property-read AcademicTerm $academicTerm
  * @property-read User $submitter
  * @property-read ?User $decider
+ * @property-read Collection<int, AuditLog> $decisionAudits
  */
 final class ScheduleProposal extends Model
 {
     /** @var list<string> */
     protected $fillable = [
         'academic_term_id',
+        'college',
+        'section_plan_id',
         'submitted_by',
         'status',
         'decided_by',
@@ -67,6 +74,26 @@ final class ScheduleProposal extends Model
     public function decider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    /**
+     * Immutable Dean and Executive Director decisions for the Program Chair
+     * timeline. Creation/publication/closure events are intentionally omitted.
+     *
+     * @return HasMany<AuditLog, $this>
+     */
+    public function decisionAudits(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'auditable_id')
+            ->where('auditable_type', AuditableType::SCHEDULE_PROPOSAL)
+            ->whereIn('action', [
+                AuditAction::SCHEDULE_PROPOSAL_DEAN_APPROVED,
+                AuditAction::SCHEDULE_PROPOSAL_DEAN_RETURNED,
+                AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_APPROVED,
+                AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_RETURNED,
+            ])
+            ->orderBy('created_at')
+            ->orderBy('id');
     }
 
     /**

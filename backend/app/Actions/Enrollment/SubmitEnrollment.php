@@ -7,38 +7,56 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
-use App\Domain\Enrollment\QueueTicketStatus;
+use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
 use App\Models\Notification;
-use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Notifications\NotificationRecorder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
- * DFD 2.4 "Finalize Subject and Generate Queue Ticket" (FR-ENR-007–009):
- * atomically records the verified subject selection as a Pending PEF record
- * and issues one queue ticket. `StoreEnrollmentRequest` has already
- * re-validated every submitted section against a freshly built eligible pool
- * before this executes — this action only writes.
+ * DFD 2.4 "Finalize Subject Selection" (FR-ENR-007–009): atomically records
+ * the verified subject selection as a Pending PEF record.
+ * `StoreEnrollmentRequest` has already re-validated every submitted section
+ * against a freshly built eligible pool before this executes — this action
+ * only writes.
  *
- * All five writes happen in one transaction (FR-ENR-007's "submit
- * atomically" and its acceptance criterion: "exactly one enrollment, the
- * selected enrollment subjects, one queue ticket, one audit entry, and the
- * appropriate notification"). `enrollments.active_academic_term_id`'s
- * generated-column uniqueness constraint is what actually prevents a
- * duplicate active enrollment at the database layer; the Form Request's
- * pre-check exists only to turn that into a clean 422 instead of a raw
- * QueryException.
+ * The queue ticket is deliberately NOT created here — it is issued only once
+ * Registrar Staff approves (`TransitionEnrollment`'s `registrar_approve`),
+ * so a student sees "waiting for approval" with no queue number until then.
+ * See ADR 0011/Phase 6 notes: this moved the Cashier queue ticket from
+ * submission-time to approval-time.
+ *
+ * All writes happen in one transaction (FR-ENR-007's "submit atomically" and
+ * its acceptance criterion: exactly one enrollment, the selected enrollment
+ * subjects, one audit entry, and the appropriate notification).
+ * `enrollments.active_academic_term_id`'s generated-column uniqueness
+ * constraint is what actually prevents a duplicate active enrollment at the
+ * database layer; the Form Request's pre-check exists only to turn that into
+ * a clean 422 instead of a raw QueryException.
+ *
+ * Seats are re-checked here, inside the transaction, under row locks — the
+ * Form Request's pool-based checks are a fast pre-check, not the
+ * authoritative one, since a section's remaining seats can change between
+ * the pool being built and this write running. A block submission locks
+ * every one of its sections together in one deterministic order, so the
+ * whole block is all-or-nothing: if any single subject in the block has
+ * lost its last seat since the pool was built, nothing in the block is
+ * written.
  */
 final readonly class SubmitEnrollment
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private NotificationRecorder $notificationRecorder,
+    ) {}
 
     /**
      * @param  list<int>  $sectionIds
@@ -49,9 +67,27 @@ final readonly class SubmitEnrollment
         array $sectionIds,
         User $actor,
         AuditRequestContext $context,
+        ?string $blockCode = null,
     ): Enrollment {
-        return DB::transaction(function () use ($student, $term, $sectionIds, $actor, $context): Enrollment {
-            $sections = Section::query()->whereIn('id', $sectionIds)->with('subject')->get();
+        return DB::transaction(function () use ($student, $term, $sectionIds, $actor, $context, $blockCode): Enrollment {
+            // `orderBy('id')` gives every concurrent submission the same
+            // lock order; without it, two submissions sharing a subject
+            // could lock in opposite orders and deadlock instead of one
+            // simply waiting for the other.
+            $sections = Section::query()
+                ->whereIn('id', $sectionIds)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->with('subject')
+                ->get();
+
+            $oversold = $sections->first(fn (Section $section): bool => $section->remainingSeats() < 1);
+            if ($oversold !== null) {
+                throw ValidationException::withMessages([
+                    'sections' => "{$oversold->section_code} ({$oversold->subject->code}) no longer has an open seat. Refresh and try again.",
+                ]);
+            }
+
             $totalUnits = (float) $sections->sum(fn (Section $section): float => $section->subject->units);
 
             $enrollment = Enrollment::create([
@@ -72,17 +108,6 @@ final readonly class SubmitEnrollment
 
             Section::query()->whereIn('id', $sectionIds)->increment('enrolled_count');
 
-            // Opaque per the queue_tickets migration's own docblock: PRD §17
-            // leaves the numbering scheme, daily reset, and priority policy
-            // unconfirmed. The enrollment ID guarantees the required global
-            // uniqueness without asserting any of that unconfirmed policy.
-            $queueTicket = QueueTicket::create([
-                'enrollment_id' => $enrollment->id,
-                'ticket_number' => sprintf('Q%06d', $enrollment->id),
-                'queue_date' => now()->toDateString(),
-                'status' => QueueTicketStatus::Waiting,
-            ]);
-
             $this->auditRecorder->record(
                 $actor,
                 AuditAction::ENROLLMENT_SUBMITTED,
@@ -93,8 +118,8 @@ final readonly class SubmitEnrollment
                     'student_id' => $enrollment->student_id,
                     'academic_term_id' => $enrollment->academic_term_id,
                     'section_ids' => $sectionIds,
+                    'block_code' => $blockCode,
                     'total_units' => $enrollment->total_units,
-                    'queue_ticket_number' => $queueTicket->ticket_number,
                 ],
                 null,
                 $context,
@@ -104,12 +129,22 @@ final readonly class SubmitEnrollment
                 'user_id' => $actor->id,
                 'type' => NotificationType::EnrollmentSubmitted,
                 'message' => sprintf(
-                    'Your enrollment for %s %s has been submitted and is pending registrar approval. Queue ticket: %s.',
+                    'Your enrollment for %s %s has been submitted and is pending registrar approval. A queue number will be issued once it is approved.',
                     $term->school_year,
                     $term->semester,
-                    $queueTicket->ticket_number,
                 ),
             ]);
+
+            $this->notificationRecorder->recordManyForRole(
+                UserRole::RegistrarStaff,
+                NotificationType::EnrollmentSubmitted,
+                sprintf(
+                    '%s submitted an enrollment for %s %s and is awaiting approval.',
+                    $student->student_number,
+                    $term->school_year,
+                    $term->semester,
+                ),
+            );
 
             return $enrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'queueTicket']);
         });

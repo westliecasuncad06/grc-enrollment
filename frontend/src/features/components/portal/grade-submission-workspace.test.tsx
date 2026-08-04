@@ -30,11 +30,42 @@ const ownSection = {
   ends_at_time: "09:30:00",
   room: "R201",
   capacity: 30,
+  capacity_source: "plan",
   viability_threshold: null,
   enrolled_count: 1,
   remaining_seats: 29,
+  is_block_exclusive: null,
   status: "published",
   status_label: "Published",
+}
+
+const ownSubject = {
+  type: "subject",
+  id: 101,
+  code: "CS101",
+  title: "Programming 1",
+  units: 3,
+  status: "active",
+  status_label: "Active",
+  is_completion_only: false,
+}
+
+const leadershipSubject = {
+  type: "subject",
+  id: 102,
+  code: "LEAD 1",
+  title: "Leadership 1",
+  units: 1.5,
+  status: "active",
+  status_label: "Active",
+  is_completion_only: true,
+}
+
+const leadershipSection = {
+  ...ownSection,
+  id: 45,
+  subject_id: 102,
+  section_code: "LEAD1-A",
 }
 
 function rosterResponse(entries: unknown[]) {
@@ -79,7 +110,11 @@ const rosterEntry = {
 
 function stubGradeRoutes(
   fetchMock: ReturnType<typeof vi.fn<typeof fetch>>,
-  { grades = [] as unknown[] } = {},
+  {
+    grades = [] as unknown[],
+    subjects = [ownSubject, leadershipSubject] as unknown[],
+    sections = [ownSection, leadershipSection] as unknown[],
+  } = {},
 ) {
   fetchMock.mockImplementation((input) => {
     const url = requestUrl(input)
@@ -93,14 +128,22 @@ function stubGradeRoutes(
         new Response(JSON.stringify(gradesResponse(grades))),
       )
     }
-    return Promise.resolve(new Response(JSON.stringify({ data: [ownSection] })))
+    if (url.includes("/subjects")) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: subjects })),
+      )
+    }
+    return Promise.resolve(new Response(JSON.stringify({ data: sections })))
   })
 }
 
-async function selectSection(user: ReturnType<typeof userEvent.setup>) {
+async function selectSection(
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp = /CS101-A/,
+) {
   const trigger = await screen.findByLabelText("Section")
   await user.click(trigger)
-  await user.click(screen.getByRole("option", { name: /CS101-A/ }))
+  await user.click(screen.getByRole("option", { name }))
 }
 
 describe("GradeSubmissionWorkspace", () => {
@@ -145,6 +188,8 @@ describe("GradeSubmissionWorkspace", () => {
           subject_code: "CS101",
           section_id: 44,
           academic_term_id: 1,
+          mark: "1.50",
+          mark_label: "with Distinction",
           final_grade: "1.50",
           remarks: null,
           status: "draft",
@@ -180,6 +225,8 @@ describe("GradeSubmissionWorkspace", () => {
           subject_code: "CS101",
           section_id: 44,
           academic_term_id: 1,
+          mark: "1.50",
+          mark_label: "with Distinction",
           final_grade: "1.50",
           remarks: "Good work",
           status: "locked",
@@ -195,7 +242,7 @@ describe("GradeSubmissionWorkspace", () => {
     await selectSection(user)
 
     const table = await screen.findByRole("table", { name: "Roster grades" })
-    expect(within(table).getByText("1.50")).toBeInTheDocument()
+    expect(within(table).getByText("with Distinction")).toBeInTheDocument()
     expect(
       within(table).queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument()
@@ -213,6 +260,11 @@ describe("GradeSubmissionWorkspace", () => {
       if (url.includes("/academic-grades")) {
         return Promise.resolve(new Response(JSON.stringify(gradesResponse([]))))
       }
+      if (url.includes("/subjects")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [ownSubject] })),
+        )
+      }
       return Promise.resolve(
         new Response(JSON.stringify({ data: [ownSection] })),
       )
@@ -225,6 +277,44 @@ describe("GradeSubmissionWorkspace", () => {
     expect(
       await screen.findByText("No enrolled students are in this section yet."),
     ).toBeInTheDocument()
+  })
+
+  it("offers only Complete/Not Complete marks for a Leadership subject, never a numeric grade", async () => {
+    stubGradeRoutes(fetchMock)
+    const user = userEvent.setup()
+    renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+
+    await selectSection(user, /LEAD1-A/)
+
+    const table = await screen.findByRole("table", { name: "Roster grades" })
+    await user.click(within(table).getByLabelText(/Mark for 2026-0001/))
+
+    expect(
+      screen.getByRole("option", { name: "C — Complete" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("option", { name: "NC — Not Complete" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: /Excellent/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("offers numeric marks, never Complete/Not Complete, for an ordinary subject", async () => {
+    stubGradeRoutes(fetchMock)
+    const user = userEvent.setup()
+    renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+
+    await selectSection(user)
+
+    const table = await screen.findByRole("table", { name: "Roster grades" })
+    await user.click(within(table).getByLabelText(/Mark for 2026-0001/))
+
+    expect(screen.getByRole("option", { name: /Excellent/ })).toBeInTheDocument()
+    expect(screen.getByRole("option", { name: /Failed/ })).toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: "C — Complete" }),
+    ).not.toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

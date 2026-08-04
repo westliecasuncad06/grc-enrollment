@@ -5,10 +5,15 @@ namespace App\Actions\Scheduling;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
-use App\Domain\Scheduling\ScheduleProposalStatus;
+use App\Domain\Organization\AcademicTermCollegeWorkflowStage;
+use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\ScheduleProposalTransitionRules;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermCollegeWorkflow;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\Notification;
 use App\Models\ScheduleProposal;
 use App\Models\Section;
@@ -16,7 +21,6 @@ use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 
 /**
  * Applies one transition in the PRD §4.1 lifecycle
@@ -32,30 +36,6 @@ use InvalidArgumentException;
 final class TransitionScheduleProposal
 {
     /**
-     * @var array<string, ScheduleProposalStatus>
-     */
-    private const TARGET_STATUS = [
-        'dean_approve' => ScheduleProposalStatus::DeanApproved,
-        'dean_return' => ScheduleProposalStatus::Draft,
-        'executive_approve' => ScheduleProposalStatus::ExecutiveApproved,
-        'executive_return' => ScheduleProposalStatus::Draft,
-        'publish' => ScheduleProposalStatus::Published,
-        'close' => ScheduleProposalStatus::Closed,
-    ];
-
-    /**
-     * @var array<string, ScheduleProposalStatus>
-     */
-    private const REQUIRED_CURRENT_STATUS = [
-        'dean_approve' => ScheduleProposalStatus::Draft,
-        'dean_return' => ScheduleProposalStatus::DeanApproved,
-        'executive_approve' => ScheduleProposalStatus::DeanApproved,
-        'executive_return' => ScheduleProposalStatus::ExecutiveApproved,
-        'publish' => ScheduleProposalStatus::ExecutiveApproved,
-        'close' => ScheduleProposalStatus::Published,
-    ];
-
-    /**
      * @var array<string, string>
      */
     private const AUDIT_ACTION = [
@@ -67,9 +47,10 @@ final class TransitionScheduleProposal
         'close' => AuditAction::SCHEDULE_PROPOSAL_CLOSED,
     ];
 
-    private const RETURN_ACTIONS = ['dean_return', 'executive_return'];
-
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly NotifyScheduleTransition $notifyScheduleTransition,
+    ) {}
 
     public function execute(
         ScheduleProposal $proposal,
@@ -78,12 +59,10 @@ final class TransitionScheduleProposal
         ?string $reason,
         AuditRequestContext $context,
     ): ScheduleProposal {
-        if (! isset(self::TARGET_STATUS[$action])) {
-            throw new InvalidArgumentException('Unknown schedule proposal transition.');
-        }
+        ScheduleProposalTransitionRules::requiredStatus($action);
 
         if (
-            in_array($action, self::RETURN_ACTIONS, true)
+            ScheduleProposalTransitionRules::isReturn($action)
             && ($reason === null || trim($reason) === '')
         ) {
             throw ValidationException::withMessages([
@@ -96,7 +75,7 @@ final class TransitionScheduleProposal
                 ->whereKey($proposal->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $requiredStatus = self::REQUIRED_CURRENT_STATUS[$action];
+            $requiredStatus = ScheduleProposalTransitionRules::requiredStatus($action);
 
             if ($lockedProposal->status !== $requiredStatus) {
                 throw ValidationException::withMessages([
@@ -106,15 +85,35 @@ final class TransitionScheduleProposal
             }
 
             $beforeValues = self::snapshot($lockedProposal);
-            $decisionReason = in_array($action, self::RETURN_ACTIONS, true) ? $reason : null;
+            $decisionReason = ScheduleProposalTransitionRules::isReturn($action) ? $reason : null;
 
             $lockedProposal->update([
-                'status' => self::TARGET_STATUS[$action],
+                'status' => ScheduleProposalTransitionRules::targetStatus($action),
                 'decided_by' => $actingUser->id,
                 'decided_at' => now(),
                 'decision_reason' => $decisionReason,
             ]);
             $lockedProposal->refresh();
+
+            if (ScheduleProposalTransitionRules::isReturn($action) && $lockedProposal->college !== null) {
+                AcademicTermSectionPlan::query()
+                    ->where('academic_term_id', $lockedProposal->academic_term_id)
+                    ->where('college', $lockedProposal->college)
+                    ->update([
+                        'status' => SectionPlanStatus::Draft,
+                        'submitted_by' => null,
+                        'submitted_at' => null,
+                    ]);
+
+                AcademicTermCollegeWorkflow::query()
+                    ->where('academic_term_id', $lockedProposal->academic_term_id)
+                    ->where('college', $lockedProposal->college)
+                    ->update([
+                        'stage' => AcademicTermCollegeWorkflowStage::SchedulePreparation,
+                        'schedule_submitted_by' => null,
+                        'schedule_submitted_at' => null,
+                    ]);
+            }
 
             $publishedSectionIds = [];
             $publicationRecipientIds = [$lockedProposal->submitted_by];
@@ -122,6 +121,7 @@ final class TransitionScheduleProposal
             if ($action === 'publish') {
                 $sections = Section::query()
                     ->where('academic_term_id', $lockedProposal->academic_term_id)
+                    ->when($lockedProposal->college !== null, fn ($query) => $query->whereHas('sectionPlan', fn ($plans) => $plans->where('college', $lockedProposal->college)))
                     ->where('status', SectionStatus::Planned->value)
                     ->orderBy('id')
                     ->lockForUpdate()
@@ -180,6 +180,19 @@ final class TransitionScheduleProposal
                     ]);
                 }
             }
+
+            $reviewerNotificationTerm = null;
+            $fetchReviewerNotificationTerm = function () use (&$reviewerNotificationTerm, $lockedProposal): AcademicTerm {
+                return $reviewerNotificationTerm ??= AcademicTerm::query()->findOrFail($lockedProposal->academic_term_id);
+            };
+
+            match ($action) {
+                'dean_approve' => $this->notifyScheduleTransition->deanApproved($lockedProposal, $fetchReviewerNotificationTerm()),
+                'executive_approve' => $this->notifyScheduleTransition->executiveApproved($lockedProposal, $fetchReviewerNotificationTerm()),
+                'dean_return' => $this->notifyScheduleTransition->returned($lockedProposal, $fetchReviewerNotificationTerm(), UserRole::Dean, (string) $decisionReason),
+                'executive_return' => $this->notifyScheduleTransition->returned($lockedProposal, $fetchReviewerNotificationTerm(), UserRole::ExecutiveDirector, (string) $decisionReason),
+                default => null,
+            };
 
             return $lockedProposal->refresh();
         });

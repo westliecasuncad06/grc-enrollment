@@ -23,6 +23,10 @@ final class ScheduleProposalPolicy
 
     public function view(User $user, ScheduleProposal $proposal): bool
     {
+        if ($user->role === UserRole::ProgramChair) {
+            return $proposal->college === $user->college?->value;
+        }
+
         if (! $user->role->isLearnerScoped()) {
             return true;
         }

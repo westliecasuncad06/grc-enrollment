@@ -6,6 +6,7 @@ use App\Domain\Organization\AcademicTermStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -15,6 +16,10 @@ use Illuminate\Database\Eloquent\Model;
  * @property ?CarbonImmutable $ends_at
  * @property ?CarbonImmutable $enrollment_opens_at
  * @property ?CarbonImmutable $enrollment_closes_at
+ * @property ?CarbonImmutable $add_drop_deadline_at
+ * @property ?CarbonImmutable $grading_deadline_at
+ * @property ?CarbonImmutable $closed_at
+ * @property ?CarbonImmutable $archived_at
  * @property AcademicTermStatus $status
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -29,6 +34,10 @@ final class AcademicTerm extends Model
         'ends_at',
         'enrollment_opens_at',
         'enrollment_closes_at',
+        'add_drop_deadline_at',
+        'grading_deadline_at',
+        'closed_at',
+        'archived_at',
         'status',
     ];
 
@@ -42,8 +51,37 @@ final class AcademicTerm extends Model
             'ends_at' => 'immutable_datetime',
             'enrollment_opens_at' => 'immutable_datetime',
             'enrollment_closes_at' => 'immutable_datetime',
+            'add_drop_deadline_at' => 'immutable_datetime',
+            'grading_deadline_at' => 'immutable_datetime',
+            'closed_at' => 'immutable_datetime',
+            'archived_at' => 'immutable_datetime',
             'status' => AcademicTermStatus::class,
         ];
+    }
+
+    public function isActionableCurrent(): bool
+    {
+        return in_array($this->status, [
+            AcademicTermStatus::Draft,
+            AcademicTermStatus::ForDeanApproval,
+            AcademicTermStatus::SemesterOngoing,
+        ], true);
+    }
+
+    /**
+     * @return HasMany<AcademicTermCollegeWorkflow, $this>
+     */
+    public function collegeWorkflows(): HasMany
+    {
+        return $this->hasMany(AcademicTermCollegeWorkflow::class);
+    }
+
+    /**
+     * @return HasMany<AcademicTermEnrollmentWindow, $this>
+     */
+    public function enrollmentWindows(): HasMany
+    {
+        return $this->hasMany(AcademicTermEnrollmentWindow::class);
     }
 
     /**

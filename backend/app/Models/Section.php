@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Domain\Identity\UserRole;
+use App\Domain\Organization\CapacitySource;
+use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,7 +23,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?string $starts_at_time
  * @property ?string $ends_at_time
  * @property ?string $room
+ * @property ?SectionModality $modality
  * @property int $capacity
+ * @property CapacitySource $capacity_source
  * @property ?int $viability_threshold
  * @property int $enrolled_count
  * @property ?bool $is_block_exclusive
@@ -38,6 +42,7 @@ final class Section extends Model
     /** @var list<string> */
     protected $fillable = [
         'academic_term_id',
+        'section_plan_id',
         'subject_id',
         'section_code',
         'professor_id',
@@ -45,7 +50,9 @@ final class Section extends Model
         'starts_at_time',
         'ends_at_time',
         'room',
+        'modality',
         'capacity',
+        'capacity_source',
         'viability_threshold',
         'enrolled_count',
         'is_block_exclusive',
@@ -59,7 +66,9 @@ final class Section extends Model
     {
         return [
             'status' => SectionStatus::class,
+            'modality' => SectionModality::class,
             'capacity' => 'integer',
+            'capacity_source' => CapacitySource::class,
             'viability_threshold' => 'integer',
             'enrolled_count' => 'integer',
             'is_block_exclusive' => 'boolean',
@@ -101,6 +110,12 @@ final class Section extends Model
         return $this->belongsTo(User::class, 'professor_id');
     }
 
+    /** @return BelongsTo<AcademicTermSectionPlan, $this> */
+    public function sectionPlan(): BelongsTo
+    {
+        return $this->belongsTo(AcademicTermSectionPlan::class, 'section_plan_id');
+    }
+
     /**
      * @return HasMany<EnrollmentSubject, $this>
      */
@@ -120,6 +135,13 @@ final class Section extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
+        if ($user->role === UserRole::ProgramChair && $user->college !== null) {
+            $query->where(function (Builder $scoped) use ($user): void {
+                $scoped->whereNull('section_plan_id')
+                    ->orWhereHas('sectionPlan', fn (Builder $plans) => $plans->where('college', $user->college->value));
+            });
+        }
+
         if ($user->role === UserRole::Faculty) {
             return $query
                 ->where('professor_id', $user->id)

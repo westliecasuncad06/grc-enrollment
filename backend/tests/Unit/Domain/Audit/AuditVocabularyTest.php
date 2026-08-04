@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class AuditVocabularyTest extends TestCase
 {
-    public function test_action_values_are_the_thirty_nine_approved_actions(): void
+    public function test_action_values_include_academic_term_workflow_transitions(): void
     {
         self::assertSame(
             [
@@ -31,6 +31,7 @@ final class AuditVocabularyTest extends TestCase
                 'section.published',
                 'schedule_proposal.closed',
                 'student_profile.provisioned',
+                'student_profile.enrollment_category_reclassified',
                 'audit_log.list_viewed',
                 'faculty_directory.list_viewed',
                 'enrollment.submitted',
@@ -51,6 +52,19 @@ final class AuditVocabularyTest extends TestCase
                 'transferee_credit.updated',
                 'transferee_credit.approved',
                 'transferee_credit.rejected',
+                'academic_term.created',
+                'subject_offerings.replaced',
+                'section_plan.submitted',
+                'academic_term_workflow.curriculum_started',
+                'academic_term_workflow.curriculum_completed',
+                'academic_term_workflow.faculty_reviewed',
+                'academic_term.closed',
+                'academic_term.archived',
+                'academic_term.enrollment_opened',
+                'academic_term.enrollment_schedule_updated',
+                'enrollment_change_request.created',
+                'enrollment_change_request.approved',
+                'enrollment_change_request.rejected',
             ],
             AuditAction::values(),
         );
@@ -73,6 +87,12 @@ final class AuditVocabularyTest extends TestCase
                 'queue_ticket',
                 'withdrawal_request',
                 'transferee_credit',
+                'academic_term',
+                'subject_offering',
+                'academic_term_workflow',
+                'section_plan',
+                'academic_term_year_level_window',
+                'enrollment_change_request',
             ],
             AuditableType::values(),
         );

@@ -15,4 +15,12 @@ enum NotificationType: string
     case WithdrawalRequestRejected = 'withdrawal_request_rejected';
     case TransfereeCreditApproved = 'transferee_credit_approved';
     case TransfereeCreditRejected = 'transferee_credit_rejected';
+    case ScheduleSubmittedForDean = 'schedule_submitted_for_dean';
+    case ScheduleDeanApproved = 'schedule_dean_approved';
+    case ScheduleExecutiveApproved = 'schedule_executive_approved';
+    case ScheduleReturned = 'schedule_returned';
+    case EnrollmentCategoryReclassified = 'enrollment_category_reclassified';
+    case EnrollmentChangeRequestSubmitted = 'enrollment_change_request_submitted';
+    case EnrollmentChangeRequestApproved = 'enrollment_change_request_approved';
+    case EnrollmentChangeRequestRejected = 'enrollment_change_request_rejected';
 }

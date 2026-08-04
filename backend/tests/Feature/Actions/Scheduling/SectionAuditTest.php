@@ -8,6 +8,7 @@ use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
@@ -24,7 +25,7 @@ final class SectionAuditTest extends TestCase
 
     private const PASSWORD = 'correct-horse-battery-staple';
 
-    public function test_creating_a_section_records_the_exact_twelve_field_snapshot_with_database_defaults(): void
+    public function test_creating_a_section_records_the_exact_fourteen_field_snapshot_with_database_defaults(): void
     {
         $term = $this->makeTerm();
         $subject = $this->makeSubject();
@@ -64,7 +65,11 @@ final class SectionAuditTest extends TestCase
                 'starts_at_time' => '08:00:00',
                 'ends_at_time' => '09:00:00',
                 'room' => 'Lab 1',
+                'modality' => null,
                 'capacity' => 40,
+                // Hand-created sections are not plan-generated, so their
+                // capacity belongs to the author who typed it.
+                'capacity_source' => 'manual',
                 'viability_threshold' => 25,
                 'enrolled_count' => 0,
                 'status' => 'planned',
@@ -121,7 +126,11 @@ final class SectionAuditTest extends TestCase
                 'starts_at_time' => '10:00:00',
                 'ends_at_time' => '11:30:00',
                 'room' => 'Room 2',
+                'modality' => null,
                 'capacity' => 35,
+                // Seeded straight through the model, so it still carries
+                // the column default before the PATCH claims it.
+                'capacity_source' => 'plan',
                 'viability_threshold' => 20,
                 'enrolled_count' => 7,
                 'status' => 'planned',
@@ -135,7 +144,11 @@ final class SectionAuditTest extends TestCase
                 'starts_at_time' => null,
                 'ends_at_time' => null,
                 'room' => null,
+                'modality' => null,
                 'capacity' => 45,
+                // Changing capacity from 35 claims the section from its
+                // year-level plan so a later release cannot overwrite it.
+                'capacity_source' => 'manual',
                 'viability_threshold' => null,
                 'enrolled_count' => 7,
                 'status' => 'published',
@@ -299,6 +312,9 @@ final class SectionAuditTest extends TestCase
             'email' => $email,
             'password' => self::PASSWORD,
             'role' => $role,
+            // Program Chairs are college-scoped (ADR 0018); SectionPolicy
+            // denies section writes to a chair with no college.
+            'college' => $role === UserRole::ProgramChair ? CollegeCode::Ccs : null,
             'status' => UserStatus::Active,
         ]);
     }
@@ -308,7 +324,7 @@ final class SectionAuditTest extends TestCase
         return AcademicTerm::create([
             'school_year' => '2026-2027',
             'semester' => '1st',
-            'status' => AcademicTermStatus::Active,
+            'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 

@@ -100,7 +100,10 @@ export function StudentQueuePaymentWorkspace() {
                         </>
                       ) : (
                         <span className="font-normal text-muted-foreground">
-                          Not issued yet
+                          {activeEnrollment.registrar_decided_at === null &&
+                          activeEnrollment.status === "pending_registrar_approval"
+                            ? "Waiting for registrar approval — no queue number yet"
+                            : "Not issued"}
                         </span>
                       )}
                     </dd>

@@ -7,6 +7,7 @@ use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
@@ -29,6 +30,9 @@ final class SectionsEndpointTest extends TestCase
             'email' => $email,
             'password' => self::PASSWORD,
             'role' => $role,
+            // Program Chairs are college-scoped (ADR 0018); SectionPolicy
+            // denies section writes to a chair with no college.
+            'college' => $role === UserRole::ProgramChair ? CollegeCode::Ccs : null,
             'status' => UserStatus::Active,
         ]);
 
@@ -40,7 +44,7 @@ final class SectionsEndpointTest extends TestCase
 
     private function makeTerm(): AcademicTerm
     {
-        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
     }
 
     private function makeSubject(string $code): Subject

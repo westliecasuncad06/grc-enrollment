@@ -59,6 +59,9 @@ final class ProvisionStudentAuditTest extends TestCase
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'year_level' => 2,
+            // The request omitted it, so ProvisionStudent defaults it —
+            // every provisioned student has an explicit category.
+            'enrollment_category' => 'regular',
             'admission_status' => 'admitted',
             'academic_standing' => 'good',
         ], $audit->after_values);

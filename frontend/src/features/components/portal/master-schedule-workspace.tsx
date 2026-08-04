@@ -7,9 +7,16 @@ import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/features/components/ui/tabs"
 import {
   useAcademicTermsQuery,
   useSectionsQuery,
@@ -46,8 +53,8 @@ export function MasterScheduleWorkspace() {
 
   return (
     <WorkspacePage
-      title="Master schedule"
-      description="Published sections are the authoritative schedule visible beyond planning."
+      title="Enrollment planning review"
+      description="Review submitted department plans, return them with notes when changes are needed, and publish approved schedules."
       unauthorized={!authorized}
       lastUpdated={sectionsQuery.dataUpdatedAt}
     >
@@ -59,69 +66,102 @@ export function MasterScheduleWorkspace() {
        * on `published.length === 0`, which locked the Executive Director
        * out of approving anything until a section already existed.
        */}
-      <Card>
-        <CardHeader>
-          <CardTitle level={2}>Published sections</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AsyncBoundary
-            query={sectionsListQuery}
-            isEmpty={(sections) => sections.length === 0}
-            emptyMessage="No published sections are available."
-            loadingLabel="Loading the master schedule…"
-          >
-            {(sections) => (
-              <ul className="grid gap-3 md:grid-cols-2">
-                {sections.map((section) => {
-                  const subject = (subjectsQuery.data ?? []).find(
-                    (item) => item.id === section.subject_id,
-                  )
-                  const term = (termsQuery.data ?? []).find(
-                    (item) => item.id === section.academic_term_id,
-                  )
-                  return (
-                    <li key={section.id} className="rounded-md border p-3">
-                      <p className="font-medium">
-                        {subject
-                          ? `${subject.code} · ${subject.title}`
-                          : `Section #${section.id}`}
-                      </p>
-                      <p>
-                        {term
-                          ? formatAcademicTerm(term)
-                          : "Academic term unavailable"}
-                      </p>
-                      <p>
-                        {section.section_code} ·{" "}
-                        {section.schedule_days ?? "Meeting time pending"} ·{" "}
-                        {section.room ?? "Room pending"}
-                      </p>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </AsyncBoundary>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle level={2}>Executive decisions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AsyncBoundary
-            query={proposalsQuery}
-            loadingLabel="Loading schedule proposals…"
-          >
-            {(proposals) => (
-              <ScheduleDecisionControls
-                actorRole="executive_director"
-                proposals={proposals}
-              />
-            )}
-          </AsyncBoundary>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="review" className="gap-4">
+        <TabsList aria-label="Executive enrollment review views">
+          <TabsTrigger value="review">For review</TabsTrigger>
+          <TabsTrigger value="published">Published</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="review">
+          <Card>
+            <CardHeader>
+              <CardTitle level={2}>Schedules for review</CardTitle>
+              <CardDescription>
+                Department plans waiting for an Executive Director decision.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AsyncBoundary
+                query={proposalsQuery}
+                loadingLabel="Loading schedule proposals…"
+              >
+                {(proposals) => (
+                  <ScheduleDecisionControls
+                    actorRole="executive_director"
+                    proposals={proposals}
+                  />
+                )}
+              </AsyncBoundary>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="published">
+          <Card>
+            <CardHeader>
+              <CardTitle level={2}>Published sections</CardTitle>
+              <CardDescription>
+                Finalized sections available in the current master schedule.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AsyncBoundary
+                query={sectionsListQuery}
+                isEmpty={(sections) => sections.length === 0}
+                emptyMessage="No published sections are available."
+                loadingLabel="Loading the master schedule…"
+              >
+                {(sections) => (
+                  <ul className="grid gap-3 md:grid-cols-2">
+                    {sections.map((section) => {
+                      const subject = (subjectsQuery.data ?? []).find(
+                        (item) => item.id === section.subject_id,
+                      )
+                      const term = (termsQuery.data ?? []).find(
+                        (item) => item.id === section.academic_term_id,
+                      )
+                      return (
+                        <li key={section.id}>
+                          <Card size="sm" className="h-full">
+                            <CardHeader>
+                              <CardTitle level={3}>
+                                {subject
+                                  ? `${subject.code} · ${subject.title}`
+                                  : `Section #${section.id}`}
+                              </CardTitle>
+                              <CardDescription>
+                                {term
+                                  ? formatAcademicTerm(term)
+                                  : "Academic term unavailable"}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+                                <div>
+                                  <dt className="text-muted-foreground">Section</dt>
+                                  <dd className="font-medium">{section.section_code}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-muted-foreground">Meeting</dt>
+                                  <dd className="font-medium">{section.schedule_days ?? "Not assigned"}</dd>
+                                </div>
+                                <div className="col-span-2">
+                                  <dt className="text-muted-foreground">Room</dt>
+                                  <dd className="font-medium">{section.room ?? "Not assigned"}</dd>
+                                </div>
+                              </dl>
+                            </CardContent>
+                          </Card>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </AsyncBoundary>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </WorkspacePage>
   )
 }

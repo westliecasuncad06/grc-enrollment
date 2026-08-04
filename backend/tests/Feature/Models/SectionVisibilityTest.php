@@ -32,7 +32,7 @@ final class SectionVisibilityTest extends TestCase
 
     private function makeTerm(): AcademicTerm
     {
-        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
     }
 
     private function makeSubject(string $code): Subject

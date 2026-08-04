@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
@@ -37,6 +38,11 @@ use Illuminate\Validation\ValidationException;
  * `storage_path` stays null. FR-FIN-010's "view and print/download" is
  * served by the Student module rendering this structured data as a
  * print-stylesheet page, not by generating a file here.
+ *
+ * Payment confirmation is also where each `EnrollmentSubject` transitions
+ * `selected` → `enrolled` — the class roster (and grade submission's roster
+ * filter) only ever surfaces `enrolled` rows, so a student stays invisible
+ * to their professor until this step runs.
  */
 final readonly class ConfirmPayment
 {
@@ -86,6 +92,10 @@ final readonly class ConfirmPayment
                 'enrolled_at' => $confirmedAt,
             ]);
             $lockedEnrollment->refresh();
+
+            $lockedEnrollment->enrollmentSubjects()
+                ->where('status', EnrollmentSubjectStatus::Selected)
+                ->update(['status' => EnrollmentSubjectStatus::Enrolled]);
 
             $document = EnrollmentDocument::create([
                 'enrollment_id' => $lockedEnrollment->id,

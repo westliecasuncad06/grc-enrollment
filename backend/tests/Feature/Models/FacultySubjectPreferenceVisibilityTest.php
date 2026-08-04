@@ -30,7 +30,7 @@ final class FacultySubjectPreferenceVisibilityTest extends TestCase
 
     public function test_a_faculty_member_sees_only_their_own_preferences(): void
     {
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Intro', 'units' => 3, 'status' => SubjectStatus::Active]);
         $professorA = $this->makeUser(UserRole::Faculty, 'professor-a');
         $professorB = $this->makeUser(UserRole::Faculty, 'professor-b');
@@ -49,7 +49,7 @@ final class FacultySubjectPreferenceVisibilityTest extends TestCase
 
     public function test_a_planning_role_sees_every_professors_preferences(): void
     {
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Intro', 'units' => 3, 'status' => SubjectStatus::Active]);
         $professorA = $this->makeUser(UserRole::Faculty, 'professor-a');
         $professorB = $this->makeUser(UserRole::Faculty, 'professor-b');

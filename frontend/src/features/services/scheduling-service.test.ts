@@ -19,9 +19,11 @@ const section = {
   ends_at_time: "09:00:00",
   room: "R101",
   capacity: 30,
+  capacity_source: "plan",
   viability_threshold: 25,
   enrolled_count: 0,
   remaining_seats: 30,
+  is_block_exclusive: null,
   status: "planned",
   status_label: "Planned",
 } as const

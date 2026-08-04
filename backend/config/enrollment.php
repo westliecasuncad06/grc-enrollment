@@ -32,8 +32,18 @@ return [
         'failing_grade' => env('ENROLLMENT_FAILING_GRADE', '5.00'),
 
         // Grades that are neither numeric passes nor fails. Never treated as
-        // satisfying a prerequisite.
-        'special_marks' => ['INC', 'NC'],
+        // satisfying a prerequisite. 'DRP' (Dropped) joins this list so the
+        // existing PrerequisiteEvaluator special-marks branch handles it
+        // without a code change — App\Domain\Academic\GradeMark is the
+        // authoritative vocabulary these values are drawn from.
+        'special_marks' => ['INC', 'NC', 'DRP'],
+
+        // Subjects whose code matches one of these prefixes (after
+        // App\Domain\Academic\CompletionOnlySubjectRule::normalizeCode()) are
+        // graded Complete (C) / Not Complete (NC) only, never numerically —
+        // Leadership (LEAD 1-8) per user direction (2026-08-04). Amending
+        // which subjects are completion-only never requires a code change.
+        'completion_only_code_prefixes' => ['LEAD'],
     ],
 
     // FR-ENR-004: maximum regular units and the overload approval workflow.

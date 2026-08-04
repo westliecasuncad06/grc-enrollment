@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\ScheduleProposal;
 
-use App\Domain\Scheduling\ScheduleProposalStatus;
+use App\Domain\Scheduling\ScheduleProposalTransitionRules;
 use App\Models\ScheduleProposal;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -17,20 +17,6 @@ use Illuminate\Validation\Rule;
  */
 final class UpdateScheduleProposalRequest extends FormRequest
 {
-    /**
-     * @var array<string, ScheduleProposalStatus>
-     */
-    private const REQUIRED_CURRENT_STATUS = [
-        'dean_approve' => ScheduleProposalStatus::Draft,
-        'dean_return' => ScheduleProposalStatus::DeanApproved,
-        'executive_approve' => ScheduleProposalStatus::DeanApproved,
-        'executive_return' => ScheduleProposalStatus::ExecutiveApproved,
-        'publish' => ScheduleProposalStatus::ExecutiveApproved,
-        'close' => ScheduleProposalStatus::Published,
-    ];
-
-    private const RETURN_ACTIONS = ['dean_return', 'executive_return'];
-
     public function authorize(): bool
     {
         return true;
@@ -42,9 +28,9 @@ final class UpdateScheduleProposalRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', 'string', Rule::in(array_keys(self::REQUIRED_CURRENT_STATUS))],
+            'action' => ['required', 'string', Rule::in(ScheduleProposalTransitionRules::actions())],
             'decision_reason' => [
-                Rule::requiredIf(fn (): bool => in_array($this->input('action'), self::RETURN_ACTIONS, true)),
+                Rule::requiredIf(fn (): bool => is_string($this->input('action')) && ScheduleProposalTransitionRules::isReturn($this->input('action'))),
                 'nullable',
                 'string',
             ],
@@ -56,13 +42,13 @@ final class UpdateScheduleProposalRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $action = $this->input('action');
 
-            if (! is_string($action) || ! isset(self::REQUIRED_CURRENT_STATUS[$action])) {
+            if (! is_string($action) || ! in_array($action, ScheduleProposalTransitionRules::actions(), true)) {
                 return;
             }
 
             /** @var ScheduleProposal $proposal */
             $proposal = $this->route('scheduleProposal');
-            $requiredStatus = self::REQUIRED_CURRENT_STATUS[$action];
+            $requiredStatus = ScheduleProposalTransitionRules::requiredStatus($action);
 
             if ($proposal->status !== $requiredStatus) {
                 $validator->errors()->add(

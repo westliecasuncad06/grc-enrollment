@@ -7,7 +7,13 @@ import {
 } from "@/features/portal/role-capabilities"
 
 const expectedModuleIds = {
-  student: ["enrollment", "eligible-subjects", "queue-payment", "grades-com"],
+  student: [
+    "enrollment",
+    "eligible-subjects",
+    "queue-payment",
+    "grades-com",
+    "add-drop-requests",
+  ],
   admission_staff: [
     "student-accounts",
     "admission-status",
@@ -20,7 +26,7 @@ const expectedModuleIds = {
     "grade-submission",
   ],
   program_chair: [
-    "curriculum",
+    "program-chair-enrollment",
     "subjects-prerequisites",
     "sections-schedules",
     "faculty-assignment",
@@ -41,17 +47,22 @@ const expectedModuleIds = {
     "reports",
   ],
   registrar_head: [
-    "enrollment-approvals",
+    "academic-terms",
+    "grade-approvals",
+    "academic-transcripts",
     "overrides-voids",
+    "enrollment-change-requests",
     "attrition-analytics",
     "compliance-reports",
     "audit-logs",
     "policy-settings",
   ],
   registrar_staff: [
+    "enrollment-approvals",
     "credit-mappings",
     "drops-withdrawals",
     "academic-records",
+    "enrollment-change-requests",
     "enrollment-documents",
   ],
   accounting_staff: [
@@ -95,5 +106,7 @@ describe("getRoleModule", () => {
     expect(getRoleModule("student", "enrollment")?.label).toBe("Enrollment")
     expect(getRoleModule("student", "payment-queue")).toBeNull()
     expect(getRoleModule("student", "unknown")).toBeNull()
+    expect(getRoleModule("dean", "schedule-approvals")?.label).toBe("Enrollment")
+    expect(getRoleModule("executive_director", "master-schedule")?.label).toBe("Enrollment")
   })
 })

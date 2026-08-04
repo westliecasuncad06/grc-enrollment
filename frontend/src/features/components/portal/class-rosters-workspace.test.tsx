@@ -30,9 +30,11 @@ const ownSection = {
   ends_at_time: "09:30:00",
   room: "R201",
   capacity: 30,
+  capacity_source: "plan",
   viability_threshold: null,
   enrolled_count: 1,
   remaining_seats: 29,
+  is_block_exclusive: null,
   status: "published",
   status_label: "Published",
 }

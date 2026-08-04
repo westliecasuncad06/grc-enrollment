@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
@@ -19,9 +20,11 @@ const sections = {
       ends_at_time: null,
       room: null,
       capacity: 40,
+      capacity_source: "plan",
       viability_threshold: null,
       enrolled_count: 0,
       remaining_seats: 40,
+      is_block_exclusive: null,
       status: "published",
       status_label: "Published",
     },
@@ -37,9 +40,11 @@ const sections = {
       ends_at_time: null,
       room: null,
       capacity: 40,
+      capacity_source: "plan",
       viability_threshold: null,
       enrolled_count: 0,
       remaining_seats: 40,
+      is_block_exclusive: null,
       status: "planned",
       status_label: "Planned",
     },
@@ -55,6 +60,7 @@ const subjects = {
       units: 3,
       status: "active",
       status_label: "Active",
+      is_completion_only: false,
     },
   ],
 }
@@ -69,8 +75,10 @@ const terms = {
       ends_at: null,
       enrollment_opens_at: null,
       enrollment_closes_at: null,
-      status: "active",
-      status_label: "Active",
+      add_drop_deadline_at: null,
+      grading_deadline_at: null,
+      status: "semester_ongoing",
+      status_label: "Semester Ongoing",
     },
   ],
 }
@@ -83,6 +91,11 @@ const deanApprovedProposal = {
       id: 9,
       academic_term_id: 2,
       submitted_by: 4,
+      submitted_by_name: "COA Program Chair",
+      college: "coa",
+      college_label: "College of Accountancy",
+      academic_term_label: "2026-2027 · 1st",
+      is_submitted: true,
       status: "dean_approved",
       status_label: "Dean approved",
       decided_by: 5,
@@ -105,6 +118,7 @@ describe("MasterScheduleWorkspace", () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it("shows the executive only published master schedule", async () => {
+    const user = userEvent.setup()
     fetchMock.mockImplementation((input) =>
       Promise.resolve(
         new Response(
@@ -128,11 +142,17 @@ describe("MasterScheduleWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
+    expect(
+      await screen.findByRole("tab", { name: "For review", selected: true }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/ENG101/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Published" }))
     expect(await screen.findByText(/ENG101/)).toBeInTheDocument()
     expect(screen.queryByText("B")).not.toBeInTheDocument()
   })
 
   it("shows executive decision controls even when no sections are published yet", async () => {
+    const user = userEvent.setup()
     // Regression test: the decision controls used to sit inside the same
     // AsyncBoundary as the published-sections list, so an empty schedule
     // locked the Executive Director out of approving the very first
@@ -161,12 +181,17 @@ describe("MasterScheduleWorkspace", () => {
       },
     })
     expect(
-      await screen.findByText("No published sections are available."),
+      await screen.findByRole("button", {
+        name: "Final approve",
+      }),
     ).toBeInTheDocument()
     expect(
-      await screen.findByRole("button", {
-        name: "Approve as Executive Director",
-      }),
+      screen.getByRole("button", { name: "Return with notes" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("College of Accountancy")).toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Published" }))
+    expect(
+      await screen.findByText("No published sections are available."),
     ).toBeInTheDocument()
   })
 
@@ -208,7 +233,7 @@ describe("MasterScheduleWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByText(/ENG101/)
+    await screen.findByRole("tab", { name: "For review", selected: true })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

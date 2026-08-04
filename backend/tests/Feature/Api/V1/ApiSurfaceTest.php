@@ -22,7 +22,10 @@ final class ApiSurfaceTest extends TestCase
             'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'GET|HEAD api/v1/academic-grades',
+            'GET|HEAD api/v1/academic-term-section-plans',
+            'GET|HEAD api/v1/academic-term-workflows',
             'GET|HEAD api/v1/academic-terms',
+            'GET|HEAD api/v1/academic-terms/{academicTerm}/enrollment-windows',
             'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/class-rosters',
@@ -31,24 +34,36 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/dashboards/institution-summary',
             'GET|HEAD api/v1/dashboards/policy-settings',
             'GET|HEAD api/v1/eligible-subjects',
+            'GET|HEAD api/v1/enrollment-blocks',
+            'GET|HEAD api/v1/enrollment-change-requests',
             'GET|HEAD api/v1/enrollment-documents',
             'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-members',
             'GET|HEAD api/v1/faculty-subject-preferences',
+            'GET|HEAD api/v1/grade-slip',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/notifications',
             'GET|HEAD api/v1/programs',
+            'GET|HEAD api/v1/prospectus',
             'GET|HEAD api/v1/queue-tickets',
+            'GET|HEAD api/v1/room-options',
             'GET|HEAD api/v1/schedule-proposals',
+            'GET|HEAD api/v1/schedule-proposals/{scheduleProposal}/sections',
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/stuck-enrollments',
             'GET|HEAD api/v1/student-profile',
+            'GET|HEAD api/v1/subject-offerings',
             'GET|HEAD api/v1/subjects',
             'GET|HEAD api/v1/transferee-credits',
             'GET|HEAD api/v1/withdrawal-requests',
             'PATCH api/v1/academic-grades/{academicGrade}',
+            'PATCH api/v1/academic-term-workflows/{workflow}',
+            'PATCH api/v1/academic-terms/{academicTerm}',
+            'PATCH api/v1/academic-terms/{academicTerm}/enrollment-schedule',
+            'PATCH api/v1/academic-terms/{academicTerm}/section-plan',
             'PATCH api/v1/curricula/{curriculum}',
+            'PATCH api/v1/enrollment-change-requests/{enrollmentChangeRequest}',
             'PATCH api/v1/enrollments/{enrollment}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
@@ -59,10 +74,15 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/transferee-credits/{transfereeCredit}',
             'PATCH api/v1/withdrawal-requests/{withdrawalRequest}',
             'POST api/v1/academic-grades',
+            'POST api/v1/academic-terms',
+            'POST api/v1/academic-terms/{academicTerm}/archive-and-create-next',
+            'POST api/v1/academic-terms/{academicTerm}/section-plan/release',
+            'POST api/v1/academic-terms/{academicTerm}/section-plan/submit',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
             'POST api/v1/enrollments',
+            'POST api/v1/enrollments/{enrollment}/change-requests',
             'POST api/v1/enrollments/{enrollment}/payment',
             'POST api/v1/enrollments/{enrollment}/withdraw',
             'POST api/v1/faculty-availabilities',
@@ -70,6 +90,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
             'POST api/v1/student-profiles',
+            'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
         ], $routes);
     }
@@ -84,12 +105,20 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.notifications.index',
             'api.v1.notifications.read',
             'api.v1.programs',
-            'api.v1.academic-terms',
+            'api.v1.academic-terms.index',
+            'api.v1.academic-terms.update',
+            'api.v1.academic-term-workflows.index',
+            'api.v1.academic-term-workflows.update',
+            'api.v1.academic-terms.store',
             'api.v1.subjects',
             'api.v1.curricula.index',
             'api.v1.curricula.store',
             'api.v1.curricula.update',
+            'api.v1.subject-offerings.index',
+            'api.v1.subject-offerings.store',
             'api.v1.eligible-subjects.index',
+            'api.v1.enrollment-blocks.index',
+            'api.v1.academic-terms.archive-and-create-next',
             'api.v1.enrollments.index',
             'api.v1.enrollments.store',
             'api.v1.enrollments.update',
@@ -97,6 +126,9 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.enrollments.withdraw',
             'api.v1.withdrawal-requests.index',
             'api.v1.withdrawal-requests.update',
+            'api.v1.enrollments.change-requests.store',
+            'api.v1.enrollment-change-requests.index',
+            'api.v1.enrollment-change-requests.update',
             'api.v1.transferee-credits.index',
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
@@ -104,6 +136,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.academic-grades.index',
             'api.v1.academic-grades.store',
             'api.v1.academic-grades.update',
+            'api.v1.prospectus.show',
+            'api.v1.grade-slip.show',
             'api.v1.queue-tickets.index',
             'api.v1.queue-tickets.update',
             'api.v1.faculty-availabilities.index',
@@ -151,6 +185,34 @@ final class ApiSurfaceTest extends TestCase
         $readRoute = Route::getRoutes()->getByName('api.v1.curricula.index');
         $this->assertNotNull($readRoute);
         $this->assertNotContains('role:program_chair', $readRoute->gatherMiddleware());
+    }
+
+    public function test_subject_offering_writes_are_gated_to_the_program_chair_role(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.subject-offerings.store');
+
+        $this->assertNotNull($route);
+        $this->assertContains('role:program_chair', $route->gatherMiddleware());
+
+        $readRoute = Route::getRoutes()->getByName('api.v1.subject-offerings.index');
+        $this->assertNotNull($readRoute);
+        $this->assertNotContains('role:program_chair', $readRoute->gatherMiddleware());
+    }
+
+    public function test_academic_term_creation_is_gated_to_the_registrar_head_role(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.academic-terms.store');
+
+        $this->assertNotNull($route);
+        $this->assertContains('role:registrar_head', $route->gatherMiddleware());
+
+        $archiveAndCreateNextRoute = Route::getRoutes()->getByName('api.v1.academic-terms.archive-and-create-next');
+        $this->assertNotNull($archiveAndCreateNextRoute);
+        $this->assertContains('role:registrar_head', $archiveAndCreateNextRoute->gatherMiddleware());
+
+        $readRoute = Route::getRoutes()->getByName('api.v1.academic-terms.index');
+        $this->assertNotNull($readRoute);
+        $this->assertNotContains('role:registrar_head', $readRoute->gatherMiddleware());
     }
 
     public function test_faculty_input_writes_are_gated_to_the_faculty_role(): void
@@ -273,6 +335,24 @@ final class ApiSurfaceTest extends TestCase
     public function test_eligible_subjects_carries_no_role_middleware(): void
     {
         $route = Route::getRoutes()->getByName('api.v1.eligible-subjects.index');
+
+        $this->assertNotNull($route);
+
+        $roleMiddleware = array_filter(
+            $route->gatherMiddleware(),
+            static fn ($middleware): bool => is_string($middleware) && str_starts_with($middleware, 'role:'),
+        );
+
+        $this->assertSame([], array_values($roleMiddleware));
+    }
+
+    /**
+     * Same shape as eligible-subjects: own computed view, student-only via
+     * EligibleSubjectPolicy, not a `role:` middleware.
+     */
+    public function test_enrollment_blocks_carries_no_role_middleware(): void
+    {
+        $route = Route::getRoutes()->getByName('api.v1.enrollment-blocks.index');
 
         $this->assertNotNull($route);
 

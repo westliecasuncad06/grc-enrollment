@@ -38,6 +38,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -84,6 +86,8 @@
   --accent: #f5edd2;
   --accent-foreground: #493a08;
   --destructive: #72182a;
+  --success: #1f7a4d;
+  --warning: #96591a;
   --border: #d9d4cb;
   --input: #cbc5ba;
   --ring: var(--grc-primary);
@@ -135,6 +139,8 @@
   --accent: #3d351c;
   --accent-foreground: #f8e9ad;
   --destructive: #ff7a8e;
+  --success: #34d399;
+  --warning: #fbbf24;
   --border: #3d3d42;
   --input: #4a4a50;
   --ring: #ef4763;
@@ -1095,6 +1101,11 @@
   border-left-color: var(--primary);
 }
 
+.portal-nav-link--locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .portal-nav-link svg {
   width: 1rem;
   height: 1rem;
@@ -1745,5 +1756,90 @@
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/**
+ * Print. Two layers:
+ *
+ * 1. Unconditional: hitting Ctrl+P anywhere in the portal hides the chrome
+ *    (sidebar, topbar, skip link, storage alert) so the printed page is
+ *    never just a screenshot of the app shell. A pure improvement on its
+ *    own, independent of anything below.
+ *
+ * 2. Document isolation, gated on `body[data-printing]` (set by
+ *    `usePrintDocument()` immediately before `window.print()` and cleared
+ *    on `afterprint`): `visibility: hidden` on everything, `visible` on the
+ *    `[data-print-region]` subtree only, so a single printable document
+ *    (grade slip, prospectus) is the entire page, with nothing else from
+ *    the surrounding workspace bleeding in. `visibility` rather than
+ *    `display`/`:has()` — an ancestor staying hidden still reserves no
+ *    layout space is not required here since the region is repositioned to
+ *    the page origin below, and `visibility` is what keeps this assertable
+ *    in Vitest (`document.body.dataset.printing` toggling is a plain DOM
+ *    read, no print-media emulation needed to verify the hook itself).
+ */
+@media print {
+  .portal-sidebar,
+  .portal-topbar,
+  .skip-link,
+  .portal-storage-alert {
+    display: none !important;
+  }
+
+  .portal-app,
+  .portal-main-column,
+  .portal-content {
+    display: block;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  body[data-printing] * {
+    visibility: hidden;
+  }
+
+  body[data-printing] [data-print-region],
+  body[data-printing] [data-print-region] * {
+    visibility: visible;
+  }
+
+  body[data-printing] [data-print-region] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .print-document {
+    color: #000;
+    background: #fff;
+    font-size: 10pt;
+  }
+
+  .print-document table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .print-document th,
+  .print-document td {
+    border: 1px solid #000;
+    padding: 2pt 4pt;
+  }
+
+  .print-document thead {
+    display: table-header-group;
+  }
+
+  .print-document tr {
+    break-inside: avoid;
+  }
+
+  .print-document .signature-cell {
+    min-width: 28mm;
   }
 }

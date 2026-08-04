@@ -13,6 +13,8 @@ final class SubjectResource extends JsonResource
 {
     /**
      * Exact key set. No attribute is passed through implicitly.
+     * `is_completion_only` marks subjects graded Complete/Not-Complete only
+     * (Leadership) — see `Subject::isCompletionOnly()`.
      *
      * @return array{
      *     type: string,
@@ -21,7 +23,8 @@ final class SubjectResource extends JsonResource
      *     title: string,
      *     units: float,
      *     status: string,
-     *     status_label: string
+     *     status_label: string,
+     *     is_completion_only: bool
      * }
      */
     public function toArray(Request $request): array
@@ -34,6 +37,7 @@ final class SubjectResource extends JsonResource
             'units' => $this->resource->units,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
+            'is_completion_only' => $this->resource->isCompletionOnly(),
         ];
     }
 }

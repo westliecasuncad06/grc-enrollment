@@ -42,6 +42,8 @@ final class AuditAction
 
     public const STUDENT_PROFILE_PROVISIONED = 'student_profile.provisioned';
 
+    public const STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED = 'student_profile.enrollment_category_reclassified';
+
     public const AUDIT_LOG_LIST_VIEWED = 'audit_log.list_viewed';
 
     public const FACULTY_DIRECTORY_LIST_VIEWED = 'faculty_directory.list_viewed';
@@ -82,6 +84,32 @@ final class AuditAction
 
     public const TRANSFEREE_CREDIT_REJECTED = 'transferee_credit.rejected';
 
+    public const ACADEMIC_TERM_CREATED = 'academic_term.created';
+
+    public const SUBJECT_OFFERINGS_REPLACED = 'subject_offerings.replaced';
+
+    public const SECTION_PLAN_SUBMITTED = 'section_plan.submitted';
+
+    public const ACADEMIC_TERM_WORKFLOW_CURRICULUM_STARTED = 'academic_term_workflow.curriculum_started';
+
+    public const ACADEMIC_TERM_WORKFLOW_CURRICULUM_COMPLETED = 'academic_term_workflow.curriculum_completed';
+
+    public const ACADEMIC_TERM_WORKFLOW_FACULTY_REVIEWED = 'academic_term_workflow.faculty_reviewed';
+
+    public const ACADEMIC_TERM_CLOSED = 'academic_term.closed';
+
+    public const ACADEMIC_TERM_ARCHIVED = 'academic_term.archived';
+
+    public const ACADEMIC_TERM_ENROLLMENT_OPENED = 'academic_term.enrollment_opened';
+
+    public const ACADEMIC_TERM_ENROLLMENT_SCHEDULE_UPDATED = 'academic_term.enrollment_schedule_updated';
+
+    public const ENROLLMENT_CHANGE_REQUEST_CREATED = 'enrollment_change_request.created';
+
+    public const ENROLLMENT_CHANGE_REQUEST_APPROVED = 'enrollment_change_request.approved';
+
+    public const ENROLLMENT_CHANGE_REQUEST_REJECTED = 'enrollment_change_request.rejected';
+
     /**
      * @return list<string>
      */
@@ -107,6 +135,7 @@ final class AuditAction
             self::SECTION_PUBLISHED,
             self::SCHEDULE_PROPOSAL_CLOSED,
             self::STUDENT_PROFILE_PROVISIONED,
+            self::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED,
             self::AUDIT_LOG_LIST_VIEWED,
             self::FACULTY_DIRECTORY_LIST_VIEWED,
             self::ENROLLMENT_SUBMITTED,
@@ -127,6 +156,19 @@ final class AuditAction
             self::TRANSFEREE_CREDIT_UPDATED,
             self::TRANSFEREE_CREDIT_APPROVED,
             self::TRANSFEREE_CREDIT_REJECTED,
+            self::ACADEMIC_TERM_CREATED,
+            self::SUBJECT_OFFERINGS_REPLACED,
+            self::SECTION_PLAN_SUBMITTED,
+            self::ACADEMIC_TERM_WORKFLOW_CURRICULUM_STARTED,
+            self::ACADEMIC_TERM_WORKFLOW_CURRICULUM_COMPLETED,
+            self::ACADEMIC_TERM_WORKFLOW_FACULTY_REVIEWED,
+            self::ACADEMIC_TERM_CLOSED,
+            self::ACADEMIC_TERM_ARCHIVED,
+            self::ACADEMIC_TERM_ENROLLMENT_OPENED,
+            self::ACADEMIC_TERM_ENROLLMENT_SCHEDULE_UPDATED,
+            self::ENROLLMENT_CHANGE_REQUEST_CREATED,
+            self::ENROLLMENT_CHANGE_REQUEST_APPROVED,
+            self::ENROLLMENT_CHANGE_REQUEST_REJECTED,
         ];
     }
 }

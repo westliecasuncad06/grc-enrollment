@@ -4,7 +4,10 @@ namespace App\Actions\Enrollment;
 
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
+use App\Domain\Academic\PrerequisiteVerdict;
+use App\Domain\Enrollment\BlockSectionAccessPolicy;
 use App\Domain\Enrollment\EligibleSubjectEntry;
+use App\Domain\Enrollment\EnrollmentAccessContext;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Scheduling\SectionStatus;
@@ -31,19 +34,10 @@ use App\Models\StudentProfile;
  */
 final readonly class BuildEligibleSubjectPool
 {
-    /**
-     * FR-ENR-011 needs a section-side "reserved" flag AND a student-side
-     * classification to compare, but PRD §17 leaves the regular/irregular
-     * vocabulary itself unconfirmed — `student_profiles.enrollment_category`
-     * is a bare nullable string for exactly that reason (see its migration).
-     * This literal is a documented placeholder, the same pattern already
-     * used for `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE`: it makes the
-     * mechanism demonstrable and testable without asserting GRC's real
-     * vocabulary. Replace it once that vocabulary is confirmed.
-     */
-    private const IRREGULAR_CATEGORY_PLACEHOLDER = 'irregular';
-
-    public function __construct(private PrerequisiteEvaluator $evaluator) {}
+    public function __construct(
+        private PrerequisiteEvaluator $evaluator,
+        private BuildEnrollmentAccessContext $accessContext,
+    ) {}
 
     /**
      * @return list<EligibleSubjectEntry>
@@ -57,20 +51,28 @@ final readonly class BuildEligibleSubjectPool
             ->orderBy('semester')
             ->get();
 
+        // Resolved once for the whole pool: which audience windows are open
+        // is a property of the term, not of any single placement.
+        $context = $this->accessContext->execute($term, $student);
+
         return array_values(array_map(
-            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement),
+            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context),
             $placements->all(),
         ));
     }
 
-    private function evaluatePlacement(StudentProfile $student, AcademicTerm $term, CurriculumSubject $placement): EligibleSubjectEntry
-    {
+    private function evaluatePlacement(
+        StudentProfile $student,
+        AcademicTerm $term,
+        CurriculumSubject $placement,
+        EnrollmentAccessContext $context,
+    ): EligibleSubjectEntry {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
         $excluded = false;
 
         $ownGrade = $this->latestLockedGrade($student->id, $placement->subject_id);
-        if ($this->evaluator->evaluate($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
+        if ($this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
             $reasons[] = ['code' => 'completed', 'message' => 'This subject has already been completed with a passing grade.'];
             $excluded = true;
         }
@@ -82,7 +84,7 @@ final readonly class BuildEligibleSubjectPool
 
         foreach ($placement->prerequisites as $edge) {
             $prerequisiteGrade = $this->latestLockedGrade($student->id, $edge->prerequisite_subject_id);
-            $verdict = $this->evaluator->evaluate($prerequisiteGrade, $edge->minimum_grade);
+            $verdict = $this->verdictFor($prerequisiteGrade, $edge->minimum_grade);
 
             if ($verdict->status->value === 'not_satisfied') {
                 $reasons[] = [
@@ -104,6 +106,7 @@ final readonly class BuildEligibleSubjectPool
             $sectionsThisTerm = Section::query()
                 ->where('academic_term_id', $term->id)
                 ->where('subject_id', $placement->subject_id)
+                ->with('sectionPlan')
                 ->get();
 
             $openSections = $sectionsThisTerm
@@ -114,12 +117,26 @@ final readonly class BuildEligibleSubjectPool
                 $reasons[] = ['code' => 'no_sections_available', 'message' => 'No published sections with open seats are offered for this subject in the selected term.'];
                 $excluded = true;
             } else {
-                $unrestricted = $openSections->reject(
-                    fn (Section $section): bool => $this->isBlockRestricted($section, $student->enrollment_category),
+                $unrestricted = $openSections->filter(
+                    fn (Section $section): bool => BlockSectionAccessPolicy::allows(
+                        $section->is_block_exclusive,
+                        $this->blockYearLevel($section),
+                        $context,
+                    ),
                 )->values();
 
                 if ($unrestricted->isEmpty()) {
-                    $reasons[] = ['code' => 'block_restricted', 'message' => 'The only open sections for this subject are reserved for regular block students.'];
+                    // $openSections was already proven non-empty above.
+                    $representativeSection = $openSections->first();
+                    $withheldCode = BlockSectionAccessPolicy::reasonFor(
+                        $representativeSection->is_block_exclusive,
+                        $this->blockYearLevel($representativeSection),
+                        $context,
+                    ) ?? 'block_restricted';
+
+                    $reasons[] = $withheldCode === 'block_other_year'
+                        ? ['code' => 'block_other_year', 'message' => 'The only open sections for this subject belong to another year level\'s block.']
+                        : ['code' => 'block_restricted', 'message' => 'The only open sections for this subject are block sections, which open to irregular students when the irregular enrollment window starts.'];
                     $excluded = true;
                 } else {
                     $availableSections = array_values($unrestricted->all());
@@ -140,7 +157,7 @@ final readonly class BuildEligibleSubjectPool
         );
     }
 
-    private function latestLockedGrade(int $studentId, int $subjectId): ?string
+    private function latestLockedGrade(int $studentId, int $subjectId): ?AcademicGrade
     {
         return AcademicGrade::query()
             ->where('student_id', $studentId)
@@ -148,7 +165,47 @@ final readonly class BuildEligibleSubjectPool
             ->where('status', GradeStatus::Locked)
             ->orderByDesc('academic_term_id')
             ->orderByDesc('id')
-            ->value('final_grade');
+            ->first(['mark', 'final_grade']);
+    }
+
+    /**
+     * `C` (Complete) satisfies a completion-only subject's own-completion
+     * check and every prerequisite edge that requires it, without ever
+     * reaching `PrerequisiteEvaluator` — that evaluator only compares
+     * numeric grades and treats every non-numeric value (including `C`) as
+     * a special mark, which would make `LEAD1`'s `C` permanently fail to
+     * satisfy `LEAD2`'s prerequisite. This short-circuit is the fix; the
+     * evaluator itself is intentionally left untouched.
+     *
+     * Falls back to `mark->value` (e.g. `'NC'`, `'INC'`) or, for legacy
+     * rows locked before `mark` existed, the raw `final_grade` string — so
+     * `PrerequisiteEvaluator`'s existing special-marks/numeric handling
+     * still runs unchanged for every case except Complete.
+     */
+    private function verdictFor(?AcademicGrade $grade, string $required): PrerequisiteVerdict
+    {
+        // Read into a local first: chaining a second `?->` off the result of
+        // the first (`$grade?->mark?->x`) only protects against `$grade`
+        // itself being null. If `$grade` is non-null but `mark` is null, a
+        // further method call needs its own `?->` — a plain `->method()` on
+        // null is a fatal error, unlike plain property access.
+        $mark = $grade?->mark;
+
+        if ($mark?->isCompletion() === true) {
+            return PrerequisiteVerdict::satisfied('Recorded mark C (Complete) satisfies this completion-only requirement.');
+        }
+
+        // Explicit null checks, not `?->`/plain `->`: PHP itself tolerates
+        // `$mark->value` here even when `$mark` is null (a property-access
+        // chain on the left of `??` degrades silently to null, with no
+        // nullsafe operator needed) — but PHPStan's static analysis can't
+        // see that runtime allowance and flags it as a possible-null
+        // dereference regardless. Explicit checks satisfy both.
+        $markValue = $mark !== null ? $mark->value : null;
+        $finalGrade = $grade !== null ? $grade->final_grade : null;
+        $rawGrade = $markValue ?? $finalGrade;
+
+        return $this->evaluator->evaluate($rawGrade, $required);
     }
 
     private function isAlreadySelectedThisTerm(int $studentId, int $academicTermId, int $subjectId): bool
@@ -166,10 +223,27 @@ final readonly class BuildEligibleSubjectPool
             ->exists();
     }
 
-    private function isBlockRestricted(Section $section, ?string $enrollmentCategory): bool
+    /**
+     * The year level a block section belongs to.
+     *
+     * `section_plan_id` is authoritative — it is the row the Program Chair
+     * actually planned against. The section-code suffix is only a fallback
+     * for legacy rows generated before section plans existed (`IT201` → 2),
+     * and null when neither is available, which the access policy treats as
+     * "do not withhold".
+     */
+    private function blockYearLevel(?Section $section): ?int
     {
-        return $section->is_block_exclusive === true
-            && $enrollmentCategory !== null
-            && strtolower($enrollmentCategory) === self::IRREGULAR_CATEGORY_PLACEHOLDER;
+        if ($section === null) {
+            return null;
+        }
+
+        if ($section->sectionPlan !== null) {
+            return $section->sectionPlan->year_level;
+        }
+
+        return preg_match('/(\d)\d{2}$/u', $section->section_code, $matches) === 1
+            ? (int) $matches[1]
+            : null;
     }
 }

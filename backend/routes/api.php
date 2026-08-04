@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\V1\AcademicGradeController;
 use App\Http\Controllers\Api\V1\AcademicTermController;
+use App\Http\Controllers\Api\V1\AcademicTermSectionPlanController;
+use App\Http\Controllers\Api\V1\AcademicTermWorkflowController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
@@ -13,19 +15,26 @@ use App\Http\Controllers\Api\V1\Dashboard\InstitutionSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\PolicySettingsController;
 use App\Http\Controllers\Api\V1\Dashboard\StuckEnrollmentController;
 use App\Http\Controllers\Api\V1\EligibleSubjectController;
+use App\Http\Controllers\Api\V1\EnrollmentBlockController;
+use App\Http\Controllers\Api\V1\EnrollmentChangeRequestController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
+use App\Http\Controllers\Api\V1\EnrollmentWindowController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
+use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProgramController;
+use App\Http\Controllers\Api\V1\ProspectusController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
+use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\SubjectController;
+use App\Http\Controllers\Api\V1\SubjectOfferingController;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
 use App\Http\Controllers\Api\V1\WithdrawalRequestController;
 use App\Http\Middleware\EnsureUserIsActive;
@@ -53,13 +62,27 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     // model's visibleTo() scope decide which rows a given role receives.
     Route::middleware(['auth:sanctum', EnsureUserIsActive::class, 'throttle:60,1'])->group(function (): void {
         Route::get('/programs', ProgramController::class)->name('programs');
-        Route::get('/academic-terms', AcademicTermController::class)->name('academic-terms');
+        Route::get('/academic-terms', [AcademicTermController::class, 'index'])->name('academic-terms.index');
+        Route::patch('/academic-terms/{academicTerm}', [AcademicTermController::class, 'update'])->name('academic-terms.update');
+
+        // GET is readable by every role (AcademicTermPolicy::view gates a
+        // learner-scoped role to learner-visible terms, same as the term
+        // list above); PATCH is Registrar Head only via
+        // AcademicTermPolicy::update — no role: middleware, same pattern as
+        // the term-transition route above it.
+        Route::get('/academic-terms/{academicTerm}/enrollment-windows', [EnrollmentWindowController::class, 'index'])->name('academic-terms.enrollment-windows.index');
+        Route::patch('/academic-terms/{academicTerm}/enrollment-schedule', [EnrollmentWindowController::class, 'update'])->name('academic-terms.enrollment-schedule.update');
+        Route::get('/academic-term-workflows', [AcademicTermWorkflowController::class, 'index'])->name('academic-term-workflows.index');
+        Route::patch('/academic-term-workflows/{workflow}', [AcademicTermWorkflowController::class, 'update'])->name('academic-term-workflows.update');
         Route::get('/subjects', SubjectController::class)->name('subjects');
         Route::get('/curricula', [CurriculumController::class, 'index'])->name('curricula.index');
+        Route::get('/subject-offerings', [SubjectOfferingController::class, 'index'])->name('subject-offerings.index');
+        Route::get('/academic-term-section-plans', [AcademicTermSectionPlanController::class, 'index'])->name('academic-term-section-plans.index');
         Route::get('/faculty-availabilities', [FacultyAvailabilityController::class, 'index'])->name('faculty-availabilities.index');
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
         Route::get('/schedule-proposals', [ScheduleProposalController::class, 'index'])->name('schedule-proposals.index');
+        Route::get('/schedule-proposals/{scheduleProposal}/sections', [ScheduleProposalController::class, 'sections'])->name('schedule-proposals.sections');
         Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
         Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
@@ -78,6 +101,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // resolves "student role only" the same way FacultyMemberPolicy
         // resolves "program chair only" for the faculty directory.
         Route::get('/eligible-subjects', EligibleSubjectController::class)->name('eligible-subjects.index');
+
+        // Blocks a regular student may enrol into as a unit. Irregular
+        // students use /eligible-subjects instead — this always returns []
+        // for them, never an error.
+        Route::get('/enrollment-blocks', EnrollmentBlockController::class)->name('enrollment-blocks.index');
 
         // Role-scoped read (Student own, Registrar Head all, Accounting
         // pending_payment only — Enrollment::scopeVisibleTo) and Student-only
@@ -114,6 +142,20 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/withdrawal-requests', [WithdrawalRequestController::class, 'index'])->name('withdrawal-requests.index');
         Route::patch('/withdrawal-requests/{withdrawalRequest}', [WithdrawalRequestController::class, 'update'])->name('withdrawal-requests.update');
 
+        // Phase 7: Student-only, own `enrolled` enrollment, only inside the
+        // add/drop window (AddDropWindowResolver). No `role:` middleware —
+        // EnrollmentPolicy::requestChange resolves the instance-level
+        // ownership check, the same shape as `enrollments/{enrollment}/withdraw`.
+        Route::post('/enrollments/{enrollment}/change-requests', [EnrollmentChangeRequestController::class, 'store'])->name('enrollments.change-requests.store');
+
+        // Role-scoped read (Student own, Registrar Head and Registrar Staff
+        // all — EnrollmentChangeRequest::scopeVisibleTo); `decide`
+        // (approve/reject) is Registrar Head only — the opposite role
+        // assignment from withdrawal-requests, per explicit user direction.
+        // No `role:` middleware — EnrollmentChangeRequestPolicy resolves both.
+        Route::get('/enrollment-change-requests', [EnrollmentChangeRequestController::class, 'index'])->name('enrollment-change-requests.index');
+        Route::patch('/enrollment-change-requests/{enrollmentChangeRequest}', [EnrollmentChangeRequestController::class, 'update'])->name('enrollment-change-requests.update');
+
         // FR-FIN-003 / PRD §3.8, §10.3: Registrar Staff records, edits, and
         // decides transferee credits (Student and Registrar Head read only
         // — TransfereeCredit::scopeVisibleTo). No `role:` middleware —
@@ -141,12 +183,19 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('/academic-grades', [AcademicGradeController::class, 'store'])->name('academic-grades.store');
         Route::patch('/academic-grades/{academicGrade}', [AcademicGradeController::class, 'update'])->name('academic-grades.update');
 
+        // A student's full academic history, not a single grade record —
+        // gated by AcademicRecordPolicy (view-academic-record), not by
+        // role: middleware, matching /eligible-subjects' shape.
+        Route::get('/prospectus', ProspectusController::class)->name('prospectus.show');
+        Route::get('/grade-slip', GradeSlipController::class)->name('grade-slip.show');
+
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's
         // existing "curriculum"/"subjects-prerequisites" module ownership.
         // CurriculumPolicy re-checks the role as defense in depth.
         Route::middleware('role:program_chair')->group(function (): void {
             Route::get('/faculty-members', FacultyMemberController::class)->name('faculty-members.index');
+            Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
 
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
@@ -159,6 +208,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             // Submitting (creating) a proposal is single-role, unlike its
             // transitions.
             Route::post('/schedule-proposals', [ScheduleProposalController::class, 'store'])->name('schedule-proposals.store');
+
+            // Process 1.1: planning-only data, no learner-visibility concept,
+            // same ownership as curriculum authorship.
+            Route::post('/subject-offerings', [SubjectOfferingController::class, 'store'])->name('subject-offerings.store');
+            Route::patch('/academic-terms/{academicTerm}/section-plan', [AcademicTermSectionPlanController::class, 'store'])->name('academic-term-section-plans.store');
+            Route::post('/academic-terms/{academicTerm}/section-plan/release', [AcademicTermSectionPlanController::class, 'release'])->name('academic-term-section-plans.release');
+            Route::post('/academic-terms/{academicTerm}/section-plan/submit', [AcademicTermSectionPlanController::class, 'submit'])->name('academic-term-section-plans.submit');
         });
 
         // A Faculty member writes only their own availability/preferences —
@@ -186,6 +242,16 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
                 ->name('audit-logs.index');
             Route::get('/dashboards/policy-settings', PolicySettingsController::class)
                 ->name('dashboards.policy-settings');
+
+            // PRD Process 1: only the Registrar Head creates academic terms.
+            // AcademicTermPolicy re-checks the role as defense in depth.
+            Route::post('/academic-terms', [AcademicTermController::class, 'store'])
+                ->name('academic-terms.store');
+
+            // Closing one cycle opens the next in the same transaction, so
+            // the system never sits with no current term.
+            Route::post('/academic-terms/{academicTerm}/archive-and-create-next', [AcademicTermController::class, 'archiveAndCreateNext'])
+                ->name('academic-terms.archive-and-create-next');
         });
 
         // Phase 7c: aggregate-only counts, never row-level enrollment data,

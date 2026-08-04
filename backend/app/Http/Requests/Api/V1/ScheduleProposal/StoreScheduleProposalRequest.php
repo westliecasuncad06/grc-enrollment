@@ -40,6 +40,7 @@ final class StoreScheduleProposalRequest extends FormRequest
 
             $hasActiveProposal = ScheduleProposal::query()
                 ->where('academic_term_id', $termId)
+                ->when($this->user()?->college !== null, fn ($query) => $query->where('college', $this->user()->college->value))
                 ->where('status', '!=', ScheduleProposalStatus::Closed->value)
                 ->exists();
 

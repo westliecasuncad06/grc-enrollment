@@ -34,7 +34,7 @@ final class CcsSubjectSeederTest extends TestCase
         $this->seed(SubjectSeeder::class);
         $this->seed(CcsSubjectSeeder::class);
 
-        $this->assertDatabaseCount('subjects', 13 + 88);
+        $this->assertDatabaseCount('subjects', 17 + 88);
         $this->assertDatabaseHas('subjects', ['code' => 'CS101']);
         $this->assertDatabaseHas('subjects', ['code' => 'LEAD 1']);
     }

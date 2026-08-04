@@ -16,23 +16,38 @@ final class CurriculumCatalogMigrationTest extends TestCase
     {
         $this->assertTrue(Schema::hasTable('subjects'));
         $this->assertTrue(Schema::hasColumns('subjects', [
-            'id', 'code', 'title', 'units', 'status', 'created_at', 'updated_at',
+            'id', 'code', 'college', 'title', 'units', 'status', 'created_at', 'updated_at',
         ]));
     }
 
-    public function test_subjects_code_is_unique(): void
+    public function test_subjects_code_is_unique_per_college(): void
     {
         DB::table('subjects')->insert([
-            'code' => 'CS101', 'title' => 'Intro to Programming', 'units' => 3,
+            'code' => 'CS101', 'college' => 'ccs', 'title' => 'Intro to Programming', 'units' => 3,
             'status' => 'active', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
         $this->expectException(QueryException::class);
 
         DB::table('subjects')->insert([
-            'code' => 'CS101', 'title' => 'Duplicate', 'units' => 3,
+            'code' => 'CS101', 'college' => 'ccs', 'title' => 'Duplicate', 'units' => 3,
             'status' => 'active', 'created_at' => now(), 'updated_at' => now(),
         ]);
+    }
+
+    public function test_the_same_code_is_allowed_in_a_different_college(): void
+    {
+        DB::table('subjects')->insert([
+            'code' => 'ETHICS', 'college' => 'ccs', 'title' => 'Ethics', 'units' => 3,
+            'status' => 'active', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('subjects')->insert([
+            'code' => 'ETHICS', 'college' => 'coe', 'title' => 'Ethics', 'units' => 3,
+            'status' => 'active', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->assertSame(2, DB::table('subjects')->where('code', 'ETHICS')->count());
     }
 
     public function test_curricula_table_has_the_expected_columns(): void

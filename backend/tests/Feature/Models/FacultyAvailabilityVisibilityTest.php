@@ -28,7 +28,7 @@ final class FacultyAvailabilityVisibilityTest extends TestCase
 
     private function makeTerm(): AcademicTerm
     {
-        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
     }
 
     public function test_a_faculty_member_sees_only_their_own_availability(): void

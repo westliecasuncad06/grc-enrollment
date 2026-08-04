@@ -43,7 +43,7 @@ const allowedModuleCases = userRoles.flatMap((role) =>
 // is not always identical to the module registry's label (e.g.
 // "Eligible Subjects" vs. "Eligible subjects"). Kept in sync with
 // `module-registry.test.tsx`'s identical `migratedRegionNames` map, which
-// covers the same 33 connected module IDs.
+// covers the same 34 connected module IDs.
 const workspaceHeadings: Record<string, string> = {
   "class-rosters": "Class rosters",
   "grade-submission": "Grade submission",
@@ -51,21 +51,22 @@ const workspaceHeadings: Record<string, string> = {
   "drops-withdrawals": "Drops & withdrawals",
   "academic-records": "Academic records",
   "enrollment-documents": "Enrollment documents",
-  "master-schedule": "Master schedule",
+  "master-schedule": "Enrollment planning review",
   "audit-logs": "Audit logs",
   "teaching-schedule": "Teaching schedule",
   "eligible-subjects": "Eligible subjects",
   "queue-payment": "Queue & payment status",
   "grades-com": "Your academic records",
-  "schedule-approvals": "Schedule approvals",
+  "schedule-approvals": "Enrollment planning review",
   "schedule-proposals": "Schedule proposals",
   "sections-schedules": "Sections and schedules",
   "faculty-assignment": "Faculty assignment",
   enrollment: "Select your subjects",
   "enrollment-approvals": "Enrollment approvals",
   "overrides-voids": "Overrides & voids",
-  curriculum: "Curriculum editor",
+  "program-chair-enrollment": "Enrollment",
   "subjects-prerequisites": "Curriculum editor",
+  "academic-terms": "Enrollment",
   "availability-preferences": "Availability and preferences",
   "payment-queue": "Payment queue",
   "serving-number": "Serving number",
@@ -78,6 +79,10 @@ const workspaceHeadings: Record<string, string> = {
   "institution-dashboard": "Institution dashboard",
   "stuck-students": "Stuck students",
   "policy-settings": "Policy settings",
+  "grade-approvals": "Grade approvals",
+  "academic-transcripts": "Academic transcripts",
+  "add-drop-requests": "Add/Drop requests",
+  "enrollment-change-requests": "Add/Drop requests",
 }
 
 describe("PortalModulePage", () => {

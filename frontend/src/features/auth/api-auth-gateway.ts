@@ -22,6 +22,7 @@ function toSession(
     userId: String(user.id),
     displayName: user.name,
     role: user.role,
+    college: user.college,
     signedInAt,
   }
 }

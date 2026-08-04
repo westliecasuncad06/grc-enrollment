@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1\AcademicGrade;
 
+use App\Domain\Academic\CompletionOnlySubjectRule;
+use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Models\AcademicGrade;
 use Illuminate\Contracts\Validation\Validator;
@@ -12,7 +14,7 @@ use Illuminate\Validation\Rule;
  * One route serves two different concerns, distinguished by whether
  * `action` is present:
  *
- *   - No `action`: a plain content edit (`final_grade`/`remarks`) by the
+ *   - No `action`: a plain content edit (`mark`/`remarks`) by the
  *     encoding Faculty member, allowed only while the grade is still
  *     `draft` (PRD §4.3 — `GradeStatus::isEditableByEncoder()`).
  *   - `action: submit` (`draft` → `submitted`, Faculty) or
@@ -44,7 +46,7 @@ final class UpdateAcademicGradeRequest extends FormRequest
     {
         return [
             'action' => ['sometimes', 'string', Rule::in(array_keys(self::REQUIRED_CURRENT_STATUS_FOR_ACTION))],
-            'final_grade' => ['prohibited_if:action,submit,lock', 'sometimes', 'nullable', 'numeric', 'between:0,999.99'],
+            'mark' => ['prohibited_if:action,submit,lock', 'sometimes', 'nullable', Rule::enum(GradeMark::class)],
             'remarks' => ['prohibited_if:action,submit,lock', 'sometimes', 'nullable', 'string'],
         ];
     }
@@ -72,10 +74,43 @@ final class UpdateAcademicGradeRequest extends FormRequest
 
             if (! $grade->status->isEditableByEncoder()) {
                 $validator->errors()->add(
-                    'final_grade',
+                    'mark',
                     "This grade is '{$grade->status->value}' and can no longer be edited directly.",
                 );
+
+                return;
             }
+
+            $this->rejectMarkNotAllowedForSubject($validator, $grade);
         });
+    }
+
+    private function rejectMarkNotAllowedForSubject(Validator $validator, AcademicGrade $grade): void
+    {
+        $rawMark = $this->input('mark');
+
+        if ($rawMark === null || $rawMark === '') {
+            return;
+        }
+
+        $mark = GradeMark::tryFrom((string) $rawMark);
+
+        if ($mark === null) {
+            return;
+        }
+
+        $subject = $grade->subject;
+
+        /** @var list<string> $prefixes */
+        $prefixes = (array) config('enrollment.grading.completion_only_code_prefixes', []);
+        $allowed = CompletionOnlySubjectRule::allowedMarks($subject->code, $prefixes);
+
+        if (! in_array($mark, $allowed, true)) {
+            $message = CompletionOnlySubjectRule::matches($subject->code, $prefixes)
+                ? "{$subject->code} is a Leadership subject and is recorded as Complete (C) or Not Complete (NC), not a numeric grade."
+                : "{$subject->code} cannot be recorded as Complete/Not Complete.";
+
+            $validator->errors()->add('mark', $message);
+        }
     }
 }

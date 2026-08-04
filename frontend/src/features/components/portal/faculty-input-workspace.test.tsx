@@ -17,8 +17,10 @@ const terms = {
       ends_at: null,
       enrollment_opens_at: null,
       enrollment_closes_at: null,
-      status: "active",
-      status_label: "Active",
+      add_drop_deadline_at: null,
+      grading_deadline_at: null,
+      status: "semester_ongoing",
+      status_label: "Semester Ongoing",
     },
   ],
 } as const
@@ -32,6 +34,7 @@ const subjects = {
       units: 3,
       status: "active",
       status_label: "Active",
+      is_completion_only: false,
     },
   ],
 } as const

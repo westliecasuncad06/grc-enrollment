@@ -40,7 +40,7 @@ final class WithdrawalRequestsEndpointTest extends TestCase
     private function makeTerm(): AcademicTerm
     {
         return AcademicTerm::create([
-            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 

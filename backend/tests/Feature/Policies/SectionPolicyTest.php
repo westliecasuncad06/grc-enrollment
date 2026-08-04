@@ -6,6 +6,7 @@ use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\Section;
@@ -19,6 +20,11 @@ final class SectionPolicyTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Program Chairs are college-scoped (ADR 0018), and `SectionPolicy`
+     * denies write access to one without a college, so the role alone is
+     * not enough to build a chair who can act.
+     */
     private function makeUser(UserRole $role): User
     {
         return User::create([
@@ -26,13 +32,14 @@ final class SectionPolicyTest extends TestCase
             'email' => $role->value.'@grc.test',
             'password' => 'irrelevant-password',
             'role' => $role,
+            'college' => $role === UserRole::ProgramChair ? CollegeCode::Ccs : null,
             'status' => UserStatus::Active,
         ]);
     }
 
     private function makePlannedSection(): Section
     {
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Test', 'units' => 3, 'status' => SubjectStatus::Active]);
 
         return Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'A', 'capacity' => 40, 'status' => SectionStatus::Planned]);
@@ -73,7 +80,7 @@ final class SectionPolicyTest extends TestCase
             'role' => UserRole::Faculty,
             'status' => UserStatus::Active,
         ]);
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
         $subject = Subject::create(['code' => 'CS102', 'title' => 'Other Test', 'units' => 3, 'status' => SubjectStatus::Active]);
         $ownSection = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'OWN', 'professor_id' => $faculty->id, 'capacity' => 40, 'status' => SectionStatus::Published]);
         $otherSection = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'OTHER', 'professor_id' => $otherFaculty->id, 'capacity' => 40, 'status' => SectionStatus::Published]);

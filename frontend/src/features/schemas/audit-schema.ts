@@ -4,6 +4,12 @@ import { userRoles } from "@/features/auth/roles"
 
 const nullableObject = z.record(z.string(), z.unknown()).nullable()
 
+// Filter-dropdown option lists, kept in sync with `App\Domain\Audit\AuditAction`
+// / `AuditableType` on a best-effort basis. This list does NOT gate what the
+// `audit_log` resource itself may contain (see `auditLogSchema` below) — a
+// backend action added here late is simply not filterable yet, rather than
+// breaking the whole page the way a `.strict()` enum on the resource field
+// would.
 export const auditActions = [
   "curriculum.created",
   "curriculum.updated",
@@ -26,6 +32,34 @@ export const auditActions = [
   "student_profile.provisioned",
   "audit_log.list_viewed",
   "faculty_directory.list_viewed",
+  "enrollment.submitted",
+  "enrollment.registrar_approved",
+  "enrollment.registrar_rejected",
+  "enrollment.voided",
+  "academic_grade.created",
+  "academic_grade.updated",
+  "academic_grade.submitted",
+  "academic_grade.locked",
+  "queue_ticket.serving_started",
+  "queue_ticket.served",
+  "enrollment.payment_confirmed",
+  "withdrawal_request.created",
+  "withdrawal_request.approved",
+  "withdrawal_request.rejected",
+  "transferee_credit.created",
+  "transferee_credit.updated",
+  "transferee_credit.approved",
+  "transferee_credit.rejected",
+  "academic_term.created",
+  "subject_offerings.replaced",
+  "section_plan.submitted",
+  "academic_term_workflow.curriculum_started",
+  "academic_term_workflow.curriculum_completed",
+  "academic_term_workflow.faculty_reviewed",
+  "academic_term.closed",
+  "academic_term.archived",
+  "academic_term.enrollment_opened",
+  "academic_term.enrollment_schedule_updated",
 ] as const
 export const auditableTypes = [
   "curriculum",
@@ -36,6 +70,16 @@ export const auditableTypes = [
   "student_profile",
   "audit_log",
   "faculty_directory",
+  "enrollment",
+  "academic_grade",
+  "queue_ticket",
+  "withdrawal_request",
+  "transferee_credit",
+  "academic_term",
+  "subject_offering",
+  "academic_term_workflow",
+  "section_plan",
+  "academic_term_year_level_window",
 ] as const
 export const auditActionSchema = z.enum(auditActions)
 export const auditableTypeSchema = z.enum(auditableTypes)
@@ -47,8 +91,13 @@ export const auditLogSchema = z
     actor_user_id: z.number().int().positive(),
     actor_role: z.enum(userRoles),
     actor_role_label: z.string().min(1),
-    action: auditActionSchema,
-    auditable_type: auditableTypeSchema,
+    // Deliberately not `auditActionSchema`/`auditableTypeSchema`: those
+    // enums back the filter dropdowns, but the resource itself must accept
+    // any backend action/type value so one unrecognized entry does not fail
+    // `.strict()` parsing and take down the whole audit log page (this bit
+    // the notification bell in the same way — see notification-schema.ts).
+    action: z.string().min(1),
+    auditable_type: z.string().min(1),
     auditable_id: z.number().int().positive().nullable(),
     before_values: nullableObject,
     after_values: nullableObject,

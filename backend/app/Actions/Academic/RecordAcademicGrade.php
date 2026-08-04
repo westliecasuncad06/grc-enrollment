@@ -2,6 +2,7 @@
 
 namespace App\Actions\Academic;
 
+use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
@@ -27,12 +28,15 @@ final readonly class RecordAcademicGrade
     public function execute(array $validated, User $actor, AuditRequestContext $context): AcademicGrade
     {
         return DB::transaction(function () use ($validated, $actor, $context): AcademicGrade {
+            $mark = isset($validated['mark']) ? GradeMark::from($validated['mark']) : null;
+
             $grade = AcademicGrade::create([
                 'student_id' => $validated['student_id'],
                 'subject_id' => $validated['subject_id'],
                 'section_id' => $validated['section_id'],
                 'academic_term_id' => $validated['academic_term_id'],
-                'final_grade' => $validated['final_grade'] ?? null,
+                'mark' => $mark,
+                'final_grade' => $mark?->numericValue(),
                 'remarks' => $validated['remarks'] ?? null,
                 'status' => GradeStatus::Draft,
                 'encoded_by' => $actor->id,
@@ -49,6 +53,7 @@ final readonly class RecordAcademicGrade
                     'subject_id' => $grade->subject_id,
                     'section_id' => $grade->section_id,
                     'academic_term_id' => $grade->academic_term_id,
+                    'mark' => $grade->mark?->value,
                     'status' => $grade->status->value,
                 ],
                 null,

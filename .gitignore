@@ -55,3 +55,4 @@ Thumbs.db
 /artifacts/
 /coverage/
 *.log
+/.playwright-mcp/

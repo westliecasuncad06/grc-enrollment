@@ -2,120 +2,170 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Academic\ReclassifyStudentEnrollmentCategory;
 use App\Domain\Academic\GradeStatus;
-use App\Domain\Academic\TransfereeCreditStatus;
-use App\Domain\Enrollment\EnrollmentDocumentType;
-use App\Domain\Enrollment\EnrollmentStatus;
-use App\Domain\Enrollment\EnrollmentSubjectStatus;
-use App\Domain\Enrollment\QueueTicketStatus;
-use App\Domain\Enrollment\WithdrawalStatus;
+use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
-use App\Models\Enrollment;
-use App\Models\EnrollmentDocument;
-use App\Models\EnrollmentSubject;
-use App\Models\Payment;
 use App\Models\Program;
-use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
-use App\Models\TransfereeCredit;
 use App\Models\User;
-use App\Models\WithdrawalRequest;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Seeds a synthetic end-to-end enrollment dataset so every role portal has
- * realistic content to render.
+ * Seeds eight student logins with real locked grade history, so
+ * `EnrollmentCategoryClassifier` can derive each one's Regular/Irregular
+ * standing for real — never hard-coded — and every year level (plus the
+ * irregular audience) is immediately testable end to end: log in, browse
+ * the derived prospectus/grade slip, and submit a fresh enrollment against
+ * the current `semester_ongoing` term (see AcademicTermSeeder), since none
+ * of the eight carry an enrollment of their own yet.
  *
- * Four students deliberately sit at different points of the PRD §4.2
- * lifecycle, which between them exercise every §10.3 table and both halves of
- * the unique-active-enrollment rule:
+ *   0001  1st year, regular    — 1 completed semester
+ *   0002  2nd year, regular    — 3 completed semesters
+ *   0003  3rd year, regular    — 5 completed semesters
+ *   0004  4th year, regular    — 7 completed semesters
+ *   0005  2nd year, irregular  — 3 sems, a 5.00 (Failed) on a required subject
+ *   0006  2nd year, irregular  — 3 sems, an INC (Incomplete) on a required subject
+ *   0007  3rd year, irregular  — 5 sems, an NC (Not Complete) on a Leadership subject
+ *   0008  4th year, irregular  — 7 sems, missing a required subject's grade entirely
  *
- *   0001  enrolled                     → queue ticket, payment, COM, past grades
- *   0002  pending_registrar_approval   → Registrar approval queue
- *   0003  pending_payment              → Accounting queue, plus transferee credit
- *   0004  withdrawn (terminal)         → withdrawal request; seat slot released
+ * Each student's completed-semester count follows "BSCS Grade History Demo
+ * 2026"'s (see CurriculumSeeder) own ordinal positions exactly — SemesterSlot::
+ * ordinal() is `(yearLevel-1)*2 + (1|2)` — so a year-Y student has
+ * `(Y-1)*2 + 1` completed ordinals and is about to enroll in their Yth
+ * year's 2nd semester, which is exactly the current ongoing term.
  *
- * NONE of this is real student data. Names, student numbers, grades, and the
- * payment reference are invented placeholders, and the emails use the reserved
- * `.test` TLD (RFC 2606) so they can never resolve to a real mailbox.
+ * Grades are recorded against the 7 non-ongoing terms AcademicTermSeeder
+ * seeds (2023-2024 1st through 2026-2027 1st), in chronological order,
+ * right-aligned so a student's MOST RECENT completed ordinal always lands on
+ * the most recent closed term (2026-2027 1st) — a year-4 student's 7
+ * ordinals therefore use all 7 terms 1:1, and shorter histories use however
+ * many of the most recent terms they need.
+ *
+ * NONE of this is real student data. Names, student numbers, and grades are
+ * invented placeholders, and the emails use the reserved `.test` TLD
+ * (RFC 2606) so they can never resolve to a real mailbox.
  *
  * Depends on RoleUserSeeder, ProgramSeeder, SubjectSeeder, CurriculumSeeder,
- * AcademicTermSeeder, and SectionSeeder.
+ * and AcademicTermSeeder.
  */
 final class DemoEnrollmentSeeder extends Seeder
 {
     private const PASSWORD = 'password';
 
     /**
-     * @var list<array{
-     *     email: string, name: string, number: string,
-     *     status: EnrollmentStatus, sections: list<array{subject: string, code: string}>
-     * }>
+     * Every subject at each curriculum ordinal, with the mark a REGULAR
+     * student earns there. Ordinal 8 (year 4, 2nd semester) is deliberately
+     * absent — that is the current ongoing term every student is left free
+     * to enroll into themselves.
+     *
+     * @var array<int, list<array{subject: string, mark: string}>>
      */
-    private const STUDENTS = [
-        [
-            'email' => 'student.seed@grc.test',
-            'name' => 'Seed Student',
-            'number' => 'STU-2026-0001',
-            'status' => EnrollmentStatus::Enrolled,
-            'sections' => [
-                ['subject' => 'CS102', 'code' => 'A'],
-                ['subject' => 'PE101', 'code' => 'A'],
-            ],
+    private const SEMESTER_SUBJECTS = [
+        1 => [
+            ['subject' => 'CS101', 'mark' => '2.00'],
+            ['subject' => 'CS102', 'mark' => '1.75'],
+            ['subject' => 'MATH101', 'mark' => '2.25'],
+            ['subject' => 'GE101', 'mark' => '1.50'],
+            ['subject' => 'PE101', 'mark' => '1.00'],
+            ['subject' => 'LEAD 1', 'mark' => 'C'],
         ],
-        [
-            'email' => 'student2.seed@grc.test',
-            'name' => 'Seed Student Two',
-            'number' => 'STU-2026-0002',
-            'status' => EnrollmentStatus::PendingRegistrarApproval,
-            'sections' => [
-                ['subject' => 'CS101', 'code' => 'A'],
-                ['subject' => 'GE101', 'code' => 'A'],
-            ],
+        2 => [
+            ['subject' => 'CS201', 'mark' => '2.00'],
+            ['subject' => 'MATH102', 'mark' => '2.50'],
+            ['subject' => 'GE102', 'mark' => '1.75'],
+            ['subject' => 'LEAD 2', 'mark' => 'C'],
         ],
-        [
-            'email' => 'student3.seed@grc.test',
-            'name' => 'Seed Student Three',
-            'number' => 'STU-2026-0003',
-            'status' => EnrollmentStatus::PendingPayment,
-            'sections' => [
-                ['subject' => 'CS102', 'code' => 'B'],
-                ['subject' => 'MATH101', 'code' => 'A'],
-            ],
+        3 => [
+            ['subject' => 'CS202', 'mark' => '2.25'],
+            ['subject' => 'LEAD 3', 'mark' => 'C'],
         ],
-        [
-            'email' => 'student4.seed@grc.test',
-            'name' => 'Seed Student Four',
-            'number' => 'STU-2026-0004',
-            'status' => EnrollmentStatus::Withdrawn,
-            'sections' => [
-                ['subject' => 'GE101', 'code' => 'A'],
-            ],
+        4 => [
+            ['subject' => 'CS301', 'mark' => '2.00'],
+            ['subject' => 'LEAD 4', 'mark' => 'C'],
+        ],
+        5 => [
+            ['subject' => 'CS302', 'mark' => '2.25'],
+            ['subject' => 'LEAD 5', 'mark' => 'C'],
+        ],
+        6 => [
+            ['subject' => 'CS303', 'mark' => '2.00'],
+            ['subject' => 'LEAD 6', 'mark' => 'C'],
+        ],
+        7 => [
+            ['subject' => 'CS401', 'mark' => '2.50'],
+            ['subject' => 'LEAD 7', 'mark' => 'C'],
         ],
     ];
 
     /**
-     * Past-term results for student 0001, which satisfy the CS102 → CS201 and
-     * MATH101 → MATH102 prerequisite chains seeded by CurriculumSeeder.
-     * Grades are placeholders; PRD §17 leaves the grading scale unconfirmed.
+     * The current ongoing term's own subjects (ordinal 8's year-2 slot is
+     * absent — see `SEMESTER_SUBJECTS`), one entry per year level 1–4 — what
+     * a REGULAR student in that year is actually about to enrol into. Each
+     * gets one generated block section so `BuildEnrollmentBlockPool` has
+     * something to offer; `SectionSeeder` already publishes an ordinary
+     * (non-block) section for every one of these same subject codes, so
+     * irregular students on the same curriculum can still enrol per subject.
      *
-     * @var list<array{subject: string, grade: string}>
+     * @var array<int, list<string>>
      */
-    private const PAST_GRADES = [
-        ['subject' => 'CS101', 'grade' => '2.00'],
-        ['subject' => 'MATH101', 'grade' => '2.50'],
-        ['subject' => 'GE101', 'grade' => '1.75'],
+    private const BLOCK_SUBJECTS_BY_YEAR = [
+        1 => ['CS201', 'MATH102', 'GE102', 'LEAD 2'],
+        2 => ['CS301', 'LEAD 4'],
+        3 => ['CS303', 'LEAD 6'],
+        4 => ['CS402', 'LEAD8'],
+    ];
+
+    /**
+     * The 7 non-ongoing terms, oldest first — a completed ordinal always
+     * maps onto the tail end of this list (see class docblock).
+     *
+     * @var list<array{school_year: string, semester: string}>
+     */
+    private const CHRONOLOGICAL_TERMS = [
+        ['school_year' => '2023-2024', 'semester' => '1st'],
+        ['school_year' => '2023-2024', 'semester' => '2nd'],
+        ['school_year' => '2024-2025', 'semester' => '1st'],
+        ['school_year' => '2024-2025', 'semester' => '2nd'],
+        ['school_year' => '2025-2026', 'semester' => '1st'],
+        ['school_year' => '2025-2026', 'semester' => '2nd'],
+        ['school_year' => '2026-2027', 'semester' => '1st'],
+    ];
+
+    /**
+     * `overrides` replaces a subject's regular mark for that one student;
+     * `omit` skips recording a mark for that subject entirely (a genuinely
+     * missing required grade, not a special mark).
+     *
+     * @var list<array{
+     *     number: string, email: string, name: string, yearLevel: int,
+     *     completedOrdinals: int, overrides: array<string, string>, omit: list<string>
+     * }>
+     */
+    private const STUDENTS = [
+        ['number' => 'STU-2026-0001', 'email' => 'student.seed@grc.test', 'name' => 'Seed Student', 'yearLevel' => 1, 'completedOrdinals' => 1, 'overrides' => [], 'omit' => []],
+        ['number' => 'STU-2026-0002', 'email' => 'student2.seed@grc.test', 'name' => 'Seed Student Two', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => [], 'omit' => []],
+        ['number' => 'STU-2026-0003', 'email' => 'student3.seed@grc.test', 'name' => 'Seed Student Three', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => [], 'omit' => []],
+        ['number' => 'STU-2026-0004', 'email' => 'student4.seed@grc.test', 'name' => 'Seed Student Four', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => []],
+        ['number' => 'STU-2026-0005', 'email' => 'student5.seed@grc.test', 'name' => 'Seed Student Five', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['MATH101' => '5.00'], 'omit' => []],
+        ['number' => 'STU-2026-0006', 'email' => 'student6.seed@grc.test', 'name' => 'Seed Student Six', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['CS201' => 'INC'], 'omit' => []],
+        ['number' => 'STU-2026-0007', 'email' => 'student7.seed@grc.test', 'name' => 'Seed Student Seven', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => ['LEAD 3' => 'NC'], 'omit' => []],
+        ['number' => 'STU-2026-0008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => ['CS401']],
     ];
 
     public function run(): void
@@ -123,27 +173,92 @@ final class DemoEnrollmentSeeder extends Seeder
         $this->guardEnvironment();
 
         DB::transaction(function (): void {
-            $activeTerm = $this->term(AcademicTermStatus::Active);
-            $closedTerm = $this->term(AcademicTermStatus::Closed);
+            $program = $this->program();
             $curriculum = $this->curriculum();
-            $program = $curriculum->program;
+            $encoder = $this->userWithRole(UserRole::Faculty);
+
+            $profiles = new Collection;
 
             foreach (self::STUDENTS as $definition) {
                 $profile = $this->studentProfile($definition, $program, $curriculum);
-                $enrollment = $this->enrollment($profile, $activeTerm, $definition);
-
-                $this->attachSections($enrollment, $activeTerm, $definition['sections']);
-                $this->attachLifecycleRecords($enrollment, $definition['status']);
+                $this->seedGradeHistory($profile, $definition, $encoder);
+                $profiles->push($profile);
             }
 
-            $this->seedPastGrades($closedTerm);
-            $this->seedTransfereeCredit();
-            $this->refreshSectionCounts();
+            $this->reclassify($profiles);
+            $this->seedRegularBlocks($curriculum, $encoder);
         });
     }
 
     /**
-     * @param  array{email: string, name: string, number: string, status: EnrollmentStatus, sections: list<array{subject: string, code: string}>}  $definition
+     * One generated block per year level 1–4, on the current ongoing term,
+     * so `BuildEnrollmentBlockPool` has something real to offer the four
+     * REGULAR seeded students (0001–0004) — otherwise "Select your block"
+     * renders "No blocks were generated" and none of them can actually
+     * complete a fresh enrollment, defeating the entire point of this
+     * roster. `college` is a required column on `academic_term_section_plans`
+     * but is never read by the block-pool lookup itself (which matches on
+     * `year_level`/`curriculum_id` only) — `'demo'` is a harmless
+     * placeholder, not a real `CollegeCode`.
+     */
+    private function seedRegularBlocks(Curriculum $curriculum, User $encoder): void
+    {
+        $currentTerm = AcademicTerm::query()
+            ->where('status', AcademicTermStatus::SemesterOngoing)
+            ->first();
+
+        if ($currentTerm === null) {
+            return;
+        }
+
+        foreach (self::BLOCK_SUBJECTS_BY_YEAR as $yearLevel => $subjectCodes) {
+            $plan = AcademicTermSectionPlan::updateOrCreate(
+                [
+                    'academic_term_id' => $currentTerm->id,
+                    'curriculum_id' => $curriculum->id,
+                    'college' => 'demo',
+                    'year_level' => $yearLevel,
+                ],
+                [
+                    'section_count' => 1,
+                    'students_per_block' => 40,
+                    'status' => SectionPlanStatus::Submitted,
+                    'submitted_by' => $encoder->id,
+                    'submitted_at' => now(),
+                ],
+            );
+
+            $blockCode = sprintf('DEMO%d01', $yearLevel);
+
+            foreach ($subjectCodes as $index => $subjectCode) {
+                $subject = $this->subject($subjectCode);
+                $startHour = 8 + $index;
+
+                Section::updateOrCreate(
+                    [
+                        'academic_term_id' => $currentTerm->id,
+                        'subject_id' => $subject->id,
+                        'section_code' => $blockCode,
+                    ],
+                    [
+                        'section_plan_id' => $plan->id,
+                        'professor_id' => $encoder->id,
+                        'schedule_days' => 'MWF',
+                        'starts_at_time' => sprintf('%02d:00:00', $startHour),
+                        'ends_at_time' => sprintf('%02d:00:00', $startHour + 1),
+                        'room' => 'RM-401',
+                        'capacity' => 40,
+                        'capacity_source' => 'plan',
+                        'is_block_exclusive' => true,
+                        'status' => SectionStatus::Published,
+                    ],
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  array{number: string, email: string, name: string, yearLevel: int, completedOrdinals: int, overrides: array<string, string>, omit: list<string>}  $definition
      */
     private function studentProfile(array $definition, Program $program, Curriculum $curriculum): StudentProfile
     {
@@ -163,258 +278,138 @@ final class DemoEnrollmentSeeder extends Seeder
                 'student_number' => $definition['number'],
                 'program_id' => $program->id,
                 'curriculum_id' => $curriculum->id,
-                'year_level' => 1,
-                'admission_status' => $definition['status'] === EnrollmentStatus::Enrolled
-                    ? AdmissionStatus::Enrolled
-                    : AdmissionStatus::Admitted,
+                'year_level' => $definition['yearLevel'],
+                // Left unset here on purpose — ReclassifyStudentEnrollmentCategory
+                // derives the real value from the grade history seeded just
+                // below, for every student, every seed run.
+                'enrollment_category' => null,
+                'enrollment_category_derived_at' => null,
+                'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
             ],
         );
     }
 
     /**
-     * @param  array{email: string, name: string, number: string, status: EnrollmentStatus, sections: list<array{subject: string, code: string}>}  $definition
+     * @param  array{number: string, email: string, name: string, yearLevel: int, completedOrdinals: int, overrides: array<string, string>, omit: list<string>}  $definition
      */
-    private function enrollment(
-        StudentProfile $profile,
-        AcademicTerm $term,
-        array $definition,
-    ): Enrollment {
-        $status = $definition['status'];
-        $units = $this->totalUnits($term, $definition['sections']);
+    private function seedGradeHistory(StudentProfile $profile, array $definition, User $encoder): void
+    {
+        for ($ordinal = 1; $ordinal <= $definition['completedOrdinals']; $ordinal++) {
+            $term = $this->termForOrdinal($ordinal, $definition['completedOrdinals']);
 
-        return Enrollment::updateOrCreate(
-            ['student_id' => $profile->id, 'academic_term_id' => $term->id],
-            [
-                'status' => $status,
-                'total_units' => $units,
-                'submitted_at' => $status === EnrollmentStatus::Draft ? null : now(),
-                'registrar_decided_at' => in_array($status, [
-                    EnrollmentStatus::PendingPayment,
-                    EnrollmentStatus::Enrolled,
-                    EnrollmentStatus::Withdrawn,
-                ], true) ? now() : null,
-                'payment_confirmed_at' => $status === EnrollmentStatus::Enrolled ? now() : null,
-                'enrolled_at' => $status === EnrollmentStatus::Enrolled ? now() : null,
-            ],
-        );
+            foreach (self::SEMESTER_SUBJECTS[$ordinal] as $row) {
+                if (in_array($row['subject'], $definition['omit'], true)) {
+                    continue;
+                }
+
+                $mark = $definition['overrides'][$row['subject']] ?? $row['mark'];
+                $subject = $this->subject($row['subject']);
+                $numeric = is_numeric($mark);
+
+                AcademicGrade::updateOrCreate(
+                    [
+                        'student_id' => $profile->id,
+                        'subject_id' => $subject->id,
+                        'academic_term_id' => $term->id,
+                    ],
+                    [
+                        // Nullable and intentionally null: this historical
+                        // result is carried without an owning section, the
+                        // same precedent past demo grades have always used.
+                        'section_id' => null,
+                        'mark' => $mark,
+                        'final_grade' => $numeric ? $mark : null,
+                        'remarks' => null,
+                        'status' => GradeStatus::Locked,
+                        'encoded_by' => $encoder->id,
+                        'submitted_at' => now(),
+                        'locked_at' => now(),
+                    ],
+                );
+            }
+        }
     }
 
     /**
-     * @param  list<array{subject: string, code: string}>  $sections
+     * A completed ordinal is always right-aligned to the most recent closed
+     * term — see the class docblock.
      */
-    private function attachSections(Enrollment $enrollment, AcademicTerm $term, array $sections): void
+    private function termForOrdinal(int $ordinal, int $completedOrdinals): AcademicTerm
     {
-        foreach ($sections as $reference) {
-            $section = $this->section($term, $reference['subject'], $reference['code']);
+        $index = (7 - $completedOrdinals) + $ordinal - 1;
+        $reference = self::CHRONOLOGICAL_TERMS[$index]
+            ?? throw new RuntimeException("No chronological term mapped for ordinal {$ordinal}.");
 
-            EnrollmentSubject::updateOrCreate(
-                ['enrollment_id' => $enrollment->id, 'section_id' => $section->id],
-                [
-                    'status' => $enrollment->status === EnrollmentStatus::Withdrawn
-                        ? EnrollmentSubjectStatus::Dropped
-                        : EnrollmentSubjectStatus::Enrolled,
-                ],
-            );
-        }
-    }
-
-    private function attachLifecycleRecords(Enrollment $enrollment, EnrollmentStatus $status): void
-    {
-        // A queue ticket exists from Registrar approval onward: PRD §4.2 rule 3
-        // reserves it at submission, but payment only becomes actionable after
-        // approval.
-        if (in_array($status, [EnrollmentStatus::PendingPayment, EnrollmentStatus::Enrolled], true)) {
-            QueueTicket::updateOrCreate(
-                ['enrollment_id' => $enrollment->id],
-                [
-                    'ticket_number' => 'Q-2026-'.str_pad((string) $enrollment->id, 4, '0', STR_PAD_LEFT),
-                    'queue_date' => now()->toDateString(),
-                    'status' => $status === EnrollmentStatus::Enrolled
-                        ? QueueTicketStatus::Served
-                        : QueueTicketStatus::Waiting,
-                    'served_at' => $status === EnrollmentStatus::Enrolled ? now() : null,
-                ],
-            );
-        }
-
-        if ($status === EnrollmentStatus::Enrolled) {
-            Payment::updateOrCreate(
-                ['enrollment_id' => $enrollment->id],
-                [
-                    'confirmed_by' => $this->userWithRole(UserRole::AccountingStaff)->id,
-                    'external_reference' => 'OR-2026-'.str_pad((string) $enrollment->id, 6, '0', STR_PAD_LEFT),
-                    'amount' => null,
-                    'confirmed_at' => now(),
-                ],
-            );
-
-            EnrollmentDocument::updateOrCreate(
-                [
-                    'enrollment_id' => $enrollment->id,
-                    'document_type' => EnrollmentDocumentType::Com,
-                ],
-                [
-                    'document_number' => 'COM-2026-'.str_pad((string) $enrollment->id, 6, '0', STR_PAD_LEFT),
-                    'storage_path' => null,
-                    'content_hash' => null,
-                    'generated_at' => now(),
-                ],
-            );
-        }
-
-        if ($status === EnrollmentStatus::Withdrawn) {
-            WithdrawalRequest::updateOrCreate(
-                ['enrollment_id' => $enrollment->id],
-                [
-                    'reason' => 'Synthetic demo withdrawal: relocated to another institution.',
-                    'status' => WithdrawalStatus::Approved,
-                    'processed_by' => $this->userWithRole(UserRole::RegistrarHead)->id,
-                    'processed_at' => now(),
-                ],
-            );
-        }
-    }
-
-    private function seedPastGrades(AcademicTerm $closedTerm): void
-    {
-        $profile = StudentProfile::query()
-            ->where('student_number', 'STU-2026-0001')
+        return AcademicTerm::query()
+            ->where('school_year', $reference['school_year'])
+            ->where('semester', $reference['semester'])
             ->firstOrFail();
-        $encoder = $this->userWithRole(UserRole::Faculty);
-
-        foreach (self::PAST_GRADES as $result) {
-            $subject = Subject::query()->where('code', $result['subject'])->firstOrFail();
-
-            AcademicGrade::updateOrCreate(
-                [
-                    'student_id' => $profile->id,
-                    'subject_id' => $subject->id,
-                    'academic_term_id' => $closedTerm->id,
-                ],
-                [
-                    // Null section: these are historical results carried
-                    // without an owning section, which is exactly the case
-                    // PRD §10.3 makes `section_id` nullable for.
-                    'section_id' => null,
-                    'final_grade' => $result['grade'],
-                    'remarks' => null,
-                    'status' => GradeStatus::Locked,
-                    'encoded_by' => $encoder->id,
-                    'submitted_at' => now(),
-                    'locked_at' => now(),
-                ],
-            );
-        }
-    }
-
-    private function seedTransfereeCredit(): void
-    {
-        $profile = StudentProfile::query()
-            ->where('student_number', 'STU-2026-0003')
-            ->firstOrFail();
-
-        TransfereeCredit::updateOrCreate(
-            [
-                'student_id' => $profile->id,
-                'source_subject_code' => 'ITE-101',
-            ],
-            [
-                'source_institution' => 'Synthetic Partner College',
-                'source_subject_title' => 'Introduction to Information Technology',
-                'source_grade' => '2.25',
-                'credited_units' => 3,
-                'subject_id' => Subject::query()->where('code', 'CS101')->value('id'),
-                'status' => TransfereeCreditStatus::Approved,
-                'processed_by' => $this->userWithRole(UserRole::RegistrarStaff)->id,
-                'processed_at' => now(),
-            ],
-        );
     }
 
     /**
-     * Recomputes each section's cached seat counter from the rows that actually
-     * occupy a seat, rather than incrementing as we go. PRD §5.3 requires that
-     * a withdrawal never decrement a section more than once — deriving the
-     * count makes repeated seeding inherently idempotent.
+     * Runs the real classifier against every seeded student's newly-written
+     * grade history, against the current `semester_ongoing` term — the
+     * seeder proves its own correctness this way, per the approved design:
+     * `enrollment_category` is never hard-coded here.
+     *
+     * @param  Collection<int, StudentProfile>  $profiles
      */
-    private function refreshSectionCounts(): void
+    private function reclassify(Collection $profiles): void
     {
-        $occupied = EnrollmentSubject::query()
-            ->whereNot('status', EnrollmentSubjectStatus::Dropped)
-            ->selectRaw('section_id, COUNT(*) as seats')
-            ->groupBy('section_id')
-            ->pluck('seats', 'section_id');
-
-        foreach (Section::query()->get() as $section) {
-            $section->update([
-                'enrolled_count' => (int) ($occupied[$section->id] ?? 0),
-            ]);
-        }
-    }
-
-    /**
-     * @param  list<array{subject: string, code: string}>  $sections
-     */
-    private function totalUnits(AcademicTerm $term, array $sections): int
-    {
-        $units = 0;
-
-        foreach ($sections as $reference) {
-            $units += (int) $this->section($term, $reference['subject'], $reference['code'])
-                ->subject
-                ->units;
-        }
-
-        return $units;
-    }
-
-    private function section(AcademicTerm $term, string $subjectCode, string $sectionCode): Section
-    {
-        $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
-
-        $section = Section::query()
-            ->where('academic_term_id', $term->id)
-            ->where('subject_id', $subject->id)
-            ->where('section_code', $sectionCode)
+        $currentTerm = AcademicTerm::query()
+            ->where('status', AcademicTermStatus::SemesterOngoing)
             ->first();
 
-        if ($section === null) {
-            throw new RuntimeException(
-                "Section {$subjectCode}-{$sectionCode} is missing. Run SectionSeeder first.",
-            );
+        if ($currentTerm === null) {
+            return;
         }
 
-        return $section;
+        app(ReclassifyStudentEnrollmentCategory::class)->executeMany(
+            $profiles,
+            $currentTerm,
+            $this->userWithRole(UserRole::RegistrarHead),
+            new AuditRequestContext('demo-enrollment-seed', null),
+        );
     }
 
-    private function term(AcademicTermStatus $status): AcademicTerm
+    private function subject(string $code): Subject
     {
-        $term = AcademicTerm::query()->where('status', $status)->first();
+        $subject = Subject::query()->where('code', $code)->first();
 
-        if ($term === null) {
-            throw new RuntimeException(
-                "DemoEnrollmentSeeder requires a '{$status->value}' academic term. "
-                .'Run AcademicTermSeeder first.',
-            );
+        if ($subject === null) {
+            throw new RuntimeException("Subject '{$code}' is missing. Run SubjectSeeder first.");
         }
 
-        return $term;
+        return $subject;
     }
 
     private function curriculum(): Curriculum
     {
         $curriculum = Curriculum::query()
-            ->where('name', 'BSCS Curriculum 2026')
+            ->where('name', 'BSCS Grade History Demo 2026')
             ->first();
 
         if ($curriculum === null) {
             throw new RuntimeException(
-                'DemoEnrollmentSeeder requires the seeded BSCS curriculum. Run CurriculumSeeder first.',
+                'DemoEnrollmentSeeder requires the seeded BSCS-DEMO curriculum. Run CurriculumSeeder first.',
             );
         }
 
         return $curriculum;
+    }
+
+    private function program(): Program
+    {
+        $program = Program::query()->where('code', 'BSCS-DEMO')->first();
+
+        if ($program === null) {
+            throw new RuntimeException(
+                'DemoEnrollmentSeeder requires the seeded BSCS program. Run ProgramSeeder first.',
+            );
+        }
+
+        return $program;
     }
 
     private function userWithRole(UserRole $role): User

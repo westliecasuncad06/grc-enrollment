@@ -37,7 +37,7 @@ final class BlockSectionEligibilityMigrationTest extends TestCase
     {
         $this->assertTrue(Schema::hasColumn('sections', 'is_block_exclusive'));
 
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Intro to Programming', 'units' => 3, 'status' => SubjectStatus::Active]);
 
         $section = Section::create([

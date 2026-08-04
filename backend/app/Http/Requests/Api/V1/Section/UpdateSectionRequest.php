@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api\V1\Section;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Scheduling\SectionConflictDetector;
+use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\Section;
 use Illuminate\Contracts\Validation\Validator;
@@ -40,6 +41,7 @@ final class UpdateSectionRequest extends FormRequest
             'starts_at_time' => ['nullable', 'date_format:H:i:s', 'required_with:ends_at_time'],
             'ends_at_time' => ['nullable', 'date_format:H:i:s', 'after:starts_at_time', 'required_with:starts_at_time'],
             'room' => ['nullable', 'string', 'max:255'],
+            'modality' => ['nullable', Rule::enum(SectionModality::class)],
             'capacity' => ['required', 'integer', 'min:1'],
             'viability_threshold' => ['nullable', 'integer', 'min:1'],
             'status' => ['required', Rule::enum(SectionStatus::class)],

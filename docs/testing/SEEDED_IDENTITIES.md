@@ -1,7 +1,8 @@
 # Seeded Development Identities
 
 **Scope:** Local development and automated tests only.
-**Source:** `backend/database/seeders/RoleUserSeeder.php`
+**Sources:** `backend/database/seeders/RoleUserSeeder.php` and
+`backend/database/seeders/CollegeProgramChairSeeder.php`
 
 These are **database fixtures**, not production accounts. They exist so every
 PRD role can be exercised against real Sanctum authentication during
@@ -38,6 +39,21 @@ rows in place rather than creating duplicates.
 All are created with status `active`. Emails use the reserved `.test` TLD
 (RFC 2606), so they can never resolve to a real mailbox.
 
+## College-specific Program Chair identities
+
+`CollegeProgramChairSeeder` creates one additional active Program Chair for
+each supported college. These accounts are additive: the generic
+`chair.seed@grc.test` identity above remains available.
+
+| College | Name | Email | Password |
+|---|---|---|---|
+| College of Computer Studies (CCS) | Seed Program Chair — College of Computer Studies | `chair.ccs@grc.test` | `password` |
+| College of Education (COE) | Seed Program Chair — College of Education | `chair.coe@grc.test` | `password` |
+| College of Accountancy (COA) | Seed Program Chair — College of Accountancy | `chair.coa@grc.test` | `password` |
+| College of Business Administration and Entrepreneurship (CBAE) | Seed Program Chair — College of Business Administration and Entrepreneurship | `chair.cbae@grc.test` | `password` |
+
+All four use the same local/testing-only shared password: `password`.
+
 ## The password
 
 All synthetic identities use:
@@ -46,27 +62,66 @@ All synthetic identities use:
 password
 ```
 
-This deliberately guessable credential is permitted only because both
-`RoleUserSeeder` and `DemoEnrollmentSeeder` refuse to run outside Laravel's
-`local` and `testing` environments. Laravel hashes the value before storing
-it; the database never contains the plain-text password.
+This deliberately guessable credential is permitted only because
+`RoleUserSeeder`, `CollegeProgramChairSeeder`, and `DemoEnrollmentSeeder`
+refuse to run outside Laravel's `local` and `testing` environments. Laravel
+hashes the value before storing it; the database never contains the plain-text
+password.
 
 ## Additional student scenarios
 
-The full `DatabaseSeeder` also creates three extra synthetic student accounts
-for portal and enrollment-state testing. They use the same shared password.
+**Source:** `backend/database/seeders/DemoEnrollmentSeeder.php`. Eight
+student logins with real locked grade history spanning year 1 semester 1
+through year 4 semester 2, on a dedicated demo curriculum ("BSCS Grade
+History Demo 2026", program `BSCS-DEMO`). `enrollment_category`
+(Regular/Irregular) is **never hard-coded** here — every seed run writes the
+locked grades, then runs the real `EnrollmentCategoryClassifier` against
+them, so the category shown below is the classifier's own verdict, not an
+assumption. None of the eight carry an enrollment for the current term —
+every one is free to submit a real, fresh enrollment through the UI/API.
 
-| Name | Email | Scenario |
-|---|---|---|
-| Seed Student Two | `student2.seed@grc.test` | Pending Registrar approval |
-| Seed Student Three | `student3.seed@grc.test` | Pending payment |
-| Seed Student Four | `student4.seed@grc.test` | Withdrawn |
+| # | Email | Year | Category | Completed semesters | What makes them Irregular |
+|---|---|---|---|---|---|
+| 0001 | `student.seed@grc.test` | 1st | Regular | 1 | — |
+| 0002 | `student2.seed@grc.test` | 2nd | Regular | 3 | — |
+| 0003 | `student3.seed@grc.test` | 3rd | Regular | 5 | — |
+| 0004 | `student4.seed@grc.test` | 4th | Regular | 7 | — |
+| 0005 | `student5.seed@grc.test` | 2nd | Irregular | 3 | `5.00` (Failed) on MATH101 |
+| 0006 | `student6.seed@grc.test` | 2nd | Irregular | 3 | `INC` (Incomplete) on CS201 |
+| 0007 | `student7.seed@grc.test` | 3rd | Irregular | 5 | `NC` (Not Complete) on LEAD 3 |
+| 0008 | `student8.seed@grc.test` | 4th | Irregular | 7 | CS401 never graded (missing required subject) |
+
+All eight use the shared password `password`.
+
+A year-Y student has `(Y-1)*2 + 1` completed curriculum ordinals
+(`SemesterSlot::ordinal()`), always right-aligned to the most recent closed
+term — a year-4 student's 7 completed ordinals use all 7 non-ongoing terms
+1:1; shorter histories use however many of the most recent terms they need.
+Every locked grade is recorded with `section_id = null` (no owning section
+for historical results).
+
+### Why a dedicated curriculum (`BSCS-DEMO`)
+
+`CatalogCurriculumPlacementSeeder` dumps the real ~103-subject CCS catalog
+onto **every** active curriculum whose program has a college set — that
+includes the older synthetic "BSCS Curriculum 2026". An earlier version of
+this roster lived there and every student came back Irregular: the importer
+had silently added dozens of ungraded "required" subjects on top of it. The
+fix is `BSCS-DEMO`, a deliberately collegeless program (`college = null`),
+which the importer skips entirely — its curriculum stays exactly the 22
+placements `DemoEnrollmentSeeder` seeds grades for.
 
 ## Running the seeder
 
 ```powershell
 cd backend
 php artisan db:seed --class=RoleUserSeeder
+```
+
+Seed the four college-specific Program Chair accounts directly:
+
+```powershell
+php artisan db:seed --class=CollegeProgramChairSeeder
 ```
 
 Or seed everything registered in `DatabaseSeeder`:
@@ -77,15 +132,17 @@ php artisan db:seed
 
 ## Safety guarantees
 
-The seeder is covered by `backend/tests/Feature/Database/RoleUserSeederTest.php`,
-which asserts that it:
+The identity seeders are covered by
+`backend/tests/Feature/Database/RoleUserSeederTest.php` and
+`backend/tests/Feature/Database/CollegeProgramChairSeederTest.php`, which
+assert that they:
 
-- creates exactly one active user per role, with unique `@grc.test` emails;
-- stores only a bcrypt hash, never the plain-text password;
-- gives every synthetic login the shared development password `password`;
-- is idempotent — reseeding updates the same rows, creating no duplicates;
-- never deletes unrelated users;
-- throws rather than seeding anything outside the `local` and `testing`
+- create exactly one active user per role, with unique `@grc.test` emails;
+- store only a bcrypt hash, never the plain-text password;
+- give every synthetic login the shared development password `password`;
+- are idempotent — reseeding updates the same rows, creating no duplicates;
+- never delete unrelated users;
+- throw rather than seeding anything outside the `local` and `testing`
   environments, even when invoked programmatically.
 
 Laravel's own `db:seed` production confirmation prompt provides a second,
@@ -100,21 +157,29 @@ covered the same way by
 **synthetic** catalog for exercising authorization and the reference-data
 endpoints — not the real GRC program catalog or term calendar.
 
-| Program code | Name | Status |
-|---|---|---|
-| `BSIT` | BS Information Technology | `active` |
-| `BSCS` | BS Computer Science | `active` |
-| `BSCRIM` | BS Criminology | `inactive` |
+| Program code | Name | Status | College |
+|---|---|---|---|
+| `BSIT` | BS Information Technology | `active` | CCS |
+| `BSCS` | BS Computer Science | `active` | CCS |
+| `BSCRIM` | BS Criminology | `inactive` | — |
+| `BSCS-DEMO` | BS Computer Science (Grade History Demo) | `active` | — (deliberate, see below) |
 
 | School year | Semester | Status |
 |---|---|---|
-| `2025-2026` | `2nd` | `closed` |
-| `2026-2027` | `1st` | `active` |
-| `2027-2028` | `1st` | `planning` |
+| `2023-2024` | `1st` | `archived` |
+| `2023-2024` | `2nd` | `archived` |
+| `2024-2025` | `1st` | `archived` |
+| `2024-2025` | `2nd` | `archived` |
+| `2025-2026` | `1st` | `archived` |
+| `2025-2026` | `2nd` | `archived` |
+| `2026-2027` | `1st` | `semester_closed` — gives `DemoEnrollmentSeeder` a closed term for the most recent locked grades |
+| `2026-2027` | `2nd` | `semester_ongoing` — **the current term.** Every enrollment-audience window (year 1–4, Irregular) is already open (opens a few days in the past, closes about two weeks out), so any seeded student can submit a real fresh enrollment immediately after seeding — no fast-forwarding step required. |
 
-Each table deliberately includes one non-learner-visible row (`inactive`,
-`planning`) so `GET /api/v1/programs` and `GET /api/v1/academic-terms` return
-observably different results for a learner-scoped role versus a planning
-role — see ADR 0008 and
-`docs/data-dictionary/identity-foundation.md#authorization`. Both `status`
-vocabularies are **provisional** pending PRD §17 approval.
+**Amendment to ADR 0018/0020:** a clean seed now leaves the current term
+already `semester_ongoing` with published, selectable sections (see
+`SectionSeeder`) — not Draft. This was a deliberate priority change for the
+grading/enrollment-completion slice: the primary ask was "let me test
+enrolling as these students right now," which a Draft term can't satisfy
+without extra manual steps. A Registrar Head can still create a fresh Draft
+term at any time through the ordinary archive-and-create-next flow to test
+the Program Chair schedule-authoring pipeline separately.

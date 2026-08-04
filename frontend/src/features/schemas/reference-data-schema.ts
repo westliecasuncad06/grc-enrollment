@@ -27,8 +27,19 @@ export const academicTermSchema = z
     ends_at: optionalUtcDateTimeSchema,
     enrollment_opens_at: optionalUtcDateTimeSchema,
     enrollment_closes_at: optionalUtcDateTimeSchema,
-    status: z.enum(["planning", "active", "closed"]),
+    add_drop_deadline_at: optionalUtcDateTimeSchema,
+    grading_deadline_at: optionalUtcDateTimeSchema,
+    closed_at: optionalUtcDateTimeSchema.optional(),
+    archived_at: optionalUtcDateTimeSchema.optional(),
+    status: z.enum([
+      "draft",
+      "for_dean_approval",
+      "semester_ongoing",
+      "semester_closed",
+      "archived",
+    ]),
     status_label: z.string().min(1),
+    is_actionable_current: z.boolean().optional(),
   })
   .strict()
 
@@ -42,9 +53,13 @@ export const subjectSchema = z
     id: z.number().int().positive(),
     code: z.string().min(1),
     title: z.string().min(1),
-    units: z.number().positive(),
+    // Imported catalog placeholders can temporarily carry zero units. The
+    // curriculum placement remains the authoritative source for generated
+    // section units, so a zero here must not invalidate the entire catalog.
+    units: z.number().nonnegative(),
     status: z.enum(["active", "inactive"]),
     status_label: z.string().min(1),
+    is_completion_only: z.boolean(),
   })
   .strict()
 
@@ -57,6 +72,7 @@ export const sectionSchema = z
     type: z.literal("section"),
     id: z.number().int().positive(),
     academic_term_id: z.number().int().positive(),
+    section_plan_id: z.number().int().positive().nullable().optional(),
     subject_id: z.number().int().positive(),
     section_code: z.string().min(1),
     professor_id: z.number().int().positive().nullable(),
@@ -64,10 +80,15 @@ export const sectionSchema = z
     starts_at_time: z.string().min(1).nullable(),
     ends_at_time: z.string().min(1).nullable(),
     room: z.string().min(1).nullable(),
+    modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable().optional(),
     capacity: z.number().int().nonnegative(),
+    capacity_source: z.enum(["plan", "manual"]),
     viability_threshold: z.number().int().positive().nullable(),
     enrolled_count: z.number().int().nonnegative(),
     remaining_seats: z.number().int().nonnegative(),
+    // Null on rows created before block generation set the flag; the
+    // enrollment pool treats null as "open to everyone".
+    is_block_exclusive: z.boolean().nullable(),
     status: z.enum(["planned", "published", "closed", "cancelled"]),
     status_label: z.string().min(1),
   })
@@ -82,6 +103,7 @@ const curriculumSubjectSchema = z
     subject_id: z.number().int().positive(),
     code: z.string().min(1),
     title: z.string().min(1),
+    units: z.number().positive().optional(),
     year_level: z.number().int().positive(),
     semester: z.string().min(1),
     is_required: z.boolean(),

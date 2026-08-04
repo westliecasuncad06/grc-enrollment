@@ -30,6 +30,7 @@ final class CreateScheduleProposal
 
             $hasActiveProposal = ScheduleProposal::query()
                 ->where('academic_term_id', $academicTermId)
+                ->when($submitter->college !== null, fn ($query) => $query->where('college', $submitter->college->value))
                 ->where('status', '!=', ScheduleProposalStatus::Closed->value)
                 ->exists();
 
@@ -42,6 +43,7 @@ final class CreateScheduleProposal
             $proposal = ScheduleProposal::create([
                 'academic_term_id' => $academicTermId,
                 'submitted_by' => $submitter->id,
+                'college' => $submitter->college?->value,
                 'status' => ScheduleProposalStatus::Draft,
             ]);
             $proposal->refresh();

@@ -32,6 +32,8 @@ import {
 } from "@/features/components/ui/sheet"
 import { PortalNotificationSheet } from "@/features/components/portal/portal-notification-sheet"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
+import { useAcademicTermWorkflowsQuery } from "@/features/hooks/use-academic-term-workflows"
+import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
 import { cn } from "@/features/lib/utils"
 import {
   formatAcademicTerm,
@@ -52,10 +54,12 @@ function NavigationLink({
   children,
   href,
   mobile = false,
+  locked = false,
 }: {
   children: ReactNode
   href: string
   mobile?: boolean
+  locked?: boolean
 }) {
   const pathname = usePathname()
   // react-router's NavLink used `end` only for "/portal"; module routes have no
@@ -66,7 +70,16 @@ function NavigationLink({
     <Link
       href={href}
       aria-current={isActive ? "page" : undefined}
-      className={cn("portal-nav-link", isActive && "portal-nav-link--active")}
+      aria-disabled={locked ? "true" : undefined}
+      title={locked ? "Complete Enrollment steps first" : undefined}
+      onClick={(event) => {
+        if (locked) event.preventDefault()
+      }}
+      className={cn(
+        "portal-nav-link",
+        isActive && "portal-nav-link--active",
+        locked && "portal-nav-link--locked",
+      )}
     >
       {children}
     </Link>
@@ -78,7 +91,12 @@ function NavigationLink({
 function PortalNavigation({
   definition,
   mobile = false,
-}: PortalNavigationProps) {
+  enrollmentLinksLocked = false,
+  hasReturnedSchedule = false,
+}: PortalNavigationProps & {
+  enrollmentLinksLocked?: boolean
+  hasReturnedSchedule?: boolean
+}) {
   return (
     <nav
       className="portal-navigation"
@@ -98,9 +116,25 @@ function PortalNavigation({
             key={module.id}
             href={`/portal/${module.id}`}
             mobile={mobile}
+            locked={
+              enrollmentLinksLocked &&
+              [
+                "subjects-prerequisites",
+                "sections-schedules",
+                "faculty-assignment",
+                "schedule-proposals",
+              ].includes(module.id)
+            }
           >
             <Icon data-icon="inline-start" aria-hidden="true" />
-            <span>{module.label}</span>
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              {module.label}
+              {hasReturnedSchedule && module.id === "program-chair-enrollment" && (
+                <Badge variant="destructive" className="shrink-0">
+                  Returned
+                </Badge>
+              )}
+            </span>
           </NavigationLink>
         )
       })}
@@ -148,6 +182,14 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const academicTermsQuery = useAcademicTermsQuery({
     enabled: session !== null,
   })
+  const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
+  const workflowsQuery = useAcademicTermWorkflowsQuery(
+    activeAcademicTerm?.id ?? 0,
+    session?.role === "program_chair" && activeAcademicTerm !== null,
+  )
+  const scheduleProposalsQuery = useScheduleProposalsQuery({
+    enabled: session?.role === "program_chair",
+  })
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams<{ moduleId?: string }>()
@@ -159,7 +201,16 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const moduleId = typeof params.moduleId === "string" ? params.moduleId : null
   const definition = rolePortalDefinitions[session.role]
   const activeModule = moduleId ? getRoleModule(session.role, moduleId) : null
-  const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
+  const chairWorkflow =
+    workflowsQuery.data?.find((item) => item.college === session.college) ??
+    workflowsQuery.data?.[0]
+  const enrollmentLinksLocked =
+    session.role === "program_chair" &&
+    chairWorkflow?.stage !== "schedule_preparation" &&
+    chairWorkflow?.stage !== "for_dean_approval"
+  const hasReturnedSchedule =
+    session.role === "program_chair" &&
+    (scheduleProposalsQuery.data ?? []).some((proposal) => proposal.is_returned)
   const currentPageLabel =
     pathname === "/portal"
       ? "Portal overview"
@@ -194,7 +245,11 @@ export function PortalShell({ children }: { children: ReactNode }) {
           <Badge variant="secondary">Preview portal</Badge>
         </div>
 
-        <PortalNavigation definition={definition} />
+        <PortalNavigation
+          definition={definition}
+          enrollmentLinksLocked={enrollmentLinksLocked}
+          hasReturnedSchedule={hasReturnedSchedule}
+        />
 
         <div className="portal-sidebar__footer">
           <p>
@@ -242,7 +297,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
                 <div className="portal-mobile-sheet__body">
                   <PortalIdentity />
                   <Badge variant="secondary">Preview portal</Badge>
-                  <PortalNavigation definition={definition} mobile />
+                  <PortalNavigation
+                    definition={definition}
+                    mobile
+                    enrollmentLinksLocked={enrollmentLinksLocked}
+                    hasReturnedSchedule={hasReturnedSchedule}
+                  />
                 </div>
               </SheetContent>
             </Sheet>

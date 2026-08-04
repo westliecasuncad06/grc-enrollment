@@ -40,6 +40,14 @@ const enrollment = {
   },
 } as const
 
+const pendingApprovalEnrollment = {
+  ...enrollment,
+  status: "pending_registrar_approval",
+  status_label: "Pending Registrar Approval",
+  registrar_decided_at: null,
+  queue_ticket: null,
+} as const
+
 const studentSession = {
   userId: "4",
   displayName: "Student",
@@ -83,6 +91,25 @@ describe("StudentQueuePaymentWorkspace", () => {
 
     expect(await screen.findByText(/Q000009/)).toBeInTheDocument()
     expect(screen.getByText(/Pending Payment/)).toBeInTheDocument()
+  })
+
+  it("shows a waiting-for-approval message with no queue number before approval", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [pendingApprovalEnrollment],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    renderWithSession(<StudentQueuePaymentWorkspace />, {
+      session: studentSession,
+    })
+
+    expect(
+      await screen.findByText(/Waiting for registrar approval/),
+    ).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

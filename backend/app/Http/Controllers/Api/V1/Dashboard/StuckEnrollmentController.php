@@ -22,7 +22,7 @@ final class StuckEnrollmentController extends Controller
         $termId = $request->validated('academic_term_id');
         $term = $termId !== null
             ? AcademicTerm::query()->where('id', $termId)->firstOrFail()
-            : AcademicTerm::query()->where('status', AcademicTermStatus::Active)->first();
+            : AcademicTerm::query()->where('status', AcademicTermStatus::SemesterOngoing)->first();
 
         if (! $term instanceof AcademicTerm) {
             throw new NotFoundHttpException('No academic_term_id was given and no term is currently active.');

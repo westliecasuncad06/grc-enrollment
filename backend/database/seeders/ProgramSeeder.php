@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\Program;
 use Illuminate\Database\Seeder;
@@ -17,14 +18,22 @@ use RuntimeException;
 final class ProgramSeeder extends Seeder
 {
     /**
-     * @var list<array{code: string, name: string, status: ProgramStatus}>
+     * @var list<array{code: string, name: string, status: ProgramStatus, college: ?CollegeCode}>
      */
     private const PROGRAMS = [
-        ['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active],
-        ['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active],
+        ['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs],
+        ['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs],
         // Deliberately inactive: proves learner-scoped and planning roles
-        // receive different GET /api/v1/programs results.
-        ['code' => 'BSCRIM', 'name' => 'BS Criminology', 'status' => ProgramStatus::Inactive],
+        // receive different GET /api/v1/programs results. Left collegeless —
+        // Criminology is outside the four currently supported colleges.
+        ['code' => 'BSCRIM', 'name' => 'BS Criminology', 'status' => ProgramStatus::Inactive, 'college' => null],
+        // Deliberately collegeless: DemoEnrollmentSeeder's grade-history
+        // roster needs a curriculum CatalogCurriculumPlacementSeeder will
+        // never touch — that seeder targets every active curriculum whose
+        // program has a college, which would otherwise dump the entire real
+        // CCS catalog (~100 subjects) onto whatever curriculum these
+        // students are placed on. See CurriculumSeeder's matching entry.
+        ['code' => 'BSCS-DEMO', 'name' => 'BS Computer Science (Grade History Demo)', 'status' => ProgramStatus::Active, 'college' => null],
     ];
 
     public function run(): void
@@ -35,7 +44,7 @@ final class ProgramSeeder extends Seeder
             foreach (self::PROGRAMS as $program) {
                 Program::updateOrCreate(
                     ['code' => $program['code']],
-                    ['name' => $program['name'], 'status' => $program['status']],
+                    ['name' => $program['name'], 'status' => $program['status'], 'college' => $program['college']],
                 );
             }
         });

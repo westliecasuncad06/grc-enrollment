@@ -7,6 +7,7 @@ import type { EnrollmentFilters } from "@/features/schemas/enrollment-schema"
 import {
   confirmPayment,
   getEligibleSubjects,
+  getEnrollmentBlocks,
   getEnrollments,
   listEnrollments,
   updateEnrollment,
@@ -23,6 +24,21 @@ export function useEligibleSubjectsQuery(academicTermId: number | null) {
   return useQuery({
     queryKey: eligibleSubjectsQueryKey(session?.userId ?? null, academicTermId),
     queryFn: ({ signal }) => getEligibleSubjects(academicTermId!, signal),
+    enabled: session !== null && academicTermId !== null,
+  })
+}
+
+export const enrollmentBlocksQueryKey = (
+  userId: string | null,
+  academicTermId: number | null,
+) => ["enrollment-blocks", userId, academicTermId] as const
+
+export function useEnrollmentBlocksQuery(academicTermId: number | null) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: enrollmentBlocksQueryKey(session?.userId ?? null, academicTermId),
+    queryFn: ({ signal }) => getEnrollmentBlocks(academicTermId!, signal),
     enabled: session !== null && academicTermId !== null,
   })
 }

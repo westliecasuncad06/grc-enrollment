@@ -15,6 +15,10 @@ const userSchema = z
     email: z.string().min(1),
     role: z.enum(userRoles),
     role_label: z.string().min(1),
+    college: z
+      .enum(["ccs", "coe", "coa", "cbae"])
+      .nullable()
+      .optional(),
     status: z.string().min(1),
   })
   .strict()

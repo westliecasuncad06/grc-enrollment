@@ -1,22 +1,35 @@
 "use client"
 
 import { FileCheck2 } from "lucide-react"
+import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { GradeSlipDocument } from "@/features/components/portal/grade-slip-document"
+import { PrintButton } from "@/features/components/portal/print-document"
+import { ProspectusDocument } from "@/features/components/portal/prospectus-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
-import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { Field, FieldLabel } from "@/features/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import { useAcademicGradesQuery } from "@/features/hooks/use-academic-grades"
 import { useEnrollmentDocumentsQuery } from "@/features/hooks/use-enrollment-documents"
+import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { gradeBadgeVariant } from "@/features/lib/grade-presentation"
+import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
 export function StudentGradesComWorkspace() {
   const { session } = useAuth()
@@ -29,6 +42,8 @@ export function StudentGradesComWorkspace() {
     { page: 1, per_page: 20 },
     { enabled: authorized },
   )
+  const termsQuery = useAcademicTermsQuery({ enabled: authorized })
+  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
   const combinedQuery = {
     isPending: gradesQuery.isPending || documentsQuery.isPending,
     isError: gradesQuery.isError || documentsQuery.isError,
@@ -77,12 +92,21 @@ export function StudentGradesComWorkspace() {
                       {
                         key: "grade",
                         header: "Grade",
-                        render: (grade) => grade.final_grade ?? "—",
+                        render: (grade) => grade.mark ?? "—",
                       },
                       {
                         key: "remarks",
                         header: "Remarks",
-                        render: (grade) => grade.remarks ?? "—",
+                        render: (grade) => (
+                          <div className="grid gap-0.5">
+                            <span>{grade.mark_label ?? "—"}</span>
+                            {grade.remarks && (
+                              <span className="text-xs text-muted-foreground">
+                                {grade.remarks}
+                              </span>
+                            )}
+                          </div>
+                        ),
                       },
                       {
                         key: "status",
@@ -99,43 +123,80 @@ export function StudentGradesComWorkspace() {
               </CardContent>
             </Card>
             <Card className="print:shadow-none">
-              <CardHeader>
+              <CardHeader className="flex items-center justify-between gap-2 print:hidden">
                 <CardTitle level={2} className="flex items-center gap-2">
                   <FileCheck2 aria-hidden="true" className="size-5" />
                   Digital Certificate of Matriculation
                 </CardTitle>
+                {documents.length > 0 && <PrintButton />}
               </CardHeader>
-              <CardContent className="grid gap-3">
+              <CardContent
+                data-print-region
+                className="print-document grid gap-3"
+              >
                 {documents.length === 0 ? (
                   <p>No Digital COM has been generated yet.</p>
                 ) : (
                   documents.map((document) => (
                     <div
                       key={document.id}
-                      className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto] sm:items-center"
+                      className="grid gap-1 rounded-lg border p-4"
                     >
-                      <div className="grid gap-1">
-                        <p className="font-medium">
-                          {document.document_type_label}
-                        </p>
-                        <p className="font-mono text-sm text-muted-foreground">
-                          {document.document_number}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Generated{" "}
-                          {new Date(document.generated_at).toLocaleString()}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="print:hidden"
-                        onClick={() => window.print()}
-                      >
-                        Print / download
-                      </Button>
+                      <p className="font-medium">
+                        {document.document_type_label}
+                      </p>
+                      <p className="font-mono text-sm text-muted-foreground">
+                        {document.document_number}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Generated{" "}
+                        {new Date(document.generated_at).toLocaleString()}
+                      </p>
                     </div>
                   ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle level={2}>Prospectus</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ProspectusDocument />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle level={2}>Grade slip</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <Field className="max-w-xs">
+                  <FieldLabel htmlFor="grade-slip-term">Academic term</FieldLabel>
+                  <Select
+                    value={selectedTermId !== null ? String(selectedTermId) : ""}
+                    onValueChange={(value) => setSelectedTermId(Number(value) || null)}
+                    disabled={termsQuery.isLoading}
+                  >
+                    <SelectTrigger id="grade-slip-term" className="w-full">
+                      <SelectValue placeholder="Select an academic term" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(termsQuery.data ?? []).map((term) => (
+                        <SelectItem key={term.id} value={String(term.id)}>
+                          {formatAcademicTerm(term)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {selectedTermId !== null ? (
+                  <GradeSlipDocument academicTermId={selectedTermId} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Select an academic term to view its grade slip.
+                  </p>
                 )}
               </CardContent>
             </Card>

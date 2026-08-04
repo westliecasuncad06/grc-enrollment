@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { act, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -14,6 +14,11 @@ const draftProposal = {
   id: 9,
   academic_term_id: 2,
   submitted_by: 4,
+  submitted_by_name: "CCS Program Chair",
+  college: "ccs",
+  college_label: "College of Computer Studies",
+  academic_term_label: "2026-2027 · 1st",
+  is_submitted: true,
   status: "draft",
   status_label: "Draft",
   decided_by: null,
@@ -33,19 +38,48 @@ const publishedProposal = {
 const proposals = {
   data: [draftProposal, deanApprovedProposal, publishedProposal],
 }
+const reviewSections = {
+  data: [{
+    type: "schedule_review_section",
+    id: 87,
+    section_code: "IT101",
+    subject_code: "PSPEAK",
+    subject_title: "Public Speaking",
+    units: 3,
+    professor_id: 43,
+    professor_name: "ALONZO",
+    schedule_days: "T",
+    starts_at_time: "13:17:00",
+    ends_at_time: "14:15:00",
+    room: "5F",
+    modality: "f2f",
+  }],
+}
+
+function url(input: RequestInfo | URL) {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url
+}
 
 describe("ScheduleDecisionWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it("exposes only API-legal actions for each decision role and status", () => {
     expect(availableScheduleActions("dean", draftProposal)).toEqual([
       "dean_approve",
+      "dean_return",
     ])
     expect(
       availableScheduleActions("executive_director", deanApprovedProposal),
-    ).toEqual(["executive_approve"])
+    ).toEqual(["executive_approve", "executive_return"])
     expect(
       availableScheduleActions("registrar_head", publishedProposal),
     ).toEqual(["close"])
@@ -69,15 +103,15 @@ describe("ScheduleDecisionWorkspace", () => {
       ]) {
         const expected =
           role === "dean" && proposal.status === "draft"
-            ? ["dean_approve"]
+            ? ["dean_approve", "dean_return"]
             : role === "dean" && proposal.status === "dean_approved"
-              ? ["dean_return"]
+              ? []
               : role === "executive_director" &&
                   proposal.status === "dean_approved"
-                ? ["executive_approve"]
+                ? ["executive_approve", "executive_return"]
                 : role === "executive_director" &&
                     proposal.status === "executive_approved"
-                  ? ["executive_return", "publish"]
+                  ? ["publish"]
                   : role === "registrar_head" && proposal.status === "published"
                     ? ["close"]
                     : []
@@ -94,9 +128,7 @@ describe("ScheduleDecisionWorkspace", () => {
         return new Promise<Response>((resolve) => {
           resolvePatch = resolve
         })
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: [deanApprovedProposal] })),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ data: [draftProposal] })))
     })
     renderWithSession(<ScheduleDecisionWorkspace />, {
       session: {
@@ -107,13 +139,13 @@ describe("ScheduleDecisionWorkspace", () => {
       },
     })
     await user.click(
-      await screen.findByRole("button", { name: "Return to draft" }),
+      await screen.findByRole("button", { name: "Return with notes" }),
     )
     expect(
       screen.getByRole("button", { name: "Confirm decision" }),
     ).toBeDisabled()
     await user.type(
-      screen.getByLabelText("Decision reason"),
+      screen.getByLabelText("Notes for Program Chair"),
       "Capacity conflict",
     )
     await user.click(screen.getByRole("button", { name: "Confirm decision" }))
@@ -135,6 +167,31 @@ describe("ScheduleDecisionWorkspace", () => {
     resolvePatch?.(new Response(JSON.stringify({ data: draftProposal })))
   })
 
+  it("shows the submitting department and opens its submitted schedule", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input) => Promise.resolve(new Response(JSON.stringify(
+      url(input).includes("/schedule-proposals/9/sections") ? reviewSections : { data: [draftProposal] },
+    ))))
+    renderWithSession(<ScheduleDecisionWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    expect(await screen.findByText("College of Computer Studies")).toBeInTheDocument()
+    expect(screen.getByText("2026-2027 · 1st")).toBeInTheDocument()
+    expect(screen.getByText("Submitted by CCS Program Chair")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Review schedule" }))
+    expect(await screen.findByRole("dialog", { name: "Review schedule · College of Computer Studies" })).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: "IT101" })).toBeInTheDocument()
+    expect(screen.getByText("PSPEAK")).toBeInTheDocument()
+    expect(screen.getByText("ALONZO")).toBeInTheDocument()
+    expect(screen.getByText("5F")).toBeInTheDocument()
+  })
+
   it("invalidates both proposal and section caches after a successful transition", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((_input, init) => {
@@ -154,10 +211,10 @@ describe("ScheduleDecisionWorkspace", () => {
     })
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries")
     await user.click(
-      await screen.findByRole("button", { name: "Approve as Dean" }),
+      await screen.findByRole("button", { name: "Approve schedule" }),
     )
     await user.click(screen.getByRole("button", { name: "Confirm decision" }))
-    await screen.findByRole("button", { name: "Approve as Dean" })
+    await screen.findByRole("button", { name: "Approve schedule" })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: scheduleProposalsQueryKey("5"),
       exact: true,
@@ -180,7 +237,7 @@ describe("ScheduleDecisionWorkspace", () => {
       },
     })
     await user.click(
-      await screen.findByRole("button", { name: "Approve as Dean" }),
+      await screen.findByRole("button", { name: "Approve schedule" }),
     )
     expect(screen.getByRole("alertdialog")).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -201,6 +258,40 @@ describe("ScheduleDecisionWorkspace", () => {
     ).toBeInTheDocument()
   })
 
+  it("refreshes a Dean queue when a Program Chair submits without a page reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let proposalSubmitted = false
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ data: proposalSubmitted ? [draftProposal] : [] }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ScheduleDecisionWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    expect(
+      await screen.findByText("No schedule decisions are currently available."),
+    ).toBeInTheDocument()
+
+    proposalSubmitted = true
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+
+    expect(
+      await screen.findByRole("button", { name: "Approve schedule" }),
+    ).toBeInTheDocument()
+  })
+
   it("has no detectable accessibility violations once loaded", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(proposals)))
     const { container } = renderWithSession(<ScheduleDecisionWorkspace />, {
@@ -211,7 +302,7 @@ describe("ScheduleDecisionWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await screen.findByRole("button", { name: "Approve as Dean" })
+    await screen.findByRole("button", { name: "Approve schedule" })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

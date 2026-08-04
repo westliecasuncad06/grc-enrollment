@@ -6,6 +6,8 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
+import { EnrollmentBlockChoice } from "@/features/components/portal/enrollment-block-choice"
 import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
@@ -36,14 +38,18 @@ import {
   SelectValue,
 } from "@/features/components/ui/select"
 import { Skeleton } from "@/features/components/ui/skeleton"
+import { useEnrollmentScheduleQuery } from "@/features/hooks/use-enrollment-windows"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import {
   eligibleSubjectsQueryKey,
+  enrollmentBlocksQueryKey,
   enrollmentsQueryKey,
   useEligibleSubjectsQuery,
+  useEnrollmentBlocksQuery,
   useEnrollmentsQuery,
 } from "@/features/hooks/use-enrollment"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
+import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
 import { createEnrollment } from "@/features/services/enrollment-service"
@@ -56,11 +62,13 @@ function SectionChoice({
   selectedSectionId,
   onChoose,
   onClear,
+  disabled = false,
 }: {
   subject: EligibleSubject
   selectedSectionId: number | undefined
   onChoose: (sectionId: number) => void
   onClear: () => void
+  disabled?: boolean
 }) {
   return (
     <Card role="article" aria-label={`${subject.code} ${subject.title}`}>
@@ -81,6 +89,7 @@ function SectionChoice({
               if (sectionId) onChoose(sectionId)
               else onClear()
             }}
+            disabled={disabled}
           >
             <SelectTrigger
               id={`section-choice-${subject.subject_id}`}
@@ -116,16 +125,36 @@ export function EnrollmentWorkspace() {
   )
   const eligibleSubjectsQuery = useEligibleSubjectsQuery(selectedTermId)
   const enrollmentsQuery = useEnrollmentsQuery()
+  const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId)
+  const viewer = scheduleQuery.data?.viewer
+  // Only a resolved "closed" reads as closed — an unresolved fetch (still
+  // loading, or no viewer block for a non-student session) must not block
+  // the workspace by default.
+  const enrollmentWindowClosed = viewer !== undefined && viewer !== null && !viewer.is_open
+  // Unresolved audience (still loading, or no viewer block at all) falls
+  // back to the per-subject flow — the safer of the two while the real
+  // audience is unknown, since it never assumes a single-block commitment.
+  const isRegularAudience = viewer != null && viewer.audience !== "irregular"
   const [selections, setSelections] = useState<Record<number, number>>({})
+  const [selectedBlockCode, setSelectedBlockCode] = useState<string | null>(
+    null,
+  )
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [fieldErrors, setFieldErrors] = useState<string[]>([])
-  const [receipt, setReceipt] = useState<{ ticketNumber: string } | null>(null)
+  const [receipt, setReceipt] = useState(false)
 
   const userId = session?.userId ?? null
   const subjects = eligibleSubjectsQuery.data ?? []
   const selectableSubjects = subjects.filter(
     (subject) => subject.is_eligible && subject.available_sections.length > 0,
+  )
+  const blocksQuery = useEnrollmentBlocksQuery(
+    isRegularAudience ? selectedTermId : null,
+  )
+  const blocks = blocksQuery.data ?? []
+  const selectedBlock: EnrollmentBlock | undefined = blocks.find(
+    (block) => block.block_code === selectedBlockCode,
   )
 
   const hasActiveEnrollmentThisTerm = (enrollmentsQuery.data ?? []).some(
@@ -158,13 +187,18 @@ export function EnrollmentWorkspace() {
 
   const mutation = useMutation({
     mutationFn: () =>
-      createEnrollment({
-        academic_term_id: selectedTermId!,
-        sections: selectedEntries.map((entry) => ({
-          section_id: entry.section.id,
-        })),
-      }),
-    onSuccess: async (enrollment) => {
+      isRegularAudience
+        ? createEnrollment({
+            academic_term_id: selectedTermId!,
+            block_code: selectedBlockCode!,
+          })
+        : createEnrollment({
+            academic_term_id: selectedTermId!,
+            sections: selectedEntries.map((entry) => ({
+              section_id: entry.section.id,
+            })),
+          }),
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: enrollmentsQueryKey(userId),
@@ -174,15 +208,20 @@ export function EnrollmentWorkspace() {
           queryKey: eligibleSubjectsQueryKey(userId, selectedTermId),
           exact: true,
         }),
+        queryClient.invalidateQueries({
+          queryKey: enrollmentBlocksQueryKey(userId, selectedTermId),
+          exact: true,
+        }),
       ])
       setSelections({})
+      setSelectedBlockCode(null)
       setConfirmOpen(false)
-      setReceipt({ ticketNumber: enrollment.queue_ticket?.ticket_number ?? "" })
+      setReceipt(true)
     },
   })
 
   const chooseSection = (subjectId: number, sectionId: number) => {
-    setReceipt(null)
+    setReceipt(false)
     setSelections((prev) => ({ ...prev, [subjectId]: sectionId }))
   }
   const clearSection = (subjectId: number) => {
@@ -192,9 +231,13 @@ export function EnrollmentWorkspace() {
       return next
     })
   }
+  const chooseBlock = (blockCode: string) => {
+    setReceipt(false)
+    setSelectedBlockCode(blockCode)
+  }
 
   const submit = async () => {
-    setReceipt(null)
+    setReceipt(false)
     setSubmitError("")
     setFieldErrors([])
     try {
@@ -235,16 +278,21 @@ export function EnrollmentWorkspace() {
     ) : receipt ? (
       <Alert>
         <AlertDescription>
-          Enrollment submitted and pending registrar approval. Queue ticket:{" "}
-          {receipt.ticketNumber}.
+          Enrollment submitted and pending registrar approval. You&apos;ll get
+          a queue number once it&apos;s approved — check Queue &amp; Payment
+          for status.
         </AlertDescription>
       </Alert>
     ) : null
 
   return (
     <WorkspacePage
-      title="Select your subjects"
-      description="Select one section per eligible subject, then submit."
+      title={isRegularAudience ? "Select your block" : "Select your subjects"}
+      description={
+        isRegularAudience
+          ? "Choose the block that enrolls you in every subject for your year level at once."
+          : "Select one section per eligible subject, then submit."
+      }
     >
       <FieldGroup>
         <Field>
@@ -253,7 +301,8 @@ export function EnrollmentWorkspace() {
             value={selectedTermId !== null ? String(selectedTermId) : ""}
             onValueChange={(value) => {
               setSelections({})
-              setReceipt(null)
+              setSelectedBlockCode(null)
+              setReceipt(false)
               setSelectedTermId(Number(value) || null)
             }}
             disabled={termsQuery.isLoading}
@@ -272,6 +321,8 @@ export function EnrollmentWorkspace() {
         </Field>
       </FieldGroup>
 
+      <EnrollmentAvailabilityBanner viewer={viewer} />
+
       {banner}
 
       {selectedTermId !== null && hasActiveEnrollmentThisTerm && (
@@ -286,7 +337,42 @@ export function EnrollmentWorkspace() {
       {selectedTermId === null ? (
         <p>Select an academic term to begin enrollment.</p>
       ) : (
-        !hasActiveEnrollmentThisTerm && (
+        !hasActiveEnrollmentThisTerm &&
+        (isRegularAudience ? (
+          <AsyncBoundary
+            query={{
+              isPending: termsQuery.isPending || blocksQuery.isFetching,
+              isError: termsQuery.isError || blocksQuery.isError,
+              error: termsQuery.error ?? blocksQuery.error,
+              data: blocksQuery.data,
+              refetch: () => {
+                void termsQuery.refetch()
+                void blocksQuery.refetch()
+              },
+            }}
+            isEmpty={(all) => all.length === 0}
+            emptyMessage="No blocks were generated for your year level and curriculum yet. Contact the Registrar."
+            loadingLabel="Loading your blocks…"
+            loadingFallback={<Skeleton className="h-48" />}
+          >
+            {() => (
+              <div role="radiogroup" aria-label="Blocks">
+                <StaggerList className="grid gap-3">
+                  {blocks.map((block) => (
+                    <StaggerItem key={block.block_code}>
+                      <EnrollmentBlockChoice
+                        block={block}
+                        selected={block.block_code === selectedBlockCode}
+                        onSelect={() => chooseBlock(block.block_code)}
+                        disabled={enrollmentWindowClosed}
+                      />
+                    </StaggerItem>
+                  ))}
+                </StaggerList>
+              </div>
+            )}
+          </AsyncBoundary>
+        ) : (
           <AsyncBoundary
             query={{
               isPending:
@@ -320,65 +406,114 @@ export function EnrollmentWorkspace() {
                         chooseSection(subject.subject_id, sectionId)
                       }
                       onClear={() => clearSection(subject.subject_id)}
+                      disabled={enrollmentWindowClosed}
                     />
                   </StaggerItem>
                 ))}
               </StaggerList>
             )}
           </AsyncBoundary>
-        )
+        ))
       )}
 
-      {selectedEntries.length > 0 && !hasActiveEnrollmentThisTerm && (
-        <Card className="portal-workspace-highlight">
-          <CardHeader>
-            <CardTitle level={2}>Review your enrollment</CardTitle>
-            <CardDescription>
-              Confirm your selections before submitting.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <DataTable
-              caption="Selected subjects"
-              rowKey={(entry) => entry.subject.subject_id}
-              rows={selectedEntries}
-              columns={[
-                {
-                  key: "subject",
-                  header: "Subject",
-                  render: (entry) =>
-                    `${entry.subject.code} — ${entry.subject.title}`,
-                },
-                {
-                  key: "section",
-                  header: "Section",
-                  render: (entry) => entry.section.section_code,
-                },
-                {
-                  key: "units",
-                  header: "Units",
-                  render: (entry) => entry.subject.units,
-                },
-              ]}
-            />
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <span className="text-sm font-medium text-muted-foreground">
-                Total units
-              </span>
-              <Badge className="text-base">{totalUnits}</Badge>
-            </div>
-            <Button
-              type="button"
-              onClick={() => setConfirmOpen(true)}
-              disabled={mutation.isPending}
-            >
-              {mutation.isPending
-                ? "Submitting enrollment"
-                : "Submit enrollment"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      {isRegularAudience
+        ? selectedBlock &&
+          !hasActiveEnrollmentThisTerm && (
+            <Card className="portal-workspace-highlight">
+              <CardHeader>
+                <CardTitle level={2}>Review your block</CardTitle>
+                <CardDescription>
+                  Confirm block {selectedBlock.block_code} before submitting —
+                  every subject below enrolls together.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <DataTable
+                  caption="Selected block subjects"
+                  rowKey={(subject) => subject.section_id}
+                  rows={selectedBlock.subjects}
+                  columns={[
+                    {
+                      key: "subject",
+                      header: "Subject",
+                      render: (subject) => `${subject.code} — ${subject.title}`,
+                    },
+                    {
+                      key: "units",
+                      header: "Units",
+                      render: (subject) => subject.units,
+                    },
+                  ]}
+                />
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Total units
+                  </span>
+                  <Badge className="text-base">{selectedBlock.total_units}</Badge>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={mutation.isPending || enrollmentWindowClosed}
+                >
+                  {mutation.isPending
+                    ? "Submitting enrollment"
+                    : "Submit enrollment"}
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        : selectedEntries.length > 0 &&
+          !hasActiveEnrollmentThisTerm && (
+            <Card className="portal-workspace-highlight">
+              <CardHeader>
+                <CardTitle level={2}>Review your enrollment</CardTitle>
+                <CardDescription>
+                  Confirm your selections before submitting.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <DataTable
+                  caption="Selected subjects"
+                  rowKey={(entry) => entry.subject.subject_id}
+                  rows={selectedEntries}
+                  columns={[
+                    {
+                      key: "subject",
+                      header: "Subject",
+                      render: (entry) =>
+                        `${entry.subject.code} — ${entry.subject.title}`,
+                    },
+                    {
+                      key: "section",
+                      header: "Section",
+                      render: (entry) => entry.section.section_code,
+                    },
+                    {
+                      key: "units",
+                      header: "Units",
+                      render: (entry) => entry.subject.units,
+                    },
+                  ]}
+                />
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Total units
+                  </span>
+                  <Badge className="text-base">{totalUnits}</Badge>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={mutation.isPending || enrollmentWindowClosed}
+                >
+                  {mutation.isPending
+                    ? "Submitting enrollment"
+                    : "Submit enrollment"}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
       <AlertDialog
         open={confirmOpen}
@@ -390,16 +525,27 @@ export function EnrollmentWorkspace() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm enrollment submission</AlertDialogTitle>
             <AlertDialogDescription>
-              This submits {selectedEntries.length} subject
-              {selectedEntries.length === 1 ? "" : "s"} totaling {totalUnits}{" "}
-              units for{" "}
+              {isRegularAudience && selectedBlock ? (
+                <>
+                  This enrolls you in all {selectedBlock.subjects.length}{" "}
+                  subjects of block {selectedBlock.block_code}, totaling{" "}
+                  {selectedBlock.total_units} units for{" "}
+                </>
+              ) : (
+                <>
+                  This submits {selectedEntries.length} subject
+                  {selectedEntries.length === 1 ? "" : "s"} totaling{" "}
+                  {totalUnits} units for{" "}
+                </>
+              )}
               {termsQuery.data?.find((term) => term.id === selectedTermId)
                 ? formatAcademicTerm(
                     termsQuery.data.find((term) => term.id === selectedTermId)!,
                   )
                 : "the selected term"}
-              . This action is recorded in the operational audit log and
-              generates one queue ticket.
+              . This action is recorded in the operational audit log and sent
+              for registrar approval — your queue number is issued once
+              it&apos;s approved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

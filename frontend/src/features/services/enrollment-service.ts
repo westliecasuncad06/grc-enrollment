@@ -17,6 +17,10 @@ import {
   type UpdateEnrollmentInput,
 } from "@/features/schemas/enrollment-schema"
 import {
+  enrollmentBlocksEnvelopeSchema,
+  type EnrollmentBlock,
+} from "@/features/schemas/enrollment-block-schema"
+import {
   ApiClientError,
   getAuthenticatedJson,
   patchAuthenticatedJson,
@@ -24,6 +28,7 @@ import {
 } from "@/features/services/api-client"
 
 export const ELIGIBLE_SUBJECTS_PATH = "/api/v1/eligible-subjects"
+export const ENROLLMENT_BLOCKS_PATH = "/api/v1/enrollment-blocks"
 export const ENROLLMENTS_PATH = "/api/v1/enrollments"
 
 function parse<T>(
@@ -53,6 +58,21 @@ export async function getEligibleSubjects(
     signal,
   )
   return parse(eligibleSubjectsEnvelopeSchema, payload, "eligible subject pool")
+    .data
+}
+
+/**
+ * Empty for an irregular student — they use `getEligibleSubjects` instead.
+ */
+export async function getEnrollmentBlocks(
+  academicTermId: number,
+  signal?: AbortSignal,
+): Promise<readonly EnrollmentBlock[]> {
+  const payload = await getAuthenticatedJson(
+    `${ENROLLMENT_BLOCKS_PATH}?academic_term_id=${academicTermId}`,
+    signal,
+  )
+  return parse(enrollmentBlocksEnvelopeSchema, payload, "enrollment block pool")
     .data
 }
 

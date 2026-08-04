@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   BadgeCheck,
   BarChart3,
   BookOpen,
@@ -9,12 +10,13 @@ import {
   FileCheck2,
   FileClock,
   FileText,
+  FileSearch,
   FolderArchive,
   Gauge,
   GraduationCap,
   Hash,
-  LibraryBig,
   ListChecks,
+  Lock,
   Medal,
   Network,
   ReceiptText,
@@ -82,6 +84,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Review your recorded grades and print your Digital Certificate of Matriculation.",
         FileCheck2,
       ),
+      portalModule(
+        "add-drop-requests",
+        "Add/Drop Requests",
+        "Request to add, drop, or change a section during the add/drop window.",
+        ArrowLeftRight,
+      ),
     ],
   },
   admission_staff: {
@@ -143,10 +151,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     welcomeHeading: "Shape curriculum demand into a reviewable schedule.",
     modules: [
       portalModule(
-        "curriculum",
-        "Curriculum",
-        "Manage curriculum structure and program requirements.",
-        LibraryBig,
+        "program-chair-enrollment",
+        "Enrollment",
+        "Define curriculum capacities, review faculty input, and generate the term schedule.",
+        GraduationCap,
       ),
       portalModule(
         "subjects-prerequisites",
@@ -186,8 +194,8 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     modules: [
       portalModule(
         "schedule-approvals",
-        "Schedule Approvals",
-        "Review the academic schedule approval queue.",
+        "Enrollment",
+        "Review submitted Program Chair enrollment plans and return them with notes when changes are needed.",
         ClipboardCheck,
       ),
       portalModule(
@@ -222,8 +230,8 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     modules: [
       portalModule(
         "master-schedule",
-        "Master Schedule",
-        "Review the consolidated academic schedule.",
+        "Enrollment",
+        "Review department enrollment plans, record decisions, and publish approved schedules.",
         CalendarDays,
       ),
       portalModule(
@@ -251,16 +259,34 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     welcomeHeading: "Govern enrollment decisions, controls, and records.",
     modules: [
       portalModule(
-        "enrollment-approvals",
-        "Enrollment Approvals",
-        "Approve or reject enrollment submissions pending registrar review.",
-        ClipboardCheck,
+        "academic-terms",
+        "Enrollment",
+        "Create the school year and semester that starts the enrollment cycle.",
+        GraduationCap,
+      ),
+      portalModule(
+        "grade-approvals",
+        "Grade Approvals",
+        "Lock submitted grades so they count toward prerequisites and standing.",
+        Lock,
+      ),
+      portalModule(
+        "academic-transcripts",
+        "Academic Transcripts",
+        "View and print any student's prospectus and grade slip.",
+        FileSearch,
       ),
       portalModule(
         "overrides-voids",
         "Overrides & Voids",
         "Void an already-approved enrollment before payment is confirmed, for authorized edge cases.",
         ShieldCheck,
+      ),
+      portalModule(
+        "enrollment-change-requests",
+        "Add/Drop Requests",
+        "Approve or reject student add/drop/change-section requests.",
+        ArrowLeftRight,
       ),
       portalModule(
         "attrition-analytics",
@@ -293,6 +319,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     welcomeHeading: "Maintain accurate enrollment and academic records.",
     modules: [
       portalModule(
+        "enrollment-approvals",
+        "Enrollment Approvals",
+        "Approve or reject enrollment submissions pending registrar review. Approving issues the Cashier queue number.",
+        ClipboardCheck,
+      ),
+      portalModule(
         "credit-mappings",
         "Credit Mappings",
         "Record and decide transferee credit mappings for admitted students.",
@@ -309,6 +341,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Academic Records",
         "View every student's academic grade records across the institution.",
         FolderArchive,
+      ),
+      portalModule(
+        "enrollment-change-requests",
+        "Add/Drop Requests",
+        "View every student add/drop/change-section request.",
+        ArrowLeftRight,
       ),
       portalModule(
         "enrollment-documents",

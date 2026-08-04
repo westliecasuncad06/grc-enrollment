@@ -38,6 +38,7 @@ describe("PrerequisiteEditor", () => {
             units: 3,
             status: "active",
             status_label: "Active",
+            is_completion_only: false,
           },
           {
             type: "subject",
@@ -47,6 +48,7 @@ describe("PrerequisiteEditor", () => {
             units: 3,
             status: "active",
             status_label: "Active",
+            is_completion_only: false,
           },
         ]}
         onChange={onChange}

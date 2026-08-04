@@ -28,6 +28,8 @@ const grade = {
   subject_code: "CS101",
   section_id: 5,
   academic_term_id: 2,
+  mark: "1.50",
+  mark_label: "with Distinction",
   final_grade: "1.50",
   remarks: null,
   status: "draft",
@@ -75,7 +77,7 @@ describe("academic-grade-service", () => {
       subject_id: 7,
       section_id: 5,
       academic_term_id: 2,
-      final_grade: 1.5,
+      mark: "1.50",
     })
 
     expect(result).toEqual(grade)

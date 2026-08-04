@@ -17,6 +17,7 @@ const profile = {
   program_id: 11,
   curriculum_id: 22,
   year_level: 1,
+  enrollment_category: "regular",
   admission_status: "admitted",
   admission_status_label: "Admitted",
   academic_standing: "good",
@@ -120,7 +121,7 @@ async function completeForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
   await selectOption(user, "Program", "BSCS — BS Computer Science")
   await selectOption(user, "Curriculum", "BSCS 2026 Curriculum (2026-2027)")
-  await selectOption(user, "Year level", "Year 1")
+  await selectOption(user, "Year level", "1st Year")
 }
 
 describe("AdmissionProvisioningWorkspace", () => {
@@ -184,6 +185,7 @@ describe("AdmissionProvisioningWorkspace", () => {
       program_id: 11,
       curriculum_id: 22,
       year_level: 1,
+      enrollment_category: "regular",
     })
 
     await user.click(
@@ -282,7 +284,7 @@ describe("AdmissionProvisioningWorkspace", () => {
       "amina.santos@grc.test",
     )
     await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
-    await selectOption(user, "Year level", "Year 1")
+    await selectOption(user, "Year level", "1st Year")
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),
     )

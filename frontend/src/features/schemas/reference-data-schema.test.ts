@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { curriculumSchema } from "@/features/schemas/reference-data-schema"
+import {
+  curriculumSchema,
+  subjectSchema,
+} from "@/features/schemas/reference-data-schema"
 
 describe("curriculumSchema", () => {
   it("accepts the backend's archived curriculum status", () => {
@@ -16,5 +19,22 @@ describe("curriculumSchema", () => {
         subjects: [],
       }).status,
     ).toBe("archived")
+  })
+})
+
+describe("subjectSchema", () => {
+  it("accepts catalog placeholders with zero units without rejecting the subject list", () => {
+    expect(
+      subjectSchema.parse({
+        type: "subject",
+        id: 166,
+        code: "PHILHIST",
+        title: "Readings in Philippine History",
+        units: 0,
+        status: "active",
+        status_label: "Active",
+        is_completion_only: false,
+      }).units,
+    ).toBe(0)
   })
 })

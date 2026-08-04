@@ -15,6 +15,7 @@ const sectionShape = {
   starts_at_time: nullableTime,
   ends_at_time: nullableTime,
   room: nullableText,
+  modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable(),
   capacity: z.number().int().min(1, "Capacity must be at least 1."),
   viability_threshold: z.number().int().min(1).nullable(),
   status: z.enum(["planned", "published", "closed", "cancelled"]),
@@ -71,6 +72,7 @@ export const sectionEditorSchema = z
     starts_at_time: z.string(),
     ends_at_time: z.string(),
     room: z.string().trim().max(255),
+    modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable(),
     professor_id: z.number().int().positive().nullable(),
     viability_threshold: z.number().int().min(1).nullable(),
   })
@@ -81,6 +83,7 @@ export const sectionEditorSchema = z
     starts_at_time: value.starts_at_time || null,
     ends_at_time: value.ends_at_time || null,
     room: value.room || null,
+    modality: value.modality ?? null,
   }))
   .pipe(sectionInputSchema)
 
@@ -90,6 +93,14 @@ export const scheduleProposalSchema = z
     id: z.number().int().positive(),
     academic_term_id: z.number().int().positive(),
     submitted_by: z.number().int().positive(),
+    submitted_by_name: z.string().min(1).optional(),
+    college: z.enum(["ccs", "coe", "coa", "cbae"]).nullable().optional(),
+    college_label: z.string().min(1).nullable().optional(),
+    academic_term_label: z.string().min(1).optional(),
+    section_plan_id: z.number().int().positive().nullable().optional(),
+    is_submitted: z.boolean().optional(),
+    is_returned: z.boolean().optional(),
+    returned_by_role: z.enum(["dean", "executive_director"]).nullable().optional(),
     status: z.enum([
       "draft",
       "dean_approved",
@@ -99,8 +110,26 @@ export const scheduleProposalSchema = z
     ]),
     status_label: z.string().min(1),
     decided_by: z.number().int().positive().nullable(),
+    decided_by_name: z.string().min(1).nullable().optional(),
     decided_at: z.iso.datetime().nullable(),
     decision_reason: z.string().nullable(),
+    decision_history: z.array(
+      z
+        .object({
+          action: z.enum([
+            "dean_approve",
+            "dean_return",
+            "executive_approve",
+            "executive_return",
+          ]),
+          action_label: z.string().min(1),
+          actor_name: z.string().min(1),
+          actor_role: z.enum(["dean", "executive_director"]),
+          decided_at: z.iso.datetime(),
+          notes: z.string().nullable(),
+        })
+        .strict(),
+    ).optional(),
   })
   .strict()
 export const scheduleProposalsEnvelopeSchema = z
@@ -108,6 +137,26 @@ export const scheduleProposalsEnvelopeSchema = z
   .strict()
 export const scheduleProposalEnvelopeSchema = z
   .object({ data: scheduleProposalSchema })
+  .strict()
+export const scheduleReviewSectionSchema = z
+  .object({
+    type: z.literal("schedule_review_section"),
+    id: z.number().int().positive(),
+    section_code: z.string().min(1),
+    subject_code: z.string().min(1),
+    subject_title: z.string().min(1),
+    units: z.number().positive(),
+    professor_id: z.number().int().positive().nullable(),
+    professor_name: z.string().min(1).nullable(),
+    schedule_days: z.string().min(1).nullable(),
+    starts_at_time: nullableTime,
+    ends_at_time: nullableTime,
+    room: nullableText,
+    modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable(),
+  })
+  .strict()
+export const scheduleReviewSectionsEnvelopeSchema = z
+  .object({ data: z.array(scheduleReviewSectionSchema) })
   .strict()
 export const scheduleProposalInputSchema = z
   .object({
@@ -146,6 +195,7 @@ export const facultyMembersEnvelopeSchema = z
 export type SectionInput = z.infer<typeof sectionInputSchema>
 export type SectionEditorValues = z.input<typeof sectionEditorSchema>
 export type ScheduleProposal = z.infer<typeof scheduleProposalSchema>
+export type ScheduleReviewSection = z.infer<typeof scheduleReviewSectionSchema>
 export type ScheduleProposalInput = z.infer<typeof scheduleProposalInputSchema>
 export type ScheduleAction = z.infer<typeof scheduleActionSchema>
 export type ScheduleProposalTransition = z.infer<

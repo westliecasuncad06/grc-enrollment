@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\V1;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -16,6 +17,7 @@ use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermEnrollmentWindow;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
@@ -26,6 +28,7 @@ use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\SubjectPrerequisite;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -38,7 +41,7 @@ final class EligibleSubjectsEndpointTest extends TestCase
     private function makeTerm(): AcademicTerm
     {
         return AcademicTerm::create([
-            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 
@@ -225,6 +228,61 @@ final class EligibleSubjectsEndpointTest extends TestCase
         self::assertTrue($advancedEntry['is_eligible']);
     }
 
+    public function test_a_complete_mark_satisfies_a_leadership_prerequisite(): void
+    {
+        // LEAD1 -> LEAD2, the exact real-catalog chain this short-circuit
+        // exists for: LEAD1 is only ever graded C/NC, never numeric, so
+        // PrerequisiteEvaluator alone (which treats every non-numeric value
+        // as a special mark) would permanently block LEAD2.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lead1 = $this->makeSubject('LEAD 1', 1.5);
+        $lead2 = $this->makeSubject('LEAD2', 1.5);
+        $this->placeSubject($curriculum, $lead1);
+        $placement = $this->placeSubject($curriculum, $lead2, 2);
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $lead1->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeSection($term, $lead2);
+        $student = $this->makeStudent($curriculum);
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $lead1->id, 'academic_term_id' => $term->id,
+            'mark' => 'C', 'status' => GradeStatus::Locked, 'encoded_by' => $student->user_id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $lead2Entry = collect($response->json('data'))->firstWhere('code', 'LEAD2');
+        self::assertTrue($lead2Entry['is_eligible']);
+    }
+
+    public function test_a_not_complete_mark_on_a_leadership_prerequisite_excludes_the_subject(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lead1 = $this->makeSubject('LEAD 1', 1.5);
+        $lead2 = $this->makeSubject('LEAD2', 1.5);
+        $this->placeSubject($curriculum, $lead1);
+        $placement = $this->placeSubject($curriculum, $lead2, 2);
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $lead1->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeSection($term, $lead2);
+        $student = $this->makeStudent($curriculum);
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $lead1->id, 'academic_term_id' => $term->id,
+            'mark' => 'NC', 'status' => GradeStatus::Locked, 'encoded_by' => $student->user_id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $lead2Entry = collect($response->json('data'))->firstWhere('code', 'LEAD2');
+        self::assertFalse($lead2Entry['is_eligible']);
+        self::assertSame('prerequisite', $lead2Entry['reasons'][0]['code']);
+    }
+
     public function test_an_unconfigured_grading_policy_flags_an_advisory_instead_of_excluding(): void
     {
         config(['enrollment.grading.comparison' => null]);
@@ -300,7 +358,7 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.reasons.0.code', 'no_sections_available');
     }
 
-    public function test_a_block_exclusive_section_excludes_an_irregular_student(): void
+    public function test_a_block_exclusive_section_is_withheld_from_an_irregular_student_before_their_window_opens(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -309,12 +367,75 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $this->makeSection($term, $subject, ['is_block_exclusive' => true]);
         $student = $this->makeStudent($curriculum);
         $student->forceFill(['enrollment_category' => 'irregular'])->save();
+        // Block seats stay reserved for regular block students until the
+        // irregular window starts.
+        AcademicTermEnrollmentWindow::create([
+            'academic_term_id' => $term->id,
+            'audience' => EnrollmentAudience::Irregular,
+            'opens_at' => CarbonImmutable::now()->addWeek(),
+            'closes_at' => CarbonImmutable::now()->addWeeks(2),
+        ]);
         $token = $this->tokenFor($student);
 
         $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
 
         $response->assertJsonPath('data.0.is_eligible', false);
         $response->assertJsonPath('data.0.reasons.0.code', 'block_restricted');
+    }
+
+    public function test_a_block_exclusive_section_opens_to_an_irregular_student_during_their_window(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $subject);
+        $this->makeSection($term, $subject, ['is_block_exclusive' => true]);
+        $student = $this->makeStudent($curriculum);
+        $student->forceFill(['enrollment_category' => 'irregular'])->save();
+        // Once the irregular window is open they may take any section that
+        // still has seats — otherwise irregular students, who are excluded
+        // from every block, would have nothing to enrol in at all.
+        AcademicTermEnrollmentWindow::create([
+            'academic_term_id' => $term->id,
+            'audience' => EnrollmentAudience::Irregular,
+            'opens_at' => CarbonImmutable::now()->subDay(),
+            'closes_at' => CarbonImmutable::now()->addWeek(),
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', true);
+    }
+
+    public function test_a_regular_student_cannot_reach_another_year_levels_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $subject);
+        // `IT301` is a 3rd-year block; the student below is 1st year.
+        $this->makeSection($term, $subject, ['is_block_exclusive' => true, 'section_code' => 'IT301']);
+        $token = $this->tokenFor($this->makeStudent($curriculum));
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', false);
+        $response->assertJsonPath('data.0.reasons.0.code', 'block_other_year');
+    }
+
+    public function test_a_regular_student_reaches_their_own_year_levels_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $subject);
+        $this->makeSection($term, $subject, ['is_block_exclusive' => true, 'section_code' => 'IT101']);
+        $token = $this->tokenFor($this->makeStudent($curriculum));
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', true);
     }
 
     public function test_a_block_exclusive_section_is_available_to_an_unclassified_student(): void

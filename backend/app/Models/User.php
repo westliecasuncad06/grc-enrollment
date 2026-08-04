@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,6 +17,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $email
  * @property string $password
  * @property UserRole $role
+ * @property ?CollegeCode $college
  * @property UserStatus $status
  * @property ?CarbonImmutable $last_login_at
  * @property ?CarbonImmutable $created_at
@@ -33,6 +35,7 @@ final class User extends Authenticatable
         'email',
         'password',
         'role',
+        'college',
         'status',
         'last_login_at',
     ];
@@ -50,6 +53,7 @@ final class User extends Authenticatable
         return [
             'password' => 'hashed',
             'role' => UserRole::class,
+            'college' => CollegeCode::class,
             'status' => UserStatus::class,
             'last_login_at' => 'immutable_datetime',
         ];

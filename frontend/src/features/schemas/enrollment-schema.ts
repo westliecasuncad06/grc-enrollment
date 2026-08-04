@@ -12,6 +12,7 @@ export const eligibleSubjectReasonSchema = z
       "prerequisite_advisory",
       "no_sections_available",
       "block_restricted",
+      "block_other_year",
     ]),
     message: z.string().min(1),
   })
@@ -123,14 +124,28 @@ export const enrollmentFiltersSchema = z
   })
   .strict()
 
-export const storeEnrollmentInputSchema = z
-  .object({
-    academic_term_id: z.number().int().positive("Select an academic term."),
-    sections: z
-      .array(z.object({ section_id: z.number().int().positive() }).strict())
-      .min(1, "Select at least one section before submitting."),
-  })
-  .strict()
+/**
+ * Two mutually exclusive submission shapes, matching
+ * `StoreEnrollmentRequest`'s `sections` xor `block_code`: an irregular
+ * student submits explicit per-subject sections, a regular student submits
+ * one block code and the server expands it to sections itself.
+ */
+export const storeEnrollmentInputSchema = z.union([
+  z
+    .object({
+      academic_term_id: z.number().int().positive("Select an academic term."),
+      sections: z
+        .array(z.object({ section_id: z.number().int().positive() }).strict())
+        .min(1, "Select at least one section before submitting."),
+    })
+    .strict(),
+  z
+    .object({
+      academic_term_id: z.number().int().positive("Select an academic term."),
+      block_code: z.string().min(1, "Select a block before submitting."),
+    })
+    .strict(),
+])
 
 export const updateEnrollmentInputSchema = z
   .object({

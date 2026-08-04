@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Curriculum\CreateCurriculum;
 use App\Actions\Curriculum\UpdateCurriculum;
+use App\Domain\Identity\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Curriculum\StoreCurriculumRequest;
 use App\Http\Requests\Api\V1\Curriculum\UpdateCurriculumRequest;
@@ -30,6 +31,7 @@ final class CurriculumController extends Controller
 
         $curricula = Curriculum::query()
             ->visibleTo($user)
+            ->when($user->role === UserRole::ProgramChair && $user->college !== null, fn ($query) => $query->whereHas('program', fn ($programs) => $programs->where('college', $user->college->value)))
             ->with(self::EAGER_LOAD)
             ->orderByDesc('effective_school_year')
             ->orderBy('name')

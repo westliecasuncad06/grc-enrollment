@@ -27,6 +27,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
+import { useEnrollmentScheduleQuery } from "@/features/hooks/use-enrollment-windows"
 import { useHealthQuery } from "@/features/hooks/use-health-query"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
@@ -41,13 +43,18 @@ export function PortalOverviewPage() {
   const academicTermsQuery = useAcademicTermsQuery({
     enabled: session !== null,
   })
+  const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
+  const isStudent = session?.role === "student"
+  const scheduleQuery = useEnrollmentScheduleQuery(
+    activeAcademicTerm?.id ?? null,
+    isStudent,
+  )
 
   if (!session) {
     return null
   }
 
   const definition = rolePortalDefinitions[session.role]
-  const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
 
   return (
     <main className="portal-overview">
@@ -146,6 +153,11 @@ export function PortalOverviewPage() {
             )}
             {academicTermsQuery.data && !activeAcademicTerm && (
               <Badge variant="outline">No active academic term</Badge>
+            )}
+            {isStudent && (
+              <div className="mt-3">
+                <EnrollmentAvailabilityBanner viewer={scheduleQuery.data?.viewer} />
+              </div>
             )}
           </CardContent>
         </Card>

@@ -2,9 +2,11 @@
 
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Models\Curriculum;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * `role`/`status`/`admission_status`/`academic_standing` are deliberately
@@ -31,7 +33,10 @@ final class StoreStudentProfileRequest extends FormRequest
             'student_number' => ['required', 'string', 'max:255', 'unique:student_profiles,student_number'],
             'program_id' => ['required', 'integer', 'exists:programs,id'],
             'curriculum_id' => ['required', 'integer', 'exists:curricula,id'],
-            'year_level' => ['required', 'integer', 'min:1'],
+            // `EnrollmentAudience::fromYearLevel()` only knows 1–4, and a
+            // year level outside that range has no enrollment window at all.
+            'year_level' => ['required', 'integer', 'between:1,4'],
+            'enrollment_category' => ['sometimes', 'nullable', Rule::enum(EnrollmentCategory::class)],
         ];
     }
 

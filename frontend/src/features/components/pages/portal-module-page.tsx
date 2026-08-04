@@ -2,8 +2,11 @@
 
 import { ArrowLeft, Construction, ShieldX } from "lucide-react"
 import Link from "next/link"
+import type { ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Alert,
   AlertDescription,
@@ -27,6 +30,73 @@ import {
   isConnectedModuleId,
   connectedModuleRegistry,
 } from "@/features/portal/module-registry"
+import { useAcademicTermWorkflowsQuery } from "@/features/hooks/use-academic-term-workflows"
+import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
+import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
+
+const programChairGatedModules = new Set([
+  "subjects-prerequisites",
+  "sections-schedules",
+  "faculty-assignment",
+  "schedule-proposals",
+])
+
+function ProgramChairModuleGate({
+  children,
+}: {
+  children: ReactNode
+}) {
+  const { session } = useAuth()
+  const termsQuery = useAcademicTermsQuery()
+  const currentTerm = getActiveAcademicTerm(termsQuery.data)
+  const workflowsQuery = useAcademicTermWorkflowsQuery(
+    currentTerm?.id ?? 0,
+    session?.college != null && currentTerm !== null,
+  )
+
+  const workflow = workflowsQuery.data?.find(
+    (item) => item.college === session?.college,
+  )
+  const query = {
+    isPending:
+      termsQuery.isPending || (currentTerm !== null && workflowsQuery.isPending),
+    isError: termsQuery.isError || workflowsQuery.isError,
+    error: termsQuery.error ?? workflowsQuery.error,
+    data: workflow ?? null,
+    refetch: () => {
+      void termsQuery.refetch()
+      void workflowsQuery.refetch()
+    },
+  }
+
+  if (
+    workflow &&
+    (workflow.stage === "schedule_preparation" ||
+      workflow.stage === "for_dean_approval")
+  ) {
+    return <>{children}</>
+  }
+
+  return (
+    <WorkspacePage
+      title="Enrollment step in progress"
+      description="Supporting pages open after the Program Chair completes the manual Enrollment steps."
+    >
+      <AsyncBoundary query={query} loadingLabel="Checking Enrollment progress…">
+        {(currentWorkflow) => (
+          <Alert>
+            <AlertDescription>
+              {currentWorkflow
+                ? `This page is locked while Enrollment is in ${currentWorkflow.stage_label}.`
+                : "Waiting for Registrar to create the next school year and semester."}{" "}
+              Return to Enrollment to continue the next step.
+            </AlertDescription>
+          </Alert>
+        )}
+      </AsyncBoundary>
+    </WorkspacePage>
+  )
+}
 
 export function PortalModulePage({ moduleId }: { moduleId: string }) {
   const { session } = useAuth()
@@ -86,9 +156,19 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
     // duplicates it with a second header sourced from the module registry.
     // Module label/description remain in use for navigation (sidebar,
     // breadcrumb) only. See ADR 0015.
+    const moduleContent = <ModuleComponent />
+    const gatedContent =
+      session.role === "program_chair" &&
+      session.college != null &&
+      programChairGatedModules.has(module.id) ? (
+        <ProgramChairModuleGate>{moduleContent}</ProgramChairModuleGate>
+      ) : (
+        moduleContent
+      )
+
     return (
       <main className="portal-module-page portal-module-page--connected">
-        <ModuleComponent />
+        {gatedContent}
         <Button
           asChild
           variant="outline"

@@ -29,7 +29,7 @@ final class FacultyAvailabilityPolicyTest extends TestCase
 
     private function makeAvailability(User $professor): FacultyAvailability
     {
-        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        $term = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
 
         return FacultyAvailability::create([
             'professor_id' => $professor->id, 'academic_term_id' => $term->id,

@@ -8,7 +8,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\ScheduleProposal\StoreScheduleProposalRequest;
 use App\Http\Requests\Api\V1\ScheduleProposal\UpdateScheduleProposalRequest;
 use App\Http\Resources\Api\V1\ScheduleProposalResource;
+use App\Http\Resources\Api\V1\ScheduleReviewSectionResource;
 use App\Models\ScheduleProposal;
+use App\Models\Section;
 use App\Models\User;
 use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
@@ -43,12 +45,39 @@ final class ScheduleProposalController extends Controller
         $this->authorize('viewAny', ScheduleProposal::class);
 
         $proposals = ScheduleProposal::query()
+            ->with(['academicTerm:id,school_year,semester', 'submitter:id,name'])
             ->visibleTo($user)
+            ->when($user->role->value === 'program_chair', fn ($query) => $query->where('college', $user->college?->value))
             ->orderByDesc('academic_term_id')
             ->orderByDesc('created_at')
             ->get();
 
         return $this->cachePrivateResponse(ScheduleProposalResource::collection($proposals)->response($request));
+    }
+
+    /** @throws AuthenticationException */
+    public function sections(Request $request, ScheduleProposal $scheduleProposal): JsonResponse
+    {
+        $this->authenticatedUser($request);
+        $this->authorize('view', $scheduleProposal);
+
+        $sections = Section::query()
+            ->with(['subject:id,code,title,units', 'professor:id,name'])
+            ->where('academic_term_id', $scheduleProposal->academic_term_id)
+            ->when(
+                $scheduleProposal->college !== null,
+                fn ($query) => $query->whereHas(
+                    'sectionPlan',
+                    fn ($plans) => $plans->where('college', $scheduleProposal->college),
+                ),
+            )
+            ->orderBy('section_code')
+            ->orderBy('id')
+            ->get();
+
+        return $this->cachePrivateResponse(
+            ScheduleReviewSectionResource::collection($sections)->response($request),
+        );
     }
 
     /**

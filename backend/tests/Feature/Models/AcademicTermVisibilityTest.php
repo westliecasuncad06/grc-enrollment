@@ -27,8 +27,8 @@ final class AcademicTermVisibilityTest extends TestCase
 
     public function test_learner_scoped_role_does_not_see_a_planning_term(): void
     {
-        AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::Closed]);
-        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Planning]);
+        AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterClosed]);
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Draft]);
 
         $faculty = $this->makeUser(UserRole::Faculty);
 
@@ -39,8 +39,8 @@ final class AcademicTermVisibilityTest extends TestCase
 
     public function test_planning_role_sees_every_term_including_planning(): void
     {
-        AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::Closed]);
-        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Planning]);
+        AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterClosed]);
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Draft]);
 
         $registrarHead = $this->makeUser(UserRole::RegistrarHead);
 

@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Domain\Academic\CompletionOnlySubjectRule;
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Organization\CollegeCode;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property int $id
  * @property string $code
+ * @property ?CollegeCode $college
  * @property string $title
  * @property float $units
  * @property SubjectStatus $status
@@ -24,6 +27,7 @@ final class Subject extends Model
     /** @var list<string> */
     protected $fillable = [
         'code',
+        'college',
         'title',
         'units',
         'status',
@@ -39,6 +43,7 @@ final class Subject extends Model
     protected function casts(): array
     {
         return [
+            'college' => CollegeCode::class,
             'units' => 'float',
             'status' => SubjectStatus::class,
         ];
@@ -50,6 +55,18 @@ final class Subject extends Model
     public function placements(): HasMany
     {
         return $this->hasMany(CurriculumSubject::class);
+    }
+
+    /**
+     * True for subjects graded Complete/Not-Complete only — Leadership
+     * (LEAD 1-8) per `config('enrollment.grading.completion_only_code_prefixes')`.
+     */
+    public function isCompletionOnly(): bool
+    {
+        /** @var list<string> $prefixes */
+        $prefixes = (array) config('enrollment.grading.completion_only_code_prefixes', []);
+
+        return CompletionOnlySubjectRule::matches($this->code, $prefixes);
     }
 
     /**

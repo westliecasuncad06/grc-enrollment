@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\Subject;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +40,12 @@ use RuntimeException;
  *
  * `status` is `Active` for every row: the source files are the *current*
  * offering, so nothing here is being marked retired.
+ *
+ * Every row is tagged `college => CollegeCode::Ccs`. Lookup stays keyed on
+ * `code` alone (not the new `(college, code)` pair) — every code here is
+ * already known to be globally unique, so this also backfills `college` in
+ * place on any row seeded before the column existed, rather than risking a
+ * duplicate.
  */
 final class CcsSubjectSeeder extends Seeder
 {
@@ -145,6 +152,7 @@ final class CcsSubjectSeeder extends Seeder
                 Subject::updateOrCreate(
                     ['code' => $subject['code']],
                     [
+                        'college' => CollegeCode::Ccs,
                         'title' => $subject['title'],
                         'units' => $subject['units'],
                         'status' => $subject['status'],

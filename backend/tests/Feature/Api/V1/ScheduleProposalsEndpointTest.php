@@ -3,15 +3,23 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Domain\Audit\AuditAction;
+use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
+use App\Domain\Organization\ProgramStatus;
+use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Scheduling\ScheduleProposalStatus;
+use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\AuditLog;
+use App\Models\Curriculum;
 use App\Models\Notification;
+use App\Models\Program;
 use App\Models\ScheduleProposal;
 use App\Models\Section;
 use App\Models\Subject;
@@ -43,13 +51,62 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
     private function makeTerm(): AcademicTerm
     {
-        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active]);
+        return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
     }
 
     public function test_anonymous_request_is_unauthenticated(): void
     {
         $this->getJson('/api/v1/schedule-proposals')->assertUnauthorized();
         $this->postJson('/api/v1/schedule-proposals', [])->assertUnauthorized();
+    }
+
+    public function test_dean_can_view_the_submitted_schedule_for_one_proposal_college(): void
+    {
+        $term = $this->makeTerm();
+        $program = Program::create(['code' => 'BSCS', 'name' => 'Computer Science', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active]);
+        $curriculum = Curriculum::create(['program_id' => $program->id, 'name' => 'BSCS 2026', 'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active]);
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => CollegeCode::Ccs->value,
+            'year_level' => 1,
+            'section_count' => 1,
+            'status' => SectionPlanStatus::Submitted,
+        ]);
+        $subject = Subject::create(['code' => 'CS101', 'title' => 'Programming 1', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $professor = User::create(['name' => 'Professor Santos', 'email' => 'professor.review@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
+        $section = Section::create([
+            'academic_term_id' => $term->id,
+            'section_plan_id' => $plan->id,
+            'subject_id' => $subject->id,
+            'section_code' => 'IT101',
+            'professor_id' => $professor->id,
+            'schedule_days' => 'M',
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '09:30:00',
+            'room' => 'LAB 1',
+            'modality' => SectionModality::FaceToFace,
+            'capacity' => 40,
+            'status' => SectionStatus::Planned,
+        ]);
+        $chair = User::create(['name' => 'CCS Program Chair', 'email' => 'chair.review@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
+        $proposal = ScheduleProposal::create([
+            'academic_term_id' => $term->id,
+            'college' => CollegeCode::Ccs->value,
+            'section_plan_id' => $plan->id,
+            'submitted_by' => $chair->id,
+            'status' => ScheduleProposalStatus::Draft,
+        ]);
+        $deanToken = $this->tokenFor(UserRole::Dean, 'dean.review@grc.test');
+
+        $response = $this->withToken($deanToken)->getJson("/api/v1/schedule-proposals/{$proposal->id}/sections");
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $section->id)
+            ->assertJsonPath('data.0.subject_code', 'CS101')
+            ->assertJsonPath('data.0.professor_name', 'Professor Santos')
+            ->assertJsonPath('data.0.room', 'LAB 1');
     }
 
     public function test_a_program_chair_can_submit_a_proposal(): void
@@ -145,7 +202,14 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response = $this->withToken($deanToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'dean_approve']);
 
-        $response->assertOk()->assertJsonPath('data.status', 'dean_approved');
+        $response->assertOk()
+            ->assertJsonPath('data.status', 'dean_approved')
+            ->assertJsonPath('data.decided_by_name', 'Test dean')
+            ->assertJsonPath('data.decision_history.0.action', 'dean_approve')
+            ->assertJsonPath('data.decision_history.0.action_label', 'Approved by Dean')
+            ->assertJsonPath('data.decision_history.0.actor_name', 'Test dean')
+            ->assertJsonPath('data.decision_history.0.actor_role', 'dean')
+            ->assertJsonPath('data.decision_history.0.notes', null);
         self::assertNotNull($proposal->refresh()->decided_by);
         self::assertSame(
             AuditAction::SCHEDULE_PROPOSAL_DEAN_APPROVED,
@@ -240,7 +304,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.reason@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
-        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::ExecutiveApproved]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.reason@grc.test');
 
         $withoutReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_return']);

@@ -2,12 +2,15 @@
 
 namespace App\Actions\Academic;
 
+use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Notifications\NotificationType;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicGrade;
+use App\Models\AcademicTerm;
 use App\Models\Notification;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -20,7 +23,7 @@ use Illuminate\Validation\ValidationException;
  * `TransitionEnrollment`/`TransitionScheduleProposal` don't: a plain content
  * edit with no `action` at all.
  *
- *   - No `action`: the encoding Faculty member corrects `final_grade` or
+ *   - No `action`: the encoding Faculty member corrects `mark` or
  *     `remarks` — allowed only while the grade is still `draft`
  *     (`GradeStatus::isEditableByEncoder()`).
  *   - `action: submit` (`draft` → `submitted`, Faculty) or
@@ -60,7 +63,10 @@ final readonly class UpdateAcademicGrade
         'lock' => AuditAction::ACADEMIC_GRADE_LOCKED,
     ];
 
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private ReclassifyStudentEnrollmentCategory $reclassifier,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $validated
@@ -116,6 +122,19 @@ final readonly class UpdateAcademicGrade
                     'type' => NotificationType::AcademicGradeLocked,
                     'message' => "Your grade for {$lockedGrade->subject->code} has been finalized.",
                 ]);
+
+                // Reclassification needs a "now" to measure the student's
+                // completed semesters against. With no term currently
+                // semester_ongoing (e.g. between terms, or a historical
+                // grade correction), there is nothing to compare against —
+                // skip rather than guess.
+                $currentTerm = AcademicTerm::query()
+                    ->where('status', AcademicTermStatus::SemesterOngoing)
+                    ->first();
+
+                if ($currentTerm !== null) {
+                    $this->reclassifier->execute($lockedGrade->student, $currentTerm, $actor, $context);
+                }
             }
 
             return $lockedGrade->refresh()->load(['student', 'subject', 'section']);
@@ -132,14 +151,21 @@ final readonly class UpdateAcademicGrade
 
             if (! $lockedGrade->status->isEditableByEncoder()) {
                 throw ValidationException::withMessages([
-                    'final_grade' => "This grade is '{$lockedGrade->status->value}' and can no longer be edited directly.",
+                    'mark' => "This grade is '{$lockedGrade->status->value}' and can no longer be edited directly.",
                 ]);
             }
 
             $beforeValues = self::snapshot($lockedGrade);
 
+            if (array_key_exists('mark', $validated)) {
+                $mark = $validated['mark'] !== null ? GradeMark::from($validated['mark']) : null;
+            } else {
+                $mark = $lockedGrade->mark;
+            }
+
             $lockedGrade->update([
-                'final_grade' => array_key_exists('final_grade', $validated) ? $validated['final_grade'] : $lockedGrade->final_grade,
+                'mark' => $mark,
+                'final_grade' => $mark?->numericValue(),
                 'remarks' => array_key_exists('remarks', $validated) ? $validated['remarks'] : $lockedGrade->remarks,
             ]);
             $lockedGrade->refresh();
@@ -160,12 +186,13 @@ final readonly class UpdateAcademicGrade
     }
 
     /**
-     * @return array{status: string, final_grade: ?string, remarks: ?string, submitted_at: ?string, locked_at: ?string}
+     * @return array{status: string, mark: ?string, final_grade: ?string, remarks: ?string, submitted_at: ?string, locked_at: ?string}
      */
     private static function snapshot(AcademicGrade $grade): array
     {
         return [
             'status' => $grade->status->value,
+            'mark' => $grade->mark?->value,
             'final_grade' => $grade->final_grade,
             'remarks' => $grade->remarks,
             'submitted_at' => $grade->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),

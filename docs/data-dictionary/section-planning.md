@@ -51,7 +51,9 @@ skipped when `professor_id`, `schedule_days`, or either time field is absent.
 ## Seeded data
 
 `database/seeders/SectionSeeder.php` (already existed from the found
-scaffold) seeds six published sections across the active term, including two
-sections of the same subject (`CS102-A`/`CS102-B`) to exercise the unique
-`(term, subject, section_code)` constraint. `viability_threshold` is
-deliberately left `NULL` for the same PRD §17 reason as the column itself.
+scaffold) seeds six published sections across an ongoing term when one exists,
+including two sections of the same subject (`CS102-A`/`CS102-B`) to exercise
+the unique `(term, subject, section_code)` constraint. With the archive-first
+manual seed there is no ongoing term, so this seeder is intentionally a no-op
+until Registrar Head opens one. `viability_threshold` is deliberately left
+`NULL` for the same PRD §17 reason as the column itself.

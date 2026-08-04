@@ -2,11 +2,19 @@ import { z } from "zod"
 
 const optionalUtcDateTimeSchema = z.iso.datetime().nullable()
 
+// Deliberately not a `z.enum` of known `NotificationType` values: the
+// backend enum already has 11 cases and grows independently of this
+// frontend build. A `.strict()` object with a narrow enum here means any one
+// unrecognized notification in the page fails the whole array's parse and
+// the bell renders "Notifications are unavailable right now." for every
+// notification type, not just the new one. Presentation (icon/tone/label)
+// is instead driven by a client-side lookup with a default fallback — see
+// `notification-presentation.ts`.
 export const notificationSchema = z
   .object({
     type: z.literal("notification"),
     id: z.number().int().positive(),
-    notification_type: z.literal("schedule_published"),
+    notification_type: z.string().min(1),
     message: z.string().min(1),
     read_at: optionalUtcDateTimeSchema,
     created_at: optionalUtcDateTimeSchema,

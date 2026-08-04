@@ -61,6 +61,7 @@ const fresh = (termId = 0): SectionEditorValues => ({
   starts_at_time: "",
   ends_at_time: "",
   room: "",
+  modality: "f2f",
   capacity: 1,
   viability_threshold: null,
   status: "planned",
@@ -93,6 +94,7 @@ export function SectionsWorkspace() {
       starts_at_time: "",
       ends_at_time: "",
       room: "",
+      modality: "f2f",
       capacity: 1,
       viability_threshold: null,
       status: "planned",
@@ -132,6 +134,7 @@ export function SectionsWorkspace() {
       starts_at_time: next.starts_at_time ?? "",
       ends_at_time: next.ends_at_time ?? "",
       room: next.room ?? "",
+      modality: next.modality ?? "f2f",
       capacity: next.capacity,
       viability_threshold: next.viability_threshold,
       status: next.status,
@@ -371,6 +374,24 @@ export function SectionsWorkspace() {
                   <Field>
                     <FieldLabel htmlFor="section-room">Room</FieldLabel>
                     <Input id="section-room" {...form.register("room")} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="section-modality">Modality</FieldLabel>
+                    <Controller
+                      control={form.control}
+                      name="modality"
+                      render={({ field }) => (
+                        <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                          <SelectTrigger id="section-modality" className="w-full"><SelectValue placeholder="Select modality" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="online">Online</SelectItem>
+                            <SelectItem value="hyflex_a">Hyflex A</SelectItem>
+                            <SelectItem value="hyflex_b">Hyflex B</SelectItem>
+                            <SelectItem value="f2f">F2F</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                   </Field>
                   <Field data-invalid={Boolean(form.formState.errors.capacity)}>
                     <FieldLabel htmlFor="section-capacity">Capacity</FieldLabel>

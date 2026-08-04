@@ -6,6 +6,7 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import type { UserRole } from "@/features/auth/roles"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { ScheduleReviewDialog } from "@/features/components/portal/schedule-review-dialog"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
@@ -18,19 +19,22 @@ import {
   AlertDialogTitle,
 } from "@/features/components/ui/alert-dialog"
 import { Button } from "@/features/components/ui/button"
+import { Badge } from "@/features/components/ui/badge"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Field, FieldLabel } from "@/features/components/ui/field"
+import { Field, FieldError, FieldLabel } from "@/features/components/ui/field"
 import { Textarea } from "@/features/components/ui/textarea"
 import { sectionsQueryKey } from "@/features/hooks/use-reference-data"
 import {
   scheduleProposalsQueryKey,
   useScheduleProposalsQuery,
 } from "@/features/hooks/use-scheduling"
+import { scheduleProposalPresentation } from "@/features/lib/schedule-status"
 import type {
   ScheduleAction,
   ScheduleProposal,
@@ -41,10 +45,10 @@ import {
 } from "@/features/services/scheduling-service"
 
 const actionLabel: Record<ScheduleAction, string> = {
-  dean_approve: "Approve as Dean",
-  dean_return: "Return to draft",
-  executive_approve: "Approve as Executive Director",
-  executive_return: "Return to draft",
+  dean_approve: "Approve schedule",
+  dean_return: "Return with notes",
+  executive_approve: "Final approve",
+  executive_return: "Return with notes",
   publish: "Publish schedule",
   close: "Close proposal",
 }
@@ -67,6 +71,7 @@ export function ScheduleDecisionControls({
   } | null>(null)
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
+  const [reviewingProposal, setReviewingProposal] = useState<ScheduleProposal | null>(null)
   const mutation = useMutation({
     mutationFn: ({
       id,
@@ -94,6 +99,7 @@ export function ScheduleDecisionControls({
       ])
       setPending(null)
       setReason("")
+      setReviewingProposal(null)
     },
   })
   const reasonRequired =
@@ -126,31 +132,66 @@ export function ScheduleDecisionControls({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <ul className="grid gap-3">
-        {selectable.map((proposal) => (
-          <li key={proposal.id} className="rounded-md border p-3">
-            <p>
-              Proposal #{proposal.id} · {proposal.status_label}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {availableScheduleActions(actorRole, proposal).map((action) => (
-                <Button
-                  key={action}
-                  type="button"
-                  disabled={mutation.isPending}
-                  onClick={() => {
-                    setPending({ proposal, action })
-                    setReason("")
-                    setError("")
-                  }}
-                >
-                  {actionLabel[action]}
-                </Button>
-              ))}
-            </div>
-          </li>
-        ))}
+      <ul className="grid gap-3 md:grid-cols-2">
+        {selectable.map((proposal) => {
+          const presentation = scheduleProposalPresentation(proposal)
+          const priorReturn = [...(proposal.decision_history ?? [])]
+            .reverse()
+            .find((decision) => decision.action === "dean_return" || decision.action === "executive_return")
+
+          return (
+            <li key={proposal.id}>
+              <Card size="sm" className="h-full">
+                <CardHeader>
+                  <CardTitle>{proposal.college_label ?? proposal.college?.toUpperCase() ?? `Proposal #${proposal.id}`}</CardTitle>
+                  <CardDescription>{proposal.academic_term_label ?? `Academic term #${proposal.academic_term_id}`}</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <p>Submitted by {proposal.submitted_by_name ?? `Program Chair #${proposal.submitted_by}`}</p>
+                  <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
+                  {priorReturn && (
+                    <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Previously returned</span> by {priorReturn.actor_name}
+                      {priorReturn.notes ? `: ${priorReturn.notes}` : "."}
+                    </p>
+                  )}
+                  <Button type="button" variant="outline" onClick={() => setReviewingProposal(proposal)}>Review schedule</Button>
+                  <div className="flex flex-wrap gap-2">
+                    {availableScheduleActions(actorRole, proposal).map((action) => (
+                      <Button
+                        key={action}
+                        type="button"
+                        variant={requiresReason(action) ? "outline" : "default"}
+                        disabled={mutation.isPending}
+                        onClick={() => {
+                          setPending({ proposal, action })
+                          setReason("")
+                          setError("")
+                        }}
+                      >
+                        {actionLabel[action]}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </li>
+          )
+        })}
       </ul>
+      <ScheduleReviewDialog
+        actorRole={actorRole}
+        proposal={reviewingProposal}
+        decisionPending={mutation.isPending}
+        onOpenChange={(open) => {
+          if (!open) setReviewingProposal(null)
+        }}
+        onDecision={(proposal, action) => {
+          setPending({ proposal, action })
+          setReason("")
+          setError("")
+        }}
+      />
       <AlertDialog
         open={pending !== null}
         onOpenChange={(open) => {
@@ -167,7 +208,7 @@ export function ScheduleDecisionControls({
           </AlertDialogHeader>
           {pending && requiresReason(pending.action) && (
             <Field data-invalid={reasonRequired}>
-              <FieldLabel htmlFor="decision-reason">Decision reason</FieldLabel>
+              <FieldLabel htmlFor="decision-reason">Notes for Program Chair</FieldLabel>
               <Textarea
                 id="decision-reason"
                 value={reason}
@@ -177,14 +218,7 @@ export function ScheduleDecisionControls({
                   reasonRequired ? "decision-reason-error" : undefined
                 }
               />
-              {reasonRequired && (
-                <p
-                  id="decision-reason-error"
-                  className="text-sm text-destructive"
-                >
-                  A reason is required to return this proposal.
-                </p>
-              )}
+              {reasonRequired && <FieldError id="decision-reason-error">Remarks are required before returning this schedule.</FieldError>}
             </Field>
           )}
           <AlertDialogFooter>
@@ -212,8 +246,8 @@ export function ScheduleDecisionWorkspace() {
 
   return (
     <WorkspacePage
-      title="Schedule approvals"
-      description="Review only the proposals assigned to the Dean checkpoint."
+      title="Enrollment planning review"
+      description="Review each department's submitted enrollment plan, approve it, or return it with clear notes for the Program Chair."
       unauthorized={!authorized}
       lastUpdated={proposalsQuery.dataUpdatedAt}
     >
@@ -224,7 +258,7 @@ export function ScheduleDecisionWorkspace() {
         {(proposals) => (
           <Card>
             <CardHeader>
-              <CardTitle level={2}>Dean decisions</CardTitle>
+              <CardTitle level={2}>Enrollment planning review</CardTitle>
             </CardHeader>
             <CardContent>
               <ScheduleDecisionControls

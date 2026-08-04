@@ -3,13 +3,19 @@
 namespace App\Http\Requests\Api\V1\Enrollment;
 
 use App\Actions\Enrollment\BuildEligibleSubjectPool;
+use App\Actions\Enrollment\BuildEnrollmentBlockPool;
+use App\Domain\Enrollment\EnrollmentAudience;
+use App\Domain\Enrollment\EnrollmentBlock;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentWindowResolver;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermEnrollmentWindow;
 use App\Models\Enrollment;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Http\FormRequest;
@@ -23,6 +29,16 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 final class StoreEnrollmentRequest extends FormRequest
 {
+    /**
+     * Populated by `withValidator()` when the submission is `block_code`:
+     * the section ids the client's block code expanded to server-side, so
+     * `EnrollmentController` never trusts a client-supplied section list
+     * for a block submission.
+     *
+     * @var list<int>
+     */
+    private array $resolvedBlockSectionIds = [];
+
     public function authorize(): bool
     {
         return true;
@@ -35,8 +51,9 @@ final class StoreEnrollmentRequest extends FormRequest
     {
         return [
             'academic_term_id' => ['required', 'integer', 'exists:academic_terms,id'],
-            'sections' => ['required', 'array', 'min:1'],
+            'sections' => ['required_without:block_code', 'prohibits:block_code', 'array', 'min:1'],
             'sections.*.section_id' => ['required', 'integer', 'distinct', 'exists:sections,id'],
+            'block_code' => ['required_without:sections', 'prohibits:sections', 'string', 'max:32'],
         ];
     }
 
@@ -45,15 +62,35 @@ final class StoreEnrollmentRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $student = $this->resolveStudent();
             $term = $this->resolveTerm();
-            $sectionIds = $this->submittedSectionIds();
 
-            if ($student === null || $term === null || $sectionIds === []) {
+            if ($student === null || $term === null) {
+                return;
+            }
+
+            // First check, ahead of every other rule below: a closed window
+            // should read as one clear message, not a wall of per-section
+            // errors that all stem from the same root cause. This is also
+            // what actually rejects submission against a `draft` or
+            // `archived` term id — previously nothing did.
+            if (! $this->rejectClosedEnrollmentWindow($validator, $student, $term)) {
                 return;
             }
 
             if ($this->hasActiveEnrollmentThisTerm($student->id, $term->id)) {
                 $validator->errors()->add('academic_term_id', 'You already have an active enrollment for this term.');
 
+                return;
+            }
+
+            $blockCode = $this->input('block_code');
+            if (is_string($blockCode) && $blockCode !== '') {
+                $this->validateBlockSubmission($validator, $student, $term, $blockCode);
+
+                return;
+            }
+
+            $sectionIds = $this->submittedSectionIds();
+            if ($sectionIds === []) {
                 return;
             }
 
@@ -64,6 +101,54 @@ final class StoreEnrollmentRequest extends FormRequest
             $this->rejectIneligibleSections($validator, $student, $term, $sectionIds);
             $this->rejectOverload($validator, $sections);
         });
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function resolvedSectionIds(): array
+    {
+        $blockCode = $this->input('block_code');
+
+        return is_string($blockCode) && $blockCode !== ''
+            ? $this->resolvedBlockSectionIds
+            : $this->submittedSectionIds();
+    }
+
+    /**
+     * A block submission skips `rejectIneligibleSections()` entirely — that
+     * check runs the per-subject eligible pool, a different rule than the
+     * one that actually governs a block. `BuildEnrollmentBlockPool` is the
+     * authoritative check here instead, via `is_selectable`: it already
+     * withholds a block once any subject in it is already passed, since a
+     * repeater no longer advances in lockstep with a single block and needs
+     * the Registrar to reclassify them as irregular first. Conflict and
+     * overload checks still apply — a block generated without conflicts
+     * should pass them trivially, but nothing here assumes that.
+     */
+    private function validateBlockSubmission(Validator $validator, StudentProfile $student, AcademicTerm $term, string $blockCode): void
+    {
+        $block = collect(app(BuildEnrollmentBlockPool::class)->execute($student, $term))
+            ->first(fn (EnrollmentBlock $candidate): bool => $candidate->blockCode === $blockCode);
+
+        if ($block === null) {
+            $validator->errors()->add('block_code', 'This block is not available for your year level and curriculum.');
+
+            return;
+        }
+
+        if (! $block->isSelectable) {
+            $validator->errors()->add('block_code', $block->reasons[0]['message'] ?? 'This block is not currently selectable.');
+
+            return;
+        }
+
+        $sectionIds = array_map(fn (Section $section): int => $section->id, $block->sections);
+        $this->resolvedBlockSectionIds = $sectionIds;
+
+        $sections = Section::query()->whereIn('id', $sectionIds)->with('subject')->get()->keyBy('id');
+        $this->rejectScheduleConflicts($validator, $sectionIds, $sections);
+        $this->rejectOverload($validator, $sections);
     }
 
     private function resolveStudent(): ?StudentProfile
@@ -108,6 +193,35 @@ final class StoreEnrollmentRequest extends FormRequest
         }
 
         return $sectionIds;
+    }
+
+    /**
+     * @return bool false when the window is closed (an error was already added)
+     */
+    private function rejectClosedEnrollmentWindow(Validator $validator, StudentProfile $student, AcademicTerm $term): bool
+    {
+        $audience = EnrollmentAudience::forStudent($student->enrollment_category, $student->year_level);
+        $window = AcademicTermEnrollmentWindow::query()
+            ->where('academic_term_id', $term->id)
+            ->where('audience', $audience->value)
+            ->first();
+
+        $availability = EnrollmentWindowResolver::resolve(
+            $term->status,
+            $term->enrollment_opens_at,
+            $term->enrollment_closes_at,
+            $window?->opens_at,
+            $window?->closes_at,
+            CarbonImmutable::now(),
+        );
+
+        if (! $availability->isOpen) {
+            $validator->errors()->add('academic_term_id', $availability->reason->message($audience));
+
+            return false;
+        }
+
+        return true;
     }
 
     private function hasActiveEnrollmentThisTerm(int $studentId, int $academicTermId): bool

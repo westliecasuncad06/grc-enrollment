@@ -331,6 +331,230 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createAcademicTerm
+      summary: Create the next school-year-and-semester record
+      description: Registrar Head only. Creates a Draft term and four
+        college workflow rows; only one non-archived term may exist.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcademicTermCreateRequest"
+      responses:
+        "201":
+          description: Draft academic term created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicTermResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/academic-terms/{academicTerm}:
+    patch:
+      operationId: transitionAcademicTerm
+      summary: Open enrollment, close, or archive one semester
+      description: >
+        Registrar Head only. `open_enrollment` moves the term to
+        semester_ongoing from draft or for_dean_approval, and requires at
+        least one published schedule_proposal for the term (ADR 0018: "no
+        date alone silently changes lifecycle status" — the enrollment
+        window dates only take effect once this transition fires). Archive
+        closes an ongoing semester as part of the same transaction and
+        retains all records attached to it.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - name: academicTerm
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [open_enrollment, close, archive]
+      responses:
+        "200":
+          description: Updated academic term.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicTermResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/academic-terms/{academicTerm}/enrollment-windows:
+    get:
+      operationId: getEnrollmentWindows
+      summary: Read the term's enrollment schedule and per-year-level availability
+      description: >
+        Readable by every role AcademicTermPolicy::view allows (a
+        learner-scoped role only for a learner-visible term). Computes each
+        year level's live open/closed state via EnrollmentWindowResolver —
+        a year level with no saved academic_term_year_level_windows row
+        falls back to the term-wide enrollment_opens_at/enrollment_closes_at
+        rather than being lazily written on this read. `viewer` is populated
+        only for an authenticated Student, for their own year level; null
+        for every other role.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - name: academicTerm
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The term's enrollment schedule.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentScheduleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/academic-terms/{academicTerm}/enrollment-schedule:
+    patch:
+      operationId: updateEnrollmentSchedule
+      summary: Save the term-wide and per-year-level enrollment windows
+      description: >
+        Registrar Head only. Replaces enrollment_opens_at/enrollment_closes_at
+        on the term and upserts all four academic_term_year_level_windows
+        rows in one request. Each year-level window must fall within the
+        term-wide window and close after it opens.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - name: academicTerm
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEnrollmentScheduleRequest"
+      responses:
+        "200":
+          description: The updated enrollment schedule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentScheduleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/academic-term-workflows:
+    get:
+      operationId: getAcademicTermWorkflows
+      summary: List college workflow stages for one academic term
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - name: academic_term_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: College workflow stages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicTermWorkflowsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/academic-term-workflows/{workflow}:
+    patch:
+      operationId: transitionAcademicTermWorkflow
+      summary: Advance one college's manual enrollment workflow
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - name: workflow
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - start_curriculum_preparation
+                    - complete_curriculum_preparation
+                    - complete_faculty_input
+      responses:
+        "200":
+          description: Updated college workflow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicTermWorkflowResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
   /api/v1/subjects:
     get:
       operationId: getSubjects
@@ -885,6 +1109,123 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/academic-term-section-plans:
+    get:
+      operationId: getAcademicTermSectionPlans
+      summary: List the authenticated Program Chair's college section plans
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academic_term_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: curriculum_id
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Year-level block counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionPlansResponse"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/academic-terms/{academicTerm}/section-plan:
+    patch:
+      operationId: patchAcademicTermSectionPlan
+      summary: Save four manual year-level block counts
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academicTerm
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveSectionPlanRequest"
+      responses:
+        "200":
+          description: Saved year-level plans.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionPlansResponse"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/academic-terms/{academicTerm}/section-plan/release:
+    post:
+      operationId: postSectionPlanRelease
+      summary: Release current-semester subjects into block sections
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academicTerm
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SectionPlanCurriculumRequest"
+      responses:
+        "200":
+          description: Generated block sections.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionPlansResponse"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/academic-terms/{academicTerm}/section-plan/submit:
+    post:
+      operationId: postSectionPlanSubmit
+      summary: Submit a completed college schedule for Dean approval
+      security:
+        - bearerAuth: []
+      tags:
+        - Approval Workflow
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academicTerm
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SectionPlanCurriculumRequest"
+      responses:
+        "200":
+          description: Proposal moved to the Dean review queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionPlanSubmitResponse"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/sections:
     get:
       operationId: getSections
@@ -1162,6 +1503,53 @@ paths:
             The submitted data is invalid, the action does not match the
             proposal's current status, or a required decision reason is
             missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/schedule-proposals/{scheduleProposal}/sections:
+    get:
+      operationId: getScheduleProposalSections
+      summary: View the department schedule attached to one proposal
+      description: >
+        Returns the read-only subject schedules for the proposal's academic
+        term and college. Dean and Executive Director use this detail before
+        approving or returning a Program Chair submission. A college-scoped
+        Program Chair may view only their own college proposal.
+      security:
+        - bearerAuth: []
+      tags:
+        - Approval Workflow
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: scheduleProposal
+          in: path
+          required: true
+          description: Schedule proposal ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The submitted department schedule.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleReviewSectionsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No schedule proposal exists with the given ID.
           content:
             application/json:
               schema:
@@ -2802,6 +3190,17 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: The request is invalid for the current lifecycle state.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     TooManyRequests:
       description: The caller has exceeded the applicable request rate.
       headers:
@@ -2929,6 +3328,7 @@ components:
         - email
         - role
         - role_label
+        - college
         - status
       properties:
         type:
@@ -2955,6 +3355,9 @@ components:
             - accounting_staff
         role_label:
           type: string
+        college:
+          type: [string, 'null']
+          enum: [ccs, coe, coa, cbae, null]
         status:
           type: string
     ErrorResponse:
@@ -3038,6 +3441,68 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AcademicTermResource"
+    AcademicTermResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AcademicTermResource"
+    AcademicTermCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - school_year
+        - semester
+        - enrollment_opens_at
+        - enrollment_closes_at
+        - add_drop_deadline_at
+      properties:
+        school_year: { type: string, pattern: '^\\d{4}-\\d{4}$' }
+        semester: { type: string, enum: [1st, 2nd] }
+        enrollment_opens_at: { type: string, format: date-time }
+        enrollment_closes_at: { type: string, format: date-time }
+        add_drop_deadline_at: { type: string, format: date-time }
+    AcademicTermWorkflowsResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AcademicTermWorkflowResource"
+    AcademicTermWorkflowResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AcademicTermWorkflowResource"
+    AcademicTermWorkflowResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - academic_term_id
+        - college
+        - college_label
+        - stage
+        - stage_label
+      properties:
+        type: { type: string, const: academic-term-workflow }
+        id: { type: integer }
+        academic_term_id: { type: integer }
+        college: { type: string, enum: [ccs, coe, coa, cbae] }
+        college_label: { type: string }
+        stage:
+          type: string
+          enum: [draft, curriculum_preparation, faculty_input, schedule_preparation, for_dean_approval]
+        stage_label: { type: string }
+        curriculum_completed_at: { type: [string, 'null'], format: date-time }
+        faculty_reviewed_at: { type: [string, 'null'], format: date-time }
+        schedule_submitted_at: { type: [string, 'null'], format: date-time }
     AcademicTermResource:
       type: object
       additionalProperties: false
@@ -3050,8 +3515,11 @@ components:
         - ends_at
         - enrollment_opens_at
         - enrollment_closes_at
+        - closed_at
+        - archived_at
         - status
         - status_label
+        - is_actionable_current
       properties:
         type:
           type: string
@@ -3074,17 +3542,123 @@ components:
         enrollment_closes_at:
           type: ["string", "null"]
           format: date-time
+        closed_at:
+          type: [string, 'null']
+          format: date-time
+        archived_at:
+          type: [string, 'null']
+          format: date-time
         status:
           type: string
-          description: >
-            PROVISIONAL vocabulary pending PRD §17 approval — see
-            App\Domain\Organization\AcademicTermStatus.
-          enum:
-            - planning
-            - active
-            - closed
+          enum: [draft, for_dean_approval, semester_ongoing, semester_closed, archived]
         status_label:
           type: string
+        is_actionable_current:
+          type: boolean
+    EnrollmentScheduleResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/EnrollmentScheduleResource"
+    EnrollmentScheduleResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - academic_term_id
+        - status
+        - enrollment_opens_at
+        - enrollment_closes_at
+        - year_levels
+        - viewer
+      properties:
+        type:
+          type: string
+          const: enrollment_schedule
+        academic_term_id:
+          type: integer
+        status:
+          type: string
+          enum: [draft, for_dean_approval, semester_ongoing, semester_closed, archived]
+        enrollment_opens_at:
+          type: ["string", "null"]
+          format: date-time
+        enrollment_closes_at:
+          type: ["string", "null"]
+          format: date-time
+        year_levels:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: "#/components/schemas/YearLevelAvailabilityResource"
+        viewer:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/YearLevelAvailabilityResource"
+          description: Populated only for an authenticated Student, for their own year level; null for every other role.
+    YearLevelAvailabilityResource:
+      type: object
+      additionalProperties: false
+      required:
+        - year_level
+        - opens_at
+        - closes_at
+        - is_open
+        - reason
+      properties:
+        year_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        opens_at:
+          type: ["string", "null"]
+          format: date-time
+          description: Effective open instant — the saved year-level override, or the term-wide date when no override exists.
+        closes_at:
+          type: ["string", "null"]
+          format: date-time
+        is_open:
+          type: boolean
+        reason:
+          type: string
+          description: See App\Domain\Enrollment\EnrollmentAvailabilityReason.
+          enum: [term_not_open, term_closed, before_window, after_window, open]
+    UpdateEnrollmentScheduleRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollment_opens_at
+        - enrollment_closes_at
+        - year_levels
+      properties:
+        enrollment_opens_at:
+          type: string
+          format: date-time
+        enrollment_closes_at:
+          type: string
+          format: date-time
+        year_levels:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: object
+            additionalProperties: false
+            required: [year_level, opens_at, closes_at]
+            properties:
+              year_level:
+                type: integer
+                minimum: 1
+                maximum: 4
+              opens_at:
+                type: ["string", "null"]
+                format: date-time
+              closes_at:
+                type: ["string", "null"]
+                format: date-time
     SubjectsResponse:
       type: object
       additionalProperties: false
@@ -3365,8 +3939,23 @@ components:
           minimum: 1
         notification_type:
           type: string
+          description: See App\Domain\Notifications\NotificationType.
           enum:
             - schedule_published
+            - enrollment_submitted
+            - enrollment_registrar_approved
+            - enrollment_registrar_rejected
+            - enrollment_voided
+            - academic_grade_locked
+            - enrollment_payment_confirmed
+            - withdrawal_request_approved
+            - withdrawal_request_rejected
+            - transferee_credit_approved
+            - transferee_credit_rejected
+            - schedule_submitted_for_dean
+            - schedule_dean_approved
+            - schedule_executive_approved
+            - schedule_returned
         message:
           type: string
         read_at:
@@ -3670,6 +4259,9 @@ components:
           type: integer
         academic_term_id:
           type: integer
+        section_plan_id:
+          type: ["integer", "null"]
+          description: College-scoped block section plan that generated this section.
         subject_id:
           type: integer
         rank:
@@ -3692,6 +4284,68 @@ components:
           minimum: 1
     UpdateFacultySubjectPreferenceRequest:
       $ref: "#/components/schemas/StoreFacultySubjectPreferenceRequest"
+    SectionPlansResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionPlanResource"
+    SectionPlanResource:
+      type: object
+      additionalProperties: false
+      required: [type, id, academic_term_id, curriculum_id, college, year_level, section_count, status, status_label, submitted_at]
+      properties:
+        type: { type: string, const: academic-term-section-plan }
+        id: { type: integer }
+        academic_term_id: { type: integer }
+        curriculum_id: { type: integer }
+        college: { type: string, enum: [ccs, coe, coa, cbae] }
+        year_level: { type: integer, minimum: 1, maximum: 4 }
+        section_count: { type: integer, minimum: 0 }
+        status: { type: string, enum: [draft, submitted] }
+        status_label: { type: string }
+        submitted_at: { type: [string, "null"], format: date-time }
+    SaveSectionPlanRequest:
+      type: object
+      additionalProperties: false
+      required: [academic_term_id, curriculum_id, counts]
+      properties:
+        academic_term_id: { type: integer }
+        curriculum_id: { type: integer }
+        counts:
+          type: object
+          minProperties: 4
+          maxProperties: 4
+          additionalProperties: { type: integer, minimum: 0, maximum: 99 }
+    SectionPlanCurriculumRequest:
+      type: object
+      additionalProperties: false
+      required: [curriculum_id]
+      properties:
+        curriculum_id: { type: integer }
+        year_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: Optional year-level-only release. Omit to release all four year levels.
+    SectionPlanSubmitResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, id, academic_term_id, college, status, status_label]
+          properties:
+            type: { type: string, const: schedule_proposal }
+            id: { type: integer }
+            academic_term_id: { type: integer }
+            college: { type: string, enum: [ccs, coe, coa, cbae] }
+            status: { type: string }
+            status_label: { type: string }
     SectionsResponse:
       type: object
       additionalProperties: false
@@ -3757,6 +4411,10 @@ components:
           format: time
         room:
           type: ["string", "null"]
+        modality:
+          type: ["string", "null"]
+          enum: [online, hyflex_a, hyflex_b, f2f, null]
+          description: Manual delivery modality; Google Classroom is intentionally excluded.
         capacity:
           type: integer
         viability_threshold:
@@ -4665,6 +5323,9 @@ components:
         room:
           type: ["string", "null"]
           maxLength: 255
+        modality:
+          type: ["string", "null"]
+          enum: [online, hyflex_a, hyflex_b, f2f, null]
         capacity:
           type: integer
           minimum: 1
@@ -4705,7 +5366,15 @@ components:
         - type
         - id
         - academic_term_id
+        - college
+        - college_label
+        - academic_term_label
+        - section_plan_id
         - submitted_by
+        - submitted_by_name
+        - is_submitted
+        - is_returned
+        - returned_by_role
         - status
         - status_label
         - decided_by
@@ -4719,8 +5388,33 @@ components:
           type: integer
         academic_term_id:
           type: integer
+        college:
+          type: ["string", "null"]
+          enum: [ccs, coe, coa, cbae, null]
+        college_label:
+          type: ["string", "null"]
+        academic_term_label:
+          type: string
+        section_plan_id:
+          type: ["integer", "null"]
         submitted_by:
           type: integer
+        submitted_by_name:
+          type: string
+        is_submitted:
+          type: boolean
+          description: False after a reviewer returns the proposal for Program Chair corrections.
+        is_returned:
+          type: boolean
+          description: >
+            Derived, not a stored status — true when status is draft,
+            is_submitted is false, and decision_reason is not null. There is
+            no dedicated "returned" status; dean_return/executive_return
+            both resolve to draft (see ScheduleProposalTransitionRules).
+        returned_by_role:
+          type: ["string", "null"]
+          enum: [dean, executive_director, null]
+          description: The role of the last reviewer who returned this proposal, when is_returned is true.
         status:
           type: string
           description: >
@@ -4741,6 +5435,64 @@ components:
           format: date-time
         decision_reason:
           type: ["string", "null"]
+    ScheduleReviewSectionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleReviewSectionResource"
+    ScheduleReviewSectionResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - section_code
+        - subject_code
+        - subject_title
+        - units
+        - professor_id
+        - professor_name
+        - schedule_days
+        - starts_at_time
+        - ends_at_time
+        - room
+        - modality
+      properties:
+        type:
+          type: string
+          const: schedule_review_section
+        id:
+          type: integer
+        section_code:
+          type: string
+        subject_code:
+          type: string
+        subject_title:
+          type: string
+        units:
+          type: number
+        professor_id:
+          type: ["integer", "null"]
+        professor_name:
+          type: ["string", "null"]
+        schedule_days:
+          type: ["string", "null"]
+        starts_at_time:
+          type: ["string", "null"]
+          format: time
+        ends_at_time:
+          type: ["string", "null"]
+          format: time
+        room:
+          type: ["string", "null"]
+        modality:
+          type: ["string", "null"]
+          enum: [online, hyflex_a, hyflex_b, f2f, null]
     StoreScheduleProposalRequest:
       type: object
       additionalProperties: false

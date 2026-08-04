@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\Subject;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,12 @@ use RuntimeException;
  *
  * The catalog is deliberately shaped as a coherent computing program so that
  * CurriculumSeeder can build a genuine multi-step prerequisite chain on top of
- * it rather than an arbitrary one.
+ * it rather than an arbitrary one — hence every row is tagged CCS.
+ *
+ * Lookup stays keyed on `code` alone (not the new `(college, code)` pair):
+ * every code here is already known to be globally unique, so this also
+ * backfills `college` in place on any row seeded before the column existed,
+ * rather than risking a duplicate.
  */
 final class SubjectSeeder extends Seeder
 {
@@ -39,6 +45,14 @@ final class SubjectSeeder extends Seeder
         // Deliberately inactive: proves catalog filtering works and that an
         // inactive subject can still be referenced by historical records.
         ['code' => 'CS099', 'title' => 'Retired Computing Elective', 'units' => 3, 'status' => SubjectStatus::Inactive],
+        // Year 3-4 core subjects, added so "BSCS Curriculum 2026" (see
+        // CurriculumSeeder) covers all four years — the demo grade-history
+        // roster (DemoEnrollmentSeeder) needs a real placement at every
+        // ordinal from year 1 semester 1 through year 4 semester 2.
+        ['code' => 'CS302', 'title' => 'Software Engineering', 'units' => 3, 'status' => SubjectStatus::Active],
+        ['code' => 'CS303', 'title' => 'Systems Analysis and Design', 'units' => 3, 'status' => SubjectStatus::Active],
+        ['code' => 'CS401', 'title' => 'Information Assurance and Security', 'units' => 3, 'status' => SubjectStatus::Active],
+        ['code' => 'CS402', 'title' => 'Capstone Project', 'units' => 3, 'status' => SubjectStatus::Active],
     ];
 
     public function run(): void
@@ -50,6 +64,7 @@ final class SubjectSeeder extends Seeder
                 Subject::updateOrCreate(
                     ['code' => $subject['code']],
                     [
+                        'college' => CollegeCode::Ccs,
                         'title' => $subject['title'],
                         'units' => $subject['units'],
                         'status' => $subject['status'],

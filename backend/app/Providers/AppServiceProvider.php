@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Domain\Academic\PrerequisiteEvaluator;
+use App\Policies\AcademicRecordPolicy;
 use App\Policies\DashboardPolicy;
 use App\Policies\EligibleSubjectPolicy;
 use App\Policies\FacultyMemberPolicy;
@@ -37,5 +38,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-institution-summary', [DashboardPolicy::class, 'viewInstitutionSummary']);
         Gate::define('view-policy-settings', [DashboardPolicy::class, 'viewPolicySettings']);
         Gate::define('view-stuck-enrollments', [StuckEnrollmentPolicy::class, 'viewAny']);
+        Gate::define('view-academic-record', [AcademicRecordPolicy::class, 'view']);
     }
 }

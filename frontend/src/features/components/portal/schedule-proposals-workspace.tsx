@@ -9,6 +9,7 @@ import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -36,6 +37,7 @@ import {
 } from "@/features/hooks/use-scheduling"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import { scheduleProposalPresentation } from "@/features/lib/schedule-status"
 import {
   scheduleProposalInputSchema,
   type ScheduleProposalInput,
@@ -184,22 +186,28 @@ export function ScheduleProposalsWorkspace() {
                 <p>No proposals have been created.</p>
               ) : (
                 <ul className="grid gap-2 md:grid-cols-2">
-                  {proposals.map((proposal) => (
-                    <li key={proposal.id} className="rounded-md border p-3">
-                      <p>
-                        {terms.find(
-                          (term) => term.id === proposal.academic_term_id,
-                        )
-                          ? formatAcademicTerm(
-                              terms.find(
-                                (term) => term.id === proposal.academic_term_id,
-                              )!,
-                            )
-                          : "Academic term unavailable"}
-                      </p>
-                      <p>{proposal.status_label}</p>
-                    </li>
-                  ))}
+                  {proposals.map((proposal) => {
+                    const presentation = scheduleProposalPresentation(proposal)
+
+                    return (
+                      <li key={proposal.id} className="rounded-md border p-3">
+                        <p>
+                          {terms.find(
+                            (term) => term.id === proposal.academic_term_id,
+                          )
+                            ? formatAcademicTerm(
+                                terms.find(
+                                  (term) => term.id === proposal.academic_term_id,
+                                )!,
+                              )
+                            : "Academic term unavailable"}
+                        </p>
+                        <Badge variant={presentation.badgeVariant}>
+                          {presentation.label}
+                        </Badge>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </section>

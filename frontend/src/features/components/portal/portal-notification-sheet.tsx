@@ -1,13 +1,16 @@
 "use client"
 
-import { Bell } from "lucide-react"
+import { Bell, CheckCheck } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 
+import { useAuth } from "@/features/auth/use-auth"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -15,41 +18,193 @@ import {
   SheetTrigger,
 } from "@/features/components/ui/sheet"
 import {
+  useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
   useNotificationsQuery,
+  useUnreadNotificationCountQuery,
 } from "@/features/hooks/use-notifications"
+import {
+  notificationDestinationPath,
+  notificationPresentation,
+  type NotificationTone,
+} from "@/features/lib/notification-presentation"
+import type { Notification } from "@/features/schemas/notification-schema"
+
+const TONE_TEXT_CLASS: Record<NotificationTone, string> = {
+  neutral: "text-muted-foreground",
+  success: "text-success",
+  warning: "text-warning",
+  destructive: "text-destructive",
+}
+
+function dayGroupLabel(createdAt: string | null): string {
+  if (!createdAt) return "Earlier"
+  const date = new Date(createdAt)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) return "Today"
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday"
+
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+}
+
+function groupByDay(
+  notifications: readonly Notification[],
+): ReadonlyMap<string, readonly Notification[]> {
+  const groups = new Map<string, Notification[]>()
+
+  for (const notification of notifications) {
+    const label = dayGroupLabel(notification.created_at)
+    groups.set(label, [...(groups.get(label) ?? []), notification])
+  }
+
+  return groups
+}
+
+function NotificationItem({
+  notification,
+  destination,
+  onNavigate,
+  onMarkRead,
+  markReadPending,
+}: {
+  notification: Notification
+  destination: string | null
+  onNavigate: (path: string) => void
+  onMarkRead: (id: number) => void
+  markReadPending: boolean
+}) {
+  const presentation = notificationPresentation(notification.notification_type)
+  const Icon = presentation.icon
+  const isUnread = notification.read_at === null
+  const body = (
+    <div className="flex items-start gap-3">
+      <Icon
+        className={`mt-0.5 size-4 shrink-0 ${TONE_TEXT_CLASS[presentation.tone]}`}
+        aria-hidden="true"
+      />
+      <div className="grid min-w-0 flex-1 gap-1 text-left">
+        <p className={isUnread ? "font-medium" : undefined}>
+          {notification.message}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {notification.created_at
+            ? new Date(notification.created_at).toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              })
+            : null}
+        </p>
+      </div>
+      {isUnread && (
+        <span
+          aria-hidden="true"
+          className="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
+        />
+      )}
+    </div>
+  )
+
+  const className = `w-full rounded-md border p-3 ${isUnread ? "border-l-2 border-l-primary" : ""}`
+
+  if (destination) {
+    return (
+      <SheetClose asChild>
+        <button
+          type="button"
+          className={`${className} text-left transition-colors hover:bg-muted`}
+          onClick={() => {
+            if (isUnread) onMarkRead(notification.id)
+            onNavigate(destination)
+          }}
+        >
+          {body}
+        </button>
+      </SheetClose>
+    )
+  }
+
+  return (
+    <article className={className}>
+      {body}
+      {isUnread && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-2"
+          disabled={markReadPending}
+          onClick={() => onMarkRead(notification.id)}
+        >
+          Mark notification as read
+        </Button>
+      )}
+    </article>
+  )
+}
 
 export function PortalNotificationSheet() {
+  const { session } = useAuth()
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [page, setPage] = useState(1)
   const notificationsQuery = useNotificationsQuery({
     unread: unreadOnly,
     page,
-  })
+  }, open)
+  const unreadCountQuery = useUnreadNotificationCountQuery()
   const markReadMutation = useMarkNotificationReadMutation()
+  const markAllReadMutation = useMarkAllNotificationsReadMutation()
   const notifications = notificationsQuery.data?.data ?? []
-  const unreadCount = notifications.filter(
-    (notification) => notification.read_at === null,
-  ).length
+  const unreadTotal = unreadCountQuery.data ?? 0
+  const groups = groupByDay(notifications)
 
   function toggleUnreadOnly() {
     setUnreadOnly((current) => !current)
     setPage(1)
   }
 
+  // Viewing the sheet counts as reading it: closing it (Escape, the overlay,
+  // or the close button) clears the red unread indicator, the same way most
+  // notification trays behave, in addition to the explicit per-item and
+  // "Mark all as read" controls below.
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && unreadTotal > 0) {
+      markAllReadMutation.mutate()
+    }
+    setOpen(nextOpen)
+  }
+
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger asChild>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Notifications"
+          aria-label={
+            unreadTotal > 0
+              ? `Notifications, ${unreadTotal} unread`
+              : "Notifications"
+          }
           title="Notifications"
+          className="relative"
         >
           <Bell aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span className="sr-only">{unreadCount} unread notifications</span>
+          {unreadTotal > 0 && (
+            <span
+              aria-hidden="true"
+              className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground"
+            >
+              {unreadTotal > 9 ? "9+" : unreadTotal}
+            </span>
           )}
         </Button>
       </SheetTrigger>
@@ -61,18 +216,32 @@ export function PortalNotificationSheet() {
           </SheetDescription>
         </SheetHeader>
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Badge variant="secondary">
-              {unreadCount} {unreadCount === 1 ? "unread" : "unread"}
+              {unreadTotal} {unreadTotal === 1 ? "unread" : "unread"}
             </Badge>
-            <Button
-              type="button"
-              size="sm"
-              variant={unreadOnly ? "default" : "outline"}
-              onClick={toggleUnreadOnly}
-            >
-              Unread only
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {unreadTotal > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={markAllReadMutation.isPending}
+                  onClick={() => markAllReadMutation.mutate()}
+                >
+                  <CheckCheck data-icon="inline-start" aria-hidden="true" />
+                  Mark all as read
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant={unreadOnly ? "default" : "outline"}
+                onClick={toggleUnreadOnly}
+              >
+                Unread only
+              </Button>
+            </div>
           </div>
 
           {notificationsQuery.isPending && <p>Loading notifications…</p>}
@@ -86,23 +255,31 @@ export function PortalNotificationSheet() {
           {notificationsQuery.data && notifications.length === 0 && (
             <p>No notifications to show.</p>
           )}
-          {notifications.map((notification) => (
-            <article key={notification.id} className="rounded-md border p-3">
-              <p>{notification.message}</p>
-              {notification.read_at === null ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={markReadMutation.isPending}
-                  onClick={() => markReadMutation.mutate(notification.id)}
-                >
-                  Mark notification as read
-                </Button>
-              ) : (
-                <span>Read</span>
-              )}
-            </article>
+          {[...groups.entries()].map(([label, items]) => (
+            <div key={label} className="grid gap-2">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {label}
+              </p>
+              <div className="grid gap-2">
+                {items.map((notification) => (
+                  <NotificationItem
+                    key={notification.id}
+                    notification={notification}
+                    destination={
+                      session
+                        ? notificationDestinationPath(
+                            notification.notification_type,
+                            session.role,
+                          )
+                        : null
+                    }
+                    onNavigate={(path) => router.push(path)}
+                    onMarkRead={(id) => markReadMutation.mutate(id)}
+                    markReadPending={markReadMutation.isPending}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
 
           {notificationsQuery.data &&

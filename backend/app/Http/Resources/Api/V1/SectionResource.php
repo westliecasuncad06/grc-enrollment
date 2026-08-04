@@ -28,9 +28,11 @@ final class SectionResource extends JsonResource
      *     ends_at_time: ?string,
      *     room: ?string,
      *     capacity: int,
+     *     capacity_source: string,
      *     viability_threshold: ?int,
      *     enrolled_count: int,
      *     remaining_seats: int,
+     *     is_block_exclusive: ?bool,
      *     status: string,
      *     status_label: string
      * }
@@ -41,6 +43,7 @@ final class SectionResource extends JsonResource
             'type' => 'section',
             'id' => $this->resource->id,
             'academic_term_id' => $this->resource->academic_term_id,
+            'section_plan_id' => $this->resource->section_plan_id,
             'subject_id' => $this->resource->subject_id,
             'section_code' => $this->resource->section_code,
             'professor_id' => $this->resource->professor_id,
@@ -48,10 +51,13 @@ final class SectionResource extends JsonResource
             'starts_at_time' => $this->resource->starts_at_time,
             'ends_at_time' => $this->resource->ends_at_time,
             'room' => $this->resource->room,
+            'modality' => $this->resource->modality?->value,
             'capacity' => $this->resource->capacity,
+            'capacity_source' => $this->resource->capacity_source->value,
             'viability_threshold' => $this->resource->viability_threshold,
             'enrolled_count' => $this->resource->enrolled_count,
             'remaining_seats' => $this->resource->remainingSeats(),
+            'is_block_exclusive' => $this->resource->is_block_exclusive,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
         ];

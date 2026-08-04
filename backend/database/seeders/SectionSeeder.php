@@ -17,6 +17,16 @@ use RuntimeException;
  * Seeds synthetic published sections for the active academic term so the
  * scheduling and enrollment portals have real rows to render.
  *
+ * The active term is always a '2nd' semester (see AcademicTermSeeder) — every
+ * DemoEnrollmentSeeder student has locked grade history through their year's
+ * 1st-semester ordinal and is meant to freely enroll fresh into this term, so
+ * every subject below is each year level's own 2nd-semester placement in
+ * "BSCS Curriculum 2026" (see CurriculumSeeder), not a repeat of the year-1
+ * 1st-semester set. The original year-1 1st-semester sections (CS101 etc.)
+ * are kept too: harmless leftover offerings a student has already completed
+ * by the time they reach this term, matching how a real registrar's catalog
+ * still lists prior-semester sections for retakes.
+ *
  * NOTE ON `viability_threshold`: it is deliberately left NULL. PRD §4.1
  * mentions 25 students as the currently documented figure, but §17 lists the
  * section-viability threshold and its exception authority as an open GRC
@@ -43,6 +53,21 @@ final class SectionSeeder extends Seeder
         ['subject' => 'MATH101', 'code' => 'A', 'days' => 'TTh', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-201', 'capacity' => 45],
         ['subject' => 'GE101', 'code' => 'A', 'days' => 'MWF', 'starts' => '10:00:00', 'ends' => '11:00:00', 'room' => 'RM-105', 'capacity' => 50],
         ['subject' => 'PE101', 'code' => 'A', 'days' => 'Sat', 'starts' => '08:00:00', 'ends' => '10:00:00', 'room' => 'GYM', 'capacity' => 60],
+        // Year 1 semester 2 — what a 1st-year DemoEnrollmentSeeder student
+        // (1 completed semester) actually needs to freely enroll into.
+        ['subject' => 'CS201', 'code' => 'A', 'days' => 'MWF', 'starts' => '08:00:00', 'ends' => '09:00:00', 'room' => 'LAB-1', 'capacity' => 40],
+        ['subject' => 'MATH102', 'code' => 'A', 'days' => 'TTh', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-201', 'capacity' => 45],
+        ['subject' => 'GE102', 'code' => 'A', 'days' => 'MWF', 'starts' => '10:00:00', 'ends' => '11:00:00', 'room' => 'RM-105', 'capacity' => 50],
+        ['subject' => 'LEAD 2', 'code' => 'A', 'days' => 'Sat', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-301', 'capacity' => 60],
+        // Year 2 semester 2 — 2nd-year students (3 completed semesters).
+        ['subject' => 'CS301', 'code' => 'A', 'days' => 'TTh', 'starts' => '10:00:00', 'ends' => '11:30:00', 'room' => 'LAB-2', 'capacity' => 40],
+        ['subject' => 'LEAD 4', 'code' => 'A', 'days' => 'Sat', 'starts' => '10:00:00', 'ends' => '11:30:00', 'room' => 'RM-301', 'capacity' => 60],
+        // Year 3 semester 2 — 3rd-year students (5 completed semesters).
+        ['subject' => 'CS303', 'code' => 'A', 'days' => 'MWF', 'starts' => '13:00:00', 'ends' => '14:00:00', 'room' => 'RM-202', 'capacity' => 40],
+        ['subject' => 'LEAD 6', 'code' => 'A', 'days' => 'Sat', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'RM-301', 'capacity' => 60],
+        // Year 4 semester 2 — 4th-year students (7 completed semesters).
+        ['subject' => 'CS402', 'code' => 'A', 'days' => 'TTh', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'RM-203', 'capacity' => 30],
+        ['subject' => 'LEAD8', 'code' => 'A', 'days' => 'Sat', 'starts' => '15:00:00', 'ends' => '16:30:00', 'room' => 'RM-301', 'capacity' => 60],
     ];
 
     public function run(): void
@@ -50,8 +75,17 @@ final class SectionSeeder extends Seeder
         $this->guardEnvironment();
 
         DB::transaction(function (): void {
-            $term = $this->activeTerm();
-            $professor = $this->professor();
+            $term = AcademicTerm::query()
+                ->where('status', AcademicTermStatus::SemesterOngoing)
+                ->first();
+            $professor = User::query()->where('role', UserRole::Faculty)->first();
+
+            // The manual enrollment startup seed intentionally contains only
+            // archived history. Sections are created after a Registrar opens
+            // an ongoing term, so a clean archive-only seed is a no-op here.
+            if ($term === null || $professor === null) {
+                return;
+            }
 
             foreach (self::SECTIONS as $section) {
                 $subject = Subject::query()->where('code', $section['subject'])->firstOrFail();
@@ -75,34 +109,6 @@ final class SectionSeeder extends Seeder
                 );
             }
         });
-    }
-
-    private function activeTerm(): AcademicTerm
-    {
-        $term = AcademicTerm::query()
-            ->where('status', AcademicTermStatus::Active)
-            ->first();
-
-        if ($term === null) {
-            throw new RuntimeException(
-                'SectionSeeder requires an active academic term. Run AcademicTermSeeder first.',
-            );
-        }
-
-        return $term;
-    }
-
-    private function professor(): User
-    {
-        $professor = User::query()->where('role', UserRole::Faculty)->first();
-
-        if ($professor === null) {
-            throw new RuntimeException(
-                'SectionSeeder requires a faculty user. Run RoleUserSeeder first.',
-            );
-        }
-
-        return $professor;
     }
 
     /**

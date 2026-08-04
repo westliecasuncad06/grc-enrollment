@@ -30,6 +30,18 @@ final class AuditableType
 
     public const TRANSFEREE_CREDIT = 'transferee_credit';
 
+    public const ACADEMIC_TERM = 'academic_term';
+
+    public const SUBJECT_OFFERING = 'subject_offering';
+
+    public const ACADEMIC_TERM_WORKFLOW = 'academic_term_workflow';
+
+    public const SECTION_PLAN = 'section_plan';
+
+    public const ACADEMIC_TERM_YEAR_LEVEL_WINDOW = 'academic_term_year_level_window';
+
+    public const ENROLLMENT_CHANGE_REQUEST = 'enrollment_change_request';
+
     /**
      * @return list<string>
      */
@@ -49,6 +61,12 @@ final class AuditableType
             self::QUEUE_TICKET,
             self::WITHDRAWAL_REQUEST,
             self::TRANSFEREE_CREDIT,
+            self::ACADEMIC_TERM,
+            self::SUBJECT_OFFERING,
+            self::ACADEMIC_TERM_WORKFLOW,
+            self::SECTION_PLAN,
+            self::ACADEMIC_TERM_YEAR_LEVEL_WINDOW,
+            self::ENROLLMENT_CHANGE_REQUEST,
         ];
     }
 }

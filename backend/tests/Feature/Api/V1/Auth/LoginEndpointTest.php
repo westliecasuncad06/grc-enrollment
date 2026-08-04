@@ -54,7 +54,7 @@ final class LoginEndpointTest extends TestCase
                 'token',
                 'token_type',
                 'expires_at',
-                'user' => ['id', 'name', 'email', 'role', 'role_label', 'status'],
+                'user' => ['id', 'name', 'email', 'role', 'role_label', 'college', 'status'],
             ],
         ]);
 

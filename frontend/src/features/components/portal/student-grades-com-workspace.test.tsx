@@ -1,5 +1,5 @@
 import { screen, within } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
 import { StudentGradesComWorkspace } from "@/features/components/portal/student-grades-com-workspace"
@@ -27,6 +27,8 @@ const grade = {
   subject_code: "CS101",
   section_id: 5,
   academic_term_id: 2,
+  mark: "1.50",
+  mark_label: "with Distinction",
   final_grade: "1.50",
   remarks: null,
   status: "locked",
@@ -46,6 +48,38 @@ const document = {
   generated_at: "2026-07-30T00:00:00Z",
 } as const
 
+const term = {
+  type: "academic-term",
+  id: 2,
+  school_year: "2026-2027",
+  semester: "2nd",
+  starts_at: null,
+  ends_at: null,
+  enrollment_opens_at: null,
+  enrollment_closes_at: null,
+  add_drop_deadline_at: null,
+  grading_deadline_at: null,
+  status: "semester_ongoing",
+  status_label: "Semester ongoing",
+} as const
+
+const prospectus = {
+  type: "prospectus",
+  student_id: 4,
+  student_number: "2026-0001",
+  program_code: "BSIT",
+  program_name: "BS Information Technology",
+  curriculum_id: 1,
+  curriculum_name: "BSIT 2023 Curriculum",
+  effective_school_year: "2023-2024",
+  year_level: 2,
+  enrollment_category: "regular",
+  enrollment_category_label: "Regular",
+  enrollment_category_derived_at: "2026-07-30T00:00:00Z",
+  semesters: [],
+  unplaced_entries: [],
+} as const
+
 const studentSession = {
   userId: "4",
   displayName: "Student",
@@ -53,13 +87,52 @@ const studentSession = {
   signedInAt: "2026-07-29T12:00:00Z",
 } as const
 
+function mockFetchResponses() {
+  return vi.fn<typeof fetch>().mockImplementation((input) => {
+    const target =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    if (target.includes("/academic-grades"))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [grade],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    if (target.includes("/academic-terms"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [term] })),
+      )
+    if (target.includes("/prospectus"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: prospectus })),
+      )
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [document],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+  })
+}
+
 describe("StudentGradesComWorkspace", () => {
-  const fetchMock = vi.fn<typeof fetch>()
-  beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
   it("does not render for an unauthorized role", () => {
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: [] })))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ data: [] }))),
+    )
     renderWithSession(<StudentGradesComWorkspace />, {
       session: {
         userId: "5",
@@ -73,34 +146,8 @@ describe("StudentGradesComWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("shows the student's grades and generated Digital COM", async () => {
-    fetchMock.mockImplementation((input) => {
-      const target =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url
-      if (target.includes("/academic-grades"))
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: [grade],
-              links: paginationLinks,
-              meta: paginationMeta,
-            }),
-          ),
-        )
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            data: [document],
-            links: paginationLinks,
-            meta: paginationMeta,
-          }),
-        ),
-      )
-    })
+  it("shows the student's grades, generated Digital COM, and prospectus", async () => {
+    vi.stubGlobal("fetch", mockFetchResponses())
     renderWithSession(<StudentGradesComWorkspace />, {
       session: studentSession,
     })
@@ -108,41 +155,17 @@ describe("StudentGradesComWorkspace", () => {
     const table = await screen.findByRole("table", { name: "Grades" })
     expect(within(table).getByText(/CS101/)).toBeInTheDocument()
     expect(screen.getByText(/COM000009/)).toBeInTheDocument()
+    expect(await screen.findByText(/BS Information Technology/)).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {
-    fetchMock.mockImplementation((input) => {
-      const target =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url
-      if (target.includes("/academic-grades"))
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: [grade],
-              links: paginationLinks,
-              meta: paginationMeta,
-            }),
-          ),
-        )
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            data: [document],
-            links: paginationLinks,
-            meta: paginationMeta,
-          }),
-        ),
-      )
-    })
+    vi.stubGlobal("fetch", mockFetchResponses())
     const { container } = renderWithSession(<StudentGradesComWorkspace />, {
       session: studentSession,
     })
 
     await screen.findByRole("table", { name: "Grades" })
+    await screen.findByText(/BS Information Technology/)
     expect(await axe(container)).toHaveNoViolations()
   })
 })

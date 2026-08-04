@@ -1,34 +1,129 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-07-31 · **PRD version:** v3.2 · **Branch:**
-`phase-7c-dashboards` (Phase 8a, Phase 8b, and Phase 8c are all merged to
-`main`, pushed to `origin/main` — Phase 8a at `8bb7e66`, Phase 8b's merge
-commit at `2da5501`, Phase 8c's merge commit at `6d1745b`). Phase 7c itself is
-complete and quality-gated on this branch but **not yet committed** — no
-commit/merge/push has been requested this session.
+**Last updated:** 2026-08-04 · **PRD version:** v3.2 · **Branch:** `main`
+at `f4cca33` (Phase 7c is merged). The working tree contains a large,
+uncommitted enrollment-startup/organization-data WIP that predates this
+session, plus this session's grading-system/enrollment-completion slice;
+none of it has been committed or pushed.
 
 ## Current Objective
 
-**Phase 7c is done** (see *Verified Completed — Phase 7c* below) — a
-factual-only reading of the Dean/Executive Director dashboard slice that
-PROGRESS.md had recorded as blocked twice before. A full PRD audit found the
-blocker was real but narrower than recorded: the dashboards' row-count
-arithmetic (status distributions, funnel counts, section fill, dwell time)
-needs no institutional decision, only the *threshold* that labels a dwell
-time "stuck" does — and that ships the same mechanism-implemented,
-value-flagged way as `max_regular_units`. Connected 4 of the 7 remaining
-modules (`enrollment-dashboard`, `stuck-students`, `institution-dashboard`,
-`policy-settings`); left 3 genuinely §17-blocked (`compliance-reports`, and
-the shared `reports` id for both Dean and Executive Director). Along the way,
-corrected a factual error this document and ADR 0016 both carried from Phase
-8c (the Executive Director's schedule-approval controls were reachable the
-whole time) and fixed the real bug tracing that correction found — see
-*Technical Decisions → Phase 7c* and ADR 0016/0017. The next decision, once
-this branch is reviewed: **Phase 8d** (§14.4 security verification, §14.5
-performance verification, §12.6's remaining profile/password/help features,
-plus the still-open student-facing Withdraw button gap) is the only
-remaining non-ML slice before Phase 9. Ask the user before starting it, and
-before committing/merging this branch.
+**Refine, then implement, the manual enrollment-startup slice for Registrar
+Head and Program Chair without overwriting unrelated user changes.** The
+approved product direction is: Registrar Head gets one Enrollment module for
+creating a Draft academic term; Program Chair gets one hard-gated three-step
+Enrollment workspace for Process 1.1–1.3; supporting Chair links are retained
+only where explicitly approved; ML and predictive outputs remain paused; seed
+history is six archived terms covering both semesters of 2020–2021 through
+2022–2023. The new session refinement adds a Registrar-friendly segmented
+term lifecycle and an explicit archive action that closes ongoing terms, plus a Program Chair
+waiting state when no current term exists. Because `academic_terms` stores one
+school-year-and-semester pair per row, the exact archive target (one semester
+or both semesters of a school year) must be confirmed before the design is
+amended or code is changed.
+
+The user confirmed one Program Chair per supported college: COE, CCS, COA,
+and CBAE. Process 1.1–1.3 progress must therefore be tracked independently
+per academic term and college; `academic_terms.status` remains the
+institution-wide lifecycle, not a substitute for four independent Chair
+workflows. The design is written and self-reviewed in
+`docs/superpowers/specs/2026-08-01-manual-enrollment-startup-design.md` and is
+The backend lifecycle/workflow implementation is now in place: five canonical
+term statuses, singleton current-term guard, four college workflow rows per
+new term, Program Chair stage transitions, and Registrar archive
+actions, UTC archive metadata, and audit vocabulary/API routes. Supporting
+database integration tests are written but remain blocked by the existing
+test-database DDL/grant issue described below. The current WIP still contains a
+partial academic-term create API/UI, subject-offering schema/API, and a long
+Program Chair page; frontend hard gating and the friendly segmented portals
+remain the next implementation slice.
+
+2026-08-02 inline execution / Task 1 RED checkpoint: the user selected per-semester closing and
+archiving (one `school_year` + `semester` record), approved a four-segment
+Registrar Enrollment stepper, and approved the Program Chair waiting state.
+The first attempt to amend the written spec failed cleanly because one patch
+context line did not match; `apply_patch` made no spec change. The amendment
+continued in smaller verified patches: the written spec now contains the
+single-current-term rule, explicit `semester_ongoing` → `semester_closed` →
+`archived` Registrar actions, non-destructive retention, close/archive audit
+and idempotency requirements, and Program Chair waiting/closed states. It is
+now self-reviewed: the placeholder scan is clean, the global term lifecycle
+and per-college stages have separate sources of truth, per-semester archive
+scope is explicit, and `git diff --check` passes. The revised written spec is
+approved by the user. The implementation plan is now written and self-reviewed
+at `docs/superpowers/plans/2026-08-02-manual-enrollment-startup.md`; it keeps
+the applied lifecycle migration intact, sequences backend before frontend,
+requires failing tests before implementation, and leaves the worktree
+uncommitted pending an explicit integration request.
+
+Documentation milestone: `docs/testing/SEEDED_IDENTITIES.md` now lists the
+four college-specific Program Chair accounts (`chair.ccs`, `chair.coe`,
+`chair.coa`, and `chair.cbae` at `@grc.test`) and explicitly confirms the
+shared local/testing password `password`.
+
+Task 1 checkpoint: the first RED run hit a test-only namespace typo, which was
+fixed; the next run proved the intended five-status/model failures but also
+hit an existing environment blocker before feature migrations could run:
+`grc_test` lacks DDL permission for the pending WIP `subject_offerings`
+migration. The focused Unit tests now pass (13 tests, 22 assertions). Feature
+database tests remain unverified until the existing migration identity is
+used or the test database grant is corrected; no production workaround was
+added. A retry with the local migration credentials also failed because that
+identity has no access to `grc_enrollment_test`; this is an environment grant
+issue, not an application assertion result.
+
+Task 2–3 milestone (2026-08-02): college-scoped workflow stages and the
+Registrar close/archive API are implemented. Unit/model/policy/resource/audit
+tests pass; API-surface tests pass (23 tests, 212 assertions), targeted
+PHPStan reports no errors, and changed PHP files pass syntax checks. The
+close/archive feature tests and workflow endpoint tests remain queued for a
+database-enabled run; they cannot execute until the test account can migrate
+the pending WIP schema. No commit or push was made.
+
+Task 4–6 frontend milestone (2026-08-02): the shared portal navigation now
+keeps Program Chair supporting links visible but non-navigable until that
+college reaches schedule preparation. Program Chair Enrollment now shows the
+Registrar waiting message when no actionable term exists, uses the current
+college workflow, and exposes manual 1.1 → 1.2 → 1.3 progression controls.
+Registrar Enrollment now has a four-segment lifecycle display plus explicit
+Close and Archive actions per semester. Frontend `npm run typecheck` and
+`npm run lint -- --quiet` pass. Existing focused UI tests still contain two
+pre-existing responsive-card duplicate-text assumptions and two synchronous
+loading assumptions; these are recorded as test follow-up rather than
+claimed green.
+
+Task 7 documentation/seed milestone (2026-08-02): archive-first seeded
+identity/term documentation, ADR 0018, data-dictionary lifecycle notes, and
+OpenAPI routes/schemas are aligned with the implemented contract.
+`npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` passes. Section and
+demo-enrollment seeders now no-op safely when the clean seed has no ongoing
+term; the focused database assertions remain blocked by the existing MariaDB
+test grant, so no database-seeded result is claimed.
+
+Final verification (2026-08-02): backend focused unit/API/static checks pass
+(43 tests, 249 assertions; targeted PHPStan has no errors); frontend focused
+contract/navigation/waiting tests pass (45 tests in the final focused run), `npm run typecheck`,
+`npm run lint -- --quiet`, and `npm run build` pass; OpenAPI lint and
+`git diff --check` pass. The full Vitest command with
+`--no-file-parallelism` exceeded the 120-second execution limit, so it is not
+reported as green. Feature tests that require `RefreshDatabase` still stop at
+the existing `grc_test` DDL permission error for the pending
+`subject_offerings` migration; the migration-credential retry lacks access to
+`grc_enrollment_test`. No commits or pushes were made.
+
+Fresh local testing reset (2026-08-02, user-requested): the local
+`grc_enrollment` database had the new migrations listed but their tables were
+not created, so Registrar create requests could not work. The pending
+subject-offerings migration was corrected with a short MariaDB-safe unique
+index name, then migrations `000002`–`000004` were applied locally. Table-level
+local grants were added for the app/migrator identities. Existing
+`2025-2026 2nd` and `2026-2027 1st` rows were retained but marked `archived`
+with timestamps; the singleton current-term pointer is `NULL`. No sections,
+enrollments, grades, or other dependent records were deleted. The Registrar
+Head can now create a new school year and semester from a clean current-term
+state. A read-only Registrar bearer-token smoke check confirms both displayed
+terms are archived and `is_actionable_current=false`; no test term was
+created on the user's behalf.
 
 ## Verified Completed — Phase 7c (factual dashboards, dwell-time signals, policy visibility)
 
@@ -2621,3 +2716,847 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 | 2026-07-31 | Phase 8b — Portal UI coherence & motion (shared header, form control migration, `motion` library) | Merged `2da5501` (ADR 0015) |
 | 2026-07-31 | Phase 8c — Playwright E2E foundation (13 of 15 critical journeys, `@axe-core/playwright`, 2 real defects found and fixed) | Merged `6d1745b` (ADR 0016) |
 | 2026-07-31 | Phase 7c — Factual dashboards, dwell-time signals, policy visibility (4 modules connected, ADR 0016 correction + real bug fix) | This entry; live-verified; backend 656/656, frontend 376/376, E2E 20/21 (1 skipped) |
+## 2026-08-02 — Registrar close option removed
+
+- Removed the visible `Close` action from the Registrar Enrollment workspace;
+  `Archive` is now the only lifecycle action shown for ongoing or closed terms.
+- Archive closes an ongoing term and archives it in one transaction; the lower-
+  level close action remains available only for backward-compatible service/API
+  callers.
+- Updated the enrollment specification and implementation plan so the visible
+  lifecycle is Archive-only while preserving the compatibility transition.
+
+## 2026-08-02 — Registrar term form fields simplified
+
+- New-term creation now accepts and displays only School Year, Semester,
+  Enrollment start, Enrollment deadline, and Add/drop/Change subject deadline.
+- Term start/end and grading deadline are no longer required for new terms;
+  nullable legacy columns remain available in historical responses.
+- Verification: frontend typecheck, lint, and AcademicTermWorkspace tests (4/4),
+  PHP syntax checks, OpenAPI lint, and `git diff --check` passed.
+
+## 2026-08-02 — Program Chair section planning slice
+
+- Implementing the approved guided year-level block-section flow, subject
+  release, manual schedule visualization, and Dean/Executive approval handoff.
+- CCS remains intentionally empty for manual testing; non-CCS approval samples
+  will be local-only fixtures. Predictive generation and Google Classroom stay
+  out of scope.
+- Submitted section plans are now locked against further Program Chair edits;
+  modality persistence and college/curriculum scoping are enforced server-side.
+- Narrowed the frontend lifecycle mutation to the supported `archive` action and
+  added a focused UI test covering the visible action and request payload.
+- Verification: frontend typecheck, lint, and the focused AcademicTermWorkspace
+  suite pass (4 tests); OpenAPI lint and `git diff --check` pass. The focused
+  backend transition feature test remains blocked by the pre-existing test DB
+  grant for `grc_test` (`CREATE` denied on `subject_offerings`).
+
+### Completion notes
+
+- Added the section-plan schema, college-scoped routes/policies, transactional
+  block-section release, idempotent approval handoff, audit event, modality
+  persistence, and local mixed approval fixtures (CCS intentionally empty).
+- Program Chair now has a compact 1st–4th year → Review → Approval flow,
+  current-term/active-curriculum release, faculty preference filtering, manual
+  day/time/room/modality editing, 30-minute Monday–Saturday timetable, and
+  confirmation before Dean/Executive submission. AI and Google Classroom stay
+  visibly unavailable by design.
+- Verification: backend PHP syntax and route checks pass; all 149 backend unit
+  tests pass; frontend lint/typecheck pass; all 35 portal test files pass (149/149);
+  OpenAPI lint passes. Feature tests using `RefreshDatabase`
+  remain blocked by the local `grc_test` privilege setup, not by assertions.
+
+## 2026-08-02 — Program Chair generated-block presentation correction
+
+- Reworking the generated-subject display into year filters, spreadsheet-style
+  block tables, and a focused schedule-assignment dialog; no Google Classroom
+  field is included.
+- The first combined verification command was invoked from the repository root
+  rather than the independent `frontend/` and `backend/` applications, so it
+  failed only because `package.json` and `artisan` are not present at that
+  level. The focused frontend test suite remains green; rerunning scoped
+  checks from their correct application directories is in progress.
+
+### Completion notes
+
+- Generated blocks now use the requested institutional names: IT, EDUC, ACC,
+  or the matching CBAE-major prefix (FM, EN, MM, HR), followed by year and
+  two-digit block ordinal (for example `IT101`, `IT102`, and `FM201`).
+- After release, the Program Chair sees clickable 1st–4th Year filters, grouped
+  spreadsheet-style tables by block, and an optional tile layout. Each subject
+  opens a focused modal for professor, day, time, room, and modality—without a
+  Google Classroom field.
+- Verification: frontend typecheck and lint pass; all 35 Program Chair portal
+  test files pass (151 tests); all 151 backend unit tests pass (321 assertions);
+  PHP syntax checks and `git diff --check` pass.
+
+## 2026-08-02 — CSV curriculum-year and add-section correction
+
+- Investigating the reported missing 3rd/4th-year subjects and blank units in
+  generated blocks. The supplied CSV carries the year/section information in
+  its `sections` column, while the existing importer defaulted every placement
+  to year 1.
+- Planned correction: derive placement year and semester from the CSV,
+  attach the catalog placements to the active local curricula, merge them with
+  any manually configured subject offerings, remove stale legacy `1A`-style
+  generated blocks during release, and add a scoped `Add section` action.
+- A first read-only local row-count probe via `artisan tinker` used an
+  incorrectly escaped namespace and failed before executing the query; no
+  database state was changed. The scoped unit/frontend tests are green, and
+  the probe will be rerun with a simpler expression.
+- The CSV seeder feature test remains blocked before assertions by the
+  pre-existing `grc_test` MariaDB privilege (`CREATE` denied on
+  `academic_term_current_slots`). The local development database seeder ran
+  successfully and verified BSCS placement counts across all four years.
+
+### Completion notes
+
+- Added CSV section metadata parsing and a curriculum-placement seeder. The
+  supplied catalog now contributes subject units, year levels, and multi-term
+  coverage to active local curricula; the development DB was reseeded.
+- Release now merges manual subject offerings with every matching curriculum
+  placement, so one configured subject cannot suppress 3rd/4th-year rows.
+- Legacy generated `1A`/`2A`-style identifiers are hidden in the Program Chair
+  view and removed within the scoped section-plan transaction before current
+  catalog blocks are released.
+- Added `Add section` beside the year filters; it increments only the selected
+  year and idempotently releases the next block code.
+- Verification: frontend typecheck/lint pass; all 35 portal test files pass
+  (152 tests); backend unit tests pass (153 tests, 327 assertions); PHP syntax
+  and `git diff --check` pass. The CSV feature suite remains blocked only by
+  the existing test-database CREATE privilege described above.
+
+## 2026-08-02 — Per-year curriculum selection correction
+
+- Replacing automatic active-curriculum selection with an explicit required
+  choice for each year level. The choice displays curriculum effectivity and
+  a plain-language New/Old label; section counts are saved and released
+  against the selected curriculum(s), preserving the existing approval flow.
+- Backend syntax and unit tests pass. The first OpenAPI lint command used the
+  backend working directory for a repository-root spec path, so Redocly could
+  not locate the file; it will be rerun from the repository root.
+
+### Completion notes
+
+- Program Chairs now explicitly select one active curriculum for every year
+  level before saving its section count. No curriculum is selected by default.
+- Each option displays its effective school year and New/Old state; the review
+  screen retains that context before release. Plans are grouped, released, and
+  submitted per selected curriculum so year levels may intentionally use
+  different curriculum versions.
+- Verification: frontend typecheck/lint pass; all 35 portal test files pass
+  (153 tests); all backend unit tests pass (153 tests, 327 assertions); PHP
+  syntax, OpenAPI lint, and `git diff --check` pass.
+
+## 2026-08-02 — Section decrement control
+
+- Adding a Remove section action beside Add section. A first combined check
+  correctly passed PHP syntax but attempted npm commands from `backend/`,
+  where no `package.json` exists; no frontend tests ran in that command.
+- A follow-up combined check repeated that directory mistake; PHP syntax passed
+  and the npm portion did not execute. No source or database state changed.
+- The same backend-directory command also could not locate the repository-root
+  OpenAPI file; backend unit tests passed independently and the spec will be
+  linted from the repository root.
+
+### Completion notes
+
+- Added `Remove section` beside `Add section`; it decrements only the selected
+  year level and releases the reduced block count.
+- Backend removal is guarded against assigned faculty, meeting details,
+  published sections, or enrolled students. Such a reduction returns a clear
+  validation error instead of deleting active scheduling data.
+- Empty year tabs now show the saved block count plus `Generate subjects for
+  <year>`; release accepts an optional year-level target so one year can be
+  generated without rerunning the other three.
+- Verification: all 35 portal test files pass (153 tests), backend unit tests
+  pass (153 tests, 327 assertions), and `git diff --check` passes.
+
+  Latest verification after the year-specific action: portal tests 154/154,
+  backend unit tests 153/153, OpenAPI lint, PHP syntax, and diff check pass.
+
+## 2026-08-02 — Section-plan generation fix
+
+- Fixed the release transaction to capture the optional year-level filter. This prevented a valid four-year review from reading its saved plans and caused the generic curriculum/count warning when generating subject lists.
+- Confirmed the prior runtime failure in the local log (`Undefined variable $yearLevel` in `SaveSectionPlan::release`). Verification after the fix: PHP syntax check passes and backend unit tests pass (153 tests, 327 assertions).
+
+## 2026-08-02 — Room catalog and CSV faculty seed
+
+- Starting a local/test-only room catalog for Program Chair schedule assignment. Each supplied room will be scoped to its permitted college(s), and the CSV faculty surnames will become deterministic synthetic Faculty records with their matching subject preferences. The existing `faculty.seed@grc.test` account will be a CCS Faculty account for manual testing.
+- The new domain and frontend focused tests pass. Applying the local migration/seeds is currently blocked: both the app identity (`grc_app`) and configured migration identity (`grc_migrator`) receive MariaDB `CREATE` denied for `room_catalog_entries`. No privilege change was attempted; the pending migration and seeders can run once a database administrator restores the local DDL/DML grants.
+- The CSV faculty seeder does not depend on the blocked room table and was run successfully after making per-term preference ranks unique. The local database now has 207 active Faculty records (CCS 55, COE 57, COA 37, CBAE 58), 633 subject preferences, and `faculty.seed@grc.test` is `Testing Faculty` in CCS.
+- The Program Chair schedule modal now presents the matching selectable people as `Professor` consistently in both the modal and generated-section table. Focused frontend tests pass (10 tests) and frontend typecheck passes.
+- Replaced the plain Professor and Room selects with searchable shadcn-compatible comboboxes. Added the required `@base-ui/react` dependency and a college-scoped local room fallback so Program Chair scheduling remains usable while the local `room_catalog_entries` migration is blocked. Focused UI/service tests pass (11 tests), frontend typecheck, and lint pass.
+- Fixed the combobox selection regression: Base UI had portaled the option list outside the modal, where the Dialog correctly applied `pointer-events: none`. The popup now portals into the active schedule dialog. Regression tests click both a Room and Professor option and verify the selected input values; frontend typecheck, lint, and diff checks pass.
+- Fixed schedule-save modal behavior: a successful section PATCH now closes the assignment modal immediately, while the section-list cache refresh continues in the background. A regression test holds the refresh pending and confirms the modal still closes after save; frontend tests (11), typecheck, lint, and diff checks pass.
+
+## 2026-08-02 — Actual schedule-save authorization investigation
+
+- The user confirmed the modal still did not close in the running portal. The
+  prior component test only proved the close behavior after a successful mocked
+  PATCH, so the runtime API was tested with the seeded CCS Program Chair.
+- The real `PATCH /api/v1/sections/45` request returns HTTP 403 `FORBIDDEN`.
+  This confirms the modal remains open because saving is rejected before the
+  successful close path. The recurring `room_catalog_entries` SELECT-denied log
+  is a separate room-options request and is not the schedule PATCH failure.
+- An initial read-only Tinker command for the linked section plan failed because
+  PowerShell expanded the inline PHP variables; no database state changed. The
+  next diagnostic will use shell-safe quoting and inspect the plan ownership and
+  status before changing the authorization behavior.
+- Root cause confirmed: `User::college` is cast to `CollegeCode`, while
+  `AcademicTermSectionPlan::college` is stored as a plain string. The Section
+  policy compared them directly, so a Draft CCS plan was denied to the CCS
+  Program Chair. A database-free regression test reproduced the false denial.
+- Updated the policy to compare the plan string with `User::college->value` for
+  both direct view and update authorization. The regression test now passes,
+  including the cross-college denial case.
+- Replayed the real request against the running local API as
+  `chair.ccs@grc.test`: `PATCH /api/v1/sections/45` now returns HTTP 200. The
+  temporary test schedule was immediately restored successfully, confirming
+  that the existing frontend success path can now close the modal.
+- Final verification: the focused Program Chair workspace suite passes (11
+  tests), frontend TypeScript and ESLint pass, all 157 backend unit tests pass
+  with 336 assertions (one pre-existing PHPUnit deprecation), and Pint passes
+  for the changed policy and regression test. The database-backed feature suite
+  remains unavailable because `grc_test` lacks CREATE permission in the local
+  test database; this is the same local grant blocker recorded above.
+
+## 2026-08-02 — Schedule modal validation visibility
+
+- The new screenshot shows a 1:17 PM start and 12:15 PM end. The existing
+  frontend schema correctly rejects that ordering before sending the PATCH,
+  but the catch path writes its message to the page-level alert behind the open
+  dialog. This makes a validation failure look like an unresponsive Save button.
+- Starting a focused TDD fix: reproduce the invalid-time interaction, keep the
+  modal open without issuing a request, and surface the actionable validation
+  message inside the schedule dialog using the existing shadcn Alert/Field
+  composition. A valid save must retain the existing close-on-success behavior.
+- The invalid-time regression failed first because the dialog contained no
+  explanation. The modal now marks both time controls invalid and shows `End
+  time must be after start time.` directly below the end time; it does not send
+  a PATCH until the ordering is corrected.
+- Added a second red/green regression for API-side validation. Field-specific
+  conflict messages from the API now render in a destructive Alert inside the
+  still-open modal instead of being hidden in the workspace alert behind it.
+- Live API verification used the screenshot's exact section 87, Professor
+  ALONZO, day T, room 5F, and F2F with the corrected range 1:17 PM–2:15 PM. The
+  PATCH returned HTTP 200 and the original section values were restored.
+- Final verification: the Program Chair workspace suite passes all 13 tests,
+  including valid close-on-save, invalid ordering, and API conflict feedback;
+  frontend TypeScript, ESLint, and `git diff --check` pass.
+
+## 2026-08-02 — Program Chair approval handoff and reviewer schedule view
+
+- Reproduced the Program Chair submit behavior against the live API. The CCS
+  term currently uses curricula 1, 2, and 4; each submit attempt returns HTTP
+  422 because generated sections still lack one or more professor/day/time/
+  room/modality assignments. The button appears broken because its generic
+  error is rendered outside the current viewport instead of beside the action.
+- Found a separate lifecycle defect: `dean_return` currently requires an
+  already Dean-approved proposal and `executive_return` requires an already
+  Executive-approved proposal. Reviewers therefore cannot return a proposal
+  while it is actually waiting at their checkpoint. Returned proposals also do
+  not currently unlock submitted section plans for Program Chair corrections.
+- Starting an inline vertical-slice fix: visible submit readiness/error state,
+  checkpoint-correct return-with-remarks transitions, college-scoped reviewer
+  schedule details, and Dean/Executive review cards identified by term,
+  department, and submitting Program Chair.
+- Program Chair submission now shows the exact count of incomplete schedule
+  assignments beside the approval action, disables submission until every
+  generated row has Professor/Day/Time/Room/Modality, and surfaces API field
+  errors at the button instead of above the viewport. The focused workspace
+  suite passes all 15 tests.
+- Centralized the schedule-proposal transition rules. Dean return is now legal
+  while the submitted proposal is `draft`; Executive return is legal while it
+  is `dean_approved`. Either return requires remarks, resets the proposal to
+  Draft, unlocks the college's submitted section plans, and moves its workflow
+  back to schedule preparation. A later Program Chair resubmission clears the
+  old decision metadata.
+- Added the proposal-scoped submitted-schedule endpoint and reviewer cards with
+  department, academic term, submitter, status, a read-only schedule table,
+  approval, and `Return to Program Chair` actions. Both Dean and Executive UI
+  focused suites pass (11 tests total); transition-rule unit tests pass (7
+  tests, 19 assertions).
+- Database-backed feature verification remains blocked by the existing local
+  test grant: `grc_test` receives MariaDB CREATE denied while RefreshDatabase
+  creates `academic_term_current_slots`. A SQLite fallback also cannot run the
+  MySQL-specific constraint migrations. No database privilege was changed.
+- One route-list verification attempt used Laravel's unsupported `--columns`
+  option; the plain route-list command was rerun successfully and confirms all
+  four schedule-proposal routes, including the new `/sections` review route.
+- A read-only Tinker diagnostic initially failed because PowerShell expanded
+  inline PHP variables; shell-safe quoting was used on retry. The live database
+  currently has no proposals, 12 CCS draft plans for term 5, and 48 of 49 term
+  sections incomplete, which explains why the approval action must remain
+  unavailable until those required assignments are completed.
+- Fixed and ran the local mixed-approval sample seeder. Its first run exposed a
+  duplicate faculty preference rank; sample preferences now receive unique,
+  deterministic ranks and reseeding twice succeeds. The seeder also uses the
+  real generated department section codes (not legacy `1A`–`4A`) and schedules
+  both exact-semester and multi-semester catalog placements, so a valid sample
+  can be resubmitted through the same release path as real data.
+- Live Sanctum API verification now covers the complete handoff: a COE Program
+  Chair submission returns proposal `draft`; Dean approval returns
+  `dean_approved`; Executive approval returns `executive_approved`. Dean return
+  and Executive return both preserve their remarks, reset the proposal to
+  Draft, unlock all four department plans, and reset the workflow to schedule
+  preparation. The sample queues were restored afterward to COE pending Dean
+  and COA/CBAE pending Executive; CCS remains without a proposal for manual
+  testing.
+- Program Chairs now see the reviewer remarks in a prominent `Returned for
+  correction` alert. Direct proposal schedule access is also college-scoped,
+  so a Program Chair cannot inspect another department's proposal.
+- Updated the OpenAPI contract for proposal metadata and the submitted-schedule
+  endpoint. Redocly validation passes; the four schedule-proposal routes are
+  registered; backend unit suite passes 165 tests/357 assertions; frontend
+  typecheck and ESLint pass; the 27 focused Program Chair/Dean/Executive tests
+  pass. The unconstrained 75-file frontend run reached 390/400 and ten UI
+  interactions timed out under parallel resource contention; each affected
+  file passes when run in isolation (Program Chair 16/16, Admission 7/7,
+  Curriculum 9/9).
+- Tried the in-app browser for final visual QA after completing API and
+  component checks, but this session exposes no browser binding. No unrelated
+  browser automation was substituted; live HTTP/API verification and rendered
+  component tests remain the available evidence.
+- The first final-state Tinker query lost SQL REGEXP quotes through shell
+  parsing and failed read-only. The retry filtered the already-read section
+  codes in PHP and confirmed zero legacy sample codes, COE=`draft`,
+  COA/CBAE=`dean_approved`, and zero CCS proposals. `git diff --check` passes.
+
+## 2026-08-02 — CCS test schedule assignments
+
+- The CCS Program Chair's term 5 plan had 49 generated sections, with 47
+  missing Professor/Day/Time/Room/Modality values. Using the authorized local
+  `chair.ccs@grc.test` test identity, all 47 were assigned through the existing
+  `UpdateSection` action so each assignment has an audit entry and keeps the
+  existing two completed rows unchanged.
+- Faculty selection prefers the seeded CCS teachable-subject preferences and
+  falls back to the seeded CCS faculty directory only where no preference was
+  available. Rooms use the supplied CCS room catalog values; schedules use
+  deterministic Monday–Saturday slots and F2F modality for this manual test.
+- Verification after assignment: 49/49 CCS sections are complete, 0 remain
+  incomplete, and the CCS term still has 0 schedule proposals. The proposal
+  was intentionally not submitted; the Program Chair can now submit it from
+  the portal after the generated rows refresh.
+- Added a small restore behavior to the Program Chair workspace: when saved
+  four-year plans and generated sections are present, a page refresh opens the
+  generated-subject view automatically. The focused Program Chair suite
+  remains green (16/16), with frontend typecheck and ESLint passing.
+- One combined test/typecheck/lint command exceeded its 124-second shell
+  timeout while running serially. The Program Chair tests, typecheck, and lint
+  were rerun separately and passed.
+
+## 2026-08-02 — Persistent schedule approval status and reviewer notes
+
+- Starting a vertical slice after the CCS Program Chair submitted the completed
+  schedule: reproduce and correct the Sections & Schedules subject-contract
+  error; persist the submitted/waiting/approved/returned presentation across
+  refreshes; surface Dean and Executive reviewer identities and notes to the
+  Program Chair; and expose the review queue from each reviewer's Enrollment
+  portal without changing the already-submitted CCS proposal state.
+### Investigation note — 2026-08-02
+
+- Initial targeted read used an outdated frontend feature path and failed without changing files. Located the current schema/service paths under `frontend/src/features/schemas` and `frontend/src/features/services`; continuing there.
+
+### Persistent approval UI milestone — 2026-08-02
+
+- Root cause of the Sections & Schedules contract failure was three imported subject-catalog placeholders with `0` units. The frontend catalog contract now accepts nonnegative catalog units while generated section units remain sourced from the curriculum placement.
+- Program Chair Enrollment now derives its submitted/locked state from the persisted schedule proposal after refresh, keeps generated schedules visible read-only, and shows pending, Dean-approved, Executive-approved, published, or returned status.
+- Schedule proposal resources now include the latest reviewer name plus an immutable Dean/Executive decision history with actor, timestamp, and return notes.
+- Dean Schedule Approvals and Executive Master Schedule are now presented in navigation as a single `Enrollment` review destination. Review buttons, approval/return actions, and `Notes for Program Chair` remain inside the existing authorized lifecycle.
+- The Program Chair Sections & Schedules destination now reuses the generated schedule view in tile mode and includes the same persisted approval status.
+- Focused frontend regression suite passed: 33/33 tests across reference-data schemas, Program Chair enrollment, reviewer controls, role capabilities, and module dispatch.
+
+### Verification note — 2026-08-02
+
+- `php artisan test --filter=ScheduleProposalsEndpointTest` produced no test output and exceeded the 120-second command timeout. No application records were mutated. Continuing with PHP syntax/static checks, narrower frontend checks, and read-only live API verification; this timeout is not recorded as a passing backend suite.
+- A single-test retry exposed the existing local test-database blocker directly: MariaDB user `grc_test` lacks `CREATE` permission for `academic_term_current_slots` (0 assertions). The backend test remains authored but cannot execute until that test-schema privilege is restored.
+- The full frontend Vitest run completed 385/403 passing. Two portal-shell expectations still used the old Dean/Executive headings and were corrected; the other 16 failures were five-second test timeouts under full-suite parallel load (the same focused Program Chair tests pass when run in their scoped suite). These are being rerun narrowly after the expectation update and are not recorded as functional regressions.
+- Reruns passed for every full-suite failure group: portal shell 44/44, admission/curriculum 16/16, and Program Chair enrollment 18/18.
+- Full backend PHPStan remains red with 29 previously existing errors across the broader uncommitted manual-enrollment slice; none were reported in the two new approval-history production files. A file-scoped analysis is run separately below rather than modifying unrelated work.
+
+### Final verification — 2026-08-02
+
+- Frontend production build passed (Next.js compile, TypeScript, page data, and static generation).
+- Frontend typecheck and targeted ESLint passed. Focused feature tests passed 33/33, portal-shell rerun 44/44, admission/curriculum rerun 16/16, and Program Chair rerun 18/18.
+- Backend PHP syntax and Pint passed for the changed approval-history model/resource/test. File-scoped PHPStan passed with no errors.
+- Live API verification returned all 442 subjects (including three zero-unit catalog placeholders) and the new `decided_by_name` / `decision_history` fields. Existing seeded decisions returned their actor history.
+- A first final-state Tinker read used PowerShell-sensitive `$` syntax and failed before executing; the corrected read-only query succeeded. CCS proposal `#4` remains `draft`, with no decider or decision reason, so the user's Dean/Executive test state was not advanced.
+- Backend feature execution remains blocked by the documented `grc_test` MariaDB CREATE privilege issue; it was not misreported as passing.
+## 2026-08-02 — Dean and Executive enrollment review redesign
+
+- Starting a frontend-only redesign of the Dean and Executive Director review experience after the current wide schedule dialog was shown to be difficult to scan and taller than the viewport.
+- Scope is presentation and review interaction only: preserve the existing authorized approve/return/publish lifecycle, reviewer notes, API services, and submitted CCS proposal state.
+- Following the explicitly requested `frontend-design` skill, plus the repository's shadcn composition rules. Design approval is required before implementation; no production code changed at this milestone.
+- The user selected and approved section tabs with compact subject cards. The approved behavior, responsive constraints, component boundaries, data flow, and test scope are recorded in `docs/superpowers/specs/2026-08-02-dean-executive-review-redesign.md`. No commit was created because repository instructions require an explicit commit request.
+- Spec self-review found no placeholders, contradictory lifecycle behavior, or unresolved scope decisions. The placeholder scan intentionally returned no matches.
+- After written-spec approval, an inline TDD implementation plan was created at `docs/superpowers/plans/2026-08-02-dean-executive-review-redesign.md`. It preserves on-demand detail loading, makes counts a dialog-only summary, and explicitly excludes backend/lifecycle changes and commits.
+- The first Task 1 RED command did not reach test collection because Vitest's default fork worker timed out starting. No production code was changed. The same new test is being rerun with a single threads worker so the expected missing-component failure can be observed without stopping the user's running development server.
+- The single-thread retry also exceeded the shell timeout before collecting tests. Process inspection shows only the user's Next development server, MCP server, and Codex runtime—no orphaned Vitest workers. A known-small existing test is being used as a control before the third RED attempt.
+- The control test passed 2/2 and the third Task 1 RED attempt then failed for the expected reason: the new `ScheduleReviewDialog` import does not yet exist.
+- The combined shadcn `info`/documentation lookup exceeded its 120-second CLI timeout without changing files. Local installed component sources were already inspected, and the documentation lookup is being retried in a smaller command before implementation.
+- Task 1 is green: the reusable viewport-safe `ScheduleReviewDialog` now groups submitted rows into naturally ordered section tabs, renders compact subject cards with explicit missing-data copy, and exposes role-correct sticky actions. Its focused suite passes 4/4, including the accessibility scan.
+- Task 2 is green: Dean and Executive proposal cards now open the compact review dialog, use concise role-specific action labels, preserve the required return-notes confirmation, and close the review after a successful transition. The combined dialog/queue suite passes 11/11.
+- Task 3 is green: the Executive workspace now defaults to a focused `For review` tab and moves finalized section cards into a separate `Published` tab. Published entries use compact semantic cards and explicit `Not assigned` copy. The focused Executive suite passes 4/4, including accessibility.
+- The first five-file final regression command exceeded its 180-second shell timeout before Vitest printed a result. It is not counted as passing. The three changed-component files had already passed individually; the remaining integration files are being rerun separately to distinguish startup/resource contention from a functional regression.
+- Split final regression reruns passed: 15/15 across the three redesigned components, 44/44 for portal module dispatch, and 3/3 for the module registry. Vitest emitted its known jsdom canvas warning during accessibility setup, but all assertions and axe scans passed.
+- The first final typecheck found one integration regression: narrowing `ScheduleDecisionControls.actorRole` to Dean/Executive rejected its existing Registrar Head reuse in the audit workspace. No runtime command was run. The control keeps its original `UserRole` API, while the new review dialog is being widened to preserve the existing legal Registrar close action.
+- After restoring the shared actor-role interface, strict frontend typecheck passed. The first six-file `npx eslint` command then exceeded its 180-second shell timeout without producing a lint result; it is not counted as passing. Focused lint is being retried through the installed local ESLint binary in smaller groups.
+- The three-production-file local ESLint retry also timed out without diagnostics. Process inspection confirmed no orphaned ESLint/Vitest workers; only the user's long-running Next dev server, MCP process, and Codex runtime remain. A single-file debug run is being used to locate the lint startup stall without stopping the user's server.
+- The single-file debug lint completed and isolated two local style violations in the new dialog: the props contract must be an interface and missing-value normalization must avoid `||`. Both are being corrected directly; no broader files need changes.
+- Final static checks are green after those corrections: strict TypeScript passed, production-file ESLint passed, and test-file ESLint passed. The lint runs were split only to stay below the local shell timeout.
+- Final redesign verification passed: the production build completed through compilation, TypeScript, page data, and static generation; a fresh post-fix component run passed 15/15; portal dispatch passed 44/44; module registry passed 3/3; and `git diff --check` passed.
+- Live reviewer-page inspection was attempted through the required in-app browser workflow, but this session exposes zero browser targets. No external browser automation was substituted and no approval/return/publish action was invoked. The submitted CCS proposal and all enrollment data remain unchanged by this redesign session.
+
+## 2026-08-03 — Schedule notifications, send-back visibility, and registrar enrollment windows
+
+- Starting a three-part slice from manual UI/functionality testing feedback:
+  (1) notify Program Chairs, Deans, and the Executive Director on every
+  schedule-proposal submit/approve/return, not only on publish; (2) make a
+  send-back state impossible to miss across every reviewer and Program Chair
+  screen (today `dean_return`/`executive_return` are `draft → draft` no-ops
+  distinguished only by `decision_reason`, and every status renders the same
+  neutral grey badge); (3) give the Registrar Head a real "Open Enrollment"
+  control with per-year-level (1st–4th) open/close scheduling, enforced
+  server-side on `POST /enrollments` — today there is no transition into
+  `semester_ongoing` at all (only a seeder writes it) and the enrollment
+  window columns are written and displayed but never compared to `now()`
+  anywhere, so a student can enroll against a `draft` or `archived` term.
+- Full design is written to
+  `C:\Users\Westlie Casuncad\.claude\plans\cominicate-in-taglish-vectorized-crescent.md`
+  after three parallel Explore agents mapped the schedule-proposal state
+  machine, the existing (already-built) notification stack, and the
+  academic-term/enrollment/registrar side. Key findings driving scope: the
+  notification bell already exists end-to-end but only `publish` ever writes a
+  row; the frontend `notification-schema.ts` uses `z.literal("schedule_published")`
+  in a `.strict()` schema, so any other notification type already breaks the
+  bell entirely (`audit-schema.ts` has the same class of bug against
+  `/portal/audit-logs`) — both are being fixed as part of this slice.
+- Constraints carried into the plan: no queue/scheduler/events/mail/broadcast
+  infrastructure exists (`QUEUE_CONNECTION=sync`, `MAIL_MAILER=log`), so
+  notifications stay inline `Notification::create` calls inside existing
+  `DB::transaction`s, and year-level enrollment opening is read-time computed
+  (no date-driven push notification is planned). MariaDB (`grc_test`) still
+  lacks `CREATE` privilege, so feature tests remain blocked; load-bearing
+  logic (`EnrollmentWindowResolver`, notification recipient rules) is being
+  designed as pure, DB-free, unit-testable code for that reason.
+- MariaDB service confirmed healthy (`mysqld.exe` running) before starting any
+  DB-heavy work.
+- Parts 1 (notifications on every schedule transition) and 2 (send-back
+  visibility) are complete: backend unit suite 172/172 (was 165), Pint and
+  file-scoped PHPStan level 8 clean on every new/changed file, frontend
+  typecheck/lint clean, and 73/73 focused Vitest tests across 9 files
+  (portal shell, notification bell, Program Chair/Dean/Executive/Registrar
+  schedule screens, the new `schedule-status`/`schedule-status.test` helper).
+  The `notification-schema.ts`/`audit-schema.ts` contract-drift bugs are
+  fixed (loosened to `z.string()` on the resource fields; the enum arrays
+  now only back filter dropdowns). The bell gained a true unread total
+  (`meta.total` via a dedicated 60s-polled query — the one deliberate
+  exception to "no polling in this app"), day grouping, per-type icon/tone,
+  mark-all-as-read, and click-through navigation. The Program Chair's
+  Enrollment nav link now carries a "Returned" badge, sourced from a new
+  `is_returned`/`returned_by_role` pair on `ScheduleProposalResource`.
+- **New blocker discovered starting Part 3 (Registrar enrollment windows):**
+  the migration `2026_08_03_000001_create_academic_term_year_level_windows_table`
+  cannot be applied to the local dev database. `migrate:status` on the
+  default `mariadb` connection reports "Migration table not found" even
+  though 27 application tables already exist — the dev DB has no
+  `migrations` tracking table at all. The project's own
+  `mariadb_migrator` connection (`grc_migrator`, documented in
+  `config/database.php`) does have a working `migrations` table and shows
+  the same-vintage `2026_08_02_000006_create_room_catalog_entries_table`
+  already pending too, but running `php artisan migrate --database=mariadb_migrator`
+  fails: `CREATE command denied to user 'grc_migrator'@'localhost' for
+  table `room_catalog_entries``. `SHOW GRANTS FOR CURRENT_USER()` confirms
+  the access model is **per-table, not database-wide** — `grc_migrator` has
+  an individual `GRANT ... ON grc_enrollment.<table>` line for every table
+  that currently exists, and nothing for a table that doesn't exist yet.
+  This is the same shape as the already-documented `grc_test` CREATE issue,
+  just now also blocking the **dev** database for any brand-new table. No
+  privilege was self-granted and no destructive action was taken. **A user
+  with root/admin MariaDB access needs to either `GRANT CREATE ON
+  grc_enrollment.* TO grc_migrator@127.0.0.1` (and the equivalent for
+  `grc_test`) or pre-create the two pending tables and grant per-table
+  access on them,** before this migration (or the also-pending
+  `room_catalog_entries` one) can run or before any Part 3 feature/live-API
+  verification can execute. Continuing with everything in Part 3 that does
+  not require a live database: the model, the pure `EnrollmentWindowResolver`
+  (DB-free, fully unit-testable), the transition/action/controller code
+  (syntax + PHPStan verified, not live-executed), and the frontend UI
+  (Vitest-mocked, no real backend needed).
+
+### Session completion — 2026-08-03
+
+## 2026-08-03 — Real-time schedule workflow refresh investigation
+
+- Starting investigation into the reported stale UI state: notification updates, Program Chair submissions reaching the Dean, and Dean approvals reaching the Executive Director currently require a manual page refresh. Scope is limited to identifying and correcting the existing client refresh/subscription flow; no schedule decision or notification records will be changed during diagnosis.
+- Root cause confirmed from the frontend query boundaries: the backend persists each schedule-transition notification, but neither notifications nor schedule-proposal queues receive server-pushed events. Only the bell's unread-count request polls (every 60 seconds); the visible notification list and the Program Chair/Dean/Executive schedule-proposal queries fetch only on mount or on a same-user mutation. A Program Chair's cache invalidation cannot refresh the Dean's browser, and a Dean's cannot refresh the Executive Director's browser.
+- The existing stack has no broadcasting/WebSocket infrastructure, so a role-scoped background refresh of these existing read-only REST queries is the smallest architecture-compatible fix. Awaiting user approval of the proposed cadence and scope before implementation.
+- The user approved the targeted refresh approach. The implementation design is now recorded in `docs/superpowers/specs/2026-08-03-realtime-schedule-refresh-design.md`: active schedule queues, unread totals, and the opened notification list use a five-second interval, and visibility focus immediately refetches them. Spec self-review found no placeholders, contradictions, ambiguous scopes, or whitespace errors (`rg` placeholder scan and `git diff --check` were clean). No commit was created because repository instructions require an explicit request.
+- The approved design has been converted to the test-first implementation plan at `docs/superpowers/plans/2026-08-03-realtime-schedule-refresh.md`. Plan self-review found no placeholder language or whitespace errors. The current checkout is the normal `main` worktree (not an existing linked worktree) and carries the user's large, uncommitted implementation slice; creating an isolated worktree would omit that in-progress slice and risk testing against the wrong state, so this bounded frontend fix will be made carefully in place without touching unrelated files.
+- Plan execution has started inline with the user's explicit approval to work on the current `main` checkout. A preliminary read correctly located the Vitest configuration but made one stale read attempt against `frontend/src/tests/setup.ts`; the actual configured file is `setup.tsx`. That read failure made no file changes and does not affect the planned test run.
+- Task 1 RED is confirmed: the new Dean queue regression test advances five seconds after its mocked Program Chair submission and fails exactly as expected (`Unable to find role=button, name=Approve schedule`). The visible queue remains on “No schedule decisions are currently available,” proving there is no automatic schedule-proposal refetch yet. No production code was changed before this failing test.
+- Task 1 is green: `useScheduleProposalsQuery` now refreshes every five seconds and on window focus. The new Dean cross-role refresh regression passed (1/1), and the affected Program Chair/Dean/Executive suite passed 30/30. Vitest printed the known jsdom `HTMLCanvasElement.getContext()` accessibility warning three times, but all assertions passed; no test failure or production diagnostic occurred.
+- Task 2 RED is confirmed: the opened notification-sheet regression advances five seconds after a new mocked schedule notification arrives and fails exactly as expected (`Unable to find an element with the text: New Dean review request`). The same dialog stays open with the prior notification, proving the visible list has no automatic refresh yet. No notification production code was changed before this failing test.
+- Task 2 is green: the unread total now refreshes every five seconds; the notification sheet's full list only fetches/polls while open, always reloads on reopening, and refetches on window focus. The new opened-sheet regression passed (1/1), and notification-sheet plus portal-shell regressions passed 25/25.
+- Starting final bounded frontend verification: strict TypeScript, ESLint on the five changed implementation/test files, the combined Program Chair/Dean/Executive/notification/portal-shell Vitest suite, and diff scope/whitespace review. No backend checks are required because this slice changes no Laravel code or API contracts.
+- The final bounded checks are green: `npm run typecheck` and targeted ESLint exited cleanly; the combined cross-role/notification/portal-shell suite passed 55/55. Vitest again printed its known jsdom canvas warning three times during accessibility-related setup, with no failed assertions. `git diff --check` is clean. The affected files already contained the user's prior uncommitted schedule-notification redesign, so the repository-wide diff is intentionally larger than this refresh-only slice; final full frontend suite and production build are beginning before handoff.
+- The first full frontend Vitest run is **not** recorded as passing: 78/79 files and 431/432 tests passed, but `ProgramChairEnrollmentWorkspace > closes the schedule modal after a successful save even while the section list refreshes` timed out at its five-second limit under full-suite load. This test's fixture deliberately holds the section-list refresh; the same focused Program Chair file had passed earlier in the session. No code change will be made until an isolated rerun and refresh-boundary evidence determine whether the new schedule-proposal interval contributes or this is the documented full-suite parallel-load timeout pattern.
+- Root-cause check for that full-suite failure: the exact test passed in isolation (1/1), and the complete Program Chair file passed 18/18 immediately afterward. The failure is therefore consistent with the repository's existing parallel-load timeout pattern, not reproducible as a functional regression from the five-second proposal refresh. A fresh full-suite rerun is required before final handoff and is starting now; the earlier 431/432 run remains accurately recorded as failed.
+- The fresh parallel full-suite rerun reproduced the exact same nonfunctional result: 78/79 files and 431/432 tests passed; only the intentionally held-refresh Program Chair modal-close test timed out at 5.261 seconds. It continues to pass 1/1 and 18/18 when not competing with all jsdom workers. Rather than alter an unrelated test or claim the parallel suite passed, the full suite is being run serially to validate the product change without the confirmed worker-contention ceiling; the production build follows only after that result.
+- The first serial-run command used an obsolete camel-case Vitest option (`--poolOptions`) and exited before collecting any test. No files changed. The installed Vitest CLI help is being consulted for its current single-worker spelling before the serial full-suite retry.
+- Full frontend validation is now green in the correct single-worker mode (`npx vitest run --no-file-parallelism --maxWorkers=1`): 79/79 files and 432/432 tests passed in 185.95 seconds. Vitest emitted the known jsdom canvas warning during accessibility setup but no assertion or runner failure. The two normal parallel runs remain accurately recorded as 431/432 due to the same pre-existing held-refresh test timing out under worker contention; they are not represented as passing. Starting the production build next.
+- Production frontend build passed: Next.js/Turbopack compiled successfully, completed TypeScript validation, generated all five static pages, and finalized page optimization with exit code 0. Final scope/whitespace review and handoff are next; no commit will be made without an explicit request.
+- Final handoff verification is complete: a fresh `git diff --check` passed; no backend/API/lifecycle code was changed for this frontend-only refresh slice. The current checkout remains intentionally dirty with the user's earlier manual-enrollment, schedule-notification, and registrar-window work; only the targeted query hooks, notification sheet, two regression tests, this progress log, and the new design/plan artifacts were touched for the refresh fix. No commit or push was made.
+
+## 2026-08-03 — Registrar notification after Executive approval investigation
+
+- Starting the requested extension: after the Executive Director has approved the submitted Program Chair schedule proposal, notify the Registrar Head that the approved schedule can proceed to the enrollment-opening workflow and make the Registrar view refresh without a page reload. Scope is limited to the existing schedule-transition notification and Registrar enrollment-read flow; no approval, publication, or enrollment-window policy values are being changed during diagnosis.
+- Root cause found: `ScheduleTransitionNotificationPlan::forAction('executive_approve', ...)` currently targets only the Program Chair submitter and every Dean, so no Registrar notification row is written. The prior five-second `useScheduleProposalsQuery` refresh already powers `EnrollmentScheduleCard` for the Registrar Head, so its publication-readiness display will refresh once the backend creates the missing notification and the relevant proposal state changes.
+- Policy dependency requiring a user decision: the PRD lifecycle is `executive_approved → published`, and the current server-side `open_enrollment` action permits opening only after at least one **published** schedule proposal. Sending a Registrar “you can start enrollment” notification at `executive_approved` would currently be premature because the separate Executive `publish` action has not happened yet. The requested trigger must be confirmed before code changes.
+- One exploratory test-file read also referenced a nonexistent `frontend/src/features/lib/notification-presentation.test.ts`; it exited after the relevant source/test reads, made no file changes, and will not be retried because the presentation behavior is already covered through the notification-sheet component tests.
+
+All three parts are implemented, statically verified, and unit-tested.
+**Live API verification and feature tests remain blocked by the MariaDB
+privilege issue above** and are explicitly not claimed as passing — see ADR
+0019 for the full design rationale.
+
+**Part 3 (Registrar enrollment windows), completed after the blocker above:**
+- `academic_term_year_level_windows` migration + `AcademicTermYearLevelWindow`
+  model; `CreateAcademicTerm` seeds one row per year level (1–4) from the
+  term-wide dates.
+- `App\Domain\Enrollment\EnrollmentWindowResolver` (pure, DB-free) plus
+  `EnrollmentAvailability`/`EnrollmentAvailabilityReason`/`YearLevelAvailability`/
+  `EnrollmentScheduleSummary` value objects. 10/10 unit tests
+  (`EnrollmentWindowResolverTest`) covering every reason and boundary
+  instant.
+- `TransitionAcademicTerm` gained `open_enrollment` (`draft`/`for_dean_approval`
+  → `semester_ongoing`, gated on ≥1 published `schedule_proposal`) — fixed a
+  real bug while adding it: the existing `close`/`archive` `if/else` would
+  have run archive's side effects (setting `archived_at`, nulling the
+  current-slot) for the new action too, since it only ever checked
+  `$action === 'close'`. Now an explicit three-way branch.
+- New `BuildEnrollmentScheduleSummary` (read) and `SaveEnrollmentSchedule`
+  (write) actions, `EnrollmentWindowController` with
+  `GET/PATCH /academic-terms/{term}/enrollment-windows` and
+  `.../enrollment-schedule`, gated by the existing `AcademicTermPolicy`
+  (no new policy class).
+- `EnrollmentWindowResolver` wired into `StoreEnrollmentRequest` as the
+  first check, ahead of every existing section-level rule — this is what
+  actually closes the previously-open hole where `POST /enrollments`
+  accepted a `draft` or `archived` term id.
+- Two new `AuditAction` constants (`academic_term.enrollment_opened`,
+  `academic_term.enrollment_schedule_updated`) and one new `AuditableType`
+  (`academic_term_year_level_window`); `AuditVocabularyTest`'s exact-list
+  assertions updated to match.
+- Frontend: `enrollment-window-schema.ts`, `enrollment-window-service.ts`,
+  `use-enrollment-windows.ts`; Registrar `EnrollmentScheduleCard` (publication-
+  readiness chips per college, confirm-gated "Open enrollment" action,
+  per-year-level datetime editor with a "same as term window" reset) wired
+  into `academic-term-workspace.tsx`; student `EnrollmentAvailabilityBanner`
+  (open/before-window/after-window/term-not-open/term-closed) wired into
+  both `enrollment-workspace.tsx` (also disables section selects and the
+  submit button while closed) and `portal-overview-page.tsx` (student-only,
+  informational). React Hook Form's `Path<T>` could not infer paths into a
+  `Record<1|2|3|4, {...}>` shape for the year-level rows — fixed by using
+  ten flat field names (`year_1_opens_at` … `year_4_closes_at`) instead of a
+  nested/mapped structure.
+- 18 new focused frontend tests across 3 new files
+  (`enrollment-schedule-card.test.tsx` 4, `enrollment-availability-banner.test.tsx`
+  6, plus 1 new case in `enrollment-workspace.test.tsx`), all passing.
+
+**Final verification, this session:**
+- Backend: Pint and file-scoped PHPStan (level 8) clean on every new/changed
+  file (pre-existing debt in three untouched-by-logic files —
+  `SaveSectionPlan.php`, `CreateAcademicTerm.php`, `TransitionAcademicTerm.php`
+  — confirmed via `git stash` comparison to predate this session, left as-is
+  per "don't fix unrelated files"). Backend unit suite: **182/182 passing**
+  (was 165 at session start). `route:list` boots cleanly with 66 routes
+  including the two new enrollment-window routes. Two new Feature test files
+  (`AcademicTermOpenEnrollmentEndpointTest`, `EnrollmentScheduleEndpointTest`)
+  plus 3 new cases in `EnrollmentsEndpointTest` are authored and confirmed to
+  fail only at the documented `grc_test` CREATE-privilege step, not on any
+  application logic.
+- Frontend: `tsc --noEmit` clean; `eslint` clean on every session-touched
+  file; full Vitest suite **79 files / 430 tests passing** (up from the
+  403-test figure recorded earlier); production `next build` (Turbopack)
+  compiles, typechecks, and generates all static pages successfully.
+- `docs/api/openapi.yaml` updated (new `open_enrollment` action, two new
+  paths, `EnrollmentScheduleResource`/`YearLevelAvailabilityResource`/
+  `UpdateEnrollmentScheduleRequest` schemas, `is_returned`/`returned_by_role`
+  on `ScheduleProposalResource`, the full `NotificationType` enum in place
+  of the single stale `schedule_published` value); `@redocly/cli lint`
+  passes. Along the way, found the OpenAPI spec's `notification_type` and
+  `ScheduleProposalResource` were already stale relative to the live backend
+  before this session (missing 10 notification types and the pre-existing
+  `decided_by_name`/`decision_history` fields) — the notification enum gap
+  is now closed; `decided_by_name`/`decision_history` remain undocumented,
+  left alone as pre-existing, unrelated drift.
+- ADR 0019 written covering all three design decisions and the no-scheduler
+  constraint.
+
+**Explicitly not done, and why:** live API/browser verification against the
+running app (blocked — the new migration cannot be applied to either
+database; see the MariaDB blocker above and the `mariadb-instability-incident`
+memory file, updated this session with the recurrence). No GRANT was
+attempted. The sample queue state (COE pending Dean, COA/CBAE pending
+Executive, CCS proposal `#4` in draft) was never touched since no live write
+was possible this session.
+
+## 2026-08-04 — Enrollment go-live: audience windows, block enrollment, capacity, archive flow
+
+Ten-phase slice (see `docs/adr/0020-block-enrollment-and-audience-windows.md`
+for the full design rationale) that took the enrollment feature from
+"exists in code, dead at runtime" to an actually-working cycle: Registrar
+sets a staggered per-audience schedule → Program Chair sets per-year
+capacity → regular students enrol by block → irregular students enrol per
+subject → Registrar archives and opens the next term.
+
+**Three compounding root causes found and fixed first:**
+1. `grc_migrator`/`grc_test` held only table-by-table grants, not
+   database-level — two migrations (`academic_term_enrollment_windows`,
+   `room_catalog_entries`) had silently never applied anywhere. Fixed with a
+   root-level database-level `GRANT`. `grc_app` (the narrow-grant runtime
+   user) needed its own explicit grants added for both new tables
+   afterward — the migrator/test grant does not extend to it, and the test
+   suite's broader grants had been masking that gap (only found via a live
+   curl 500 + `storage/logs/laravel.log`).
+2. Frontend/backend contract mismatch on enrollment windows: backend sent 5
+   `audiences`, frontend's `.strict()` schema demanded 4 `year_levels` —
+   every Registrar save 422'd and no student ever saw a window banner.
+   Fixed by aligning the frontend to the backend (tested, correct shape).
+3. `sections.is_block_exclusive`/`student_profiles.enrollment_category`
+   existed as columns nothing wrote to — 212/212 sections had
+   `is_block_exclusive = null`. Root cause: `SaveSectionPlan::release()`'s
+   `firstOrCreate` never updated an existing section row (also why 206/212
+   were stuck at the hardcoded capacity of 40). Replaced with an
+   `upsertGeneratedSection()` that respects a new `capacity_source`
+   (`plan`|`manual`) flag so a Program Chair's per-year default and a
+   dispatcher's manual override can coexist.
+
+**Delivered:** `EnrollmentAudience` (5 values, ordinal labels — "1st Year"
+never "Year 1"); `BlockSectionAccessPolicy` (time-based block exclusivity,
+replacing a static always-visible check); block-as-a-unit enrollment (new
+`GET /enrollment-blocks`, `POST /enrollments` accepting `block_code` as an
+alternative to `sections`, `seatsRemaining` = MIN across the block);
+`lockForUpdate()` all-or-nothing seat concurrency for multi-section block
+submissions; Program Chair `students_per_block` per-year default plus
+per-section capacity override; `ArchiveAndCreateNextTerm` (archive current +
+create next Draft in one transaction) replacing the standalone term-creation
+form, surfaced through a new `ArchiveTermDialog` that asks only for the next
+school year and semester; 5 seeded student logins (year 1–4 regular by
+block, one 2nd-year irregular by subject) plus an optional
+`EnrollmentOpenDemoSeeder` that fast-forwards CCS past the Dean/Executive
+approval chain for manual/E2E testing. Amends ADR 0018: a clean seed now
+leaves one current Draft term (`2026-2027 / 1st`) instead of none.
+
+**E2E:** `block-enrollment.spec.ts` and `enrollment-windows.spec.ts` are new;
+`enrollment.spec.ts` rewritten (student4 is now a regular block-enrolling
+student, so the per-subject journey moved to the one irregular seed
+identity); `academic-term-archive.spec.ts` is new. The archive spec
+one-way-transitions the shared seeded `semester_ongoing` term to `archived`,
+which the other three specs depend on staying ongoing — same hazard the
+existing throttle-isolation pattern in `playwright.config.ts` already
+solved once; gave the archive spec its own serial `archive-isolated`
+project, `dependencies`-ordered to run after both `chromium` and
+`throttle-isolated`. Separately, three assertions across the block/irregular
+specs needed a bumped timeout (5s → 15s): the audience viewer resolves via a
+multi-request waterfall (term auto-select → schedule fetch → block-pool
+fetch) that briefly renders the wrong fallback heading first, and the
+post-submit receipt banner awaits three invalidated queries refetching
+before it renders — both real, not flakes, confirmed by live Playwright MCP
+browser walkthrough of the full block-enrollment journey (submission
+produced queue ticket `Q000001` and the review/confirm-dialog copy matched
+exactly) before the timeout fix.
+
+**Docs:** `docs/adr/0020-block-enrollment-and-audience-windows.md`;
+`docs/testing/SEEDED_IDENTITIES.md` updated for the 5-student table and the
+now-non-empty clean-seed term list.
+
+**Final verification, this session:**
+- Backend: Pint clean (`--dirty`, i.e. every uncommitted file — 16 files had
+  pre-existing style drift unrelated to this slice's logic, fixed
+  mechanically); PHPStan level 8 found 24 pre-existing errors across files
+  this slice didn't touch (or only lightly touched, inheriting debt already
+  documented as deliberately-left in an earlier session) — one genuine new
+  finding in `ProgramChairScheduleSampleSeeder.php` (`$plans[1]` unprovable
+  by static analysis, same class as an already-guarded access two lines
+  above) fixed with the same defensive-guard pattern. Full suite:
+  **848/848 passing**.
+- Frontend: `tsc --noEmit` clean; `eslint` clean (one stale
+  `eslint-disable` comment in `program-chair-enrollment-workspace.tsx`,
+  auto-fixed); full Vitest suite **445/445 passing** (80/80 files, serial);
+  production `next build` (Turbopack) compiles, typechecks, and generates
+  all 5 pages successfully.
+- E2E: all 5 of this slice's new/rewritten specs pass cleanly on a fresh
+  seed — `enrollment.spec.ts` (irregular journey), `block-enrollment.spec.ts`
+  (both regular-block and irregular-window-closed journeys),
+  `enrollment-windows.spec.ts` (new), `academic-term-archive.spec.ts` (new,
+  isolated into its own `archive-isolated` Playwright project since it
+  one-way-archives the shared current term). Two real bugs found and fixed
+  along the way, both in test code, confirmed via live Playwright-MCP
+  browser reproduction rather than assumed: (1) `enrollment-windows.spec.ts`
+  submitted before the schedule form's own async-populated date fields had
+  loaded, tripping client-side "Enter a date." validation with zero network
+  request ever sent — fixed by waiting for the term-wide date input to hold
+  a value before interacting further; (2) two tests' overall 30s budget was
+  too tight once several slow waterfalls stacked in one test (audience-
+  viewer resolution, then a post-submit triple-query-invalidation refetch)
+  even with generous per-assertion timeouts — fixed with `test.setTimeout(60_000)`.
+- Live Playwright-MCP browser walkthrough (not just automated specs):
+  confirmed the full regular-student block-enrollment journey end-to-end
+  (student4.seed@grc.test picked block IT401, reviewed its weekly schedule,
+  submitted, got queue ticket `Q000001`, confirm-dialog copy exact);
+  confirmed the Registrar's enrollment-schedule save + live per-audience
+  status grid updates without reload; confirmed the archive-and-create-next
+  dialog flow; confirmed the notification-bell unread-clear-on-close fix
+  (from earlier this session) is in place in
+  `portal-notification-sheet.tsx`'s `handleOpenChange`.
+
+**Discovered but explicitly not fixed — a pre-existing gap, not from this
+slice:** `withdrawal.spec.ts` (journey 13) and `grade-submission.spec.ts`
+(journey 9) both fail against a genuinely fresh `migrate:fresh --seed`,
+independent of any change in this session. Root cause: both explicitly
+depend (by their own code comments) on `DemoEnrollmentSeeder` populating a
+real `enrolled`-status enrollment for `student.seed@grc.test`, which only
+happens when a `semester_ongoing` term already exists at the moment that
+seeder runs — true before ADR 0018 (when the default seed produced an
+`Active` term directly) but never true since, since ADR 0018 deliberately
+made a clean seed produce no populated current term (and this session's ADR
+0020 amendment, a Draft term, doesn't change that). `scheduling-and-approval.spec.ts`
+(journeys 4 & 5) also fails: it drives the old manual per-subject "create a
+section" form at `/portal/sections-schedules`, but that route now always
+renders `ProgramChairEnrollmentWorkspace` (the block-plan wizard) for the
+`program_chair` role — an earlier session's UI change this test was never
+updated for. All three went undiscovered until now because `migrate:fresh
+--seed` had never once completed successfully in this project before this
+session's Phase 0 database-grant fix — this is the first time the full E2E
+suite has ever run against a truly fresh seed. Fixing them properly means
+either rewriting their precondition-arrangement to self-arrange over the API
+(the pattern `docs/adr/0016-e2e-architecture-and-live-contract-fixes.md`
+decision 3 already prescribes for exactly this class of bug) or rewriting
+them against the current Program Chair UI — both substantial, and both
+orthogonal to this slice's actual scope, so left as a flagged follow-up
+rather than silently absorbed.
+
+## 2026-08-04 — Grading system, auto-derived standing, and enrollment-cycle completion
+
+Ten-phase slice (see `docs/adr/0021-grading-system-and-enrollment-completion.md`
+for the full design rationale) that closed the three remaining gaps between
+"can submit an enrollment" and "can complete one": grading, queue-issuance
+timing, and add/drop.
+
+**Delivered:** `GradeMark` backed enum (numeric scale + `C`/`NC`/`INC`/`DRP`)
+replacing free-text `final_grade`; `CompletionOnlySubjectRule` matching every
+real `LEAD` spelling; a `C`-satisfies-prerequisite short-circuit in
+`BuildEligibleSubjectPool` ahead of `PrerequisiteEvaluator` so the 8-subject
+Leadership chain can never self-block; `EnrollmentCategoryClassifier` +
+`ReclassifyStudentEnrollmentCategory`, re-run on every grade lock, writing a
+real (never hard-coded) Regular/Irregular verdict with reasons; print-ready
+`<GradeSlipDocument>`/`<ProspectusDocument>` (CODE|SUBJECT|UNITS|FINAL|
+REMARKS|SECTION|PROFESSOR|SIGNATURE + TOTAL ACADEMIC UNITS + GPA, matching
+the reference paper form, GPA correctly excluding non-numeric marks) shared
+between the student's own view and the Registrar's look-up-any-student view;
+the previously-nonexistent Grade Approvals lock UI (mandatory, permanent,
+confirmation-gated) and Academic Transcripts module; `QueueTicket` creation
+moved from submission to Registrar Staff approval (`EnrollmentPolicy` and
+`Enrollment::scopeVisibleTo` updated accordingly); `enrollment_change_requests`
++ `AddDropWindowResolver` giving `add_drop_deadline_at` its first real
+behavior — window opens only once enrollment has closed and before the
+deadline, student submits with a required reason, Registrar Head decides,
+Registrar Staff sees the result; an 8-student demo roster
+(`BSCS-DEMO`/"BSCS Grade History Demo 2026", a deliberately collegeless
+program so the real CCS catalog importer can't contaminate it) with real
+locked grade history proving the classifier's own derivation, spanning 8
+terms (`2023-2024` through `2026-2027`, the last as the current
+`semester_ongoing` term).
+
+**Three bugs found only by a live Playwright-MCP walkthrough, not by the
+automated suites, because none of them exercised the real cross-role
+sequence a live user does:**
+1. `ConfirmPayment` transitioned the parent `Enrollment` to `Enrolled` but
+   never transitioned its `EnrollmentSubject` rows off `Selected` —
+   `EnrollmentSubjectStatus::Enrolled` was defined but referenced nowhere
+   else in the codebase. Since `grade-submission-workspace.tsx`'s roster
+   filters strictly on `status === "enrolled"`, **no professor could ever
+   see a single student to grade, for any student, system-wide** — silently
+   blocking this slice's own central path. Fixed by bulk-transitioning
+   `Selected → Enrolled` inside `ConfirmPayment`'s existing transaction;
+   `ClassRostersEndpointTest`'s fixtures had (correctly) assumed this
+   transition existed all along, which is why the gap was invisible to the
+   test suite.
+2. `enrollment_change_requests` (new in this slice) never received its
+   `grc_app` database grant — every add/drop list call 500'd with `SELECT
+   command denied`. Same class of gap `docs/runbooks/mariadb-local.md`
+   already documented for the original four tables; fixed with the same
+   table-level `GRANT` pattern (verified safe per the runbook's own
+   crash-history notes — only wildcard grants have ever crashed this
+   instance) after confirming server health and all `mysql.*` privilege
+   tables checked `OK` before and after. The runbook now explicitly calls
+   out that every new table needs its own grant.
+3. `student-add-drop-workspace.tsx` swallowed the backend's specific 422
+   message (e.g. "The add/drop window opens once enrollment closes for this
+   term.") behind a generic "check your connection" fallback — the backend's
+   business-rule enforcement was correct throughout, only the frontend's
+   error surface was misleading. Fixed by extracting the first
+   `fieldErrors` message via the existing `isApiClientError` helper.
+
+None of the three were regressions from this slice's own design — the first
+two are gaps inherited from earlier slices that this slice's live walkthrough
+was the first to actually exercise end-to-end; the third is local to a
+component this slice added. All three now have regression coverage
+(`PaymentConfirmationEndpointTest`, the runbook update, and a new
+`student-add-drop-workspace.test.tsx` case).
+
+**Two more gaps caught by a full serial Vitest run** (the default parallel
+run is unreliable under concurrent PHPStan/backend-suite/browser-automation
+load — it showed 76 false-positive timeout failures that vanished once
+re-run alone with `--no-file-parallelism`):
+- `portal-module-page.test.tsx`'s `workspaceHeadings` fixture map was never
+  updated with this slice's four new module IDs
+  (`grade-approvals`/`academic-transcripts`/`add-drop-requests`/
+  `enrollment-change-requests`), even though the identical map in
+  `module-registry.test.tsx` already had them — a partial update from
+  earlier in this session. Fixed by adding the same four entries.
+- `grade-slip-document.test.tsx`'s fixture coincidentally gives one subject's
+  mark and the slip's overall GPA the same value (`"1.50"`), so
+  `getByText("1.50")` threw on multiple matches. The component itself
+  renders correctly (confirmed live); fixed the assertion to
+  `getAllByText("1.50")` expecting both occurrences.
+
+**Final verification, this session:**
+- Backend: Pint clean (`--dirty`); PHPStan level 8 clean on this slice's
+  files (23 pre-existing errors remain elsewhere, unrelated to this slice,
+  same baseline an earlier session already documented); full suite passing,
+  0 failures, including the new `ConfirmPayment` regression test.
+- Frontend: `tsc --noEmit` clean; `eslint` clean; full Vitest suite run
+  serially: **484/487 passing**. The 3 remaining failures
+  (`admission-provisioning-workspace.test.tsx` ×2,
+  `curriculum-workspace.test.tsx` ×1, all "Test timed out in 5000ms") are in
+  files last touched by the unrelated, pre-existing enrollment-startup WIP
+  that predates this session (per this file's own header) — reproduced in
+  isolation, unrelated to anything this slice touched, not attempted here.
+- Live Playwright-MCP browser walkthrough covering every role in the cycle:
+  professor encoded a numeric mark (CS201, "Very Good") and confirmed the
+  Leadership-subject mark selector only offers `C`/`NC`; Registrar Head
+  locked it through the mandatory confirmation dialog and the grade
+  disappeared from the lock queue; a regular student's block enrollment went
+  from "Waiting for approval" (no queue number) → Registrar Staff approval →
+  queue ticket `Q000001` appearing at that exact moment → Cashier
+  notification → payment confirmation → Digital COM `COM000001` → the
+  student then (and only then) appearing on their professor's roster;
+  Registrar Head looked up a regular student's (STU-2026-0004) full 8-semester
+  prospectus and printable grade slip, and a separate irregular student's
+  (STU-2026-0008) derived "Irregular" status with its missing-subject reason
+  visible; a student's drop request correctly 422'd outside the add/drop
+  window with the specific reason surfaced in the UI after the fix above.
+
+**Discovered but explicitly not fixed — flagged follow-ups:**
+- The Playwright E2E suite's `SEED_STUDENT_SCENARIOS` fixture model predates
+  this slice's 8-student/grade-history seed redesign; several specs need
+  rewriting against the new fixture shape. Not attempted here — its own
+  follow-up slice.
+- `docs/api/openapi.yaml` was not updated for the ~10 endpoints this slice
+  added (prospectus, grade slip, grade approvals, add/drop requests, etc.).
+  No test enforces sync with the real routes, so this is known, undetected
+  drift rather than a silent regression.

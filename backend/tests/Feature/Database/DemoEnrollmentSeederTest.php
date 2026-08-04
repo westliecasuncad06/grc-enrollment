@@ -2,17 +2,17 @@
 
 namespace Tests\Feature\Database;
 
-use App\Domain\Enrollment\EnrollmentStatus;
-use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Academic\GradeStatus;
+use App\Models\AcademicGrade;
+use App\Models\AuditLog;
 use App\Models\Enrollment;
-use App\Models\EnrollmentSubject;
-use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoEnrollmentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -22,77 +22,112 @@ final class DemoEnrollmentSeederTest extends TestCase
 
     private const SEED_PASSWORD = 'password';
 
-    public function test_it_seeds_one_enrollment_per_demonstrated_lifecycle_state(): void
+    /**
+     * Eight student profiles, all with real locked grade history, but no
+     * Enrollment row of their own yet — every one is left free to submit a
+     * fresh enrollment against the current `semester_ongoing` term through
+     * the real UI/API, which is the entire point of this seed.
+     */
+    public function test_a_clean_seed_creates_eight_student_profiles_but_no_enrollments(): void
     {
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(4, StudentProfile::count());
-        $this->assertSame(4, Enrollment::count());
-
-        foreach ([
-            EnrollmentStatus::Enrolled,
-            EnrollmentStatus::PendingRegistrarApproval,
-            EnrollmentStatus::PendingPayment,
-            EnrollmentStatus::Withdrawn,
-        ] as $status) {
-            $this->assertSame(
-                1,
-                Enrollment::where('status', $status->value)->count(),
-                "Expected exactly one {$status->value} enrollment.",
-            );
-        }
+        $this->assertSame(8, StudentProfile::count());
+        $this->assertSame(0, Enrollment::count());
     }
 
     /**
-     * The withdrawn student must not occupy a seat slot, while the three
-     * non-terminal enrollments must each hold one. This is the seeded
-     * expression of the unique-active-enrollment rule.
+     * @return array<string, array{string, int, string}>
      */
-    public function test_only_non_terminal_enrollments_hold_a_seat_slot(): void
+    public static function studentRosterProvider(): array
     {
-        $this->seed(DatabaseSeeder::class);
-
-        $this->assertSame(3, Enrollment::query()->active()->count());
-        $this->assertSame(
-            3,
-            Enrollment::whereNotNull('active_academic_term_id')->count(),
-        );
-        $this->assertSame(
-            1,
-            Enrollment::whereNull('active_academic_term_id')->count(),
-        );
+        return [
+            '0001 year 1 regular' => ['STU-2026-0001', 1, 'regular'],
+            '0002 year 2 regular' => ['STU-2026-0002', 2, 'regular'],
+            '0003 year 3 regular' => ['STU-2026-0003', 3, 'regular'],
+            '0004 year 4 regular' => ['STU-2026-0004', 4, 'regular'],
+            '0005 year 2 irregular (failed subject)' => ['STU-2026-0005', 2, 'irregular'],
+            '0006 year 2 irregular (incomplete)' => ['STU-2026-0006', 2, 'irregular'],
+            '0007 year 3 irregular (NC on Leadership)' => ['STU-2026-0007', 3, 'irregular'],
+            '0008 year 4 irregular (missing required subject)' => ['STU-2026-0008', 4, 'irregular'],
+        ];
     }
 
-    public function test_section_seat_counts_exclude_dropped_rows(): void
+    #[DataProvider('studentRosterProvider')]
+    public function test_each_seeded_student_has_the_expected_year_level_and_derived_category(
+        string $studentNumber,
+        int $yearLevel,
+        string $category,
+    ): void {
+        $this->seed(DatabaseSeeder::class);
+
+        $profile = StudentProfile::query()->where('student_number', $studentNumber)->firstOrFail();
+
+        $this->assertSame($yearLevel, $profile->year_level);
+        // Never hard-coded: this is the real EnrollmentCategoryClassifier's
+        // verdict against the grade history seeded just above it, proving
+        // the seeder's own correctness.
+        $this->assertSame($category, $profile->enrollment_category);
+        $this->assertNotNull($profile->enrollment_category_derived_at);
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function gradeHistoryCountProvider(): array
+    {
+        return [
+            '0001 — 1 completed semester' => ['STU-2026-0001', 6],
+            '0002 — 3 completed semesters' => ['STU-2026-0002', 12],
+            '0003 — 5 completed semesters' => ['STU-2026-0003', 16],
+            '0004 — 7 completed semesters' => ['STU-2026-0004', 20],
+            '0005 — 3 completed semesters' => ['STU-2026-0005', 12],
+            '0006 — 3 completed semesters' => ['STU-2026-0006', 12],
+            '0007 — 5 completed semesters' => ['STU-2026-0007', 16],
+            // 7 completed semesters, minus the one deliberately omitted
+            // required subject that makes this student Irregular.
+            '0008 — 7 completed semesters, one omitted' => ['STU-2026-0008', 19],
+        ];
+    }
+
+    #[DataProvider('gradeHistoryCountProvider')]
+    public function test_each_seeded_student_has_the_expected_locked_grade_count(string $studentNumber, int $expectedCount): void
     {
         $this->seed(DatabaseSeeder::class);
 
-        foreach (Section::all() as $section) {
-            $expected = EnrollmentSubject::where('section_id', $section->id)
-                ->where('status', '!=', EnrollmentSubjectStatus::Dropped->value)
-                ->count();
+        $profile = StudentProfile::query()->where('student_number', $studentNumber)->firstOrFail();
+        $grades = AcademicGrade::query()->where('student_id', $profile->id)->get();
 
-            $this->assertSame(
-                $expected,
-                $section->enrolled_count,
-                "Section {$section->id} seat counter disagrees with its occupying rows.",
-            );
-        }
+        $this->assertCount($expectedCount, $grades);
+        $this->assertTrue($grades->every(fn (AcademicGrade $grade): bool => $grade->status === GradeStatus::Locked));
+    }
+
+    public function test_the_missing_subject_irregular_student_carries_the_expected_classification_reason(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $profile = StudentProfile::query()->where('student_number', 'STU-2026-0008')->firstOrFail();
+        $log = AuditLog::query()
+            ->where('auditable_type', 'student_profile')
+            ->where('auditable_id', $profile->id)
+            ->sole();
+
+        $reasons = $log->after_values['reasons'] ?? [];
+        $this->assertNotEmpty($reasons);
+        $this->assertSame('missing_required_subject', $reasons[0]['code'] ?? null);
     }
 
     public function test_reseeding_creates_no_duplicates(): void
     {
         $this->seed(DatabaseSeeder::class);
 
-        $enrollmentIds = Enrollment::orderBy('id')->pluck('id')->all();
         $profileIds = StudentProfile::orderBy('id')->pluck('id')->all();
-        $subjectRowCount = EnrollmentSubject::count();
+        $gradeCount = AcademicGrade::count();
 
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame($enrollmentIds, Enrollment::orderBy('id')->pluck('id')->all());
         $this->assertSame($profileIds, StudentProfile::orderBy('id')->pluck('id')->all());
-        $this->assertSame($subjectRowCount, EnrollmentSubject::count());
+        $this->assertSame($gradeCount, AcademicGrade::count());
     }
 
     public function test_seeded_student_emails_use_the_reserved_test_domain(): void
@@ -111,8 +146,6 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $students = User::query()->where('role', 'student')->get();
-
-        $this->assertCount(4, $students);
 
         foreach ($students as $student) {
             $this->assertTrue(

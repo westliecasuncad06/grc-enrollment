@@ -24,6 +24,7 @@ import {
 } from "@/features/components/ui/dialog"
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -49,6 +50,14 @@ import {
 } from "@/features/schemas/admission-schema"
 
 const formSchema = provisionStudentSchema.omit({ password: true })
+
+/** Ordinals, matching how the enrollment schedule names each year level. */
+const YEAR_LEVEL_OPTIONS = [
+  { value: 1, label: "1st Year" },
+  { value: 2, label: "2nd Year" },
+  { value: 3, label: "3rd Year" },
+  { value: 4, label: "4th Year" },
+] as const
 type AdmissionFormValues = z.infer<typeof formSchema>
 
 const workspaceHeadings: Record<string, string> = {
@@ -98,6 +107,7 @@ export function AdmissionProvisioningWorkspace({
       program_id: 0,
       curriculum_id: 0,
       year_level: 0,
+      enrollment_category: "regular",
     },
   })
   const selectedProgramId = useWatch({ control, name: "program_id" })
@@ -293,9 +303,9 @@ export function AdmissionProvisioningWorkspace({
                         <SelectValue placeholder="Select a year level" />
                       </SelectTrigger>
                       <SelectContent>
-                        {[1, 2, 3, 4].map((year) => (
-                          <SelectItem key={year} value={String(year)}>
-                            Year {year}
+                        {YEAR_LEVEL_OPTIONS.map(({ value, label }) => (
+                          <SelectItem key={value} value={String(value)}>
+                            {label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -303,6 +313,38 @@ export function AdmissionProvisioningWorkspace({
                   )}
                 />
                 <FieldError>{errors.year_level?.message}</FieldError>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="admission-enrollment-category">
+                  Enrollment category
+                </FieldLabel>
+                <Controller
+                  control={control}
+                  name="enrollment_category"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isProvisioning}
+                    >
+                      <SelectTrigger
+                        id="admission-enrollment-category"
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="regular">Regular</SelectItem>
+                        <SelectItem value="irregular">Irregular</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldDescription>
+                  Regular students enrol in their year level&apos;s block.
+                  Irregular students choose subjects individually during the
+                  irregular enrollment window.
+                </FieldDescription>
               </Field>
               {requestError && (
                 <Alert variant="destructive">

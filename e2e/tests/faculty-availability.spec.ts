@@ -21,8 +21,8 @@ test("journey 3 — Faculty submits a new availability window", async ({
   // label is ambiguous, and the availability form's term select is first in
   // DOM order. Academic term has no default (placeholder shown until
   // chosen); day_of_week defaults to Monday, so only the term needs an
-  // explicit pick. The seeded active term is "2026-2027 · 1st".
-  await selectOption(page, "Academic term", "2026-2027 · 1st")
+  // explicit pick. The seeded active term is "2022-2023 · 2nd".
+  await selectOption(page, "Academic term", "2022-2023 · 2nd")
   await page.getByLabel("Start time").fill("08:00:00")
   await page.getByLabel("End time").fill("10:00:00")
   await page.getByRole("button", { name: "Save availability" }).click()

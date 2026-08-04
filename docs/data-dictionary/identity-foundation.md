@@ -44,7 +44,11 @@ No foreign keys in this slice. `student_profiles`, which would reference
 | `ends_at` | `DATETIME` | nullable | |
 | `enrollment_opens_at` | `DATETIME` | nullable | |
 | `enrollment_closes_at` | `DATETIME` | nullable | |
-| `status` | `VARCHAR(255)` | not null | Application-backed string. **Provisional** values `planning`/`active`/`closed` — see `App\Domain\Organization\AcademicTermStatus`; the institutional vocabulary itself remains unconfirmed (PRD §17) |
+| `add_drop_deadline_at` | `DATETIME` | nullable | |
+| `grading_deadline_at` | `DATETIME` | nullable | |
+| `closed_at` | `DATETIME` | nullable | Set once by Registrar close action |
+| `archived_at` | `DATETIME` | nullable | Set once by Registrar archive action |
+| `status` | `VARCHAR(255)` | not null | `draft`, `for_dean_approval`, `semester_ongoing`, `semester_closed`, or `archived` — see `App\Domain\Organization\AcademicTermStatus` |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 |  |  | **unique** `(school_year, semester)` | |
 
@@ -96,9 +100,10 @@ row regardless of status. See ADR 0008 for the full rationale.
 Exactly nine synthetic identities, one per role, are seeded by
 `backend/database/seeders/RoleUserSeeder.php` in `local`/`testing`
 environments only. `backend/database/seeders/ProgramSeeder.php` and
-`AcademicTermSeeder.php` seed a small synthetic catalog in the same
-environments — three programs (one `inactive`) and three terms (one still
-`planning`), deliberately including a non-learner-visible row of each so the
-authorization difference is observable. None of this is the real GRC catalog.
+`AcademicTermSeeder.php` seeds six archived historical semesters (both
+semesters of 2020–2021 through 2022–2023) and no current term. The clean
+manual-test seed therefore lets Registrar Head create the next semester
+explicitly; sections and demo enrollments are no-ops until an ongoing term
+exists. None of this is the real GRC catalog.
 See `docs/testing/SEEDED_IDENTITIES.md` for the full list and safety
 guarantees.

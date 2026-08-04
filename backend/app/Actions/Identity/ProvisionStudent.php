@@ -5,6 +5,7 @@ namespace App\Actions\Identity;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -25,7 +26,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, curriculum_id: int, year_level: int}  $data
+     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, curriculum_id: int, year_level: int, enrollment_category?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -47,6 +48,10 @@ final class ProvisionStudent
                 'program_id' => $data['program_id'],
                 'curriculum_id' => $data['curriculum_id'],
                 'year_level' => $data['year_level'],
+                // Defaults to regular so a provisioned student always has an
+                // explicit category; only an irregular one takes the
+                // per-subject enrollment path.
+                'enrollment_category' => $data['enrollment_category'] ?? EnrollmentCategory::Regular->value,
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
             ]);
@@ -65,6 +70,7 @@ final class ProvisionStudent
                     'program_id' => $profile->program_id,
                     'curriculum_id' => $profile->curriculum_id,
                     'year_level' => $profile->year_level,
+                    'enrollment_category' => $profile->enrollment_category,
                     'admission_status' => $profile->admission_status->value,
                     'academic_standing' => $profile->academic_standing->value,
                 ],

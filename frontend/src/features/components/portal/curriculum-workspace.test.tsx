@@ -29,6 +29,7 @@ const subjects = {
       units: 3,
       status: "active",
       status_label: "Active",
+      is_completion_only: false,
     },
     {
       type: "subject",
@@ -38,6 +39,7 @@ const subjects = {
       units: 3,
       status: "active",
       status_label: "Active",
+      is_completion_only: false,
     },
   ],
 } as const

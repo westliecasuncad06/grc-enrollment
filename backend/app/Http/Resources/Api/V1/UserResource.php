@@ -23,6 +23,7 @@ final class UserResource extends JsonResource
      *     email: string,
      *     role: string,
      *     role_label: string,
+     *     college: ?string,
      *     status: string
      * }
      */
@@ -35,6 +36,7 @@ final class UserResource extends JsonResource
             'email' => $this->resource->email,
             'role' => $this->resource->role->value,
             'role_label' => $this->resource->role->label(),
+            'college' => $this->resource->college?->value,
             'status' => $this->resource->status->value,
         ];
     }

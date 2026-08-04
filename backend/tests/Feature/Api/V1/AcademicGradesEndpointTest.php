@@ -36,7 +36,7 @@ final class AcademicGradesEndpointTest extends TestCase
     private function makeTerm(): AcademicTerm
     {
         return AcademicTerm::create([
-            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 
@@ -144,13 +144,80 @@ final class AcademicGradesEndpointTest extends TestCase
             'subject_id' => $subject->id,
             'section_id' => $section->id,
             'academic_term_id' => $term->id,
-            'final_grade' => 1.5,
+            'mark' => '1.50',
             'remarks' => null,
         ]);
 
-        $response->assertCreated()->assertJsonPath('data.status', 'draft');
+        $response->assertCreated()->assertJsonPath('data.status', 'draft')->assertJsonPath('data.mark', '1.50')
+            ->assertJsonPath('data.mark_label', 'with Distinction');
         self::assertSame('1.50', AcademicGrade::query()->sole()->final_grade);
         self::assertSame(AuditAction::ACADEMIC_GRADE_CREATED, AuditLog::query()->sole()->action);
+    }
+
+    public function test_a_leadership_subject_rejects_a_numeric_mark(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('LEAD 1');
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.lead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $subject, $professor);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($professor);
+
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades', [
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+            'section_id' => $section->id,
+            'academic_term_id' => $term->id,
+            'mark' => '1.50',
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('mark', $response->json('error.errors'));
+    }
+
+    public function test_a_leadership_subject_accepts_complete(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('LEAD 1');
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.leadok@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $subject, $professor);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($professor);
+
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades', [
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+            'section_id' => $section->id,
+            'academic_term_id' => $term->id,
+            'mark' => 'C',
+        ]);
+
+        $response->assertCreated()->assertJsonPath('data.mark', 'C')->assertJsonPath('data.mark_label', 'Complete');
+        self::assertNull(AcademicGrade::query()->sole()->final_grade);
+    }
+
+    public function test_an_ordinary_subject_rejects_complete(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject();
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.nonlead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $subject, $professor);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($professor);
+
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades', [
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+            'section_id' => $section->id,
+            'academic_term_id' => $term->id,
+            'mark' => 'C',
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('mark', $response->json('error.errors'));
     }
 
     public function test_a_faculty_member_cannot_create_a_grade_for_someone_elses_section(): void
@@ -209,12 +276,13 @@ final class AcademicGradesEndpointTest extends TestCase
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->patchJson("/api/v1/academic-grades/{$grade->id}", [
-            'final_grade' => 3.0,
+            'mark' => '3.00',
             'remarks' => null,
         ]);
 
         $response->assertOk();
         self::assertSame('3.00', $grade->refresh()->final_grade);
+        self::assertSame('3.00', $grade->mark->value);
         self::assertSame(AuditAction::ACADEMIC_GRADE_UPDATED, AuditLog::query()->sole()->action);
     }
 
@@ -230,7 +298,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->patchJson("/api/v1/academic-grades/{$grade->id}", [
-            'final_grade' => 3.0,
+            'mark' => '3.00',
         ]);
 
         $response->assertUnprocessable();
@@ -248,7 +316,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $otherToken = $this->tokenForNewUser(UserRole::Faculty, 'prof.notowner@grc.test');
 
         $response = $this->withToken($otherToken)->patchJson("/api/v1/academic-grades/{$grade->id}", [
-            'final_grade' => 3.0,
+            'mark' => '3.00',
         ]);
 
         $response->assertForbidden();
@@ -305,9 +373,20 @@ final class AcademicGradesEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.status', 'locked');
         self::assertNotNull($grade->refresh()->locked_at);
-        self::assertSame(AuditAction::ACADEMIC_GRADE_LOCKED, AuditLog::query()->sole()->action);
-        self::assertSame(NotificationType::AcademicGradeLocked, Notification::query()->sole()->type);
-        self::assertSame($student->user_id, Notification::query()->sole()->user_id);
+        self::assertSame(
+            AuditAction::ACADEMIC_GRADE_LOCKED,
+            AuditLog::query()->where('action', AuditAction::ACADEMIC_GRADE_LOCKED)->sole()->action,
+        );
+
+        // Locking also reclassifies the student's enrollment_category (this
+        // student starts unclassified, so this is its first-ever derivation
+        // to "regular") — see ReclassifyStudentEnrollmentCategoryTest for
+        // that behavior in isolation. Both notifications land on the same
+        // student; assert the grade-locked one specifically by type.
+        $gradeLockedNotification = Notification::query()
+            ->where('type', NotificationType::AcademicGradeLocked)
+            ->sole();
+        self::assertSame($student->user_id, $gradeLockedNotification->user_id);
     }
 
     public function test_lock_cannot_be_performed_by_faculty(): void

@@ -14,10 +14,13 @@ final class AcademicGradeResource extends JsonResource
     /**
      * Exact key set. `student_number` (never email or name) is exposed so
      * Faculty and the Registrar Head can identify whose record this is,
-     * matching `EnrollmentResource`'s precedent. `final_grade` is passed
-     * through as the exact string the model carries — never cast to float
-     * (see `AcademicGrade::casts()`), since PRD §17 leaves the grading
-     * scale unconfirmed.
+     * matching `EnrollmentResource`'s precedent. `mark` is the authoritative
+     * value the API now accepts (see `App\Domain\Academic\GradeMark`);
+     * `final_grade` survives as a derived numeric mirror, kept for readers
+     * that predate the mark vocabulary — never cast to float (see
+     * `AcademicGrade::casts()`), since PRD §17 leaves the grading scale
+     * unconfirmed. `mark_label` is a pure function of `mark`
+     * (`GradeMark::label()`) and is never stored.
      *
      * @return array{
      *     type: string,
@@ -28,6 +31,8 @@ final class AcademicGradeResource extends JsonResource
      *     subject_code: string,
      *     section_id: ?int,
      *     academic_term_id: int,
+     *     mark: ?string,
+     *     mark_label: ?string,
      *     final_grade: ?string,
      *     remarks: ?string,
      *     status: string,
@@ -47,6 +52,8 @@ final class AcademicGradeResource extends JsonResource
             'subject_code' => $this->resource->subject->code,
             'section_id' => $this->resource->section_id,
             'academic_term_id' => $this->resource->academic_term_id,
+            'mark' => $this->resource->mark?->value,
+            'mark_label' => $this->resource->mark?->label(),
             'final_grade' => $this->resource->final_grade,
             'remarks' => $this->resource->remarks,
             'status' => $this->resource->status->value,

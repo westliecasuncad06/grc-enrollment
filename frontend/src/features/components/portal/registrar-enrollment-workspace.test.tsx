@@ -6,6 +6,11 @@ import { axe } from "vitest-axe"
 import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/registrar-enrollment-workspace"
 import { renderWithSession } from "@/tests/render-app"
 
+function url(input: RequestInfo | URL) {
+  if (typeof input === "string") return input
+  return input instanceof URL ? input.toString() : input.url
+}
+
 const paginationLinks = {
   first: "https://api.test/enrollments?page=1",
   last: "https://api.test/enrollments?page=1",
@@ -43,7 +48,14 @@ const pendingPaymentEnrollment = {
   status_label: "Pending Payment",
 } as const
 
-const registrarSession = {
+const registrarStaffSession = {
+  userId: "6",
+  displayName: "Registrar Staff",
+  role: "registrar_staff",
+  signedInAt: "2026-07-29T12:00:00Z",
+} as const
+
+const registrarHeadSession = {
   userId: "5",
   displayName: "Registrar Head",
   role: "registrar_head",
@@ -55,7 +67,7 @@ describe("RegistrarEnrollmentWorkspace", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("does not render the queue for an unauthorized role", () => {
+  it("does not render the approvals queue for an unauthorized role", () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -65,36 +77,82 @@ describe("RegistrarEnrollmentWorkspace", () => {
         }),
       ),
     )
-    renderWithSession(<RegistrarEnrollmentWorkspace />, {
-      session: {
-        userId: "1",
-        displayName: "Student",
-        role: "student",
-        signedInAt: "2026-07-29T12:00:00Z",
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      {
+        session: {
+          userId: "1",
+          displayName: "Student",
+          role: "student",
+          signedInAt: "2026-07-29T12:00:00Z",
+        },
       },
-    })
+    )
     expect(
       screen.getByText("This workspace is not available for your role."),
     ).toBeInTheDocument()
   })
 
-  it("offers approve/reject for a pending-approval enrollment and void for a pending-payment one", async () => {
+  it("no longer lets a Registrar Head open the approvals queue (moved to Registrar Staff)", () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: [pendingApprovalEnrollment, pendingPaymentEnrollment],
+          data: [],
           links: paginationLinks,
-          meta: { ...paginationMeta, total: 2 },
+          meta: paginationMeta,
         }),
       ),
     )
-    renderWithSession(<RegistrarEnrollmentWorkspace />, {
-      session: registrarSession,
-    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarHeadSession },
+    )
+    expect(
+      screen.getByText("This workspace is not available for your role."),
+    ).toBeInTheDocument()
+  })
+
+  it("does not let Registrar Staff open the overrides & voids queue", () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="overrides-voids" />,
+      { session: registrarStaffSession },
+    )
+    expect(
+      screen.getByText("This workspace is not available for your role."),
+    ).toBeInTheDocument()
+  })
+
+  it("offers approve/reject to Registrar Staff on the approvals queue, filtered by status", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [pendingApprovalEnrollment],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      ).then((response) => {
+        expect(url(input)).toContain('status=pending_registrar_approval')
+        return response
+      }),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
 
     const table = await screen.findByRole("table", { name: "Enrollment queue" })
     expect(within(table).getByText("#9")).toBeInTheDocument()
-    expect(within(table).getByText("#10")).toBeInTheDocument()
     expect(
       within(table).getByRole("button", { name: "Approve" }),
     ).toBeInTheDocument()
@@ -102,8 +160,38 @@ describe("RegistrarEnrollmentWorkspace", () => {
       within(table).getByRole("button", { name: "Reject" }),
     ).toBeInTheDocument()
     expect(
+      within(table).queryByRole("button", { name: "Void" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("offers void to Registrar Head on the overrides & voids queue, filtered by status", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [pendingPaymentEnrollment],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      ).then((response) => {
+        expect(url(input)).toContain('status=pending_payment')
+        return response
+      }),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="overrides-voids" />,
+      { session: registrarHeadSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(within(table).getByText("#10")).toBeInTheDocument()
+    expect(
       within(table).getByRole("button", { name: "Void" }),
     ).toBeInTheDocument()
+    expect(
+      within(table).queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument()
   })
 
   it("requires a reason before confirming a rejection", async () => {
@@ -127,9 +215,10 @@ describe("RegistrarEnrollmentWorkspace", () => {
         ),
       )
     })
-    renderWithSession(<RegistrarEnrollmentWorkspace />, {
-      session: registrarSession,
-    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
 
     const table = await screen.findByRole("table", { name: "Enrollment queue" })
     await user.click(within(table).getByRole("button", { name: "Reject" }))
@@ -157,15 +246,16 @@ describe("RegistrarEnrollmentWorkspace", () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: [pendingApprovalEnrollment, pendingPaymentEnrollment],
+          data: [pendingApprovalEnrollment],
           links: paginationLinks,
-          meta: { ...paginationMeta, total: 2 },
+          meta: paginationMeta,
         }),
       ),
     )
-    const { container } = renderWithSession(<RegistrarEnrollmentWorkspace />, {
-      session: registrarSession,
-    })
+    const { container } = renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
 
     await screen.findByRole("table", { name: "Enrollment queue" })
     expect(await axe(container)).toHaveNoViolations()

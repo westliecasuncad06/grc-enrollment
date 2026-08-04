@@ -2,6 +2,43 @@ import { z } from "zod"
 
 const gradeStatusValues = ["draft", "submitted", "locked"] as const
 
+// Mirrors App\Domain\Academic\GradeMark's exact case order.
+export const gradeMarkValues = [
+  "1.00",
+  "1.25",
+  "1.50",
+  "1.75",
+  "2.00",
+  "2.25",
+  "2.50",
+  "2.75",
+  "3.00",
+  "5.00",
+  "C",
+  "NC",
+  "INC",
+  "DRP",
+] as const
+
+/** The four non-numeric marks — never sent for an ordinary academic subject. */
+export const completionOnlyMarkValues = ["C", "NC", "INC", "DRP"] as const
+
+/** Every mark an ordinary (non-completion-only) subject may take. */
+export const academicMarkValues = [
+  "1.00",
+  "1.25",
+  "1.50",
+  "1.75",
+  "2.00",
+  "2.25",
+  "2.50",
+  "2.75",
+  "3.00",
+  "5.00",
+  "INC",
+  "DRP",
+] as const
+
 export const academicGradeSchema = z
   .object({
     type: z.literal("academic_grade"),
@@ -12,6 +49,8 @@ export const academicGradeSchema = z
     subject_code: z.string().min(1),
     section_id: z.number().int().positive().nullable(),
     academic_term_id: z.number().int().positive(),
+    mark: z.enum(gradeMarkValues).nullable(),
+    mark_label: z.string().nullable(),
     final_grade: z.string().nullable(),
     remarks: z.string().nullable(),
     status: z.enum(gradeStatusValues),
@@ -67,7 +106,7 @@ export const storeAcademicGradeInputSchema = z
     subject_id: z.number().int().positive(),
     section_id: z.number().int().positive(),
     academic_term_id: z.number().int().positive(),
-    final_grade: z.number().min(0).max(999.99).optional(),
+    mark: z.enum(gradeMarkValues).optional(),
     remarks: z.string().optional(),
   })
   .strict()
@@ -80,7 +119,7 @@ export const storeAcademicGradeInputSchema = z
 export const updateAcademicGradeInputSchema = z.union([
   z
     .object({
-      final_grade: z.number().min(0).max(999.99).optional(),
+      mark: z.enum(gradeMarkValues).optional(),
       remarks: z.string().optional(),
     })
     .strict(),

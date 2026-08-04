@@ -156,6 +156,18 @@ Verify: `php artisan tinker --execute="echo DB::table('users')->count();"`
 should succeed; a `DB::statement('CREATE TABLE ...')` through the same
 connection should fail (least privilege holds).
 
+### Gotcha: every new table needs its own grant, or `grc_app` gets a silent 500
+
+Each migration that adds a table requires its own follow-up `GRANT SELECT,
+INSERT, UPDATE, DELETE ON grc_enrollment.<table> TO 'grc_app'@'127.0.0.1';` —
+there is no wildcard grant (see the crash history above), so this is easy to
+forget on a table added late in a slice. The failure mode is a plain HTTP 500
+from the API (`SQLSTATE[42000]... SELECT command denied to user 'grc_app'`),
+which looks like an application bug until you check `SHOW GRANTS FOR
+'grc_app'@'127.0.0.1'`. `enrollment_change_requests` (added in the Phase 7
+add/drop slice) missed this step and stayed 500 until caught during the Phase
+10 live walkthrough; its grant was added the same way as the four above.
+
 ## Rolling back
 
 ```powershell

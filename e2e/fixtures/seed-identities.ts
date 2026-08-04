@@ -29,11 +29,17 @@ export const SEED_IDENTITIES: Record<SeedRole, { email: string; name: string }> 
   accounting_staff: { email: "accounting.seed@grc.test", name: "Seed Accounting Staff" },
 }
 
-/** Additional student lifecycle scenarios from the full DatabaseSeeder. */
+/**
+ * Additional student lifecycle scenarios from the full DatabaseSeeder.
+ * `student.seed@grc.test` itself is 1st year / regular. The four below are
+ * 2nd/3rd/4th year regular and one 2nd-year irregular — regular students
+ * enrol by block, irregular by subject (DemoEnrollmentSeeder).
+ */
 export const SEED_STUDENT_SCENARIOS = {
   pendingRegistrarApproval: { email: "student2.seed@grc.test", name: "Seed Student Two" },
   pendingPayment: { email: "student3.seed@grc.test", name: "Seed Student Three" },
   withdrawn: { email: "student4.seed@grc.test", name: "Seed Student Four" },
+  irregular: { email: "student5.seed@grc.test", name: "Seed Student Five" },
 } as const
 
 /** A deliberately nonexistent email — safe to use for throttle/negative tests. */

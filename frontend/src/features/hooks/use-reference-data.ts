@@ -1,15 +1,19 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
 import {
+  archiveAndCreateNextAcademicTerm,
+  createAcademicTerm,
   getAcademicTerms,
+  updateAcademicTerm,
   getCurricula,
   getPrograms,
   getSections,
   getSubjects,
 } from "@/features/services/reference-data-service"
+import type { ArchiveAndCreateNextInput } from "@/features/schemas/academic-term-schema"
 
 export const academicTermsQueryKey = (userId: string | null) =>
   ["academic-terms", userId] as const
@@ -35,6 +39,60 @@ export function useAcademicTermsQuery({
     queryKey: academicTermsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getAcademicTerms(signal),
     enabled: enabled && session !== null,
+  })
+}
+
+export function useCreateAcademicTermMutation() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: createAcademicTerm,
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: academicTermsQueryKey(session?.userId ?? null),
+        exact: true,
+      }),
+  })
+}
+
+export function useUpdateAcademicTermMutation() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      academicTermId,
+      action,
+    }: {
+      academicTermId: number
+      action: "open_enrollment" | "archive"
+    }) => updateAcademicTerm(academicTermId, action),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: academicTermsQueryKey(session?.userId ?? null),
+        exact: true,
+      }),
+  })
+}
+
+export function useArchiveAndCreateNextTermMutation() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      academicTermId,
+      next,
+    }: {
+      academicTermId: number
+      next: ArchiveAndCreateNextInput
+    }) => archiveAndCreateNextAcademicTerm(academicTermId, next),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: academicTermsQueryKey(session?.userId ?? null),
+        exact: true,
+      }),
   })
 }
 

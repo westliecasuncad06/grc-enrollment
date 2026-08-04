@@ -4,7 +4,9 @@ namespace Tests\Feature\Api\V1;
 
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
+use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -12,15 +14,19 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
+use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Program;
+use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -34,7 +40,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
     private function makeTerm(): AcademicTerm
     {
         return AcademicTerm::create([
-            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 
@@ -133,6 +139,36 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $this->assertDatabaseCount('enrollment_documents', 1);
         self::assertSame(AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditLog::query()->sole()->action);
         self::assertSame(NotificationType::EnrollmentPaymentConfirmed, Notification::query()->sole()->type);
+    }
+
+    public function test_confirming_payment_moves_selected_subjects_to_enrolled_but_leaves_dropped_ones_alone(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $subject = Subject::create(['code' => 'CS101', 'title' => 'CS101 Title', 'units' => 3.0, 'status' => SubjectStatus::Active]);
+        $otherSubject = Subject::create(['code' => 'CS102', 'title' => 'CS102 Title', 'units' => 3.0, 'status' => SubjectStatus::Active]);
+        $section = Section::create([
+            'academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'A',
+            'capacity' => 40, 'status' => SectionStatus::Published,
+        ]);
+        $droppedSection = Section::create([
+            'academic_term_id' => $term->id, 'subject_id' => $otherSubject->id, 'section_code' => 'A',
+            'capacity' => 40, 'status' => SectionStatus::Published,
+        ]);
+        $selectedSubject = EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id, 'section_id' => $section->id, 'status' => EnrollmentSubjectStatus::Selected,
+        ]);
+        $droppedSubject = EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id, 'section_id' => $droppedSection->id, 'status' => EnrollmentSubjectStatus::Dropped,
+        ]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.rostertransition@grc.test');
+
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [])->assertCreated();
+
+        self::assertSame(EnrollmentSubjectStatus::Enrolled, $selectedSubject->refresh()->status);
+        self::assertSame(EnrollmentSubjectStatus::Dropped, $droppedSubject->refresh()->status);
     }
 
     public function test_confirming_payment_is_idempotent_and_creates_no_duplicate(): void

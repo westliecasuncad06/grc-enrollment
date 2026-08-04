@@ -53,7 +53,7 @@ final class CurriculumSeeder extends Seeder
         [
             'program_code' => 'BSCS',
             'name' => 'BSCS Curriculum 2026',
-            'effective_school_year' => '2026-2027',
+            'effective_school_year' => '2022-2023',
             'status' => CurriculumStatus::Active,
             'placements' => [
                 ['subject' => 'CS101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
@@ -74,10 +74,67 @@ final class CurriculumSeeder extends Seeder
                 'MATH102' => ['MATH101'],
             ],
         ],
+        // Deliberately on the collegeless 'BSCS-DEMO' program (see
+        // ProgramSeeder), not "BSCS Curriculum 2026" above: any curriculum
+        // under a college-bearing program gets the entire real catalog
+        // dumped onto it by CatalogCurriculumPlacementSeeder, which would
+        // silently add ~100 unrelated required subjects on top of these 22.
+        // Leadership (completion-only, C/NC — see App\Domain\Academic\
+        // GradeMark/CompletionOnlySubjectRule) plus a core subject every
+        // semester, spanning every ordinal from year 1 semester 1 through
+        // year 4 semester 2 — DemoEnrollmentSeeder's grade-history roster
+        // needs a real placement at every one of those 8 positions.
+        [
+            'program_code' => 'BSCS-DEMO',
+            'name' => 'BSCS Grade History Demo 2026',
+            'effective_school_year' => '2022-2023',
+            'status' => CurriculumStatus::Active,
+            'placements' => [
+                ['subject' => 'CS101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'CS102', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'MATH101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'GE101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'PE101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'LEAD 1', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'CS201', 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'MATH102', 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'GE102', 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'LEAD 2', 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'CS202', 'year_level' => 2, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'LEAD 3', 'year_level' => 2, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'CS301', 'year_level' => 2, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'LEAD 4', 'year_level' => 2, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'CS302', 'year_level' => 3, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'LEAD 5', 'year_level' => 3, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'CS303', 'year_level' => 3, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'LEAD 6', 'year_level' => 3, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'CS401', 'year_level' => 4, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'LEAD 7', 'year_level' => 4, 'semester' => '1st', 'is_required' => true],
+                ['subject' => 'CS402', 'year_level' => 4, 'semester' => '2nd', 'is_required' => true],
+                ['subject' => 'LEAD8', 'year_level' => 4, 'semester' => '2nd', 'is_required' => true],
+            ],
+            'prerequisites' => [
+                'CS201' => ['CS102'],
+                'CS202' => ['CS201'],
+                'CS301' => ['CS202'],
+                'MATH102' => ['MATH101'],
+                'LEAD 2' => ['LEAD 1'],
+                'LEAD 3' => ['LEAD 2'],
+                'LEAD 4' => ['LEAD 3'],
+                'LEAD 5' => ['LEAD 4'],
+                'LEAD 6' => ['LEAD 5'],
+                'LEAD 7' => ['LEAD 6'],
+                'LEAD8' => ['LEAD 7'],
+                'CS302' => ['CS301'],
+                'CS303' => ['CS302'],
+                'CS401' => ['CS303'],
+                'CS402' => ['CS401'],
+            ],
+        ],
         [
             'program_code' => 'BSIT',
             'name' => 'BSIT Curriculum 2026',
-            'effective_school_year' => '2026-2027',
+            'effective_school_year' => '2022-2023',
             'status' => CurriculumStatus::Active,
             'placements' => [
                 ['subject' => 'CS101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
@@ -95,7 +152,7 @@ final class CurriculumSeeder extends Seeder
         [
             'program_code' => 'BSCS',
             'name' => 'BSCS Curriculum 2027 (Proposed)',
-            'effective_school_year' => '2027-2028',
+            'effective_school_year' => '2023-2024',
             'status' => CurriculumStatus::Draft,
             'placements' => [
                 ['subject' => 'CS101', 'year_level' => 1, 'semester' => '1st', 'is_required' => true],

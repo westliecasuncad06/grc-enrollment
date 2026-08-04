@@ -1,5 +1,6 @@
 import {
   academicTermsEnvelopeSchema,
+  academicTermSchema,
   curriculaEnvelopeSchema,
   programsEnvelopeSchema,
   sectionsEnvelopeSchema,
@@ -11,15 +12,32 @@ import {
   type Subject,
 } from "@/features/schemas/reference-data-schema"
 import {
+  archiveAndCreateNextInputSchema,
+  storeAcademicTermInputSchema,
+  type ArchiveAndCreateNextInput,
+  type StoreAcademicTermInput,
+} from "@/features/schemas/academic-term-schema"
+import { z } from "zod"
+import {
   ApiClientError,
   getAuthenticatedJson,
+  patchAuthenticatedJson,
+  postAuthenticatedJson,
 } from "@/features/services/api-client"
+import {
+  academicTermWorkflowsEnvelopeSchema,
+  academicTermWorkflowSchema,
+  academicTermWorkflowActionSchema,
+  type AcademicTermWorkflow,
+  type AcademicTermWorkflowAction,
+} from "@/features/schemas/academic-term-workflow-schema"
 
 export const ACADEMIC_TERMS_PATH = "/api/v1/academic-terms"
 export const PROGRAMS_PATH = "/api/v1/programs"
 export const SUBJECTS_PATH = "/api/v1/subjects"
 export const CURRICULA_PATH = "/api/v1/curricula"
 export const SECTIONS_PATH = "/api/v1/sections"
+export const ACADEMIC_TERM_WORKFLOWS_PATH = "/api/v1/academic-term-workflows"
 
 function parseResponse<T>(
   schema: {
@@ -49,6 +67,121 @@ export async function getAcademicTerms(
   const payload = await getAuthenticatedJson(ACADEMIC_TERMS_PATH, signal)
   return parseResponse(academicTermsEnvelopeSchema, payload, "academic terms")
     .data
+}
+
+const academicTermEnvelopeSchema = z
+  .object({ data: academicTermSchema })
+  .strict()
+
+/**
+ * Converts each browser `datetime-local` value (no seconds, no timezone
+ * suffix) to a full ISO 8601 string before it reaches the API.
+ */
+export async function createAcademicTerm(
+  input: StoreAcademicTermInput,
+): Promise<AcademicTerm> {
+  const parsedInput = parseResponse(
+    storeAcademicTermInputSchema,
+    input,
+    "academic term create request",
+  )
+  const payload = await postAuthenticatedJson(ACADEMIC_TERMS_PATH, {
+    school_year: parsedInput.school_year,
+    semester: parsedInput.semester,
+    enrollment_opens_at: new Date(
+      parsedInput.enrollment_opens_at,
+    ).toISOString(),
+    enrollment_closes_at: new Date(
+      parsedInput.enrollment_closes_at,
+    ).toISOString(),
+    add_drop_deadline_at: new Date(
+      parsedInput.add_drop_deadline_at,
+    ).toISOString(),
+  })
+  return parseResponse(
+    academicTermEnvelopeSchema,
+    payload,
+    "created academic term",
+  ).data
+}
+
+export async function updateAcademicTerm(
+  academicTermId: number,
+  action: "open_enrollment" | "archive",
+): Promise<AcademicTerm> {
+  const payload = await patchAuthenticatedJson(
+    `${ACADEMIC_TERMS_PATH}/${academicTermId}`,
+    { action },
+  )
+
+  return parseResponse(
+    academicTermEnvelopeSchema,
+    payload,
+    "updated academic term",
+  ).data
+}
+
+/**
+ * Archives `academicTermId` and opens `next` as the new current term, in
+ * one transaction. Returns the newly created term — the Registrar's next
+ * screen is about the new cycle, not the one just retired.
+ */
+export async function archiveAndCreateNextAcademicTerm(
+  academicTermId: number,
+  next: ArchiveAndCreateNextInput,
+): Promise<AcademicTerm> {
+  const parsedInput = parseResponse(
+    archiveAndCreateNextInputSchema,
+    next,
+    "archive-and-create-next request",
+  )
+  const payload = await postAuthenticatedJson(
+    `${ACADEMIC_TERMS_PATH}/${academicTermId}/archive-and-create-next`,
+    parsedInput,
+  )
+
+  return parseResponse(
+    academicTermEnvelopeSchema,
+    payload,
+    "created academic term",
+  ).data
+}
+
+export async function getAcademicTermWorkflows(
+  academicTermId: number,
+  signal?: AbortSignal,
+): Promise<readonly AcademicTermWorkflow[]> {
+  const payload = await getAuthenticatedJson(
+    `${ACADEMIC_TERM_WORKFLOWS_PATH}?academic_term_id=${academicTermId}`,
+    signal,
+  )
+
+  return parseResponse(
+    academicTermWorkflowsEnvelopeSchema,
+    payload,
+    "academic term workflows",
+  ).data
+}
+
+export async function updateAcademicTermWorkflow(
+  workflowId: number,
+  input: AcademicTermWorkflowAction,
+): Promise<AcademicTermWorkflow> {
+  const parsedInput = parseResponse(
+    academicTermWorkflowActionSchema,
+    input,
+    "academic term workflow action",
+  )
+  const payload = await patchAuthenticatedJson(
+    `${ACADEMIC_TERM_WORKFLOWS_PATH}/${workflowId}`,
+    parsedInput,
+  )
+
+  return parseResponse(
+    z.object({ data: academicTermWorkflowSchema }).strict(),
+    payload,
+    "updated academic term workflow",
+  ).data
 }
 
 export async function getPrograms(
@@ -82,7 +215,12 @@ export async function getSections(
 export function getActiveAcademicTerm(
   terms: readonly AcademicTerm[] | undefined,
 ): AcademicTerm | null {
-  return terms?.find((term) => term.status === "active") ?? null
+  return (
+    terms?.find(
+      (term) =>
+        term.is_actionable_current ?? term.status === "semester_ongoing",
+    ) ?? null
+  )
 }
 
 export function formatAcademicTerm(term: AcademicTerm): string {

@@ -163,7 +163,7 @@ final class TransfereeAndWithdrawalMigrationTest extends TestCase
         return Enrollment::create([
             'student_id' => $this->makeStudent()->id,
             'academic_term_id' => AcademicTerm::create([
-                'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+                'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
             ])->id,
             'status' => EnrollmentStatus::Enrolled,
             'total_units' => 0,

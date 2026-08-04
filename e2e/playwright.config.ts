@@ -5,6 +5,12 @@ import { defineConfig, devices } from "@playwright/test"
  * which routes/api.php keys per IP, not per credential. Every worker shares
  * one source IP, so it runs alone in its own serial project, positioned last,
  * so a tripped limiter can't starve the sign-ins the other journeys need.
+ *
+ * academic-term-archive.spec.ts archives the one seeded `semester_ongoing`
+ * term — a one-way transition that block-enrollment.spec.ts and
+ * enrollment.spec.ts both depend on that same term still being ongoing. It
+ * runs alone in its own serial project, after `chromium`, so it can never
+ * race or precede the specs that need the term to still be open.
  */
 export default defineConfig({
   testDir: "./tests",
@@ -23,7 +29,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: /throttling\.spec\.ts/,
+      testIgnore: [/throttling\.spec\.ts/, /academic-term-archive\.spec\.ts/],
     },
     {
       name: "throttle-isolated",
@@ -32,6 +38,14 @@ export default defineConfig({
       fullyParallel: false,
       workers: 1,
       dependencies: ["chromium"],
+    },
+    {
+      name: "archive-isolated",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /academic-term-archive\.spec\.ts/,
+      fullyParallel: false,
+      workers: 1,
+      dependencies: ["chromium", "throttle-isolated"],
     },
   ],
 })

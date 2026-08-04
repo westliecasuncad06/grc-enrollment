@@ -30,13 +30,29 @@ import {
   useUpdateAcademicGradeMutation,
 } from "@/features/hooks/use-academic-grades"
 import { useClassRosterQuery } from "@/features/hooks/use-class-roster"
-import { useSectionsQuery } from "@/features/hooks/use-reference-data"
-import type { AcademicGrade } from "@/features/schemas/academic-grade-schema"
-import { gradeBadgeVariant } from "@/features/lib/grade-presentation"
+import {
+  useSectionsQuery,
+  useSubjectsQuery,
+} from "@/features/hooks/use-reference-data"
+import {
+  gradeMarkValues,
+  type AcademicGrade,
+} from "@/features/schemas/academic-grade-schema"
+import {
+  allowedMarksForSubject,
+  gradeBadgeVariant,
+  gradeMarkLabel,
+} from "@/features/lib/grade-presentation"
 
 interface Draft {
-  finalGrade: string
+  mark: string
   remarks: string
+}
+
+function isGradeMark(
+  value: string,
+): value is (typeof gradeMarkValues)[number] {
+  return (gradeMarkValues as readonly string[]).includes(value)
 }
 
 export function GradeSubmissionWorkspace() {
@@ -48,6 +64,7 @@ export function GradeSubmissionWorkspace() {
   const [error, setError] = useState("")
 
   const sectionsQuery = useSectionsQuery({ enabled: authorized })
+  const subjectsQuery = useSubjectsQuery({ enabled: authorized })
   const facultyId = Number(session?.userId)
   const ownSections = useMemo(() => {
     if (!Number.isSafeInteger(facultyId) || facultyId <= 0) return []
@@ -57,6 +74,12 @@ export function GradeSubmissionWorkspace() {
   }, [sectionsQuery.data, facultyId])
   const selectedSection = ownSections.find(
     (section) => section.id === sectionId,
+  )
+  const selectedSubject = (subjectsQuery.data ?? []).find(
+    (subject) => subject.id === selectedSection?.subject_id,
+  )
+  const allowedMarks = allowedMarksForSubject(
+    selectedSubject?.is_completion_only ?? false,
   )
 
   const rosterQuery = useClassRosterQuery(
@@ -80,7 +103,7 @@ export function GradeSubmissionWorkspace() {
 
   const draftFor = (studentId: number, grade: AcademicGrade | undefined) =>
     drafts[studentId] ?? {
-      finalGrade: grade?.final_grade ?? "",
+      mark: grade?.mark ?? "",
       remarks: grade?.remarks ?? "",
     }
 
@@ -105,9 +128,7 @@ export function GradeSubmissionWorkspace() {
         subject_id: selectedSection.subject_id,
         section_id: selectedSection.id,
         academic_term_id: selectedSection.academic_term_id,
-        final_grade: draft.finalGrade.trim()
-          ? Number(draft.finalGrade)
-          : undefined,
+        mark: isGradeMark(draft.mark) ? draft.mark : undefined,
         remarks: draft.remarks.trim() || undefined,
       })
     } catch {
@@ -127,9 +148,7 @@ export function GradeSubmissionWorkspace() {
       await updateMutation.mutateAsync({
         id: grade.id,
         input: {
-          final_grade: draft.finalGrade.trim()
-            ? Number(draft.finalGrade)
-            : undefined,
+          mark: isGradeMark(draft.mark) ? draft.mark : undefined,
           remarks: draft.remarks.trim() || undefined,
         },
       })
@@ -243,8 +262,8 @@ export function GradeSubmissionWorkspace() {
                       render: (entry) => entry.student_number,
                     },
                     {
-                      key: "final_grade",
-                      header: "Final grade",
+                      key: "mark",
+                      header: "Mark",
                       render: (entry) => {
                         const grade = gradesByStudentId.get(entry.student_id)
                         const draft = draftFor(entry.student_id, grade)
@@ -254,19 +273,29 @@ export function GradeSubmissionWorkspace() {
                           (createMutation.isPending || updateMutation.isPending)
 
                         return editable ? (
-                          <Input
-                            inputMode="decimal"
-                            aria-label={`Final grade for ${entry.student_number}`}
-                            value={draft.finalGrade}
+                          <Select
+                            value={draft.mark}
                             disabled={rowPending}
-                            onChange={(event) =>
-                              setDraft(entry.student_id, {
-                                finalGrade: event.target.value,
-                              })
+                            onValueChange={(value) =>
+                              setDraft(entry.student_id, { mark: value })
                             }
-                          />
+                          >
+                            <SelectTrigger
+                              aria-label={`Mark for ${entry.student_number}`}
+                              className="w-full"
+                            >
+                              <SelectValue placeholder="Select mark" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allowedMarks.map((mark) => (
+                                <SelectItem key={mark} value={mark}>
+                                  {mark} — {gradeMarkLabel[mark]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         ) : (
-                          (grade?.final_grade ?? "—")
+                          (grade?.mark_label ?? "—")
                         )
                       },
                     },

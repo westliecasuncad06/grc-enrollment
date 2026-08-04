@@ -71,6 +71,7 @@ final class ScheduleProposalAuditTest extends TestCase
         UserRole $actorRole,
         string $expectedAuditAction,
         ?string $reason,
+        int $expectedNotifications,
     ): void {
         Carbon::setTestNow('2026-07-29 09:30:00 UTC');
 
@@ -115,20 +116,32 @@ final class ScheduleProposalAuditTest extends TestCase
                 $reason,
                 "transition-{$transition}-request",
             );
-            $this->assertDatabaseCount('notifications', 0);
+            // ADR 0019 supersedes the original "only publish notifies" rule:
+            // `TransitionScheduleProposal` now notifies on every transition
+            // that `ScheduleTransitionNotificationPlan` covers. `close` is
+            // not in that plan, so it stays silent; the approve/return
+            // transitions each reach the submitter, who is the only
+            // recipient this fixture actually creates a user for.
+            $this->assertDatabaseCount('notifications', $expectedNotifications);
         } finally {
             Carbon::setTestNow();
         }
     }
 
     /**
+     * The trailing int is the expected notification count. Approve and
+     * return transitions reach the submitting Chair, who is the only
+     * planned recipient this fixture creates a user for; `close` has no
+     * entry in `ScheduleTransitionNotificationPlan` at all.
+     *
      * @return array<string, array{
      *     string,
      *     ScheduleProposalStatus,
      *     ScheduleProposalStatus,
      *     UserRole,
      *     string,
-     *     ?string
+     *     ?string,
+     *     int
      * }>
      */
     public static function nonPublicationTransitionProvider(): array
@@ -141,14 +154,16 @@ final class ScheduleProposalAuditTest extends TestCase
                 UserRole::Dean,
                 AuditAction::SCHEDULE_PROPOSAL_DEAN_APPROVED,
                 null,
+                1,
             ],
             'dean return' => [
                 'dean_return',
-                ScheduleProposalStatus::DeanApproved,
+                ScheduleProposalStatus::Draft,
                 ScheduleProposalStatus::Draft,
                 UserRole::Dean,
                 AuditAction::SCHEDULE_PROPOSAL_DEAN_RETURNED,
                 'Please correct the faculty assignments.',
+                1,
             ],
             'executive approve' => [
                 'executive_approve',
@@ -157,14 +172,16 @@ final class ScheduleProposalAuditTest extends TestCase
                 UserRole::ExecutiveDirector,
                 AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_APPROVED,
                 null,
+                1,
             ],
             'executive return' => [
                 'executive_return',
-                ScheduleProposalStatus::ExecutiveApproved,
+                ScheduleProposalStatus::DeanApproved,
                 ScheduleProposalStatus::Draft,
                 UserRole::ExecutiveDirector,
                 AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_RETURNED,
                 'Please resolve the room conflict.',
+                1,
             ],
             'close' => [
                 'close',
@@ -173,6 +190,7 @@ final class ScheduleProposalAuditTest extends TestCase
                 UserRole::RegistrarHead,
                 AuditAction::SCHEDULE_PROPOSAL_CLOSED,
                 null,
+                0,
             ],
         ];
     }
@@ -459,7 +477,7 @@ final class ScheduleProposalAuditTest extends TestCase
         return AcademicTerm::create([
             'school_year' => '2026-2027',
             'semester' => '1st',
-            'status' => AcademicTermStatus::Active,
+            'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 

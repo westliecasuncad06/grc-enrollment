@@ -69,12 +69,20 @@ final class EnrollmentController extends Controller
         $student = StudentProfile::query()->where('user_id', $actor->id)->firstOrFail();
         $term = AcademicTerm::query()->where('id', $request->validated('academic_term_id'))->firstOrFail();
 
-        $sectionIds = array_values(array_map(
-            static fn (array $section): int => (int) $section['section_id'],
-            $request->validated('sections'),
-        ));
+        // For a block submission, `resolvedSectionIds()` is the server-side
+        // expansion of `block_code` — the client never supplies section ids
+        // directly for a block.
+        $sectionIds = $request->resolvedSectionIds();
+        $blockCode = $request->validated('block_code');
 
-        $enrollment = $submitEnrollment->execute($student, $term, $sectionIds, $actor, $contextFactory->fromRequest($request));
+        $enrollment = $submitEnrollment->execute(
+            $student,
+            $term,
+            $sectionIds,
+            $actor,
+            $contextFactory->fromRequest($request),
+            is_string($blockCode) ? $blockCode : null,
+        );
 
         $response = EnrollmentResource::make($enrollment)->response($request);
         $response->setStatusCode(201);

@@ -9,10 +9,12 @@ import {
   scheduleProposalInputSchema,
   scheduleProposalTransitionSchema,
   scheduleProposalsEnvelopeSchema,
+  scheduleReviewSectionsEnvelopeSchema,
   sectionInputSchema,
   type ScheduleProposal,
   type ScheduleProposalInput,
   type ScheduleProposalTransition,
+  type ScheduleReviewSection,
   type ScheduleAction,
   type SectionEditorValues,
   type SectionInput,
@@ -35,10 +37,10 @@ const legalActions: Record<
   admission_staff: {},
   faculty: {},
   program_chair: {},
-  dean: { draft: ["dean_approve"], dean_approved: ["dean_return"] },
+  dean: { draft: ["dean_approve", "dean_return"] },
   executive_director: {
-    dean_approved: ["executive_approve"],
-    executive_approved: ["executive_return", "publish"],
+    dean_approved: ["executive_approve", "executive_return"],
+    executive_approved: ["publish"],
   },
   registrar_head: { published: ["close"] },
   registrar_staff: {},
@@ -49,6 +51,7 @@ export function availableScheduleActions(
   role: UserRole,
   proposal: ScheduleProposal,
 ): ScheduleAction[] {
+  if (proposal.is_submitted === false) return []
   return [...(legalActions[role][proposal.status] ?? [])]
 }
 
@@ -85,6 +88,7 @@ export function toSectionReplacement(
       starts_at_time: section.starts_at_time,
       ends_at_time: section.ends_at_time,
       room: section.room,
+      modality: section.modality ?? null,
       capacity: section.capacity,
       viability_threshold: section.viability_threshold,
       status: section.status,
@@ -121,6 +125,17 @@ export async function getScheduleProposals(
     scheduleProposalsEnvelopeSchema,
     await getAuthenticatedJson(SCHEDULE_PROPOSALS_PATH, signal),
     "schedule proposal list",
+  ).data
+}
+
+export async function getScheduleReviewSections(
+  proposalId: number,
+  signal?: AbortSignal,
+): Promise<readonly ScheduleReviewSection[]> {
+  return parse(
+    scheduleReviewSectionsEnvelopeSchema,
+    await getAuthenticatedJson(`${SCHEDULE_PROPOSALS_PATH}/${proposalId}/sections`, signal),
+    "submitted schedule section list",
   ).data
 }
 

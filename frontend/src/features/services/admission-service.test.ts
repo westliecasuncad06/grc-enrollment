@@ -13,6 +13,7 @@ const input: ProvisionStudentInput = {
   program_id: 11,
   curriculum_id: 22,
   year_level: 1,
+  enrollment_category: "regular",
 }
 
 const profile = {
@@ -23,6 +24,7 @@ const profile = {
   program_id: input.program_id,
   curriculum_id: input.curriculum_id,
   year_level: input.year_level,
+  enrollment_category: "regular",
   admission_status: "admitted",
   admission_status_label: "Admitted",
   academic_standing: "good",
@@ -40,7 +42,7 @@ describe("provisionStudent", () => {
     vi.unstubAllGlobals()
   })
 
-  it("posts only the seven approved provisioning fields and parses the created profile", async () => {
+  it("posts only the eight approved provisioning fields and parses the created profile", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ data: profile }), { status: 201 }),
     )
@@ -61,6 +63,7 @@ describe("provisionStudent", () => {
     expect(Object.keys(body).sort()).toEqual([
       "curriculum_id",
       "email",
+      "enrollment_category",
       "name",
       "password",
       "program_id",

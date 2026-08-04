@@ -415,7 +415,7 @@ final class FacultyInputAuditTest extends TestCase
         return AcademicTerm::create([
             'school_year' => '2026-2027',
             'semester' => '1st',
-            'status' => AcademicTermStatus::Active,
+            'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 

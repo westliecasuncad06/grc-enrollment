@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Domain\Identity\UserRole;
 use App\Models\AcademicTerm;
 use App\Models\User;
 
@@ -14,6 +15,19 @@ final class AcademicTermPolicy
     public function viewAny(User $user): bool
     {
         return true;
+    }
+
+    /**
+     * Actor: Registrar Head — PRD Process 1's term-creation owner.
+     */
+    public function create(User $user): bool
+    {
+        return $user->role === UserRole::RegistrarHead;
+    }
+
+    public function update(User $user, AcademicTerm $term): bool
+    {
+        return $user->role === UserRole::RegistrarHead;
     }
 
     /**

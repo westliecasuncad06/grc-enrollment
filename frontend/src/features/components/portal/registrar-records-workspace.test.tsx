@@ -220,6 +220,8 @@ describe("RegistrarRecordsWorkspace", () => {
                   subject_code: "CS101",
                   section_id: 44,
                   academic_term_id: 1,
+                  mark: "1.50",
+                  mark_label: "with Distinction",
                   final_grade: "1.50",
                   remarks: null,
                   status: "locked",

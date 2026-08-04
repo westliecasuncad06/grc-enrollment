@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Domain\Identity\UserRole;
+use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\Section;
 use App\Models\User;
@@ -21,6 +22,10 @@ final class SectionPolicy
 
     public function view(User $user, Section $section): bool
     {
+        if ($user->role === UserRole::ProgramChair && $user->college !== null && $section->section_plan_id !== null) {
+            return $section->sectionPlan?->college === $user->college->value;
+        }
+
         if (! $user->role->isLearnerScoped()) {
             if ($user->role === UserRole::ExecutiveDirector) {
                 return $section->status === SectionStatus::Published;
@@ -39,11 +44,13 @@ final class SectionPolicy
 
     public function create(User $user): bool
     {
-        return $user->role === UserRole::ProgramChair;
+        return $user->role === UserRole::ProgramChair && $user->college !== null;
     }
 
     public function update(User $user, Section $section): bool
     {
-        return $user->role === UserRole::ProgramChair;
+        return $user->role === UserRole::ProgramChair
+            && ($section->sectionPlan === null || $section->sectionPlan->status !== SectionPlanStatus::Submitted)
+            && ($user->college === null || $section->section_plan_id === null || $section->sectionPlan?->college === $user->college->value);
     }
 }

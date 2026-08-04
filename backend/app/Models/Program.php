@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * @property int $id
  * @property string $code
+ * @property ?CollegeCode $college
  * @property string $name
  * @property ProgramStatus $status
  * @property ?CarbonImmutable $created_at
@@ -20,6 +22,7 @@ final class Program extends Model
     /** @var list<string> */
     protected $fillable = [
         'code',
+        'college',
         'name',
         'status',
     ];
@@ -30,6 +33,7 @@ final class Program extends Model
     protected function casts(): array
     {
         return [
+            'college' => CollegeCode::class,
             'status' => ProgramStatus::class,
         ];
     }

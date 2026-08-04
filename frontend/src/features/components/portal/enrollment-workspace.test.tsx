@@ -17,8 +17,10 @@ const terms = {
       ends_at: null,
       enrollment_opens_at: null,
       enrollment_closes_at: null,
-      status: "active",
-      status_label: "Active",
+      add_drop_deadline_at: null,
+      grading_deadline_at: null,
+      status: "semester_ongoing",
+      status_label: "Semester Ongoing",
     },
   ],
 }
@@ -47,13 +49,92 @@ const eligibleSubject = {
       ends_at_time: "09:00:00",
       room: "R101",
       capacity: 30,
+      capacity_source: "plan",
       viability_threshold: null,
       enrolled_count: 0,
       remaining_seats: 30,
+      is_block_exclusive: null,
       status: "published",
       status_label: "Published",
     },
   ],
+}
+
+const enrollmentBlock = {
+  type: "enrollment_block",
+  block_code: "IT201",
+  year_level: 2,
+  curriculum_id: 9,
+  section_plan_id: 12,
+  total_units: 6,
+  seats_remaining: 7,
+  capacity: 40,
+  is_selectable: true,
+  reasons: [],
+  subjects: [
+    {
+      section_id: 5,
+      subject_id: 7,
+      code: "CS201",
+      title: "Data Structures",
+      units: 3,
+      schedule_days: "MWF",
+      starts_at_time: "08:00:00",
+      ends_at_time: "09:00:00",
+      room: "LAB-1",
+      modality: "f2f",
+      professor_name: "Dr. Cruz",
+      capacity: 40,
+      enrolled_count: 33,
+      remaining_seats: 7,
+    },
+    {
+      section_id: 6,
+      subject_id: 8,
+      code: "GE201",
+      title: "Ethics",
+      units: 3,
+      schedule_days: "TTh",
+      starts_at_time: "10:00:00",
+      ends_at_time: "11:30:00",
+      room: "R201",
+      modality: "f2f",
+      professor_name: "Dr. Reyes",
+      capacity: 40,
+      enrolled_count: 30,
+      remaining_seats: 10,
+    },
+  ],
+}
+
+const regularViewer = {
+  audience: "year_2",
+  label: "2nd Year",
+  opens_at: null,
+  closes_at: null,
+  is_open: true,
+  reason: "open",
+}
+
+function mockRegularSchedule(input: RequestInfo | URL) {
+  const target = url(input)
+  if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: {
+            type: "enrollment_schedule",
+            academic_term_id: 2,
+            status: "semester_ongoing",
+            enrollment_opens_at: null,
+            enrollment_closes_at: null,
+            audiences: [],
+            viewer: regularViewer,
+          },
+        }),
+      ),
+    )
+  return null
 }
 
 const paginationLinks = {
@@ -92,12 +173,9 @@ const createdEnrollment = {
         status_label: "Selected",
       },
     ],
-    queue_ticket: {
-      ticket_number: "Q000009",
-      queue_date: "2026-07-30",
-      status: "waiting",
-      status_label: "Waiting",
-    },
+    // No queue ticket yet at submission — it is issued only once Registrar
+    // Staff approves (Phase 6).
+    queue_ticket: null,
   },
 }
 
@@ -156,6 +234,42 @@ function mockRoutes(
   }
 }
 
+function mockRegularRoutes(
+  overrides: {
+    blocks?: unknown
+    onSubmit?: () => unknown
+  } = {},
+) {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const scheduleResponse = mockRegularSchedule(input)
+    if (scheduleResponse) return scheduleResponse
+
+    const target = url(input)
+    if (target.includes("/academic-terms"))
+      return Promise.resolve(new Response(JSON.stringify(terms)))
+    if (target.includes("/enrollment-blocks"))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: overrides.blocks ?? [enrollmentBlock] }),
+        ),
+      )
+    if (target.includes("/enrollments") && init?.method === "POST")
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(overrides.onSubmit?.() ?? createdEnrollment),
+          { status: 201 },
+        ),
+      )
+    if (target.includes("/enrollments"))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta }),
+        ),
+      )
+    return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+  }
+}
+
 describe("EnrollmentWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
@@ -195,7 +309,9 @@ describe("EnrollmentWorkspace", () => {
       academic_term_id: 2,
       sections: [{ section_id: 5 }],
     })
-    expect(await screen.findByText(/Queue ticket: Q000009/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/pending registrar approval/),
+    ).toBeInTheDocument()
   })
 
   it("preserves the selected section when submission fails", async () => {
@@ -388,6 +504,157 @@ describe("EnrollmentWorkspace", () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Section")).not.toBeInTheDocument()
+  })
+
+  it("shows a closed banner and disables selection and submission when the enrollment window is closed", async () => {
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "enrollment_schedule",
+                academic_term_id: 2,
+                status: "semester_ongoing",
+                enrollment_opens_at: null,
+                enrollment_closes_at: null,
+                audiences: [],
+                viewer: {
+                  audience: "irregular",
+                  label: "Irregular Students",
+                  opens_at: "2028-08-01T00:00:00Z",
+                  closes_at: null,
+                  is_open: false,
+                  reason: "before_window",
+                },
+              },
+            }),
+          ),
+        )
+      if (target.includes("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [eligibleSubject] })),
+        )
+      if (target.includes("/enrollments"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(
+      await screen.findByText("Enrollment has not opened yet"),
+    ).toBeInTheDocument()
+    expect(await screen.findByLabelText("Section")).toBeDisabled()
+  })
+
+  it("a regular student selects a block, reviews, confirms, and submits", async () => {
+    const user = userEvent.setup()
+    let submitCall: [RequestInfo | URL, RequestInit | undefined] | null = null
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        url(input).includes("/enrollments") &&
+        init?.method === "POST"
+      ) {
+        submitCall = [input, init]
+      }
+      return mockRegularRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(await screen.findByText("Select your block")).toBeInTheDocument()
+    await user.click(await screen.findByText("Block IT201"))
+    expect(
+      await screen.findByText("Review your block"),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    expect(
+      screen.getByText(/enrolls you in all 2 subjects of block IT201/),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+
+    await vi.waitFor(() => expect(submitCall).not.toBeNull())
+    const [, init] = submitCall!
+    expect(JSON.parse(init?.body as string)).toEqual({
+      academic_term_id: 2,
+      block_code: "IT201",
+    })
+    expect(
+      await screen.findByText(/pending registrar approval/),
+    ).toBeInTheDocument()
+  })
+
+  it("shows an explicit empty state when no blocks exist for a regular student's curriculum", async () => {
+    fetchMock.mockImplementation(mockRegularRoutes({ blocks: [] }))
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(
+      await screen.findByText(
+        "No blocks were generated for your year level and curriculum yet. Contact the Registrar.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("disables block selection when the enrollment window is closed", async () => {
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "enrollment_schedule",
+                academic_term_id: 2,
+                status: "semester_ongoing",
+                enrollment_opens_at: null,
+                enrollment_closes_at: null,
+                audiences: [],
+                viewer: { ...regularViewer, is_open: false, reason: "before_window" },
+              },
+            }),
+          ),
+        )
+      return mockRegularRoutes()(input)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    const block = await screen.findByText("Block IT201")
+    await userEvent.setup().click(block)
+    expect(screen.queryByText("Review your block")).not.toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

@@ -4,6 +4,7 @@ export interface AuthSession {
   userId: string
   displayName: string
   role: UserRole
+  college?: "ccs" | "coe" | "coa" | "cbae" | null
   signedInAt: string
 }
 

@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
@@ -14,7 +16,10 @@ use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermEnrollmentWindow;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
@@ -37,7 +42,7 @@ final class EnrollmentsEndpointTest extends TestCase
     private function makeTerm(): AcademicTerm
     {
         return AcademicTerm::create([
-            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Active,
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
         ]);
     }
 
@@ -91,6 +96,46 @@ final class EnrollmentsEndpointTest extends TestCase
             'admission_status' => AdmissionStatus::Admitted,
             'academic_standing' => AcademicStanding::Good,
         ]);
+    }
+
+    /**
+     * @return array{0: AcademicTermSectionPlan, 1: list<Section>}
+     */
+    private function makeBlock(AcademicTerm $term, Curriculum $curriculum, string $blockCode, array $subjectCodes): array
+    {
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id,
+            'college' => 'ccs', 'year_level' => 1, 'section_count' => 1,
+            'students_per_block' => 40, 'status' => 'submitted',
+        ]);
+
+        $sections = [];
+        // Real block schedules never overlap; staggering the start hour per
+        // subject keeps this fixture conflict-free the same way.
+        foreach (array_values($subjectCodes) as $index => $subjectCode) {
+            $subject = $this->makeSubject($subjectCode);
+            $this->placeSubject($curriculum, $subject);
+            $startHour = 8 + $index;
+            $sections[] = Section::create([
+                'academic_term_id' => $term->id,
+                'section_plan_id' => $plan->id,
+                'subject_id' => $subject->id,
+                'section_code' => $blockCode,
+                'schedule_days' => 'MWF',
+                'starts_at_time' => sprintf('%02d:00:00', $startHour),
+                'ends_at_time' => sprintf('%02d:00:00', $startHour + 1),
+                'room' => 'LAB-1',
+                'professor_id' => User::create([
+                    'name' => 'Prof '.$subjectCode, 'email' => strtolower($subjectCode).'.prof@grc.test',
+                    'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+                ])->id,
+                'capacity' => 40,
+                'is_block_exclusive' => true,
+                'status' => SectionStatus::Published,
+            ]);
+        }
+
+        return [$plan, $sections];
     }
 
     private function tokenFor(StudentProfile $student): string
@@ -197,11 +242,13 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertJsonPath('data.total_units', 3);
         $response->assertJsonCount(1, 'data.subjects');
         $response->assertJsonPath('data.subjects.0.subject_code', 'CS101');
-        $response->assertJsonPath('data.queue_ticket.status', 'waiting');
+        // No queue ticket yet — it is issued only once Registrar Staff
+        // approves (Phase 6), not at submission.
+        $response->assertJsonPath('data.queue_ticket', null);
 
         $this->assertDatabaseCount('enrollments', 1);
         $this->assertDatabaseCount('enrollment_subjects', 1);
-        $this->assertDatabaseCount('queue_tickets', 1);
+        $this->assertDatabaseCount('queue_tickets', 0);
         self::assertSame(AuditAction::ENROLLMENT_SUBMITTED, AuditLog::query()->sole()->action);
         self::assertSame(
             NotificationType::EnrollmentSubmitted,
@@ -210,6 +257,187 @@ final class EnrollmentsEndpointTest extends TestCase
 
         $section->refresh();
         self::assertSame(1, $section->enrolled_count);
+    }
+
+    public function test_a_block_submission_enrolls_every_subject_in_the_block_atomically(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        [, $sections] = $this->makeBlock($term, $curriculum, 'IT101', ['CS101', 'GE101']);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'IT101',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonCount(2, 'data.subjects');
+        $this->assertDatabaseCount('enrollment_subjects', 2);
+        self::assertSame(AuditAction::ENROLLMENT_SUBMITTED, AuditLog::query()->sole()->action);
+        self::assertSame('IT101', AuditLog::query()->sole()->after_values['block_code'] ?? null);
+
+        foreach ($sections as $section) {
+            self::assertSame(1, $section->refresh()->enrolled_count);
+        }
+    }
+
+    public function test_sections_and_block_code_together_are_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        [, $sections] = $this->makeBlock($term, $curriculum, 'IT101', ['CS101']);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'IT101',
+            'sections' => [['section_id' => $sections[0]->id]],
+        ]);
+
+        $response->assertUnprocessable();
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    /**
+     * A block submission deliberately skips the per-subject
+     * `rejectIneligibleSections()` check — running the per-subject pool
+     * would reject any subject the student already completed, which is a
+     * different rule than the one that actually governs a block.
+     * `BuildEnrollmentBlockPool` is what's authoritative for a block
+     * instead, and it withholds the whole block once any subject in it is
+     * already passed: a repeater no longer advances in lockstep with a
+     * single block, so they need the Registrar to reclassify them as
+     * irregular before they can pick subjects individually.
+     */
+    public function test_a_previously_completed_subject_blocks_the_whole_block_submission(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        [, $sections] = $this->makeBlock($term, $curriculum, 'IT101', ['CS101', 'GE101']);
+        $student = $this->makeStudent($curriculum);
+        $faculty = User::create([
+            'name' => 'Grade Encoder', 'email' => 'encoder.repeat@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+        ]);
+        AcademicGrade::create([
+            'student_id' => $student->id,
+            'subject_id' => $sections[0]->subject_id,
+            'academic_term_id' => $term->id,
+            'final_grade' => '1.00',
+            'status' => GradeStatus::Locked,
+            'encoded_by' => $faculty->id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'IT101',
+        ]);
+
+        $response->assertUnprocessable();
+        $this->assertDatabaseCount('enrollments', 0);
+        foreach ($sections as $section) {
+            self::assertSame(0, $section->refresh()->enrolled_count);
+        }
+    }
+
+    public function test_an_unavailable_block_code_is_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'DOES-NOT-EXIST',
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonPath('error.errors.block_code.0', 'This block is not available for your year level and curriculum.');
+    }
+
+    public function test_submission_against_a_term_that_is_not_semester_ongoing_is_rejected(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::Draft,
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertArrayHasKey('academic_term_id', $response->json('error.errors'));
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    public function test_submission_before_the_students_year_level_window_opens_is_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $term->update([
+            'enrollment_opens_at' => now()->subDay(),
+            'enrollment_closes_at' => now()->addMonth(),
+        ]);
+        AcademicTermEnrollmentWindow::create([
+            'academic_term_id' => $term->id,
+            'audience' => EnrollmentAudience::Year1,
+            'opens_at' => now()->addWeek(),
+            'closes_at' => now()->addMonth(),
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertArrayHasKey('academic_term_id', $response->json('error.errors'));
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    public function test_submission_inside_the_students_year_level_window_succeeds(): void
+    {
+        $term = $this->makeTerm();
+        $term->update([
+            'enrollment_opens_at' => now()->subDay(),
+            'enrollment_closes_at' => now()->addMonth(),
+        ]);
+        AcademicTermEnrollmentWindow::create([
+            'academic_term_id' => $term->id,
+            'audience' => EnrollmentAudience::Year1,
+            'opens_at' => now()->subDay(),
+            'closes_at' => now()->addMonth(),
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ]);
+
+        $response->assertCreated();
     }
 
     public function test_a_submission_totals_fractional_units_correctly(): void
@@ -465,6 +693,26 @@ final class EnrollmentsEndpointTest extends TestCase
         $paged->assertJsonPath('meta.per_page', 1);
     }
 
+    public function test_registrar_staff_sees_every_enrollment_with_filters_and_pagination(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+
+        $studentA = $this->makeStudent($curriculum);
+        $this->makeEnrollment($studentA, $term);
+
+        $studentB = $this->makeStudentWithEmail($curriculum, 'second.staff@grc.test', '2026-0003');
+        $this->makeEnrollment($studentB, $term);
+
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.enroll@grc.test');
+
+        $all = $this->withToken($staffToken)->getJson('/api/v1/enrollments');
+        $all->assertOk()->assertJsonCount(2, 'data');
+
+        $filtered = $this->withToken($staffToken)->getJson('/api/v1/enrollments?status=pending_registrar_approval');
+        $filtered->assertOk()->assertJsonCount(2, 'data');
+    }
+
     public function test_accounting_staff_sees_only_pending_payment_enrollments_regardless_of_status_filter(): void
     {
         $term = $this->makeTerm();
@@ -493,9 +741,9 @@ final class EnrollmentsEndpointTest extends TestCase
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
         $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
-        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.approve@grc.test');
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.approve@grc.test');
 
-        $response = $this->withToken($registrarToken)
+        $response = $this->withToken($staffToken)
             ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
 
         $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
@@ -508,6 +756,27 @@ final class EnrollmentsEndpointTest extends TestCase
             NotificationType::EnrollmentRegistrarApproved,
             Notification::query()->sole()->type,
         );
+
+        // The Cashier queue ticket is issued exactly at this checkpoint —
+        // not at submission (Phase 6).
+        $response->assertJsonPath('data.queue_ticket.status', 'waiting');
+        $this->assertDatabaseCount('queue_tickets', 1);
+    }
+
+    public function test_a_registrar_head_role_cannot_perform_registrar_approve(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.head.approve@grc.test');
+
+        $response = $this->withToken($registrarToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
+        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+        $this->assertDatabaseCount('queue_tickets', 0);
     }
 
     public function test_registrar_reject_requires_a_reason_and_transitions_to_rejected(): void
@@ -516,7 +785,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
         $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
-        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.reject@grc.test');
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.reject@grc.test');
 
         $withoutReason = $this->withToken($registrarToken)
             ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_reject']);
@@ -572,7 +841,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $this->assertDatabaseCount('audit_logs', 0);
     }
 
-    public function test_a_non_registrar_head_role_cannot_perform_registrar_approve(): void
+    public function test_a_non_registrar_staff_role_cannot_perform_registrar_approve(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();

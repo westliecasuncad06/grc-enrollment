@@ -2,11 +2,15 @@
 
 namespace App\Http\Requests\Api\V1\AcademicGrade;
 
+use App\Domain\Academic\CompletionOnlySubjectRule;
+use App\Domain\Academic\GradeMark;
 use App\Models\AcademicGrade;
 use App\Models\Section;
+use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Faculty-only (DFD 3.1): every grade this endpoint creates is tied to one
@@ -34,7 +38,7 @@ final class StoreAcademicGradeRequest extends FormRequest
             'subject_id' => ['required', 'integer', 'exists:subjects,id'],
             'section_id' => ['required', 'integer', 'exists:sections,id'],
             'academic_term_id' => ['required', 'integer', 'exists:academic_terms,id'],
-            'final_grade' => ['sometimes', 'nullable', 'numeric', 'between:0,999.99'],
+            'mark' => ['sometimes', 'nullable', Rule::enum(GradeMark::class)],
             'remarks' => ['sometimes', 'nullable', 'string'],
         ];
     }
@@ -76,7 +80,39 @@ final class StoreAcademicGradeRequest extends FormRequest
                     'subject_id',
                     'A grade record already exists for this student, subject, and term.',
                 );
+
+                return;
             }
+
+            $this->rejectMarkNotAllowedForSubject($validator, (int) $subjectId);
         });
+    }
+
+    private function rejectMarkNotAllowedForSubject(Validator $validator, int $subjectId): void
+    {
+        $rawMark = $this->input('mark');
+
+        if ($rawMark === null || $rawMark === '') {
+            return;
+        }
+
+        $mark = GradeMark::tryFrom((string) $rawMark);
+        $subject = Subject::query()->find($subjectId);
+
+        if ($mark === null || $subject === null) {
+            return;
+        }
+
+        /** @var list<string> $prefixes */
+        $prefixes = (array) config('enrollment.grading.completion_only_code_prefixes', []);
+        $allowed = CompletionOnlySubjectRule::allowedMarks($subject->code, $prefixes);
+
+        if (! in_array($mark, $allowed, true)) {
+            $message = CompletionOnlySubjectRule::matches($subject->code, $prefixes)
+                ? "{$subject->code} is a Leadership subject and is recorded as Complete (C) or Not Complete (NC), not a numeric grade."
+                : "{$subject->code} cannot be recorded as Complete/Not Complete.";
+
+            $validator->errors()->add('mark', $message);
+        }
     }
 }
