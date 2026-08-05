@@ -42,6 +42,17 @@ Because all three screens consume this one hook, this single change makes all
 three queues refresh live — confirmed as in-scope with the user, since forking
 the hook per screen would duplicate logic for identical desired behavior.
 
+**Correction (post-implementation, final review):** this is accurate for
+Registrar Staff's Enrollment Approvals and Registrar Head's Overrides &
+Voids, which both render their table directly off this query. It overstates
+the Accounting/Cashier screen: that screen's visible waiting-line list is
+driven by a separate, non-polling hook (`useQueueTicketsQuery`); this
+change only makes the enrollment-derived fields joined onto each ticket
+row (financial status, units, amount due) refresh live there, not the
+queue membership itself. Extending `useQueueTicketsQuery` with the same
+polling is the natural follow-up, tracked separately — out of this slice's
+scope, which is limited to `useEnrollmentsListQuery`.
+
 5 seconds matches the schedule-proposals and notification-bell precedent
 (these are the "staff review queue" family); the sibling
 `useEnrollmentsQuery` (a student's own enrollment record) polls at 10 seconds,

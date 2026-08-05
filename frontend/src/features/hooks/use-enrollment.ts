@@ -82,13 +82,20 @@ export const enrollmentsListQueryKey = (
 /**
  * Polls every 5s so a newly submitted enrollment shows up in whichever
  * role-scoped queue is watching it — Registrar Staff's Enrollment
- * Approvals, Registrar Head's Overrides & Voids, and the Cashier's
- * pending-payment queue all consume this one hook. Matches the interval
- * already used for the schedule-proposals queue and the notification bell
- * (see docs/superpowers/specs/2026-08-03-realtime-schedule-refresh-design.md);
- * `useEnrollmentsQuery` above stays at 10s since that one is a student's own
- * record view, not a staff review queue. Refetches immediately on window
- * focus. TanStack Query pauses polling in hidden tabs by default
+ * Approvals and Registrar Head's Overrides & Voids both render their
+ * table directly off this query, so both refresh live. The Accounting
+ * payment screen also consumes this hook, but only to enrich its ticket
+ * rows with financial-status/units/amount-due data joined by enrollment
+ * id — its actual waiting-line list comes from `useQueueTicketsQuery`
+ * (frontend/src/features/hooks/use-queue-tickets.ts), which does not poll,
+ * so a newly approved student still needs a mutation or reload to appear
+ * there. Matches the interval already used for the schedule-proposals
+ * queue and the notification bell (see
+ * docs/superpowers/specs/2026-08-03-realtime-schedule-refresh-design.md
+ * and docs/superpowers/specs/2026-08-05-realtime-enrollment-queue-refresh-design.md);
+ * `useEnrollmentsQuery` above stays at 10s since that one is a student's
+ * own record view, not a staff review queue. Refetches immediately on
+ * window focus. TanStack Query pauses polling in hidden tabs by default
  * (`refetchIntervalInBackground` is not set), so this costs nothing when
  * nobody is looking at the page.
  */
