@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -137,7 +137,10 @@ function mockRoutes(
 describe("AccountingPaymentWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it("does not render the queue for an unauthorized role", () => {
     fetchMock.mockImplementation(mockRoutes())
@@ -173,6 +176,39 @@ describe("AccountingPaymentWorkspace", () => {
 
     const waitingRow = await screen.findByRole("table", { name: "Waiting" })
     expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
+  })
+
+  it("refreshes the waiting list when a new ticket appears without a page reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let ticketIssued = false
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-tickets"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: ticketIssued ? [waitingTicket] : [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    const table = await screen.findByRole("table", { name: "Waiting" })
+    expect(within(table).queryByText("Q002")).not.toBeInTheDocument()
+
+    ticketIssued = true
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+
+    expect(await within(table).findByText("Q002")).toBeInTheDocument()
   })
 
   it("shows the student's financial status as a badge when set", async () => {
