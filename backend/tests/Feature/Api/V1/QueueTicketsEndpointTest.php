@@ -21,6 +21,7 @@ use App\Models\Program;
 use App\Models\QueueTicket;
 use App\Models\StudentProfile;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -140,6 +141,43 @@ final class QueueTicketsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.id', $served->id);
     }
 
+    public function test_index_lists_a_never_requeued_ticket_before_a_requeued_ticket_on_a_timestamp_tie(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentB = $this->makeStudent($curriculum, 'b.tiebreak@grc.test', '2026-2001');
+        $studentC = $this->makeStudent($curriculum, 'c.tiebreak@grc.test', '2026-2002');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.tiebreak@grc.test');
+
+        try {
+            CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-08-01 09:00:00', 'UTC'));
+
+            // B and C are created at the exact same frozen instant, so
+            // both get the identical `created_at`. B has the lower id
+            // (created first).
+            $ticketB = $this->makeTicket($studentB, $term, 'Q000001');
+            $ticketC = $this->makeTicket($studentC, $term, 'Q000002');
+
+            // Skipping B while the clock is still frozen at the same
+            // instant stamps its requeued_at to the exact same value as
+            // C's created_at -- a true tie on
+            // COALESCE(requeued_at, created_at) between a requeued ticket
+            // (B) and a never-requeued one (C), despite B's lower id.
+            $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticketB->id}", ['action' => 'skip'])->assertOk();
+
+            $response = $this->withToken($token)->getJson('/api/v1/queue-tickets');
+
+            // C (never requeued) sorts ahead of B (requeued) despite B's
+            // lower id -- matching QueueTicket::position()'s own regime
+            // split, which already gets this right.
+            $response->assertOk()->assertJsonCount(2, 'data');
+            $response->assertJsonPath('data.0.id', $ticketC->id);
+            $response->assertJsonPath('data.1.id', $ticketB->id);
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+    }
+
     public function test_serve_transitions_a_waiting_ticket_to_serving(): void
     {
         $term = $this->makeTerm();
@@ -208,6 +246,7 @@ final class QueueTicketsEndpointTest extends TestCase
         $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'skip']);
 
         $response->assertOk()->assertJsonPath('data.status', 'waiting');
+        $response->assertJsonPath('data.requeued_at', fn ($value) => $value !== null);
         $ticket->refresh();
         self::assertSame('waiting', $ticket->status->value);
         self::assertNotNull($ticket->requeued_at);

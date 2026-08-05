@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\QueueTicket;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -49,9 +50,14 @@ final class QueueTicketResource extends JsonResource
             'status_label' => $this->resource->status->label(),
             'priority' => $this->resource->priority->value,
             'priority_label' => $this->resource->priority->label(),
-            'created_at' => $this->resource->created_at?->utc()->format('Y-m-d\TH:i:s\Z'),
-            'served_at' => $this->resource->served_at?->utc()->format('Y-m-d\TH:i:s\Z'),
-            'requeued_at' => $this->resource->requeued_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'created_at' => self::formatTimestamp($this->resource->created_at),
+            'served_at' => self::formatTimestamp($this->resource->served_at),
+            'requeued_at' => self::formatTimestamp($this->resource->requeued_at),
         ];
+    }
+
+    private static function formatTimestamp(?CarbonInterface $timestamp): ?string
+    {
+        return $timestamp?->utc()->format('Y-m-d\TH:i:s\Z');
     }
 }

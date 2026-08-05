@@ -10,6 +10,7 @@ use App\Domain\Enrollment\QueueTicketStatus;
 use App\Models\QueueTicket;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -183,8 +184,13 @@ final readonly class TransitionQueueTicket
         return [
             'status' => $ticket->status->value,
             'priority' => $ticket->priority->value,
-            'served_at' => $ticket->served_at?->utc()->format('Y-m-d\TH:i:s\Z'),
-            'requeued_at' => $ticket->requeued_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'served_at' => self::formatTimestamp($ticket->served_at),
+            'requeued_at' => self::formatTimestamp($ticket->requeued_at),
         ];
+    }
+
+    private static function formatTimestamp(?CarbonImmutable $timestamp): ?string
+    {
+        return $timestamp?->utc()->format('Y-m-d\TH:i:s\Z');
     }
 }
