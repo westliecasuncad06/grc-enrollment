@@ -26,11 +26,13 @@ final class DatabaseSeeder extends Seeder
             SubjectSeeder::class,
             // The real GRC catalog: 409 subjects across the 12 real
             // programs (see ProgramSeeder), 3 curriculum versions each,
-            // and the 74 confirmed prerequisites. See each seeder's
-            // docblock.
+            // the 74 confirmed prerequisites, and the active version's real
+            // per-subject schedule/faculty reference data. See each
+            // seeder's docblock.
             GrcSubjectCatalogSeeder::class,
             GrcCurriculumSeeder::class,
             GrcPrerequisiteSeeder::class,
+            GrcCurriculumScheduleReferenceSeeder::class,
             // Additive: the isolated BSIT-DEMO grade-history fixture
             // DemoEnrollmentSeeder needs, untouched by the real catalog
             // above. See DemoGradeHistoryCurriculumSeeder's docblock.
