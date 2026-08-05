@@ -79,6 +79,19 @@ export const enrollmentsListQueryKey = (
   filters: EnrollmentFilters,
 ) => ["enrollments-list", userId, filters] as const
 
+/**
+ * Polls every 5s so a newly submitted enrollment shows up in whichever
+ * role-scoped queue is watching it — Registrar Staff's Enrollment
+ * Approvals, Registrar Head's Overrides & Voids, and the Cashier's
+ * pending-payment queue all consume this one hook. Matches the interval
+ * already used for the schedule-proposals queue and the notification bell
+ * (see docs/superpowers/specs/2026-08-03-realtime-schedule-refresh-design.md);
+ * `useEnrollmentsQuery` above stays at 10s since that one is a student's own
+ * record view, not a staff review queue. Refetches immediately on window
+ * focus. TanStack Query pauses polling in hidden tabs by default
+ * (`refetchIntervalInBackground` is not set), so this costs nothing when
+ * nobody is looking at the page.
+ */
 export function useEnrollmentsListQuery(
   filters: EnrollmentFilters,
   { enabled = true }: { enabled?: boolean } = {},
@@ -89,6 +102,8 @@ export function useEnrollmentsListQuery(
     queryKey: enrollmentsListQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listEnrollments(filters, signal),
     enabled: enabled && session !== null,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: "always",
   })
 }
 

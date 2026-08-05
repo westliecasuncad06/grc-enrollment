@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -76,7 +76,10 @@ const registrarHeadSession = {
 describe("RegistrarEnrollmentWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it("does not render the approvals queue for an unauthorized role", () => {
     fetchMock.mockResolvedValue(
@@ -287,6 +290,39 @@ describe("RegistrarEnrollmentWorkspace", () => {
     expect(within(dialog).getByText("3 units")).toBeInTheDocument()
     expect(within(dialog).getByText(/MWF · 08:00–09:00/)).toBeInTheDocument()
     expect(within(dialog).getByText(/RM-101/)).toBeInTheDocument()
+  })
+
+  it("refreshes the approvals queue when a student submits without a page reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let submitted = false
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: submitted ? [pendingApprovalEnrollment] : [],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    expect(
+      await screen.findByText("No enrollments match this queue."),
+    ).toBeInTheDocument()
+
+    submitted = true
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+    })
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(within(table).getByText("#9")).toBeInTheDocument()
   })
 
   it("offers void to Registrar Head on the overrides & voids queue, filtered by status", async () => {
