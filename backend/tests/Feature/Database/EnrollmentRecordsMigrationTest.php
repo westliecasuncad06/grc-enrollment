@@ -52,7 +52,7 @@ final class EnrollmentRecordsMigrationTest extends TestCase
         ]));
 
         $this->assertTrue(Schema::hasColumns('queue_tickets', [
-            'id', 'enrollment_id', 'ticket_number', 'queue_date', 'status', 'priority', 'served_at', 'served_by',
+            'id', 'enrollment_id', 'ticket_number', 'queue_date', 'status', 'priority', 'served_at', 'served_by', 'requeued_at',
         ]));
 
         $this->assertTrue(Schema::hasColumns('payments', [

@@ -21,12 +21,15 @@ use InvalidArgumentException;
  *
  * §17 leaves reset cadence and priority eligibility unconfirmed — this
  * Action enforces only the three-step order (`waiting` → `serving` →
- * `served`, with `skip` as a `cancelled` exit from either `waiting` or
- * `serving`) and a single-active-serving rule, never any numbering or
- * eligibility policy. No notification is sent: calling, completing, or
- * skipping a ticket is Accounting's own operational action, with no
- * live-queue display this slice implements to make a push notification
- * meaningful yet.
+ * `served`, with `skip` as a `waiting` re-entry — stamping `requeued_at`
+ * to push the ticket to the back of its own priority tier, see
+ * `QueueTicket::position()` — from either `waiting` or `serving`) and a
+ * single-active-serving rule, never any numbering or eligibility policy.
+ * No skip-count limit is enforced: PRD §17 leaves this whole area
+ * provisional, and a cap would be inventing policy, not implementing an
+ * approved one. No notification is sent: calling, completing, or skipping
+ * a ticket is Accounting's own operational action, with no live-queue
+ * display this slice implements to make a push notification meaningful yet.
  *
  * `mark_priority` is a separate, non-status-changing write — see its own
  * method below.
@@ -39,7 +42,7 @@ final readonly class TransitionQueueTicket
     private const TARGET_STATUS = [
         'serve' => QueueTicketStatus::Serving,
         'complete' => QueueTicketStatus::Served,
-        'skip' => QueueTicketStatus::Cancelled,
+        'skip' => QueueTicketStatus::Waiting,
     ];
 
     /**
@@ -111,6 +114,7 @@ final readonly class TransitionQueueTicket
                 'status' => $targetStatus,
                 'served_at' => $targetStatus === QueueTicketStatus::Served ? now() : $lockedTicket->served_at,
                 'served_by' => $action === 'serve' ? $actor->id : $lockedTicket->served_by,
+                'requeued_at' => $action === 'skip' ? now() : $lockedTicket->requeued_at,
             ]);
             $lockedTicket->refresh();
 
@@ -172,7 +176,7 @@ final readonly class TransitionQueueTicket
     }
 
     /**
-     * @return array{status: string, priority: string, served_at: ?string}
+     * @return array{status: string, priority: string, served_at: ?string, requeued_at: ?string}
      */
     private static function snapshot(QueueTicket $ticket): array
     {
@@ -180,6 +184,7 @@ final readonly class TransitionQueueTicket
             'status' => $ticket->status->value,
             'priority' => $ticket->priority->value,
             'served_at' => $ticket->served_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'requeued_at' => $ticket->requeued_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 }

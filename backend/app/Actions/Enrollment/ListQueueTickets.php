@@ -7,9 +7,13 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 /**
  * PRD §5.3 FR-FIN-006: Accounting Staff's operational view of the payment
- * queue, ordered deterministically by `queue_date` then `id` (arrival
- * order) — §17 leaves any reset or priority policy unconfirmed, so no
- * ordering beyond plain arrival is asserted here.
+ * queue, ordered deterministically by `queue_date` then the ticket's
+ * effective order (`COALESCE(requeued_at, created_at)`, then `id`) --
+ * plain arrival order for a never-skipped ticket, or requeue order for one
+ * that was skipped. §17 leaves any reset or priority policy unconfirmed,
+ * so no priority-tier ordering is asserted at this list level (the
+ * Cashier's own waiting-line display sorts by priority tier itself; see
+ * `byQueueOrder` in `accounting-payment-workspace.tsx`).
  */
 final readonly class ListQueueTickets
 {
@@ -29,6 +33,7 @@ final readonly class ListQueueTickets
             ->when($queueDate !== null, fn ($query) => $query->whereDate('queue_date', $queueDate))
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->orderBy('queue_date')
+            ->orderByRaw('COALESCE(requeued_at, created_at)')
             ->orderBy('id')
             ->paginate($perPage, ['*'], 'page', $page)
             ->withQueryString();

@@ -16,7 +16,9 @@ final class QueueTicketResource extends JsonResource
      * identify whose ticket this is, matching `EnrollmentResource`'s
      * precedent. `served_by` is deliberately absent — actor identity is
      * never rendered to students, and Accounting identifies its own staff
-     * from context, not this response.
+     * from context, not this response. `created_at` is exposed so the
+     * frontend can reproduce this same `COALESCE(requeued_at, created_at)`
+     * ordering locally rather than guessing at it independently.
      *
      * @return array{
      *     type: string,
@@ -29,7 +31,9 @@ final class QueueTicketResource extends JsonResource
      *     status_label: string,
      *     priority: string,
      *     priority_label: string,
-     *     served_at: ?string
+     *     created_at: ?string,
+     *     served_at: ?string,
+     *     requeued_at: ?string
      * }
      */
     public function toArray(Request $request): array
@@ -45,7 +49,9 @@ final class QueueTicketResource extends JsonResource
             'status_label' => $this->resource->status->label(),
             'priority' => $this->resource->priority->value,
             'priority_label' => $this->resource->priority->label(),
+            'created_at' => $this->resource->created_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'served_at' => $this->resource->served_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'requeued_at' => $this->resource->requeued_at?->utc()->format('Y-m-d\TH:i:s\Z'),
         ];
     }
 }

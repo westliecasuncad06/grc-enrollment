@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property QueueTicketPriority $priority
  * @property ?CarbonImmutable $served_at
  * @property ?int $served_by
+ * @property ?CarbonImmutable $requeued_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Enrollment $enrollment
@@ -33,6 +34,7 @@ final class QueueTicket extends Model
         'priority',
         'served_at',
         'served_by',
+        'requeued_at',
     ];
 
     /**
@@ -45,6 +47,7 @@ final class QueueTicket extends Model
             'priority' => QueueTicketPriority::class,
             'queue_date' => 'immutable_date',
             'served_at' => 'immutable_datetime',
+            'requeued_at' => 'immutable_datetime',
         ];
     }
 
@@ -75,7 +78,22 @@ final class QueueTicket extends Model
      * count. `null` once this ticket has left `waiting` (position no
      * longer means anything for a ticket already being served or done).
      * Priority tickets always precede regular ones within the same day;
-     * within a tier, earlier `id` (== earlier issuance) goes first.
+     * within a tier, ordered by `COALESCE(requeued_at, created_at)` --
+     * arrival order for a never-skipped ticket, or the moment it was last
+     * requeued for one that was.
+     *
+     * `created_at`/`requeued_at` are whole-second `timestamp` columns
+     * (Eloquent truncates any sub-second precision on write regardless of
+     * column precision, so widening them buys nothing), which means two
+     * events landing in the same wall-clock second -- routine under a fast
+     * test suite, and not impossible at a real front desk -- tie on
+     * `COALESCE(...)` alone. `id` can't be the *whole* tiebreak for that
+     * tie: a low-id ticket requeued after a higher-id ticket already
+     * exists must now sort *after* it, which a plain `id` comparison gets
+     * backwards. So a tie first splits on `requeued_at IS NOT NULL` --
+     * never-requeued (arrival order) always precedes requeued (skip
+     * moment) -- and only falls back to `id` once both candidates agree on
+     * that split, i.e. a true same-instant tie within one regime.
      */
     public function position(): ?int
     {
@@ -87,20 +105,39 @@ final class QueueTicket extends Model
             ->where('queue_date', $this->queue_date)
             ->where('status', QueueTicketStatus::Waiting);
 
+        $applyOrderedBefore = function ($query): void {
+            $effectiveOrder = ($this->requeued_at ?? $this->created_at)->format('Y-m-d H:i:s');
+            $selfWasRequeued = (int) ($this->requeued_at !== null);
+
+            $query->where(function ($query) use ($effectiveOrder, $selfWasRequeued) {
+                $query->whereRaw('COALESCE(requeued_at, created_at) < ?', [$effectiveOrder])
+                    ->orWhere(function ($query) use ($effectiveOrder, $selfWasRequeued) {
+                        $query->whereRaw('COALESCE(requeued_at, created_at) = ?', [$effectiveOrder])
+                            ->where(function ($query) use ($selfWasRequeued) {
+                                $query->whereRaw('(requeued_at IS NOT NULL) < ?', [$selfWasRequeued])
+                                    ->orWhere(function ($query) use ($selfWasRequeued) {
+                                        $query->whereRaw('(requeued_at IS NOT NULL) = ?', [$selfWasRequeued])
+                                            ->where('id', '<', $this->id);
+                                    });
+                            });
+                    });
+            });
+        };
+
         if ($this->priority === QueueTicketPriority::Priority) {
-            return (clone $waitingOnSameDay)
-                ->where('priority', QueueTicketPriority::Priority)
-                ->where('id', '<', $this->id)
-                ->count();
+            $priorityQuery = (clone $waitingOnSameDay)->where('priority', QueueTicketPriority::Priority);
+            $applyOrderedBefore($priorityQuery);
+
+            return $priorityQuery->count();
         }
 
         $priorityAhead = (clone $waitingOnSameDay)
             ->where('priority', QueueTicketPriority::Priority)
             ->count();
-        $regularAhead = (clone $waitingOnSameDay)
-            ->where('priority', QueueTicketPriority::Regular)
-            ->where('id', '<', $this->id)
-            ->count();
+
+        $regularQuery = (clone $waitingOnSameDay)->where('priority', QueueTicketPriority::Regular);
+        $applyOrderedBefore($regularQuery);
+        $regularAhead = $regularQuery->count();
 
         return $priorityAhead + $regularAhead;
     }

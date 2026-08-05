@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\V1;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\QueueTicketPriority;
 use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
@@ -196,7 +197,7 @@ final class QueueTicketsEndpointTest extends TestCase
         self::assertSame('waiting', $ticket->refresh()->status->value);
     }
 
-    public function test_skip_cancels_a_waiting_ticket(): void
+    public function test_skip_requeues_a_waiting_ticket_to_the_back_of_line(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -206,11 +207,14 @@ final class QueueTicketsEndpointTest extends TestCase
 
         $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'skip']);
 
-        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $response->assertOk()->assertJsonPath('data.status', 'waiting');
+        $ticket->refresh();
+        self::assertSame('waiting', $ticket->status->value);
+        self::assertNotNull($ticket->requeued_at);
         self::assertSame(AuditAction::QUEUE_TICKET_SKIPPED, AuditLog::query()->sole()->action);
     }
 
-    public function test_skip_cancels_a_serving_ticket(): void
+    public function test_skip_requeues_a_serving_ticket_to_the_back_of_line(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -220,7 +224,51 @@ final class QueueTicketsEndpointTest extends TestCase
 
         $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'skip']);
 
-        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $response->assertOk()->assertJsonPath('data.status', 'waiting');
+        self::assertNotNull($ticket->refresh()->requeued_at);
+    }
+
+    public function test_a_requeued_ticket_moves_behind_tickets_with_a_higher_id(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'a.queue@grc.test', '2026-1001');
+        $studentB = $this->makeStudent($curriculum, 'b.queue@grc.test', '2026-1002');
+        $studentC = $this->makeStudent($curriculum, 'c.queue@grc.test', '2026-1003');
+        $ticketA = $this->makeTicket($studentA, $term, 'Q000001');
+        $ticketB = $this->makeTicket($studentB, $term, 'Q000002', '2026-08-01', QueueTicketStatus::Serving);
+        $ticketC = $this->makeTicket($studentC, $term, 'Q000003');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.requeueorder@grc.test');
+
+        self::assertSame(0, $ticketA->position());
+        self::assertSame(1, $ticketC->position());
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticketB->id}", ['action' => 'skip'])->assertOk();
+
+        // B re-enters waiting behind C, even though B's id predates C's --
+        // proving ordering now follows the requeue moment, not id.
+        self::assertSame(0, $ticketA->refresh()->position());
+        self::assertSame(1, $ticketC->refresh()->position());
+        self::assertSame(2, $ticketB->refresh()->position());
+    }
+
+    public function test_a_requeued_priority_ticket_still_precedes_regular_tickets(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'a.queue@grc.test', '2026-1001');
+        $studentB = $this->makeStudent($curriculum, 'b.queue@grc.test', '2026-1002');
+        $ticketA = $this->makeTicket($studentA, $term, 'Q000001');
+        $ticketB = $this->makeTicket($studentB, $term, 'Q000002', '2026-08-01', QueueTicketStatus::Serving);
+        $ticketB->update(['priority' => QueueTicketPriority::Priority]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.requeuepriority@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticketB->id}", ['action' => 'skip'])->assertOk();
+
+        // B is Priority; even requeued to the back of ITS tier, it still
+        // precedes every Regular ticket, including A which never left waiting.
+        self::assertSame(0, $ticketB->refresh()->position());
+        self::assertSame(1, $ticketA->refresh()->position());
     }
 
     public function test_skip_cannot_be_performed_from_served(): void
