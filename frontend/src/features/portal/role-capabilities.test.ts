@@ -7,7 +7,7 @@ import {
 } from "@/features/portal/role-capabilities"
 
 const expectedModuleIds = {
-  student: ["enrollment", "eligible-subjects", "grades", "digital-com"],
+  student: ["enrollment", "grades", "digital-com"],
   admission_staff: [
     "student-accounts",
     "admission-status",

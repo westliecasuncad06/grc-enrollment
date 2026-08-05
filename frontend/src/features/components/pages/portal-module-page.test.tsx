@@ -41,9 +41,9 @@ const allowedModuleCases = userRoles.flatMap((role) =>
 // second, module-registry-sourced <h1>. Each workspace's heading text is its
 // own, established in earlier phases and unaffected by this shell change; it
 // is not always identical to the module registry's label (e.g.
-// "Eligible Subjects" vs. "Eligible subjects"). Kept in sync with
-// `module-registry.test.tsx`'s identical `migratedRegionNames` map, which
-// covers the same 35 connected module IDs.
+// "Enrollment" vs. "Enrollment planning review" for `master-schedule`).
+// Kept in sync with `module-registry.test.tsx`'s identical
+// `migratedRegionNames` map, which covers the same 34 connected module IDs.
 const workspaceHeadings: Record<string, string> = {
   "class-rosters": "Class rosters",
   "grade-submission": "Grade submission",
@@ -54,7 +54,6 @@ const workspaceHeadings: Record<string, string> = {
   "master-schedule": "Enrollment planning review",
   "audit-logs": "Audit logs",
   "teaching-schedule": "Teaching schedule",
-  "eligible-subjects": "Eligible subjects",
   grades: "Grades",
   "digital-com": "Digital COM",
   "schedule-approvals": "Enrollment planning review",

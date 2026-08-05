@@ -5,6 +5,15 @@ import { gradeMarkValues } from "@/features/schemas/academic-grade-schema"
 const gradeStatusValues = ["draft", "submitted", "locked"] as const
 const semesterSlotValues = ["1st", "2nd"] as const
 
+export const prospectusPrerequisiteSchema = z
+  .object({
+    subject_id: z.number().int().positive(),
+    code: z.string().min(1),
+    title: z.string().min(1),
+    minimum_grade: z.string().min(1),
+  })
+  .strict()
+
 export const prospectusEntrySchema = z
   .object({
     subject_id: z.number().int().positive(),
@@ -22,6 +31,7 @@ export const prospectusEntrySchema = z
     academic_term_id: z.number().int().positive().nullable(),
     term_label: z.string().nullable(),
     attempt_count: z.number().int().nonnegative(),
+    prerequisites: z.array(prospectusPrerequisiteSchema),
   })
   .strict()
 

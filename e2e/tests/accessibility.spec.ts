@@ -36,7 +36,7 @@ for (const { name, path } of pages) {
   })
 }
 
-test("accessibility — portal overview and Eligible Subjects (the originally reported page) have no critical or serious axe violations", async ({
+test("accessibility — portal overview and Enrollment (the originally reported page, later folded from a standalone Eligible Subjects page into Enrollment) have no critical or serious axe violations", async ({
   page,
   request,
 }) => {
@@ -54,7 +54,7 @@ test("accessibility — portal overview and Eligible Subjects (the originally re
     overviewSerious.map((v) => `${v.id}: ${v.help}`).join("\n"),
   ).toEqual([])
 
-  await page.goto("/portal/eligible-subjects")
+  await page.goto("/portal/enrollment")
   const eligibleResults = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze()
@@ -67,16 +67,16 @@ test("accessibility — portal overview and Eligible Subjects (the originally re
   ).toEqual([])
 })
 
-test("accessibility — 200% zoom keeps the Eligible Subjects page usable (no horizontal scroll, content stays reachable)", async ({
+test("accessibility — 200% zoom keeps the Enrollment page usable (no horizontal scroll, content stays reachable)", async ({
   page,
   request,
 }) => {
   await authenticateViaApi(page, request, "student")
   await page.setViewportSize({ width: 640, height: 480 })
-  await page.goto("/portal/eligible-subjects")
+  await page.goto("/portal/enrollment")
 
   await expect(
-    page.getByRole("heading", { name: "Eligible subjects" }),
+    page.getByRole("heading", { name: "Select your subjects" }),
   ).toBeVisible()
 
   const hasHorizontalOverflow = await page.evaluate(
@@ -91,7 +91,7 @@ test("accessibility — prefers-reduced-motion suppresses the motion library's J
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await authenticateViaApi(page, request, "student")
-  await page.goto("/portal/eligible-subjects")
+  await page.goto("/portal/enrollment")
 
   // motion.tsx's Reveal/StaggerList/StaggerItem/FadePresence each call
   // useReducedMotion() and render a plain, motion-free wrapper when set —
@@ -104,7 +104,7 @@ test("accessibility — prefers-reduced-motion suppresses the motion library's J
   // instead of hanging. 50ms comfortably separates "near-zero, intentional"
   // from "an actual multi-hundred-millisecond entrance animation still ran."
   await expect(
-    page.getByRole("heading", { name: "Eligible subjects" }),
+    page.getByRole("heading", { name: "Select your subjects" }),
   ).toBeVisible()
 
   const meaningfullyAnimatedCount = await page.evaluate(() => {

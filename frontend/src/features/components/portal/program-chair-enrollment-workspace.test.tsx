@@ -98,6 +98,24 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "2nd Year sections" })).toBeInTheDocument()
   })
 
+  it("highlights the active year level red in the progress bar", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockAll())
+    renderWorkspace()
+    expect(await screen.findByRole("heading", { name: "1st Year sections" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "1st Year" })).toHaveAttribute("data-variant", "destructive")
+    expect(screen.getByRole("button", { name: "2nd Year" })).toHaveAttribute("data-variant", "outline")
+
+    await chooseCurriculum(user, 1)
+    await user.clear(screen.getByLabelText("Number of block sections"))
+    await user.type(screen.getByLabelText("Number of block sections"), "2")
+    await user.click(screen.getByRole("button", { name: "Save and continue" }))
+
+    expect(await screen.findByRole("heading", { name: "2nd Year sections" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "1st Year" })).toHaveAttribute("data-variant", "outline")
+    expect(screen.getByRole("button", { name: "2nd Year" })).toHaveAttribute("data-variant", "destructive")
+  })
+
   it("shows review controls and keeps AI generation unavailable", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockAll())

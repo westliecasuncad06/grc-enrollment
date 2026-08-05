@@ -13,7 +13,6 @@ import { SectionsWorkspace } from "@/features/components/portal/sections-workspa
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
 import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
 import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
-import { EligibleSubjectsWorkspace } from "@/features/components/portal/eligible-subjects-workspace"
 import { EnrollmentWorkspace } from "@/features/components/portal/enrollment-workspace"
 import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/registrar-enrollment-workspace"
 import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
@@ -44,7 +43,6 @@ export type ConnectedModuleId =
   | "schedule-approvals"
   | "master-schedule"
   | "audit-logs"
-  | "eligible-subjects"
   | "enrollment"
   | "grade-approvals"
   | "academic-transcripts"
@@ -83,7 +81,6 @@ export const connectedModuleIds = [
   "schedule-approvals",
   "master-schedule",
   "audit-logs",
-  "eligible-subjects",
   "enrollment",
   "grade-approvals",
   "academic-transcripts",
@@ -198,7 +195,6 @@ export const connectedModuleRegistry: Readonly<
   "schedule-approvals": ScheduleDecisionWorkspace,
   "master-schedule": MasterScheduleWorkspace,
   "audit-logs": AuditLogsWorkspace,
-  "eligible-subjects": EligibleSubjectsWorkspace,
   enrollment: EnrollmentWorkspace,
   "grade-approvals": gradeApprovalsWorkspace,
   "academic-transcripts": academicTranscriptsWorkspace,

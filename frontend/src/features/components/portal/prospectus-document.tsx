@@ -108,6 +108,7 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
           <TableRow>
             <TableHead scope="col">Code</TableHead>
             <TableHead scope="col">Subject description</TableHead>
+            <TableHead scope="col">Pre-requisite</TableHead>
             <TableHead scope="col">Units</TableHead>
             <TableHead scope="col">Grade</TableHead>
             <TableHead scope="col">Status</TableHead>
@@ -131,6 +132,11 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
                   )}
                 </TableCell>
                 <TableCell>{entry.title}</TableCell>
+                <TableCell>
+                  {entry.prerequisites.length > 0
+                    ? entry.prerequisites.map((p) => p.code).join(", ")
+                    : "—"}
+                </TableCell>
                 <TableCell>{entry.units}</TableCell>
                 <TableCell>{entry.mark ?? "—"}</TableCell>
                 <TableCell>

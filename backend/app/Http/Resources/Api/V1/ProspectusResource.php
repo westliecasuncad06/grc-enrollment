@@ -6,6 +6,7 @@ use App\Domain\Academic\Prospectus;
 use App\Domain\Academic\ProspectusEntry;
 use App\Domain\Academic\ProspectusSemester;
 use App\Models\AcademicGrade;
+use App\Models\SubjectPrerequisite;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -97,7 +98,8 @@ final class ProspectusResource extends JsonResource
      *     status_label: ?string,
      *     academic_term_id: ?int,
      *     term_label: ?string,
-     *     attempt_count: int
+     *     attempt_count: int,
+     *     prerequisites: list<array{subject_id: int, code: string, title: string, minimum_grade: string}>
      * }
      */
     private function entryToArray(ProspectusEntry $entry): array
@@ -122,6 +124,14 @@ final class ProspectusResource extends JsonResource
             'academic_term_id' => $grade?->academic_term_id,
             'term_label' => $term !== null ? "{$term->school_year} · {$term->semester}" : null,
             'attempt_count' => count($entry->attempts),
+            'prerequisites' => array_values($entry->placement->prerequisites
+                ->map(fn (SubjectPrerequisite $prerequisite): array => [
+                    'subject_id' => $prerequisite->prerequisiteSubject->id,
+                    'code' => $prerequisite->prerequisiteSubject->code,
+                    'title' => $prerequisite->prerequisiteSubject->title,
+                    'minimum_grade' => $prerequisite->minimum_grade,
+                ])
+                ->all()),
         ];
     }
 

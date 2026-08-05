@@ -418,7 +418,7 @@ export function ProgramChairEnrollmentWorkspace({
           <CardDescription>{currentTerm ? `${formatAcademicTerm(currentTerm)} · Select the curriculum version for each year level.` : "Loading current term…"}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
-          {step !== "subjects" && <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-label="Enrollment planning progress">{["1st Year", "2nd Year", "3rd Year", "4th Year", "Review", "Approval"].map((label, index) => <Button key={label} type="button" variant={(step === "year" && index === yearLevel - 1) || (step === "review" && index === 4) ? "default" : "outline"} disabled={index > 3 && step === "year"} onClick={() => index < 4 ? (setYearLevel(index + 1), setStep("year")) : index === 4 ? setStep("review") : undefined}>{label}</Button>)}</div>}
+          {step !== "subjects" && <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-label="Enrollment planning progress">{["1st Year", "2nd Year", "3rd Year", "4th Year", "Review", "Approval"].map((label, index) => <Button key={label} type="button" variant={index < 4 ? (step === "year" && index === yearLevel - 1 ? "destructive" : "outline") : (step === "review" && index === 4 ? "default" : "outline")} disabled={index > 3 && step === "year"} onClick={() => index < 4 ? (setYearLevel(index + 1), setStep("year")) : index === 4 ? setStep("review") : undefined}>{label}</Button>)}</div>}
 
           {step === "year" && <Card>
             <CardHeader><CardTitle>{yearLabel(yearLevel)} sections</CardTitle><CardDescription>Choose the curriculum version first, then enter the number of block sections for this year level.</CardDescription></CardHeader>

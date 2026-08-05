@@ -18,6 +18,7 @@ use App\Models\CurriculumSubject;
 use App\Models\Program;
 use App\Models\StudentProfile;
 use App\Models\Subject;
+use App\Models\SubjectPrerequisite;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -137,6 +138,42 @@ final class ProspectusEndpointTest extends TestCase
         $untakenEntry = collect($secondSemEntries)->firstWhere('code', 'CS102');
         self::assertNull($untakenEntry['mark']);
         self::assertSame(0, $untakenEntry['attempt_count']);
+    }
+
+    public function test_a_subjects_prerequisites_are_included_on_its_prospectus_entry(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $prerequisite = $this->makeSubject('CS100');
+        $subject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $prerequisite, 1, '1st');
+        $placement = $this->placeSubject($curriculum, $subject, 1, '2nd');
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id,
+            'prerequisite_subject_id' => $prerequisite->id,
+            'minimum_grade' => '75',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student->user);
+
+        $response = $this->withToken($token)->getJson('/api/v1/prospectus');
+
+        $response->assertOk();
+        $semesters = $response->json('data.semesters');
+
+        $secondSemEntries = collect($semesters)->firstWhere('semester', '2nd')['entries'];
+        $entry = collect($secondSemEntries)->firstWhere('code', 'CS101');
+        self::assertSame([
+            [
+                'subject_id' => $prerequisite->id,
+                'code' => 'CS100',
+                'title' => 'CS100 Title',
+                'minimum_grade' => '75',
+            ],
+        ], $entry['prerequisites']);
+
+        $firstSemEntries = collect($semesters)->firstWhere('semester', '1st')['entries'];
+        $prerequisiteEntry = collect($firstSemEntries)->firstWhere('code', 'CS100');
+        self::assertSame([], $prerequisiteEntry['prerequisites']);
     }
 
     public function test_a_student_cannot_view_another_students_prospectus(): void

@@ -15,9 +15,10 @@ use Illuminate\Support\Collection;
 
 /**
  * Builds a student's full curriculum prospectus (year 1 sem 1 through
- * year 4 sem 2) in exactly 2 queries: every placement in the student's
- * curriculum, and every grade the student has ever recorded. Everything
- * else — grouping, the earliest-vs-actual-term semester bucket, the
+ * year 4 sem 2) in a small, fixed number of queries: every placement in the
+ * student's curriculum (plus its eager-loaded subject and prerequisites),
+ * and every grade the student has ever recorded. Everything else —
+ * grouping, the earliest-vs-actual-term semester bucket, the
  * unplaced-entries split — is in-memory.
  */
 final readonly class BuildStudentProspectus
@@ -26,7 +27,7 @@ final readonly class BuildStudentProspectus
     {
         $placements = CurriculumSubject::query()
             ->where('curriculum_id', $student->curriculum_id)
-            ->with('subject')
+            ->with(['subject', 'prerequisites.prerequisiteSubject'])
             ->orderBy('year_level')
             ->orderBy('semester')
             ->get();

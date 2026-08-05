@@ -2,7 +2,6 @@ import {
   ArrowLeftRight,
   BadgeCheck,
   BarChart3,
-  BookOpen,
   Building2,
   CalendarDays,
   ClipboardCheck,
@@ -64,12 +63,6 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Enrollment",
         "Select sections and submit your enrollment for the term.",
         GraduationCap,
-      ),
-      portalModule(
-        "eligible-subjects",
-        "Eligible Subjects",
-        "Review curriculum and prerequisite eligibility for each subject.",
-        BookOpen,
       ),
       portalModule(
         "grades",

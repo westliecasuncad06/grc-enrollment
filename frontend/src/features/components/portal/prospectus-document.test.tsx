@@ -26,6 +26,9 @@ const takenEntry = {
   academic_term_id: 2,
   term_label: "2025-2026 · 1st",
   attempt_count: 1,
+  prerequisites: [
+    { subject_id: 6, code: "CS100", title: "Intro to Programming", minimum_grade: "75" },
+  ],
 } as const
 
 const untakenEntry = {
@@ -44,6 +47,7 @@ const untakenEntry = {
   academic_term_id: null,
   term_label: null,
   attempt_count: 0,
+  prerequisites: [],
 } as const
 
 const unplacedEntry = {
@@ -113,6 +117,21 @@ describe("ProspectusDocument", () => {
     expect(screen.getByText("1.50")).toBeInTheDocument()
     expect(screen.queryByText("with Distinction")).not.toBeInTheDocument()
     expect(screen.getByText("Not taken")).toBeInTheDocument()
+  })
+
+  it("shows a subject's pre-requisite codes, or a dash when it has none", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(prospectusFixture())),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    const takenRow = (await screen.findByText("CS101")).closest("tr")!
+    expect(within(takenRow).getByText("CS100")).toBeInTheDocument()
+
+    const untakenRow = screen.getByText("CS102").closest("tr")!
+    const prerequisiteCell = within(untakenRow).getAllByRole("cell")[2]
+    expect(prerequisiteCell).toHaveTextContent("—")
   })
 
   it("colors a failed, incomplete, or not-taken row distinctly from a passed one", async () => {
