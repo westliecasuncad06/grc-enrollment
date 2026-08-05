@@ -18,6 +18,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $year_level
  * @property string $semester
  * @property bool $is_required
+ * @property ?string $reference_day
+ * @property ?string $reference_start_time
+ * @property ?string $reference_end_time
+ * @property ?string $reference_room
+ * @property ?string $reference_modality
+ * @property ?string $reference_professor_name
+ * @property ?string $reference_sched_id
+ * @property ?string $reference_notes
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Curriculum $curriculum
@@ -33,6 +41,14 @@ final class CurriculumSubject extends Model
         'year_level',
         'semester',
         'is_required',
+        'reference_day',
+        'reference_start_time',
+        'reference_end_time',
+        'reference_room',
+        'reference_modality',
+        'reference_professor_name',
+        'reference_sched_id',
+        'reference_notes',
     ];
 
     /**
