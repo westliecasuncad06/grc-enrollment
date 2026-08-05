@@ -1,7 +1,42 @@
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, ExternalLink, Menu } from "lucide-react"
 import Link from "next/link"
 
+import { GrcBrand } from "@/features/components/common/grc-brand"
 import { Button } from "@/features/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/features/components/ui/sheet"
+
+const navigationItems = [
+  { href: "#about-grc", label: "About GRC" },
+  { href: "#academics", label: "Academics" },
+  { href: "#student-services", label: "Student Services" },
+  { href: "#enrollment", label: "Enrollment" },
+] as const
+
+function PublicNavigation({ mobile = false }: { mobile?: boolean }) {
+  return (
+    <nav
+      className={mobile ? "public-navigation public-navigation--mobile" : "public-navigation"}
+      aria-label="Public navigation"
+    >
+      {navigationItems.map((item) => (
+        <a key={item.href} href={item.href}>
+          {item.label}
+        </a>
+      ))}
+      <a href="https://grc.edu.ph/">
+        Visit GRC Website
+        <ExternalLink data-icon="inline-end" aria-hidden="true" />
+      </a>
+    </nav>
+  )
+}
 
 export function PublicHeader() {
   return (
@@ -9,28 +44,44 @@ export function PublicHeader() {
       <Link
         className="institutional-identity rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
         href="/"
-        aria-label="Global Reciprocal Colleges enrollment home"
       >
-        <span className="grc-monogram" aria-hidden="true">
-          GRC
-        </span>
-        <span>
-          <span className="institution-name">Global Reciprocal Colleges</span>
-          <span className="system-name">Automated Enrollment System</span>
-        </span>
+        <GrcBrand />
       </Link>
 
-      <nav className="public-navigation" aria-label="Public navigation">
-        <a href="#portal-guide">Portal guide</a>
-        <a href="#system-readiness">System readiness</a>
-      </nav>
+      <PublicNavigation />
 
-      <Button asChild>
-        <Link href="/login">
-          Sign in to portal
-          <ArrowRight data-icon="inline-end" aria-hidden="true" />
-        </Link>
-      </Button>
+      <div className="public-masthead__actions">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button
+              className="public-mobile-trigger"
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Open public navigation"
+            >
+              <Menu aria-hidden="true" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="public-mobile-sheet">
+            <SheetHeader>
+              <SheetTitle>Explore GRC</SheetTitle>
+              <SheetDescription>
+                Learn more about Global Reciprocal Colleges and access the enrollment portal.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="public-mobile-sheet__body">
+              <PublicNavigation mobile />
+            </div>
+          </SheetContent>
+        </Sheet>
+        <Button asChild>
+          <Link href="/login">
+            Sign in to portal
+            <ArrowRight data-icon="inline-end" aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
     </header>
   )
 }

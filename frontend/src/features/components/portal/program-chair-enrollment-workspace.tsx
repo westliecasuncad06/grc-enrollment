@@ -145,6 +145,68 @@ function ApprovalStatusCard({ proposal, submitted }: { proposal: ScheduleProposa
   )
 }
 
+function MobileScheduleCard({
+  section,
+  code,
+  title,
+  units,
+  facultyName,
+  approvalLocked,
+  onAssign,
+}: {
+  section: Section
+  code: string
+  title: string
+  units: string | number
+  facultyName: string | undefined
+  approvalLocked: boolean
+  onAssign: (section: Section) => void
+}) {
+  return (
+    <Card
+      role="article"
+      aria-label={`${code} schedule`}
+      size="sm"
+      className="program-chair-schedule-card"
+    >
+      <CardHeader>
+        <CardTitle level={3}>{code}</CardTitle>
+        <CardDescription>
+          {title} · {units} units
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <dl className="grid gap-2 text-sm">
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Schedule</dt>
+            <dd>Sched ID {section.id} · {scheduleSummary(section, facultyName)}</dd>
+          </div>
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Modality</dt>
+            <dd>
+              <Badge variant="secondary">
+                {section.modality
+                  ? modalityLabels[section.modality]
+                  : "Modality not set"}
+              </Badge>
+            </dd>
+          </div>
+        </dl>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={approvalLocked}
+          onClick={() => onAssign(section)}
+          className="w-full"
+        >
+          <CalendarClockIcon data-icon="inline-start" />
+          Set schedule
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function ProgramChairEnrollmentWorkspace({
   workspaceTitle = "Enrollment",
   workspaceDescription = "Build block sections, then assign each subject schedule from its section table.",
@@ -482,7 +544,8 @@ export function ProgramChairEnrollmentWorkspace({
                   <CardDescription>{yearLabel(year)} block section · {sections.length} subject{sections.length === 1 ? "" : "s"}</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  {view === "table" ? <Table>
+                  {view === "table" && <div className="program-chair-schedule-cards">{sections.map((section) => <MobileScheduleCard key={section.id} section={section} code={subjectFor(section.subject_id)?.code ?? `Subject #${section.subject_id}`} title={subjectFor(section.subject_id)?.title ?? "Subject"} units={unitsFor(section.subject_id)} facultyName={facultyNameFor(section.professor_id)} approvalLocked={approvalLocked} onAssign={openEdit} />)}</div>}
+                  {view === "table" ? <Table className="program-chair-schedule-table">
                     <TableHeader><TableRow><TableHead>Subject code</TableHead><TableHead>Description</TableHead><TableHead>Units</TableHead><TableHead>Sched ID</TableHead><TableHead>Day</TableHead><TableHead>Time</TableHead><TableHead>Room</TableHead><TableHead>Professor</TableHead><TableHead>Modality</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                     <TableBody>{sections.map((section) => <TableRow key={section.id}><TableCell className="font-medium">{subjectFor(section.subject_id)?.code ?? `Subject #${section.subject_id}`}</TableCell><TableCell>{subjectFor(section.subject_id)?.title ?? "Subject"}</TableCell><TableCell>{unitsFor(section.subject_id)}</TableCell><TableCell>{section.id}</TableCell><TableCell>{section.schedule_days ?? "—"}</TableCell><TableCell>{section.starts_at_time && section.ends_at_time ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}` : "—"}</TableCell><TableCell>{section.room ?? "—"}</TableCell><TableCell>{facultyNameFor(section.professor_id) ?? "—"}</TableCell><TableCell>{section.modality ? modalityLabels[section.modality] : "—"}</TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" disabled={approvalLocked} onClick={() => openEdit(section)}><CalendarClockIcon data-icon="inline-start" />Assign schedule</Button></TableCell></TableRow>)}</TableBody>
                   </Table> : <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">{sections.map((section) => <Card key={section.id} size="sm"><CardHeader><CardTitle>{subjectFor(section.subject_id)?.code ?? `Subject #${section.subject_id}`}</CardTitle><CardDescription>{subjectFor(section.subject_id)?.title ?? "Subject"} · {unitsFor(section.subject_id)} units</CardDescription></CardHeader><CardContent className="grid gap-3"><p className="text-sm text-muted-foreground">Sched ID {section.id} · {scheduleSummary(section, facultyNameFor(section.professor_id))}</p><Badge variant="secondary">{section.modality ? modalityLabels[section.modality] : "Modality not set"}</Badge><Button type="button" variant="outline" disabled={approvalLocked} onClick={() => openEdit(section)}><CalendarClockIcon data-icon="inline-start" />Assign schedule</Button></CardContent></Card>)}</div>}
@@ -499,7 +562,7 @@ export function ProgramChairEnrollmentWorkspace({
       </Card>
 
       <Dialog open={editingSection !== null} onOpenChange={(open) => { if (!open) { setEditingSection(null); setScheduleError("") } }}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[100dvh] overflow-y-auto rounded-none sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-xl">
           <DialogHeader><DialogTitle>Schedule assignment · {selected?.section_code ?? "Block"}</DialogTitle><DialogDescription>{selected ? `${subjectFor(selected.subject_id)?.code ?? "Subject"} · Sched ID ${selected.id}` : "Choose faculty and meeting details for this subject."}</DialogDescription></DialogHeader>
           {selected && <FieldGroup className="grid gap-3 sm:grid-cols-2">
             <Field><FieldLabel htmlFor="schedule-professor">Professor</FieldLabel><SearchableCombobox id="schedule-professor" label="Professor" options={availableFaculty.map((member) => ({ value: String(member.id), label: member.name }))} value={scheduleDraft.professor_id} onValueChange={(value) => setScheduleDraft({ ...scheduleDraft, professor_id: value })} placeholder="Search professor" emptyMessage="No matching professor." /></Field>

@@ -105,7 +105,7 @@ describe("PortalModulePage", () => {
           screen.getByRole("region", { name: heading }),
         ).toBeInTheDocument()
         expect(
-          screen.queryByRole("heading", { name: "Demo module preview" }),
+          screen.queryByRole("heading", { name: "Planned capability" }),
         ).not.toBeInTheDocument()
       } else {
         expect(
@@ -114,20 +114,20 @@ describe("PortalModulePage", () => {
         expect(screen.getByText(module.description)).toBeInTheDocument()
         expect(
           screen.getByRole("region", {
-            name: `${module.label} module preview`,
+            name: `${module.label} planned capability`,
           }),
         ).toBeInTheDocument()
         expect(
-          screen.getByRole("heading", { name: "Demo module preview" }),
+          screen.getByRole("heading", { name: "Planned capability" }),
         ).toBeInTheDocument()
         expect(
           screen.getByText(
-            "This module is not connected to workflow or authorization APIs.",
+            "This workspace is being prepared for a future GRC Connect release.",
           ),
         ).toBeInTheDocument()
       }
       expect(
-        screen.getByRole("link", { name: "Return to portal overview" }),
+        screen.getByRole("link", { name: "Return to GRC Connect" }),
       ).toHaveAttribute("href", "/portal")
     },
   )
@@ -140,7 +140,7 @@ describe("PortalModulePage", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        "This destination is not assigned to your signed-in demo role.",
+        "This destination is not assigned to your signed-in role.",
       ),
     ).toBeInTheDocument()
 
@@ -148,6 +148,11 @@ describe("PortalModulePage", () => {
       name: "Unavailable portal module",
     })
     expect(unavailableRegion).not.toHaveTextContent("not-a-real-module")
+
+    const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" })
+    expect(
+      within(breadcrumb).getByText("Unavailable workspace"),
+    ).toHaveAttribute("aria-current", "page")
   })
 
   it("does not leak a valid module assigned to another role", () => {
@@ -175,7 +180,7 @@ describe("PortalModulePage", () => {
     renderModule("student", studentModule.id)
 
     expect(
-      screen.getByRole("link", { name: "Return to portal overview" }),
+      screen.getByRole("link", { name: "Return to GRC Connect" }),
     ).toHaveAttribute("href", "/portal")
 
     // The destination must remain the role's own overview — the shell around
@@ -185,7 +190,7 @@ describe("PortalModulePage", () => {
     })
     const links = within(navigation).getAllByRole("link")
     expect(links).toHaveLength(
-      rolePortalDefinitions.student.modules.length + 1, // + "Portal overview"
+      rolePortalDefinitions.student.modules.length + 1, // + "GRC Connect"
     )
   })
 })

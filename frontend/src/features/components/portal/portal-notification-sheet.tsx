@@ -155,10 +155,13 @@ export function PortalNotificationSheet() {
   const [open, setOpen] = useState(false)
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [page, setPage] = useState(1)
-  const notificationsQuery = useNotificationsQuery({
-    unread: unreadOnly,
-    page,
-  }, open)
+  const notificationsQuery = useNotificationsQuery(
+    {
+      unread: unreadOnly,
+      page,
+    },
+    open,
+  )
   const unreadCountQuery = useUnreadNotificationCountQuery()
   const markReadMutation = useMarkNotificationReadMutation()
   const markAllReadMutation = useMarkAllNotificationsReadMutation()
@@ -171,14 +174,7 @@ export function PortalNotificationSheet() {
     setPage(1)
   }
 
-  // Viewing the sheet counts as reading it: closing it (Escape, the overlay,
-  // or the close button) clears the red unread indicator, the same way most
-  // notification trays behave, in addition to the explicit per-item and
-  // "Mark all as read" controls below.
   function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen && unreadTotal > 0) {
-      markAllReadMutation.mutate()
-    }
     setOpen(nextOpen)
   }
 

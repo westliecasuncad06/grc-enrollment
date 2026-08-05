@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -716,6 +716,14 @@ describe("EnrollmentWorkspace", () => {
     await user.click(await screen.findByText("IT201"))
     expect(
       await screen.findByText("Review your section"),
+    ).toBeInTheDocument()
+    const subjectCard = await screen.findByRole("article", {
+      name: "CS201 section review",
+    })
+    expect(subjectCard).toHaveTextContent("Data Structures")
+    expect(subjectCard).toHaveTextContent("MWF")
+    expect(
+      within(subjectCard).getByText("LAB-1"),
     ).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     expect(

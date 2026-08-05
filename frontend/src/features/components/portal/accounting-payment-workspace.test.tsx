@@ -411,6 +411,23 @@ describe("AccountingPaymentWorkspace", () => {
     })
   })
 
+  it("renders each waiting ticket as a phone-sized action card", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    const card = await screen.findByRole("article", {
+      name: "Waiting ticket Q002",
+    })
+    expect(within(card).getByText("2026-0002")).toBeInTheDocument()
+    expect(within(card).getByText("Amount due")).toBeInTheDocument()
+    expect(within(card).getByText("—")).toBeInTheDocument()
+    expect(
+      within(card).getByRole("button", { name: "Mark priority" }),
+    ).toBeInTheDocument()
+  })
+
   it("has no detectable accessibility violations once loaded", async () => {
     fetchMock.mockImplementation(mockRoutes())
     const { container } = renderWithSession(<AccountingPaymentWorkspace />, {

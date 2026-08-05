@@ -130,7 +130,11 @@ describe("ScheduleReviewDialog", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /College of Computer Studies/,
     })
-    expect(dialog).toHaveClass("max-h-[90dvh]", "overflow-hidden")
+    expect(dialog).toHaveClass(
+      "max-h-[100dvh]",
+      "sm:max-h-[90dvh]",
+      "overflow-hidden",
+    )
     expect(screen.getByRole("button", { name: "Return with notes" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Approve schedule" })).toBeInTheDocument()
   })

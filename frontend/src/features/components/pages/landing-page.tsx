@@ -1,17 +1,19 @@
 import {
-  ArrowDown,
   ArrowRight,
   BookOpenCheck,
   Building2,
   CheckCheck,
   ClipboardList,
+  ExternalLink,
   GraduationCap,
+  HeartHandshake,
   Landmark,
-  Users,
+  LibraryBig,
+  School,
+  Sparkles,
 } from "lucide-react"
 import Link from "next/link"
 
-import { PublicApiReadiness } from "@/features/components/common/public-api-readiness"
 import { PublicFooter } from "@/features/components/layouts/public-footer"
 import { PublicHeader } from "@/features/components/layouts/public-header"
 import { Button } from "@/features/components/ui/button"
@@ -23,24 +25,47 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 
-const audiencePaths = [
+const academics = [
   {
-    title: "Students",
-    description:
-      "Choose eligible subjects, follow authorized review, and move toward payment confirmation and a finalized Digital COM.",
+    href: "https://grc.edu.ph/college-of-business-administration/",
+    label: "College of Business Administration",
+  },
+  {
+    href: "https://grc.edu.ph/college-of-entrepreneurship/",
+    label: "College of Entrepreneurship",
+  },
+  {
+    href: "https://grc.edu.ph/college-of-accountancy/",
+    label: "College of Accountancy",
+  },
+  {
+    href: "https://grc.edu.ph/college-of-education/",
+    label: "College of Education",
+  },
+  {
+    href: "https://grc.edu.ph/college-of-computer-studies/",
+    label: "College of Computer Studies",
+  },
+] as const
+
+const studentServices = [
+  {
+    description: "Learn about admission requirements and the GRC admission process.",
+    href: "https://grc.edu.ph/grc-admission/",
     icon: GraduationCap,
+    label: "Admissions",
   },
   {
-    title: "Faculty & Program Chairs",
-    description:
-      "Coordinate availability, class assignments, curriculum, sections, and schedule proposals in role-aware workspaces.",
-    icon: Users,
+    description: "Explore scholarship information and application guidance from GRC.",
+    href: "https://grc.edu.ph/grc-scholarship/",
+    icon: HeartHandshake,
+    label: "Scholarship",
   },
   {
-    title: "Enrollment offices & leadership",
-    description:
-      "Admissions, Registrar, Accounting, Dean, and Executive offices review the records and decisions assigned to them.",
-    icon: Landmark,
+    description: "Access GRC Library information and learning resources.",
+    href: "https://grc.edu.ph/grc-library/",
+    icon: LibraryBig,
+    label: "GRC Library",
   },
 ] as const
 
@@ -48,25 +73,25 @@ const enrollmentJourney = [
   {
     title: "Schedule preparation",
     description:
-      "Academic teams prepare curriculum, sections, assignments, and reviewable schedules.",
+      "Academic teams prepare curriculum, sections, faculty assignments, and reviewable schedules.",
     icon: ClipboardList,
   },
   {
     title: "Student subject selection and submission",
     description:
-      "Students review eligible subjects and submit an enrollment request.",
+      "Students review eligible sections or subjects and submit an enrollment request.",
     icon: BookOpenCheck,
   },
   {
     title: "Authorized review and approval",
     description:
-      "Assigned offices evaluate the request through governed role boundaries.",
+      "The right offices review each request through role-based enrollment controls.",
     icon: CheckCheck,
   },
   {
     title: "Payment confirmation and Digital COM finalization",
     description:
-      "Accounting confirms verified payment before the registration record is finalized.",
+      "Accounting confirms payment before the Digital Certificate of Matriculation is finalized.",
     icon: Building2,
   },
 ] as const
@@ -82,17 +107,15 @@ export function LandingPage() {
       <main id="main-content" tabIndex={-1}>
         <section className="landing-hero" aria-labelledby="landing-title">
           <div className="landing-hero__copy reveal reveal--one">
-            <p className="eyebrow">
-              <Landmark aria-hidden="true" />
-              One guided enrollment record
+            <p className="landing-tagline">
+              <Sparkles aria-hidden="true" />
+              TOUCHING HEARTS, RENEWING MINDS, TRANSFORMING LIVES
             </p>
-            <h1 id="landing-title">
-              Enrollment, guided from first step to final record.
-            </h1>
+            <h1 id="landing-title">Your GRC enrollment journey starts here.</h1>
             <p className="landing-hero__summary">
-              Coordinate schedules, subject selection, authorized approvals,
-              payment confirmation, and academic records through one role-aware
-              enrollment experience.
+              The GRC Automated Enrollment System brings schedules, subject
+              selection, approvals, payment confirmation, and your Digital COM
+              together in one role-guided experience.
             </p>
             <div className="landing-actions">
               <Button asChild size="lg">
@@ -102,80 +125,112 @@ export function LandingPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <a href="#system-readiness">
-                  View system readiness
-                  <ArrowDown data-icon="inline-end" aria-hidden="true" />
-                </a>
+                <a href="#enrollment">How enrollment works</a>
               </Button>
             </div>
-            <p className="landing-boundary">
-              Public information only. Sign-in currently opens a clearly labeled
-              local interface demonstration.
-            </p>
           </div>
 
-          <aside
-            className="enrollment-folio reveal reveal--two"
-            aria-label="Enrollment journey folio"
-          >
-            <div className="enrollment-folio__header">
-              <span>Enrollment folio</span>
-              <strong>One coordinated path</strong>
-            </div>
-            <ol>
-              {enrollmentJourney.map((step, index) => {
-                const Icon = step.icon
-
-                return (
-                  <li key={step.title}>
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <Icon aria-hidden="true" />
-                    <strong>{step.title}</strong>
-                  </li>
-                )
-              })}
-            </ol>
-            <p>
-              Each handoff belongs to an authorized role. The public landing
-              page exposes no enrollment record.
-            </p>
+          <aside className="landing-hero__panel reveal reveal--two" aria-label="GRC enrollment portal">
+            <School aria-hidden="true" />
+            <p>GRC Connect</p>
+            <strong>Your role. Your next enrollment task. One connected portal.</strong>
+            <span>
+              Sign in to continue with the enrollment work assigned to your role.
+            </span>
           </aside>
         </section>
 
         <section
-          id="portal-guide"
-          className="audience-section"
-          aria-labelledby="portal-guide-title"
+          id="about-grc"
+          className="landing-values-section"
+          aria-label="About Global Reciprocal Colleges"
         >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Portal guide</p>
-              <h2 id="portal-guide-title">One system, many responsibilities</h2>
+              <p className="eyebrow">
+                <Landmark aria-hidden="true" />
+                About GRC
+              </p>
+              <h2 id="about-grc-title">Education with values at the center.</h2>
             </div>
             <p>
-              Each person enters a workspace shaped around their part of the
-              enrollment record—not a one-size-fits-all dashboard.
+              The enrollment experience reflects the same clarity, care, and
+              responsibility that guide Global Reciprocal Colleges.
             </p>
           </div>
+          <div className="landing-values-grid" aria-label="About Global Reciprocal Colleges">
+            <article className="landing-value-card">
+              <h3 className="eyebrow">Vision</h3>
+              <p className="landing-value-card__statement">
+                A global community of excellent individuals with values.
+              </p>
+            </article>
+            <article className="landing-value-card">
+              <h3 className="eyebrow">Mission</h3>
+              <p className="landing-value-card__statement">
+                Values-based quality education that develops successful,
+                socially responsible, morally upright, skilled workers and
+                highly competent professionals.
+              </p>
+            </article>
+          </div>
+        </section>
 
-          <div className="audience-grid">
-            {audiencePaths.map((path, index) => {
-              const Icon = path.icon
+        <section id="academics" className="academics-section" aria-labelledby="academics-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Academics</p>
+              <h2 id="academics-title">Explore GRC’s academic colleges.</h2>
+            </div>
+            <p>
+              Learn about the programs and academic communities offered by
+              Global Reciprocal Colleges.
+            </p>
+          </div>
+          <ul className="academics-list" aria-label="GRC academics">
+            {academics.map((college, index) => (
+              <li key={college.href}>
+                <a href={college.href}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{college.label}</strong>
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section
+          id="student-services"
+          className="student-services-section"
+          aria-label="Student services"
+        >
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Student services</p>
+              <h2 id="student-services-title">Find the support you need.</h2>
+            </div>
+            <p>
+              Official GRC services remain available alongside the enrollment
+              portal whenever you need them.
+            </p>
+          </div>
+          <div className="student-services-grid" aria-label="Student services">
+            {studentServices.map((service) => {
+              const Icon = service.icon
 
               return (
-                <Card key={path.title} className="audience-card">
+                <Card key={service.href} className="student-service-card">
                   <CardHeader>
-                    <div className="audience-card__marker">
-                      <span>{String(index + 1).padStart(2, "0")}</span>
-                      <Icon aria-hidden="true" />
-                    </div>
-                    <CardTitle role="heading" aria-level={3}>
-                      {path.title}
-                    </CardTitle>
-                    <CardDescription>{path.description}</CardDescription>
+                    <Icon aria-hidden="true" />
+                    <CardTitle level={3}>{service.label}</CardTitle>
+                    <CardDescription>{service.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <span>Role-guided portal preview</span>
+                    <a href={service.href}>
+                      Visit {service.label}
+                      <ExternalLink data-icon="inline-end" aria-hidden="true" />
+                    </a>
                   </CardContent>
                 </Card>
               )
@@ -183,15 +238,15 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="journey-section" aria-labelledby="journey-title">
+        <section id="enrollment" className="journey-section" aria-labelledby="journey-title">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Enrollment journey</p>
-              <h2 id="journey-title">From schedule to final record</h2>
+              <p className="eyebrow">Enrollment at GRC</p>
+              <h2 id="journey-title">How enrollment works</h2>
             </div>
             <p>
-              Four connected stages make the process legible while keeping
-              approvals and records inside their authorized boundaries.
+              Every handoff is assigned to an authorized role, making the
+              process clear for students and accountable for GRC offices.
             </p>
           </div>
 
@@ -214,8 +269,6 @@ export function LandingPage() {
             })}
           </ol>
         </section>
-
-        <PublicApiReadiness />
       </main>
 
       <PublicFooter />

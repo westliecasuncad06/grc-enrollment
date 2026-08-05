@@ -29,7 +29,7 @@ const unconfiguredStuck = {
     {
       type: "stuck_enrollment",
       enrollment_id: 9,
-      student_number: "STU-2026-0002",
+      student_number: "2023-06-00002",
       status: "pending_registrar_approval",
       status_label: "Pending Registrar Approval",
       days_in_status: 5,
@@ -48,7 +48,7 @@ const configuredStuck = {
     {
       type: "stuck_enrollment",
       enrollment_id: 9,
-      student_number: "STU-2026-0002",
+      student_number: "2023-06-00002",
       status: "pending_registrar_approval",
       status_label: "Pending Registrar Approval",
       days_in_status: 5,
@@ -105,7 +105,7 @@ describe("StuckStudentsWorkspace", () => {
     })
 
     const table = await screen.findByRole("table", { name: "Stuck students" })
-    expect(within(table).getByText("STU-2026-0002")).toBeInTheDocument()
+    expect(within(table).getByText("2023-06-00002")).toBeInTheDocument()
     expect(
       screen.getByText(/No institutional threshold is configured/),
     ).toBeInTheDocument()

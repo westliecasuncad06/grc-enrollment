@@ -1,3 +1,5 @@
+import { ExternalLink } from "lucide-react"
+
 export function PublicFooter() {
   return (
     <footer className="site-footer public-footer">
@@ -6,8 +8,12 @@ export function PublicFooter() {
         <span>Automated Enrollment System</span>
       </div>
       <div>
-        <span>Help and issue reporting will be connected here.</span>
-        <span>Demo interface—no private student records are loaded.</span>
+        <a href="https://grc.edu.ph/about-us/">About GRC</a>
+        <a href="https://grc.edu.ph/contact-us/">Contact GRC</a>
+        <a href="https://grc.edu.ph/">
+          Official GRC website
+          <ExternalLink data-icon="inline-end" aria-hidden="true" />
+        </a>
       </div>
     </footer>
   )

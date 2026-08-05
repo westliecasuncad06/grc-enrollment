@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -130,6 +130,10 @@ describe("AcademicTermWorkspace", () => {
 
     expect((await screen.findAllByText("2022-2023 · 2nd")).length).toBeGreaterThan(0)
     expect((await screen.findAllByText("Semester Ongoing")).length).toBeGreaterThan(0)
+    const termCard = screen.getByRole("article", {
+      name: "2022-2023 · 2nd enrollment cycle",
+    })
+    expect(within(termCard).getByText("Semester Ongoing")).toBeInTheDocument()
   })
 
   it("offers archive as the only lifecycle action for an ongoing semester", async () => {

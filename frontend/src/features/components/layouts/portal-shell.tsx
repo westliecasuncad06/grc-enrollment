@@ -1,21 +1,13 @@
 "use client"
 
-import {
-  Bell,
-  CircleHelp,
-  Flag,
-  KeyRound,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  UserRound,
-} from "lucide-react"
+import { LayoutDashboard, LogOut, Menu } from "lucide-react"
 import Link from "next/link"
 import { useParams, usePathname, useRouter } from "next/navigation"
 import { startTransition, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { Breadcrumb } from "@/features/components/common/breadcrumb"
+import { GrcBrand } from "@/features/components/common/grc-brand"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/features/components/ui/avatar"
 import { Badge } from "@/features/components/ui/badge"
@@ -44,6 +36,7 @@ import {
   rolePortalDefinitions,
   type RolePortalDefinition,
 } from "@/features/portal/role-capabilities"
+import { isConnectedModuleId } from "@/features/portal/module-registry"
 
 interface PortalNavigationProps {
   definition: RolePortalDefinition
@@ -106,38 +99,41 @@ function PortalNavigation({
     >
       <NavigationLink href="/portal" mobile={mobile}>
         <LayoutDashboard data-icon="inline-start" aria-hidden="true" />
-        <span>Portal overview</span>
+        <span>GRC Connect</span>
       </NavigationLink>
-      {definition.modules.map((module) => {
-        const Icon = module.icon
+      {definition.modules
+        .filter((module) => isConnectedModuleId(module.id))
+        .map((module) => {
+          const Icon = module.icon
 
-        return (
-          <NavigationLink
-            key={module.id}
-            href={`/portal/${module.id}`}
-            mobile={mobile}
-            locked={
-              enrollmentLinksLocked &&
-              [
-                "subjects-prerequisites",
-                "sections-schedules",
-                "faculty-assignment",
-                "schedule-proposals",
-              ].includes(module.id)
-            }
-          >
-            <Icon data-icon="inline-start" aria-hidden="true" />
-            <span className="flex min-w-0 items-center justify-between gap-2">
-              {module.label}
-              {hasReturnedSchedule && module.id === "program-chair-enrollment" && (
-                <Badge variant="destructive" className="shrink-0">
-                  Returned
-                </Badge>
-              )}
-            </span>
-          </NavigationLink>
-        )
-      })}
+          return (
+            <NavigationLink
+              key={module.id}
+              href={`/portal/${module.id}`}
+              mobile={mobile}
+              locked={
+                enrollmentLinksLocked &&
+                [
+                  "subjects-prerequisites",
+                  "sections-schedules",
+                  "faculty-assignment",
+                  "schedule-proposals",
+                ].includes(module.id)
+              }
+            >
+              <Icon data-icon="inline-start" aria-hidden="true" />
+              <span className="flex min-w-0 items-center justify-between gap-2">
+                {module.label}
+                {hasReturnedSchedule &&
+                  module.id === "program-chair-enrollment" && (
+                    <Badge variant="destructive" className="shrink-0">
+                      Returned
+                    </Badge>
+                  )}
+              </span>
+            </NavigationLink>
+          )
+        })}
     </nav>
   )
 }
@@ -145,35 +141,8 @@ function PortalNavigation({
 function PortalIdentity() {
   return (
     <div className="portal-brand">
-      <span className="grc-monogram" aria-hidden="true">
-        GRC
-      </span>
-      <span>
-        <strong>Global Reciprocal Colleges</strong>
-        <small>Enrollment System</small>
-      </span>
+      <GrcBrand compact />
     </div>
-  )
-}
-
-function PreviewAction({
-  icon: Icon,
-  label,
-}: {
-  icon: typeof Bell
-  label: string
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      disabled
-      aria-label={label}
-      title={`${label} — not connected`}
-    >
-      <Icon aria-hidden="true" />
-    </Button>
   )
 }
 
@@ -213,8 +182,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
     (scheduleProposalsQuery.data ?? []).some((proposal) => proposal.is_returned)
   const currentPageLabel =
     pathname === "/portal"
-      ? "Portal overview"
-      : (activeModule?.label ?? "Module preview")
+      ? "GRC Connect"
+      : (activeModule?.label ?? "Unavailable workspace")
   const initials = session.displayName
     .split(/\s+/)
     .map((part) => part[0])
@@ -242,7 +211,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <aside className="portal-sidebar">
         <div>
           <PortalIdentity />
-          <Badge variant="secondary">Preview portal</Badge>
+          <Badge variant="secondary">GRC Connect</Badge>
         </div>
 
         <PortalNavigation
@@ -289,14 +258,14 @@ export function PortalShell({ children }: { children: ReactNode }) {
               </SheetTrigger>
               <SheetContent side="left" className="portal-mobile-sheet">
                 <SheetHeader>
-                  <SheetTitle>Portal navigation</SheetTitle>
+                  <SheetTitle>GRC Connect navigation</SheetTitle>
                   <SheetDescription>
                     {definition.roleLabel} workspace
                   </SheetDescription>
                 </SheetHeader>
                 <div className="portal-mobile-sheet__body">
                   <PortalIdentity />
-                  <Badge variant="secondary">Preview portal</Badge>
+                  <Badge variant="secondary">GRC Connect</Badge>
                   <PortalNavigation
                     definition={definition}
                     mobile
@@ -310,9 +279,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
             <Breadcrumb
               items={
                 pathname === "/portal"
-                  ? [{ label: "Portal overview" }]
+                  ? [{ label: "GRC Connect" }]
                   : [
-                      { label: "Portal overview", href: "/portal" },
+                      { label: "GRC Connect", href: "/portal" },
                       { label: currentPageLabel },
                     ]
               }
@@ -321,10 +290,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
           <div className="portal-topbar__actions">
             <PortalNotificationSheet />
-            <PreviewAction icon={UserRound} label="Profile preview" />
-            <PreviewAction icon={KeyRound} label="Password settings preview" />
-            <PreviewAction icon={CircleHelp} label="Help preview" />
-            <PreviewAction icon={Flag} label="Report issue preview" />
             <Separator orientation="vertical" />
             <Button
               type="button"

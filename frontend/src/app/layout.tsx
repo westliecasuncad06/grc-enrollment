@@ -6,9 +6,9 @@ import { Providers } from "@/app/providers"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Service Readiness | GRC Enrollment",
+  title: "GRC Automated Enrollment System",
   description:
-    "Service-readiness checkpoint for the GRC Automated Enrollment System.",
+    "Role-guided enrollment for Global Reciprocal Colleges.",
   icons: { icon: "/favicon.svg" },
 }
 

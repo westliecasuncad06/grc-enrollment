@@ -97,7 +97,12 @@ function modalityLabel(modality: ScheduleReviewSection["modality"]) {
 
 function ScheduleSubjectCard({ section }: { section: ScheduleReviewSection }) {
   return (
-    <Card size="sm" className="h-full">
+    <Card
+      role="article"
+      aria-label={`${section.subject_code} schedule review`}
+      size="sm"
+      className="h-full"
+    >
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -248,7 +253,7 @@ export function ScheduleReviewDialog({
 
   return (
     <Dialog open={proposal !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="grid max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="grid max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90dvh] sm:max-w-5xl sm:rounded-xl">
         <DialogHeader className="px-4 pt-4 pr-12 sm:px-6 sm:pt-6 sm:pr-14">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="grid gap-1">
@@ -311,7 +316,7 @@ export function ScheduleReviewDialog({
 
         <DialogFooter
           showCloseButton
-          className="m-0 rounded-none px-4 pb-4 sm:px-6 sm:pb-6"
+          className="m-0 rounded-none px-4 pb-4 [&_button]:w-full sm:px-6 sm:pb-6 sm:[&_button]:w-auto"
         >
           {proposal &&
             actions.map((action) => (

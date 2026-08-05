@@ -152,6 +152,50 @@ function SectionChoice({
   )
 }
 
+function reviewTimeRange(startsAt: string | null, endsAt: string | null) {
+  return startsAt && endsAt
+    ? `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
+    : "Time to be confirmed"
+}
+
+function ReviewSubjectCard({
+  code,
+  title,
+  units,
+  details,
+}: {
+  code: string
+  title: string
+  units: number
+  details: readonly { label: string; value: string | number }[]
+}) {
+  return (
+    <Card role="article" aria-label={`${code} section review`} size="sm">
+      <CardHeader>
+        <CardTitle level={3}>{code}</CardTitle>
+        <CardDescription>{title}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-2 text-sm">
+          {details.map((detail) => (
+            <div
+              key={detail.label}
+              className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2"
+            >
+              <dt className="text-muted-foreground">{detail.label}</dt>
+              <dd className="min-w-0 text-right font-medium">{detail.value}</dd>
+            </div>
+          ))}
+          <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 border-t pt-2">
+            <dt className="text-muted-foreground">Units</dt>
+            <dd className="text-right font-semibold">{units}</dd>
+          </div>
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function EnrollmentWorkspace() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
@@ -453,6 +497,24 @@ export function EnrollmentWorkspace() {
                       render: (subject) => subject.units,
                     },
                   ]}
+                  renderCard={(subject) => (
+                    <ReviewSubjectCard
+                      code={subject.code}
+                      title={subject.title}
+                      units={subject.units}
+                      details={[
+                        {
+                          label: "Schedule",
+                          value: `${subject.schedule_days ?? "To be confirmed"} · ${reviewTimeRange(subject.starts_at_time, subject.ends_at_time)}`,
+                        },
+                        { label: "Room", value: subject.room ?? "To be confirmed" },
+                        {
+                          label: "Professor",
+                          value: subject.professor_name ?? "To be confirmed",
+                        },
+                      ]}
+                    />
+                  )}
                 />
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <span className="text-sm font-medium text-muted-foreground">
@@ -462,6 +524,7 @@ export function EnrollmentWorkspace() {
                 </div>
                 <Button
                   type="button"
+                  className="w-full sm:w-auto"
                   onClick={() => setConfirmOpen(true)}
                   disabled={mutation.isPending || enrollmentWindowClosed}
                 >
@@ -504,6 +567,25 @@ export function EnrollmentWorkspace() {
                       render: (entry) => entry.subject.units,
                     },
                   ]}
+                  renderCard={(entry) => (
+                    <ReviewSubjectCard
+                      code={entry.subject.code}
+                      title={entry.subject.title}
+                      units={entry.subject.units}
+                      details={[
+                        { label: "Section", value: entry.section.section_code },
+                        {
+                          label: "Schedule",
+                          value: `${entry.section.schedule_days ?? "To be confirmed"} · ${reviewTimeRange(entry.section.starts_at_time, entry.section.ends_at_time)}`,
+                        },
+                        { label: "Room", value: entry.section.room ?? "To be confirmed" },
+                        {
+                          label: "Seats available",
+                          value: entry.section.remaining_seats,
+                        },
+                      ]}
+                    />
+                  )}
                 />
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <span className="text-sm font-medium text-muted-foreground">
@@ -513,6 +595,7 @@ export function EnrollmentWorkspace() {
                 </div>
                 <Button
                   type="button"
+                  className="w-full sm:w-auto"
                   onClick={() => setConfirmOpen(true)}
                   disabled={mutation.isPending || enrollmentWindowClosed}
                 >
@@ -530,7 +613,7 @@ export function EnrollmentWorkspace() {
           if (!open && !mutation.isPending) setConfirmOpen(false)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[100dvh] overflow-y-auto rounded-none sm:max-h-[90dvh] sm:rounded-xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm enrollment submission</AlertDialogTitle>
             <AlertDialogDescription>
@@ -557,7 +640,7 @@ export function EnrollmentWorkspace() {
               it&apos;s approved.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogFooter className="[&_button]:w-full sm:[&_button]:w-auto">
             <AlertDialogCancel disabled={mutation.isPending}>
               Cancel
             </AlertDialogCancel>

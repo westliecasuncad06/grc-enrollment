@@ -7,6 +7,7 @@ import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
 import { PortalOverviewPage } from "@/features/components/pages/portal-overview-page"
+import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { routerMock } from "@/tests/navigation-mock"
 import { renderWithSession } from "@/tests/render-app"
@@ -49,12 +50,15 @@ describe("PortalShell", () => {
     vi.unstubAllGlobals()
   })
 
-  it.each(userRoles)("shows the exact role navigation for %s", (role) => {
+  it.each(userRoles)("shows only live role navigation for %s", (role) => {
     const definition = rolePortalDefinitions[role]
+    const liveModules = definition.modules.filter((module) =>
+      isConnectedModuleId(module.id),
+    )
     renderShell(role)
 
     expect(
-      screen.getByRole("heading", { name: definition.welcomeHeading }),
+      screen.getByRole("heading", { name: "GRC Connect" }),
     ).toBeInTheDocument()
 
     const navigation = screen.getByRole("navigation", {
@@ -62,15 +66,21 @@ describe("PortalShell", () => {
     })
     const links = within(navigation).getAllByRole("link")
 
-    expect(links).toHaveLength(definition.modules.length + 1)
+    expect(links).toHaveLength(liveModules.length + 1)
     expect(
-      within(navigation).getByRole("link", { name: "Portal overview" }),
+      within(navigation).getByRole("link", { name: "GRC Connect" }),
     ).toHaveAttribute("href", "/portal")
 
     for (const module of definition.modules) {
-      expect(
-        within(navigation).getByRole("link", { name: module.label }),
-      ).toHaveAttribute("href", `/portal/${module.id}`)
+      const link = within(navigation).queryByRole("link", {
+        name: module.label,
+      })
+
+      if (isConnectedModuleId(module.id)) {
+        expect(link).toHaveAttribute("href", `/portal/${module.id}`)
+      } else {
+        expect(link).not.toBeInTheDocument()
+      }
     }
 
     expect(
@@ -79,7 +89,7 @@ describe("PortalShell", () => {
     expect(screen.getAllByText(definition.roleLabel).length).toBeGreaterThan(0)
   })
 
-  it("connects notifications while keeping unsupported account actions honestly disabled", () => {
+  it("keeps the top bar focused on connected account actions", () => {
     renderShell("student")
 
     expect(screen.getByRole("button", { name: /notifications/i })).toBeEnabled()
@@ -90,7 +100,7 @@ describe("PortalShell", () => {
       "Help preview",
       "Report issue preview",
     ]) {
-      expect(screen.getByRole("button", { name })).toBeDisabled()
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument()
     }
   })
 
@@ -172,7 +182,9 @@ describe("PortalShell", () => {
       screen.getByRole("button", { name: "Open portal navigation" }),
     )
 
-    const dialog = screen.getByRole("dialog", { name: "Portal navigation" })
+    const dialog = screen.getByRole("dialog", {
+      name: "GRC Connect navigation",
+    })
     expect(
       within(dialog).getByRole("link", { name: "Payment Queue" }),
     ).toHaveAttribute("href", "/portal/payment-queue")
@@ -204,10 +216,10 @@ describe("PortalShell", () => {
     ).toBeInTheDocument()
   })
 
-  it("labels the portal as a preview and never as a demo", () => {
+  it("labels the signed-in workspace as GRC Connect", () => {
     renderShell("student")
 
-    expect(screen.getAllByText("Preview portal").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("GRC Connect").length).toBeGreaterThan(0)
     expect(screen.queryByText("Demo portal")).not.toBeInTheDocument()
   })
 
@@ -219,7 +231,7 @@ describe("PortalShell", () => {
     })
 
     expect(
-      within(navigation).getByRole("link", { name: "Portal overview" }),
+      within(navigation).getByRole("link", { name: "GRC Connect" }),
     ).toHaveAttribute("aria-current", "page")
   })
 
@@ -227,7 +239,7 @@ describe("PortalShell", () => {
     renderShell("student")
 
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" })
-    expect(within(breadcrumb).getByText("Portal overview")).toHaveAttribute(
+    expect(within(breadcrumb).getByText("GRC Connect")).toHaveAttribute(
       "aria-current",
       "page",
     )
@@ -249,7 +261,7 @@ describe("PortalShell", () => {
 
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" })
     expect(
-      within(breadcrumb).getByRole("link", { name: "Portal overview" }),
+      within(breadcrumb).getByRole("link", { name: "GRC Connect" }),
     ).toHaveAttribute("href", "/portal")
     expect(within(breadcrumb).getByText(module.label)).toHaveAttribute(
       "aria-current",

@@ -493,6 +493,39 @@ describe("RegistrarEnrollmentWorkspace", () => {
     ).not.toBeDisabled()
   })
 
+  it("renders a complete phone-sized approval card with review and decision actions", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              ...overloadFlaggedEnrollment,
+              student_financial_status: "scholar",
+              student_financial_status_label: "Scholar",
+            },
+          ],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const card = await screen.findByRole("article", {
+      name: "Enrollment #11",
+    })
+    expect(within(card).getByText("2026-0001")).toBeInTheDocument()
+    expect(within(card).getByText("Scholar")).toBeInTheDocument()
+    expect(within(card).getByText("24 units")).toBeInTheDocument()
+    expect(within(card).getByText("Overload")).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "Review" })).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "Approve" })).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "Reject" })).toBeInTheDocument()
+  })
+
   it("has no detectable accessibility violations once loaded", async () => {
     fetchMock.mockResolvedValue(
       new Response(

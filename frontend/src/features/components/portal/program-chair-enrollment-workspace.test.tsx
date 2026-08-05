@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -151,6 +151,33 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     expect(screen.queryByText("IT201")).not.toBeInTheDocument()
     expect(screen.queryByText("2A")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "1. 1st Year" })).not.toBeInTheDocument()
+  })
+
+  it("provides every generated subject as a phone-friendly schedule card", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockAll())
+    renderWorkspace()
+    for (let year = 1; year <= 4; year++) {
+      await chooseCurriculum(user, year)
+      const input = await screen.findByLabelText("Number of block sections")
+      await user.clear(input)
+      await user.type(input, "1")
+      await user.click(
+        screen.getByRole("button", {
+          name: year === 4 ? "Continue to review" : "Save and continue",
+        }),
+      )
+    }
+    await user.click(screen.getByRole("button", { name: "Generate subject list" }))
+
+    const card = await screen.findByRole("article", {
+      name: "CS101 schedule",
+    })
+    expect(within(card).getByText("Programming 1 · 3 units")).toBeInTheDocument()
+    expect(within(card).getByText(/Sched ID 21/)).toBeInTheDocument()
+    expect(
+      within(card).getByRole("button", { name: "Set schedule" }),
+    ).toBeInTheDocument()
   })
 
   it("opens a focused schedule assignment dialog from a generated subject row", async () => {

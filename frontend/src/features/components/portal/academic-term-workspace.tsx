@@ -165,7 +165,7 @@ export function AcademicTermWorkspace() {
                 <ArchiveTermDialog
                   term={currentTerm}
                   trigger={
-                    <Button type="button" variant="outline">
+                        <Button type="button" variant="outline" className="w-full sm:w-auto">
                       Archive current semester
                     </Button>
                   }
@@ -303,7 +303,7 @@ export function AcademicTermWorkspace() {
                     </FieldError>
                   </Field>
                 </div>
-                <Button type="submit" disabled={mutation.isPending}>
+                <Button type="submit" className="w-full sm:w-auto" disabled={mutation.isPending}>
                   {mutation.isPending ? "Creating term" : "Create school year"}
                 </Button>
               </FieldGroup>
@@ -354,9 +354,50 @@ export function AcademicTermWorkspace() {
                 render: (term) =>
                   term.enrollment_opens_at && term.enrollment_closes_at
                     ? `${term.enrollment_opens_at} – ${term.enrollment_closes_at}`
-                    : "Not set",
+                  : "Not set",
               },
             ]}
+            renderCard={(term) => {
+              const termLabel = formatAcademicTerm(term)
+              const canArchive =
+                term.status === "semester_ongoing" ||
+                term.status === "semester_closed"
+              const enrollmentWindow =
+                term.enrollment_opens_at && term.enrollment_closes_at
+                  ? `${term.enrollment_opens_at} – ${term.enrollment_closes_at}`
+                  : "Not set"
+
+              return (
+                <Card
+                  role="article"
+                  aria-label={`${termLabel} enrollment cycle`}
+                  size="sm"
+                >
+                  <CardHeader>
+                    <CardTitle level={3}>{termLabel}</CardTitle>
+                    <CardDescription>{term.status_label}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    <dl className="grid gap-2 text-sm">
+                      <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-2">
+                        <dt className="text-muted-foreground">Enrollment window</dt>
+                        <dd className="min-w-0 text-right font-medium">{enrollmentWindow}</dd>
+                      </div>
+                    </dl>
+                    {canArchive && (
+                      <ArchiveTermDialog
+                        term={term}
+                        trigger={
+                          <Button type="button" className="w-full" variant="outline">
+                            Archive term
+                          </Button>
+                        }
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            }}
           />
         )}
       </AsyncBoundary>

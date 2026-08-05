@@ -23,6 +23,7 @@ import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
@@ -87,6 +88,77 @@ function statusBadgeVariant(
   if (status === "rejected" || status === "cancelled") return "destructive"
   if (status === "enrolled") return "default"
   return "outline"
+}
+
+function EnrollmentQueueCard({
+  enrollment,
+  moduleId,
+  mutationPending,
+  onReview,
+  onStartDecision,
+}: {
+  enrollment: Enrollment
+  moduleId: string
+  mutationPending: boolean
+  onReview: (enrollment: Enrollment) => void
+  onStartDecision: (enrollment: Enrollment, action: RegistrarAction) => void
+}) {
+  const actions = availableActions(enrollment, moduleId)
+
+  return (
+    <Card role="article" aria-label={`Enrollment #${enrollment.id}`}>
+      <CardHeader>
+        <CardTitle level={3}>Enrollment #{enrollment.id}</CardTitle>
+        <Badge variant={statusBadgeVariant(enrollment.status)}>
+          {enrollment.status_label}
+        </Badge>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-3 text-sm">
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Student</dt>
+            <dd className="flex flex-wrap items-center gap-2 font-medium">
+              {enrollment.student_number}
+              {enrollment.student_financial_status_label && (
+                <Badge variant="secondary">
+                  {enrollment.student_financial_status_label}
+                </Badge>
+              )}
+            </dd>
+          </div>
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Units</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              {enrollment.total_units} units
+              {enrollment.requires_overload_approval && (
+                <Badge variant="outline">Overload</Badge>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </CardContent>
+      <CardFooter className="flex-col items-stretch gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onReview(enrollment)}
+        >
+          Review
+        </Button>
+        {actions.map((action) => (
+          <Button
+            key={action}
+            type="button"
+            variant={action === "registrar_approve" ? "default" : "destructive"}
+            disabled={mutationPending}
+            onClick={() => onStartDecision(enrollment, action)}
+          >
+            {actionLabel[action]}
+          </Button>
+        ))}
+      </CardFooter>
+    </Card>
+  )
 }
 
 interface RegistrarEnrollmentWorkspaceProps {
@@ -188,6 +260,20 @@ export function RegistrarEnrollmentWorkspace({
                 caption="Enrollment queue"
                 rowKey={(enrollment) => enrollment.id}
                 rows={enrollments}
+                renderCard={(enrollment) => (
+                  <EnrollmentQueueCard
+                    enrollment={enrollment}
+                    moduleId={initialModuleId}
+                    mutationPending={mutation.isPending}
+                    onReview={setReviewingEnrollment}
+                    onStartDecision={(target, action) => {
+                      setPending({ enrollment: target, action })
+                      setReason("")
+                      setOverloadAcknowledged(false)
+                      setError("")
+                    }}
+                  />
+                )}
                 columns={[
                   {
                     key: "student",

@@ -2,20 +2,16 @@
 
 import {
   ArrowUpRight,
-  CalendarX2,
+  CalendarDays,
   CircleCheck,
   CircleDashed,
   ServerCrash,
-  ShieldAlert,
 } from "lucide-react"
 import Link from "next/link"
 
 import { useAuth } from "@/features/auth/use-auth"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/features/components/ui/alert"
+import { GrcBrand } from "@/features/components/common/grc-brand"
+import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -27,17 +23,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { useEnrollmentScheduleQuery } from "@/features/hooks/use-enrollment-windows"
 import { useHealthQuery } from "@/features/hooks/use-health-query"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
+import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import {
   formatAcademicTerm,
   getActiveAcademicTerm,
 } from "@/features/services/reference-data-service"
 
-export function PortalOverviewPage() {
+export function GrcConnectPage() {
   const { session } = useAuth()
   const healthQuery = useHealthQuery()
   const academicTermsQuery = useAcademicTermsQuery({
@@ -55,54 +51,71 @@ export function PortalOverviewPage() {
   }
 
   const definition = rolePortalDefinitions[session.role]
+  const availableModules = definition.modules.filter((module) =>
+    isConnectedModuleId(module.id),
+  )
+  const plannedModules = definition.modules.filter(
+    (module) => !isConnectedModuleId(module.id),
+  )
+  const primaryModule = availableModules[0]
 
   return (
-    <main className="portal-overview">
-      <section className="portal-overview-header">
-        <div>
-          <Badge variant="outline">{definition.roleLabel} workspace</Badge>
-          <h1>{definition.welcomeHeading}</h1>
-          <p>
-            Welcome, {session.displayName}. Explore the planned enrollment
-            workspace for your role without changing institutional records.
-          </p>
+    <main className="grc-connect">
+      <section className="grc-connect-hero" aria-labelledby="grc-connect-title">
+        <div className="grc-connect-hero__identity">
+          <GrcBrand compact />
+          <p>TOUCHING HEARTS, RENEWING MINDS, TRANSFORMING LIVES</p>
         </div>
-        <span className="portal-overview-header__folio" aria-hidden="true">
-          <strong>GRC</strong>
-          <small>Role workspace</small>
-        </span>
+        <div className="grc-connect-hero__copy">
+          <h1 id="grc-connect-title">GRC Connect</h1>
+          <span>{definition.welcomeHeading}</span>
+        </div>
+        <div className="grc-connect-hero__action">
+          <p>Start here</p>
+          {primaryModule ? (
+            <>
+              <strong>{primaryModule.label}</strong>
+              <Button asChild variant="secondary">
+                <Link href={`/portal/${primaryModule.id}`}>
+                  Open {primaryModule.label} workspace
+                  <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <span>Your role has no live workspace at the moment.</span>
+          )}
+        </div>
       </section>
 
-      <Alert className="portal-boundary-alert">
-        <ShieldAlert aria-hidden="true" />
-        <AlertTitle role="heading" aria-level={2}>
-          Portal workspace
-        </AlertTitle>
-        <AlertDescription>
-          <p>Your available modules are limited to your signed-in role.</p>
-          <p>
-            Connected workspaces identify their live API boundary on arrival.
-          </p>
-        </AlertDescription>
-      </Alert>
-
-      <section aria-label={`${definition.roleLabel} portal modules`}>
+      <section aria-label={`${definition.roleLabel} GRC Connect modules`}>
         <div className="portal-section-heading">
           <div>
-            <p className="eyebrow">Assigned workspace</p>
-            <h2>Modules prepared for your role</h2>
+            <p className="eyebrow">Your GRC workspace</p>
+            <h2>Available workspaces</h2>
           </div>
           <p>
-            Module availability is shown inside each role-authorized workspace.
+            Live tools assigned to your role for the current enrollment process.
           </p>
         </div>
 
         <div className="portal-module-grid">
-          {definition.modules.map((module, index) => {
+          {availableModules.map((module, index) => {
             const Icon = module.icon
+            const isPrimary = index === 0
+            const actionLabel = isPrimary
+              ? `Continue to ${module.label}`
+              : `Open ${module.label}`
 
             return (
-              <Card key={module.id} className="portal-module-card">
+              <Card
+                key={module.id}
+                className={
+                  isPrimary
+                    ? "portal-module-card portal-module-card--primary"
+                    : "portal-module-card"
+                }
+              >
                 <CardHeader>
                   <span className="portal-module-card__index">
                     {String(index + 1).padStart(2, "0")}
@@ -110,15 +123,17 @@ export function PortalOverviewPage() {
                   <CardAction>
                     <Icon aria-hidden="true" />
                   </CardAction>
-                  <CardTitle role="heading" aria-level={3}>
-                    {module.label}
-                  </CardTitle>
+                  <CardTitle level={3}>{module.label}</CardTitle>
                   <CardDescription>{module.description}</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                  <Button asChild variant="ghost" size="sm">
+                  <Button
+                    asChild
+                    variant={isPrimary ? "default" : "ghost"}
+                    size="sm"
+                  >
                     <Link href={`/portal/${module.id}`}>
-                      Open {module.label}
+                      {actionLabel}
                       <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
                     </Link>
                   </Button>
@@ -129,18 +144,57 @@ export function PortalOverviewPage() {
         </div>
       </section>
 
-      <section className="portal-status-grid" aria-label="Connection status">
+      {plannedModules.length > 0 && (
+        <section
+          className="portal-planned-capabilities"
+          aria-label={`${definition.roleLabel} planned capabilities`}
+        >
+          <div className="portal-section-heading">
+            <div>
+              <p className="eyebrow">In development</p>
+              <h2>Planned capabilities</h2>
+            </div>
+            <p>
+              These role-relevant tools are being prepared and are not yet
+              available for day-to-day enrollment work.
+            </p>
+          </div>
+
+          <div className="portal-module-grid">
+            {plannedModules.map((module) => {
+              const Icon = module.icon
+
+              return (
+                <Card
+                  key={module.id}
+                  className="portal-module-card portal-module-card--planned"
+                >
+                  <CardHeader>
+                    <CardAction>
+                      <Icon aria-hidden="true" />
+                    </CardAction>
+                    <CardTitle level={3}>{module.label}</CardTitle>
+                    <CardDescription>{module.description}</CardDescription>
+                    <Badge variant="outline" className="mt-3 w-fit">
+                      Planned
+                    </Badge>
+                  </CardHeader>
+                </Card>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="portal-status-grid" aria-label="GRC Connect status">
         <Card>
           <CardHeader>
             <CardAction>
-              <CalendarX2 aria-hidden="true" />
+              <CalendarDays aria-hidden="true" />
             </CardAction>
-            <CardTitle role="heading" aria-level={2}>
-              Academic term
-            </CardTitle>
+            <CardTitle>Academic term</CardTitle>
             <CardDescription>
-              Current institutional context from the authenticated reference
-              API.
+              Your enrollment work is organized around the active GRC term.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -156,7 +210,9 @@ export function PortalOverviewPage() {
             )}
             {isStudent && (
               <div className="mt-3">
-                <EnrollmentAvailabilityBanner viewer={scheduleQuery.data?.viewer} />
+                <EnrollmentAvailabilityBanner
+                  viewer={scheduleQuery.data?.viewer}
+                />
               </div>
             )}
           </CardContent>
@@ -173,22 +229,21 @@ export function PortalOverviewPage() {
                 <CircleCheck aria-hidden="true" />
               )}
             </CardAction>
-            <CardTitle role="heading" aria-level={2}>
-              Public API
-            </CardTitle>
+            <CardTitle>System availability</CardTitle>
             <CardDescription>
-              Read-only reachability for the published health contract.
+              A quick connection check for the enrollment portal.
             </CardDescription>
           </CardHeader>
           <CardContent aria-live="polite">
-            {healthQuery.isPending && <p>Checking public API…</p>}
-            {healthQuery.isError && <p>Public API unavailable</p>}
-            {healthQuery.data && (
-              <p>Public API online · {healthQuery.data.api_version}</p>
-            )}
+            {healthQuery.isPending && <p>Checking system availability…</p>}
+            {healthQuery.isError && <p>System availability unavailable</p>}
+            {healthQuery.data && <p>Enrollment portal available</p>}
           </CardContent>
         </Card>
       </section>
     </main>
   )
 }
+
+/** @deprecated Use GrcConnectPage. Kept for existing callers during the UI transition. */
+export const PortalOverviewPage = GrcConnectPage

@@ -197,7 +197,7 @@ export function ScheduleDecisionControls({
           if (!open && !mutation.isPending) setPending(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-h-[100dvh] overflow-y-auto rounded-none sm:max-h-[90dvh] sm:rounded-xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm schedule decision</AlertDialogTitle>
             <AlertDialogDescription>
@@ -220,7 +220,7 @@ export function ScheduleDecisionControls({
               {reasonRequired && <FieldError id="decision-reason-error">Remarks are required before returning this schedule.</FieldError>}
             </Field>
           )}
-          <AlertDialogFooter>
+          <AlertDialogFooter className="[&_button]:w-full sm:[&_button]:w-auto">
             <AlertDialogCancel disabled={mutation.isPending}>
               Cancel
             </AlertDialogCancel>

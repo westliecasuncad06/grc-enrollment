@@ -204,7 +204,9 @@ describe("PortalNotificationSheet", () => {
     fetchMock.mockImplementation(() =>
       Promise.resolve(
         new Response(
-          JSON.stringify(activeUser === "A" ? userANotifications : userBNotifications),
+          JSON.stringify(
+            activeUser === "A" ? userANotifications : userBNotifications,
+          ),
           { status: 200 },
         ),
       ),
@@ -277,18 +279,24 @@ describe("PortalNotificationSheet", () => {
 
     renderWithSession(<PortalNotificationSheet />)
     await user.click(screen.getByRole("button", { name: /notifications/i }))
-    expect(await screen.findByText("Earlier schedule update")).toBeInTheDocument()
+    expect(
+      await screen.findByText("Earlier schedule update"),
+    ).toBeInTheDocument()
 
     message = "New Dean review request"
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000)
     })
 
-    expect(await screen.findByText("New Dean review request")).toBeInTheDocument()
-    expect(screen.getByRole("dialog", { name: "Notifications" })).toBeInTheDocument()
+    expect(
+      await screen.findByText("New Dean review request"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("dialog", { name: "Notifications" }),
+    ).toBeInTheDocument()
   })
 
-  it("marks all unread notifications as read when the sheet is closed", async () => {
+  it("keeps unread notifications unchanged when the sheet is closed", async () => {
     const user = userEvent.setup()
     const patchedIds: number[] = []
     fetchMock.mockImplementation((input, init) => {
@@ -300,7 +308,11 @@ describe("PortalNotificationSheet", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: { ...notificationEnvelope.data[0], id, read_at: "2026-07-29T10:03:00Z" },
+              data: {
+                ...notificationEnvelope.data[0],
+                id,
+                read_at: "2026-07-29T10:03:00Z",
+              },
             }),
             { status: 200 },
           ),
@@ -313,7 +325,11 @@ describe("PortalNotificationSheet", () => {
             ...notificationEnvelope,
             data: [
               { ...notificationEnvelope.data[0], id: 7 },
-              { ...notificationEnvelope.data[0], id: 8, notification_type: "enrollment_submitted" },
+              {
+                ...notificationEnvelope.data[0],
+                id: 8,
+                notification_type: "enrollment_submitted",
+              },
             ],
           }),
           { status: 200 },
@@ -327,7 +343,7 @@ describe("PortalNotificationSheet", () => {
 
     await user.click(screen.getByRole("button", { name: "Close" }))
 
-    await vi.waitFor(() => expect(patchedIds.sort()).toEqual([7, 8]))
+    expect(patchedIds).toEqual([])
   })
 
   it("does not attempt to mark anything read when the sheet is closed with zero unread", async () => {
@@ -336,12 +352,19 @@ describe("PortalNotificationSheet", () => {
     fetchMock.mockImplementation((_input, init) => {
       if (init?.method === "PATCH") {
         patchCalled = true
-        return Promise.resolve(new Response(JSON.stringify({ data: notificationEnvelope.data[0] }), { status: 200 }))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: notificationEnvelope.data[0] }), {
+            status: 200,
+          }),
+        )
       }
 
       return Promise.resolve(
         new Response(
-          JSON.stringify({ ...notificationEnvelope, meta: { ...notificationEnvelope.meta, total: 0 } }),
+          JSON.stringify({
+            ...notificationEnvelope,
+            meta: { ...notificationEnvelope.meta, total: 0 },
+          }),
           { status: 200 },
         ),
       )
@@ -368,7 +391,11 @@ describe("PortalNotificationSheet", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: { ...notificationEnvelope.data[0], id, read_at: "2026-07-29T10:03:00Z" },
+              data: {
+                ...notificationEnvelope.data[0],
+                id,
+                read_at: "2026-07-29T10:03:00Z",
+              },
             }),
             { status: 200 },
           ),
@@ -381,7 +408,11 @@ describe("PortalNotificationSheet", () => {
             ...notificationEnvelope,
             data: [
               { ...notificationEnvelope.data[0], id: 7 },
-              { ...notificationEnvelope.data[0], id: 8, notification_type: "enrollment_submitted" },
+              {
+                ...notificationEnvelope.data[0],
+                id: 8,
+                notification_type: "enrollment_submitted",
+              },
             ],
           }),
           { status: 200 },
@@ -405,7 +436,10 @@ describe("PortalNotificationSheet", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: { ...notificationEnvelope.data[0], read_at: "2026-07-29T10:03:00Z" },
+              data: {
+                ...notificationEnvelope.data[0],
+                read_at: "2026-07-29T10:03:00Z",
+              },
             }),
             { status: 200 },
           ),
@@ -433,10 +467,14 @@ describe("PortalNotificationSheet", () => {
     })
     await user.click(screen.getByRole("button", { name: /notifications/i }))
     await user.click(
-      await screen.findByRole("button", { name: /CCS's schedule was returned/ }),
+      await screen.findByRole("button", {
+        name: /CCS's schedule was returned/,
+      }),
     )
 
-    expect(routerMock.push).toHaveBeenCalledWith("/portal/program-chair-enrollment")
+    expect(routerMock.push).toHaveBeenCalledWith(
+      "/portal/program-chair-enrollment",
+    )
     expect(
       screen.queryByRole("dialog", { name: "Notifications" }),
     ).not.toBeInTheDocument()

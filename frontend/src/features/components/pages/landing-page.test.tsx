@@ -16,21 +16,17 @@ describe("LandingPage", () => {
     vi.unstubAllGlobals()
   })
 
-  it("presents the institutional identity and primary portal actions", async () => {
+  it("connects the official GRC identity to the enrollment portal", async () => {
     renderWithSession(<LandingPage />)
 
     expect(
       await screen.findByRole("heading", {
-        name: "Enrollment, guided from first step to final record.",
+        name: "Your GRC enrollment journey starts here.",
       }),
     ).toBeInTheDocument()
     const banner = screen.getByRole("banner")
-    expect(
-      within(banner).getByText("Global Reciprocal Colleges"),
-    ).toBeInTheDocument()
-    expect(
-      within(banner).getByText("Automated Enrollment System"),
-    ).toBeInTheDocument()
+    expect(within(banner).getByRole("img", { name: "Global Reciprocal Colleges" })).toBeInTheDocument()
+    expect(screen.getByText("TOUCHING HEARTS, RENEWING MINDS, TRANSFORMING LIVES")).toBeInTheDocument()
 
     for (const link of screen.getAllByRole("link", {
       name: "Sign in to portal",
@@ -38,45 +34,37 @@ describe("LandingPage", () => {
       expect(link).toHaveAttribute("href", "/login")
     }
 
-    expect(
-      screen.getByRole("link", { name: "View system readiness" }),
-    ).toHaveAttribute("href", "#system-readiness")
-    expect(screen.getByRole("link", { name: "Portal guide" })).toHaveAttribute(
-      "href",
-      "#portal-guide",
-    )
+    const navigation = within(banner).getByRole("navigation", {
+      name: "Public navigation",
+    })
+    expect(within(navigation).getByRole("link", { name: "About GRC" })).toHaveAttribute("href", "#about-grc")
+    expect(within(navigation).getByRole("link", { name: "Academics" })).toHaveAttribute("href", "#academics")
+    expect(within(navigation).getByRole("link", { name: "Student Services" })).toHaveAttribute("href", "#student-services")
+    expect(within(navigation).getByRole("link", { name: "Visit GRC Website" })).toHaveAttribute("href", "https://grc.edu.ph/")
   })
 
-  it("orients every portal audience without exposing private records", () => {
+  it("presents GRC values and official public pathways without private records", () => {
     renderWithSession(<LandingPage />)
 
-    const guide = screen.getByRole("region", {
-      name: "One system, many responsibilities",
+    const about = screen.getByRole("region", {
+      name: "About Global Reciprocal Colleges",
     })
+    expect(within(about).getByRole("heading", { name: "Vision" })).toBeInTheDocument()
+    expect(within(about).getByText("A global community of excellent individuals with values.")).toBeInTheDocument()
+    expect(within(about).getByRole("heading", { name: "Mission" })).toBeInTheDocument()
 
-    expect(
-      within(guide).getByRole("heading", { name: "Students" }),
-    ).toBeInTheDocument()
-    expect(
-      within(guide).getByRole("heading", {
-        name: "Faculty & Program Chairs",
-      }),
-    ).toBeInTheDocument()
-    expect(
-      within(guide).getByRole("heading", {
-        name: "Enrollment offices & leadership",
-      }),
-    ).toBeInTheDocument()
-    expect(guide).toHaveTextContent(
-      "Admissions, Registrar, Accounting, Dean, and Executive offices",
-    )
+    const services = screen.getByRole("region", { name: "Student services" })
+    expect(within(services).getByRole("link", { name: "Visit Admissions" })).toHaveAttribute("href", "https://grc.edu.ph/grc-admission/")
+    expect(within(services).getByRole("link", { name: "Visit GRC Library" })).toHaveAttribute("href", "https://grc.edu.ph/grc-library/")
+    expect(within(services).getByRole("link", { name: "Visit Scholarship" })).toHaveAttribute("href", "https://grc.edu.ph/grc-scholarship/")
+    expect(document.body).not.toHaveTextContent(/student number|private student records/i)
   })
 
   it("shows the four-stage enrollment journey in order", () => {
     renderWithSession(<LandingPage />)
 
     const journey = screen.getByRole("region", {
-      name: "From schedule to final record",
+      name: "How enrollment works",
     })
     const steps = within(journey).getAllByRole("listitem")
 
@@ -91,21 +79,11 @@ describe("LandingPage", () => {
     )
   })
 
-  it("embeds honest readiness and demo-boundary information", () => {
+  it("keeps the landing page focused on enrollment instead of API diagnostics", () => {
     renderWithSession(<LandingPage />)
 
-    const readiness = screen.getByRole("region", {
-      name: "System readiness",
-    })
-
-    expect(readiness).toHaveAttribute("id", "system-readiness")
-    expect(
-      within(readiness).getByText("Contacting the public gateway…"),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText("Demo interface—no private student records are loaded."),
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/100%|production ready/i)).not.toBeInTheDocument()
-    expect(document.body).not.toHaveTextContent(/[\w.-]+@[\w.-]+\.[a-z]{2,}/i)
+    expect(screen.queryByRole("region", { name: "System readiness" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Demo interface—no private student records are loaded.")).not.toBeInTheDocument()
+    expect(screen.queryByText("Contacting the public gateway…")).not.toBeInTheDocument()
   })
 })

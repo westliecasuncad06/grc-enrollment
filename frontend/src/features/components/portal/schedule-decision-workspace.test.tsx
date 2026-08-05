@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -184,9 +184,12 @@ describe("ScheduleDecisionWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Review schedule" }))
     expect(await screen.findByRole("dialog", { name: "Review schedule · College of Computer Studies" })).toBeInTheDocument()
     expect(screen.getByRole("tab", { name: "IT101" })).toBeInTheDocument()
-    expect(screen.getByText("PSPEAK")).toBeInTheDocument()
-    expect(screen.getByText("ALONZO")).toBeInTheDocument()
-    expect(screen.getByText("5F")).toBeInTheDocument()
+    const subjectCard = screen.getByRole("article", {
+      name: "PSPEAK schedule review",
+    })
+    expect(subjectCard).toHaveTextContent("Public Speaking")
+    expect(within(subjectCard).getByText("ALONZO")).toBeInTheDocument()
+    expect(within(subjectCard).getByText("5F")).toBeInTheDocument()
   })
 
   it("invalidates both proposal and section caches after a successful transition", async () => {

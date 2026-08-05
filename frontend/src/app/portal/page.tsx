@@ -1,5 +1,5 @@
-import { PortalOverviewPage } from "@/features/components/pages/portal-overview-page"
+import { GrcConnectPage } from "@/features/components/pages/portal-overview-page"
 
 export default function Page() {
-  return <PortalOverviewPage />
+  return <GrcConnectPage />
 }

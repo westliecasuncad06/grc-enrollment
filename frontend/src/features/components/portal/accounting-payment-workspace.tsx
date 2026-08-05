@@ -23,6 +23,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
@@ -74,6 +75,87 @@ function byQueueOrder(a: QueueTicket, b: QueueTicket): number {
   const bRequeued = b.requeued_at !== null
   if (aRequeued !== bRequeued) return aRequeued ? 1 : -1
   return a.id - b.id
+}
+
+function formatAmountDue(enrollment: Enrollment | undefined) {
+  const total = enrollment?.assessment?.total_amount
+  return total ? `₱${total}` : "—"
+}
+
+function WaitingTicketCard({
+  ticket,
+  enrollment,
+  pending,
+  onMarkPriority,
+}: {
+  ticket: QueueTicket
+  enrollment: Enrollment | undefined
+  pending: boolean
+  onMarkPriority: (ticket: QueueTicket) => void
+}) {
+  return (
+    <Card role="article" aria-label={`Waiting ticket ${ticket.ticket_number}`}>
+      <CardHeader>
+        <CardTitle level={3}>{ticket.ticket_number}</CardTitle>
+        {ticket.priority === "priority" && (
+          <Badge variant="outline">Priority</Badge>
+        )}
+        <CardDescription>{ticket.student_number}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-3 text-sm">
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Amount due</dt>
+            <dd className="font-medium">{formatAmountDue(enrollment)}</dd>
+          </div>
+          {enrollment?.student_financial_status_label && (
+            <div className="grid gap-1">
+              <dt className="text-muted-foreground">Student status</dt>
+              <dd>
+                <Badge variant="secondary">
+                  {enrollment.student_financial_status_label}
+                </Badge>
+              </dd>
+            </div>
+          )}
+        </dl>
+      </CardContent>
+      {ticket.priority === "regular" && (
+        <CardFooter className="items-stretch">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => onMarkPriority(ticket)}
+            className="w-full"
+          >
+            Mark priority
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
+  )
+}
+
+function ServedTicketCard({ ticket }: { ticket: QueueTicket }) {
+  return (
+    <Card role="article" aria-label={`Served ticket ${ticket.ticket_number}`}>
+      <CardHeader>
+        <CardTitle level={3}>{ticket.ticket_number}</CardTitle>
+        <CardDescription>{ticket.student_number}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-1 text-sm">
+          <dt className="text-muted-foreground">Served at</dt>
+          <dd>
+            {ticket.served_at
+              ? new Date(ticket.served_at).toLocaleTimeString()
+              : "—"}
+          </dd>
+        </dl>
+      </CardContent>
+    </Card>
+  )
 }
 
 /**
@@ -345,11 +427,7 @@ export function AccountingPaymentWorkspace() {
                     {
                       key: "amount",
                       header: "Amount due",
-                      render: (ticket) => {
-                        const total = enrollmentFor(ticket)?.assessment
-                          ?.total_amount
-                        return total ? `₱${total}` : "—"
-                      },
+                      render: (ticket) => formatAmountDue(enrollmentFor(ticket)),
                     },
                     {
                       key: "actions",
@@ -368,6 +446,14 @@ export function AccountingPaymentWorkspace() {
                         ) : null,
                     },
                   ]}
+                  renderCard={(ticket) => (
+                    <WaitingTicketCard
+                      ticket={ticket}
+                      enrollment={enrollmentFor(ticket)}
+                      pending={ticketMutation.isPending}
+                      onMarkPriority={markPriority}
+                    />
+                  )}
                 />
               </CardContent>
             </Card>
@@ -401,6 +487,7 @@ export function AccountingPaymentWorkspace() {
                           : "—",
                     },
                   ]}
+                  renderCard={(ticket) => <ServedTicketCard ticket={ticket} />}
                 />
               </CardContent>
             </Card>

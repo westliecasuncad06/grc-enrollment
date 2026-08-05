@@ -41,11 +41,7 @@ const programChairGatedModules = new Set([
   "schedule-proposals",
 ])
 
-function ProgramChairModuleGate({
-  children,
-}: {
-  children: ReactNode
-}) {
+function ProgramChairModuleGate({ children }: { children: ReactNode }) {
   const { session } = useAuth()
   const termsQuery = useAcademicTermsQuery()
   const currentTerm = getActiveAcademicTerm(termsQuery.data)
@@ -59,7 +55,8 @@ function ProgramChairModuleGate({
   )
   const query = {
     isPending:
-      termsQuery.isPending || (currentTerm !== null && workflowsQuery.isPending),
+      termsQuery.isPending ||
+      (currentTerm !== null && workflowsQuery.isPending),
     isError: termsQuery.isError || workflowsQuery.isError,
     error: termsQuery.error ?? workflowsQuery.error,
     data: workflow ?? null,
@@ -125,7 +122,7 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
               Portal module not found
             </EmptyTitle>
             <EmptyDescription>
-              This destination is not assigned to your signed-in demo role.
+              This destination is not assigned to your signed-in role.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -136,7 +133,7 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
             <Button asChild>
               <Link href="/portal">
                 <ArrowLeft data-icon="inline-start" aria-hidden="true" />
-                Return to portal overview
+                Return to GRC Connect
               </Link>
             </Button>
           </EmptyContent>
@@ -176,7 +173,7 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
         >
           <Link href="/portal">
             <ArrowLeft data-icon="inline-start" aria-hidden="true" />
-            Return to portal overview
+            Return to GRC Connect
           </Link>
         </Button>
       </main>
@@ -188,7 +185,7 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
       <Empty
         className="portal-module-empty"
         role="region"
-        aria-label={`${module.label} module preview`}
+        aria-label={`${module.label} planned capability`}
       >
         <EmptyHeader>
           <EmptyMedia variant="icon">
@@ -204,16 +201,16 @@ export function PortalModulePage({ moduleId }: { moduleId: string }) {
           <Alert className="portal-module-warning">
             <Construction aria-hidden="true" />
             <AlertTitle role="heading" aria-level={2}>
-              Demo module preview
+              Planned capability
             </AlertTitle>
             <AlertDescription>
-              This module is not connected to workflow or authorization APIs.
+              This workspace is being prepared for a future GRC Connect release.
             </AlertDescription>
           </Alert>
           <Button asChild variant="outline">
             <Link href="/portal">
               <ArrowLeft data-icon="inline-start" aria-hidden="true" />
-              Return to portal overview
+              Return to GRC Connect
             </Link>
           </Button>
         </EmptyContent>
