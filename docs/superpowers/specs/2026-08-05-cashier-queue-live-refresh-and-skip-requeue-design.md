@@ -90,6 +90,10 @@ queue-policy area "provisional, pending GRC approval" (`QueueTicketStatus`'s
 own docblock repeats this verbatim). Adding a cap now would be inventing
 institutional policy, not implementing an approved one. Flagged here so it
 is not rediscovered as a "missed" requirement later.
+- Related: redirecting `skip` to `waiting` also makes
+  `QueueTicketStatus::Cancelled` unreachable, so there is no remaining way
+  to remove a no-show ticket from today's queue. Not evaluated or solved by
+  this slice — an acknowledged gap, not a decision.
 
 ## Alternatives considered
 

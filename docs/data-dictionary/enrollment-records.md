@@ -105,10 +105,11 @@ Faculty-only; `PATCH` serves a plain content edit (draft only) or
 | `enrollment_id` | `BIGINT UNSIGNED` | not null, **unique**, FK → `enrollments.id`, `CASCADE` on delete | One ticket per enrollment |
 | `ticket_number` | `VARCHAR(255)` | not null, **unique with `queue_date`** (not alone — see below) | Resets daily (`Q001`, `Q002`, …), not derived from the enrollment id |
 | `queue_date` | `DATE` | not null | |
-| `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\QueueTicketStatus` (adds `cancelled` via the `skip` transition) |
+| `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Enrollment\QueueTicketStatus`. `skip` now returns the ticket to `waiting` rather than moving it to `cancelled` |
 | `priority` | `VARCHAR(255)` | not null, default `regular` | **Provisional** — see `App\Domain\Enrollment\QueueTicketPriority`. Cashier-set after issuance; no eligibility rule is encoded |
 | `served_at` | `TIMESTAMP` | nullable | |
 | `served_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | Never exposed via `QueueTicketResource` — actor identity stays private, same convention as every audited action |
+| `requeued_at` | `TIMESTAMP` | nullable | Set to the skip moment; drives ordering ahead of `id` — see below |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
 `ticket_number`'s uniqueness moved from a bare column constraint to the
@@ -126,8 +127,12 @@ neither transition has a per-ticket ownership dimension. Calling `serve` on
 a new ticket implicitly completes whatever was already `serving` that day
 (single-active-serving), enforced in `App\Actions\Enrollment\
 TransitionQueueTicket`, not the schema. `App\Models\QueueTicket::position()`
-computes how many `waiting` tickets stand ahead of a given one (priority
-tickets always precede regular ones); embedded only in
+computes how many `waiting` tickets stand ahead of a given one: priority
+tickets always precede regular ones, and within a tier tickets are ordered
+by `COALESCE(requeued_at, created_at)`, with a same-tick tie splitting a
+never-requeued ticket ahead of a requeued one and `id` as the final
+fallback (`App\Actions\Enrollment\ListQueueTickets`, the Accounting Staff
+queue list, applies the identical rule). `position()` is embedded only in
 `EnrollmentResource.queue_ticket.position` for a student's own ticket —
 never a full queue listing, for privacy. OpenAPI tag `Payments`.
 

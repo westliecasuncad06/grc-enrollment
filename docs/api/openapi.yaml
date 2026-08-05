@@ -2809,10 +2809,12 @@ paths:
         Accounting Staff only. `action: serve` moves `waiting` → `serving`
         (and implicitly completes whatever else was `serving` that day —
         single-active-serving); `action: complete` moves `serving` →
-        `served`; `action: skip` moves either `waiting` or `serving` to
-        `cancelled`; `action: mark_priority` flags a `waiting` ticket
-        `priority` without changing its status. §17 leaves reset cadence and
-        priority eligibility unconfirmed.
+        `served`; `action: skip` returns either `waiting` or `serving` to
+        `waiting`, stamping a fresh `requeued_at` so the ticket moves to the
+        back of its own priority tier instead of losing its place;
+        `action: mark_priority` flags a `waiting` ticket `priority` without
+        changing its status. §17 leaves reset cadence and priority
+        eligibility unconfirmed.
       security:
         - bearerAuth: []
       tags:
@@ -5309,7 +5311,9 @@ components:
         - status_label
         - priority
         - priority_label
+        - created_at
         - served_at
+        - requeued_at
       properties:
         type:
           type: string
@@ -5344,7 +5348,13 @@ components:
             - priority
         priority_label:
           type: string
+        created_at:
+          type: string
+          format: date-time
         served_at:
+          type: ["string", "null"]
+          format: date-time
+        requeued_at:
           type: ["string", "null"]
           format: date-time
     UpdateQueueTicketRequest:

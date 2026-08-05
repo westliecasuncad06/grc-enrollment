@@ -137,6 +137,16 @@ precedent `ConfirmPayment`'s bulk `EnrollmentSubject` status transition
 already set. `served_by` records which cashier served a ticket but is
 never exposed via `QueueTicketResource` (actor-privacy convention).
 
+**Amendment:** `skip` no longer targets `QueueTicketStatus::Cancelled`. A
+later change (2026-08-05, the Cashier queue live-refresh and skip-requeue
+slice) redirected it to `waiting` instead, stamping a new `requeued_at`
+column so the ticket lands at the back of its own priority tier rather
+than disappearing. This means `Cancelled` is now unreachable in practice —
+there is no remaining way for Accounting Staff to remove a ticket from
+today's queue (e.g. a no-show). That gap was not evaluated by this ADR and
+is not yet resolved; it is a known limitation, not an intentional
+decision.
+
 `QueueTicket::position()` is computed server-side, only for the caller's
 own ticket: priority tickets ahead (or, if the caller is priority
 themselves, only priority tickets ahead of them by id), then regular

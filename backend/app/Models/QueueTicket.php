@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Domain\Enrollment\QueueTicketPriority;
 use App\Domain\Enrollment\QueueTicketStatus;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -73,14 +74,31 @@ final class QueueTicket extends Model
     }
 
     /**
+     * The instant this ticket sorts by within its priority tier:
+     * `requeued_at` if it's ever been skipped, otherwise `created_at`.
+     * `created_at` is not cast in `casts()` (only `served_at`/`requeued_at`
+     * are), so it comes back as a plain `Illuminate\Support\Carbon`, not a
+     * `CarbonImmutable` — hence the `CarbonInterface` return type, which
+     * both implement and which is all `format()` below needs. The final
+     * `?? CarbonImmutable::now()` only matters for an unsaved, not-yet-
+     * persisted model (no real `queue_tickets` row ever lacks
+     * `created_at`) — treating that edge case as "sorts as if issued right
+     * now" is honest and safe, not a behavior change for any real ticket.
+     */
+    private function effectiveOrder(): CarbonInterface
+    {
+        return $this->requeued_at ?? $this->created_at ?? CarbonImmutable::now();
+    }
+
+    /**
      * How many other `waiting` tickets stand ahead of this one today — the
      * whole queue is never exposed to a student (privacy), only their own
      * count. `null` once this ticket has left `waiting` (position no
      * longer means anything for a ticket already being served or done).
      * Priority tickets always precede regular ones within the same day;
-     * within a tier, ordered by `COALESCE(requeued_at, created_at)` --
-     * arrival order for a never-skipped ticket, or the moment it was last
-     * requeued for one that was.
+     * within a tier, ordered by `effectiveOrder()` -- arrival order for a
+     * never-skipped ticket, or the moment it was last requeued for one
+     * that was.
      *
      * `created_at`/`requeued_at` are whole-second `timestamp` columns
      * (Eloquent truncates any sub-second precision on write regardless of
@@ -106,7 +124,7 @@ final class QueueTicket extends Model
             ->where('status', QueueTicketStatus::Waiting);
 
         $applyOrderedBefore = function ($query): void {
-            $effectiveOrder = ($this->requeued_at ?? $this->created_at)->format('Y-m-d H:i:s');
+            $effectiveOrder = $this->effectiveOrder()->format('Y-m-d H:i:s');
             $selfWasRequeued = (int) ($this->requeued_at !== null);
 
             $query->where(function ($query) use ($effectiveOrder, $selfWasRequeued) {
