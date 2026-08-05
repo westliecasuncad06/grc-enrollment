@@ -29,7 +29,6 @@ final class ScheduleProposalController extends Controller
     private const ABILITY_FOR_ACTION = [
         'dean_approve' => 'approveAsDean',
         'dean_return' => 'approveAsDean',
-        'executive_approve' => 'approveAsExecutive',
         'executive_return' => 'approveAsExecutive',
         'publish' => 'publish',
         'close' => 'close',

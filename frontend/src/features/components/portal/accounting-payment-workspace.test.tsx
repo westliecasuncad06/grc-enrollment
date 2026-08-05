@@ -48,6 +48,8 @@ const pendingPaymentEnrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_financial_status: null,
+  student_financial_status_label: null,
   academic_term_id: 2,
   status: "pending_payment",
   status_label: "Pending Payment",
@@ -173,6 +175,35 @@ describe("AccountingPaymentWorkspace", () => {
     expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
   })
 
+  it("shows the student's financial status as a badge when set", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/enrollments") && init?.method !== "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  ...pendingPaymentEnrollment,
+                  student_financial_status: "scholar",
+                  student_financial_status_label: "Scholar",
+                },
+              ],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    expect(await screen.findByText("Q001")).toBeInTheDocument()
+    expect(screen.getByText("Scholar")).toBeInTheDocument()
+  })
+
   it("calls the next waiting ticket when nobody is being served", async () => {
     const user = userEvent.setup()
     let servedRequest: RequestInit | undefined
@@ -218,7 +249,10 @@ describe("AccountingPaymentWorkspace", () => {
       within(dialog).getByRole("button", { name: "Confirm payment" }),
     )
 
-    expect(await screen.findByText(/COM000009/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/COM000009/)).length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole("button", { name: "Print / download" }),
+    ).toBeInTheDocument()
   })
 
   it("skips the currently serving ticket", async () => {

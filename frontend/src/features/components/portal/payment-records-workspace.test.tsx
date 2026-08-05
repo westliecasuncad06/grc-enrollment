@@ -86,7 +86,8 @@ describe("PaymentRecordsWorkspace", () => {
     expect(within(table).getByText("2026-0001")).toBeInTheDocument()
     expect(within(table).getByText("#9")).toBeInTheDocument()
     expect(within(table).getByText("₱5775.00")).toBeInTheDocument()
-    expect(within(table).getByText("OR-000123")).toBeInTheDocument()
+    // Manual payments only — no external reference column is shown.
+    expect(within(table).queryByText("Reference")).not.toBeInTheDocument()
   })
 
   it("filters by confirmed date", async () => {

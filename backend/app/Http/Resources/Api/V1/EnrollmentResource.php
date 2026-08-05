@@ -18,7 +18,9 @@ final class EnrollmentResource extends JsonResource
      * `student_number` (never email or name) is exposed so the Registrar
      * Head and Accounting Staff can identify whose enrollment they are
      * processing — the same non-sensitive identifier `StudentProfileResource`
-     * already exposes.
+     * already exposes. `student_financial_status` is the same
+     * pass-through: informational only (`App\Domain\Identity\FinancialStatus`),
+     * never read by fee computation.
      *
      * `assessment` is nullable: every enrollment created before this slice,
      * and any created directly (not through `registrar_approve`) — as most
@@ -33,6 +35,8 @@ final class EnrollmentResource extends JsonResource
      *     id: int,
      *     student_id: int,
      *     student_number: string,
+     *     student_financial_status: ?string,
+     *     student_financial_status_label: ?string,
      *     academic_term_id: int,
      *     status: string,
      *     status_label: string,
@@ -62,6 +66,8 @@ final class EnrollmentResource extends JsonResource
             'id' => $this->resource->id,
             'student_id' => $this->resource->student_id,
             'student_number' => $this->resource->student->student_number,
+            'student_financial_status' => $this->resource->student->financial_status?->value,
+            'student_financial_status_label' => $this->resource->student->financial_status?->label(),
             'academic_term_id' => $this->resource->academic_term_id,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),

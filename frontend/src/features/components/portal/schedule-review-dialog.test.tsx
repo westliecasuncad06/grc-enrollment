@@ -135,10 +135,12 @@ describe("ScheduleReviewDialog", () => {
     expect(screen.getByRole("button", { name: "Approve schedule" })).toBeInTheDocument()
   })
 
-  it("uses the final approval label for the Executive Director", async () => {
+  it("lets the Executive Director publish directly or return with notes", async () => {
     renderDialog("executive_director")
 
-    expect(await screen.findByRole("button", { name: "Final approve" })).toBeInTheDocument()
+    expect(
+      await screen.findByRole("button", { name: "Publish schedule" }),
+    ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Return with notes" })).toBeInTheDocument()
   })
 

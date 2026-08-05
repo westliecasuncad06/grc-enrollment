@@ -23,9 +23,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Applies one transition in the PRD §4.1 lifecycle
- * (draft → dean_approved → executive_approved → published → closed) and
- * records who decided it and when.
+ * Applies one transition in the schedule lifecycle
+ * (draft → dean_approved → published → closed — see
+ * `ScheduleProposalStatus`'s docblock for the PRD §4.1 amendment this
+ * reflects) and records who decided it and when.
  *
  * `publish` is the only action with a side effect beyond the proposal row
  * itself: it transitions every `planned` section in the proposal's term
@@ -41,7 +42,6 @@ final class TransitionScheduleProposal
     private const AUDIT_ACTION = [
         'dean_approve' => AuditAction::SCHEDULE_PROPOSAL_DEAN_APPROVED,
         'dean_return' => AuditAction::SCHEDULE_PROPOSAL_DEAN_RETURNED,
-        'executive_approve' => AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_APPROVED,
         'executive_return' => AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_RETURNED,
         'publish' => AuditAction::SCHEDULE_PROPOSAL_PUBLISHED,
         'close' => AuditAction::SCHEDULE_PROPOSAL_CLOSED,
@@ -188,7 +188,6 @@ final class TransitionScheduleProposal
 
             match ($action) {
                 'dean_approve' => $this->notifyScheduleTransition->deanApproved($lockedProposal, $fetchReviewerNotificationTerm()),
-                'executive_approve' => $this->notifyScheduleTransition->executiveApproved($lockedProposal, $fetchReviewerNotificationTerm()),
                 'dean_return' => $this->notifyScheduleTransition->returned($lockedProposal, $fetchReviewerNotificationTerm(), UserRole::Dean, (string) $decisionReason),
                 'executive_return' => $this->notifyScheduleTransition->returned($lockedProposal, $fetchReviewerNotificationTerm(), UserRole::ExecutiveDirector, (string) $decisionReason),
                 default => null,

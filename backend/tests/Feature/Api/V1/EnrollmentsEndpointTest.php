@@ -282,7 +282,8 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertCreated();
         self::assertSame(
             [
-                'type', 'id', 'student_id', 'student_number', 'academic_term_id',
+                'type', 'id', 'student_id', 'student_number',
+                'student_financial_status', 'student_financial_status_label', 'academic_term_id',
                 'status', 'status_label', 'total_units', 'requires_overload_approval',
                 'submitted_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
                 'subjects', 'queue_ticket', 'assessment',

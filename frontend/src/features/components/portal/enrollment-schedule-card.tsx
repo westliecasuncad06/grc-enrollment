@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
+import { toast } from "sonner"
 
 import {
   AlertDialog,
@@ -191,6 +192,7 @@ export function EnrollmentScheduleCard({
         })),
       })
       setSaveReceipt(true)
+      toast.success("Enrollment schedule saved.")
     } catch {
       setSaveError(
         "The enrollment schedule could not be saved. Check the dates and try again.",

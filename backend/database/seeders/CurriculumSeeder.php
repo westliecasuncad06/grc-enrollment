@@ -74,7 +74,7 @@ final class CurriculumSeeder extends Seeder
                 'MATH102' => ['MATH101'],
             ],
         ],
-        // Deliberately on the collegeless 'BSCS-DEMO' program (see
+        // Deliberately on the collegeless 'BSIT-DEMO' program (see
         // ProgramSeeder), not "BSCS Curriculum 2026" above: any curriculum
         // under a college-bearing program gets the entire real catalog
         // dumped onto it by CatalogCurriculumPlacementSeeder, which would
@@ -85,8 +85,8 @@ final class CurriculumSeeder extends Seeder
         // year 4 semester 2 — DemoEnrollmentSeeder's grade-history roster
         // needs a real placement at every one of those 8 positions.
         [
-            'program_code' => 'BSCS-DEMO',
-            'name' => 'BSCS Grade History Demo 2026',
+            'program_code' => 'BSIT-DEMO',
+            'name' => 'BSIT Grade History Demo 2026',
             'effective_school_year' => '2022-2023',
             'status' => CurriculumStatus::Active,
             'placements' => [

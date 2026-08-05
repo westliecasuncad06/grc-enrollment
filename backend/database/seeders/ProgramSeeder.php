@@ -33,7 +33,7 @@ final class ProgramSeeder extends Seeder
         // program has a college, which would otherwise dump the entire real
         // CCS catalog (~100 subjects) onto whatever curriculum these
         // students are placed on. See CurriculumSeeder's matching entry.
-        ['code' => 'BSCS-DEMO', 'name' => 'BS Computer Science (Grade History Demo)', 'status' => ProgramStatus::Active, 'college' => null],
+        ['code' => 'BSIT-DEMO', 'name' => 'BS Information Technology (Grade History Demo)', 'status' => ProgramStatus::Active, 'college' => null],
     ];
 
     public function run(): void

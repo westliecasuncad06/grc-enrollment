@@ -76,7 +76,7 @@ final class EnrollmentRecordsMigrationTest extends TestCase
 
         $this->assertTrue(Schema::hasColumns('student_profiles', [
             'id', 'user_id', 'student_number', 'program_id', 'curriculum_id',
-            'year_level', 'admission_status', 'academic_standing',
+            'year_level', 'admission_status', 'academic_standing', 'financial_status',
         ]));
     }
 

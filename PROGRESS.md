@@ -3508,7 +3508,7 @@ moved from submission to Registrar Staff approval (`EnrollmentPolicy` and
 behavior — window opens only once enrollment has closed and before the
 deadline, student submits with a required reason, Registrar Head decides,
 Registrar Staff sees the result; an 8-student demo roster
-(`BSCS-DEMO`/"BSCS Grade History Demo 2026", a deliberately collegeless
+(`BSIT-DEMO`/"BSIT Grade History Demo 2026", a deliberately collegeless
 program so the real CCS catalog importer can't contaminate it) with real
 locked grade history proving the classifier's own derivation, spanning 8
 terms (`2023-2024` through `2026-2027`, the last as the current
@@ -3610,7 +3610,7 @@ Small user-reported fix on top of the grading slice above, before the larger
 assessment/fees slice began. Two issues from a live screenshot: (1) the
 enrollment screen said "Block" and showed placeholder block codes
 (`DEMO1A`) instead of the real school section codes students actually see
-(`IT101`, `BSCS401`, etc.); a section with no professor assigned yet was
+(`IT101`, `BSIT401`, etc.); a section with no professor assigned yet was
 also being excluded from selection, when professor assignment should be
 allowed to follow later. (2) The Grades sidebar ordered semester chips by
 "latest completed" instead of always showing 1st semester to the left of
@@ -3624,7 +3624,8 @@ field deliberately left unchanged — API contract, not copy); removed the
 `incomplete` filter, reworded the incomplete-schedule/full-section messages
 to drop "professor"; `DemoEnrollmentSeeder`'s `BLOCK_CODES_BY_YEAR` renamed
 from `DEMO1A/1B/1C`-style placeholders to real-looking codes
-(`BSCS101`/`BSCS102`/`BSCS103`, etc.), matching the convention other
+(`BSIT101`/`BSIT102`/`BSIT103`, etc.; later renamed from `BSCS1xx` to
+`BSIT1xx` — see the 2026-08-05 entry below), matching the convention other
 colleges' real catalog data already used. `academic-record-view.tsx` gained
 a `semesterOrdinal()` helper so `groupBySchoolYear()` always sorts 1st
 before 2nd regardless of API order, plus sidebar polish (per-year divider,
@@ -3794,6 +3795,170 @@ mismatch, not just test-breaking). `docs/api/openapi.yaml` and
   once the enrollment reached `Enrolled` (correctly absent while
   `pending_payment`).
 
-**Nothing in this entry has been committed or merged** — the user has
-repeated, multiple times across this session, that they will say
+**Update:** this entry (Task G / assessment-fees-cashier-overload-professor
+slice, plus the grades/COM/enrollment restructure and terminology slices
+that landed alongside it) was committed to `main` at `165f5b7` once the
+user explicitly said "go ahead" — 127 files, 7,757 insertions / 2,058
+deletions, on top of `85a6357`. Not pushed to origin.
+
+**Note on `BSCS-DEMO` references above:** later the same day, the product
+owner asked for the demo curriculum to represent BSIT rather than BSCS
+(the entries above describe the walkthrough exactly as it happened, before
+that request). `BSCS-DEMO`/`BSCS Grade History Demo 2026`/`BSCS1xx` block
+codes were renamed to `BSIT-DEMO`/`BSIT Grade History Demo 2026`/`BSIT1xx`
+throughout the codebase — see the follow-up session entry below.
+
+## 2026-08-05 — Mobile stepper fix, ED direct-publish, Scholar/Payee tag, generated student numbers, BSIT-DEMO rename, real-time approvals, Cashier manual-payment cleanup
+
+Twelve-part, user-directed slice (Taglish request plus a mid-turn addendum)
+landing on top of the Task G slice above, once that slice was committed to
+`main` at `165f5b7`. None of this entry has been committed or merged — the
+user has repeated, multiple times across this session, that they will say
 explicitly when that should happen.
+
+**Delivered, by part:**
+
+- **Mobile `StatusStepper`.** The `<li>` had an unconditional `flex-1`
+  which, inside the mobile `flex-col` `<ol>`, stretched every step to fill
+  the container's height — the huge stacked circles the product owner's
+  screenshot showed. Fixed with a `flex-row flex-wrap` mobile layout
+  (`sm:flex-nowrap` restores the desktop row), smaller circle/text sizes
+  below `sm:`.
+- **Executive Director workflow simplified.** Retired the `executive_approve`
+  action — the ED's own PRD §4.1-documented two-step
+  `dean_approved → executive_approved → published` lifecycle collapses to a
+  direct `dean_approved → published`, at the product owner's explicit
+  request to remove the "Final approve" step entirely. Followed the
+  established "keep the enum case, retire the action" pattern (ADR 0022
+  precedent for `QueueTicketStatus::Cancelled`): `ScheduleProposalStatus::
+  ExecutiveApproved` stays defined for historical rows and old audit
+  entries, but `ScheduleProposalTransitionRules` no longer lists
+  `executive_approve` as reachable and `publish` now requires
+  `DeanApproved` directly. `ScheduleProposalStatus`'s own docblock — which
+  called this lifecycle "authoritative rather than provisional" — was
+  amended in place to document this as a deliberate product decision, not
+  a routine §17 provisional-value change.
+- **Scholar/Payee tag.** New `App\Domain\Identity\FinancialStatus` enum
+  (`scholar`/`payee`), nullable `financial_status` column on
+  `student_profiles`, surfaced on both `StudentProfileResource` and
+  `EnrollmentResource`. Deliberately informational only — confirmed with
+  the product owner via structured question — never read by
+  `AssessmentComputation` or any fee logic. Shown as a `Badge` next to the
+  student number on the Accounting and Registrar Staff queues.
+- **Generated student number format.** Switched from free-typed to an
+  auto-generated, regenerable `YYYY-MM-NNNNN` (e.g. `2027-08-30001`),
+  enforced by the same regex on both the Zod schema and the
+  `StoreStudentProfileRequest` backend rule. `AdmissionProvisioningWorkspace`
+  captures the first generated value once via
+  `useState(() => generateStudentNumber())` — calling the generator inline
+  inside `useForm`'s `defaultValues` object re-invokes it every render,
+  silently wasting calls (invisible with the real generator, but broke a
+  test using a stateful counting mock) — and exposes a "Generate new
+  number" button plus an injectable `generateStudentNumber` prop for
+  deterministic tests.
+- **`BSCS-DEMO` → `BSIT-DEMO` rename.** Per the product owner's literal
+  answer ("if it's in the curriculum, make it BSIT, not BSCS"): the demo
+  grade-history curriculum (program code, curriculum name, and
+  `DemoEnrollmentSeeder`'s `BSCS1xx` block codes) renamed to `BSIT-DEMO`/
+  `BSIT1xx`. Deliberately left the separate, pre-existing real `BSIT`
+  program (used by `ProgramChairScheduleSampleSeeder`'s own fixture)
+  untouched — a real `BSIT` program code already existed and would have
+  collided with a naive global rename.
+- **Registrar schedule-save toast.** `enrollment-schedule-card.tsx`'s
+  `saveSchedule()` now calls `toast.success("Enrollment schedule saved.")`
+  — the app-wide `sonner` `<Toaster/>` had been mounted since Phase 3 but
+  had zero real callers anywhere in the app until this.
+- **Registrar Staff review dialog.** New `EnrollmentReviewDialog` lets
+  Registrar Staff inspect a student's chosen subjects, schedule, and units
+  before approving — reused the established reference-data client-side
+  join pattern from `MasterScheduleWorkspace` (fetch all sections + all
+  subjects, both `viewAny`-open per policy, join by `section_id` →
+  `subject_id` client-side) rather than a new dedicated endpoint.
+- **Real-time student polling.** `useEnrollmentsQuery` gained
+  `refetchInterval: 10_000` so a Registrar decision or payment confirmation
+  appears on the student's own Enrollment page without a manual refresh —
+  a deliberate short-polling stand-in documented in the hook's own
+  docblock, since no WebSocket/SSE infrastructure exists in this stack.
+- **Cashier: manual payment only.** Removed the "External reference" field
+  from the payment-confirmation dialog entirely — payments here are always
+  manual, so the field never meant anything. Added a printable COM
+  (`PrintDocument`/`PrintButton`) directly inside the confirmation success
+  Alert once `document_number` is available, and removed the now-dead
+  "Reference" column from Payment Records. Confirmed the student's Digital
+  COM workspace (`student-digital-com-workspace.tsx`) already worked and
+  needed no changes.
+
+**Three real bugs found by tests during this session's own verification
+pass, all pre-existing gaps this same slice left behind, not implementation
+defects in the new code itself:**
+
+1. `schedule-review-dialog.test.tsx` still asserted the old "Final approve"
+   button label for the Executive Director role — a second call site for
+   the ED action-label map that the Part B rename missed
+   (`schedule-decision-workspace.tsx` and `schedule-review-dialog.tsx`
+   were both fixed, but only the former's test file was updated). Fixed by
+   asserting "Publish schedule" instead.
+2. `ProvisionStudentAuditTest.php` used pre-Part-D `student_number`
+   literals (`PRIVATE-STUDENT-0001`, `ROLLBACK-0001`) that the new format
+   regex now rejects with 422, and its exact-match `after_values` audit
+   assertion didn't expect the new `financial_status` key. Fixed both;
+   confirmed the file's two other tests (`DENIED-0001`/`INVALID-0001`,
+   deliberately testing authorization/validation rejection) were correctly
+   unaffected since a FormRequest-level rejection was already the expected
+   outcome either way.
+3. The new `enrollment-workspace.test.tsx` polling test needed
+   `vi.useFakeTimers()` installed **before** `renderWithSession`, not
+   after — a `refetchInterval` timer scheduled under real timers during
+   the initial render is invisible to a fake clock installed later,
+   matching the precedent already established in
+   `portal-notification-sheet.test.tsx`. Its assertions also needed
+   `findAllByText`/length checks instead of `findByText`, since the status
+   badge renders in more than one place at once (the same `DataTable`
+   dual desktop/mobile-render ambiguity already hit once this session in
+   the Part G Review-button test).
+
+**Verification:** `vendor/bin/pint --dirty` clean. `vendor/bin/phpstan
+analyse` (full repo) — 23 pre-existing baseline errors, zero new.
+`npx tsc --noEmit` (full repo) clean. `npx eslint .` (full repo) — 2
+pre-existing errors, both in files untouched this session (left alone, out
+of scope).
+
+Backend `php artisan test`, run in chunks after the whole-suite background
+process was twice killed by the environment for unclear reasons (not a
+MariaDB crash — the `mysqld` process survived both kills with the same
+PID) once it reached the heavy `DemoEnrollmentSeederTest`/
+`ReferenceDataSeederTest` pair: Unit 280/280, Feature/Actions 79/79 (after
+the `ProvisionStudentAuditTest` fixes above), Feature/Api 438/438,
+Feature/Auth 11/11, Feature/Models 19/19, Feature/Policies 49/49,
+Feature/Database (light, excluding the two heavy seeder files) 121/121 —
+**1,047 passed** across those chunks. `DemoEnrollmentSeederTest`/
+`ReferenceDataSeederTest` (50 tests, 844.71s) were confirmed green earlier
+in this same session, before Parts F–L, whose changes never touch anything
+those two files or their seeders depend on.
+
+One self-inflicted issue during this pass, not a code defect: a mistaken
+concurrent background test run (the heavy seeder pair re-launched before
+an earlier light-chunk run had finished) corrupted the `grc_enrollment_test`
+database mid-migration, producing 45 spurious `Table 'migrations' doesn't
+exist` failures. Repaired via the documented
+`php artisan migrate:fresh --env=testing --force` (`grc_test` already has
+full DDL per `docs/runbooks/mariadb-local.md`); the light Database chunk
+then passed 121/121 cleanly on a foreground re-run.
+
+Frontend `npx vitest run --no-file-parallelism` — 531/534 passing in the
+full sequential run; the remaining 3 (`admission-provisioning-workspace`,
+`curriculum-workspace`, `module-registry`) each failed only with a plain
+`Test timed out in 5000ms` under the full run's resource load, and each
+passed cleanly with 15–60s of headroom when re-run individually — the same
+class of full-suite-only flakiness already seen with `class-rosters-
+workspace` earlier in this session (a "Timeout waiting for worker to
+respond" pool error), not a real regression.
+
+Fresh `php artisan migrate:fresh --database=mariadb_migrator --seed --force`
+against the dev database: clean, no errors. Confirmed via `tinker`:
+`BSIT-DEMO` program present, no `BSCS-DEMO` leftover; `financial_status`
+column live on `student_profiles`; 15 distinct professors owning sections
+(the 10 new connected professors plus pre-existing fixture faculty).
+Seeded demo students keep their old fixed `STU-YYYY-NNNN`-style numbers by
+design — those rows are inserted directly by seeders, bypassing the HTTP
+endpoint the new regex validates.

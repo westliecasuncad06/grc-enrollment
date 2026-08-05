@@ -93,11 +93,6 @@ export function PaymentRecordsWorkspace() {
                       payment.amount ? `₱${payment.amount}` : "—",
                   },
                   {
-                    key: "reference",
-                    header: "Reference",
-                    render: (payment) => payment.external_reference ?? "—",
-                  },
-                  {
                     key: "confirmed_at",
                     header: "Confirmed at",
                     render: (payment) =>

@@ -22,6 +22,8 @@ const profile = {
   admission_status_label: "Admitted",
   academic_standing: "good",
   academic_standing_label: "Good",
+  financial_status: null,
+  financial_status_label: null,
 } as const
 
 const programs = {
@@ -78,6 +80,8 @@ function requestUrl(input: RequestInfo | URL): string {
   return input instanceof URL ? input.toString() : input.url
 }
 
+const generatedStudentNumber = "2027-08-01001"
+
 function renderWorkspace(
   initialModuleId = "student-accounts",
   generateCredential = () => credential,
@@ -88,6 +92,7 @@ function renderWorkspace(
       initialModuleId={initialModuleId}
       generateCredential={generateCredential}
       writeCredential={writeCredential}
+      generateStudentNumber={() => generatedStudentNumber}
     />,
     {
       session: {
@@ -118,7 +123,8 @@ async function completeForm(user: ReturnType<typeof userEvent.setup>) {
     screen.getByLabelText("Email address"),
     "amina.santos@grc.test",
   )
-  await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
+  // Student number is auto-generated (see `generateStudentNumber` injected
+  // by `renderWorkspace`) — no need to type one.
   await selectOption(user, "Program", "BSCS — BS Computer Science")
   await selectOption(user, "Curriculum", "BSCS 2026 Curriculum (2026-2027)")
   await selectOption(user, "Year level", "1st Year")
@@ -181,7 +187,7 @@ describe("AdmissionProvisioningWorkspace", () => {
       name: "Amina Santos",
       email: "amina.santos@grc.test",
       password: credential,
-      student_number: "STU-2027-1001",
+      student_number: generatedStudentNumber,
       program_id: 11,
       curriculum_id: 22,
       year_level: 1,
@@ -197,6 +203,51 @@ describe("AdmissionProvisioningWorkspace", () => {
       screen.getByRole("button", { name: "Close credential receipt" }),
     )
     expect(screen.queryByText(credential)).not.toBeInTheDocument()
+  })
+
+  it("auto-fills a YYYY-MM-NNNNN student number and can generate a new one", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((request) => {
+      const url = requestUrl(request)
+      if (url.endsWith("/programs"))
+        return Promise.resolve(
+          new Response(JSON.stringify(programs), { status: 200 }),
+        )
+      if (url.endsWith("/curricula"))
+        return Promise.resolve(
+          new Response(JSON.stringify(curricula), { status: 200 }),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    let call = 0
+    const numbers = ["2027-08-01001", "2027-08-02002"]
+    renderWithSession(
+      <AdmissionProvisioningWorkspace
+        generateCredential={() => credential}
+        writeCredential={writeTextMock}
+        generateStudentNumber={() => numbers[call++] ?? numbers[0]}
+      />,
+      {
+        session: {
+          userId: "5",
+          displayName: "Admission Staff",
+          role: "admission_staff",
+          signedInAt: "2026-07-29T12:00:00Z",
+        },
+      },
+    )
+
+    const field = screen.getByLabelText("Student number")
+    expect(field).toHaveValue("2027-08-01001")
+
+    await user.type(screen.getByLabelText("Student name"), "Amina Santos")
+    await user.click(
+      screen.getByRole("button", { name: "Generate new number" }),
+    )
+    expect(field).toHaveValue("2027-08-02002")
+    // Regenerating the student number does not wipe the rest of the form.
+    expect(screen.getByLabelText("Student name")).toHaveValue("Amina Santos")
   })
 
   it("maps a 422 validation response to the named form field", async () => {
@@ -283,7 +334,6 @@ describe("AdmissionProvisioningWorkspace", () => {
       screen.getByLabelText("Email address"),
       "amina.santos@grc.test",
     )
-    await user.type(screen.getByLabelText("Student number"), "STU-2027-1001")
     await selectOption(user, "Year level", "1st Year")
     await user.click(
       screen.getByRole("button", { name: "Create student account" }),

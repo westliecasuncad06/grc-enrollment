@@ -39,8 +39,7 @@ const legalActions: Record<
   program_chair: {},
   dean: { draft: ["dean_approve", "dean_return"] },
   executive_director: {
-    dean_approved: ["executive_approve", "executive_return"],
-    executive_approved: ["publish"],
+    dean_approved: ["publish", "executive_return"],
   },
   registrar_head: { published: ["close"] },
   registrar_staff: {},

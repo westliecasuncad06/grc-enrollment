@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { act, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -166,6 +166,8 @@ const createdEnrollment = {
     id: 9,
     student_id: 4,
     student_number: "2026-0001",
+    student_financial_status: null,
+    student_financial_status_label: null,
     academic_term_id: 2,
     status: "pending_registrar_approval",
     status_label: "Pending Registrar Approval",
@@ -285,7 +287,10 @@ function mockRegularRoutes(
 describe("EnrollmentWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it("selects a section, reviews, confirms, and submits the enrollment", async () => {
     const user = userEvent.setup()
@@ -796,5 +801,59 @@ describe("EnrollmentWorkspace", () => {
 
     await screen.findByLabelText("Section")
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("polls so a Registrar decision appears without a manual refresh", async () => {
+    let status: "pending_registrar_approval" | "pending_payment" =
+      "pending_registrar_approval"
+    const baseRoutes = mockRoutes()
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/enrollments") && init?.method !== "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  ...createdEnrollment.data,
+                  status,
+                  status_label:
+                    status === "pending_registrar_approval"
+                      ? "Pending Registrar Approval"
+                      : "Pending Payment",
+                },
+              ],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return baseRoutes(input, init)
+    })
+
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    expect(
+      (await screen.findAllByText("Pending Registrar Approval")).length,
+    ).toBeGreaterThan(0)
+
+    status = "pending_payment"
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+
+    expect(
+      (await screen.findAllByText("Pending Payment")).length,
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText("Pending Registrar Approval")).not.toBeInTheDocument()
   })
 })

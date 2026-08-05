@@ -46,6 +46,16 @@ export function useEnrollmentBlocksQuery(academicTermId: number | null) {
 export const enrollmentsQueryKey = (userId: string | null) =>
   ["enrollments", userId] as const
 
+/**
+ * Polls every 10s so a Registrar Staff decision, a Cashier payment
+ * confirmation, or a queue-position change shows up on the student's own
+ * Enrollment page without them having to refresh — there is no
+ * WebSocket/SSE push in this stack, so short polling is the deliberate
+ * stand-in. TanStack Query only polls while a component actually observes
+ * this query and pauses in a backgrounded tab (`refetchIntervalInBackground`
+ * defaults to `false`), so this costs nothing when nobody is looking at
+ * the page.
+ */
 export function useEnrollmentsQuery({
   enabled = true,
 }: { enabled?: boolean } = {}) {
@@ -55,6 +65,7 @@ export function useEnrollmentsQuery({
     queryKey: enrollmentsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getEnrollments(signal),
     enabled: enabled && session !== null,
+    refetchInterval: 10_000,
   })
 }
 

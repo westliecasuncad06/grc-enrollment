@@ -34,13 +34,16 @@ export function StatusStepper({ stages, stoppedMessage }: StatusStepperProps) {
   }
 
   return (
-    <ol className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-0">
+    <ol className="flex flex-row flex-wrap items-start gap-x-2 gap-y-3 sm:flex-nowrap sm:gap-0">
       {stages.map((stage, index) => (
-        <li key={stage.label} className="flex flex-1 items-center gap-3">
+        <li
+          key={stage.label}
+          className="flex min-w-14 items-center gap-1.5 sm:min-w-0 sm:flex-1 sm:gap-3"
+        >
           <div className="flex flex-col items-center gap-1 sm:w-full">
             <span
               className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
+                "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium sm:size-7 sm:text-xs",
                 stage.done
                   ? "border-primary bg-primary text-primary-foreground"
                   : stage.current
@@ -49,14 +52,14 @@ export function StatusStepper({ stages, stoppedMessage }: StatusStepperProps) {
               )}
             >
               {stage.done ? (
-                <CheckIcon aria-hidden="true" className="size-4" />
+                <CheckIcon aria-hidden="true" className="size-3.5 sm:size-4" />
               ) : (
                 index + 1
               )}
             </span>
             <span
               className={cn(
-                "text-center text-xs",
+                "text-center text-[11px] leading-tight sm:text-xs",
                 stage.done || stage.current
                   ? "font-medium text-foreground"
                   : "text-muted-foreground",

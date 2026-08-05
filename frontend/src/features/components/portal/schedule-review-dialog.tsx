@@ -62,7 +62,6 @@ const collator = new Intl.Collator(undefined, {
 const reviewActionLabels: Partial<Record<ScheduleAction, string>> = {
   dean_approve: "Approve schedule",
   dean_return: "Return with notes",
-  executive_approve: "Final approve",
   executive_return: "Return with notes",
   publish: "Publish schedule",
   close: "Close proposal",

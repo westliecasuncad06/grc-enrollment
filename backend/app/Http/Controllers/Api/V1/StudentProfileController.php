@@ -35,6 +35,7 @@ final class StudentProfileController extends Controller
             'curriculum_id' => $request->validated('curriculum_id'),
             'year_level' => $request->validated('year_level'),
             'enrollment_category' => $request->validated('enrollment_category'),
+            'financial_status' => $request->validated('financial_status'),
         ], $actor, $contextFactory->fromRequest($request));
 
         $response = StudentProfileResource::make($profile)->response($request);

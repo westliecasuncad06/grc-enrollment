@@ -79,7 +79,7 @@ describe("ScheduleDecisionWorkspace", () => {
     ])
     expect(
       availableScheduleActions("executive_director", deanApprovedProposal),
-    ).toEqual(["executive_approve", "executive_return"])
+    ).toEqual(["publish", "executive_return"])
     expect(
       availableScheduleActions("registrar_head", publishedProposal),
     ).toEqual(["close"])
@@ -108,11 +108,8 @@ describe("ScheduleDecisionWorkspace", () => {
               ? []
               : role === "executive_director" &&
                   proposal.status === "dean_approved"
-                ? ["executive_approve", "executive_return"]
-                : role === "executive_director" &&
-                    proposal.status === "executive_approved"
-                  ? ["publish"]
-                  : role === "registrar_head" && proposal.status === "published"
+                ? ["publish", "executive_return"]
+                : role === "registrar_head" && proposal.status === "published"
                     ? ["close"]
                     : []
         expect(availableScheduleActions(role, proposal)).toEqual(expected)

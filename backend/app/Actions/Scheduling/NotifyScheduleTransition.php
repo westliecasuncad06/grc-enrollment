@@ -35,11 +35,6 @@ final class NotifyScheduleTransition
         $this->apply('dean_approve', $proposal, $term, null);
     }
 
-    public function executiveApproved(ScheduleProposal $proposal, AcademicTerm $term): void
-    {
-        $this->apply('executive_approve', $proposal, $term, null);
-    }
-
     public function returned(
         ScheduleProposal $proposal,
         AcademicTerm $term,

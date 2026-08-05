@@ -164,10 +164,13 @@ export const scheduleProposalInputSchema = z
   })
   .strict()
 
+// "executive_approve" is deliberately absent — the Executive Director's
+// forward path is a direct "publish" from `dean_approved`, not a separate
+// approval step. `decision_history.action` below keeps accepting it for any
+// pre-existing historical row; this schema governs the *request* side only.
 export const scheduleActionSchema = z.enum([
   "dean_approve",
   "dean_return",
-  "executive_approve",
   "executive_return",
   "publish",
   "close",

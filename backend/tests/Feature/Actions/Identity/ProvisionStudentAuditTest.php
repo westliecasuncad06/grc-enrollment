@@ -36,7 +36,7 @@ final class ProvisionStudentAuditTest extends TestCase
                 'name' => 'Sensitive Student Name',
                 'email' => 'sensitive.student@grc.test',
                 'password' => 'temporary-secret-password',
-                'student_number' => 'PRIVATE-STUDENT-0001',
+                'student_number' => '2027-08-30001',
                 'program_id' => $program->id,
                 'curriculum_id' => $curriculum->id,
                 'year_level' => 2,
@@ -64,6 +64,7 @@ final class ProvisionStudentAuditTest extends TestCase
             'enrollment_category' => 'regular',
             'admission_status' => 'admitted',
             'academic_standing' => 'good',
+            'financial_status' => null,
         ], $audit->after_values);
         self::assertNull($audit->reason);
         self::assertSame('student-provision-request', $audit->request_id);
@@ -74,7 +75,7 @@ final class ProvisionStudentAuditTest extends TestCase
         self::assertStringNotContainsString('Sensitive Student Name', $serializedAudit);
         self::assertStringNotContainsString('sensitive.student@grc.test', $serializedAudit);
         self::assertStringNotContainsString('temporary-secret-password', $serializedAudit);
-        self::assertStringNotContainsString('PRIVATE-STUDENT-0001', $serializedAudit);
+        self::assertStringNotContainsString('2027-08-30001', $serializedAudit);
         self::assertStringNotContainsString('"password"', strtolower($serializedAudit));
         self::assertStringNotContainsString('password_confirmation', strtolower($serializedAudit));
     }
@@ -140,7 +141,7 @@ final class ProvisionStudentAuditTest extends TestCase
                     'name' => 'Rollback Student',
                     'email' => 'rollback.student@grc.test',
                     'password' => 'temporary-password',
-                    'student_number' => 'ROLLBACK-0001',
+                    'student_number' => '2027-08-30002',
                     'program_id' => $program->id,
                     'curriculum_id' => $curriculum->id,
                     'year_level' => 3,
@@ -155,7 +156,7 @@ final class ProvisionStudentAuditTest extends TestCase
         self::assertNotNull($caughtException, 'The injected audit failure must escape the transaction.');
         self::assertSame('Injected student audit write failure.', $caughtException->getMessage());
         $this->assertDatabaseMissing('users', ['email' => 'rollback.student@grc.test']);
-        $this->assertDatabaseMissing('student_profiles', ['student_number' => 'ROLLBACK-0001']);
+        $this->assertDatabaseMissing('student_profiles', ['student_number' => '2027-08-30002']);
         $this->assertDatabaseCount('audit_logs', 0);
     }
 

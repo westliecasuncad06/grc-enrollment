@@ -30,6 +30,8 @@ const enrolledEnrollment: Enrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_financial_status: null,
+  student_financial_status_label: null,
   academic_term_id: 2,
   status: "enrolled",
   status_label: "Enrolled",

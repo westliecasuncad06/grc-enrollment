@@ -23,7 +23,7 @@ const MODALITY_LABEL: Record<string, string> = {
  * One section a regular student may choose as a unit — every subject in it
  * enrolls together, so this shows the full weekly schedule rather than a
  * single subject's detail. `block.block_code` is the school's own section
- * code (e.g. "BSCS101"), shown as-is — "block" stays as the underlying
+ * code (e.g. "BSIT101"), shown as-is — "block" stays as the underlying
  * mechanism (choosing it enrolls every subject at once) but never appears
  * as a word in front of the student.
  */

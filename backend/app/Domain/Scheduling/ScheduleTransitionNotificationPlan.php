@@ -43,19 +43,7 @@ final class ScheduleTransitionNotificationPlan
                 [
                     'audience' => UserRole::ExecutiveDirector,
                     'type' => NotificationType::ScheduleDeanApproved,
-                    'message' => "{$collegeAndTermLabel} was approved by the Dean and is waiting for your final approval.",
-                ],
-            ],
-            'executive_approve' => [
-                [
-                    'audience' => 'submitter',
-                    'type' => NotificationType::ScheduleExecutiveApproved,
-                    'message' => "{$collegeAndTermLabel} received final approval from the Executive Director.",
-                ],
-                [
-                    'audience' => UserRole::Dean,
-                    'type' => NotificationType::ScheduleExecutiveApproved,
-                    'message' => "{$collegeAndTermLabel} received final approval from the Executive Director.",
+                    'message' => "{$collegeAndTermLabel} was approved by the Dean and is ready for your review — publish it or return it with notes.",
                 ],
             ],
             'dean_return' => [

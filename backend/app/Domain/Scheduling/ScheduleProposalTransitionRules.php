@@ -6,13 +6,22 @@ use InvalidArgumentException;
 
 final class ScheduleProposalTransitionRules
 {
-    /** @var array<string, ScheduleProposalStatus> */
+    /**
+     * `executive_approve` is deliberately absent: the Executive Director's
+     * lifecycle was simplified from a two-step approve-then-publish to one
+     * direct `publish` (or `executive_return`) straight from `DeanApproved`
+     * — a product-owner amendment to the PRD §4.1 lifecycle this class's
+     * own docblock once called authoritative. `ScheduleProposalStatus::
+     * ExecutiveApproved` stays defined for any pre-existing row already in
+     * that state, but no new transition can ever reach or leave it.
+     *
+     * @var array<string, ScheduleProposalStatus>
+     */
     private const REQUIRED_STATUS = [
         'dean_approve' => ScheduleProposalStatus::Draft,
         'dean_return' => ScheduleProposalStatus::Draft,
-        'executive_approve' => ScheduleProposalStatus::DeanApproved,
         'executive_return' => ScheduleProposalStatus::DeanApproved,
-        'publish' => ScheduleProposalStatus::ExecutiveApproved,
+        'publish' => ScheduleProposalStatus::DeanApproved,
         'close' => ScheduleProposalStatus::Published,
     ];
 
@@ -20,7 +29,6 @@ final class ScheduleProposalTransitionRules
     private const TARGET_STATUS = [
         'dean_approve' => ScheduleProposalStatus::DeanApproved,
         'dean_return' => ScheduleProposalStatus::Draft,
-        'executive_approve' => ScheduleProposalStatus::ExecutiveApproved,
         'executive_return' => ScheduleProposalStatus::Draft,
         'publish' => ScheduleProposalStatus::Published,
         'close' => ScheduleProposalStatus::Closed,

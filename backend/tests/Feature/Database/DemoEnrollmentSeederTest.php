@@ -180,18 +180,19 @@ final class DemoEnrollmentSeederTest extends TestCase
     }
 
     /**
-     * Every block section of a subject, within the dedicated `BSCS-DEMO`
-     * curriculum's own blocks (`BSCS101`..`BSCS401`) — across every block
+     * Every block section of a subject, within the dedicated `BSIT-DEMO`
+     * curriculum's own blocks (`BSIT101`..`BSIT401`) — across every block
      * code, in every year level that offers it — must be owned by that
      * subject's one real professor, not the old shared
      * `faculty.seed@grc.test` placeholder.
      *
-     * Deliberately scoped to `BSCS-DEMO`, not "every `is_block_exclusive`
+     * Deliberately scoped to `BSIT-DEMO`, not "every `is_block_exclusive`
      * section of this subject code platform-wide": `LEAD8` (and other
-     * Leadership codes) also appears in the synthetic BSIT curriculum that
-     * `ProgramChairScheduleSampleSeeder` generates its own block sections
-     * for (e.g. `IT401`), owned by that seeder's own "Sample Faculty" — an
-     * unrelated fixture for a different testing purpose.
+     * Leadership codes) also appears in the separate, real `BSIT` program's
+     * curriculum that `ProgramChairScheduleSampleSeeder` generates its own
+     * block sections for (e.g. `IT401`), owned by that seeder's own "Sample
+     * Faculty" — an unrelated fixture for a different testing purpose, and
+     * a different program code (`BSIT` vs this seeder's `BSIT-DEMO`).
      */
     #[DataProvider('connectedProfessorProvider')]
     public function test_each_connected_professor_owns_every_block_section_of_their_subject(
@@ -206,7 +207,7 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->assertSame('faculty', $professor->role->value);
         $this->assertSame('ccs', $professor->college?->value);
 
-        $curriculum = Curriculum::query()->where('name', 'BSCS Grade History Demo 2026')->firstOrFail();
+        $curriculum = Curriculum::query()->where('name', 'BSIT Grade History Demo 2026')->firstOrFail();
         $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
         $sections = Section::query()
             ->where('subject_id', $subject->id)

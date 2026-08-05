@@ -96,6 +96,8 @@ export const enrollmentSchema = z
     id: z.number().int().positive(),
     student_id: z.number().int().positive(),
     student_number: z.string().min(1),
+    student_financial_status: z.enum(["scholar", "payee"]).nullable(),
+    student_financial_status_label: z.string().min(1).nullable(),
     academic_term_id: z.number().int().positive(),
     status: z.enum(enrollmentStatusValues),
     status_label: z.string().min(1),

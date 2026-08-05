@@ -187,11 +187,11 @@ final class ScheduleProposalsEndpointTest extends TestCase
     }
 
     /**
-     * The full lifecycle (draft -> dean_approved -> executive_approved ->
-     * published -> closed) is exercised across these four tests rather than
-     * one chained walk — each precreates the proposal directly at whatever
-     * status the transition under test requires and authenticates as
-     * exactly one actor, matching every other endpoint test in this suite.
+     * The full lifecycle (draft -> dean_approved -> published -> closed) is
+     * exercised across these tests rather than one chained walk — each
+     * precreates the proposal directly at whatever status the transition
+     * under test requires and authenticates as exactly one actor, matching
+     * every other endpoint test in this suite.
      */
     public function test_dean_approve_transitions_a_draft_proposal(): void
     {
@@ -217,7 +217,13 @@ final class ScheduleProposalsEndpointTest extends TestCase
         );
     }
 
-    public function test_executive_approve_transitions_a_dean_approved_proposal(): void
+    /**
+     * `executive_approve` no longer exists — the Executive Director's
+     * forward path from a Dean-approved proposal is a direct `publish`
+     * (see `test_publish_transitions_the_proposal_and_publishes_the_terms_planned_sections`)
+     * or `executive_return`, not a separate approval checkpoint.
+     */
+    public function test_executive_approve_is_no_longer_a_valid_action(): void
     {
         $term = $this->makeTerm();
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.execapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
@@ -226,17 +232,17 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_approve']);
 
-        $response->assertOk()->assertJsonPath('data.status', 'executive_approved');
-        self::assertSame(
-            AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_APPROVED,
-            AuditLog::query()->sole()->action,
-        );
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame('dean_approved', $proposal->refresh()->status->value);
     }
 
     /**
      * Direct proof that `publish` is what exposes the term's schedule
      * (FR-SCH-009): the section stays `planned` right up until this exact
-     * transition, then flips to `published` in the same request.
+     * transition, then flips to `published` in the same request. Also
+     * proof of the simplified Executive Director lifecycle: `publish` is
+     * legal straight from `dean_approved`, with no separate approval step.
      */
     public function test_publish_transitions_the_proposal_and_publishes_the_terms_planned_sections(): void
     {
@@ -244,7 +250,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Test', 'units' => 3, 'status' => SubjectStatus::Active]);
         $section = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'A', 'capacity' => 40, 'status' => SectionStatus::Planned]);
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.publish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
-        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::ExecutiveApproved]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.publish@grc.test');
 
         self::assertSame('planned', $section->refresh()->status->value);
@@ -326,13 +332,13 @@ final class ScheduleProposalsEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $chair = User::create(['name' => 'Chair', 'email' => 'chair.registrarpublish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
-        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::ExecutiveApproved]);
+        $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $registrarToken = $this->tokenFor(UserRole::RegistrarHead, 'registrar.registrarpublish@grc.test');
 
         $response = $this->withToken($registrarToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'publish']);
 
         $response->assertForbidden();
-        self::assertSame('executive_approved', $proposal->refresh()->status->value);
+        self::assertSame('dean_approved', $proposal->refresh()->status->value);
         $this->assertDatabaseCount('audit_logs', 0);
     }
 }

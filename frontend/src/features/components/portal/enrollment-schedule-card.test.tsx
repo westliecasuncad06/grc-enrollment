@@ -1,10 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { toast } from "sonner"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { EnrollmentScheduleCard } from "@/features/components/portal/enrollment-schedule-card"
 import { renderWithSession } from "@/tests/render-app"
 import type { AcademicTerm } from "@/features/schemas/reference-data-schema"
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn() } }))
 
 function url(input: RequestInfo | URL) {
   if (typeof input === "string") return input
@@ -231,6 +234,8 @@ describe("EnrollmentScheduleCard", () => {
       "irregular",
     ])
     expect(body.enrollment_opens_at).toBe("2028-07-01T00:00:00.000Z")
+    expect(await screen.findByText("Enrollment schedule saved.")).toBeInTheDocument()
+    expect(toast.success).toHaveBeenCalledWith("Enrollment schedule saved.")
   })
 
   it("labels rows with ordinals, uses date-only inputs, and states the fixed 8am/11:59pm times", async () => {

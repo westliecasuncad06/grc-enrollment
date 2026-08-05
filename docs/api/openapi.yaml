@@ -4617,6 +4617,8 @@ components:
         - id
         - student_id
         - student_number
+        - student_financial_status
+        - student_financial_status_label
         - academic_term_id
         - status
         - status_label
@@ -4643,6 +4645,17 @@ components:
             Never email or name — exposed so the Registrar Head and
             Accounting Staff can identify whose enrollment they are
             processing.
+        student_financial_status:
+          type: [string, 'null']
+          description: >
+            Informational only — never read by fee computation. See
+            App\Domain\Identity\FinancialStatus.
+          enum:
+            - scholar
+            - payee
+            - null
+        student_financial_status_label:
+          type: [string, 'null']
         academic_term_id:
           type: integer
         status:
@@ -5797,6 +5810,17 @@ components:
             - warning
         academic_standing_label:
           type: string
+        financial_status:
+          type: [string, 'null']
+          description: >
+            Informational only, set at admission provisioning — never read by
+            fee computation. See App\Domain\Identity\FinancialStatus.
+          enum:
+            - scholar
+            - payee
+            - null
+        financial_status_label:
+          type: [string, 'null']
     StoreStudentProfileRequest:
       type: object
       additionalProperties: false
@@ -5822,6 +5846,10 @@ components:
         student_number:
           type: string
           maxLength: 255
+          pattern: '^\d{4}-(0[1-9]|1[0-2])-\d{5}$'
+          description: >
+            YYYY-MM-NNNNN — the year and month provisioned, then a random
+            5-digit suffix. The frontend generates this by default.
         program_id:
           type: integer
         curriculum_id:
@@ -5830,3 +5858,9 @@ components:
         year_level:
           type: integer
           minimum: 1
+        financial_status:
+          type: [string, 'null']
+          enum:
+            - scholar
+            - payee
+            - null

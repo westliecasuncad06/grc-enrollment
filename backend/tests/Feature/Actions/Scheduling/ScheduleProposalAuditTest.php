@@ -165,15 +165,6 @@ final class ScheduleProposalAuditTest extends TestCase
                 'Please correct the faculty assignments.',
                 1,
             ],
-            'executive approve' => [
-                'executive_approve',
-                ScheduleProposalStatus::DeanApproved,
-                ScheduleProposalStatus::ExecutiveApproved,
-                UserRole::ExecutiveDirector,
-                AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_APPROVED,
-                null,
-                1,
-            ],
             'executive return' => [
                 'executive_return',
                 ScheduleProposalStatus::DeanApproved,
@@ -206,7 +197,7 @@ final class ScheduleProposalAuditTest extends TestCase
             $facultyA = $this->makeUser(UserRole::Faculty, 'publication.faculty-a@grc.test');
             $facultyB = $this->makeUser(UserRole::Faculty, 'publication.faculty-b@grc.test');
             $alreadyPublishedFaculty = $this->makeUser(UserRole::Faculty, 'publication.already@grc.test');
-            $proposal = $this->makeProposal($term, $chair, ScheduleProposalStatus::ExecutiveApproved);
+            $proposal = $this->makeProposal($term, $chair, ScheduleProposalStatus::DeanApproved);
 
             $plannedSections = [
                 $this->makeSection($term, $subject, 'A', $facultyA),
@@ -278,7 +269,7 @@ final class ScheduleProposalAuditTest extends TestCase
             self::assertSame([
                 'academic_term_id' => $term->id,
                 'submitted_by' => $chair->id,
-                'status' => 'executive_approved',
+                'status' => 'dean_approved',
                 'decided_by' => null,
                 'decided_at' => null,
                 'decision_reason' => null,
@@ -357,7 +348,7 @@ final class ScheduleProposalAuditTest extends TestCase
                 ->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'publish']);
         });
 
-        self::assertSame(ScheduleProposalStatus::ExecutiveApproved, $proposal->refresh()->status);
+        self::assertSame(ScheduleProposalStatus::DeanApproved, $proposal->refresh()->status);
 
         foreach ($sections as $section) {
             self::assertSame(SectionStatus::Planned, $section->refresh()->status);
@@ -389,7 +380,7 @@ final class ScheduleProposalAuditTest extends TestCase
 
         self::assertNotNull($caughtException, 'The injected notification write failure must escape the transaction.');
         self::assertSame('Injected notification write failure.', $caughtException->getMessage());
-        self::assertSame(ScheduleProposalStatus::ExecutiveApproved, $proposal->refresh()->status);
+        self::assertSame(ScheduleProposalStatus::DeanApproved, $proposal->refresh()->status);
 
         foreach ($sections as $section) {
             self::assertSame(SectionStatus::Planned, $section->refresh()->status);
@@ -529,7 +520,7 @@ final class ScheduleProposalAuditTest extends TestCase
         $subject = $this->makeSubject();
         $chair = $this->makeUser(UserRole::ProgramChair, "rollback.{$suffix}.chair@grc.test");
         $faculty = $this->makeUser(UserRole::Faculty, "rollback.{$suffix}.faculty@grc.test");
-        $proposal = $this->makeProposal($term, $chair, ScheduleProposalStatus::ExecutiveApproved);
+        $proposal = $this->makeProposal($term, $chair, ScheduleProposalStatus::DeanApproved);
         $sections = [
             $this->makeSection($term, $subject, 'A', $faculty),
             $this->makeSection($term, $subject, 'B', null),

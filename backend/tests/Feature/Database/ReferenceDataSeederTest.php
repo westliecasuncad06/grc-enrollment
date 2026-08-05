@@ -26,7 +26,7 @@ final class ReferenceDataSeederTest extends TestCase
             ProgramStatus::Inactive,
             Program::where('code', 'BSCRIM')->sole()->status,
         );
-        $this->assertNull(Program::where('code', 'BSCS-DEMO')->sole()->college);
+        $this->assertNull(Program::where('code', 'BSIT-DEMO')->sole()->college);
     }
 
     /**

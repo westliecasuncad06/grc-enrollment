@@ -29,6 +29,8 @@ const pendingApprovalEnrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_financial_status: null,
+  student_financial_status_label: null,
   academic_term_id: 2,
   status: "pending_registrar_approval",
   status_label: "Pending Registrar Approval",
@@ -171,6 +173,120 @@ describe("RegistrarEnrollmentWorkspace", () => {
     expect(
       within(table).queryByRole("button", { name: "Void" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("shows the student's financial status as a badge when set", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              ...pendingApprovalEnrollment,
+              student_financial_status: "payee",
+              student_financial_status_label: "Payee",
+            },
+          ],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(within(table).getByText("Payee")).toBeInTheDocument()
+  })
+
+  it("reviews a student's chosen subjects, schedule, and units", async () => {
+    const user = userEvent.setup()
+    const enrollmentWithSubjects = {
+      ...pendingApprovalEnrollment,
+      total_units: 3,
+      subjects: [
+        {
+          section_id: 55,
+          subject_code: "CS101",
+          subject_title: "Programming 1",
+          status: "selected",
+          status_label: "Selected",
+        },
+      ],
+    }
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/sections"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "section",
+                  id: 55,
+                  academic_term_id: 2,
+                  subject_id: 7,
+                  section_code: "A",
+                  professor_id: null,
+                  schedule_days: "MWF",
+                  starts_at_time: "08:00:00",
+                  ends_at_time: "09:00:00",
+                  room: "RM-101",
+                  capacity: 40,
+                  capacity_source: "manual",
+                  viability_threshold: null,
+                  enrolled_count: 1,
+                  remaining_seats: 39,
+                  is_block_exclusive: null,
+                  status: "published",
+                  status_label: "Published",
+                },
+              ],
+            }),
+          ),
+        )
+      if (target.includes("/subjects"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "subject",
+                  id: 7,
+                  code: "CS101",
+                  title: "Programming 1",
+                  units: 3,
+                  status: "active",
+                  status_label: "Active",
+                  is_completion_only: false,
+                },
+              ],
+            }),
+          ),
+        )
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [enrollmentWithSubjects],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    await user.click(within(table).getByRole("button", { name: "Review" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText(/CS101/)).toBeInTheDocument()
+    expect(within(dialog).getByText("3 units")).toBeInTheDocument()
+    expect(within(dialog).getByText(/MWF · 08:00–09:00/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/RM-101/)).toBeInTheDocument()
   })
 
   it("offers void to Registrar Head on the overrides & voids queue, filtered by status", async () => {

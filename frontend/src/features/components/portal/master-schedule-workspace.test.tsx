@@ -182,7 +182,7 @@ describe("MasterScheduleWorkspace", () => {
     })
     expect(
       await screen.findByRole("button", {
-        name: "Final approve",
+        name: "Publish schedule",
       }),
     ).toBeInTheDocument()
     expect(

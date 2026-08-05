@@ -9,7 +9,7 @@ const input: ProvisionStudentInput = {
   name: "Amina Santos",
   email: "amina.santos@grc.test",
   password: "N4!temporaryCredential",
-  student_number: "STU-2027-1001",
+  student_number: "2027-08-01001",
   program_id: 11,
   curriculum_id: 22,
   year_level: 1,
@@ -29,6 +29,8 @@ const profile = {
   admission_status_label: "Admitted",
   academic_standing: "good",
   academic_standing_label: "Good",
+  financial_status: null,
+  financial_status_label: null,
 } as const
 
 describe("provisionStudent", () => {

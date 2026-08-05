@@ -39,6 +39,7 @@ import {
 } from "@/features/components/ui/select"
 import { useStudentProvisioning } from "@/features/hooks/use-student-provisioning"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import { generateStudentNumber } from "@/features/lib/student-number"
 import { generateTemporaryCredential } from "@/features/lib/temporary-credential"
 import {
   useCurriculaQuery,
@@ -70,6 +71,7 @@ interface AdmissionProvisioningWorkspaceProps {
   initialModuleId?: string
   generateCredential?: () => string
   writeCredential?: (credential: string) => Promise<void>
+  generateStudentNumber?: () => string
 }
 
 interface CredentialReceipt {
@@ -81,10 +83,16 @@ export function AdmissionProvisioningWorkspace({
   initialModuleId = "student-accounts",
   generateCredential = generateTemporaryCredential,
   writeCredential = (credential) => navigator.clipboard.writeText(credential),
+  generateStudentNumber: makeStudentNumber = generateStudentNumber,
 }: AdmissionProvisioningWorkspaceProps) {
   const [receipt, setReceipt] = useState<CredentialReceipt | null>(null)
   const [copyStatus, setCopyStatus] = useState("")
   const [requestError, setRequestError] = useState("")
+  // Computed once at mount, not inline in `defaultValues` below — that
+  // object literal is rebuilt on every render (React Hook Form only reads
+  // it once), so calling the generator there would silently waste a call
+  // per keystroke instead of exactly once.
+  const [initialStudentNumber] = useState(makeStudentNumber)
   const programsQuery = useProgramsQuery()
   const curriculaQuery = useCurriculaQuery()
   const { isProvisioning, provision } = useStudentProvisioning()
@@ -103,11 +111,12 @@ export function AdmissionProvisioningWorkspace({
     defaultValues: {
       name: "",
       email: "",
-      student_number: "",
+      student_number: initialStudentNumber,
       program_id: 0,
       curriculum_id: 0,
       year_level: 0,
       enrollment_category: "regular",
+      financial_status: undefined,
     },
   })
   const selectedProgramId = useWatch({ control, name: "program_id" })
@@ -151,7 +160,19 @@ export function AdmissionProvisioningWorkspace({
   const closeReceipt = () => {
     setReceipt(null)
     setCopyStatus("")
-    reset()
+    // `reset()` with no args restores the *original* mount-time defaults —
+    // including the already-used student number — so the next account
+    // would immediately collide. Generate a fresh one instead.
+    reset({
+      name: "",
+      email: "",
+      student_number: makeStudentNumber(),
+      program_id: 0,
+      curriculum_id: 0,
+      year_level: 0,
+      enrollment_category: "regular",
+      financial_status: undefined,
+    })
   }
 
   return (
@@ -198,12 +219,30 @@ export function AdmissionProvisioningWorkspace({
                 <FieldLabel htmlFor="admission-student-number">
                   Student number
                 </FieldLabel>
-                <Input
-                  id="admission-student-number"
-                  disabled={isProvisioning}
-                  aria-invalid={Boolean(errors.student_number)}
-                  {...register("student_number")}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="admission-student-number"
+                    disabled={isProvisioning}
+                    aria-invalid={Boolean(errors.student_number)}
+                    {...register("student_number")}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isProvisioning}
+                    onClick={() =>
+                      setValue("student_number", makeStudentNumber(), {
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    Generate new number
+                  </Button>
+                </div>
+                <FieldDescription>
+                  Auto-generated as YYYY-MM-NNNNN. Generate a new one if this
+                  number turns out to already be taken.
+                </FieldDescription>
                 <FieldError>{errors.student_number?.message}</FieldError>
               </Field>
               <Field data-invalid={Boolean(errors.program_id)}>
@@ -344,6 +383,40 @@ export function AdmissionProvisioningWorkspace({
                   Regular students enrol in their year level&apos;s block.
                   Irregular students choose subjects individually during the
                   irregular enrollment window.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="admission-financial-status">
+                  Financial status
+                </FieldLabel>
+                <Controller
+                  control={control}
+                  name="financial_status"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? "unset"}
+                      onValueChange={(value) =>
+                        field.onChange(value === "unset" ? undefined : value)
+                      }
+                      disabled={isProvisioning}
+                    >
+                      <SelectTrigger
+                        id="admission-financial-status"
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unset">Not set</SelectItem>
+                        <SelectItem value="scholar">Scholar</SelectItem>
+                        <SelectItem value="payee">Payee</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldDescription>
+                  Informational only — shown to Registrar and Accounting
+                  staff. Does not change fee computation.
                 </FieldDescription>
               </Field>
               {requestError && (

@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { EnrollmentReviewDialog } from "@/features/components/portal/enrollment-review-dialog"
 import { Paginator } from "@/features/components/portal/paginator"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
@@ -105,6 +106,8 @@ export function RegistrarEnrollmentWorkspace({
     enrollment: Enrollment
     action: RegistrarAction
   } | null>(null)
+  const [reviewingEnrollment, setReviewingEnrollment] =
+    useState<Enrollment | null>(null)
   const [reason, setReason] = useState("")
   const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
   const [error, setError] = useState("")
@@ -189,7 +192,16 @@ export function RegistrarEnrollmentWorkspace({
                   {
                     key: "student",
                     header: "Student",
-                    render: (enrollment) => enrollment.student_number,
+                    render: (enrollment) => (
+                      <span className="flex items-center gap-2">
+                        {enrollment.student_number}
+                        {enrollment.student_financial_status_label && (
+                          <Badge variant="secondary">
+                            {enrollment.student_financial_status_label}
+                          </Badge>
+                        )}
+                      </span>
+                    ),
                   },
                   {
                     key: "enrollment",
@@ -222,6 +234,14 @@ export function RegistrarEnrollmentWorkspace({
                     header: "Actions",
                     render: (enrollment) => (
                       <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setReviewingEnrollment(enrollment)}
+                        >
+                          Review
+                        </Button>
                         {availableActions(enrollment, initialModuleId).map((action) => (
                           <Button
                             key={action}
@@ -259,6 +279,12 @@ export function RegistrarEnrollmentWorkspace({
           </div>
         </CardContent>
       </Card>
+      <EnrollmentReviewDialog
+        enrollment={reviewingEnrollment}
+        onOpenChange={(open) => {
+          if (!open) setReviewingEnrollment(null)
+        }}
+      />
       <AlertDialog
         open={pending !== null}
         onOpenChange={(open) => {

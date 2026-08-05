@@ -72,8 +72,8 @@ password.
 
 **Source:** `backend/database/seeders/DemoEnrollmentSeeder.php`. Eight
 student logins with real locked grade history spanning year 1 semester 1
-through year 4 semester 2, on a dedicated demo curriculum ("BSCS Grade
-History Demo 2026", program `BSCS-DEMO`). `enrollment_category`
+through year 4 semester 2, on a dedicated demo curriculum ("BSIT Grade
+History Demo 2026", program `BSIT-DEMO`). `enrollment_category`
 (Regular/Irregular) is **never hard-coded** here — every seed run writes the
 locked grades, then runs the real `EnrollmentCategoryClassifier` against
 them, so the category shown below is the classifier's own verdict, not an
@@ -137,16 +137,19 @@ availability declared" in the Faculty Assignment workspace, since that CSV
 carries no availability data. The 10 identities above are the ones this
 project actually exercises end to end for teaching-side workflows.
 
-### Why a dedicated curriculum (`BSCS-DEMO`)
+### Why a dedicated curriculum (`BSIT-DEMO`)
 
 `CatalogCurriculumPlacementSeeder` dumps the real ~103-subject CCS catalog
 onto **every** active curriculum whose program has a college set — that
-includes the older synthetic "BSCS Curriculum 2026". An earlier version of
-this roster lived there and every student came back Irregular: the importer
-had silently added dozens of ungraded "required" subjects on top of it. The
-fix is `BSCS-DEMO`, a deliberately collegeless program (`college = null`),
-which the importer skips entirely — its curriculum stays exactly the 22
-placements `DemoEnrollmentSeeder` seeds grades for.
+includes the older synthetic "BSCS Curriculum 2026" and the real "BSIT 2026
+Curriculum". An earlier version of this roster lived on a college-bearing
+program and every student came back Irregular: the importer had silently
+added dozens of ungraded "required" subjects on top of it. The fix is
+`BSIT-DEMO`, a deliberately collegeless program (`college = null`), which
+the importer skips entirely — its curriculum stays exactly the 22
+placements `DemoEnrollmentSeeder` seeds grades for. Renamed from `BSCS-DEMO`
+at the product owner's request — the demo roster represents BSIT students,
+not BSCS.
 
 ## Running the seeder
 
@@ -199,7 +202,7 @@ endpoints — not the real GRC program catalog or term calendar.
 | `BSIT` | BS Information Technology | `active` | CCS |
 | `BSCS` | BS Computer Science | `active` | CCS |
 | `BSCRIM` | BS Criminology | `inactive` | — |
-| `BSCS-DEMO` | BS Computer Science (Grade History Demo) | `active` | — (deliberate, see below) |
+| `BSIT-DEMO` | BS Information Technology (Grade History Demo) | `active` | — (deliberate, see below) |
 
 | School year | Semester | Status |
 |---|---|---|

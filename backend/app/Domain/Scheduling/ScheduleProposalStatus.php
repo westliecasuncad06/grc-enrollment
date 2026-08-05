@@ -3,12 +3,19 @@
 namespace App\Domain\Scheduling;
 
 /**
- * The schedule lifecycle defined in PRD §4.1:
+ * The schedule lifecycle. PRD §4.1 originally specified:
  *
  *   draft → dean_approved → executive_approved → published → closed
  *
- * A returned proposal moves back to `draft` with a required reason. Specified
- * by the PRD, so this enum is authoritative rather than provisional.
+ * amended by the product owner to a direct Executive Director step:
+ *
+ *   draft → dean_approved → published → closed
+ *
+ * `ExecutiveApproved` stays defined so a pre-existing row already in that
+ * state remains representable, but `ScheduleProposalTransitionRules` no
+ * longer contains any transition that reaches or leaves it — it is dead for
+ * every new proposal. A returned proposal moves back to `draft` with a
+ * required reason.
  *
  * The section-viability threshold that gates publication is NOT encoded here:
  * PRD §17 lists it as an open decision, so `sections.viability_threshold`

@@ -50,8 +50,10 @@ final class ScheduleProposalPolicy
     }
 
     /**
-     * Covers `executive_approve` and `executive_return` — same shape as
-     * approveAsDean, one checkpoint later.
+     * Covers `executive_return` only — the Executive Director's forward
+     * path is `publish` (its own ability below), not a separate approval
+     * step; see `ScheduleProposalStatus`'s docblock for the lifecycle
+     * amendment this reflects.
      */
     public function approveAsExecutive(User $user): bool
     {

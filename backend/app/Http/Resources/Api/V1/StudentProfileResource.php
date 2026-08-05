@@ -27,7 +27,9 @@ final class StudentProfileResource extends JsonResource
      *     admission_status: string,
      *     admission_status_label: string,
      *     academic_standing: string,
-     *     academic_standing_label: string
+     *     academic_standing_label: string,
+     *     financial_status: ?string,
+     *     financial_status_label: ?string
      * }
      */
     public function toArray(Request $request): array
@@ -45,6 +47,8 @@ final class StudentProfileResource extends JsonResource
             'admission_status_label' => $this->resource->admission_status->label(),
             'academic_standing' => $this->resource->academic_standing->value,
             'academic_standing_label' => $this->resource->academic_standing->label(),
+            'financial_status' => $this->resource->financial_status?->value,
+            'financial_status_label' => $this->resource->financial_status?->label(),
         ];
     }
 }

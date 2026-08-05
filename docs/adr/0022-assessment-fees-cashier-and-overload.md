@@ -192,14 +192,15 @@ Submission path, not just a `professor_id` foreign key with nothing behind
 it.
 
 This is deliberately scoped to `DemoEnrollmentSeeder`'s own
-`BSCS-DEMO`-curriculum block sections — not every section platform-wide
+`BSIT-DEMO`-curriculum block sections — not every section platform-wide
 that happens to share one of those 10 subject codes.
 `ProgramChairScheduleSampleSeeder` independently generates its own
-block-exclusive sections for a separate synthetic BSIT curriculum that
-happens to reuse some Leadership subject codes (e.g. `LEAD8` also backs a
-section coded `IT401`); those stay owned by that seeder's own "Sample
-Faculty" fixture, which exists for a different testing purpose (exercising
-the Program-Chair-schedule-authoring pipeline, not the student demo
+block-exclusive sections for the separate, real `BSIT` program's curriculum
+that happens to reuse some Leadership subject codes (e.g. `LEAD8` also
+backs a section coded `IT401`); those stay owned by that seeder's own
+"Sample Faculty" fixture, which exists for a different testing purpose
+(exercising the Program-Chair-schedule-authoring pipeline, not the student
+demo
 roster) and is intentionally left alone.
 
 ## The §17 boundary — what's provisional here, explicitly
@@ -243,7 +244,7 @@ every `is_block_exclusive` section for a subject code platform-wide and
 failed on `LEAD8`, which `ProgramChairScheduleSampleSeeder`'s unrelated
 BSIT fixture also uses. Not a defect in the seeder itself — the test's
 query was scoped too broadly. Fixed by scoping the assertion to
-`BSCS-DEMO`'s own section plans.
+`BSIT-DEMO`'s own section plans.
 
 **Known follow-ups, deliberately not absorbed into this slice:**
 - The Playwright E2E suite's `SEED_STUDENT_SCENARIOS` fixture model

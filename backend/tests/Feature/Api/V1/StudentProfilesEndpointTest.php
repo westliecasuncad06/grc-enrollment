@@ -64,20 +64,72 @@ final class StudentProfilesEndpointTest extends TestCase
             'name' => 'New Student',
             'email' => 'new.student@grc.test',
             'password' => 'a-temporary-password',
-            'student_number' => 'STU-2027-0001',
+            'student_number' => '2027-08-10001',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'year_level' => 1,
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
-        $response->assertJsonPath('data.student_number', 'STU-2027-0001');
+        $response->assertJsonPath('data.student_number', '2027-08-10001');
         $response->assertJsonPath('data.admission_status', 'admitted');
         $response->assertJsonMissingPath('data.password');
 
         $this->assertDatabaseHas('users', ['email' => 'new.student@grc.test', 'role' => 'student']);
-        $this->assertDatabaseHas('student_profiles', ['student_number' => 'STU-2027-0001']);
+        $this->assertDatabaseHas('student_profiles', ['student_number' => '2027-08-10001']);
         self::assertSame(AuditAction::STUDENT_PROFILE_PROVISIONED, AuditLog::query()->sole()->action);
+    }
+
+    public function test_student_number_must_match_the_yyyy_mm_nnnnn_format(): void
+    {
+        [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.badformat@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'name' => 'New Student',
+            'email' => 'badformat.student@grc.test',
+            'password' => 'a-temporary-password',
+            'student_number' => 'STU-2027-0001',
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'year_level' => 1,
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseMissing('users', ['email' => 'badformat.student@grc.test']);
+    }
+
+    public function test_financial_status_is_accepted_and_defaults_to_null(): void
+    {
+        [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.financial@grc.test');
+
+        $scholar = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'name' => 'Scholar Student',
+            'email' => 'scholar.student@grc.test',
+            'password' => 'a-temporary-password',
+            'student_number' => '2027-08-10002',
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'year_level' => 1,
+            'financial_status' => 'scholar',
+        ]);
+        $scholar->assertCreated();
+        $scholar->assertJsonPath('data.financial_status', 'scholar');
+        $scholar->assertJsonPath('data.financial_status_label', 'Scholar');
+
+        $unset = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'name' => 'Unset Student',
+            'email' => 'unset.student@grc.test',
+            'password' => 'a-temporary-password',
+            'student_number' => '2027-08-10003',
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'year_level' => 1,
+        ]);
+        $unset->assertCreated();
+        $unset->assertJsonPath('data.financial_status', null);
+        $unset->assertJsonPath('data.financial_status_label', null);
     }
 
     public function test_a_non_admission_staff_role_cannot_provision_a_student(): void
@@ -89,7 +141,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'name' => 'New Student',
             'email' => 'blocked.student@grc.test',
             'password' => 'a-temporary-password',
-            'student_number' => 'STU-2027-0002',
+            'student_number' => '2027-08-10004',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'year_level' => 1,
@@ -114,7 +166,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'name' => 'New Student',
             'email' => 'mismatch.student@grc.test',
             'password' => 'a-temporary-password',
-            'student_number' => 'STU-2027-0003',
+            'student_number' => '2027-08-10005',
             'program_id' => $program->id,
             'curriculum_id' => $otherCurriculum->id,
             'year_level' => 1,
@@ -134,7 +186,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'name' => 'New Student',
             'email' => 'existing@grc.test',
             'password' => 'a-temporary-password',
-            'student_number' => 'STU-2027-0004',
+            'student_number' => '2027-08-10006',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
             'year_level' => 1,

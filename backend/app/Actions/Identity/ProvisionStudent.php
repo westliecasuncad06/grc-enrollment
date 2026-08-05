@@ -26,7 +26,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, curriculum_id: int, year_level: int, enrollment_category?: ?string}  $data
+     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, curriculum_id: int, year_level: int, enrollment_category?: ?string, financial_status?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -54,6 +54,7 @@ final class ProvisionStudent
                 'enrollment_category' => $data['enrollment_category'] ?? EnrollmentCategory::Regular->value,
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
+                'financial_status' => $data['financial_status'] ?? null,
             ]);
             $profile->refresh();
 
@@ -73,6 +74,7 @@ final class ProvisionStudent
                     'enrollment_category' => $profile->enrollment_category,
                     'admission_status' => $profile->admission_status->value,
                     'academic_standing' => $profile->academic_standing->value,
+                    'financial_status' => $profile->financial_status?->value,
                 ],
                 null,
                 $context,

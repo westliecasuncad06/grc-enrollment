@@ -40,24 +40,10 @@ final class ScheduleTransitionNotificationPlanTest extends TestCase
         self::assertSame(UserRole::ExecutiveDirector, $plan[1]['audience']);
         self::assertSame(NotificationType::ScheduleDeanApproved, $plan[1]['type']);
         // The two audiences read different messages: the submitter is told
-        // what happened, the Executive Director is told what to do next.
+        // what happened, the Executive Director is told what to do next —
+        // review it directly (publish or return), not a separate approval.
         self::assertStringContainsString('approved by the Dean.', $plan[0]['message']);
-        self::assertStringContainsString('waiting for your final approval', $plan[1]['message']);
-    }
-
-    public function test_executive_approval_notifies_the_submitter_and_every_dean(): void
-    {
-        $plan = ScheduleTransitionNotificationPlan::forAction(
-            'executive_approve',
-            'CCS schedule for 2026-2027 1st',
-            null,
-        );
-
-        self::assertCount(2, $plan);
-        self::assertSame('submitter', $plan[0]['audience']);
-        self::assertSame(UserRole::Dean, $plan[1]['audience']);
-        self::assertSame(NotificationType::ScheduleExecutiveApproved, $plan[0]['type']);
-        self::assertSame(NotificationType::ScheduleExecutiveApproved, $plan[1]['type']);
+        self::assertStringContainsString('publish it or return it with notes', $plan[1]['message']);
     }
 
     #[DataProvider('returnActions')]
@@ -99,5 +85,12 @@ final class ScheduleTransitionNotificationPlanTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         ScheduleTransitionNotificationPlan::forAction('unknown_action', 'X', null);
+    }
+
+    public function test_executive_approve_is_no_longer_a_known_action(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ScheduleTransitionNotificationPlan::forAction('executive_approve', 'X', null);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Identity\FinancialStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $enrollment_category_derived_at
  * @property AdmissionStatus $admission_status
  * @property AcademicStanding $academic_standing
+ * @property ?FinancialStatus $financial_status
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read User $user
@@ -42,6 +44,7 @@ final class StudentProfile extends Model
         'enrollment_category_derived_at',
         'admission_status',
         'academic_standing',
+        'financial_status',
     ];
 
     /**
@@ -54,6 +57,7 @@ final class StudentProfile extends Model
             'enrollment_category_derived_at' => 'immutable_datetime',
             'admission_status' => AdmissionStatus::class,
             'academic_standing' => AcademicStanding::class,
+            'financial_status' => FinancialStatus::class,
         ];
     }
 

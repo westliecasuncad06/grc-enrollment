@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { PrintButton, PrintDocument } from "@/features/components/portal/print-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
@@ -62,7 +63,6 @@ export function AccountingPaymentWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "accounting_staff"
   const [confirming, setConfirming] = useState(false)
-  const [externalReference, setExternalReference] = useState("")
   const [amount, setAmount] = useState("")
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
@@ -109,7 +109,6 @@ export function AccountingPaymentWorkspace() {
   }
 
   const openConfirm = () => {
-    setExternalReference("")
     setAmount(nowServingEnrollment?.assessment?.total_amount ?? "")
     setError("")
     setConfirming(true)
@@ -121,12 +120,10 @@ export function AccountingPaymentWorkspace() {
     try {
       const result = await paymentMutation.mutateAsync({
         id: nowServing.enrollment_id,
-        externalReference: externalReference.trim() || undefined,
         amount: amount.trim() ? Number(amount) : undefined,
       })
       setLastConfirmation(result)
       setConfirming(false)
-      setExternalReference("")
       setAmount("")
     } catch {
       setError(
@@ -152,10 +149,38 @@ export function AccountingPaymentWorkspace() {
       )}
       {lastConfirmation && (
         <Alert>
-          <AlertDescription>
-            Payment confirmed for enrollment #{lastConfirmation.enrollment.id}.
-            Digital COM {lastConfirmation.document.document_number ?? "pending"}{" "}
-            is ready.
+          <AlertDescription className="grid gap-3">
+            <p>
+              Payment confirmed for enrollment #{lastConfirmation.enrollment.id}.
+              Digital COM {lastConfirmation.document.document_number ?? "pending"}{" "}
+              is ready.
+            </p>
+            {lastConfirmation.document.document_number && (
+              <PrintDocument title="Digital Certificate of Matriculation" actions={<PrintButton />}>
+                <div className="grid gap-1 rounded-lg border p-4">
+                  <p className="font-medium">
+                    Digital Certificate of Matriculation
+                  </p>
+                  <p className="font-mono text-sm text-muted-foreground">
+                    {lastConfirmation.document.document_number}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {lastConfirmation.enrollment.student_number}
+                    {lastConfirmation.enrollment.student_financial_status_label
+                      ? ` · ${lastConfirmation.enrollment.student_financial_status_label}`
+                      : ""}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Generated{" "}
+                    {lastConfirmation.document.generated_at
+                      ? new Date(
+                          lastConfirmation.document.generated_at,
+                        ).toLocaleString()
+                      : "—"}
+                  </p>
+                </div>
+              </PrintDocument>
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -192,11 +217,16 @@ export function AccountingPaymentWorkspace() {
                         <Badge variant="outline">Priority</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                       {nowServing.student_number}
                       {nowServingEnrollment
                         ? ` · ${nowServingEnrollment.total_units} units`
                         : ""}
+                      {nowServingEnrollment?.student_financial_status_label && (
+                        <Badge variant="secondary">
+                          {nowServingEnrollment.student_financial_status_label}
+                        </Badge>
+                      )}
                     </p>
                     <p className="text-sm font-medium">
                       Amount due{" "}
@@ -273,7 +303,20 @@ export function AccountingPaymentWorkspace() {
                     {
                       key: "student",
                       header: "Student",
-                      render: (ticket) => ticket.student_number,
+                      render: (ticket) => {
+                        const financialStatusLabel = enrollmentFor(ticket)
+                          ?.student_financial_status_label
+                        return (
+                          <span className="flex items-center gap-2">
+                            {ticket.student_number}
+                            {financialStatusLabel && (
+                              <Badge variant="secondary">
+                                {financialStatusLabel}
+                              </Badge>
+                            )}
+                          </span>
+                        )
+                      },
                     },
                     {
                       key: "amount",
@@ -350,22 +393,13 @@ export function AccountingPaymentWorkspace() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm received payment</AlertDialogTitle>
             <AlertDialogDescription>
-              This generates the Digital COM and is recorded in the operational
-              audit log. Confirming twice has no additional effect.
+              This is a manual payment — no external reference is collected.
+              Confirming generates the Digital COM and is recorded in the
+              operational audit log. Confirming twice has no additional
+              effect.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="external-reference">
-                External reference (optional)
-              </FieldLabel>
-              <Input
-                id="external-reference"
-                value={externalReference}
-                onChange={(event) => setExternalReference(event.target.value)}
-                disabled={paymentMutation.isPending}
-              />
-            </Field>
             <Field>
               <FieldLabel htmlFor="payment-amount">Amount</FieldLabel>
               <Input

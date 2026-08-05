@@ -47,7 +47,7 @@ use RuntimeException;
  *   0007  3rd year, irregular  — 5 sems, an NC (Not Complete) on a Leadership subject
  *   0008  4th year, irregular  — 7 sems, missing a required subject's grade entirely
  *
- * Each student's completed-semester count follows "BSCS Grade History Demo
+ * Each student's completed-semester count follows "BSIT Grade History Demo
  * 2026"'s (see CurriculumSeeder) own ordinal positions exactly — SemesterSlot::
  * ordinal() is `(yearLevel-1)*2 + (1|2)` — so a year-Y student has
  * `(Y-1)*2 + 1` completed ordinals and is about to enroll in their Yth
@@ -142,15 +142,15 @@ final class DemoEnrollmentSeeder extends Seeder
      * choice at years 1–3. Codes follow the school's own convention —
      * program prefix, year level, two-digit section number — not a "DEMO"
      * placeholder, so the enrollment screen shows exactly what a student
-     * would see in production (e.g. "BSCS101", not "Block DEMO1A").
+     * would see in production (e.g. "BSIT101", not "Block DEMO1A").
      *
      * @var array<int, list<string>>
      */
     private const BLOCK_CODES_BY_YEAR = [
-        1 => ['BSCS101', 'BSCS102', 'BSCS103'],
-        2 => ['BSCS201', 'BSCS202', 'BSCS203'],
-        3 => ['BSCS301', 'BSCS302', 'BSCS303'],
-        4 => ['BSCS401'],
+        1 => ['BSIT101', 'BSIT102', 'BSIT103'],
+        2 => ['BSIT201', 'BSIT202', 'BSIT203'],
+        3 => ['BSIT301', 'BSIT302', 'BSIT303'],
+        4 => ['BSIT401'],
     ];
 
     /**
@@ -517,12 +517,12 @@ final class DemoEnrollmentSeeder extends Seeder
     private function curriculum(): Curriculum
     {
         $curriculum = Curriculum::query()
-            ->where('name', 'BSCS Grade History Demo 2026')
+            ->where('name', 'BSIT Grade History Demo 2026')
             ->first();
 
         if ($curriculum === null) {
             throw new RuntimeException(
-                'DemoEnrollmentSeeder requires the seeded BSCS-DEMO curriculum. Run CurriculumSeeder first.',
+                'DemoEnrollmentSeeder requires the seeded BSIT-DEMO curriculum. Run CurriculumSeeder first.',
             );
         }
 
@@ -531,11 +531,11 @@ final class DemoEnrollmentSeeder extends Seeder
 
     private function program(): Program
     {
-        $program = Program::query()->where('code', 'BSCS-DEMO')->first();
+        $program = Program::query()->where('code', 'BSIT-DEMO')->first();
 
         if ($program === null) {
             throw new RuntimeException(
-                'DemoEnrollmentSeeder requires the seeded BSCS program. Run ProgramSeeder first.',
+                'DemoEnrollmentSeeder requires the seeded BSIT program. Run ProgramSeeder first.',
             );
         }
 

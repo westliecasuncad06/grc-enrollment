@@ -28,9 +28,8 @@ final class ScheduleProposalTransitionRulesTest extends TestCase
         return [
             'Dean approves pending submission' => ['dean_approve', ScheduleProposalStatus::Draft, ScheduleProposalStatus::DeanApproved, false],
             'Dean returns pending submission' => ['dean_return', ScheduleProposalStatus::Draft, ScheduleProposalStatus::Draft, true],
-            'Executive approves Dean-approved submission' => ['executive_approve', ScheduleProposalStatus::DeanApproved, ScheduleProposalStatus::ExecutiveApproved, false],
             'Executive returns Dean-approved submission' => ['executive_return', ScheduleProposalStatus::DeanApproved, ScheduleProposalStatus::Draft, true],
-            'Executive publishes approved submission' => ['publish', ScheduleProposalStatus::ExecutiveApproved, ScheduleProposalStatus::Published, false],
+            'Executive publishes Dean-approved submission directly' => ['publish', ScheduleProposalStatus::DeanApproved, ScheduleProposalStatus::Published, false],
             'Registrar closes published submission' => ['close', ScheduleProposalStatus::Published, ScheduleProposalStatus::Closed, false],
         ];
     }
@@ -40,5 +39,17 @@ final class ScheduleProposalTransitionRulesTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         ScheduleProposalTransitionRules::requiredStatus('unknown');
+    }
+
+    /**
+     * The two-step approve-then-publish flow was retired in favor of a
+     * direct `publish` — `executive_approve` must no longer be a legal
+     * action at all.
+     */
+    public function test_executive_approve_is_no_longer_a_known_action(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ScheduleProposalTransitionRules::requiredStatus('executive_approve');
     }
 }
