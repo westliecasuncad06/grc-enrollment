@@ -339,6 +339,48 @@ describe("AccountingPaymentWorkspace", () => {
     expect(within(rows[2]).getByText("Q001")).toBeInTheDocument()
   })
 
+  it("sorts a never-requeued ticket before a requeued one on an exact effective-order tie", async () => {
+    // Both tickets share the same effective order instant -- the requeued
+    // ticket's requeued_at equals the never-requeued ticket's created_at --
+    // and the requeued ticket deliberately has the LOWER id, to prove the
+    // requeued_at-IS-NOT-NULL regime split (not `id`) breaks the tie, same
+    // as QueueTicket::position()/ListQueueTickets server-side.
+    const requeuedWaitingTicket = {
+      ...servingTicket,
+      id: 1,
+      ticket_number: "Q001",
+      status: "waiting",
+      status_label: "Waiting",
+      created_at: "2026-07-30T00:00:00Z",
+      requeued_at: "2026-07-30T02:00:00Z",
+    }
+    const neverRequeuedWaitingTicket = {
+      ...servingTicket,
+      id: 5,
+      ticket_number: "Q005",
+      status: "waiting",
+      status_label: "Waiting",
+      created_at: "2026-07-30T02:00:00Z",
+      requeued_at: null,
+    }
+    fetchMock.mockImplementation(
+      mockRoutes({
+        tickets: [requeuedWaitingTicket, neverRequeuedWaitingTicket],
+      }),
+    )
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    const table = await screen.findByRole("table", { name: "Waiting" })
+    const rows = await within(table).findAllByRole("row")
+    // header row, then Q005 (never requeued, higher id) ahead of Q001
+    // (requeued, lower id) -- proving the regime split, not `id`, breaks
+    // the exact effective-order tie.
+    expect(within(rows[1]).getByText("Q005")).toBeInTheDocument()
+    expect(within(rows[2]).getByText("Q001")).toBeInTheDocument()
+  })
+
   it("marks a waiting ticket priority", async () => {
     const user = userEvent.setup()
     let priorityRequest: RequestInit | undefined

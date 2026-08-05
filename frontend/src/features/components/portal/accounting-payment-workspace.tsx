@@ -51,14 +51,28 @@ function todayIsoDate(): string {
  * effective order — `requeued_at` if the ticket was ever skipped,
  * otherwise `created_at`. A skipped ticket's `requeued_at` is stamped at
  * the moment it was skipped, so it naturally sorts after every ticket that
- * already existed then, landing at the back of its own tier. Mirrors
- * `QueueTicket::position()`/`ListQueueTickets` server-side exactly.
+ * already existed then, landing at the back of its own tier.
+ *
+ * `created_at`/`requeued_at` are whole-second timestamps, so an exact tie
+ * on that effective order is routine, not a rare edge case. `id` can't be
+ * the *whole* tiebreak for that tie: a low-id ticket requeued after a
+ * higher-id ticket already exists must now sort *after* it, which a plain
+ * `id` comparison gets backwards. So a tie first splits on whether the
+ * ticket was ever requeued — never-requeued (arrival order) always
+ * precedes requeued (skip moment) — and only falls back to `id` once both
+ * candidates agree on that split, i.e. a true same-instant tie within one
+ * regime. Mirrors `QueueTicket::position()`/`ListQueueTickets` server-side
+ * exactly (effective order, then the `requeued_at IS NOT NULL` regime
+ * split, then `id`).
  */
 function byQueueOrder(a: QueueTicket, b: QueueTicket): number {
   if (a.priority !== b.priority) return a.priority === "priority" ? -1 : 1
   const aOrder = a.requeued_at ?? a.created_at
   const bOrder = b.requeued_at ?? b.created_at
   if (aOrder !== bOrder) return aOrder < bOrder ? -1 : 1
+  const aRequeued = a.requeued_at !== null
+  const bRequeued = b.requeued_at !== null
+  if (aRequeued !== bRequeued) return aRequeued ? 1 : -1
   return a.id - b.id
 }
 
