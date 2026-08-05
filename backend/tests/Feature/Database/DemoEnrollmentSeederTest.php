@@ -31,13 +31,16 @@ final class DemoEnrollmentSeederTest extends TestCase
      * Eight student profiles, all with real locked grade history, but no
      * Enrollment row of their own yet — every one is left free to submit a
      * fresh enrollment against the current `semester_ongoing` term through
-     * the real UI/API, which is the entire point of this seed.
+     * the real UI/API, which is the entire point of this seed. Plus 2 more
+     * — see `test_curriculum_version_demo_students_resolve_to_the_correct_version`
+     * — that demonstrate curriculum versioning on the real `BSIT` program,
+     * unrelated to this grade-history roster.
      */
     public function test_a_clean_seed_creates_eight_student_profiles_but_no_enrollments(): void
     {
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(8, StudentProfile::count());
+        $this->assertSame(10, StudentProfile::count());
         $this->assertSame(0, Enrollment::count());
     }
 
@@ -47,14 +50,14 @@ final class DemoEnrollmentSeederTest extends TestCase
     public static function studentRosterProvider(): array
     {
         return [
-            '0001 year 1 regular' => ['STU-2026-0001', 1, 'regular'],
-            '0002 year 2 regular' => ['STU-2026-0002', 2, 'regular'],
-            '0003 year 3 regular' => ['STU-2026-0003', 3, 'regular'],
-            '0004 year 4 regular' => ['STU-2026-0004', 4, 'regular'],
-            '0005 year 2 irregular (failed subject)' => ['STU-2026-0005', 2, 'irregular'],
-            '0006 year 2 irregular (incomplete)' => ['STU-2026-0006', 2, 'irregular'],
-            '0007 year 3 irregular (NC on Leadership)' => ['STU-2026-0007', 3, 'irregular'],
-            '0008 year 4 irregular (missing required subject)' => ['STU-2026-0008', 4, 'irregular'],
+            '0001 year 1 regular' => ['2023-06-00001', 1, 'regular'],
+            '0002 year 2 regular' => ['2023-06-00002', 2, 'regular'],
+            '0003 year 3 regular' => ['2023-06-00003', 3, 'regular'],
+            '0004 year 4 regular' => ['2023-06-00004', 4, 'regular'],
+            '0005 year 2 irregular (failed subject)' => ['2023-06-00005', 2, 'irregular'],
+            '0006 year 2 irregular (incomplete)' => ['2023-06-00006', 2, 'irregular'],
+            '0007 year 3 irregular (NC on Leadership)' => ['2023-06-00007', 3, 'irregular'],
+            '0008 year 4 irregular (missing required subject)' => ['2023-06-00008', 4, 'irregular'],
         ];
     }
 
@@ -82,16 +85,16 @@ final class DemoEnrollmentSeederTest extends TestCase
     public static function gradeHistoryCountProvider(): array
     {
         return [
-            '0001 — 1 completed semester' => ['STU-2026-0001', 6],
-            '0002 — 3 completed semesters' => ['STU-2026-0002', 12],
-            '0003 — 5 completed semesters' => ['STU-2026-0003', 16],
-            '0004 — 7 completed semesters' => ['STU-2026-0004', 20],
-            '0005 — 3 completed semesters' => ['STU-2026-0005', 12],
-            '0006 — 3 completed semesters' => ['STU-2026-0006', 12],
-            '0007 — 5 completed semesters' => ['STU-2026-0007', 16],
+            '0001 — 1 completed semester' => ['2023-06-00001', 6],
+            '0002 — 3 completed semesters' => ['2023-06-00002', 12],
+            '0003 — 5 completed semesters' => ['2023-06-00003', 16],
+            '0004 — 7 completed semesters' => ['2023-06-00004', 20],
+            '0005 — 3 completed semesters' => ['2023-06-00005', 12],
+            '0006 — 3 completed semesters' => ['2023-06-00006', 12],
+            '0007 — 5 completed semesters' => ['2023-06-00007', 16],
             // 7 completed semesters, minus the one deliberately omitted
             // required subject that makes this student Irregular.
-            '0008 — 7 completed semesters, one omitted' => ['STU-2026-0008', 19],
+            '0008 — 7 completed semesters, one omitted' => ['2023-06-00008', 19],
         ];
     }
 
@@ -111,7 +114,7 @@ final class DemoEnrollmentSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
 
-        $profile = StudentProfile::query()->where('student_number', 'STU-2026-0008')->firstOrFail();
+        $profile = StudentProfile::query()->where('student_number', '2023-06-00008')->firstOrFail();
         $log = AuditLog::query()
             ->where('auditable_type', 'student_profile')
             ->where('auditable_id', $profile->id)
@@ -120,6 +123,49 @@ final class DemoEnrollmentSeederTest extends TestCase
         $reasons = $log->after_values['reasons'] ?? [];
         $this->assertNotEmpty($reasons);
         $this->assertSame('missing_required_subject', $reasons[0]['code'] ?? null);
+    }
+
+    /**
+     * @return array<string, array{string, string, int, int}>
+     */
+    public static function curriculumVersionStudentProvider(): array
+    {
+        return [
+            '2023 entry -> old (2018-2023) curriculum, 4th year' => ['2023-06-00100', 'student.oldcurriculum.seed@grc.test', 2023, 4],
+            '2024 entry -> new (2024-2029) curriculum, 3rd year' => ['2024-06-00101', 'student.newcurriculum.seed@grc.test', 2024, 3],
+        ];
+    }
+
+    #[DataProvider('curriculumVersionStudentProvider')]
+    public function test_curriculum_version_demo_students_resolve_to_the_correct_version(
+        string $studentNumber,
+        string $email,
+        int $entryYear,
+        int $yearLevel,
+    ): void {
+        $this->seed(DatabaseSeeder::class);
+
+        $profile = StudentProfile::query()->where('student_number', $studentNumber)->with(['curriculum', 'user'])->firstOrFail();
+
+        $this->assertSame($email, $profile->user->email);
+        $this->assertSame($entryYear, $profile->entry_year);
+        $this->assertSame($yearLevel, $profile->year_level);
+        $this->assertSame('BSIT', $profile->program->code);
+        $this->assertTrue(
+            $entryYear >= $profile->curriculum->effective_start_year
+                && $entryYear <= $profile->curriculum->effective_end_year,
+            "Student entering {$entryYear} should be on a curriculum whose range contains {$entryYear}, got {$profile->curriculum->effective_school_year}.",
+        );
+    }
+
+    public function test_the_2023_and_2024_entry_demo_students_are_on_different_curriculum_versions(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $oldCurriculumStudent = StudentProfile::query()->where('student_number', '2023-06-00100')->firstOrFail();
+        $newCurriculumStudent = StudentProfile::query()->where('student_number', '2024-06-00101')->firstOrFail();
+
+        $this->assertNotSame($oldCurriculumStudent->curriculum_id, $newCurriculumStudent->curriculum_id);
     }
 
     public function test_reseeding_creates_no_duplicates(): void
@@ -208,7 +254,7 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->assertSame('ccs', $professor->college?->value);
 
         $curriculum = Curriculum::query()->where('name', 'BSIT Grade History Demo 2026')->firstOrFail();
-        $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
+        $subject = $this->demoSubject($subjectCode);
         $sections = Section::query()
             ->where('subject_id', $subject->id)
             ->where('is_block_exclusive', true)
@@ -234,7 +280,7 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $professor = User::query()->where('email', $expectedEmail)->firstOrFail();
-        $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
+        $subject = $this->demoSubject($subjectCode);
 
         $this->assertSame(
             5,
@@ -247,6 +293,27 @@ final class DemoEnrollmentSeederTest extends TestCase
             ->where('subject_id', $subject->id)
             ->sole();
         $this->assertSame(1, $preference->rank);
+    }
+
+    /**
+     * `subjects` is unique on `(college, code)`, not `code` alone: the real
+     * GRC catalog (`GrcSubjectCatalogSeeder`) seeds `LEAD 2`/`LEAD 4`/
+     * `LEAD 6`/`LEAD8` under real colleges too, so an unscoped code lookup
+     * is ambiguous for those four. `DemoEnrollmentSeeder` places its own
+     * curriculum's Leadership subjects as collegeless specifically to stay
+     * unambiguous — this test must resolve the same collegeless row the
+     * seeder actually used, or it would silently pass by agreeing with
+     * itself on the wrong subject rather than verifying the real one.
+     */
+    private function demoSubject(string $code): Subject
+    {
+        $query = Subject::query()->where('code', $code);
+
+        if (in_array($code, ['LEAD 2', 'LEAD 4', 'LEAD 6', 'LEAD8'], true)) {
+            $query->whereNull('college');
+        }
+
+        return $query->firstOrFail();
     }
 
     public function test_reseeding_ten_connected_professors_creates_no_duplicates(): void

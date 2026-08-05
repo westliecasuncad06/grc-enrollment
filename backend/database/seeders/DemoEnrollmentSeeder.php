@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Actions\Academic\ReclassifyStudentEnrollmentCategory;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Curriculum\CurriculumVersion;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -219,14 +220,33 @@ final class DemoEnrollmentSeeder extends Seeder
      * }>
      */
     private const STUDENTS = [
-        ['number' => 'STU-2026-0001', 'email' => 'student.seed@grc.test', 'name' => 'Seed Student', 'yearLevel' => 1, 'completedOrdinals' => 1, 'overrides' => [], 'omit' => []],
-        ['number' => 'STU-2026-0002', 'email' => 'student2.seed@grc.test', 'name' => 'Seed Student Two', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => [], 'omit' => []],
-        ['number' => 'STU-2026-0003', 'email' => 'student3.seed@grc.test', 'name' => 'Seed Student Three', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => [], 'omit' => []],
-        ['number' => 'STU-2026-0004', 'email' => 'student4.seed@grc.test', 'name' => 'Seed Student Four', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => []],
-        ['number' => 'STU-2026-0005', 'email' => 'student5.seed@grc.test', 'name' => 'Seed Student Five', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['MATH101' => '5.00'], 'omit' => []],
-        ['number' => 'STU-2026-0006', 'email' => 'student6.seed@grc.test', 'name' => 'Seed Student Six', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['CS201' => 'INC'], 'omit' => []],
-        ['number' => 'STU-2026-0007', 'email' => 'student7.seed@grc.test', 'name' => 'Seed Student Seven', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => ['LEAD 3' => 'NC'], 'omit' => []],
-        ['number' => 'STU-2026-0008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => ['CS401']],
+        ['number' => '2023-06-00001', 'email' => 'student.seed@grc.test', 'name' => 'Seed Student', 'yearLevel' => 1, 'completedOrdinals' => 1, 'overrides' => [], 'omit' => []],
+        ['number' => '2023-06-00002', 'email' => 'student2.seed@grc.test', 'name' => 'Seed Student Two', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => [], 'omit' => []],
+        ['number' => '2023-06-00003', 'email' => 'student3.seed@grc.test', 'name' => 'Seed Student Three', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => [], 'omit' => []],
+        ['number' => '2023-06-00004', 'email' => 'student4.seed@grc.test', 'name' => 'Seed Student Four', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => []],
+        ['number' => '2023-06-00005', 'email' => 'student5.seed@grc.test', 'name' => 'Seed Student Five', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['MATH101' => '5.00'], 'omit' => []],
+        ['number' => '2023-06-00006', 'email' => 'student6.seed@grc.test', 'name' => 'Seed Student Six', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['CS201' => 'INC'], 'omit' => []],
+        ['number' => '2023-06-00007', 'email' => 'student7.seed@grc.test', 'name' => 'Seed Student Seven', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => ['LEAD 3' => 'NC'], 'omit' => []],
+        ['number' => '2023-06-00008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => ['CS401']],
+    ];
+
+    /**
+     * Two logins on the REAL `BSIT` program's curriculum versions (not the
+     * isolated `BSIT-DEMO` fixture the 8 grade-history students above use),
+     * demonstrating the Registrar's exact versioning scenario: a student who
+     * entered in 2023 is the last batch of the old curriculum and is now a
+     * 4th-year 2nd-sem student on it, while a 2024-entry student already
+     * follows the new curriculum and is a 3rd-year 2nd-sem student on it.
+     * Neither carries grade history or a block enrollment — the 8 students
+     * above already exercise that lifecycle; these two exist solely to make
+     * `CurriculumVersion::resolveForEntryYear()` visible end to end (log in,
+     * open the prospectus, see the correct curriculum's subject list).
+     *
+     * @var list<array{number: string, email: string, name: string, entryYear: int, yearLevel: int}>
+     */
+    private const CURRICULUM_VERSION_STUDENTS = [
+        ['number' => '2023-06-00100', 'email' => 'student.oldcurriculum.seed@grc.test', 'name' => 'Seed Student (2023 Entry, Old Curriculum)', 'entryYear' => 2023, 'yearLevel' => 4],
+        ['number' => '2024-06-00101', 'email' => 'student.newcurriculum.seed@grc.test', 'name' => 'Seed Student (2024 Entry, New Curriculum)', 'entryYear' => 2024, 'yearLevel' => 3],
     ];
 
     public function run(): void
@@ -248,7 +268,57 @@ final class DemoEnrollmentSeeder extends Seeder
 
             $this->reclassify($profiles);
             $this->seedRegularBlocks($curriculum, $encoder);
+            $this->seedCurriculumVersionDemoStudents();
         });
+    }
+
+    /**
+     * Seeds `CURRICULUM_VERSION_STUDENTS` — see that constant's docblock.
+     * Silently does nothing if the real `BSIT` program or its curriculum
+     * versions are not seeded (e.g. a test seeding only `DemoEnrollmentSeeder`
+     * in isolation without `GrcCurriculumSeeder`), since this demonstration
+     * is additive and never required by the grade-history roster.
+     */
+    private function seedCurriculumVersionDemoStudents(): void
+    {
+        $program = Program::query()->where('code', 'BSIT')->first();
+
+        if ($program === null) {
+            return;
+        }
+
+        $curricula = Curriculum::query()->where('program_id', $program->id)->get();
+
+        foreach (self::CURRICULUM_VERSION_STUDENTS as $definition) {
+            $curriculum = CurriculumVersion::resolveForEntryYear($curricula, $definition['entryYear']);
+
+            if ($curriculum === null) {
+                continue;
+            }
+
+            $user = User::updateOrCreate(
+                ['email' => $definition['email']],
+                [
+                    'name' => $definition['name'],
+                    'password' => self::PASSWORD,
+                    'role' => UserRole::Student,
+                    'status' => UserStatus::Active,
+                ],
+            );
+
+            StudentProfile::updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'student_number' => $definition['number'],
+                    'program_id' => $program->id,
+                    'curriculum_id' => $curriculum->id,
+                    'entry_year' => $definition['entryYear'],
+                    'year_level' => $definition['yearLevel'],
+                    'admission_status' => AdmissionStatus::Admitted,
+                    'academic_standing' => AcademicStanding::Good,
+                ],
+            );
+        }
     }
 
     /**
@@ -503,9 +573,32 @@ final class DemoEnrollmentSeeder extends Seeder
         );
     }
 
+    /**
+     * `subjects` is unique on `(college, code)`, not `code` alone, and the
+     * real GRC catalog (`GrcSubjectCatalogSeeder`) seeds `LEAD 1`-`LEAD8`
+     * under every real college that offers Leadership (COE, CBAE, COA,
+     * CCS) — so an unscoped `where('code', $code)` is ambiguous for those
+     * eight codes and can silently resolve to the wrong college's row.
+     * `DemoGradeHistoryCurriculumSeeder` places this curriculum's own LEAD
+     * codes as collegeless (`college => null`) specifically to stay
+     * unambiguous; every grade recorded here must resolve to that same
+     * collegeless subject, or a student's grade history and their
+     * curriculum's required-subject list silently disagree on which
+     * subject_id "LEAD 2" even is — which is exactly what makes
+     * `EnrollmentCategoryClassifier` see a "missing required subject" and
+     * misclassify an otherwise-Regular student as Irregular.
+     */
+    private const LEADERSHIP_SUBJECTS = ['LEAD 1', 'LEAD 2', 'LEAD 3', 'LEAD 4', 'LEAD 5', 'LEAD 6', 'LEAD 7', 'LEAD8'];
+
     private function subject(string $code): Subject
     {
-        $subject = Subject::query()->where('code', $code)->first();
+        $query = Subject::query()->where('code', $code);
+
+        if (in_array($code, self::LEADERSHIP_SUBJECTS, true)) {
+            $query->whereNull('college');
+        }
+
+        $subject = $query->first();
 
         if ($subject === null) {
             throw new RuntimeException("Subject '{$code}' is missing. Run SubjectSeeder first.");

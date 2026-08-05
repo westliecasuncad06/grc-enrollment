@@ -38,6 +38,20 @@ use RuntimeException;
 final class SectionSeeder extends Seeder
 {
     /**
+     * `subjects` is unique on `(college, code)`, not `code` alone, and the
+     * real GRC catalog (`GrcSubjectCatalogSeeder`) also seeds `LEAD 2`/
+     * `LEAD 4`/`LEAD 6`/`LEAD8` under real colleges — an unscoped code
+     * lookup for these four is ambiguous and must stay pinned to the
+     * collegeless subject `DemoGradeHistoryCurriculumSeeder` places in this
+     * curriculum, or this seeder's own section ends up keyed to a
+     * different subject_id than the one a demo student's grade history and
+     * curriculum placement actually use.
+     *
+     * @var list<string>
+     */
+    private const LEADERSHIP_SUBJECTS = ['LEAD 2', 'LEAD 4', 'LEAD 6', 'LEAD8'];
+
+    /**
      * @var list<array{
      *     subject: string, code: string, days: string,
      *     starts: string, ends: string, room: string, capacity: int
@@ -88,7 +102,13 @@ final class SectionSeeder extends Seeder
             }
 
             foreach (self::SECTIONS as $section) {
-                $subject = Subject::query()->where('code', $section['subject'])->firstOrFail();
+                $subjectQuery = Subject::query()->where('code', $section['subject']);
+
+                if (in_array($section['subject'], self::LEADERSHIP_SUBJECTS, true)) {
+                    $subjectQuery->whereNull('college');
+                }
+
+                $subject = $subjectQuery->firstOrFail();
 
                 Section::updateOrCreate(
                     [
