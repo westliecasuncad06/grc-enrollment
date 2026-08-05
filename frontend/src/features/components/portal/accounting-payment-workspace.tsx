@@ -46,9 +46,19 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-/** Priority tickets always precede regular ones; within a tier, earlier id first — mirrors QueueTicket::position() server-side. */
+/**
+ * Priority tickets always precede regular ones; within a tier, ordered by
+ * effective order — `requeued_at` if the ticket was ever skipped,
+ * otherwise `created_at`. A skipped ticket's `requeued_at` is stamped at
+ * the moment it was skipped, so it naturally sorts after every ticket that
+ * already existed then, landing at the back of its own tier. Mirrors
+ * `QueueTicket::position()`/`ListQueueTickets` server-side exactly.
+ */
 function byQueueOrder(a: QueueTicket, b: QueueTicket): number {
   if (a.priority !== b.priority) return a.priority === "priority" ? -1 : 1
+  const aOrder = a.requeued_at ?? a.created_at
+  const bOrder = b.requeued_at ?? b.created_at
+  if (aOrder !== bOrder) return aOrder < bOrder ? -1 : 1
   return a.id - b.id
 }
 

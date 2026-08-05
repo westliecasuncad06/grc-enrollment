@@ -21,7 +21,9 @@ export const queueTicketResourceSchema = z
     status_label: z.string().min(1),
     priority: z.enum(queueTicketPriorityValues),
     priority_label: z.string().min(1),
+    created_at: z.iso.datetime(),
     served_at: z.iso.datetime().nullable(),
+    requeued_at: z.iso.datetime().nullable(),
   })
   .strict()
 

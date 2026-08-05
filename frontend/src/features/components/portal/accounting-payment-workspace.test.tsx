@@ -30,7 +30,9 @@ const servingTicket = {
   status_label: "Serving",
   priority: "regular",
   priority_label: "Regular",
+  created_at: "2026-07-30T00:05:00Z",
   served_at: null,
+  requeued_at: null,
 } as const
 
 const waitingTicket = {
@@ -41,6 +43,7 @@ const waitingTicket = {
   ticket_number: "Q002",
   status: "waiting",
   status_label: "Waiting",
+  created_at: "2026-07-30T00:10:00Z",
 } as const
 
 const pendingPaymentEnrollment = {
@@ -291,19 +294,33 @@ describe("AccountingPaymentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("skips the currently serving ticket", async () => {
+  it("requeues the currently serving ticket to the back of the waiting line", async () => {
     const user = userEvent.setup()
-    let skipRequest: RequestInit | undefined
+    let skipped = false
+    const requeuedTicket = {
+      ...servingTicket,
+      status: "waiting",
+      status_label: "Waiting",
+      requeued_at: "2026-07-30T01:00:00Z",
+    }
     fetchMock.mockImplementation((input, init) => {
       const target = url(input)
       if (target.includes("/queue-tickets/1") && init?.method === "PATCH") {
-        skipRequest = init
+        skipped = true
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ data: { ...servingTicket, status: "cancelled" } }),
-          ),
+          new Response(JSON.stringify({ data: requeuedTicket })),
         )
       }
+      if (target.includes("/queue-tickets"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: skipped ? [waitingTicket, requeuedTicket] : [servingTicket, waitingTicket],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
       return mockRoutes()(input, init)
     })
     renderWithSession(<AccountingPaymentWorkspace />, {
@@ -313,10 +330,13 @@ describe("AccountingPaymentWorkspace", () => {
     await screen.findByText("Q001")
     await user.click(screen.getByRole("button", { name: "Skip" }))
 
-    await vi.waitFor(() => expect(skipRequest).toBeDefined())
-    expect(JSON.parse(skipRequest?.body as string)).toEqual({
-      action: "skip",
-    })
+    const table = await screen.findByRole("table", { name: "Waiting" })
+    const rows = await within(table).findAllByRole("row")
+    // header row, then Q002 (never requeued) ahead of Q001 (just
+    // requeued) -- proving the skipped ticket lands at the back, not
+    // simply back in the list in its old (lower-id) position.
+    expect(within(rows[1]).getByText("Q002")).toBeInTheDocument()
+    expect(within(rows[2]).getByText("Q001")).toBeInTheDocument()
   })
 
   it("marks a waiting ticket priority", async () => {

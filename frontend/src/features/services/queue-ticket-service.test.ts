@@ -29,7 +29,9 @@ const ticket = {
   status_label: "Waiting",
   priority: "regular",
   priority_label: "Regular",
+  created_at: "2026-07-30T00:00:00Z",
   served_at: null,
+  requeued_at: null,
 } as const
 
 describe("queue-ticket-service", () => {
