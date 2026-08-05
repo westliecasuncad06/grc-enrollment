@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $program_id
  * @property string $name
  * @property string $effective_school_year
+ * @property ?int $effective_start_year
+ * @property ?int $effective_end_year
  * @property CurriculumStatus $status
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -28,6 +30,8 @@ final class Curriculum extends Model
         'program_id',
         'name',
         'effective_school_year',
+        'effective_start_year',
+        'effective_end_year',
         'status',
     ];
 
@@ -80,5 +84,27 @@ final class Curriculum extends Model
         ));
 
         return $query->whereIn('status', $visibleValues);
+    }
+
+    /**
+     * Query-side equivalent of `App\Domain\Curriculum\CurriculumVersion::
+     * resolveForEntryYear()` — orders a program's versions so the one
+     * effective for `$entryYear` sorts first. Ranges are contiguous and
+     * non-overlapping by construction (see `GrcCurriculumSeeder`), so the
+     * version with the highest `effective_start_year` at or before
+     * `$entryYear` is always either the containing version or, if none
+     * contains it, the correct fallback to the latest version already
+     * started — the same rule the domain class applies to an in-memory
+     * collection. Callers still combine this with `first()` (and typically
+     * `where('program_id', ...)`) to get a single result.
+     *
+     * @param  Builder<Curriculum>  $query
+     * @return Builder<Curriculum>
+     */
+    public function scopeEffectiveForYear(Builder $query, int $entryYear): Builder
+    {
+        return $query
+            ->where('effective_start_year', '<=', $entryYear)
+            ->orderByDesc('effective_start_year');
     }
 }

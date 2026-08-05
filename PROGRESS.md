@@ -1,7 +1,7 @@
 # GRC Enrollment System — Development Progress
 
-**Last updated:** 2026-08-05 · **PRD version:** v3.2 · **Branch:** `main`
-at `85a6357` (Phase 7c and the grading/enrollment-completion slice — ADR
+**Last updated:** 2026-08-06 · **PRD version:** v3.2 · **Branch:** `main`
+at `314ace6` (Phase 7c and the grading/enrollment-completion slice — ADR
 0021 — are both merged). The working tree currently carries two further
 uncommitted slices on top: the 2026-08-04 section-terminology/Grades-sidebar
 fix, and the 2026-08-05 assessment/fees, guided Cashier flow, overload
@@ -3962,3 +3962,321 @@ column live on `student_profiles`; 15 distinct professors owning sections
 Seeded demo students keep their old fixed `STU-YYYY-NNNN`-style numbers by
 design — those rows are inserted directly by seeders, bypassing the HTTP
 endpoint the new regex validates.
+
+## 2026-08-06 — Enrollment UI, mobile responsiveness, and GRC branding
+
+**Session start / approved scope:** The user approved the institutional-modern
+redesign plan: align the public landing page with GRC's official identity,
+replace all visible “Portal Overview” copy with **GRC Connect**, and improve
+the responsive enrollment chain for Student, Program Chair, Dean, Executive
+Director, Registrar Head, Registrar Staff, and Accounting. The `/portal`
+route, bearer-token authentication, role authorization, enrollment states,
+queue/payment idempotency, and all backend contracts remain unchanged.
+
+**Preflight:** This checkout is the shared `main` branch at `314ace6` and
+already contains unrelated uncommitted backend, documentation, E2E, and test
+changes. The approved UI slice will touch only the relevant frontend files,
+will preserve that existing work, and will not be committed or pushed. The
+official white GRC logo will be stored locally rather than hotlinked; official
+public copy and destinations are sourced from `https://grc.edu.ph/`.
+
+**Focused baseline:** Before changing the landing or portal identity, ran
+`npx vitest run src/features/components/pages/landing-page.test.tsx
+src/features/components/pages/portal-overview-page.test.tsx
+src/features/components/layouts/portal-shell.test.tsx --no-file-parallelism`
+from `frontend/`: **3 files / 25 tests passed** (24.53s).
+
+**TDD RED checkpoint:** Updated those three focused test files for the new
+public GRC brand and GRC Connect contract, then re-ran the same command.
+It failed as intended: **19 assertions failed / 6 remained green**, because
+the current application still renders the old landing headline, text monogram,
+“Portal overview” labels, API-readiness panel, and developer-oriented portal
+copy. No unexpected runtime failure blocked the test run.
+
+**Brand/GRC Connect implementation checkpoint:** Added the shared `GrcBrand`
+component and a locally stored official white GRC logo, rebuilt the landing
+page and public navigation, renamed the signed-in home to GRC Connect, and
+updated portal branding/breadcrumbs/metadata. The first GREEN attempt left six
+focused-test expectation mismatches: two pre-existing tests still asserted the
+retired preview wording, the new landing About section needed an explicit
+landmark name, one journey title was intentionally shortened, and the primary
+Enrollment link was duplicated between the hero and module card. No runtime
+or API error occurred; those UI-contract details are being corrected before
+the next test run.
+
+**Brand/GRC Connect verification:** After correcting those semantic and copy
+details, the same focused Vitest command passed: **3 files / 25 tests passed**
+in 59.27s. This validates the official-logo landing identity, public links,
+GRC Connect label/navigation/breadcrumb transition, personalized next action,
+and the existing mobile portal Sheet behavior. The work now proceeds to
+phone-specific enrollment workflow cards without changing any API contract.
+
+**Registrar Staff and Accounting mobile cards:** Added custom `DataTable`
+phone-card renderers for Registrar enrollment approvals/voids and Accounting
+waiting/served tickets. Approval cards retain student financial status, units,
+overload indication, Review, and every authorized decision; Cashier cards
+retain ticket, student, amount, financial status, and priority action. Desktop
+tables and all mutations remain unchanged. Focused verification passed:
+`registrar-enrollment-workspace.test.tsx` +
+`accounting-payment-workspace.test.tsx` — **2 files / 24 tests passed**
+(21.69s). The test environment continues to log its existing non-fatal
+`HTMLCanvasElement.getContext()` notice from the print component.
+
+**Program Chair mobile schedule-card TDD RED:** Added a behavioral test for a
+generated subject schedule card, then ran
+`npx vitest run src/features/components/portal/program-chair-enrollment-workspace.test.tsx --no-file-parallelism`.
+Result: 20 tests total, 19 passed, and the new mobile-card test failed as
+expected before implementation (72.43s; the existing non-fatal JSDOM
+`HTMLCanvasElement.getContext()` notice also appeared).
+
+**Program Chair mobile schedule cards:** Implemented an accessible, compact
+per-subject schedule card for phone-sized table views, retained the desktop
+table, and made the schedule dialog safely scroll within the mobile viewport.
+The first implementation exposed two identically named actions to the
+DOM-based test runner; the card action is now the clearer “Set schedule,”
+while the table keeps “Assign schedule.” Focused verification passed:
+`program-chair-enrollment-workspace.test.tsx` — **1 file / 20 tests passed**
+(39.50s), with only the existing non-fatal canvas notice.
+
+**Student review-card TDD RED:** Added an interaction-level expectation for a
+regular student's selected-subject card and ran
+`npx vitest run src/features/components/portal/enrollment-workspace.test.tsx --no-file-parallelism`.
+The expected `CS201 section review` card was absent before implementation:
+13 tests passed and the new test failed (11.50s), with the existing non-fatal
+canvas notice only.
+
+**Student enrollment mobile review:** Replaced the default narrow-screen
+subject summaries with purpose-built review cards containing the subject,
+schedule, room, professor/seat context, and units. The regular and irregular
+submission buttons now fill the available phone width; the confirmation
+dialog scrolls safely and retains full-width touch targets on small screens.
+Focused verification passed: `enrollment-workspace.test.tsx` — **1 file /
+14 tests passed** (10.86s), with only the existing non-fatal canvas notice.
+
+**Dean / Executive schedule-review TDD RED:** Added a semantic mobile-card
+expectation for a submitted schedule subject and ran
+`npx vitest run src/features/components/portal/schedule-decision-workspace.test.tsx --no-file-parallelism`.
+The new `PSPEAK schedule review` landmark was absent before implementation;
+7 tests passed and 1 failed (6.87s), with the existing non-fatal canvas notice.
+
+**Dean / Executive schedule-review mobile treatment:** Added accessible subject
+card landmarks to the review dialog, full-height scroll-safe phone dialog
+geometry, and full-width decision actions on phones. The shared confirmation
+dialog now has the same small-screen behavior. Focused verification passed:
+`schedule-decision-workspace.test.tsx` — **1 file / 8 tests passed** (6.78s),
+with only the existing non-fatal canvas notice.
+
+**Registrar Head term-card TDD RED:** Added an accessible enrollment-cycle
+card expectation and ran
+`npx vitest run src/features/components/portal/academic-term-workspace.test.tsx --no-file-parallelism`.
+The card was absent as expected before implementation: 5 tests passed and 1
+failed (8.79s), with only the existing non-fatal canvas notice.
+
+**Registrar Head enrollment-cycle mobile cards:** Added a focused card for
+each term with its status, enrollment-window state, and full-width archive
+action. Term-creation and current-term archive triggers now also span phone
+widths. Focused verification passed:
+`academic-term-workspace.test.tsx` — **1 file / 6 tests passed** (8.13s),
+with only the existing non-fatal canvas notice.
+
+**Integration verification prep:** The user-facing enrollment and public-brand
+changes are implemented. Next checks will run the complete focused UI test
+set, formatting/type/build validation, and a narrow visual smoke check at
+desktop and phone widths. No API, route, auth, permission, or mutation
+contract was changed.
+
+**Focused integration suite:** Passed
+`npx vitest run` for the 9 affected public, portal-shell, and enrollment
+workspace test files — **9 files / 97 tests passed** (122.40s). The suite
+logged the existing non-fatal JSDOM canvas notice from the print component;
+there were no assertion or runtime failures.
+
+**Static verification:** `npm run typecheck` passed (39.50s). The repository
+format check remains blocked by 86 already-unformatted files across unrelated
+frontend modules (and several files outside this change); no bulk format was
+run, to preserve the user's dirty worktree. The next validation is the
+production build and responsive browser smoke check.
+
+**Production build and visual smoke check:** `npm run build` passed (85.40s;
+all five Next routes generated successfully). An isolated production server
+was used for browser checks and stopped afterwards. At 390px, the public
+landing page showed the official logo, compact menu trigger, stacked content,
+and no horizontal overflow. At 1440px, the full public navigation and logo
+were visible with no overflow. The current local database rejected the
+documented synthetic student login, so a live authenticated portal screen
+could not be loaded for the browser-only check; the focused component suite
+continues to cover every role-specific workflow. The already-running dev
+server also held protected routes at its restoring state, so it was not used
+as verification evidence.
+
+**Final static check prep:** Running the configured ESLint command next. A
+failure in unrelated pre-existing dirty files will be recorded without a
+repository-wide rewrite.
+
+**Repository-wide ESLint limitation:** `npm run lint` exceeded the 180s
+command timeout without producing a diagnostic (184.10s). It was terminated
+by the command runner rather than completing or reporting a code issue. A
+narrow lint run for the affected source and test files follows.
+
+**Handoff verification:** The affected source and test files pass targeted
+ESLint. A full `npm test` run is now required by the finalization checklist
+on the exact current tree; no commit, merge, or push will be performed.
+
+**Full-suite result and triage:** `npm test` completed with 78 files / 517
+tests passing and 10 files / 21 tests failing (187.91s). Twenty failures are
+unrelated five-second test timeouts spread across untouched workspaces during
+the fully parallel run. One affected existing test needs an expected-class
+update because the schedule-review dialog now deliberately uses
+`max-h-[100dvh]` on phones and `sm:max-h-[90dvh]` on larger screens. The
+focused feature tests had already passed serially; the expected-class test is
+being corrected and rerun next.
+
+**Schedule-review regression resolved:** The isolated existing test reproduced
+the failure consistently: it asserted the previous one-size dialog cap rather
+than the new responsive `max-h-[100dvh]` / `sm:max-h-[90dvh]` behavior. The
+assertion was updated to the intended mobile-plus-desktop contract. The review
+dialog and decision workspace tests now pass serially: **2 files / 12 tests
+passed** (17.94s), with only the existing non-fatal canvas notice.
+
+**Final affected-suite command limitation:** The combined ten-file serial
+command exceeded the runner's 180s cap and was terminated before Vitest could
+print its summary (184.08s; it emitted only the known canvas notices before
+the runner's broken-pipe cleanup). The current tree is instead evidenced by
+the earlier 9-file / 97-test green run plus the final 2-file / 12-test
+schedule-review and decision rerun; the only change after the 97-test run was
+the tested schedule-review expectation update.
+
+**Final integrity checks and handoff:** Targeted ESLint for the final
+schedule-review source/test pair passed (28.90s), and `git diff --check`
+passed with no whitespace errors. The temporary production server and browser
+used for visual smoke checks were stopped. The shared worktree's pre-existing
+unrelated backend/docs/e2e changes and untracked assets remain untouched. No
+commit, merge, or push was performed.
+
+## 2026-08-06 — Nine-role portal UI usability audit
+
+**Audit scope:** Requested a code-and-workflow review of the current UI for
+all nine PRD user roles, covering role relevance, friendly task flow,
+responsive/mobile behavior, accessibility, and visual hierarchy. This is a
+read-only review first; no API contract, authorization, or source behavior
+will be changed without a follow-up implementation request.
+
+**Role coverage evidence:** `role-capabilities.test.ts` passed — **1 file /
+3 tests passed** (3.11s), confirming the current mapping of modules to all
+nine roles. The audit found that the central enrollment workspaces and their
+recent mobile cards are role-appropriate, while six leadership modules still
+route to explicit preview states and four global top-bar affordances are
+disabled previews. Findings will be handed off with precise source locations;
+no implementation changes were made during this review.
+
+## 2026-08-06 — Nine-role portal usability implementation preparation
+
+**Session start and design discovery:** The user authorized the audited UI
+improvements. Before changing source behavior, the role navigation, GRC
+Connect home, module fallback, notification tray, and shared sheet/dialog
+primitives were re-reviewed against the PRD-aligned role definitions. The
+implementation will preserve every existing authorization and API contract;
+the user selected the recommended presentation for the six unconnected
+leadership modules: keep them visibly labelled as non-clickable **Planned
+capabilities**, separate from live workspaces and hidden from daily role
+navigation. The next changes begin with focused behavioral tests.
+
+**Nine-role usability TDD RED:** Added behavioral coverage for the approved
+live-versus-planned portal presentation, removal of disconnected top-bar
+controls, explicit-only notification marking, and safe mobile panel geometry.
+The focused five-file Vitest run failed as intended: **51 assertions failed /
+26 passed** in 76.10s. The failures match the pre-change UI exactly (preview
+modules still appear in navigation and active grids, preview top-bar buttons
+remain, sheet close marks all notifications read, dialogs lack viewport
+containment, and return labels still use “portal overview”). No unexpected
+runtime/API error occurred.
+
+**Nine-role usability implementation:** GRC Connect and role navigation now
+surface connected enrollment workspaces only, while the six unconnected
+analytics/reporting modules appear separately as non-clickable **Planned
+capabilities**. Existing bookmarked preview routes display an honest planned
+state. The disconnected global account/help buttons were removed rather than
+presented as disabled actions; notification read status now changes only via
+an explicit user action; shared Sheets, Dialogs, and AlertDialogs contain
+their scroll area and respect dynamic mobile viewport limits. All API,
+authorization, and mutation contracts remain unchanged.
+
+**Focused implementation verification:** `npx vitest run` for the five
+affected portal, notification, and responsive-primitive test files passed:
+**5 files / 77 tests passed** in 55.58s. The first GREEN run had two test-only
+query issues (a fuzzy Enrollment label and simultaneous Radix modals hiding
+each other); both tests were corrected and the focused suite then passed.
+
+**Static verification:** `npm run typecheck` initially reported one unused
+`Bell` import in `portal-shell.tsx`, traced directly to the removed preview
+action component. Removing that import resolved the check; `npm run typecheck`
+and targeted ESLint both passed. `npm run build` also passed, generating all
+five Next routes. The in-app visual-preview surface was unavailable for the
+local production server, so no browser screenshot is claimed. The temporary
+server was stopped. Role-catalog verification passed (**1 file / 3 tests**),
+and `git diff --check` passed. A targeted Prettier check then identified
+style-only formatting in seven touched portal files; those exact files are
+being formatted before the final rerun.
+
+**Final nine-role usability verification:** One remaining technical breadcrumb
+fallback (“Module preview”) was covered by a new RED/GREEN regression test and
+changed to “Unavailable workspace.” The final focused portal suite passed:
+**5 files / 77 tests passed** in 50.76s. Current-tree `npm run typecheck`,
+targeted ESLint, and targeted Prettier checks all passed; `npm run build`
+passed and generated all five routes; `git diff --check` passed. No commit or
+push was performed. The repository-wide `npm test` and `npm run lint` were not
+rerun in this pass because their earlier results remain documented above: the
+full test run encountered unrelated parallel resource timeouts and repository
+lint exceeded the command timeout. The shared dirty backend/docs/e2e worktree
+changes remain untouched.
+
+## 2026-08-06 — GRC Connect welcome-copy refinement
+
+**Session start and approved micro-design:** The user asked to remove the
+personalized “Welcome, [name]” line from the GRC Connect hero because the
+name is not useful in that placement. The role badge and role-specific work
+guidance will remain, so the page retains its context without repeating the
+signed-in identity. This is a copy-only frontend refinement; no API,
+authorization, or enrollment workflow changes are in scope.
+
+**Welcome-copy TDD RED:** The overview regression test now requires the
+role-specific guidance to remain while “Welcome, Test Student.” is absent.
+Its first execution was delayed by a detached temporary production-server
+child left from the prior verification; only that server’s exact child
+processes and the timed-out test process were stopped. The rerun failed as
+intended on the existing welcome line (**1 failed / 3 passed**), confirming
+the test exercises the requested copy change rather than an environment error.
+
+**Welcome-copy implementation and verification:** Removed the personalized
+welcome line from the GRC Connect hero while retaining its role badge and
+role-specific guidance. The focused overview test passed (**1 file / 4
+tests** in 13.90s), `npm run typecheck` passed, targeted Prettier passed, and
+`git diff --check` passed. A targeted ESLint attempt for the two changed files
+exceeded the command timeout without diagnostics; that exact child process was
+stopped after inspection. The broader affected-file lint run from the prior
+portal UI pass remains green. No API, authorization, enrollment behavior,
+commit, or push was changed.
+
+**All-role coverage follow-up:** The user clarified that the welcome-name
+removal must apply to every role, not only Registrar Head. The implementation
+already uses the single shared `GrcConnectPage` for all roles; a role-by-role
+regression test now makes that global behavior explicit. The formatted final
+test run passed: **1 file / 13 tests** in 14.46s, covering every role;
+`npm run typecheck` and `git diff --check` also passed. No production behavior
+needed a further change because the welcome line was already removed from the
+one component every role uses.
+
+**Hero role-badge clarification:** The user clarified with a screenshot that
+the unwanted text is the role badge (for example, “Program Chair”) above the
+GRC Connect title—not the already-removed welcome name. The requested
+presentation is to remove that redundant badge from the shared hero for every
+role while retaining role identity in the portal sidebar, where it remains
+useful context. A focused all-role regression test follows before the markup
+change.
+
+**Hero role-badge implementation:** Removed the shared role badge from the
+GRC Connect hero. The all-role regression test first failed as expected for
+all nine labels, then passed after the markup change: **1 file / 13 tests
+passed** in 21.48s. Targeted Prettier, `npm run typecheck`, and `git diff
+--check` passed. The role label intentionally remains in the portal sidebar;
+no API, authorization, enrollment behavior, commit, or push changed.

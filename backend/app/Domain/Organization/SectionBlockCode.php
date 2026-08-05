@@ -20,12 +20,33 @@ final class SectionBlockCode
     ): string {
         $prefix = match ($college) {
             CollegeCode::Ccs => 'IT',
-            CollegeCode::Coe => 'EDUC',
+            CollegeCode::Coe => self::coePrefix($programCode),
             CollegeCode::Coa => 'ACC',
             CollegeCode::Cbae => self::cbaePrefix($programCode),
         };
 
         return sprintf('%s%d%02d', $prefix, $yearLevel, $blockOrdinal);
+    }
+
+    /**
+     * COE has five distinct majors (Elementary Education, and Secondary
+     * Education in Filipino/English/Social Studies/Values Education), each
+     * with its own real block prefix in GRC's schedule sheets — unlike CCS/
+     * COA, "College of Education" alone does not identify one program.
+     */
+    private static function coePrefix(string $programCode): string
+    {
+        $normalized = strtoupper(str_replace([' ', '_'], '', $programCode));
+
+        return match (true) {
+            str_contains($normalized, 'ELEM') || $normalized === 'BEED' => 'ELEM',
+            str_contains($normalized, 'SOCSCI') => 'SOCSCI',
+            str_contains($normalized, 'FIL') => 'FIL',
+            str_contains($normalized, 'ENG') => 'ENG',
+            str_contains($normalized, 'VAL') => 'VAL',
+            str_contains($normalized, 'TCP') => 'TCP',
+            default => 'EDUC',
+        };
     }
 
     private static function cbaePrefix(string $programCode): string

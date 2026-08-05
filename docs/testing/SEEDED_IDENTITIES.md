@@ -93,6 +93,22 @@ every one is free to submit a real, fresh enrollment through the UI/API.
 
 All eight use the shared password `password`.
 
+### Two curriculum-versioning demo students
+
+Separate from the eight above, and unrelated to the grade-history roster:
+two logins on the REAL `BSIT` program's curriculum versions, demonstrating
+that a student's entry year decides which curriculum version they follow
+(`App\Domain\Curriculum\CurriculumVersion::resolveForEntryYear()`). Neither
+carries grade history or a block enrollment — they exist only to make
+curriculum-version resolution visible end to end.
+
+| Email | Entry year | Curriculum version | Year level |
+|---|---|---|---|
+| `student.oldcurriculum.seed@grc.test` | 2023 | 2018-2023 (archived — last batch) | 4th |
+| `student.newcurriculum.seed@grc.test` | 2024 | 2024-2029 (active) | 3rd |
+
+Both use the shared password `password`.
+
 A year-Y student has `(Y-1)*2 + 1` completed curriculum ordinals
 (`SemesterSlot::ordinal()`), always right-aligned to the most recent closed
 term — a year-4 student's 7 completed ordinals use all 7 non-ongoing terms
@@ -129,6 +145,37 @@ rank-1 `FacultySubjectPreference` for their own subject — real Faculty Input
 rows, not just a `professor_id` pointer, so logging in as any of them shows a
 genuine Teaching Schedule, Class Roster, and Grade Submission workspace.
 
+## 4 sample faculty identities (one per college)
+
+**Source:** `backend/database/seeders/ProgramChairScheduleSampleSeeder.php`.
+Separate from both the 10 connected professors above and the CCS catalog
+faculty below: one Faculty account per college, created so each college's
+Program Chair workspace has a faculty member to schedule against. These are
+the accounts that back the mixed Dean/Executive approval fixtures.
+
+| College | Name | Email |
+|---|---|---|
+| CCS | Sample Faculty — CCS | `faculty.sample.ccs@grc.test` |
+| COE | Sample Faculty — COE | `faculty.sample.coe@grc.test` |
+| COA | Sample Faculty — COA | `faculty.sample.coa@grc.test` |
+| CBAE | Sample Faculty — CBAE | `faculty.sample.cbae@grc.test` |
+
+All four use the shared password `password` and role `faculty`.
+
+### The full faculty headcount, reconciled
+
+A clean seed produces **221** `faculty` rows, which is the sum of four
+separate seeders rather than one roster — worth knowing before assuming a
+count is wrong:
+
+| Source | Count |
+|---|---|
+| `CatalogFacultySeeder` (real CCS/COE/COA/CBAE CSV catalog) | 206 |
+| `DemoEnrollmentSeeder` (the 10 connected `prof.*` professors) | 10 |
+| `ProgramChairScheduleSampleSeeder` (the 4 `faculty.sample.*` above) | 4 |
+| `RoleUserSeeder` (`faculty.seed@grc.test`) | 1 |
+| **Total** | **221** |
+
 ### Why not the whole 211-professor catalog
 
 `CatalogFacultySeeder` seeds 206 real-named faculty from the CCS CSV catalog,
@@ -139,17 +186,17 @@ project actually exercises end to end for teaching-side workflows.
 
 ### Why a dedicated curriculum (`BSIT-DEMO`)
 
-`CatalogCurriculumPlacementSeeder` dumps the real ~103-subject CCS catalog
-onto **every** active curriculum whose program has a college set — that
-includes the older synthetic "BSCS Curriculum 2026" and the real "BSIT 2026
-Curriculum". An earlier version of this roster lived on a college-bearing
-program and every student came back Irregular: the importer had silently
-added dozens of ungraded "required" subjects on top of it. The fix is
-`BSIT-DEMO`, a deliberately collegeless program (`college = null`), which
-the importer skips entirely — its curriculum stays exactly the 22
-placements `DemoEnrollmentSeeder` seeds grades for. Renamed from `BSCS-DEMO`
-at the product owner's request — the demo roster represents BSIT students,
-not BSCS.
+`GrcCurriculumSeeder` places the real GRC catalog onto **every** one of the
+12 real programs (see below), each with 3 curriculum versions. An earlier
+version of this roster lived on a college-bearing program and every student
+came back Irregular: the importer had silently added dozens of ungraded
+"required" subjects on top of it. The fix is `BSIT-DEMO`, a deliberately
+collegeless program (`college = null`), which `GrcCurriculumSeeder` skips
+entirely — its curriculum (seeded separately by
+`DemoGradeHistoryCurriculumSeeder`) stays exactly the 22 placements
+`DemoEnrollmentSeeder` seeds grades for. Renamed from `BSCS-DEMO` at the
+product owner's request — the demo roster represents BSIT students, not
+BSCS.
 
 ## Running the seeder
 
@@ -188,21 +235,47 @@ assert that they:
 Laravel's own `db:seed` production confirmation prompt provides a second,
 independent layer of protection at the command level.
 
-## Seeded programs and academic terms
+## Seeded programs, curricula, and academic terms
 
-**Source:** `backend/database/seeders/ProgramSeeder.php` and
-`AcademicTermSeeder.php`. Same `local`/`testing`-only guarantee as above, and
-covered the same way by
-`backend/tests/Feature/Database/ReferenceDataSeederTest.php`. This is a small
-**synthetic** catalog for exercising authorization and the reference-data
-endpoints — not the real GRC program catalog or term calendar.
+**Source:** `backend/database/seeders/ProgramSeeder.php`,
+`GrcSubjectCatalogSeeder.php`, `GrcCurriculumSeeder.php`,
+`GrcPrerequisiteSeeder.php`, and `AcademicTermSeeder.php`. Same
+`local`/`testing`-only guarantee as above.
+
+`ProgramSeeder` seeds the **real** 12-program GRC catalog — the only
+programs the supplied 2024-2029 curriculum schedules cover, across the four
+currently supported colleges — plus two collegeless test/demo fixtures.
+Covered by `backend/tests/Feature/Database/ReferenceDataSeederTest.php`,
+`GrcSubjectCatalogSeederTest.php`, `GrcCurriculumSeederTest.php`, and
+`GrcPrerequisiteSeederTest.php`.
 
 | Program code | Name | Status | College |
 |---|---|---|---|
 | `BSIT` | BS Information Technology | `active` | CCS |
-| `BSCS` | BS Computer Science | `active` | CCS |
+| `BEED` | Bachelor of Elementary Education | `active` | COE |
+| `BSED-FIL` | BSEd major in Filipino | `active` | COE |
+| `BSED-ENG` | BSEd major in English | `active` | COE |
+| `BSED-SOCSCI` | BSEd major in Social Studies | `active` | COE |
+| `BSED-VAL` | BSEd major in Values Education | `active` | COE |
+| `TCP` | Teacher Certificate Program | `active` | COE |
+| `BSBA-FM` | BSBA major in Financial Management | `active` | CBAE |
+| `BSENTREP` | BS Entrepreneurship | `active` | CBAE |
+| `BSBA-MM` | BSBA major in Marketing Management | `active` | CBAE |
+| `BSBA-HRM` | BSBA major in Human Resource Management | `active` | CBAE |
+| `BSA` | BS Accountancy | `active` | COA |
 | `BSCRIM` | BS Criminology | `inactive` | — |
 | `BSIT-DEMO` | BS Information Technology (Grade History Demo) | `active` | — (deliberate, see below) |
+
+Each of the 12 real programs gets **3 curriculum versions** (36 total): the
+active `2024-2029` (seeded exactly as extracted from GRC's real block-section
+schedules — see `backend/database/seeders/data/extract-curriculum-placements.py`),
+and two archived versions, `2018-2023` and `2012-2017`, copying that map with
+a small illustrative per-program diff (`GrcCurriculumSeeder::ARCHIVED_VARIATIONS`
+— **not real historical GRC data**, since none was supplied; it exists only
+to prove the versioning mechanism works). `App\Domain\Curriculum\
+CurriculumVersion::resolveForEntryYear()` picks the correct version for a
+student's entry year — see the two demo students under "Additional student
+scenarios" above for it working end to end.
 
 | School year | Semester | Status |
 |---|---|---|

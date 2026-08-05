@@ -8,7 +8,7 @@ use App\Domain\Organization\ProgramStatus;
 use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
-use Database\Seeders\CcsSubjectSeeder;
+use Database\Seeders\GrcSubjectCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -19,7 +19,7 @@ use Tests\TestCase;
  * the concrete "set up the prerequisites of the subjects" capability
  * requested for Phase 6.
  */
-final class CcsSubjectSeederCurriculumIntegrationTest extends TestCase
+final class GrcSubjectCatalogSeederCurriculumIntegrationTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -27,7 +27,7 @@ final class CcsSubjectSeederCurriculumIntegrationTest extends TestCase
 
     public function test_a_program_chair_can_build_a_curriculum_from_the_real_ccs_catalog(): void
     {
-        $this->seed(CcsSubjectSeeder::class);
+        $this->seed(GrcSubjectCatalogSeeder::class);
 
         $program = Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active]);
 

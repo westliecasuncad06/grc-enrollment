@@ -19,10 +19,9 @@ final class CompletionOnlySubjectRuleTest extends TestCase
     }
 
     /**
-     * Every spelling variant actually seeded by CcsSubjectSeeder /
-     * AllOrganizationsSubjectsPrerequisitesSeeder for the 8 Leadership
-     * subjects — the exact real-data inconsistency this rule exists to
-     * absorb.
+     * Every spelling variant actually seeded by GrcSubjectCatalogSeeder for
+     * the 8 Leadership subjects — the exact real-data inconsistency this
+     * rule exists to absorb.
      */
     public function test_matches_every_observed_lead_code_spelling(): void
     {

@@ -60,11 +60,11 @@ test("journey 16 — Dean reads the enrollment dashboard and stuck-students repo
 
   const stuckTable = page.getByRole("table", { name: "Stuck students" })
   const studentCells = stuckTable.getByRole("cell", {
-    name: /^STU-2026-\d{4}$/,
+    name: /^\d{4}-\d{2}-\d{5}$/,
   })
   await expect(studentCells.first()).toBeVisible()
   for (const cell of await studentCells.all()) {
-    await expect(cell).toHaveText(/^STU-2026-\d{4}$/)
+    await expect(cell).toHaveText(/^\d{4}-\d{2}-\d{5}$/)
   }
 })
 

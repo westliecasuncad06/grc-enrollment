@@ -4,27 +4,129 @@ Covers the existing XAMPP MariaDB 10.4.32 instance used for local development
 per ADR 0007 — **not** an isolated install. If `C:\xampp\mysql\bin\mysqld.exe`
 is not already running, start it from the XAMPP Control Panel first.
 
-## Known instability — read before touching privileges
+## Known instability — history and resolution
 
-This instance has crashed twice on this workstation, confirmed via Windows
-Application Event Log (`Get-WinEvent -FilterHashtable @{LogName='Application';
+> **Resolved 2026-08-05 by a datadir rebuild.** The rules below are kept as
+> history because the *cause* was misdiagnosed for weeks and the wrong
+> workaround was written into this runbook. See "Instance rebuild" for what
+> actually fixed it.
+
+This instance crashed repeatedly, confirmed via Windows Application Event Log
+(`Get-WinEvent -FilterHashtable @{LogName='Application';
 ProviderName='Application Error'}`, filtered for `mysqld`):
 
 - once independently, unrelated to any development session;
-- once triggered by a schema-wildcard `GRANT ... ON dbname.* TO ...`
-  statement, reproducibly, twice in a row, even immediately after a clean
-  restart and a clean `CHECK TABLE mysql.db`.
+- reproducibly on schema-wildcard `GRANT ... ON dbname.* TO ...`, twice in a
+  row, even immediately after a clean restart and a clean `CHECK TABLE
+  mysql.db`.
 
-**Use only table-level grants** (`GRANT ... ON dbname.specific_table TO
-...`), never `GRANT ... ON dbname.* TO ...`, until this is resolved. Table-
-level grants routed through `mysql.tables_priv` have been exercised 20+ times
-without incident. Include `CREATE` in a grant to target a table that does not
-exist yet — MySQL/MariaDB permits this for `CREATE` specifically; any other
-privilege on a nonexistent table fails with `ERROR 1146`.
+**The old workaround was: never use schema-wildcard grants, only table-level
+grants.** The crash was attributed to a corrupt
+`C:\xampp\mysql\bin\VCRUNTIME140.dll`, since the faults landed at a fixed
+offset inside that DLL.
+
+**That diagnosis was wrong.** The real cause was **corruption in the Aria
+system tables that hold privileges** (`mysql.db`, `mysql.columns_priv`, …).
+A schema-wildcard `GRANT` writes `mysql.db`; a table-level `GRANT` writes
+`mysql.tables_priv` — which happened to be healthy. That is the entire
+reason table-level grants "worked" and wildcard grants "crashed". The DLL
+was never at fault, and was never replaced.
+
+After the 2026-08-05 rebuild onto a fresh datadir, a schema-wildcard
+`GRANT ... ON db.* TO ...` was run as an explicit canary and **succeeded with
+the server surviving**. Schema-wildcard grants are safe again.
+
+Two rules from that era still stand on their own merits:
+
+- **Do not append `FLUSH PRIVILEGES` to a `GRANT`.** `GRANT` applies
+  immediately in MariaDB; the flush adds a failure surface for no benefit
+  (it once returned `ERROR 1030 ... Aria` after the grants had already
+  applied). A flush is only required when hand-editing grant tables.
+- Include `CREATE` in a grant targeting a table that does not exist yet —
+  MySQL/MariaDB permits this for `CREATE` specifically; any other privilege
+  on a nonexistent table fails with `ERROR 1146`.
 
 If MariaDB stops responding mid-command ("Lost connection to MySQL server
 during query"), check `netstat -ano | findstr :3306` and the Windows Event Log
-before assuming it was just a slow query.
+before assuming it was just a slow query. **A live process listening on 3306
+is not proof the server is usable** — after the 2026-08-05 crash loop it
+stayed listening while refusing every connection at the handshake. Always
+confirm with a real test query.
+
+## Server will not start — InnoDB redo-log corruption
+
+**Distinct from the Aria failure below, and more dangerous:** this one *does*
+threaten `grc_enrollment` data, because that database is InnoDB. Signature in
+`mysql_error.log`, on every startup attempt:
+
+```
+[ERROR] InnoDB: Missing MLOG_CHECKPOINT at <lsn> between the checkpoint <lsn> and the end <lsn>
+[ERROR] InnoDB: Plugin initialization aborted with error Generic error
+[ERROR] Plugin 'InnoDB' registration as a STORAGE ENGINE failed.
+[ERROR] Unknown/unsupported storage engine: InnoDB
+[ERROR] Aborting
+```
+
+Seen 2026-08-05 after `mysqld` crashed three times in one afternoon. What to
+know before touching anything:
+
+- **`innodb_force_recovery=1` is not enough** for this signature; it still
+  aborts. Level `6` (skips redo-log apply entirely) does start the server.
+- **Level 6 is read-only.** Any write fails with `ERROR 1036: Table '<x>' is
+  read only`, so you cannot repair, `DROP`, or rebuild in this mode — it is
+  strictly a salvage window.
+- Pass it on the command line rather than editing `my.ini`, so it cannot be
+  left enabled by accident:
+  ```powershell
+  C:\xampp\mysql\bin\mysqld.exe --defaults-file=C:\xampp\mysql\bin\my.ini `
+    --innodb-force-recovery=6 --skip-grant-tables --standalone
+  ```
+- **Deleting `ib_logfile0`/`ib_logfile1` to force a fresh log makes things
+  worse, not better.** The regenerated log starts at a lower LSN than the
+  data pages, and every page then reports `log sequence number ... is in the
+  future!`. At that point the instance is unrecoverable in place — plan on a
+  rebuild rather than trying to salvage the datadir.
+
+### `SHOW COLUMNS` crashing the server (and why `mysqldump` fails)
+
+If plain `SELECT` works but `SHOW COLUMNS` / `SHOW FIELDS` / `DESCRIBE` kills
+the server outright (full core dump to `data\mysqld.dmp`), the cause is
+corrupt **`mysql.columns_priv`** — those statements consult column-level
+privileges, so a corrupt Aria privilege table takes the server down.
+`mysqldump` issues `SHOW FIELDS` per table, so it dies on the first table and
+looks like the data is unreadable. It usually isn't.
+
+Two ways out, cheapest first:
+
+1. **`--skip-grant-tables`** — no privilege lookup happens at all, so the
+   crash path is bypassed entirely. This is what made a full `mysqldump` of
+   every database possible during the 2026-08-05 recovery.
+2. Repair the Aria system tables (procedure in the next section), which fixes
+   the underlying corruption.
+
+### Instance rebuild (last resort, but the reliable one)
+
+Once pages report "in the future", rebuild rather than repair:
+
+1. **Salvage first — do not skip this.** Start with
+   `--innodb-force-recovery=6 --skip-grant-tables`, then `mysqldump` every
+   database including the unrelated ones sharing this instance. Verify each
+   dump ends with `-- Dump completed`; a truncated dump means a crash
+   mid-dump. Record row counts now, to compare after restore.
+2. Stop cleanly: `mysqladmin -u root shutdown`.
+3. **Rename, never delete:** `data` → `data_broken_<date>`.
+4. Recreate `data` from XAMPP's shipped pristine template at
+   `C:\xampp\mysql\backup\` (simpler and more reliable on Windows than
+   `mysql_install_db.exe`).
+5. Start normally and confirm the log has **no** `ERROR` lines at all — not
+   just that the server came up.
+6. Recreate principals and grants (see below), restore every dump, and verify
+   row counts against step 1.
+
+`grc_enrollment` is fully reproducible from `migrations + seeders`, so a dump
+restore and a `migrate --seed` are both valid; the dump is exact, the seed is
+clean. Restoring the dump also preserves the `migrations` table, so
+`migrate:status` stays consistent.
 
 ## Server will not start — Aria checkpoint/recovery failure
 
@@ -125,12 +227,26 @@ CREATE USER 'grc_test'@'127.0.0.1'     IDENTIFIED BY '$testPw';
 "@ | & 'C:\xampp\mysql\bin\mysql.exe' -u root -h 127.0.0.1 -P 3306
 ```
 
-Then grant `grc_migrator` and `grc_test` full DDL+DML on every planned table
-name (`migrations`, `users`, `personal_access_tokens`, `programs`,
-`academic_terms`) in their respective databases — see
-`docs/superpowers/plans/2026-07-27-mariadb-identity-sanctum-auth.md` Task 2
-for the exact statements. **Do not** grant `grc_app` anything yet; its
-DML-only grants can only be issued after the tables exist (next section).
+Then grant, **schema-level** (safe again as of the 2026-08-05 rebuild — see
+"Known instability"). This is the current, preferred form:
+
+```sql
+-- grc_app stays DML-only: no CREATE/ALTER/DROP, per ADR 0007.
+GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.*      TO 'grc_app'@'127.0.0.1';
+GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment_test.* TO 'grc_app'@'127.0.0.1';
+
+-- DDL principals.
+GRANT ALL PRIVILEGES ON grc_enrollment.*      TO 'grc_migrator'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON grc_enrollment_test.* TO 'grc_test'@'127.0.0.1';
+```
+
+No trailing `FLUSH PRIVILEGES` — see "Known instability" for why.
+
+Verify least privilege actually holds:
+
+```powershell
+php artisan tinker --execute="try { DB::statement('CREATE TABLE ddl_canary (id INT)'); echo 'FAIL: DDL allowed'; } catch (\Throwable \$e) { echo 'OK: DDL denied'; }"
+```
 
 ## Running migrations
 
@@ -142,41 +258,27 @@ cd backend
 php artisan migrate --database=mariadb_migrator --force
 ```
 
-After the first migration, grant `grc_app` its deferred DML privileges on the
-four domain tables (not `migrations`):
-
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.users TO 'grc_app'@'127.0.0.1';
-GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.personal_access_tokens TO 'grc_app'@'127.0.0.1';
-GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.programs TO 'grc_app'@'127.0.0.1';
-GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.academic_terms TO 'grc_app'@'127.0.0.1';
-```
+**No follow-up grant is needed for new tables.** The schema-level grant in the
+previous section (`ON grc_enrollment.*`) covers every table the migration
+creates, including future ones.
 
 Verify: `php artisan tinker --execute="echo DB::table('users')->count();"`
 should succeed; a `DB::statement('CREATE TABLE ...')` through the same
 connection should fail (least privilege holds).
 
-### Gotcha: every new table needs its own grant, or `grc_app` gets a silent 500
+### Historical: the "every new table needs its own grant" trap
 
-Each migration that adds a table requires its own follow-up `GRANT SELECT,
-INSERT, UPDATE, DELETE ON grc_enrollment.<table> TO 'grc_app'@'127.0.0.1';` —
-there is no wildcard grant (see the crash history above), so this is easy to
-forget on a table added late in a slice. The failure mode is a plain HTTP 500
-from the API (`SQLSTATE[42000]... SELECT command denied to user 'grc_app'`),
-which looks like an application bug until you check `SHOW GRANTS FOR
-'grc_app'@'127.0.0.1'`. `enrollment_change_requests` (added in the Phase 7
-add/drop slice) missed this step and stayed 500 until caught during the Phase
-10 live walkthrough; its grant was added the same way as the four above.
+Under the old table-level-grant workaround, each migration that added a table
+needed its own follow-up `GRANT ... ON grc_enrollment.<table>`, which was easy
+to forget. The failure mode was a plain HTTP 500 from the API
+(`SQLSTATE[42000]... SELECT command denied to user 'grc_app'`) that looked like
+an application bug until you checked `SHOW GRANTS`. It bit at least three
+times — `enrollment_change_requests`, `assessments`/`assessment_items`, and
+`academic_term_year_level_windows`.
 
-The assessment/fees slice adds two more tables — grant both immediately
-after running their migrations, before hitting `GET /api/v1/enrollments`
-(which eager-loads `assessment.items` and 500s exactly like
-`enrollment_change_requests` did if either grant is missing):
-
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.assessments TO 'grc_app'@'127.0.0.1';
-GRANT SELECT, INSERT, UPDATE, DELETE ON grc_enrollment.assessment_items TO 'grc_app'@'127.0.0.1';
-```
+**The schema-level grant eliminates this class of bug entirely.** If you see
+that 500 today, it means the schema-level grant is missing, not that a
+per-table grant was forgotten.
 
 ## Rolling back
 

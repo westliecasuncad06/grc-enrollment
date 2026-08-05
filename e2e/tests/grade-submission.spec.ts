@@ -34,23 +34,23 @@ test("journey 9 — Faculty records and submits a grade for an enrolled student"
   const table = page.getByRole("table", { name: "Roster grades" })
   await expect(table).toBeVisible()
 
-  const gradeInput = table.getByLabel("Final grade for STU-2026-0001")
+  const gradeInput = table.getByLabel("Final grade for 2023-06-00001")
   await gradeInput.fill("1.75")
   await table
-    .getByRole("row", { name: /STU-2026-0001/ })
+    .getByRole("row", { name: /2023-06-00001/ })
     .getByRole("button", { name: "Record grade" })
     .click()
 
   await expect(
-    table.getByRole("row", { name: /STU-2026-0001/ }).getByText("Draft"),
+    table.getByRole("row", { name: /2023-06-00001/ }).getByText("Draft"),
   ).toBeVisible()
 
   await table
-    .getByRole("row", { name: /STU-2026-0001/ })
+    .getByRole("row", { name: /2023-06-00001/ })
     .getByRole("button", { name: "Submit" })
     .click()
 
   await expect(
-    table.getByRole("row", { name: /STU-2026-0001/ }).getByText("Submitted"),
+    table.getByRole("row", { name: /2023-06-00001/ }).getByText("Submitted"),
   ).toBeVisible()
 })

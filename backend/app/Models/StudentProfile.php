@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $student_number
  * @property int $program_id
  * @property int $curriculum_id
+ * @property ?int $entry_year
  * @property int $year_level
  * @property ?string $enrollment_category
  * @property ?CarbonImmutable $enrollment_category_derived_at
@@ -39,6 +40,7 @@ final class StudentProfile extends Model
         'student_number',
         'program_id',
         'curriculum_id',
+        'entry_year',
         'year_level',
         'enrollment_category',
         'enrollment_category_derived_at',
@@ -53,6 +55,7 @@ final class StudentProfile extends Model
     protected function casts(): array
     {
         return [
+            'entry_year' => 'integer',
             'year_level' => 'integer',
             'enrollment_category_derived_at' => 'immutable_datetime',
             'admission_status' => AdmissionStatus::class,

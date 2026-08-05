@@ -24,15 +24,17 @@ final class DatabaseSeeder extends Seeder
             ProgramSeeder::class,
             AcademicTermSeeder::class,
             SubjectSeeder::class,
-            // Additive: the real GRC CCS catalog, alongside (not replacing)
-            // the synthetic subjects above. See CcsSubjectSeeder's docblock.
-            CcsSubjectSeeder::class,
-            // Additive: the real four-college (CCS/COE/COA/CBAE) catalog,
-            // via placeholder per-college Program/Curriculum scaffolds. See
-            // AllOrganizationsSubjectsPrerequisitesSeeder's docblock.
-            AllOrganizationsSubjectsPrerequisitesSeeder::class,
-            CurriculumSeeder::class,
-            CatalogCurriculumPlacementSeeder::class,
+            // The real GRC catalog: 409 subjects across the 12 real
+            // programs (see ProgramSeeder), 3 curriculum versions each,
+            // and the 74 confirmed prerequisites. See each seeder's
+            // docblock.
+            GrcSubjectCatalogSeeder::class,
+            GrcCurriculumSeeder::class,
+            GrcPrerequisiteSeeder::class,
+            // Additive: the isolated BSIT-DEMO grade-history fixture
+            // DemoEnrollmentSeeder needs, untouched by the real catalog
+            // above. See DemoGradeHistoryCurriculumSeeder's docblock.
+            DemoGradeHistoryCurriculumSeeder::class,
             RoomCatalogSeeder::class,
             CatalogFacultySeeder::class,
             SectionSeeder::class,

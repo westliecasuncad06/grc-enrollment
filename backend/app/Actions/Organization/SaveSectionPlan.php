@@ -147,7 +147,7 @@ final class SaveSectionPlan
                 ->get()
                 ->map(fn ($placement) => (object) [
                     'subject_id' => $placement->subject_id,
-                    'max_section_capacity' => $configuredOfferings->get($placement->subject_id)?->max_section_capacity ?? 40,
+                    'max_section_capacity' => $configuredOfferings->get($placement->subject_id)?->max_section_capacity,
                     'year_level' => $placement->year_level ?? 1,
                 ]);
 
@@ -178,7 +178,7 @@ final class SaveSectionPlan
                             (int) $yearLevel,
                             $number,
                         );
-                        $this->upsertGeneratedSection($term, $plan, (int) $offering->subject_id, $code);
+                        $this->upsertGeneratedSection($term, $plan, (int) $offering->subject_id, $code, $offering->max_section_capacity);
                     }
                 }
             }
@@ -203,12 +203,20 @@ final class SaveSectionPlan
      *     per-section figure the Chair typed.
      *   - `status` is set at creation only; a section that has already been
      *     published must not be demoted back to Planned by a later release.
+     *
+     * `$subjectCapacity` is the subject's own `SubjectOffering.
+     * max_section_capacity`, when the Program Chair configured one (e.g. to
+     * allot extra seats to a single subject for irregular students) — it
+     * takes precedence over the year level's `students_per_block` for that
+     * subject only, every other subject in the same year level still
+     * inherits the block figure.
      */
     private function upsertGeneratedSection(
         AcademicTerm $term,
         AcademicTermSectionPlan $plan,
         int $subjectId,
         string $code,
+        ?int $subjectCapacity,
     ): void {
         $identity = [
             'academic_term_id' => $term->id,
@@ -217,7 +225,7 @@ final class SaveSectionPlan
         ];
 
         $section = Section::query()->where($identity)->first();
-        $planCapacity = max(1, (int) $plan->students_per_block);
+        $planCapacity = max(1, (int) ($subjectCapacity ?? $plan->students_per_block));
 
         if ($section === null) {
             Section::create($identity + [

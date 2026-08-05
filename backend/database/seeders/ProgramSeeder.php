@@ -10,10 +10,16 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Seeds a small synthetic program catalog for local development and
- * automated tests. This is NOT the real GRC program catalog — the
- * institutional catalog and status vocabulary remain unconfirmed under
- * PRD §17 (see App\Domain\Organization\ProgramStatus).
+ * Seeds GRC's real 12-program catalog (the only programs the supplied
+ * 2024-2029 curriculum schedules cover, across the four currently supported
+ * colleges — see GrcCurriculumSeeder), plus two collegeless fixtures used
+ * only for local development and automated tests: `BSCRIM` (proves
+ * learner-scoped vs. planning roles see different program lists) and
+ * `BSIT-DEMO` (DemoEnrollmentSeeder's isolated grade-history roster).
+ *
+ * `BEED`/`BSED-*`/`TCP` program codes must match
+ * `SectionBlockCode::coePrefix()`'s match arms exactly — that is how a
+ * generated block section knows which COE major it belongs to.
  */
 final class ProgramSeeder extends Seeder
 {
@@ -22,17 +28,27 @@ final class ProgramSeeder extends Seeder
      */
     private const PROGRAMS = [
         ['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs],
-        ['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs],
+        ['code' => 'BEED', 'name' => 'Bachelor of Elementary Education', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe],
+        ['code' => 'BSED-FIL', 'name' => 'Bachelor of Secondary Education major in Filipino', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe],
+        ['code' => 'BSED-ENG', 'name' => 'Bachelor of Secondary Education major in English', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe],
+        ['code' => 'BSED-SOCSCI', 'name' => 'Bachelor of Secondary Education major in Social Studies', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe],
+        ['code' => 'BSED-VAL', 'name' => 'Bachelor of Secondary Education major in Values Education', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe],
+        ['code' => 'TCP', 'name' => 'Teacher Certificate Program', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe],
+        ['code' => 'BSBA-FM', 'name' => 'BS Business Administration major in Financial Management', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Cbae],
+        ['code' => 'BSENTREP', 'name' => 'BS Entrepreneurship', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Cbae],
+        ['code' => 'BSBA-MM', 'name' => 'BS Business Administration major in Marketing Management', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Cbae],
+        ['code' => 'BSBA-HRM', 'name' => 'BS Business Administration major in Human Resource Management', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Cbae],
+        ['code' => 'BSA', 'name' => 'BS Accountancy', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coa],
         // Deliberately inactive: proves learner-scoped and planning roles
         // receive different GET /api/v1/programs results. Left collegeless —
         // Criminology is outside the four currently supported colleges.
         ['code' => 'BSCRIM', 'name' => 'BS Criminology', 'status' => ProgramStatus::Inactive, 'college' => null],
         // Deliberately collegeless: DemoEnrollmentSeeder's grade-history
-        // roster needs a curriculum CatalogCurriculumPlacementSeeder will
-        // never touch — that seeder targets every active curriculum whose
-        // program has a college, which would otherwise dump the entire real
-        // CCS catalog (~100 subjects) onto whatever curriculum these
-        // students are placed on. See CurriculumSeeder's matching entry.
+        // roster needs a curriculum GrcCurriculumSeeder will never touch —
+        // that seeder targets every one of the 12 real programs above, which
+        // would otherwise dump the entire real catalog onto whatever
+        // curriculum these students are placed on. See
+        // DemoGradeHistoryCurriculumSeeder's matching entry.
         ['code' => 'BSIT-DEMO', 'name' => 'BS Information Technology (Grade History Demo)', 'status' => ProgramStatus::Active, 'college' => null],
     ];
 
