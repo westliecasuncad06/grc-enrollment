@@ -12,10 +12,11 @@ use RuntimeException;
 /**
  * Seeds GRC's real 12-program catalog (the only programs the supplied
  * 2024-2029 curriculum schedules cover, across the four currently supported
- * colleges — see GrcCurriculumSeeder), plus two collegeless fixtures used
+ * colleges — see GrcCurriculumSeeder), plus one collegeless fixture used
  * only for local development and automated tests: `BSCRIM` (proves
- * learner-scoped vs. planning roles see different program lists) and
- * `BSIT-DEMO` (DemoEnrollmentSeeder's isolated grade-history roster).
+ * learner-scoped vs. planning roles see different program lists).
+ * `DemoEnrollmentSeeder`'s grade-history roster is placed on the real
+ * `BSIT` program's own active curriculum, not a dedicated fixture.
  *
  * `BEED`/`BSED-*`/`TCP` program codes must match
  * `SectionBlockCode::coePrefix()`'s match arms exactly — that is how a
@@ -43,13 +44,6 @@ final class ProgramSeeder extends Seeder
         // receive different GET /api/v1/programs results. Left collegeless —
         // Criminology is outside the four currently supported colleges.
         ['code' => 'BSCRIM', 'name' => 'BS Criminology', 'status' => ProgramStatus::Inactive, 'college' => null],
-        // Deliberately collegeless: DemoEnrollmentSeeder's grade-history
-        // roster needs a curriculum GrcCurriculumSeeder will never touch —
-        // that seeder targets every one of the 12 real programs above, which
-        // would otherwise dump the entire real catalog onto whatever
-        // curriculum these students are placed on. See
-        // DemoGradeHistoryCurriculumSeeder's matching entry.
-        ['code' => 'BSIT-DEMO', 'name' => 'BS Information Technology (Grade History Demo)', 'status' => ProgramStatus::Active, 'college' => null],
     ];
 
     public function run(): void

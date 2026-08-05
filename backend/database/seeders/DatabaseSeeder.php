@@ -33,10 +33,6 @@ final class DatabaseSeeder extends Seeder
             GrcCurriculumSeeder::class,
             GrcPrerequisiteSeeder::class,
             GrcCurriculumScheduleReferenceSeeder::class,
-            // Additive: the isolated BSIT-DEMO grade-history fixture
-            // DemoEnrollmentSeeder needs, untouched by the real catalog
-            // above. See DemoGradeHistoryCurriculumSeeder's docblock.
-            DemoGradeHistoryCurriculumSeeder::class,
             RoomCatalogSeeder::class,
             CatalogFacultySeeder::class,
             SectionSeeder::class,

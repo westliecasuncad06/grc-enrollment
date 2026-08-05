@@ -23,13 +23,12 @@ final class ReferenceDataSeederTest extends TestCase
 
         // 12 real GRC programs (BSIT, BEED, BSED-FIL, BSED-ENG,
         // BSED-SOCSCI, BSED-VAL, TCP, BSBA-FM, BSENTREP, BSBA-MM,
-        // BSBA-HRM, BSA) plus the two collegeless test/demo fixtures below.
-        $this->assertDatabaseCount('programs', 14);
+        // BSBA-HRM, BSA) plus the one collegeless test fixture (BSCRIM).
+        $this->assertDatabaseCount('programs', 13);
         $this->assertSame(
             ProgramStatus::Inactive,
             Program::where('code', 'BSCRIM')->sole()->status,
         );
-        $this->assertNull(Program::where('code', 'BSIT-DEMO')->sole()->college);
     }
 
     /**
@@ -76,7 +75,7 @@ final class ReferenceDataSeederTest extends TestCase
 
         $this->seed(ProgramSeeder::class);
 
-        $this->assertSame(14, Program::count());
+        $this->assertSame(13, Program::count());
         $this->assertSame($originalIds, Program::orderBy('id')->pluck('id')->all());
     }
 
