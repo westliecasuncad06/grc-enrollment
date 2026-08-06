@@ -35,7 +35,6 @@ import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
 
 const programChairGatedModules = new Set([
-  "subjects-prerequisites",
   "sections-schedules",
   "faculty-assignment",
   "schedule-proposals",

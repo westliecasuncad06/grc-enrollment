@@ -114,7 +114,6 @@ function PortalNavigation({
               locked={
                 enrollmentLinksLocked &&
                 [
-                  "subjects-prerequisites",
                   "sections-schedules",
                   "faculty-assignment",
                   "schedule-proposals",
