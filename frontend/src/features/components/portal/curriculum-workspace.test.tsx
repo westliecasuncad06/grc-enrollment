@@ -291,7 +291,9 @@ describe("CurriculumWorkspace", () => {
         ).toBe(true),
       autosaveTimeout,
     )
-    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: "Save curriculum" }),
     ).not.toBeInTheDocument()
@@ -345,9 +347,7 @@ describe("CurriculumWorkspace", () => {
         return Promise.resolve(new Response(JSON.stringify(curriculum)))
       writes += 1
       if (writes > 1)
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: written })),
-        )
+        return Promise.resolve(new Response(JSON.stringify({ data: written })))
       return new Promise<Response>((resolve) => {
         gate.release = () =>
           resolve(new Response(JSON.stringify({ data: written })))
@@ -479,7 +479,9 @@ describe("CurriculumWorkspace", () => {
     await selectOption(user, "Curriculum", "BSCS 2026")
 
     await screen.findByRole("tab", { name: /1st year/i })
-    expect(screen.getByRole("button", { name: "Save Curriculum" })).toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: "Save Curriculum" }),
+    ).toBeDisabled()
   })
 
   it("marks the curriculum active from the final Save Curriculum button", async () => {
@@ -656,9 +658,7 @@ describe("CurriculumWorkspace", () => {
     // The Program select locks once a curriculum has an id, so this is the
     // observable proof that the create response was applied before the next
     // edit — without it the assertion below could race the in-flight POST.
-    await waitFor(() =>
-      expect(screen.getByLabelText("Program")).toBeDisabled(),
-    )
+    await waitFor(() => expect(screen.getByLabelText("Program")).toBeDisabled())
     await selectOption(user, "Semester for CS101", "2nd")
     await waitFor(
       () =>
@@ -710,7 +710,9 @@ describe("CurriculumWorkspace", () => {
   it("defaults to the Manage tab and offers a read-only View tab of the program's active curriculum", async () => {
     const user = userEvent.setup()
     const activeCurricula = {
-      data: [{ ...curriculum.data[0], status: "active", status_label: "Active" }],
+      data: [
+        { ...curriculum.data[0], status: "active", status_label: "Active" },
+      ],
     }
     fetchMock.mockImplementation((input) => {
       if (url(input).endsWith("/programs"))
