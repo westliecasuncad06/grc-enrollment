@@ -32,40 +32,36 @@ final class ReferenceDataSeederTest extends TestCase
     }
 
     /**
-     * Six archived historical semesters (2023-2024 through 2025-2026), one
-     * closed term (2026-2027 1st — so DemoEnrollmentSeeder has somewhere to
-     * attach its most recent locked grades), and exactly one SemesterOngoing
-     * current term (2026-2027 2nd) — the one actionable, immediately
-     * enrollable term a clean seed leaves behind.
+     * Six archived historical semesters (2023-2024 through 2025-2026) and one
+     * closed current term (2026-2027 1st) tracked by
+     * `academic_term_current_slots` — see `AcademicTermSeederTest` for the
+     * dedicated, exhaustive coverage of this seeder's shape. This test just
+     * confirms `ReferenceDataSeederTest`'s own combined-seed expectations
+     * still line up with it.
      */
-    public function test_academic_term_seeder_creates_the_expected_eight_terms(): void
+    public function test_academic_term_seeder_creates_the_expected_seven_terms(): void
     {
         $this->seed(AcademicTermSeeder::class);
 
-        $this->assertDatabaseCount('academic_terms', 8);
+        $this->assertDatabaseCount('academic_terms', 7);
         $this->assertSame(6, AcademicTerm::where('status', AcademicTermStatus::Archived)->count());
         $this->assertSame(1, AcademicTerm::where('status', AcademicTermStatus::SemesterClosed)->count());
-        $this->assertSame(1, AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->count());
+        $this->assertSame(0, AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->count());
         $this->assertSame(
             [
                 '2023-2024|1st', '2023-2024|2nd',
                 '2024-2025|1st', '2024-2025|2nd',
                 '2025-2026|1st', '2025-2026|2nd',
-                '2026-2027|1st', '2026-2027|2nd',
+                '2026-2027|1st',
             ],
             AcademicTerm::query()->orderBy('school_year')->orderBy('semester')->get()
                 ->map(fn (AcademicTerm $term): string => "{$term->school_year}|{$term->semester}")
                 ->all(),
         );
 
-        $ongoing = AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->sole();
-        $this->assertSame(5, $ongoing->enrollmentWindows()->count());
-        $this->assertNotNull($ongoing->enrollment_opens_at);
-        $this->assertNotNull($ongoing->enrollment_closes_at);
-        $this->assertTrue($ongoing->enrollment_opens_at->isPast());
-        $this->assertTrue($ongoing->enrollment_closes_at->isFuture());
+        $current = AcademicTerm::where('status', AcademicTermStatus::SemesterClosed)->sole();
         $slot = DB::table('academic_term_current_slots')->where('id', 1)->first();
-        $this->assertSame($ongoing->id, $slot->academic_term_id);
+        $this->assertSame($current->id, $slot->academic_term_id);
     }
 
     public function test_reseeding_programs_updates_in_place_without_duplicates(): void
@@ -86,7 +82,7 @@ final class ReferenceDataSeederTest extends TestCase
 
         $this->seed(AcademicTermSeeder::class);
 
-        $this->assertSame(8, AcademicTerm::count());
+        $this->assertSame(7, AcademicTerm::count());
         $this->assertSame($originalIds, AcademicTerm::orderBy('id')->pluck('id')->all());
     }
 

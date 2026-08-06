@@ -3,7 +3,9 @@
 namespace Tests\Feature\Database;
 
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicGrade;
+use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
@@ -17,6 +19,7 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoEnrollmentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -27,6 +30,31 @@ final class DemoEnrollmentSeederTest extends TestCase
     use RefreshDatabase;
 
     private const SEED_PASSWORD = 'password';
+
+    /**
+     * `AcademicTermSeeder` no longer leaves a `semester_ongoing` term behind
+     * on a clean seed (see `AcademicTermSeederTest`), so two things inside
+     * `DemoEnrollmentSeeder` that both guard on that term existing now no-op
+     * on a bare `$this->seed(DatabaseSeeder::class)`: `seedRegularBlocks()`
+     * (connects the reference-professor roster to real Faculty
+     * accounts/availability/preferences and generates their block sections)
+     * and `reclassify()` (derives `enrollment_category` off the seeded grade
+     * history and writes the classification `AuditLog`). Tests that need
+     * either output create their own ongoing term here, then re-seed
+     * `DemoEnrollmentSeeder` directly (not the whole `DatabaseSeeder`, which
+     * would re-run `AcademicTermSeeder` and archive this term straight back
+     * out, since it isn't in the seeder's own `TERMS` list).
+     */
+    private function seedOngoingTerm(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+
+        DB::table('academic_term_current_slots')->where('id', 1)->update(['academic_term_id' => $term->id]);
+    }
 
     /**
      * Eight student profiles, all with real locked grade history, but no
@@ -69,6 +97,8 @@ final class DemoEnrollmentSeederTest extends TestCase
         string $category,
     ): void {
         $this->seed(DatabaseSeeder::class);
+        $this->seedOngoingTerm();
+        $this->seed(DemoEnrollmentSeeder::class);
 
         $profile = StudentProfile::query()->where('student_number', $studentNumber)->firstOrFail();
 
@@ -117,6 +147,8 @@ final class DemoEnrollmentSeederTest extends TestCase
     public function test_the_missing_subject_irregular_student_carries_the_expected_classification_reason(): void
     {
         $this->seed(DatabaseSeeder::class);
+        $this->seedOngoingTerm();
+        $this->seed(DemoEnrollmentSeeder::class);
 
         $profile = StudentProfile::query()->where('student_number', '2023-06-00008')->firstOrFail();
         $log = AuditLog::query()
@@ -241,6 +273,8 @@ final class DemoEnrollmentSeederTest extends TestCase
     public function test_every_subject_with_a_reference_professor_has_a_connected_faculty_account_owning_its_blocks(int $yearLevel): void
     {
         $this->seed(DatabaseSeeder::class);
+        $this->seedOngoingTerm();
+        $this->seed(DemoEnrollmentSeeder::class);
 
         $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
         $placements = CurriculumSubject::query()
@@ -273,6 +307,8 @@ final class DemoEnrollmentSeederTest extends TestCase
     public function test_every_connected_professor_has_declared_availability(int $yearLevel): void
     {
         $this->seed(DatabaseSeeder::class);
+        $this->seedOngoingTerm();
+        $this->seed(DemoEnrollmentSeeder::class);
 
         $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
         $placements = CurriculumSubject::query()
@@ -305,9 +341,19 @@ final class DemoEnrollmentSeederTest extends TestCase
         }
     }
 
+    /**
+     * Reseeds `DemoEnrollmentSeeder` directly rather than the whole
+     * `DatabaseSeeder` — see `seedOngoingTerm()` — since re-running
+     * `AcademicTermSeeder` would archive the inline ongoing term straight
+     * back out. `DemoEnrollmentSeeder` itself is the seeder whose
+     * idempotency this test actually exercises.
+     */
     public function test_reseeding_connected_professors_creates_no_duplicates(): void
     {
         $this->seed(DatabaseSeeder::class);
+        $this->seedOngoingTerm();
+        $this->seed(DemoEnrollmentSeeder::class);
+
         $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
         $names = CurriculumSubject::query()
             ->where('curriculum_id', $curriculum->id)
@@ -318,7 +364,7 @@ final class DemoEnrollmentSeederTest extends TestCase
             ->unique();
         $professorCount = User::query()->whereIn('name', $names)->where('role', 'faculty')->count();
 
-        $this->seed(DatabaseSeeder::class);
+        $this->seed(DemoEnrollmentSeeder::class);
 
         $this->assertSame($names->count(), $professorCount);
         $this->assertSame($professorCount, User::query()->whereIn('name', $names)->where('role', 'faculty')->count());

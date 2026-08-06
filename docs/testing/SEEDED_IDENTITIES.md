@@ -125,12 +125,15 @@ owned by the single `faculty.seed@grc.test` account, then later a fixed
 creates one real `faculty` account per distinct `reference_professor_name`
 found across years 1–4's current-term subjects (`BLOCK_SUBJECTS_BY_YEAR`) in
 the real BSIT curriculum's own schedule/faculty reference data — the same
-names that appear in `curriculum-2024-2029-schedule-references.csv`. A clean
-seed currently produces **23** of these (this number is a property of the
-source Excel, not a designed constant, and will drift if that data changes).
-A subject whose representative block has no named professor in the source
-Excel gets no Faculty account at all, and its generated sections keep
-`professor_id` null — no name is ever invented.
+names that appear in `curriculum-2024-2029-schedule-references.csv`. This
+only runs once a `semester_ongoing` term exists, which a bare clean seed no
+longer leaves behind (see "Seeded programs, curricula, and academic terms"
+below) — after the Registrar completes the archive-and-open-next workflow
+(or a test seeds one directly), it produces **23** of these (this number is
+a property of the source Excel, not a designed constant, and will drift if
+that data changes). A subject whose representative block has no named
+professor in the source Excel gets no Faculty account at all, and its
+generated sections keep `professor_id` null — no name is ever invented.
 
 Every email follows `prof.<slug of the name>@grc.test` (e.g. `MR. SALAZAR` →
 `prof.mr-salazar@grc.test`, `COACH JUDE SALONGA` →
@@ -175,7 +178,11 @@ CurriculumSubject::query()
 Separate from both the connected professors above and the CCS catalog
 faculty below: one Faculty account per college, created so each college's
 Program Chair workspace has a faculty member to schedule against. These are
-the accounts that back the mixed Dean/Executive approval fixtures.
+the accounts that back the mixed Dean/Executive approval fixtures. Like the
+connected professors above, this seeder picks the current term with
+`whereNotIn('status', ['archived', 'semester_closed'])` and no-ops if none
+matches — a bare clean seed's only term is `semester_closed`, so it produces
+none of these four until the Registrar opens the next term.
 
 | College | Name | Email |
 |---|---|---|
@@ -188,17 +195,21 @@ All four use the shared password `password` and role `faculty`.
 
 ### The full faculty headcount, reconciled
 
-A clean seed produces **234** `faculty` rows, which is the sum of four
-separate seeders rather than one roster — worth knowing before assuming a
-count is wrong:
+**234** `faculty` rows is the sum of four separate seeders rather than one
+roster — worth knowing before assuming a count is wrong — but only once an
+ongoing term exists. A bare clean seed produces **207**: the `prof.*` and
+`faculty.sample.*` rows both depend on a `semester_ongoing` term (see the two
+sections above), which a clean seed no longer leaves behind. After the
+Registrar opens the next term (or a test/dev script seeds one directly), the
+remaining 27 appear and the total reaches 234:
 
-| Source | Count |
-|---|---|
-| `CatalogFacultySeeder` (real CCS/COE/COA/CBAE CSV catalog) | 206 |
-| `DemoEnrollmentSeeder` (the connected `prof.*` professors above) | 23 |
-| `ProgramChairScheduleSampleSeeder` (the 4 `faculty.sample.*` above) | 4 |
-| `RoleUserSeeder` (`faculty.seed@grc.test`) | 1 |
-| **Total** | **234** |
+| Source | Count on a bare clean seed | Count once a term is ongoing |
+|---|---|---|
+| `CatalogFacultySeeder` (real CCS/COE/COA/CBAE CSV catalog) | 206 | 206 |
+| `DemoEnrollmentSeeder` (the connected `prof.*` professors above) | 0 | 23 |
+| `ProgramChairScheduleSampleSeeder` (the 4 `faculty.sample.*` above) | 0 | 4 |
+| `RoleUserSeeder` (`faculty.seed@grc.test`) | 1 | 1 |
+| **Total** | **207** | **234** |
 
 ### Why not the whole 211-professor catalog
 
@@ -295,14 +306,19 @@ scenarios" above for it working end to end.
 | `2024-2025` | `2nd` | `archived` |
 | `2025-2026` | `1st` | `archived` |
 | `2025-2026` | `2nd` | `archived` |
-| `2026-2027` | `1st` | `semester_closed` — gives `DemoEnrollmentSeeder` a closed term for the most recent locked grades |
-| `2026-2027` | `2nd` | `semester_ongoing` — **the current term.** Every enrollment-audience window (year 1–4, Irregular) is already open (opens a few days in the past, closes about two weeks out), so any seeded student can submit a real fresh enrollment immediately after seeding — no fast-forwarding step required. |
+| `2026-2027` | `1st` | `semester_closed` — **the current term.** Just concluded and genuinely needing the Registrar to archive it before the next school year/semester can be opened. |
 
-**Amendment to ADR 0018/0020:** a clean seed now leaves the current term
-already `semester_ongoing` with published, selectable sections (see
-`SectionSeeder`) — not Draft. This was a deliberate priority change for the
-grading/enrollment-completion slice: the primary ask was "let me test
-enrolling as these students right now," which a Draft term can't satisfy
-without extra manual steps. A Registrar Head can still create a fresh Draft
-term at any time through the ordinary archive-and-create-next flow to test
-the Program Chair schedule-authoring pipeline separately.
+**Further amendment, reverting to the archive-and-open-next starting
+state:** a clean seed's current term is `2026-2027` 1st semester again —
+closed, tracked as current, with no 2nd semester row at all — instead of a
+pre-seeded `2026-2027` 2nd already `semester_ongoing` with published
+sections. This trades away the "test enrolling right now" convenience the
+prior amendment (to ADR 0018/0020) added, in favor of exercising the literal
+Registrar workflow end to end: Archive current semester → name the next
+school year/semester → Draft → Program Chair publishes a schedule →
+Registrar opens enrollment. `SectionSeeder` and
+`DemoEnrollmentSeeder::seedRegularBlocks()` both already guard on a
+`semester_ongoing` term existing and no-op cleanly when one doesn't, so
+neither needed a code change for this reversion — a Registrar Head reaches
+an enrollable term through the ordinary archive-and-create-next flow at any
+time.

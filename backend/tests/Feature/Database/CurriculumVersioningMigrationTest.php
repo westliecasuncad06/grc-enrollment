@@ -37,7 +37,12 @@ final class CurriculumVersioningMigrationTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->artisan('migrate:rollback', ['--step' => 2])->assertExitCode(0);
+        // --step 3, not 2: a later migration
+        // (add_schedule_reference_columns_to_curriculum_subjects) landed
+        // after the two this test actually cares about, so rolling back
+        // only 2 would leave effective_start_year/effective_end_year still
+        // applied and this backfill assertion moot.
+        $this->artisan('migrate:rollback', ['--step' => 3])->assertExitCode(0);
         $this->artisan('migrate')->assertExitCode(0);
 
         $row = DB::table('curricula')->where('id', $curriculumId)->first();
@@ -71,7 +76,8 @@ final class CurriculumVersioningMigrationTest extends TestCase
 
     public function test_migrations_are_fully_reversible(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 2])->assertExitCode(0);
+        // --step 3, not 2 -- see test_backfill_parses_the_existing_effective_school_year_string.
+        $this->artisan('migrate:rollback', ['--step' => 3])->assertExitCode(0);
 
         $this->assertFalse(Schema::hasColumn('curricula', 'effective_start_year'));
         $this->assertFalse(Schema::hasColumn('student_profiles', 'entry_year'));
