@@ -86,10 +86,10 @@ every one is free to submit a real, fresh enrollment through the UI/API.
 | 0002 | `student2.seed@grc.test` | 2nd | Regular | 3 | — |
 | 0003 | `student3.seed@grc.test` | 3rd | Regular | 5 | — |
 | 0004 | `student4.seed@grc.test` | 4th | Regular | 7 | — |
-| 0005 | `student5.seed@grc.test` | 2nd | Irregular | 3 | `5.00` (Failed) on MATH101 |
-| 0006 | `student6.seed@grc.test` | 2nd | Irregular | 3 | `INC` (Incomplete) on CS201 |
-| 0007 | `student7.seed@grc.test` | 3rd | Irregular | 5 | `NC` (Not Complete) on LEAD 3 |
-| 0008 | `student8.seed@grc.test` | 4th | Irregular | 7 | CS401 never graded (missing required subject) |
+| 0005 | `student5.seed@grc.test` | 2nd | Irregular | 3 | `5.00` (Failed) on MATHWRLD |
+| 0006 | `student6.seed@grc.test` | 2nd | Irregular | 3 | `INC` (Incomplete) on PROG1 |
+| 0007 | `student7.seed@grc.test` | 3rd | Irregular | 5 | `NC` (Not Complete) on LEAD 5 |
+| 0008 | `student8.seed@grc.test` | 4th | Irregular | 7 | SPI never graded (missing required subject) |
 
 All eight use the shared password `password`.
 
@@ -116,39 +116,63 @@ term — a year-4 student's 7 completed ordinals use all 7 non-ongoing terms
 Every locked grade is recorded with `section_id = null` (no owning section
 for historical results).
 
-## 10 connected professor identities
+## Connected professor identities (live, from the source Excel)
 
 **Source:** `backend/database/seeders/DemoEnrollmentSeeder.php`. Every block
 section generated for the four regular seeded students (see above) used to be
-owned by the single `faculty.seed@grc.test` account. Since then, each of the
-10 distinct subjects those blocks offer (`BLOCK_SUBJECTS_BY_YEAR`) has its own
-real professor — a genuine 1:1 mapping, exactly like a real department: one
-instructor teaching every block's section of their own course.
+owned by the single `faculty.seed@grc.test` account, then later a fixed
+10-entry invented roster. Neither exists anymore: `seedProfessors()` now
+creates one real `faculty` account per distinct `reference_professor_name`
+found across years 1–4's current-term subjects (`BLOCK_SUBJECTS_BY_YEAR`) in
+the real BSIT curriculum's own schedule/faculty reference data — the same
+names that appear in `curriculum-2024-2029-schedule-references.csv`. A clean
+seed currently produces **23** of these (this number is a property of the
+source Excel, not a designed constant, and will drift if that data changes).
+A subject whose representative block has no named professor in the source
+Excel gets no Faculty account at all, and its generated sections keep
+`professor_id` null — no name is ever invented.
 
-| Subject | Name | Email |
+Every email follows `prof.<slug of the name>@grc.test` (e.g. `MR. SALAZAR` →
+`prof.mr-salazar@grc.test`, `COACH JUDE SALONGA` →
+`prof.coach-jude-salonga@grc.test`). A few, to log in against directly:
+
+| Reference name | Example subject | Email |
 |---|---|---|
-| CS201 | Ramon Bautista | `prof.bautista@grc.test` |
-| MATH102 | Teresa Villanueva | `prof.villanueva@grc.test` |
-| GE102 | Christian Dela Cruz | `prof.dela-cruz@grc.test` |
-| LEAD 2 | Angelica Reyes | `prof.reyes@grc.test` |
-| CS301 | Michael Santos | `prof.santos@grc.test` |
-| LEAD 4 | Josephine Mendoza | `prof.mendoza@grc.test` |
-| CS303 | Ferdinand Aquino | `prof.aquino@grc.test` |
-| LEAD 6 | Grace Manalo | `prof.manalo@grc.test` |
-| CS402 | Rafael Torres | `prof.torres@grc.test` |
-| LEAD8 | Cecilia Fernandez | `prof.fernandez@grc.test` |
+| MR. SALAZAR | PATHFIT2 (year 1) *and* PATHFIT4 (year 2) | `prof.mr-salazar@grc.test` |
+| MS. GALLEN | CONWRLD (year 1) | `prof.ms-gallen@grc.test` |
+| COACH MARIEL | LEAD2 (year 1) | `prof.coach-mariel@grc.test` |
+| MS. PUNZALAN | DSTRUCTL (year 2) | `prof.ms-punzalan@grc.test` |
+| MR. CACHO | ADVMOBL (year 3) | `prof.mr-cacho@grc.test` |
+| COACH JUVELYN | LEAD6 (year 3) *and* LEAD8 (year 4) | `prof.coach-juvelyn@grc.test` |
 
-All 10 use the shared password `password`, role `faculty`, college CCS. Each
+`MR. SALAZAR` and `COACH JUVELYN` above are deliberate examples of a
+professor teaching more than one of these subjects: `faculty_subject_preferences`
+has a `(professor_id, academic_term_id, rank)` unique constraint, so their
+first subject encountered gets rank 1 and each additional one gets the next
+rank (2, 3, ...) — never a second rank-1 row for the same professor.
+
+All 23 use the shared password `password`, role `faculty`, college CCS. Each
 one also has a declared weekday (Mon–Fri, 08:00–17:00) `FacultyAvailability`
 window covering every `BLOCK_SCHEDULES` slot their sections meet at, and a
-rank-1 `FacultySubjectPreference` for their own subject — real Faculty Input
+`FacultySubjectPreference` for every subject they own — real Faculty Input
 rows, not just a `professor_id` pointer, so logging in as any of them shows a
-genuine Teaching Schedule, Class Roster, and Grade Submission workspace.
+genuine Teaching Schedule, Class Roster, and Grade Submission workspace. The
+full current list can always be enumerated directly:
+
+```php
+CurriculumSubject::query()
+    ->where('curriculum_id', Curriculum::where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole()->id)
+    ->whereIn('year_level', [1, 2, 3, 4])
+    ->where('semester', '2nd')
+    ->whereNotNull('reference_professor_name')
+    ->pluck('reference_professor_name')
+    ->unique();
+```
 
 ## 4 sample faculty identities (one per college)
 
 **Source:** `backend/database/seeders/ProgramChairScheduleSampleSeeder.php`.
-Separate from both the 10 connected professors above and the CCS catalog
+Separate from both the connected professors above and the CCS catalog
 faculty below: one Faculty account per college, created so each college's
 Program Chair workspace has a faculty member to schedule against. These are
 the accounts that back the mixed Dean/Executive approval fixtures.
@@ -164,25 +188,26 @@ All four use the shared password `password` and role `faculty`.
 
 ### The full faculty headcount, reconciled
 
-A clean seed produces **221** `faculty` rows, which is the sum of four
+A clean seed produces **234** `faculty` rows, which is the sum of four
 separate seeders rather than one roster — worth knowing before assuming a
 count is wrong:
 
 | Source | Count |
 |---|---|
 | `CatalogFacultySeeder` (real CCS/COE/COA/CBAE CSV catalog) | 206 |
-| `DemoEnrollmentSeeder` (the 10 connected `prof.*` professors) | 10 |
+| `DemoEnrollmentSeeder` (the connected `prof.*` professors above) | 23 |
 | `ProgramChairScheduleSampleSeeder` (the 4 `faculty.sample.*` above) | 4 |
 | `RoleUserSeeder` (`faculty.seed@grc.test`) | 1 |
-| **Total** | **221** |
+| **Total** | **234** |
 
 ### Why not the whole 211-professor catalog
 
 `CatalogFacultySeeder` seeds 206 real-named faculty from the CCS CSV catalog,
 but only a handful of them declare any availability — most render "No
 availability declared" in the Faculty Assignment workspace, since that CSV
-carries no availability data. The 10 identities above are the ones this
-project actually exercises end to end for teaching-side workflows.
+carries no availability data. The connected professor identities above are
+the ones this project actually exercises end to end for teaching-side
+workflows.
 
 ## Running the seeder
 
@@ -230,7 +255,7 @@ independent layer of protection at the command level.
 
 `ProgramSeeder` seeds the **real** 12-program GRC catalog — the only
 programs the supplied 2024-2029 curriculum schedules cover, across the four
-currently supported colleges — plus two collegeless test/demo fixtures.
+currently supported colleges — plus one collegeless test fixture (`BSCRIM`).
 Covered by `backend/tests/Feature/Database/ReferenceDataSeederTest.php`,
 `GrcSubjectCatalogSeederTest.php`, `GrcCurriculumSeederTest.php`, and
 `GrcPrerequisiteSeederTest.php`.
