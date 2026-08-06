@@ -707,6 +707,44 @@ describe("CurriculumWorkspace", () => {
     ).not.toHaveLength(0)
   })
 
+  it("defaults to the Manage tab and offers a read-only View tab of the program's active curriculum", async () => {
+    const user = userEvent.setup()
+    const activeCurricula = {
+      data: [{ ...curriculum.data[0], status: "active", status_label: "Active" }],
+    }
+    fetchMock.mockImplementation((input) => {
+      if (url(input).endsWith("/programs"))
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      if (url(input).endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url(input).endsWith("/curricula"))
+        return Promise.resolve(new Response(JSON.stringify(activeCurricula)))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWorkspace()
+
+    // Manage is the default tab — the existing curriculum-select form is visible
+    // without clicking anything, exactly as before this task.
+    await screen.findByLabelText("Curriculum")
+    expect(screen.getByRole("tab", { name: "Manage" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    )
+
+    await user.click(screen.getByRole("tab", { name: "View" }))
+
+    expect(
+      await screen.findByText("1st Year · 1st Semester"),
+    ).toBeInTheDocument()
+    const table = screen.getByRole("table")
+    expect(within(table).getByText("CS101")).toBeInTheDocument()
+    expect(within(table).getByText("Programming 1")).toBeInTheDocument()
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent)
+    expect(headers).toEqual(["Code", "Description", "Units"])
+  })
+
   it("has no detectable accessibility violations once loaded", async () => {
     fetchMock.mockImplementation((input) =>
       Promise.resolve(

@@ -78,6 +78,7 @@ import {
   toCurriculumReplacement,
 } from "@/features/services/curriculum-service"
 import { PrerequisiteEditor } from "@/features/components/portal/prerequisite-editor"
+import { CurriculumView } from "@/features/components/portal/curriculum-view"
 
 const fresh: StoreCurriculumInput = {
   program_id: 0,
@@ -365,8 +366,13 @@ export function CurriculumWorkspace() {
         loadingLabel="Loading curriculum data…"
       >
         {() => (
-          <>
-            <div className="flex gap-2">
+          <Tabs defaultValue="manage" className="grid gap-4">
+            <TabsList aria-label="Curriculum editor mode">
+              <TabsTrigger value="manage">Manage</TabsTrigger>
+              <TabsTrigger value="view">View</TabsTrigger>
+            </TabsList>
+            <TabsContent value="manage" className="grid gap-4">
+              <div className="flex gap-2">
               <Field>
                 <FieldLabel htmlFor="curriculum-select">Curriculum</FieldLabel>
                 <Select
@@ -744,7 +750,14 @@ export function CurriculumWorkspace() {
                 </Button>
               </div>
             </FieldGroup>
-          </>
+            </TabsContent>
+            <TabsContent value="view">
+              <CurriculumView
+                programs={programsQuery.data ?? []}
+                curricula={curriculaQuery.data ?? []}
+              />
+            </TabsContent>
+          </Tabs>
         )}
       </AsyncBoundary>
       <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
