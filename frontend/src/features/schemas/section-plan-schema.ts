@@ -17,6 +17,18 @@ export const sectionPlanSchema = z
   .strict()
 
 export const sectionPlansEnvelopeSchema = z.object({ data: z.array(sectionPlanSchema) }).strict()
+// The auto-assign endpoint is the only section-plan endpoint that adds a
+// sibling `meta` key alongside `data` (via Laravel's `->additional([...])`),
+// so it needs its own envelope instead of reusing `sectionPlansEnvelopeSchema`
+// — that one is `.strict()` and would throw on the extra key. `meta` itself
+// stays `.passthrough()` so additional telemetry fields the backend adds
+// later don't break parsing here.
+export const sectionPlansAutoAssignEnvelopeSchema = z
+  .object({
+    data: z.array(sectionPlanSchema),
+    meta: z.object({ sections_updated: z.number().int().min(0) }).passthrough(),
+  })
+  .strict()
 export const sectionPlanCountsSchema = z.object({
   academic_term_id: z.number().int().positive(),
   curriculum_id: z.number().int().positive(),

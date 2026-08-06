@@ -446,7 +446,11 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       const target = url(input)
       if (target.includes("/section-plan/auto-assign") && init?.method === "POST") {
         autoAssigned = true
-        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+        // Matches the real endpoint's shape: Laravel's `->additional(...)`
+        // adds a sibling `meta` key next to `data` — the only section-plan
+        // response that does, which is exactly what tripped up the
+        // `.strict()` envelope schema this reused before the fix.
+        return Promise.resolve(new Response(JSON.stringify({ data: [], meta: { sections_updated: 1 } })))
       }
       if (target.includes("/sections"))
         return Promise.resolve(

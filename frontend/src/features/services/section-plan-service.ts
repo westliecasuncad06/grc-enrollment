@@ -1,5 +1,6 @@
 import {
   sectionPlanCountsSchema,
+  sectionPlansAutoAssignEnvelopeSchema,
   sectionPlansEnvelopeSchema,
   type SectionPlan,
   type SectionPlanCounts,
@@ -9,6 +10,10 @@ import { z } from "zod"
 
 const path = "/api/v1/academic-term-section-plans"
 const parseEnvelope = (payload: unknown) => sectionPlansEnvelopeSchema.parse(payload).data
+// The auto-assign endpoint adds a sibling `meta` key alongside `data` (see
+// `sectionPlansAutoAssignEnvelopeSchema`) that `parseEnvelope`'s `.strict()`
+// schema would reject, so it gets its own parse helper.
+const parseAutoAssignEnvelope = (payload: unknown) => sectionPlansAutoAssignEnvelopeSchema.parse(payload).data
 
 export async function getSectionPlans(termId: number, curriculumId?: number, signal?: AbortSignal): Promise<readonly SectionPlan[]> {
   const curriculumQuery = curriculumId ? `&curriculum_id=${curriculumId}` : ""
@@ -28,7 +33,7 @@ export async function releaseSectionPlan(termId: number, curriculumId: number, y
 
 export async function autoAssignSectionSchedule(termId: number, curriculumId: number, yearLevel?: number): Promise<readonly SectionPlan[]> {
   const payload = await postAuthenticatedJson(`/api/v1/academic-terms/${termId}/section-plan/auto-assign`, { curriculum_id: curriculumId, ...(yearLevel ? { year_level: yearLevel } : {}) })
-  return parseEnvelope(payload)
+  return parseAutoAssignEnvelope(payload)
 }
 
 export async function submitSectionPlan(termId: number, curriculumId: number): Promise<{ id: number; status: string }> {
