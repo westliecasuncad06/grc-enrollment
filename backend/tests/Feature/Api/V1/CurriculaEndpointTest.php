@@ -10,6 +10,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
 use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
@@ -230,6 +231,68 @@ final class CurriculaEndpointTest extends TestCase
             1,
             AuditLog::query()->where('action', AuditAction::CURRICULUM_UPDATED)->count(),
         );
+    }
+
+    /**
+     * Regression coverage for a data-loss bug: the `reference_*` columns on
+     * `curriculum_subjects` hold real schedule/faculty data transcribed from
+     * GRC's official Excel files and seeded once by
+     * `GrcCurriculumScheduleReferenceSeeder`. The Curriculum Editor autosaves
+     * on a debounce and never sends those columns, so
+     * `SynchronizeCurriculumSubjects`' delete-and-recreate used to null them
+     * out on every single save, silently and irreversibly.
+     */
+    public function test_updating_a_curriculum_preserves_its_placements_reference_schedule_data(): void
+    {
+        $program = $this->makeProgram();
+        [$intro, $dataStructures] = $this->makeTwoSubjects();
+        $curriculum = Curriculum::create([
+            'program_id' => $program->id, 'name' => 'BSCS 2026 Curriculum',
+            'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Draft,
+        ]);
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $intro->id,
+            'year_level' => 1, 'semester' => '1st', 'is_required' => true,
+            'reference_day' => 'Tue', 'reference_start_time' => '07:30:00', 'reference_end_time' => '09:30:00',
+            'reference_room' => 'ONLINE', 'reference_modality' => 'ONLINE',
+            'reference_professor_name' => 'MR. MACINAS', 'reference_sched_id' => 'S-101',
+            'reference_notes' => 'From the 2024-2029 sheet.',
+        ]);
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.reference-data@grc.test');
+
+        // The editor re-sends the untouched placement verbatim while adding
+        // an unrelated second subject — the exact shape of an autosave.
+        $response = $this->withToken($token)->patchJson("/api/v1/curricula/{$curriculum->id}", [
+            'name' => 'BSCS 2026 Curriculum',
+            'effective_school_year' => '2026-2027',
+            'status' => 'active',
+            'subjects' => [
+                ['subject_id' => $intro->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ['subject_id' => $dataStructures->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
+            ],
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('curriculum_subjects', [
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $intro->id,
+            'reference_day' => 'Tue',
+            'reference_start_time' => '07:30:00',
+            'reference_end_time' => '09:30:00',
+            'reference_room' => 'ONLINE',
+            'reference_modality' => 'ONLINE',
+            'reference_professor_name' => 'MR. MACINAS',
+            'reference_sched_id' => 'S-101',
+            'reference_notes' => 'From the 2024-2029 sheet.',
+        ]);
+        // A genuinely new placement has no reference data to carry forward,
+        // and none is invented for it.
+        $this->assertDatabaseHas('curriculum_subjects', [
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $dataStructures->id,
+            'reference_day' => null,
+            'reference_professor_name' => null,
+        ]);
     }
 
     public function test_a_non_program_chair_role_cannot_update_a_curriculum(): void
