@@ -395,6 +395,17 @@ export function ProgramChairEnrollmentWorkspace({
       setError(`The last ${yearLabel(year)} section could not be removed. Assigned schedules or enrolled students must be cleared first.`)
     }
   }
+  const autoAssignSchedule = async () => {
+    setError("")
+    try {
+      for (const selectedCurriculumId of selectedCurriculumIds) {
+        await planMutations.autoAssign.mutateAsync({ curriculumId: selectedCurriculumId, yearLevel: Number(activeYear) })
+      }
+      await sectionsQuery.refetch()
+    } catch {
+      setError("Auto-assign could not run. Check that generated sections exist for this year level.")
+    }
+  }
   const generateSubjectsForYear = async (year: number) => {
     const selectedCurriculumId = curriculumIds[year]
 
@@ -521,6 +532,9 @@ export function ProgramChairEnrollmentWorkspace({
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => void removeSection()} disabled={approvalLocked || (counts[Number(activeYear)] ?? 0) <= 0 || planMutations.save.isPending || planMutations.release.isPending}>
                   <MinusIcon data-icon="inline-start" />Remove section
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void autoAssignSchedule()} disabled={approvalLocked || planMutations.autoAssign.isPending}>
+                  Auto-assign professors & rooms
                 </Button>
                 <Button type="button" size="sm" variant="outline" onClick={() => void addSection()} disabled={approvalLocked || planMutations.save.isPending || planMutations.release.isPending}>
                   <PlusIcon data-icon="inline-start" />Add section

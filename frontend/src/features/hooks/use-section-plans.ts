@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/features/auth/use-auth"
-import { getSectionPlans, releaseSectionPlan, saveSectionPlan, submitSectionPlan } from "@/features/services/section-plan-service"
+import { autoAssignSectionSchedule, getSectionPlans, releaseSectionPlan, saveSectionPlan, submitSectionPlan } from "@/features/services/section-plan-service"
 import type { SectionPlanCounts } from "@/features/schemas/section-plan-schema"
 
 export const sectionPlansQueryKey = (userId: string | null, termId: number, curriculumId?: number) => ["section-plans", userId, termId, curriculumId ?? "all"] as const
@@ -23,5 +23,6 @@ export function useSectionPlanMutations(termId: number) {
   const save = useMutation({ mutationFn: (input: SectionPlanCounts) => saveSectionPlan(input), onSuccess: invalidate })
   const release = useMutation({ mutationFn: (input: { curriculumId: number; yearLevel?: number }) => releaseSectionPlan(termId, input.curriculumId, input.yearLevel), onSuccess: invalidate })
   const submit = useMutation({ mutationFn: (curriculumId: number) => submitSectionPlan(termId, curriculumId), onSuccess: invalidate })
-  return { save, release, submit }
+  const autoAssign = useMutation({ mutationFn: (input: { curriculumId: number; yearLevel?: number }) => autoAssignSectionSchedule(termId, input.curriculumId, input.yearLevel), onSuccess: invalidate })
+  return { save, release, submit, autoAssign }
 }

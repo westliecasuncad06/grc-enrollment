@@ -437,6 +437,46 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     expect(screen.getByRole("button", { name: "Remove section" })).toBeEnabled()
   })
 
+  it("auto-assigns professors and rooms from the reference data on button click", async () => {
+    const user = userEvent.setup()
+    const sectionFixture = sections.data[0]
+    const fallback = mockAll()
+    let autoAssigned = false
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/section-plan/auto-assign") && init?.method === "POST") {
+        autoAssigned = true
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      }
+      if (target.includes("/sections"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: autoAssigned
+                ? [{ ...sectionFixture, schedule_days: "Tue", professor_id: 9 }]
+                : sections.data,
+            }),
+          ),
+        )
+      return fallback(input, init)
+    })
+
+    renderWorkspace()
+    for (let year = 1; year <= 4; year++) {
+      await chooseCurriculum(user, year)
+      const input = await screen.findByLabelText("Number of block sections")
+      await user.clear(input)
+      await user.type(input, "1")
+      await user.click(screen.getByRole("button", { name: year === 4 ? "Continue to review" : "Save and continue" }))
+    }
+    await user.click(screen.getByRole("button", { name: "Generate subject list" }))
+
+    await screen.findByText(sectionFixture.section_code)
+    await user.click(screen.getByRole("button", { name: "Auto-assign professors & rooms" }))
+
+    expect(await screen.findByText("Tue")).toBeInTheDocument()
+  })
+
   it("offers a year-specific subject generation action when a year is empty", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockAll())
