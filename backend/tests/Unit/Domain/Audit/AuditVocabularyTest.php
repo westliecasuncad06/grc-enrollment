@@ -57,6 +57,7 @@ final class AuditVocabularyTest extends TestCase
                 'academic_term.created',
                 'subject_offerings.replaced',
                 'section_plan.submitted',
+                'section_plan.auto_assigned',
                 'academic_term_workflow.curriculum_started',
                 'academic_term_workflow.curriculum_completed',
                 'academic_term_workflow.faculty_reviewed',

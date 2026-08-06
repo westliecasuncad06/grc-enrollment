@@ -94,6 +94,8 @@ final class AuditAction
 
     public const SECTION_PLAN_SUBMITTED = 'section_plan.submitted';
 
+    public const SECTION_PLAN_AUTO_ASSIGNED = 'section_plan.auto_assigned';
+
     public const ACADEMIC_TERM_WORKFLOW_CURRICULUM_STARTED = 'academic_term_workflow.curriculum_started';
 
     public const ACADEMIC_TERM_WORKFLOW_CURRICULUM_COMPLETED = 'academic_term_workflow.curriculum_completed';
@@ -165,6 +167,7 @@ final class AuditAction
             self::ACADEMIC_TERM_CREATED,
             self::SUBJECT_OFFERINGS_REPLACED,
             self::SECTION_PLAN_SUBMITTED,
+            self::SECTION_PLAN_AUTO_ASSIGNED,
             self::ACADEMIC_TERM_WORKFLOW_CURRICULUM_STARTED,
             self::ACADEMIC_TERM_WORKFLOW_CURRICULUM_COMPLETED,
             self::ACADEMIC_TERM_WORKFLOW_FACULTY_REVIEWED,

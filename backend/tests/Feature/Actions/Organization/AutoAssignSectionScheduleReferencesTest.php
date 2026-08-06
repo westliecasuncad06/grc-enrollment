@@ -3,6 +3,8 @@
 namespace Tests\Feature\Actions\Organization;
 
 use App\Actions\Organization\AutoAssignSectionScheduleReferences;
+use App\Domain\Audit\AuditAction;
+use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
@@ -16,6 +18,7 @@ use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
+use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Program;
@@ -23,6 +26,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 final class AutoAssignSectionScheduleReferencesTest extends TestCase
@@ -34,14 +38,27 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         return AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
     }
 
-    private function makeCurriculum(): Curriculum
+    private function makeCurriculum(CollegeCode $college = CollegeCode::Ccs, string $code = 'BSIT'): Curriculum
     {
-        $program = Program::create(['code' => 'BSIT', 'name' => 'BS IT', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs]);
+        $program = Program::create(['code' => $code, 'name' => "BS {$code}", 'status' => ProgramStatus::Active, 'college' => $college]);
 
         return Curriculum::create([
-            'program_id' => $program->id, 'name' => 'BSIT Curriculum',
+            'program_id' => $program->id, 'name' => "{$code} Curriculum",
             'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active,
         ]);
+    }
+
+    private function makeChair(CollegeCode $college = CollegeCode::Ccs, string $email = 'chair.autoassign@grc.test'): User
+    {
+        return User::create([
+            'name' => 'Chair '.$college->value, 'email' => $email, 'password' => 'password',
+            'role' => UserRole::ProgramChair, 'college' => $college, 'status' => UserStatus::Active,
+        ]);
+    }
+
+    private function context(): AuditRequestContext
+    {
+        return new AuditRequestContext('auto-assign-action-test', null);
     }
 
     private function makePlacement(Curriculum $curriculum, string $code, array $reference): CurriculumSubject
@@ -74,7 +91,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
         $section = $this->makeSection($term, $plan, $placement->subject_id);
 
-        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id);
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
 
         $section->refresh();
         $this->assertSame('Tue', $section->schedule_days);
@@ -102,7 +119,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
             'schedule_days' => 'Wed', 'room' => 'LAB-9', 'professor_id' => $existingProfessor->id,
         ]);
 
-        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id);
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
 
         $section->refresh();
         $this->assertSame('Wed', $section->schedule_days);
@@ -118,7 +135,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
         $section = $this->makeSection($term, $plan, $placement->subject_id);
 
-        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id);
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
 
         $section->refresh();
         $this->assertSame('Fri', $section->schedule_days);
@@ -134,7 +151,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 2, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
         $section = $this->makeSection($term, $plan, $subject->id, ['section_code' => 'IT201']);
 
-        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, 1);
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context(), 1);
 
         $this->assertNull($section->refresh()->schedule_days);
     }
@@ -155,7 +172,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
         $section = $this->makeSection($term, $plan, $placement->subject_id);
 
-        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id);
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
 
         $this->assertSame(SectionModality::HyflexA, $section->refresh()->modality);
     }
@@ -173,8 +190,91 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
         $section = $this->makeSection($term, $plan, $placement->subject_id);
 
-        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id);
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
 
         $this->assertNull($section->refresh()->modality);
+    }
+
+    /**
+     * The role check alone lets any Program Chair bulk-write any college's
+     * sections. Every sibling write on this workflow (SaveSectionPlan's
+     * save/release/submit) asserts curriculum ownership; so must this one.
+     */
+    public function test_it_rejects_a_curriculum_belonging_to_another_college(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'ITC', [
+            'reference_day' => 'Tue', 'reference_room' => 'ONLINE', 'reference_professor_name' => 'MR. MACINAS',
+        ]);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $section = $this->makeSection($term, $plan, $placement->subject_id);
+        $intruder = $this->makeChair(CollegeCode::Coe, 'chair.coe.autoassign@grc.test');
+
+        try {
+            app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $intruder, $this->context());
+            self::fail('Expected a cross-college auto-assign to be rejected.');
+        } catch (ValidationException $exception) {
+            self::assertArrayHasKey('curriculum_id', $exception->errors());
+        }
+
+        $section->refresh();
+        $this->assertNull($section->schedule_days);
+        $this->assertNull($section->room);
+        $this->assertNull($section->professor_id);
+        $this->assertSame(0, AuditLog::query()->count());
+    }
+
+    /**
+     * Second layer of the same guard: the plan rows themselves carry a
+     * `college`, so the query must be scoped even when the curriculum passes
+     * the ownership assertion.
+     */
+    public function test_it_leaves_another_colleges_section_plan_untouched(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownPlacement = $this->makePlacement($curriculum, 'ITC', ['reference_day' => 'Tue']);
+        $otherPlacement = $this->makePlacement($curriculum, 'EDUC1', ['reference_day' => 'Fri']);
+        $ownPlan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $otherPlan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'coe', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $ownSection = $this->makeSection($term, $ownPlan, $ownPlacement->subject_id);
+        $otherSection = $this->makeSection($term, $otherPlan, $otherPlacement->subject_id, ['section_code' => 'ED101']);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $this->assertSame('Tue', $ownSection->refresh()->schedule_days);
+        $this->assertNull($otherSection->refresh()->schedule_days);
+    }
+
+    public function test_it_records_an_audit_row_for_the_bulk_write(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'ITC', ['reference_day' => 'Tue']);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $section = $this->makeSection($term, $plan, $placement->subject_id);
+        $chair = $this->makeChair();
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $chair, $this->context());
+
+        $log = AuditLog::query()->where('action', AuditAction::SECTION_PLAN_AUTO_ASSIGNED)->sole();
+        $this->assertSame($chair->id, $log->actor_user_id);
+        $this->assertSame($plan->id, $log->auditable_id);
+        $this->assertSame('ccs', $log->after_values['college']);
+        $this->assertSame([$section->id], $log->after_values['section_ids']);
+    }
+
+    public function test_a_run_that_fills_nothing_records_no_audit_row(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'ITC', []);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $this->makeSection($term, $plan, $placement->subject_id);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $this->assertSame(0, AuditLog::query()->count());
     }
 }

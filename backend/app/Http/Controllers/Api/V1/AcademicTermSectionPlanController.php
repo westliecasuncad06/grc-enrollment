@@ -75,23 +75,32 @@ final class AcademicTermSectionPlanController extends Controller
         Request $request,
         AcademicTerm $academicTerm,
         AutoAssignSectionScheduleReferences $action,
+        AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
-        $this->authenticatedUser($request);
+        $user = $this->authenticatedUser($request);
         $this->authorize('viewAny', AcademicTermSectionPlan::class);
         $input = $request->validate([
             'curriculum_id' => ['required', 'integer', 'exists:curricula,id'],
             'year_level' => ['sometimes', 'integer', 'between:1,4'],
         ]);
+        $curriculumId = (int) $input['curriculum_id'];
+
+        // The action re-derives and enforces the college itself; this local
+        // copy only scopes the response payload, exactly as release/submit do.
+        $college = $user->college?->value;
 
         $sections = $action->execute(
             $academicTerm,
-            (int) $input['curriculum_id'],
+            $curriculumId,
+            $user,
+            $contextFactory->fromRequest($request),
             isset($input['year_level']) ? (int) $input['year_level'] : null,
         );
 
         $plans = AcademicTermSectionPlan::query()
             ->where('academic_term_id', $academicTerm->id)
-            ->where('curriculum_id', (int) $input['curriculum_id'])
+            ->where('curriculum_id', $curriculumId)
+            ->where('college', $college)
             ->get();
 
         return AcademicTermSectionPlanResource::collection($plans)->additional([
