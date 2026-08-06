@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\Section;
@@ -20,12 +21,19 @@ use RuntimeException;
  * The active term is always a '2nd' semester (see AcademicTermSeeder) — every
  * DemoEnrollmentSeeder student has locked grade history through their year's
  * 1st-semester ordinal and is meant to freely enroll fresh into this term, so
- * every subject below is each year level's own 2nd-semester placement in
- * "BSCS Curriculum 2026" (see CurriculumSeeder), not a repeat of the year-1
- * 1st-semester set. The original year-1 1st-semester sections (CS101 etc.)
- * are kept too: harmless leftover offerings a student has already completed
- * by the time they reach this term, matching how a real registrar's catalog
- * still lists prior-semester sections for retakes.
+ * every subject below is a real BSIT subject (see `GrcCurriculumSeeder`),
+ * mostly drawn from each year level's own 2nd-semester placement, not a
+ * repeat of the year-1 1st-semester set. The original year-1 1st-semester
+ * sections are kept too: harmless leftover offerings a student has already
+ * completed by the time they reach this term, matching how a real
+ * registrar's catalog still lists prior-semester sections for retakes.
+ *
+ * These are deliberately a representative handful per year level, not every
+ * subject that year's block sections cover (`DemoEnrollmentSeeder::
+ * seedRegularBlocks()` already publishes a block-exclusive section for every
+ * one of those) — this seeder's purpose is only to give an irregular
+ * student at least one ordinary, non-block section per subject to enroll
+ * into individually.
  *
  * NOTE ON `viability_threshold`: it is deliberately left NULL. PRD §4.1
  * mentions 25 students as the currently documented figure, but §17 lists the
@@ -38,49 +46,35 @@ use RuntimeException;
 final class SectionSeeder extends Seeder
 {
     /**
-     * `subjects` is unique on `(college, code)`, not `code` alone, and the
-     * real GRC catalog (`GrcSubjectCatalogSeeder`) also seeds `LEAD 2`/
-     * `LEAD 4`/`LEAD 6`/`LEAD8` under real colleges — an unscoped code
-     * lookup for these four is ambiguous and must stay pinned to the
-     * collegeless subject `DemoGradeHistoryCurriculumSeeder` places in this
-     * curriculum, or this seeder's own section ends up keyed to a
-     * different subject_id than the one a demo student's grade history and
-     * curriculum placement actually use.
-     *
-     * @var list<string>
-     */
-    private const LEADERSHIP_SUBJECTS = ['LEAD 2', 'LEAD 4', 'LEAD 6', 'LEAD8'];
-
-    /**
      * @var list<array{
      *     subject: string, code: string, days: string,
      *     starts: string, ends: string, room: string, capacity: int
      * }>
      */
     private const SECTIONS = [
-        ['subject' => 'CS101', 'code' => 'A', 'days' => 'MWF', 'starts' => '08:00:00', 'ends' => '09:00:00', 'room' => 'LAB-1', 'capacity' => 40],
-        ['subject' => 'CS102', 'code' => 'A', 'days' => 'MWF', 'starts' => '09:00:00', 'ends' => '10:00:00', 'room' => 'LAB-1', 'capacity' => 40],
+        ['subject' => 'ITC', 'code' => 'A', 'days' => 'MWF', 'starts' => '08:00:00', 'ends' => '09:00:00', 'room' => 'LAB-1', 'capacity' => 40],
+        ['subject' => 'ITCL', 'code' => 'A', 'days' => 'MWF', 'starts' => '09:00:00', 'ends' => '10:00:00', 'room' => 'LAB-1', 'capacity' => 40],
         // A second section of the same subject: exercises the unique
         // (term, subject, section_code) constraint and gives the scheduler a
         // genuine choice between offerings.
-        ['subject' => 'CS102', 'code' => 'B', 'days' => 'TTh', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'LAB-2', 'capacity' => 35],
-        ['subject' => 'MATH101', 'code' => 'A', 'days' => 'TTh', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-201', 'capacity' => 45],
-        ['subject' => 'GE101', 'code' => 'A', 'days' => 'MWF', 'starts' => '10:00:00', 'ends' => '11:00:00', 'room' => 'RM-105', 'capacity' => 50],
-        ['subject' => 'PE101', 'code' => 'A', 'days' => 'Sat', 'starts' => '08:00:00', 'ends' => '10:00:00', 'room' => 'GYM', 'capacity' => 60],
+        ['subject' => 'ITCL', 'code' => 'B', 'days' => 'TTh', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'LAB-2', 'capacity' => 35],
+        ['subject' => 'MATHWRLD', 'code' => 'A', 'days' => 'TTh', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-201', 'capacity' => 45],
+        ['subject' => 'PURPCOMM', 'code' => 'A', 'days' => 'MWF', 'starts' => '10:00:00', 'ends' => '11:00:00', 'room' => 'RM-105', 'capacity' => 50],
+        ['subject' => 'PATHFIT1', 'code' => 'A', 'days' => 'Sat', 'starts' => '08:00:00', 'ends' => '10:00:00', 'room' => 'GYM', 'capacity' => 60],
         // Year 1 semester 2 — what a 1st-year DemoEnrollmentSeeder student
         // (1 completed semester) actually needs to freely enroll into.
-        ['subject' => 'CS201', 'code' => 'A', 'days' => 'MWF', 'starts' => '08:00:00', 'ends' => '09:00:00', 'room' => 'LAB-1', 'capacity' => 40],
-        ['subject' => 'MATH102', 'code' => 'A', 'days' => 'TTh', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-201', 'capacity' => 45],
-        ['subject' => 'GE102', 'code' => 'A', 'days' => 'MWF', 'starts' => '10:00:00', 'ends' => '11:00:00', 'room' => 'RM-105', 'capacity' => 50],
-        ['subject' => 'LEAD 2', 'code' => 'A', 'days' => 'Sat', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-301', 'capacity' => 60],
+        ['subject' => 'PROG1', 'code' => 'A', 'days' => 'MWF', 'starts' => '08:00:00', 'ends' => '09:00:00', 'room' => 'LAB-1', 'capacity' => 40],
+        ['subject' => 'PROG1L', 'code' => 'A', 'days' => 'TTh', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-201', 'capacity' => 45],
+        ['subject' => 'SCITECH', 'code' => 'A', 'days' => 'MWF', 'starts' => '10:00:00', 'ends' => '11:00:00', 'room' => 'RM-105', 'capacity' => 50],
+        ['subject' => 'LEAD2', 'code' => 'A', 'days' => 'Sat', 'starts' => '08:00:00', 'ends' => '09:30:00', 'room' => 'RM-301', 'capacity' => 60],
         // Year 2 semester 2 — 2nd-year students (3 completed semesters).
-        ['subject' => 'CS301', 'code' => 'A', 'days' => 'TTh', 'starts' => '10:00:00', 'ends' => '11:30:00', 'room' => 'LAB-2', 'capacity' => 40],
-        ['subject' => 'LEAD 4', 'code' => 'A', 'days' => 'Sat', 'starts' => '10:00:00', 'ends' => '11:30:00', 'room' => 'RM-301', 'capacity' => 60],
+        ['subject' => 'DSTRUCT', 'code' => 'A', 'days' => 'TTh', 'starts' => '10:00:00', 'ends' => '11:30:00', 'room' => 'LAB-2', 'capacity' => 40],
+        ['subject' => 'LEAD4', 'code' => 'A', 'days' => 'Sat', 'starts' => '10:00:00', 'ends' => '11:30:00', 'room' => 'RM-301', 'capacity' => 60],
         // Year 3 semester 2 — 3rd-year students (5 completed semesters).
-        ['subject' => 'CS303', 'code' => 'A', 'days' => 'MWF', 'starts' => '13:00:00', 'ends' => '14:00:00', 'room' => 'RM-202', 'capacity' => 40],
-        ['subject' => 'LEAD 6', 'code' => 'A', 'days' => 'Sat', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'RM-301', 'capacity' => 60],
+        ['subject' => 'ADVMOB', 'code' => 'A', 'days' => 'MWF', 'starts' => '13:00:00', 'ends' => '14:00:00', 'room' => 'RM-202', 'capacity' => 40],
+        ['subject' => 'LEAD6', 'code' => 'A', 'days' => 'Sat', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'RM-301', 'capacity' => 60],
         // Year 4 semester 2 — 4th-year students (7 completed semesters).
-        ['subject' => 'CS402', 'code' => 'A', 'days' => 'TTh', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'RM-203', 'capacity' => 30],
+        ['subject' => 'SYSMAIN', 'code' => 'A', 'days' => 'TTh', 'starts' => '13:00:00', 'ends' => '14:30:00', 'room' => 'RM-203', 'capacity' => 30],
         ['subject' => 'LEAD8', 'code' => 'A', 'days' => 'Sat', 'starts' => '15:00:00', 'ends' => '16:30:00', 'room' => 'RM-301', 'capacity' => 60],
     ];
 
@@ -102,13 +96,16 @@ final class SectionSeeder extends Seeder
             }
 
             foreach (self::SECTIONS as $section) {
-                $subjectQuery = Subject::query()->where('code', $section['subject']);
-
-                if (in_array($section['subject'], self::LEADERSHIP_SUBJECTS, true)) {
-                    $subjectQuery->whereNull('college');
-                }
-
-                $subject = $subjectQuery->firstOrFail();
+                // `subjects` is unique on `(college, code)`, not `code`
+                // alone, and the real GRC catalog (`GrcSubjectCatalogSeeder`)
+                // seeds several of these codes identically under other real
+                // colleges too (e.g. every Leadership code) — every subject
+                // this seeder ever looks up is a real BSIT (CCS) subject, so
+                // scoping every lookup to CCS resolves the same row the real
+                // BSIT curriculum actually uses, the same fix
+                // `DemoEnrollmentSeeder::subject()` applies for the same
+                // reason.
+                $subject = Subject::query()->where('college', CollegeCode::Ccs)->where('code', $section['subject'])->firstOrFail();
 
                 Section::updateOrCreate(
                     [

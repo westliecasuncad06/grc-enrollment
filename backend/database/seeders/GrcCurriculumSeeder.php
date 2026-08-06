@@ -190,7 +190,16 @@ final class GrcCurriculumSeeder extends Seeder
                 ['curriculum_id' => $curriculum->id, 'subject_id' => $subject->id],
                 [
                     'year_level' => $placement['year_level'],
-                    'semester' => count($placement['semesters']) === 2 ? '1st|2nd' : $placement['semesters'][array_key_first($placement['semesters'])],
+                    // BUG FIX (found while verifying Task 5 of the
+                    // curriculum-editor/real-schedule-data plan): indexing
+                    // into `$placement['semesters']` with its own first key
+                    // returns that key's boolean `true` MARKER value, not
+                    // the semester string itself — every non-composite
+                    // placement across all 12 programs was silently stored
+                    // as the literal string '1' (PHP's `(string) true`)
+                    // instead of '1st'/'2nd'. `array_key_first()` already IS
+                    // the semester string; no further indexing is needed.
+                    'semester' => count($placement['semesters']) === 2 ? '1st|2nd' : array_key_first($placement['semesters']),
                     'is_required' => true,
                 ],
             );
