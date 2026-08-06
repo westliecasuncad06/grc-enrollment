@@ -106,7 +106,14 @@ export function CurriculumWorkspace() {
   const programsQuery = useProgramsQuery()
   const subjectsQuery = useSubjectsQuery()
   const curriculaQuery = useCurriculaQuery()
-  const [selectedId, setSelectedId] = useState(0)
+  const [selectedId, setSelectedIdState] = useState(0)
+  // Mirrored in a ref so an in-flight save can tell, on resolution, whether the
+  // chair has since switched to a different curriculum.
+  const selectedIdRef = useRef(0)
+  const setSelectedId = useCallback((id: number) => {
+    selectedIdRef.current = id
+    setSelectedIdState(id)
+  }, [])
   const [discardTarget, setDiscardTarget] = useState<number | "new" | null>(
     null,
   )
@@ -148,18 +155,29 @@ export function CurriculumWorkspace() {
   const save = useCallback(
     async (input: StoreCurriculumInput) => {
       setRequestError("")
+      // Both captured before the request so the response can be discarded if
+      // the chair moved on while it was in flight. Resetting the form to this
+      // stale snapshot would silently overwrite whatever they typed meanwhile
+      // *and* clear `isDirty`, so even the discard dialog would stop warning.
+      const requestedFor = selectedIdRef.current
+      const valuesAtRequest = JSON.stringify(form.getValues())
       try {
         const saved = await mutateAsync(input)
+        if (selectedIdRef.current !== requestedFor) return
         setSelectedId(saved.id)
-        applyValues(input)
+        // Live edits made during the request stay put; the next autosave cycle
+        // carries them, since they also moved the placement signature.
+        if (JSON.stringify(form.getValues()) === valuesAtRequest)
+          applyValues(input)
       } catch (error) {
+        if (selectedIdRef.current !== requestedFor) return
         if (!applyApiFieldErrors(error, form.setError))
           setRequestError(
             "Curriculum could not be saved. Check the connection or conflicting changes, then retry.",
           )
       }
     },
-    [applyValues, form, mutateAsync],
+    [applyValues, form, mutateAsync, setSelectedId],
   )
   const edit = (id: number) => {
     const curriculum = (curriculaQuery.data ?? []).find(
@@ -280,9 +298,15 @@ export function CurriculumWorkspace() {
     watchedValues,
   ).success
   useEffect(() => {
-    if (!isDirty || !autosaveReady || isPending) return
-    if (persistedPlacements.current === placementSignature) return
+    if (!isDirty || isPending) return
+    if (autosaveReady && persistedPlacements.current === placementSignature)
+      return
     const timer = setTimeout(() => {
+      // Nothing can be written until the whole form is a valid request. Run
+      // validation instead of writing, so the fields blocking the autosave are
+      // actually highlighted rather than silently swallowing every edit — this
+      // screen has no submit button to run it for us.
+      if (!autosaveReady) return void form.trigger()
       persistedPlacements.current = placementSignature
       void save(form.getValues())
     }, autosaveDelayMs)
@@ -305,9 +329,11 @@ export function CurriculumWorkspace() {
   )
   const saveState = isPending
     ? "Saving…"
-    : mutation.isSuccess
-      ? "Saved"
-      : "Edits save automatically"
+    : isDirty && !autosaveReady
+      ? "Not saved — fix the highlighted fields"
+      : mutation.isSuccess
+        ? "Saved"
+        : "Edits save automatically"
   const referenceDataQuery = {
     isPending:
       programsQuery.isPending ||
@@ -703,8 +729,15 @@ export function CurriculumWorkspace() {
                 <Button
                   type="button"
                   disabled={!allYearsPopulated || isPending}
+                  // Routed through `handleSubmit` so RHF runs the resolver and
+                  // populates the field errors before anything is sent — with
+                  // no form submit left on this screen, this is the only path
+                  // that surfaces "Enter a curriculum name" instead of letting
+                  // the service's own parse throw a connection-shaped error.
                   onClick={() =>
-                    void save({ ...form.getValues(), status: "active" })
+                    void form.handleSubmit((values) =>
+                      save({ ...values, status: "active" }),
+                    )()
                   }
                 >
                   Save Curriculum

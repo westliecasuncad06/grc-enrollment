@@ -328,6 +328,104 @@ describe("CurriculumWorkspace", () => {
     )
   })
 
+  /**
+   * Reference-data reads as usual, but the first write hangs until the
+   * returned `release` is called — the only way to hold a save in flight while
+   * the chair keeps working.
+   */
+  function mockDeferredWrite(written: unknown) {
+    const gate: { release: (() => void) | null } = { release: null }
+    let writes = 0
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).endsWith("/programs"))
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      if (url(input).endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url(input).endsWith("/curricula") && init?.method !== "POST")
+        return Promise.resolve(new Response(JSON.stringify(curriculum)))
+      writes += 1
+      if (writes > 1)
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: written })),
+        )
+      return new Promise<Response>((resolve) => {
+        gate.release = () =>
+          resolve(new Response(JSON.stringify({ data: written })))
+      })
+    })
+    return gate
+  }
+
+  it("keeps an edit made while an earlier save is still in flight", async () => {
+    const user = userEvent.setup()
+    const gate = mockDeferredWrite(curriculum.data[0])
+    renderWorkspace()
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await selectOption(user, "Semester for CS101", "2nd")
+    await waitFor(() => expect(gate.release).not.toBeNull(), autosaveTimeout)
+
+    // Placed while the semester write is still open. Resetting the form to the
+    // snapshot that request was built from would wipe this row outright.
+    await selectOption(user, "Subject to place", "CS102 — Programming 2")
+    await user.click(
+      screen.getByRole("button", { name: "Add subject placement" }),
+    )
+    gate.release?.()
+
+    expect(
+      await screen.findByLabelText("Subject code for CS102"),
+    ).toBeInTheDocument()
+    await waitFor(
+      () =>
+        expect(
+          replacements("/curricula/9").some((body) =>
+            body.subjects.some((subject) => subject.subject_id === 12),
+          ),
+        ).toBe(true),
+      autosaveTimeout,
+    )
+  }, 20000)
+
+  it("stays on the newly opened curriculum when an earlier save resolves", async () => {
+    const user = userEvent.setup()
+    const gate = mockDeferredWrite(curriculum.data[0])
+    renderWorkspace()
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await selectOption(user, "Semester for CS101", "2nd")
+    await waitFor(() => expect(gate.release).not.toBeNull(), autosaveTimeout)
+
+    await selectOption(user, "Curriculum", "BSCS 2027")
+    await user.click(screen.getByRole("button", { name: "Discard changes" }))
+    gate.release?.()
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Curriculum name")).toHaveValue("BSCS 2027"),
+    )
+    expect(screen.getByLabelText("Curriculum")).toHaveTextContent("BSCS 2027")
+  }, 20000)
+
+  it("swaps a placement's subject from the row combobox and autosaves it", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockApi())
+    renderWorkspace()
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await user.click(screen.getByLabelText("Subject code for CS101"))
+    await user.click(await screen.findByRole("option", { name: "CS102" }))
+
+    await waitFor(
+      () =>
+        expect(
+          replacements("/curricula/9").some((body) =>
+            body.subjects.some((subject) => subject.subject_id === 12),
+          ),
+        ).toBe(true),
+      autosaveTimeout,
+    )
+  })
+
   it("adds a prerequisite from the placement row and autosaves the edge", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(
@@ -554,6 +652,12 @@ describe("CurriculumWorkspace", () => {
           expect.objectContaining({ method: "POST" }),
         ),
       autosaveTimeout,
+    )
+    // The Program select locks once a curriculum has an id, so this is the
+    // observable proof that the create response was applied before the next
+    // edit — without it the assertion below could race the in-flight POST.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Program")).toBeDisabled(),
     )
     await selectOption(user, "Semester for CS101", "2nd")
     await waitFor(
