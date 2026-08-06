@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Organization\AutoAssignSectionScheduleReferences;
 use App\Actions\Organization\SaveSectionPlan;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SectionPlan\IndexSectionPlanRequest;
@@ -68,6 +69,34 @@ final class AcademicTermSectionPlanController extends Controller
         $plans = $action->release($academicTerm, $curriculumId, $user, $contextFactory->fromRequest($request), isset($input['year_level']) ? (int) $input['year_level'] : null);
 
         return AcademicTermSectionPlanResource::collection(collect($plans))->response($request);
+    }
+
+    public function autoAssign(
+        Request $request,
+        AcademicTerm $academicTerm,
+        AutoAssignSectionScheduleReferences $action,
+    ): JsonResponse {
+        $this->authenticatedUser($request);
+        $this->authorize('viewAny', AcademicTermSectionPlan::class);
+        $input = $request->validate([
+            'curriculum_id' => ['required', 'integer', 'exists:curricula,id'],
+            'year_level' => ['sometimes', 'integer', 'between:1,4'],
+        ]);
+
+        $sections = $action->execute(
+            $academicTerm,
+            (int) $input['curriculum_id'],
+            isset($input['year_level']) ? (int) $input['year_level'] : null,
+        );
+
+        $plans = AcademicTermSectionPlan::query()
+            ->where('academic_term_id', $academicTerm->id)
+            ->where('curriculum_id', (int) $input['curriculum_id'])
+            ->get();
+
+        return AcademicTermSectionPlanResource::collection($plans)->additional([
+            'meta' => ['sections_updated' => $sections->count()],
+        ])->response($request);
     }
 
     public function submit(

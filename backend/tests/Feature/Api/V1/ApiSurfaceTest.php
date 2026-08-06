@@ -78,6 +78,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/academic-grades',
             'POST api/v1/academic-terms',
             'POST api/v1/academic-terms/{academicTerm}/archive-and-create-next',
+            'POST api/v1/academic-terms/{academicTerm}/section-plan/auto-assign',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/release',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/submit',
             'POST api/v1/auth/login',

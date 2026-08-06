@@ -225,6 +225,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/subject-offerings', [SubjectOfferingController::class, 'store'])->name('subject-offerings.store');
             Route::patch('/academic-terms/{academicTerm}/section-plan', [AcademicTermSectionPlanController::class, 'store'])->name('academic-term-section-plans.store');
             Route::post('/academic-terms/{academicTerm}/section-plan/release', [AcademicTermSectionPlanController::class, 'release'])->name('academic-term-section-plans.release');
+            Route::post('/academic-terms/{academicTerm}/section-plan/auto-assign', [AcademicTermSectionPlanController::class, 'autoAssign'])->name('academic-term-section-plans.auto-assign');
             Route::post('/academic-terms/{academicTerm}/section-plan/submit', [AcademicTermSectionPlanController::class, 'submit'])->name('academic-term-section-plans.submit');
         });
 
