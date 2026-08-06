@@ -72,8 +72,8 @@ password.
 
 **Source:** `backend/database/seeders/DemoEnrollmentSeeder.php`. Eight
 student logins with real locked grade history spanning year 1 semester 1
-through year 4 semester 2, on a dedicated demo curriculum ("BSIT Grade
-History Demo 2026", program `BSIT-DEMO`). `enrollment_category`
+through year 4 semester 2, on the real BSIT program's active (2024-2029)
+curriculum. `enrollment_category`
 (Regular/Irregular) is **never hard-coded** here — every seed run writes the
 locked grades, then runs the real `EnrollmentCategoryClassifier` against
 them, so the category shown below is the classifier's own verdict, not an
@@ -184,20 +184,6 @@ availability declared" in the Faculty Assignment workspace, since that CSV
 carries no availability data. The 10 identities above are the ones this
 project actually exercises end to end for teaching-side workflows.
 
-### Why a dedicated curriculum (`BSIT-DEMO`)
-
-`GrcCurriculumSeeder` places the real GRC catalog onto **every** one of the
-12 real programs (see below), each with 3 curriculum versions. An earlier
-version of this roster lived on a college-bearing program and every student
-came back Irregular: the importer had silently added dozens of ungraded
-"required" subjects on top of it. The fix is `BSIT-DEMO`, a deliberately
-collegeless program (`college = null`), which `GrcCurriculumSeeder` skips
-entirely — its curriculum (seeded separately by
-`DemoGradeHistoryCurriculumSeeder`) stays exactly the 22 placements
-`DemoEnrollmentSeeder` seeds grades for. Renamed from `BSCS-DEMO` at the
-product owner's request — the demo roster represents BSIT students, not
-BSCS.
-
 ## Running the seeder
 
 ```powershell
@@ -264,7 +250,6 @@ Covered by `backend/tests/Feature/Database/ReferenceDataSeederTest.php`,
 | `BSBA-HRM` | BSBA major in Human Resource Management | `active` | CBAE |
 | `BSA` | BS Accountancy | `active` | COA |
 | `BSCRIM` | BS Criminology | `inactive` | — |
-| `BSIT-DEMO` | BS Information Technology (Grade History Demo) | `active` | — (deliberate, see below) |
 
 Each of the 12 real programs gets **3 curriculum versions** (36 total): the
 active `2024-2029` (seeded exactly as extracted from GRC's real block-section

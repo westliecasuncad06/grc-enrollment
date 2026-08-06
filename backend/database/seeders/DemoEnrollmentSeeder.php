@@ -18,6 +18,7 @@ use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
 use App\Models\FacultyAvailability;
 use App\Models\FacultySubjectPreference;
 use App\Models\Program;
@@ -28,6 +29,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -48,8 +50,8 @@ use RuntimeException;
  *   0007  3rd year, irregular  — 5 sems, an NC (Not Complete) on a Leadership subject
  *   0008  4th year, irregular  — 7 sems, missing a required subject's grade entirely
  *
- * Each student's completed-semester count follows "BSIT Grade History Demo
- * 2026"'s (see CurriculumSeeder) own ordinal positions exactly — SemesterSlot::
+ * Each student's completed-semester count follows the real BSIT curriculum's
+ * own ordinal positions exactly — SemesterSlot::
  * ordinal() is `(yearLevel-1)*2 + (1|2)` — so a year-Y student has
  * `(Y-1)*2 + 1` completed ordinals and is about to enroll in their Yth
  * year's 2nd semester, which is exactly the current ongoing term.
@@ -73,67 +75,139 @@ final class DemoEnrollmentSeeder extends Seeder
     private const PASSWORD = 'password';
 
     /**
-     * Every subject at each curriculum ordinal, with the mark a REGULAR
-     * student earns there. Ordinal 8 (year 4, 2nd semester) is deliberately
-     * absent — that is the current ongoing term every student is left free
-     * to enroll into themselves.
+     * Every REAL BSIT subject at each curriculum ordinal (from
+     * `data/curriculum-2024-2029-placements.csv`), with the mark a REGULAR
+     * student earns there. Every required subject gets '2.00' except that
+     * ordinal's Leadership subject, which gets 'C' (completion-only — see
+     * `CompletionOnlySubjectRule`). Ordinal 8 (year 4, 2nd semester) is
+     * deliberately absent — that is the current ongoing term every student
+     * is left free to enroll into themselves.
      *
      * @var array<int, list<array{subject: string, mark: string}>>
      */
     private const SEMESTER_SUBJECTS = [
         1 => [
-            ['subject' => 'CS101', 'mark' => '2.00'],
-            ['subject' => 'CS102', 'mark' => '1.75'],
-            ['subject' => 'MATH101', 'mark' => '2.25'],
-            ['subject' => 'GE101', 'mark' => '1.50'],
-            ['subject' => 'PE101', 'mark' => '1.00'],
+            ['subject' => 'ITC', 'mark' => '2.00'],
+            ['subject' => 'ITCL', 'mark' => '2.00'],
+            ['subject' => 'ITP1', 'mark' => '2.00'],
+            ['subject' => 'ITP1L', 'mark' => '2.00'],
+            ['subject' => 'ITP2', 'mark' => '2.00'],
+            ['subject' => 'ITP2L', 'mark' => '2.00'],
+            ['subject' => 'KOMFIL', 'mark' => '2.00'],
             ['subject' => 'LEAD 1', 'mark' => 'C'],
+            ['subject' => 'MATHWRLD', 'mark' => '2.00'],
+            ['subject' => 'NSTP 1', 'mark' => '2.00'],
+            ['subject' => 'PATHFIT1', 'mark' => '2.00'],
+            ['subject' => 'PHILHIST', 'mark' => '2.00'],
+            ['subject' => 'PURPCOMM', 'mark' => '2.00'],
+            ['subject' => 'UNDSELF', 'mark' => '2.00'],
         ],
         2 => [
-            ['subject' => 'CS201', 'mark' => '2.00'],
-            ['subject' => 'MATH102', 'mark' => '2.50'],
-            ['subject' => 'GE102', 'mark' => '1.75'],
-            ['subject' => 'LEAD 2', 'mark' => 'C'],
+            ['subject' => 'CONWRLD', 'mark' => '2.00'],
+            ['subject' => 'ETHICS', 'mark' => '2.00'],
+            ['subject' => 'HCI', 'mark' => '2.00'],
+            ['subject' => 'HCIL', 'mark' => '2.00'],
+            ['subject' => 'ITPLUS3', 'mark' => '2.00'],
+            ['subject' => 'ITPLUS4', 'mark' => '2.00'],
+            ['subject' => 'LEAD2', 'mark' => 'C'],
+            ['subject' => 'NSTP2', 'mark' => '2.00'],
+            ['subject' => 'PATHFIT2', 'mark' => '2.00'],
+            ['subject' => 'PROG1', 'mark' => '2.00'],
+            ['subject' => 'PROG1L', 'mark' => '2.00'],
+            ['subject' => 'PSPEAK', 'mark' => '2.00'],
+            ['subject' => 'SCITECH', 'mark' => '2.00'],
         ],
         3 => [
-            ['subject' => 'CS202', 'mark' => '2.25'],
+            ['subject' => 'AVE', 'mark' => '2.00'],
+            ['subject' => 'AVEL', 'mark' => '2.00'],
+            ['subject' => 'CPROG2', 'mark' => '2.00'],
+            ['subject' => 'CPROG2L', 'mark' => '2.00'],
+            ['subject' => 'DBMSYS', 'mark' => '2.00'],
+            ['subject' => 'DBMSYSL', 'mark' => '2.00'],
+            ['subject' => 'ENVISCI', 'mark' => '2.00'],
+            ['subject' => 'IPT1', 'mark' => '2.00'],
+            ['subject' => 'IPT1L', 'mark' => '2.00'],
             ['subject' => 'LEAD 3', 'mark' => 'C'],
+            ['subject' => 'NW1', 'mark' => '2.00'],
+            ['subject' => 'NW1L', 'mark' => '2.00'],
+            ['subject' => 'PATHFIT3', 'mark' => '2.00'],
+            ['subject' => 'WST', 'mark' => '2.00'],
+            ['subject' => 'WSTL', 'mark' => '2.00'],
         ],
         4 => [
-            ['subject' => 'CS301', 'mark' => '2.00'],
-            ['subject' => 'LEAD 4', 'mark' => 'C'],
+            ['subject' => 'DSTRUCT', 'mark' => '2.00'],
+            ['subject' => 'DSTRUCTL', 'mark' => '2.00'],
+            ['subject' => 'INFOMGT', 'mark' => '2.00'],
+            ['subject' => 'INFOMGTL', 'mark' => '2.00'],
+            ['subject' => 'LEAD4', 'mark' => 'C'],
+            ['subject' => 'NET2', 'mark' => '2.00'],
+            ['subject' => 'NET2L', 'mark' => '2.00'],
+            ['subject' => 'OOP', 'mark' => '2.00'],
+            ['subject' => 'OOPL', 'mark' => '2.00'],
+            ['subject' => 'PATHFIT4', 'mark' => '2.00'],
+            ['subject' => 'PROFELEC1', 'mark' => '2.00'],
+            ['subject' => 'PROFELEC1L', 'mark' => '2.00'],
+            ['subject' => 'SOSLIT', 'mark' => '2.00'],
+            ['subject' => 'SYSARCH1', 'mark' => '2.00'],
+            ['subject' => 'SYSARCH1L', 'mark' => '2.00'],
         ],
         5 => [
-            ['subject' => 'CS302', 'mark' => '2.25'],
+            ['subject' => 'ARTAPP', 'mark' => '2.00'],
+            ['subject' => 'BMC', 'mark' => '2.00'],
+            ['subject' => 'BMCL', 'mark' => '2.00'],
+            ['subject' => 'CAO', 'mark' => '2.00'],
+            ['subject' => 'CAOL', 'mark' => '2.00'],
+            ['subject' => 'DMATH', 'mark' => '2.00'],
             ['subject' => 'LEAD 5', 'mark' => 'C'],
+            ['subject' => 'PRELEC2', 'mark' => '2.00'],
+            ['subject' => 'PRELEC2L', 'mark' => '2.00'],
+            ['subject' => 'PT', 'mark' => '2.00'],
+            ['subject' => 'PTL', 'mark' => '2.00'],
+            ['subject' => 'SIA2', 'mark' => '2.00'],
+            ['subject' => 'SIA2L', 'mark' => '2.00'],
         ],
         6 => [
-            ['subject' => 'CS303', 'mark' => '2.00'],
-            ['subject' => 'LEAD 6', 'mark' => 'C'],
+            ['subject' => 'ADVMOB', 'mark' => '2.00'],
+            ['subject' => 'ADVMOBL', 'mark' => '2.00'],
+            ['subject' => 'ARCHORG', 'mark' => '2.00'],
+            ['subject' => 'ARCHORGL', 'mark' => '2.00'],
+            ['subject' => 'CAPSTONE1', 'mark' => '2.00'],
+            ['subject' => 'CAPSTONE1L', 'mark' => '2.00'],
+            ['subject' => 'INFOSEC1', 'mark' => '2.00'],
+            ['subject' => 'INFOSEC1L', 'mark' => '2.00'],
+            ['subject' => 'LEAD6', 'mark' => 'C'],
+            ['subject' => 'QMTHODS', 'mark' => '2.00'],
+            ['subject' => 'RIZAL', 'mark' => '2.00'],
+            ['subject' => 'WEBSYS', 'mark' => '2.00'],
+            ['subject' => 'WEBSYSL', 'mark' => '2.00'],
         ],
         7 => [
-            ['subject' => 'CS401', 'mark' => '2.50'],
+            ['subject' => 'BUSANA', 'mark' => '2.00'],
+            ['subject' => 'CAPS2', 'mark' => '2.00'],
+            ['subject' => 'CAPS2L', 'mark' => '2.00'],
+            ['subject' => 'IAS2', 'mark' => '2.00'],
+            ['subject' => 'IAS2L', 'mark' => '2.00'],
             ['subject' => 'LEAD 7', 'mark' => 'C'],
+            ['subject' => 'SPI', 'mark' => '2.00'],
         ],
     ];
 
     /**
-     * The current ongoing term's own subjects (ordinal 8's year-2 slot is
-     * absent — see `SEMESTER_SUBJECTS`), one entry per year level 1–4 — what
-     * a REGULAR student in that year is actually about to enrol into. Every
-     * block for that year level (see `BLOCK_CODES_BY_YEAR`) offers the same
-     * subject list, just on a different schedule; `SectionSeeder` already
-     * publishes an ordinary (non-block) section for every one of these same
-     * subject codes, so irregular students on the same curriculum can still
-     * enrol per subject.
+     * The current ongoing term's own real BSIT subjects — one entry per
+     * year level 1–4, what a REGULAR student in that year is about to
+     * enroll into. Years 1–3 are exactly `SEMESTER_SUBJECTS[2]`/`[4]`/`[6]`'s
+     * own subject codes (a year-Y student's current target IS year Y's
+     * 2nd semester, ordinal `2*Y`); year 4's list is wholly new since
+     * ordinal 8 (year 4 2nd semester) is deliberately absent from
+     * `SEMESTER_SUBJECTS`.
      *
      * @var array<int, list<string>>
      */
     private const BLOCK_SUBJECTS_BY_YEAR = [
-        1 => ['CS201', 'MATH102', 'GE102', 'LEAD 2'],
-        2 => ['CS301', 'LEAD 4'],
-        3 => ['CS303', 'LEAD 6'],
-        4 => ['CS402', 'LEAD8'],
+        1 => ['CONWRLD', 'ETHICS', 'HCI', 'HCIL', 'ITPLUS3', 'ITPLUS4', 'LEAD2', 'NSTP2', 'PATHFIT2', 'PROG1', 'PROG1L', 'PSPEAK', 'SCITECH'],
+        2 => ['DSTRUCT', 'DSTRUCTL', 'INFOMGT', 'INFOMGTL', 'LEAD4', 'NET2', 'NET2L', 'OOP', 'OOPL', 'PATHFIT4', 'PROFELEC1', 'PROFELEC1L', 'SOSLIT', 'SYSARCH1', 'SYSARCH1L'],
+        3 => ['ADVMOB', 'ADVMOBL', 'ARCHORG', 'ARCHORGL', 'CAPSTONE1', 'CAPSTONE1L', 'INFOSEC1', 'INFOSEC1L', 'LEAD6', 'QMTHODS', 'RIZAL', 'WEBSYS', 'WEBSYSL'],
+        4 => ['LEAD8', 'OJT', 'SYSMAIN', 'SYSMAINL'],
     ];
 
     /**
@@ -155,42 +229,19 @@ final class DemoEnrollmentSeeder extends Seeder
     ];
 
     /**
-     * One distinct weekly schedule per block letter (A/B/C), so the three
-     * blocks in a year level are a meaningfully different choice — not the
-     * same slot copy-pasted under three codes. Indexed positionally against
-     * `BLOCK_CODES_BY_YEAR`'s inner arrays.
+     * One distinct single-day weekly schedule per block letter (A/B/C), so
+     * the three blocks in a year level are a meaningfully different choice
+     * — not the same slot copy-pasted under three codes. Each subject in a
+     * block meets exactly one day, matching how every real GRC schedule row
+     * works (verified directly against both source Excel files). Indexed
+     * positionally against `BLOCK_CODES_BY_YEAR`'s inner arrays.
      *
-     * @var list<array{days: string, start_hour: int, room: string}>
+     * @var list<array{day: string, start_hour: int, room: string}>
      */
     private const BLOCK_SCHEDULES = [
-        ['days' => 'MWF', 'start_hour' => 8, 'room' => 'RM-401'],
-        ['days' => 'TTh', 'start_hour' => 8, 'room' => 'RM-402'],
-        ['days' => 'MWF', 'start_hour' => 13, 'room' => 'RM-403'],
-    ];
-
-    /**
-     * One real professor per `BLOCK_SUBJECTS_BY_YEAR` subject — a perfect
-     * 1:1 mapping across all 10 distinct subjects those four year levels
-     * offer. Each professor owns every block's section of their own subject
-     * (see `seedRegularBlocks`), exactly like a real department: one
-     * instructor, many sections of the same course. Replaces the single
-     * `faculty.seed@grc.test` account that previously owned all 448 demo
-     * sections. Names are invented placeholders; emails use the reserved
-     * `.test` TLD (RFC 2606).
-     *
-     * @var array<string, array{name: string, email_local: string}>
-     */
-    private const PROFESSORS = [
-        'CS201' => ['name' => 'Ramon Bautista', 'email_local' => 'bautista'],
-        'MATH102' => ['name' => 'Teresa Villanueva', 'email_local' => 'villanueva'],
-        'GE102' => ['name' => 'Christian Dela Cruz', 'email_local' => 'dela-cruz'],
-        'LEAD 2' => ['name' => 'Angelica Reyes', 'email_local' => 'reyes'],
-        'CS301' => ['name' => 'Michael Santos', 'email_local' => 'santos'],
-        'LEAD 4' => ['name' => 'Josephine Mendoza', 'email_local' => 'mendoza'],
-        'CS303' => ['name' => 'Ferdinand Aquino', 'email_local' => 'aquino'],
-        'LEAD 6' => ['name' => 'Grace Manalo', 'email_local' => 'manalo'],
-        'CS402' => ['name' => 'Rafael Torres', 'email_local' => 'torres'],
-        'LEAD8' => ['name' => 'Cecilia Fernandez', 'email_local' => 'fernandez'],
+        ['day' => 'Mon', 'start_hour' => 8, 'room' => 'RM-401'],
+        ['day' => 'Wed', 'start_hour' => 8, 'room' => 'RM-402'],
+        ['day' => 'Fri', 'start_hour' => 13, 'room' => 'RM-403'],
     ];
 
     /**
@@ -224,23 +275,23 @@ final class DemoEnrollmentSeeder extends Seeder
         ['number' => '2023-06-00002', 'email' => 'student2.seed@grc.test', 'name' => 'Seed Student Two', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => [], 'omit' => []],
         ['number' => '2023-06-00003', 'email' => 'student3.seed@grc.test', 'name' => 'Seed Student Three', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => [], 'omit' => []],
         ['number' => '2023-06-00004', 'email' => 'student4.seed@grc.test', 'name' => 'Seed Student Four', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => []],
-        ['number' => '2023-06-00005', 'email' => 'student5.seed@grc.test', 'name' => 'Seed Student Five', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['MATH101' => '5.00'], 'omit' => []],
-        ['number' => '2023-06-00006', 'email' => 'student6.seed@grc.test', 'name' => 'Seed Student Six', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['CS201' => 'INC'], 'omit' => []],
-        ['number' => '2023-06-00007', 'email' => 'student7.seed@grc.test', 'name' => 'Seed Student Seven', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => ['LEAD 3' => 'NC'], 'omit' => []],
-        ['number' => '2023-06-00008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => ['CS401']],
+        ['number' => '2023-06-00005', 'email' => 'student5.seed@grc.test', 'name' => 'Seed Student Five', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['MATHWRLD' => '5.00'], 'omit' => []],
+        ['number' => '2023-06-00006', 'email' => 'student6.seed@grc.test', 'name' => 'Seed Student Six', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['PROG1' => 'INC'], 'omit' => []],
+        ['number' => '2023-06-00007', 'email' => 'student7.seed@grc.test', 'name' => 'Seed Student Seven', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => ['LEAD 5' => 'NC'], 'omit' => []],
+        ['number' => '2023-06-00008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => ['SPI']],
     ];
 
     /**
-     * Two logins on the REAL `BSIT` program's curriculum versions (not the
-     * isolated `BSIT-DEMO` fixture the 8 grade-history students above use),
-     * demonstrating the Registrar's exact versioning scenario: a student who
-     * entered in 2023 is the last batch of the old curriculum and is now a
-     * 4th-year 2nd-sem student on it, while a 2024-entry student already
-     * follows the new curriculum and is a 3rd-year 2nd-sem student on it.
-     * Neither carries grade history or a block enrollment — the 8 students
-     * above already exercise that lifecycle; these two exist solely to make
-     * `CurriculumVersion::resolveForEntryYear()` visible end to end (log in,
-     * open the prospectus, see the correct curriculum's subject list).
+     * Two more logins on the REAL `BSIT` program, demonstrating the
+     * Registrar's exact versioning scenario: a student who entered in 2023
+     * is the last batch of the old curriculum and is now a 4th-year 2nd-sem
+     * student on it, while a 2024-entry student already follows the new
+     * curriculum and is a 3rd-year 2nd-sem student on it. Neither carries
+     * grade history or a block enrollment — the 8 students above already
+     * exercise that lifecycle, now on this same real BSIT program; these two
+     * exist solely to make `CurriculumVersion::resolveForEntryYear()` visible
+     * end to end (log in, open the prospectus, see the correct curriculum's
+     * subject list).
      *
      * @var list<array{number: string, email: string, name: string, entryYear: int, yearLevel: int}>
      */
@@ -343,7 +394,7 @@ final class DemoEnrollmentSeeder extends Seeder
             return;
         }
 
-        $professorsBySubject = $this->seedProfessors($currentTerm);
+        $professorsBySubject = $this->seedProfessors($currentTerm, $curriculum);
 
         foreach (self::BLOCK_SUBJECTS_BY_YEAR as $yearLevel => $subjectCodes) {
             $blockCodes = self::BLOCK_CODES_BY_YEAR[$yearLevel];
@@ -370,6 +421,7 @@ final class DemoEnrollmentSeeder extends Seeder
                 foreach ($subjectCodes as $subjectIndex => $subjectCode) {
                     $subject = $this->subject($subjectCode);
                     $startHour = $schedule['start_hour'] + $subjectIndex;
+                    $professor = $professorsBySubject[$subjectCode] ?? null;
 
                     Section::updateOrCreate(
                         [
@@ -379,8 +431,8 @@ final class DemoEnrollmentSeeder extends Seeder
                         ],
                         [
                             'section_plan_id' => $plan->id,
-                            'professor_id' => $this->professorFor($professorsBySubject, $subjectCode)->id,
-                            'schedule_days' => $schedule['days'],
+                            'professor_id' => $professor?->id,
+                            'schedule_days' => $schedule['day'],
                             'starts_at_time' => sprintf('%02d:00:00', $startHour),
                             'ends_at_time' => sprintf('%02d:00:00', $startHour + 1),
                             'room' => $schedule['room'],
@@ -396,65 +448,96 @@ final class DemoEnrollmentSeeder extends Seeder
     }
 
     /**
-     * One `User` (role Faculty, college CCS) per `PROFESSORS` entry, each
+     * One `User` (role Faculty, college CCS) per named `reference_professor_name`
+     * across the current term's own subjects (`BLOCK_SUBJECTS_BY_YEAR`), each
      * with a declared weekday 08:00–17:00 availability (covering every
-     * `BLOCK_SCHEDULES` slot their sections actually meet at) and a rank-1
-     * `FacultySubjectPreference` for their own subject — real Faculty Input
-     * rows, not just a `professor_id` pointer, so `faculty.<name>@grc.test`
-     * has a genuine Teaching Schedule/Class Roster/Grade Submission story.
+     * `BLOCK_SCHEDULES` slot their sections actually meet at) and a
+     * `FacultySubjectPreference` for every subject they own — real Faculty
+     * Input rows, not just a `professor_id` pointer. A subject whose
+     * representative block had no named professor in the source Excel gets
+     * no Faculty account and its generated sections keep `professor_id =
+     * null` — no name is ever invented.
      *
-     * @return array<string, User> subject code => the professor who owns it
+     * Rank is assigned per professor, not hard-coded to 1: several real
+     * professors in the source Excel own more than one of this term's
+     * subjects (e.g. "MR. SALAZAR" teaches both PATHFIT2 and PATHFIT4), and
+     * `faculty_subject_preferences` has a `(professor_id, academic_term_id,
+     * rank)` unique constraint — a professor cannot rank two different
+     * subjects #1 in the same term. Follows the same `max('rank') + 1`,
+     * skip-if-already-exists convention `CatalogFacultySeeder` already uses
+     * for the identical problem: each professor's first subject encountered
+     * (in `BLOCK_SUBJECTS_BY_YEAR` order) gets rank 1, their second gets
+     * rank 2, and so on; reseeding never re-ranks an existing preference.
+     *
+     * @return array<string, ?User> subject code => the professor who owns it, or null
      */
-    private function seedProfessors(AcademicTerm $currentTerm): array
+    private function seedProfessors(AcademicTerm $currentTerm, Curriculum $curriculum): array
     {
         $professorsBySubject = [];
+        $nextRanks = [];
 
-        foreach (self::PROFESSORS as $subjectCode => $definition) {
-            $professor = User::updateOrCreate(
-                ['email' => "prof.{$definition['email_local']}@grc.test"],
-                [
-                    'name' => $definition['name'],
-                    'password' => self::PASSWORD,
-                    'role' => UserRole::Faculty,
-                    'college' => CollegeCode::Ccs,
-                    'status' => UserStatus::Active,
-                ],
-            );
+        foreach (self::BLOCK_SUBJECTS_BY_YEAR as $subjectCodes) {
+            foreach ($subjectCodes as $subjectCode) {
+                if (array_key_exists($subjectCode, $professorsBySubject)) {
+                    continue;
+                }
 
-            foreach ([1, 2, 3, 4, 5] as $dayOfWeek) {
-                FacultyAvailability::updateOrCreate(
+                $subject = $this->subject($subjectCode);
+                $placement = CurriculumSubject::query()
+                    ->where('curriculum_id', $curriculum->id)
+                    ->where('subject_id', $subject->id)
+                    ->first();
+                $professorName = $placement?->reference_professor_name;
+
+                if ($professorName === null) {
+                    $professorsBySubject[$subjectCode] = null;
+
+                    continue;
+                }
+
+                $professor = User::updateOrCreate(
+                    ['name' => $professorName, 'role' => UserRole::Faculty],
                     [
-                        'professor_id' => $professor->id,
-                        'academic_term_id' => $currentTerm->id,
-                        'day_of_week' => $dayOfWeek,
-                        'starts_at_time' => '08:00:00',
+                        'email' => 'prof.'.Str::slug($professorName).'@grc.test',
+                        'password' => self::PASSWORD,
+                        'college' => CollegeCode::Ccs,
+                        'status' => UserStatus::Active,
                     ],
-                    ['ends_at_time' => '17:00:00'],
                 );
-            }
 
-            FacultySubjectPreference::updateOrCreate(
-                [
+                foreach ([1, 2, 3, 4, 5] as $dayOfWeek) {
+                    FacultyAvailability::updateOrCreate(
+                        [
+                            'professor_id' => $professor->id,
+                            'academic_term_id' => $currentTerm->id,
+                            'day_of_week' => $dayOfWeek,
+                            'starts_at_time' => '08:00:00',
+                        ],
+                        ['ends_at_time' => '17:00:00'],
+                    );
+                }
+
+                $preference = FacultySubjectPreference::firstOrNew([
                     'professor_id' => $professor->id,
                     'academic_term_id' => $currentTerm->id,
-                    'subject_id' => $this->subject($subjectCode)->id,
-                ],
-                ['rank' => 1],
-            );
+                    'subject_id' => $subject->id,
+                ]);
 
-            $professorsBySubject[$subjectCode] = $professor;
+                if (! $preference->exists) {
+                    $rankKey = "{$currentTerm->id}:{$professor->id}";
+                    $nextRanks[$rankKey] ??= (int) FacultySubjectPreference::query()
+                        ->where('professor_id', $professor->id)
+                        ->where('academic_term_id', $currentTerm->id)
+                        ->max('rank');
+                    $preference->rank = ++$nextRanks[$rankKey];
+                    $preference->save();
+                }
+
+                $professorsBySubject[$subjectCode] = $professor;
+            }
         }
 
         return $professorsBySubject;
-    }
-
-    /**
-     * @param  array<string, User>  $professorsBySubject
-     */
-    private function professorFor(array $professorsBySubject, string $subjectCode): User
-    {
-        return $professorsBySubject[$subjectCode]
-            ?? throw new RuntimeException("No professor mapped for subject '{$subjectCode}'.");
     }
 
     /**
@@ -575,30 +658,24 @@ final class DemoEnrollmentSeeder extends Seeder
 
     /**
      * `subjects` is unique on `(college, code)`, not `code` alone, and the
-     * real GRC catalog (`GrcSubjectCatalogSeeder`) seeds `LEAD 1`-`LEAD8`
-     * under every real college that offers Leadership (COE, CBAE, COA,
-     * CCS) — so an unscoped `where('code', $code)` is ambiguous for those
-     * eight codes and can silently resolve to the wrong college's row.
-     * `DemoGradeHistoryCurriculumSeeder` places this curriculum's own LEAD
-     * codes as collegeless (`college => null`) specifically to stay
-     * unambiguous; every grade recorded here must resolve to that same
-     * collegeless subject, or a student's grade history and their
-     * curriculum's required-subject list silently disagree on which
-     * subject_id "LEAD 2" even is — which is exactly what makes
+     * real GRC catalog (`GrcSubjectCatalogSeeder`) seeds several of this
+     * curriculum's own codes — every Leadership code (`LEAD 1`-`LEAD8`) and
+     * several shared Gen-Ed codes (e.g. `KOMFIL`) alike — identically under
+     * other real colleges too (COE, CBAE, COA), so an unscoped
+     * `where('code', $code)` is ambiguous. Every subject this seeder ever
+     * looks up belongs to the real BSIT curriculum, which
+     * `curriculum-2024-2029-placements.csv` places entirely under CCS, so
+     * scoping every lookup to CCS resolves the same row
+     * `GrcCurriculumSeeder`/`GrcCurriculumScheduleReferenceSeeder` used for
+     * that placement — or a student's grade history and the curriculum's
+     * required-subject list would silently disagree on which subject_id a
+     * shared code even is, which is exactly what makes
      * `EnrollmentCategoryClassifier` see a "missing required subject" and
      * misclassify an otherwise-Regular student as Irregular.
      */
-    private const LEADERSHIP_SUBJECTS = ['LEAD 1', 'LEAD 2', 'LEAD 3', 'LEAD 4', 'LEAD 5', 'LEAD 6', 'LEAD 7', 'LEAD8'];
-
     private function subject(string $code): Subject
     {
-        $query = Subject::query()->where('code', $code);
-
-        if (in_array($code, self::LEADERSHIP_SUBJECTS, true)) {
-            $query->whereNull('college');
-        }
-
-        $subject = $query->first();
+        $subject = Subject::query()->where('college', CollegeCode::Ccs)->where('code', $code)->first();
 
         if ($subject === null) {
             throw new RuntimeException("Subject '{$code}' is missing. Run SubjectSeeder first.");
@@ -609,13 +686,15 @@ final class DemoEnrollmentSeeder extends Seeder
 
     private function curriculum(): Curriculum
     {
+        $program = $this->program();
         $curriculum = Curriculum::query()
-            ->where('name', 'BSIT Grade History Demo 2026')
+            ->where('program_id', $program->id)
+            ->where('status', 'active')
             ->first();
 
         if ($curriculum === null) {
             throw new RuntimeException(
-                'DemoEnrollmentSeeder requires the seeded BSIT-DEMO curriculum. Run CurriculumSeeder first.',
+                'DemoEnrollmentSeeder requires the real BSIT program\'s active curriculum. Run GrcCurriculumSeeder first.',
             );
         }
 
@@ -624,7 +703,7 @@ final class DemoEnrollmentSeeder extends Seeder
 
     private function program(): Program
     {
-        $program = Program::query()->where('code', 'BSIT-DEMO')->first();
+        $program = Program::query()->where('code', 'BSIT')->first();
 
         if ($program === null) {
             throw new RuntimeException(

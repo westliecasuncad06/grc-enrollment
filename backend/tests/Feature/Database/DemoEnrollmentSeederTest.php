@@ -6,12 +6,13 @@ use App\Domain\Academic\GradeStatus;
 use App\Models\AcademicGrade;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
 use App\Models\FacultyAvailability;
 use App\Models\FacultySubjectPreference;
+use App\Models\Program;
 use App\Models\Section;
 use App\Models\StudentProfile;
-use App\Models\Subject;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoEnrollmentSeeder;
@@ -84,17 +85,20 @@ final class DemoEnrollmentSeederTest extends TestCase
      */
     public static function gradeHistoryCountProvider(): array
     {
+        // Real BSIT per-ordinal subject counts: 14, 13, 15, 15, 13, 13, 7
+        // (year 1 sem 1, year 1 sem 2, year 2 sem 1, year 2 sem 2, year 3
+        // sem 1, year 3 sem 2, year 4 sem 1 respectively).
         return [
-            '0001 — 1 completed semester' => ['2023-06-00001', 6],
-            '0002 — 3 completed semesters' => ['2023-06-00002', 12],
-            '0003 — 5 completed semesters' => ['2023-06-00003', 16],
-            '0004 — 7 completed semesters' => ['2023-06-00004', 20],
-            '0005 — 3 completed semesters' => ['2023-06-00005', 12],
-            '0006 — 3 completed semesters' => ['2023-06-00006', 12],
-            '0007 — 5 completed semesters' => ['2023-06-00007', 16],
-            // 7 completed semesters, minus the one deliberately omitted
-            // required subject that makes this student Irregular.
-            '0008 — 7 completed semesters, one omitted' => ['2023-06-00008', 19],
+            '0001 — 1 completed semester' => ['2023-06-00001', 14],
+            '0002 — 3 completed semesters' => ['2023-06-00002', 14 + 13 + 15],
+            '0003 — 5 completed semesters' => ['2023-06-00003', 14 + 13 + 15 + 15 + 13],
+            '0004 — 7 completed semesters' => ['2023-06-00004', 14 + 13 + 15 + 15 + 13 + 13 + 7],
+            '0005 — 3 completed semesters' => ['2023-06-00005', 14 + 13 + 15],
+            '0006 — 3 completed semesters' => ['2023-06-00006', 14 + 13 + 15],
+            '0007 — 5 completed semesters' => ['2023-06-00007', 14 + 13 + 15 + 15 + 13],
+            // 7 completed ordinals' worth of subjects, minus the one
+            // deliberately omitted required subject.
+            '0008 — 7 completed semesters, one omitted' => ['2023-06-00008', 14 + 13 + 15 + 15 + 13 + 13 + 7 - 1],
         ];
     }
 
@@ -207,124 +211,117 @@ final class DemoEnrollmentSeederTest extends TestCase
     }
 
     /**
-     * @return array<string, array{string, string, string}>
+     * @return array<string, array{int}>
      */
-    public static function connectedProfessorProvider(): array
+    public static function blockYearProvider(): array
     {
         return [
-            'CS201' => ['CS201', 'Ramon Bautista', 'prof.bautista@grc.test'],
-            'MATH102' => ['MATH102', 'Teresa Villanueva', 'prof.villanueva@grc.test'],
-            'GE102' => ['GE102', 'Christian Dela Cruz', 'prof.dela-cruz@grc.test'],
-            'LEAD 2' => ['LEAD 2', 'Angelica Reyes', 'prof.reyes@grc.test'],
-            'CS301' => ['CS301', 'Michael Santos', 'prof.santos@grc.test'],
-            'LEAD 4' => ['LEAD 4', 'Josephine Mendoza', 'prof.mendoza@grc.test'],
-            'CS303' => ['CS303', 'Ferdinand Aquino', 'prof.aquino@grc.test'],
-            'LEAD 6' => ['LEAD 6', 'Grace Manalo', 'prof.manalo@grc.test'],
-            'CS402' => ['CS402', 'Rafael Torres', 'prof.torres@grc.test'],
-            'LEAD8' => ['LEAD8', 'Cecilia Fernandez', 'prof.fernandez@grc.test'],
+            'year 1' => [1],
+            'year 2' => [2],
+            'year 3' => [3],
+            'year 4' => [4],
         ];
     }
 
     /**
-     * Every block section of a subject, within the dedicated `BSIT-DEMO`
-     * curriculum's own blocks (`BSIT101`..`BSIT401`) — across every block
-     * code, in every year level that offers it — must be owned by that
-     * subject's one real professor, not the old shared
-     * `faculty.seed@grc.test` placeholder.
-     *
-     * Deliberately scoped to `BSIT-DEMO`, not "every `is_block_exclusive`
-     * section of this subject code platform-wide": `LEAD8` (and other
-     * Leadership codes) also appears in the separate, real `BSIT` program's
-     * curriculum that `ProgramChairScheduleSampleSeeder` generates its own
-     * block sections for (e.g. `IT401`), owned by that seeder's own "Sample
-     * Faculty" — an unrelated fixture for a different testing purpose, and
-     * a different program code (`BSIT` vs this seeder's `BSIT-DEMO`).
+     * Scoped to `DemoEnrollmentSeeder`'s own block sections, not "every
+     * `is_block_exclusive` section of this subject on the real BSIT
+     * curriculum": `ProgramChairScheduleSampleSeeder` independently
+     * generates its own block sections (codes like `IT101`) on this SAME
+     * curriculum — it picks whichever active curriculum the college's
+     * seeded students are actually on, and the 8 `DemoEnrollmentSeeder`
+     * students are exactly that — owned by its own "Sample Faculty", an
+     * unrelated fixture for a different testing purpose. The two are
+     * distinguished by `academic_term_section_plans.college`:
+     * `DemoEnrollmentSeeder` always plans under the harmless placeholder
+     * `'demo'` (see `seedRegularBlocks()`), while `ProgramChairScheduleSampleSeeder`
+     * plans under the subject's real college (`'ccs'`).
      */
-    #[DataProvider('connectedProfessorProvider')]
-    public function test_each_connected_professor_owns_every_block_section_of_their_subject(
-        string $subjectCode,
-        string $expectedName,
-        string $expectedEmail,
-    ): void {
+    #[DataProvider('blockYearProvider')]
+    public function test_every_subject_with_a_reference_professor_has_a_connected_faculty_account_owning_its_blocks(int $yearLevel): void
+    {
         $this->seed(DatabaseSeeder::class);
 
-        $professor = User::query()->where('email', $expectedEmail)->firstOrFail();
-        $this->assertSame($expectedName, $professor->name);
-        $this->assertSame('faculty', $professor->role->value);
-        $this->assertSame('ccs', $professor->college?->value);
-
-        $curriculum = Curriculum::query()->where('name', 'BSIT Grade History Demo 2026')->firstOrFail();
-        $subject = $this->demoSubject($subjectCode);
-        $sections = Section::query()
-            ->where('subject_id', $subject->id)
-            ->where('is_block_exclusive', true)
-            ->whereHas('sectionPlan', fn ($query) => $query->where('curriculum_id', $curriculum->id))
+        $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
+        $placements = CurriculumSubject::query()
+            ->where('curriculum_id', $curriculum->id)
+            ->where('year_level', $yearLevel)
+            ->where('semester', '2nd')
+            ->whereNotNull('reference_professor_name')
             ->get();
 
-        $this->assertNotEmpty($sections);
-        foreach ($sections as $section) {
+        $this->assertNotEmpty($placements, "Expected at least one named-professor subject for year {$yearLevel}.");
+
+        foreach ($placements as $placement) {
+            $professor = User::query()->where('name', $placement->reference_professor_name)->where('role', 'faculty')->first();
+            $this->assertNotNull($professor, "Expected a Faculty account named '{$placement->reference_professor_name}'.");
+
+            $sections = Section::query()
+                ->where('subject_id', $placement->subject_id)
+                ->where('is_block_exclusive', true)
+                ->whereHas('sectionPlan', fn ($query) => $query->where('curriculum_id', $curriculum->id)->where('college', 'demo'))
+                ->get();
+
+            $this->assertNotEmpty($sections, "Expected at least one generated block section for {$placement->subject->code}.");
+            foreach ($sections as $section) {
+                $this->assertSame($professor->id, $section->professor_id, "Section {$section->section_code} of {$placement->subject->code} is not owned by '{$placement->reference_professor_name}'.");
+            }
+        }
+    }
+
+    #[DataProvider('blockYearProvider')]
+    public function test_every_connected_professor_has_declared_availability(int $yearLevel): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
+        $placements = CurriculumSubject::query()
+            ->where('curriculum_id', $curriculum->id)
+            ->where('year_level', $yearLevel)
+            ->where('semester', '2nd')
+            ->whereNotNull('reference_professor_name')
+            ->get();
+
+        foreach ($placements as $placement) {
+            $professor = User::query()->where('name', $placement->reference_professor_name)->where('role', 'faculty')->sole();
+
             $this->assertSame(
-                $professor->id,
-                $section->professor_id,
-                "Section {$section->section_code} of {$subjectCode} is not owned by {$expectedEmail}.",
+                5,
+                FacultyAvailability::query()->where('professor_id', $professor->id)->count(),
+                "{$placement->reference_professor_name} should have one declared availability window per weekday.",
             );
+
+            $preference = FacultySubjectPreference::query()
+                ->where('professor_id', $professor->id)
+                ->where('subject_id', $placement->subject_id)
+                ->sole();
+            // Not hard-coded to rank 1: `faculty_subject_preferences` has a
+            // (professor_id, academic_term_id, rank) unique constraint, and
+            // several real professors in the source Excel own more than one
+            // of this term's subjects (e.g. "MR. SALAZAR" teaches both
+            // PATHFIT2 and PATHFIT4), so only their first subject can be
+            // rank 1 — later ones are legitimately 2, 3, etc.
+            $this->assertGreaterThan(0, $preference->rank);
         }
     }
 
-    #[DataProvider('connectedProfessorProvider')]
-    public function test_each_connected_professor_has_declared_availability_and_a_subject_preference(
-        string $subjectCode,
-        string $expectedName,
-        string $expectedEmail,
-    ): void {
-        $this->seed(DatabaseSeeder::class);
-
-        $professor = User::query()->where('email', $expectedEmail)->firstOrFail();
-        $subject = $this->demoSubject($subjectCode);
-
-        $this->assertSame(
-            5,
-            FacultyAvailability::query()->where('professor_id', $professor->id)->count(),
-            "{$expectedName} should have one declared availability window per weekday.",
-        );
-
-        $preference = FacultySubjectPreference::query()
-            ->where('professor_id', $professor->id)
-            ->where('subject_id', $subject->id)
-            ->sole();
-        $this->assertSame(1, $preference->rank);
-    }
-
-    /**
-     * `subjects` is unique on `(college, code)`, not `code` alone: the real
-     * GRC catalog (`GrcSubjectCatalogSeeder`) seeds `LEAD 2`/`LEAD 4`/
-     * `LEAD 6`/`LEAD8` under real colleges too, so an unscoped code lookup
-     * is ambiguous for those four. `DemoEnrollmentSeeder` places its own
-     * curriculum's Leadership subjects as collegeless specifically to stay
-     * unambiguous — this test must resolve the same collegeless row the
-     * seeder actually used, or it would silently pass by agreeing with
-     * itself on the wrong subject rather than verifying the real one.
-     */
-    private function demoSubject(string $code): Subject
-    {
-        $query = Subject::query()->where('code', $code);
-
-        if (in_array($code, ['LEAD 2', 'LEAD 4', 'LEAD 6', 'LEAD8'], true)) {
-            $query->whereNull('college');
-        }
-
-        return $query->firstOrFail();
-    }
-
-    public function test_reseeding_ten_connected_professors_creates_no_duplicates(): void
+    public function test_reseeding_connected_professors_creates_no_duplicates(): void
     {
         $this->seed(DatabaseSeeder::class);
-        $professorCount = User::query()->where('email', 'like', 'prof.%@grc.test')->count();
+        $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
+        $names = CurriculumSubject::query()
+            ->where('curriculum_id', $curriculum->id)
+            ->whereIn('year_level', [1, 2, 3, 4])
+            ->where('semester', '2nd')
+            ->whereNotNull('reference_professor_name')
+            ->pluck('reference_professor_name')
+            ->unique();
+        $professorCount = User::query()->whereIn('name', $names)->where('role', 'faculty')->count();
 
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(10, $professorCount);
-        $this->assertSame(10, User::query()->where('email', 'like', 'prof.%@grc.test')->count());
+        $this->assertSame($names->count(), $professorCount);
+        $this->assertSame($professorCount, User::query()->whereIn('name', $names)->where('role', 'faculty')->count());
     }
 
     /**
