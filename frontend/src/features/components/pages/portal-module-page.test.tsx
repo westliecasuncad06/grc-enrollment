@@ -1,5 +1,5 @@
 import { screen, within } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AuthSession } from "@/features/auth/auth-types"
 import { userRoles, type UserRole } from "@/features/auth/roles"
@@ -192,5 +192,101 @@ describe("PortalModulePage", () => {
     expect(links).toHaveLength(
       rolePortalDefinitions.student.modules.length + 1, // + "GRC Connect"
     )
+  })
+})
+
+describe("Curriculum Editor access for a Program Chair", () => {
+  const fetchMock = vi.fn<typeof fetch>()
+  beforeEach(() => vi.stubGlobal("fetch", fetchMock))
+  afterEach(() => vi.unstubAllGlobals())
+
+  function requestUrl(input: RequestInfo | URL): string {
+    if (typeof input === "string") return input
+    return input instanceof URL ? input.toString() : input.url
+  }
+
+  /** Academic term is active and the chair's college workflow sits in `stage`. */
+  function mockWorkflowStage(stage: string) {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.includes("/academic-term-workflows")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term-workflow",
+                  id: 1,
+                  academic_term_id: 5,
+                  college: "ccs",
+                  college_label: "College of Computer Studies",
+                  stage,
+                  stage_label: stage,
+                  curriculum_completed_at: null,
+                  faculty_reviewed_at: null,
+                  schedule_submitted_at: null,
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      if (url.includes("/academic-terms")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term",
+                  id: 5,
+                  school_year: "2026-2027",
+                  semester: "1st",
+                  starts_at: null,
+                  ends_at: null,
+                  enrollment_opens_at: null,
+                  enrollment_closes_at: null,
+                  add_drop_deadline_at: null,
+                  grading_deadline_at: null,
+                  status: "semester_ongoing",
+                  status_label: "Semester Ongoing",
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+  }
+
+  it("stays open while the chair's college Enrollment workflow is still in an earlier stage", async () => {
+    mockWorkflowStage("curriculum_preparation")
+
+    renderWithSession(
+      <PortalShell>
+        <PortalModulePage moduleId="subjects-prerequisites" />
+      </PortalShell>,
+      {
+        route: "/portal/subjects-prerequisites",
+        routeParams: { moduleId: "subjects-prerequisites" },
+        session: {
+          userId: "9",
+          displayName: "Test Program Chair",
+          role: "program_chair",
+          college: "ccs",
+          signedInAt: "2026-08-07T00:00:00.000Z",
+        },
+      },
+    )
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Curriculum editor",
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("heading", { name: "Enrollment step in progress" }),
+    ).not.toBeInTheDocument()
   })
 })

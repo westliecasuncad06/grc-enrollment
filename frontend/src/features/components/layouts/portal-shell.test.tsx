@@ -268,4 +268,73 @@ describe("PortalShell", () => {
       "page",
     )
   })
+
+  it("keeps the Curriculum Editor link unlocked while other Enrollment-gated links stay locked", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.includes("/academic-term-workflows")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term-workflow",
+                  id: 1,
+                  academic_term_id: 5,
+                  college: "ccs",
+                  college_label: "College of Computer Studies",
+                  stage: "curriculum_preparation",
+                  stage_label: "Curriculum Preparation",
+                  curriculum_completed_at: null,
+                  faculty_reviewed_at: null,
+                  schedule_submitted_at: null,
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      if (url.includes("/academic-terms")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term",
+                  id: 5,
+                  school_year: "2026-2027",
+                  semester: "1st",
+                  starts_at: null,
+                  ends_at: null,
+                  enrollment_opens_at: null,
+                  enrollment_closes_at: null,
+                  add_drop_deadline_at: null,
+                  grading_deadline_at: null,
+                  status: "semester_ongoing",
+                  status_label: "Semester Ongoing",
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderShell("program_chair", {
+      session: { ...sessionFor("program_chair"), college: "ccs" },
+    })
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Role portal navigation",
+    })
+    expect(
+      await within(navigation).findByRole("link", {
+        name: "Curriculum Editor",
+      }),
+    ).not.toHaveAttribute("aria-disabled")
+    expect(
+      within(navigation).getByRole("link", { name: "Sections & Schedules" }),
+    ).toHaveAttribute("aria-disabled", "true")
+  })
 })

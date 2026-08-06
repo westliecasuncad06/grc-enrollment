@@ -78,6 +78,7 @@ import {
   toCurriculumReplacement,
 } from "@/features/services/curriculum-service"
 import { PrerequisiteEditor } from "@/features/components/portal/prerequisite-editor"
+import { CurriculumView } from "@/features/components/portal/curriculum-view"
 
 const fresh: StoreCurriculumInput = {
   program_id: 0,
@@ -265,9 +266,7 @@ export function CurriculumWorkspace() {
         ),
     )
   const removePlacement = (index: number) =>
-    setPlacements(
-      form.getValues("subjects").filter((_, row) => row !== index),
-    )
+    setPlacements(form.getValues("subjects").filter((_, row) => row !== index))
   const addPrerequisite = (index: number, prerequisiteSubjectId: number) => {
     const placement = form.getValues("subjects")[index]
     updatePlacement(index, {
@@ -294,9 +293,8 @@ export function CurriculumWorkspace() {
   // A brand-new curriculum has nothing to PATCH and no complete payload to
   // POST until its header fields are filled in, so autosave stays quiet until
   // the whole form is a valid create/replace request.
-  const autosaveReady = storeCurriculumInputSchema.safeParse(
-    watchedValues,
-  ).success
+  const autosaveReady =
+    storeCurriculumInputSchema.safeParse(watchedValues).success
   useEffect(() => {
     if (!isDirty || isPending) return
     if (autosaveReady && persistedPlacements.current === placementSignature)
@@ -318,7 +316,8 @@ export function CurriculumWorkspace() {
     value: String(subject.id),
     label: subject.code,
   }))
-  const subjectFor = (id: number) => catalog.find((subject) => subject.id === id)
+  const subjectFor = (id: number) =>
+    catalog.find((subject) => subject.id === id)
   const codeFor = (id: number) => subjectFor(id)?.code ?? `Subject ${id}`
   const placementsForYear = (year: number) =>
     formSubjects
@@ -365,386 +364,417 @@ export function CurriculumWorkspace() {
         loadingLabel="Loading curriculum data…"
       >
         {() => (
-          <>
-            <div className="flex gap-2">
-              <Field>
-                <FieldLabel htmlFor="curriculum-select">Curriculum</FieldLabel>
-                <Select
-                  value={String(selectedId)}
-                  onValueChange={(value) => requestEdit(Number(value))}
-                >
-                  <SelectTrigger id="curriculum-select" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">New curriculum</SelectItem>
-                    {(curriculaQuery.data ?? []).map((curriculum) => (
-                      <SelectItem
-                        key={curriculum.id}
-                        value={String(curriculum.id)}
-                      >
-                        {curriculum.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <div className="flex items-end">
-                <Button type="button" variant="outline" onClick={startNew}>
-                  New curriculum
-                </Button>
-              </div>
-            </div>
-            <FieldGroup>
-              <Field data-invalid={Boolean(form.formState.errors.program_id)}>
-                <FieldLabel htmlFor="curriculum-program">Program</FieldLabel>
-                <Controller
-                  control={form.control}
-                  name="program_id"
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ? String(field.value) : ""}
-                      onValueChange={(value) => field.onChange(Number(value))}
-                      disabled={selectedId > 0}
-                    >
-                      <SelectTrigger
-                        id="curriculum-program"
-                        className="w-full"
-                        aria-invalid={Boolean(form.formState.errors.program_id)}
-                      >
-                        <SelectValue placeholder="Select a program" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(programsQuery.data ?? []).map((program) => (
-                          <SelectItem key={program.id} value={String(program.id)}>
-                            {program.code} — {program.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError>
-                  {form.formState.errors.program_id?.message}
-                </FieldError>
-              </Field>
-              <Field data-invalid={Boolean(form.formState.errors.name)}>
-                <FieldLabel htmlFor="curriculum-name">
-                  Curriculum name
-                </FieldLabel>
-                <Input
-                  id="curriculum-name"
-                  aria-invalid={Boolean(form.formState.errors.name)}
-                  {...form.register("name")}
-                />
-                <FieldError>{form.formState.errors.name?.message}</FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="effective-school-year">
-                  Effective school year
-                </FieldLabel>
-                <Input
-                  id="effective-school-year"
-                  {...form.register("effective_school_year")}
-                />
-                <FieldError>
-                  {form.formState.errors.effective_school_year?.message}
-                </FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
-                <Controller
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="curriculum-status" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
-              <section
-                aria-label="Curriculum subject placements"
-                className="grid gap-3"
-              >
-                <Tabs value={activeYear} onValueChange={setActiveYear}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <TabsList
-                      aria-label="Curriculum year level"
-                      className="w-full sm:w-fit"
-                    >
-                      {years.map((year) => (
-                        <TabsTrigger key={year} value={String(year)}>
-                          {yearLabel(year)}
-                        </TabsTrigger>
+          <Tabs defaultValue="manage" className="grid gap-4">
+            <TabsList aria-label="Curriculum editor mode">
+              <TabsTrigger value="manage">Manage</TabsTrigger>
+              <TabsTrigger value="view">View</TabsTrigger>
+            </TabsList>
+            <TabsContent value="manage" className="grid gap-4">
+              <div className="flex gap-2">
+                <Field>
+                  <FieldLabel htmlFor="curriculum-select">
+                    Curriculum
+                  </FieldLabel>
+                  <Select
+                    value={String(selectedId)}
+                    onValueChange={(value) => requestEdit(Number(value))}
+                  >
+                    <SelectTrigger id="curriculum-select" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">New curriculum</SelectItem>
+                      {(curriculaQuery.data ?? []).map((curriculum) => (
+                        <SelectItem
+                          key={curriculum.id}
+                          value={String(curriculum.id)}
+                        >
+                          {curriculum.name}
+                        </SelectItem>
                       ))}
-                    </TabsList>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        aria-live="polite"
-                        className="text-sm text-muted-foreground"
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <div className="flex items-end">
+                  <Button type="button" variant="outline" onClick={startNew}>
+                    New curriculum
+                  </Button>
+                </div>
+              </div>
+              <FieldGroup>
+                <Field data-invalid={Boolean(form.formState.errors.program_id)}>
+                  <FieldLabel htmlFor="curriculum-program">Program</FieldLabel>
+                  <Controller
+                    control={form.control}
+                    name="program_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                        disabled={selectedId > 0}
                       >
-                        {saveState}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setGraphOpen(true)}
-                      >
-                        Prerequisite graph
-                      </Button>
-                    </div>
-                  </div>
-                  {years.map((year) => (
-                    <TabsContent
-                      key={year}
-                      value={String(year)}
-                      className="grid gap-3"
-                    >
-                      <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-                        <Field>
-                          <FieldLabel htmlFor="subject-to-place">
-                            Subject to place
-                          </FieldLabel>
-                          <Select
-                            value={
-                              placementSubjectId > 0
-                                ? String(placementSubjectId)
-                                : ""
-                            }
-                            onValueChange={(value) =>
-                              setPlacementSubjectId(Number(value))
-                            }
-                          >
-                            <SelectTrigger
-                              id="subject-to-place"
-                              className="w-full"
+                        <SelectTrigger
+                          id="curriculum-program"
+                          className="w-full"
+                          aria-invalid={Boolean(
+                            form.formState.errors.program_id,
+                          )}
+                        >
+                          <SelectValue placeholder="Select a program" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(programsQuery.data ?? []).map((program) => (
+                            <SelectItem
+                              key={program.id}
+                              value={String(program.id)}
                             >
-                              <SelectValue placeholder="Select a subject" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {catalog.map((subject) => (
-                                <SelectItem
-                                  key={subject.id}
-                                  value={String(subject.id)}
-                                >
-                                  {subject.code} — {subject.title}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </Field>
+                              {program.code} — {program.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError>
+                    {form.formState.errors.program_id?.message}
+                  </FieldError>
+                </Field>
+                <Field data-invalid={Boolean(form.formState.errors.name)}>
+                  <FieldLabel htmlFor="curriculum-name">
+                    Curriculum name
+                  </FieldLabel>
+                  <Input
+                    id="curriculum-name"
+                    aria-invalid={Boolean(form.formState.errors.name)}
+                    {...form.register("name")}
+                  />
+                  <FieldError>{form.formState.errors.name?.message}</FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="effective-school-year">
+                    Effective school year
+                  </FieldLabel>
+                  <Input
+                    id="effective-school-year"
+                    {...form.register("effective_school_year")}
+                  />
+                  <FieldError>
+                    {form.formState.errors.effective_school_year?.message}
+                  </FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
+                  <Controller
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          id="curriculum-status"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+                <section
+                  aria-label="Curriculum subject placements"
+                  className="grid gap-3"
+                >
+                  <Tabs value={activeYear} onValueChange={setActiveYear}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <TabsList
+                        aria-label="Curriculum year level"
+                        className="w-full sm:w-fit"
+                      >
+                        {years.map((year) => (
+                          <TabsTrigger key={year} value={String(year)}>
+                            {yearLabel(year)}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          aria-live="polite"
+                          className="text-sm text-muted-foreground"
+                        >
+                          {saveState}
+                        </span>
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={addPlacement}
+                          size="sm"
+                          onClick={() => setGraphOpen(true)}
                         >
-                          Add subject placement
+                          Prerequisite graph
                         </Button>
                       </div>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Subject Code</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Units</TableHead>
-                            <TableHead>Semester</TableHead>
-                            <TableHead>Prerequisite</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {placementsForYear(year).map(
-                            ({ placement, index }) => {
-                              const code = codeFor(placement.subject_id)
-                              const candidates = formSubjects.filter(
-                                (other) =>
-                                  other.subject_id !== placement.subject_id &&
-                                  !placement.prerequisites.some(
-                                    (edge) =>
-                                      edge.prerequisite_subject_id ===
-                                      other.subject_id,
-                                  ),
-                              )
-                              return (
-                                <TableRow key={placement.subject_id}>
-                                  <TableCell>
-                                    <div className="flex items-center gap-1">
-                                      <SearchableCombobox
-                                        id={`placement-${placement.subject_id}-subject`}
-                                        label={`Subject code for ${code}`}
-                                        options={catalogOptions}
-                                        value={String(placement.subject_id)}
-                                        onValueChange={(value) => {
-                                          if (value)
-                                            updatePlacement(index, {
-                                              subject_id: Number(value),
-                                            })
-                                        }}
-                                        placeholder="Search subject code"
-                                        emptyMessage="No matching subject."
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        aria-label={`Remove ${code} placement`}
-                                        onClick={() => removePlacement(index)}
-                                      >
-                                        <Trash2Icon />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    {subjectFor(placement.subject_id)?.title ??
-                                      "—"}
-                                  </TableCell>
-                                  <TableCell>
-                                    {subjectFor(placement.subject_id)?.units ??
-                                      "—"}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Select
-                                      value={placement.semester}
-                                      onValueChange={(value) =>
-                                        updatePlacement(index, {
-                                          semester: value,
-                                        })
-                                      }
-                                    >
-                                      <SelectTrigger
-                                        id={`placement-${placement.subject_id}-semester`}
-                                        aria-label={`Semester for ${code}`}
-                                        className="w-full"
-                                      >
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {[
-                                          ...semesters,
-                                          ...(semesters.some(
-                                            (semester) =>
-                                              semester === placement.semester,
-                                          )
-                                            ? []
-                                            : [placement.semester]),
-                                        ].map((semester) => (
-                                          <SelectItem
-                                            key={semester}
-                                            value={semester}
-                                          >
-                                            {semester}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </TableCell>
-                                  <TableCell className="whitespace-normal">
-                                    <div className="flex flex-wrap items-center gap-1">
-                                      {placement.prerequisites.length === 0 && (
-                                        <span className="text-muted-foreground">
-                                          None
-                                        </span>
-                                      )}
-                                      {placement.prerequisites.map((edge) => (
-                                        <Badge
-                                          key={edge.prerequisite_subject_id}
-                                          variant="secondary"
-                                          className="gap-1 pr-1"
+                    </div>
+                    {years.map((year) => (
+                      <TabsContent
+                        key={year}
+                        value={String(year)}
+                        className="grid gap-3"
+                      >
+                        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                          <Field>
+                            <FieldLabel htmlFor="subject-to-place">
+                              Subject to place
+                            </FieldLabel>
+                            <Select
+                              value={
+                                placementSubjectId > 0
+                                  ? String(placementSubjectId)
+                                  : ""
+                              }
+                              onValueChange={(value) =>
+                                setPlacementSubjectId(Number(value))
+                              }
+                            >
+                              <SelectTrigger
+                                id="subject-to-place"
+                                className="w-full"
+                              >
+                                <SelectValue placeholder="Select a subject" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {catalog.map((subject) => (
+                                  <SelectItem
+                                    key={subject.id}
+                                    value={String(subject.id)}
+                                  >
+                                    {subject.code} — {subject.title}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={addPlacement}
+                          >
+                            Add subject placement
+                          </Button>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Subject Code</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead>Units</TableHead>
+                              <TableHead>Semester</TableHead>
+                              <TableHead>Prerequisite</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {placementsForYear(year).map(
+                              ({ placement, index }) => {
+                                const code = codeFor(placement.subject_id)
+                                const candidates = formSubjects.filter(
+                                  (other) =>
+                                    other.subject_id !== placement.subject_id &&
+                                    !placement.prerequisites.some(
+                                      (edge) =>
+                                        edge.prerequisite_subject_id ===
+                                        other.subject_id,
+                                    ),
+                                )
+                                return (
+                                  <TableRow key={placement.subject_id}>
+                                    <TableCell>
+                                      <div className="flex items-center gap-1">
+                                        <SearchableCombobox
+                                          id={`placement-${placement.subject_id}-subject`}
+                                          label={`Subject code for ${code}`}
+                                          options={catalogOptions}
+                                          value={String(placement.subject_id)}
+                                          onValueChange={(value) => {
+                                            if (value)
+                                              updatePlacement(index, {
+                                                subject_id: Number(value),
+                                              })
+                                          }}
+                                          placeholder="Search subject code"
+                                          emptyMessage="No matching subject."
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          aria-label={`Remove ${code} placement`}
+                                          onClick={() => removePlacement(index)}
                                         >
-                                          {codeFor(edge.prerequisite_subject_id)}
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="size-5 p-0"
-                                            aria-label={`Remove prerequisite ${codeFor(edge.prerequisite_subject_id)} from ${code}`}
-                                            onClick={() =>
-                                              removePrerequisite(
-                                                index,
-                                                edge.prerequisite_subject_id,
-                                              )
-                                            }
-                                          >
-                                            <XIcon />
-                                          </Button>
-                                        </Badge>
-                                      ))}
+                                          <Trash2Icon />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      {subjectFor(placement.subject_id)
+                                        ?.title ?? "—"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {subjectFor(placement.subject_id)
+                                        ?.units ?? "—"}
+                                    </TableCell>
+                                    <TableCell>
                                       <Select
-                                        value=""
+                                        value={placement.semester}
                                         onValueChange={(value) =>
-                                          addPrerequisite(index, Number(value))
+                                          updatePlacement(index, {
+                                            semester: value,
+                                          })
                                         }
                                       >
                                         <SelectTrigger
-                                          id={`placement-${placement.subject_id}-prerequisite`}
-                                          aria-label={`Add prerequisite for ${code}`}
-                                          className="w-auto"
-                                          disabled={candidates.length === 0}
+                                          id={`placement-${placement.subject_id}-semester`}
+                                          aria-label={`Semester for ${code}`}
+                                          className="w-full"
                                         >
-                                          <SelectValue placeholder="Add" />
+                                          <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          {candidates.map((candidate) => (
+                                          {[
+                                            ...semesters,
+                                            ...(semesters.some(
+                                              (semester) =>
+                                                semester === placement.semester,
+                                            )
+                                              ? []
+                                              : [placement.semester]),
+                                          ].map((semester) => (
                                             <SelectItem
-                                              key={candidate.subject_id}
-                                              value={String(
-                                                candidate.subject_id,
-                                              )}
+                                              key={semester}
+                                              value={semester}
                                             >
-                                              {codeFor(candidate.subject_id)}
+                                              {semester}
                                             </SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              )
-                            },
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TabsContent>
-                  ))}
-                </Tabs>
-                <FieldError>
-                  {form.formState.errors.subjects?.message}
-                </FieldError>
-              </section>
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                {!allYearsPopulated && (
-                  <p className="text-sm text-muted-foreground">
-                    Place at least one subject in every year level before
-                    publishing this curriculum.
-                  </p>
-                )}
-                <Button
-                  type="button"
-                  disabled={!allYearsPopulated || isPending}
-                  // Routed through `handleSubmit` so RHF runs the resolver and
-                  // populates the field errors before anything is sent — with
-                  // no form submit left on this screen, this is the only path
-                  // that surfaces "Enter a curriculum name" instead of letting
-                  // the service's own parse throw a connection-shaped error.
-                  onClick={() =>
-                    void form.handleSubmit((values) =>
-                      save({ ...values, status: "active" }),
-                    )()
-                  }
-                >
-                  Save Curriculum
-                </Button>
-              </div>
-            </FieldGroup>
-          </>
+                                    </TableCell>
+                                    <TableCell className="whitespace-normal">
+                                      <div className="flex flex-wrap items-center gap-1">
+                                        {placement.prerequisites.length ===
+                                          0 && (
+                                          <span className="text-muted-foreground">
+                                            None
+                                          </span>
+                                        )}
+                                        {placement.prerequisites.map((edge) => (
+                                          <Badge
+                                            key={edge.prerequisite_subject_id}
+                                            variant="secondary"
+                                            className="gap-1 pr-1"
+                                          >
+                                            {codeFor(
+                                              edge.prerequisite_subject_id,
+                                            )}
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              className="size-5 p-0"
+                                              aria-label={`Remove prerequisite ${codeFor(edge.prerequisite_subject_id)} from ${code}`}
+                                              onClick={() =>
+                                                removePrerequisite(
+                                                  index,
+                                                  edge.prerequisite_subject_id,
+                                                )
+                                              }
+                                            >
+                                              <XIcon />
+                                            </Button>
+                                          </Badge>
+                                        ))}
+                                        <Select
+                                          value=""
+                                          onValueChange={(value) =>
+                                            addPrerequisite(
+                                              index,
+                                              Number(value),
+                                            )
+                                          }
+                                        >
+                                          <SelectTrigger
+                                            id={`placement-${placement.subject_id}-prerequisite`}
+                                            aria-label={`Add prerequisite for ${code}`}
+                                            className="w-auto"
+                                            disabled={candidates.length === 0}
+                                          >
+                                            <SelectValue placeholder="Add" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {candidates.map((candidate) => (
+                                              <SelectItem
+                                                key={candidate.subject_id}
+                                                value={String(
+                                                  candidate.subject_id,
+                                                )}
+                                              >
+                                                {codeFor(candidate.subject_id)}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              },
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                  <FieldError>
+                    {form.formState.errors.subjects?.message}
+                  </FieldError>
+                </section>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {!allYearsPopulated && (
+                    <p className="text-sm text-muted-foreground">
+                      Place at least one subject in every year level before
+                      publishing this curriculum.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    disabled={!allYearsPopulated || isPending}
+                    // Routed through `handleSubmit` so RHF runs the resolver and
+                    // populates the field errors before anything is sent — with
+                    // no form submit left on this screen, this is the only path
+                    // that surfaces "Enter a curriculum name" instead of letting
+                    // the service's own parse throw a connection-shaped error.
+                    onClick={() =>
+                      void form.handleSubmit((values) =>
+                        save({ ...values, status: "active" }),
+                      )()
+                    }
+                  >
+                    Save Curriculum
+                  </Button>
+                </div>
+              </FieldGroup>
+            </TabsContent>
+            <TabsContent value="view">
+              <CurriculumView
+                programs={programsQuery.data ?? []}
+                curricula={curriculaQuery.data ?? []}
+              />
+            </TabsContent>
+          </Tabs>
         )}
       </AsyncBoundary>
       <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
