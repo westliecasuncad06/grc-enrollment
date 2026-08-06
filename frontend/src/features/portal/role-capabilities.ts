@@ -144,8 +144,8 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       ),
       portalModule(
         "subjects-prerequisites",
-        "Subjects & Prerequisites",
-        "Manage subject relationships and eligibility rules.",
+        "Curriculum Editor",
+        "Build each year level's subject list, units, and prerequisites.",
         Network,
       ),
       portalModule(

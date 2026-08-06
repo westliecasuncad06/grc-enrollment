@@ -97,5 +97,6 @@ describe("getRoleModule", () => {
     expect(getRoleModule("student", "unknown")).toBeNull()
     expect(getRoleModule("dean", "schedule-approvals")?.label).toBe("Enrollment")
     expect(getRoleModule("executive_director", "master-schedule")?.label).toBe("Enrollment")
+    expect(getRoleModule("program_chair", "subjects-prerequisites")?.label).toBe("Curriculum Editor")
   })
 })
