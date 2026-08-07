@@ -132,12 +132,6 @@ export type StoreCurriculumInput = z.infer<typeof storeCurriculumInputSchema>
 export interface CurriculumEditorValues {
   name: string
   effective_school_year: string
-  status:
-    | "draft"
-    | "pending_dean_review"
-    | "pending_executive_review"
-    | "active"
-    | "archived"
   subjects: readonly {
     subject_id: number
     year_level: number

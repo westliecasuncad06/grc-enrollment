@@ -26,6 +26,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/features/components/ui/dialog"
@@ -72,10 +73,12 @@ import {
   type CurriculumSubjectInput,
   type StoreCurriculumInput,
 } from "@/features/schemas/curriculum-schema"
+import type { Curriculum } from "@/features/schemas/reference-data-schema"
 import {
   createCurriculum,
   replaceCurriculum,
   toCurriculumReplacement,
+  transitionCurriculum,
 } from "@/features/services/curriculum-service"
 import { PrerequisiteEditor } from "@/features/components/portal/prerequisite-editor"
 import { CurriculumView } from "@/features/components/portal/curriculum-view"
@@ -84,7 +87,6 @@ const fresh: StoreCurriculumInput = {
   program_id: 0,
   name: "",
   effective_school_year: "",
-  status: "draft",
   subjects: [],
 }
 const years = [1, 2, 3, 4] as const
@@ -122,6 +124,7 @@ export function CurriculumWorkspace() {
   const [activeYear, setActiveYear] = useState("1")
   const [graphOpen, setGraphOpen] = useState(false)
   const [requestError, setRequestError] = useState("")
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
   const form = useForm<StoreCurriculumInput>({
     resolver: zodResolver(storeCurriculumInputSchema),
     defaultValues: fresh,
@@ -153,6 +156,42 @@ export function CurriculumWorkspace() {
     },
     [form],
   )
+  const transitionMutation = useMutation({
+    mutationFn: (action: "submit") =>
+      transitionCurriculum(selectedId, { action }),
+    onSuccess: (updated) => {
+      // The transition response already carries the authoritative post-write
+      // status, so write it straight into the cache instead of invalidating —
+      // an invalidate-triggered refetch could otherwise race this update and
+      // briefly (or, against a slow read replica, not-so-briefly) show the
+      // pre-submit status again.
+      queryClient.setQueryData<Curriculum[]>(
+        curriculaQueryKey(userId),
+        (old) =>
+          (old ?? []).map((item) => (item.id === updated.id ? updated : item)),
+      )
+      applyValues({
+        program_id: updated.program_id,
+        name: updated.name,
+        effective_school_year: updated.effective_school_year,
+        subjects: updated.subjects.map(
+          ({ subject_id, year_level, semester, is_required, prerequisites }) => ({
+            subject_id,
+            year_level,
+            semester,
+            is_required,
+            prerequisites: prerequisites.map(
+              ({ prerequisite_subject_id, minimum_grade }) => ({
+                prerequisite_subject_id,
+                minimum_grade,
+              }),
+            ),
+          }),
+        ),
+      })
+      setSubmitDialogOpen(false)
+    },
+  })
   const save = useCallback(
     async (input: StoreCurriculumInput) => {
       setRequestError("")
@@ -190,7 +229,6 @@ export function CurriculumWorkspace() {
         program_id: curriculum.program_id,
         name: curriculum.name,
         effective_school_year: curriculum.effective_school_year,
-        status: curriculum.status,
         subjects: curriculum.subjects.map(
           ({
             subject_id,
@@ -213,6 +251,15 @@ export function CurriculumWorkspace() {
         ),
       })
   }
+  const selectedCurriculum = (curriculaQuery.data ?? []).find(
+    (item) => item.id === selectedId,
+  )
+  // Undefined only while the curriculum list hasn't loaded (or hasn't caught
+  // up with a just-created id) yet — treat that as unlocked rather than
+  // locking the editor on data that hasn't arrived.
+  const isLocked = Boolean(
+    selectedCurriculum && selectedCurriculum.status !== "draft",
+  )
   const requestEdit = (id: number) => {
     if (id === selectedId) return
     if (id === 0) return startNew()
@@ -296,7 +343,7 @@ export function CurriculumWorkspace() {
   const autosaveReady =
     storeCurriculumInputSchema.safeParse(watchedValues).success
   useEffect(() => {
-    if (!isDirty || isPending) return
+    if (!isDirty || isPending || isLocked) return
     if (autosaveReady && persistedPlacements.current === placementSignature)
       return
     const timer = setTimeout(() => {
@@ -309,7 +356,15 @@ export function CurriculumWorkspace() {
       void save(form.getValues())
     }, autosaveDelayMs)
     return () => clearTimeout(timer)
-  }, [autosaveReady, form, isDirty, isPending, placementSignature, save])
+  }, [
+    autosaveReady,
+    form,
+    isDirty,
+    isLocked,
+    isPending,
+    placementSignature,
+    save,
+  ])
 
   const catalog = subjectsQuery.data ?? []
   const catalogOptions = catalog.map((subject) => ({
@@ -323,9 +378,6 @@ export function CurriculumWorkspace() {
     formSubjects
       .map((placement, index) => ({ placement, index }))
       .filter(({ placement }) => placement.year_level === year)
-  const allYearsPopulated = years.every((year) =>
-    formSubjects.some((placement) => placement.year_level === year),
-  )
   const saveState = isPending
     ? "Saving…"
     : isDirty && !autosaveReady
@@ -411,7 +463,7 @@ export function CurriculumWorkspace() {
                       <Select
                         value={field.value ? String(field.value) : ""}
                         onValueChange={(value) => field.onChange(Number(value))}
-                        disabled={selectedId > 0}
+                        disabled={selectedId > 0 || isLocked}
                       >
                         <SelectTrigger
                           id="curriculum-program"
@@ -446,6 +498,7 @@ export function CurriculumWorkspace() {
                   <Input
                     id="curriculum-name"
                     aria-invalid={Boolean(form.formState.errors.name)}
+                    disabled={isLocked}
                     {...form.register("name")}
                   />
                   <FieldError>{form.formState.errors.name?.message}</FieldError>
@@ -456,37 +509,31 @@ export function CurriculumWorkspace() {
                   </FieldLabel>
                   <Input
                     id="effective-school-year"
+                    disabled={isLocked}
                     {...form.register("effective_school_year")}
                   />
                   <FieldError>
                     {form.formState.errors.effective_school_year?.message}
                   </FieldError>
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
-                  <Controller
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger
-                          id="curriculum-status"
-                          className="w-full"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="archived">Archived</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </Field>
+                {selectedCurriculum && (
+                  <Field>
+                    <FieldLabel>Status</FieldLabel>
+                    <div>
+                      <Badge variant={isLocked ? "secondary" : "outline"}>
+                        {selectedCurriculum.status_label}
+                      </Badge>
+                    </div>
+                  </Field>
+                )}
+                {selectedCurriculum?.last_decision_reason &&
+                  selectedCurriculum.status === "draft" && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        Returned: {selectedCurriculum.last_decision_reason}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 <section
                   aria-label="Curriculum subject placements"
                   className="grid gap-3"
@@ -514,6 +561,7 @@ export function CurriculumWorkspace() {
                           type="button"
                           variant="outline"
                           size="sm"
+                          disabled={isLocked}
                           onClick={() => setGraphOpen(true)}
                         >
                           Prerequisite graph
@@ -540,6 +588,7 @@ export function CurriculumWorkspace() {
                               onValueChange={(value) =>
                                 setPlacementSubjectId(Number(value))
                               }
+                              disabled={isLocked}
                             >
                               <SelectTrigger
                                 id="subject-to-place"
@@ -562,6 +611,7 @@ export function CurriculumWorkspace() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={isLocked}
                             onClick={addPlacement}
                           >
                             Add subject placement
@@ -607,12 +657,14 @@ export function CurriculumWorkspace() {
                                           }}
                                           placeholder="Search subject code"
                                           emptyMessage="No matching subject."
+                                          disabled={isLocked}
                                         />
                                         <Button
                                           type="button"
                                           variant="ghost"
                                           size="sm"
                                           aria-label={`Remove ${code} placement`}
+                                          disabled={isLocked}
                                           onClick={() => removePlacement(index)}
                                         >
                                           <Trash2Icon />
@@ -635,6 +687,7 @@ export function CurriculumWorkspace() {
                                             semester: value,
                                           })
                                         }
+                                        disabled={isLocked}
                                       >
                                         <SelectTrigger
                                           id={`placement-${placement.subject_id}-semester`}
@@ -686,6 +739,7 @@ export function CurriculumWorkspace() {
                                               size="sm"
                                               className="size-5 p-0"
                                               aria-label={`Remove prerequisite ${codeFor(edge.prerequisite_subject_id)} from ${code}`}
+                                              disabled={isLocked}
                                               onClick={() =>
                                                 removePrerequisite(
                                                   index,
@@ -710,7 +764,10 @@ export function CurriculumWorkspace() {
                                             id={`placement-${placement.subject_id}-prerequisite`}
                                             aria-label={`Add prerequisite for ${code}`}
                                             className="w-auto"
-                                            disabled={candidates.length === 0}
+                                            disabled={
+                                              candidates.length === 0 ||
+                                              isLocked
+                                            }
                                           >
                                             <SelectValue placeholder="Add" />
                                           </SelectTrigger>
@@ -742,31 +799,62 @@ export function CurriculumWorkspace() {
                     {form.formState.errors.subjects?.message}
                   </FieldError>
                 </section>
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  {!allYearsPopulated && (
-                    <p className="text-sm text-muted-foreground">
-                      Place at least one subject in every year level before
-                      publishing this curriculum.
-                    </p>
-                  )}
-                  <Button
-                    type="button"
-                    disabled={!allYearsPopulated || isPending}
-                    // Routed through `handleSubmit` so RHF runs the resolver and
-                    // populates the field errors before anything is sent — with
-                    // no form submit left on this screen, this is the only path
-                    // that surfaces "Enter a curriculum name" instead of letting
-                    // the service's own parse throw a connection-shaped error.
-                    onClick={() =>
-                      void form.handleSubmit((values) =>
-                        save({ ...values, status: "active" }),
-                      )()
-                    }
-                  >
-                    Save Curriculum
-                  </Button>
-                </div>
               </FieldGroup>
+              {selectedCurriculum?.status === "draft" &&
+                formSubjects.length > 0 && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={() => setSubmitDialogOpen(true)}
+                    >
+                      Submit for Dean Review
+                    </Button>
+                  </div>
+                )}
+              <Dialog open={submitDialogOpen} onOpenChange={setSubmitDialogOpen}>
+                <DialogContent className="max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Review before submitting</DialogTitle>
+                    <DialogDescription>
+                      Every subject below will be sent to the Dean for
+                      review. You will not be able to edit this curriculum
+                      again until it is approved or returned.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {programsQuery.data && (
+                    <CurriculumView
+                      programs={programsQuery.data.filter(
+                        (program) => program.id === watchedValues.program_id,
+                      )}
+                      // CurriculumView only ever renders curricula whose status
+                      // is "active" — this preview stands in a draft about to
+                      // be submitted, so its status is overridden purely for
+                      // this read-only render; nothing here is persisted.
+                      curricula={
+                        selectedCurriculum
+                          ? [{ ...selectedCurriculum, status: "active" as const }]
+                          : []
+                      }
+                    />
+                  )}
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setSubmitDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={transitionMutation.isPending}
+                      onClick={() => transitionMutation.mutate("submit")}
+                    >
+                      Confirm & Submit
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
             <TabsContent value="view">
               <CurriculumView

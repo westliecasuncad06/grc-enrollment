@@ -83,6 +83,8 @@ const curriculum = {
       effective_school_year: "2026-2027",
       status: "draft",
       status_label: "Draft",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [
         {
           subject_id: 11,
@@ -103,10 +105,11 @@ const curriculum = {
       effective_school_year: "2027-2028",
       status: "draft",
       status_label: "Draft",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [],
     },
-    // Every year level 1-4 carries a placement, so the final "Save Curriculum"
-    // (mark active) button is enabled for this one and disabled for BSCS 2026.
+    // Every year level 1-4 carries a placement.
     {
       type: "curriculum",
       id: 12,
@@ -115,6 +118,8 @@ const curriculum = {
       effective_school_year: "2029-2030",
       status: "draft",
       status_label: "Draft",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [
         {
           subject_id: 11,
@@ -149,6 +154,28 @@ const curriculum = {
           title: "Capstone",
           year_level: 4,
           semester: "2nd",
+          is_required: true,
+          prerequisites: [],
+        },
+      ],
+    },
+    {
+      type: "curriculum",
+      id: 13,
+      program_id: 1,
+      name: "BSCS 2030",
+      effective_school_year: "2030-2031",
+      status: "pending_dean_review",
+      status_label: "Pending Dean Review",
+      decided_at: "2026-08-07T00:00:00Z",
+      last_decision_reason: null,
+      subjects: [
+        {
+          subject_id: 11,
+          code: "CS101",
+          title: "Programming 1",
+          year_level: 1,
+          semester: "1st",
           is_required: true,
           prerequisites: [],
         },
@@ -457,53 +484,64 @@ describe("CurriculumWorkspace", () => {
     )
   })
 
-  it("shows a final Save Curriculum button once all four years have at least one subject", async () => {
+  it("locks every editing control once the curriculum is not a draft", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockApi())
     renderWorkspace()
     await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2029")
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Save Curriculum" }),
-      ).toBeEnabled(),
-    )
-  })
+    await selectOption(user, "Curriculum", "BSCS 2030")
 
-  it("disables the final Save Curriculum button while a year level has no subjects yet", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation(mockApi())
-    renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-
-    await screen.findByRole("tab", { name: /1st year/i })
+    expect(await screen.findByText("Pending Dean Review")).toBeInTheDocument()
+    expect(screen.getByLabelText("Curriculum name")).toBeDisabled()
     expect(
-      screen.getByRole("button", { name: "Save Curriculum" }),
-    ).toBeDisabled()
+      screen.queryByRole("button", { name: "Submit for Dean Review" }),
+    ).not.toBeInTheDocument()
   })
 
-  it("marks the curriculum active from the final Save Curriculum button", async () => {
+  it("opens a review dialog and submits a draft with at least one subject", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(
-      mockApi(() => new Response(JSON.stringify({ data: curriculum.data[2] }))),
+      mockApi((input) =>
+        url(input).endsWith("/transition")
+          ? new Response(
+              JSON.stringify({
+                data: {
+                  ...curriculum.data[0],
+                  status: "pending_dean_review",
+                  status_label: "Pending Dean Review",
+                },
+              }),
+            )
+          : new Response(JSON.stringify({ data: curriculum.data[0] })),
+      ),
     )
     renderWorkspace()
     await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2029")
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Save Curriculum" }),
-      ).toBeEnabled(),
-    )
-    await user.click(screen.getByRole("button", { name: "Save Curriculum" }))
 
-    await waitFor(() =>
-      expect(
-        replacements("/curricula/12").some((body) => body.status === "active"),
-      ).toBe(true),
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await user.click(
+      screen.getByRole("button", { name: "Submit for Dean Review" }),
     )
+
+    expect(screen.getByText("Review before submitting")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Confirm & Submit" }))
+
+    expect(await screen.findByText("Pending Dean Review")).toBeInTheDocument()
+  })
+
+  it("hides the Submit button for a draft with no subjects placed", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockApi())
+    renderWorkspace()
+    await screen.findByLabelText("Curriculum")
+
+    await selectOption(user, "Curriculum", "BSCS 2027")
+
+    expect(
+      screen.queryByRole("button", { name: "Submit for Dean Review" }),
+    ).not.toBeInTheDocument()
   })
 
   it("keeps unsaved work until the chair confirms discard", async () => {
