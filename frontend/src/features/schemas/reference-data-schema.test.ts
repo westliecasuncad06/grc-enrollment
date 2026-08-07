@@ -16,10 +16,38 @@ describe("curriculumSchema", () => {
         effective_school_year: "2023-2024",
         status: "archived",
         status_label: "Archived",
+        decided_at: null,
+        last_decision_reason: null,
         subjects: [],
       }).status,
     ).toBe("archived")
   })
+
+  it.each([
+    "draft",
+    "pending_dean_review",
+    "pending_executive_review",
+    "active",
+    "archived",
+  ] as const)(
+    "accepts the '%s' curriculum status along with the decision fields",
+    (status) => {
+      expect(
+        curriculumSchema.parse({
+          type: "curriculum",
+          id: 22,
+          program_id: 11,
+          name: "BSCS 2023 Curriculum",
+          effective_school_year: "2023-2024",
+          status,
+          status_label: "Whatever",
+          decided_at: "2026-08-07T00:00:00.000000Z",
+          last_decision_reason: "Missing PATHFIT 2.",
+          subjects: [],
+        }).status,
+      ).toBe(status)
+    },
+  )
 })
 
 describe("subjectSchema", () => {

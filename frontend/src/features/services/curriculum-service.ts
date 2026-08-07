@@ -3,7 +3,9 @@ import { z } from "zod"
 import {
   storeCurriculumInputSchema,
   curriculumReplacementSchema,
+  curriculumTransitionSchema,
   type CurriculumEditorValues,
+  type CurriculumTransition,
   type StoreCurriculumInput,
   type UpdateCurriculumInput,
 } from "@/features/schemas/curriculum-schema"
@@ -42,7 +44,6 @@ export function toCurriculumReplacement(
     {
       name: values.name,
       effective_school_year: values.effective_school_year,
-      status: values.status,
       subjects: values.subjects.map((subject) => ({
         subject_id: subject.subject_id,
         year_level: subject.year_level,
@@ -77,6 +78,17 @@ export async function replaceCurriculum(
     parse(curriculumReplacementSchema, input, "curriculum replacement request"),
   )
   return parse(zEnvelope, payload, "updated curriculum").data
+}
+
+export async function transitionCurriculum(
+  id: number,
+  transition: CurriculumTransition,
+): Promise<Curriculum> {
+  const payload = await patchAuthenticatedJson(
+    `${CURRICULA_PATH}/${id}/transition`,
+    parse(curriculumTransitionSchema, transition, "curriculum transition request"),
+  )
+  return parse(zEnvelope, payload, "transitioned curriculum").data
 }
 
 const curriculumEnvelopeSchema = z.object({ data: curriculumSchema }).strict()

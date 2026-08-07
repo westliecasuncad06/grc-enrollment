@@ -26,7 +26,6 @@ const replacementShape = {
     .string()
     .trim()
     .min(1, "Enter the effective school year."),
-  status: z.enum(["draft", "active", "archived"]),
   subjects: z.array(curriculumSubjectInputSchema),
 }
 
@@ -96,7 +95,6 @@ export const storeCurriculumInputSchema = z
     const result = curriculumReplacementSchema.safeParse({
       name: value.name,
       effective_school_year: value.effective_school_year,
-      status: value.status,
       subjects: value.subjects,
     })
     if (!result.success) {
@@ -110,6 +108,22 @@ export const storeCurriculumInputSchema = z
     }
   })
 
+export const curriculumTransitionSchema = z
+  .object({
+    action: z.enum([
+      "submit",
+      "dean_approve",
+      "dean_return",
+      "executive_approve",
+      "executive_return",
+    ]),
+    reason: z.string().trim().min(1).optional(),
+  })
+  .strict()
+
+export type CurriculumTransition = z.infer<typeof curriculumTransitionSchema>
+export type CurriculumAction = CurriculumTransition["action"]
+
 export type CurriculumSubjectInput = z.infer<
   typeof curriculumSubjectInputSchema
 >
@@ -118,7 +132,12 @@ export type StoreCurriculumInput = z.infer<typeof storeCurriculumInputSchema>
 export interface CurriculumEditorValues {
   name: string
   effective_school_year: string
-  status: "draft" | "active" | "archived"
+  status:
+    | "draft"
+    | "pending_dean_review"
+    | "pending_executive_review"
+    | "active"
+    | "archived"
   subjects: readonly {
     subject_id: number
     year_level: number
