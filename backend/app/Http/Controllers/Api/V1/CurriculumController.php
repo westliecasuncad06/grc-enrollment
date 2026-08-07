@@ -57,7 +57,6 @@ final class CurriculumController extends Controller
             'program_id' => $request->validated('program_id'),
             'name' => $request->validated('name'),
             'effective_school_year' => $request->validated('effective_school_year'),
-            'status' => $request->validated('status'),
         ], $request->subjects(), $contextFactory->fromRequest($request));
 
         $response = CurriculumResource::make($curriculum)->response($request);
@@ -81,7 +80,6 @@ final class CurriculumController extends Controller
         $curriculum = $action->execute($user, [
             'name' => $request->validated('name'),
             'effective_school_year' => $request->validated('effective_school_year'),
-            'status' => $request->validated('status'),
         ], $request->subjects(), $curriculum, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(CurriculumResource::make($curriculum)->response($request));

@@ -85,7 +85,6 @@ final class CurriculaEndpointTest extends TestCase
             'program_id' => $program->id,
             'name' => 'BSCS 2026 Curriculum',
             'effective_school_year' => '2026-2027',
-            'status' => 'draft',
             'subjects' => [
                 ['subject_id' => $intro->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
                 [
@@ -126,7 +125,6 @@ final class CurriculaEndpointTest extends TestCase
             'program_id' => $program->id,
             'name' => 'Should Not Exist',
             'effective_school_year' => '2026-2027',
-            'status' => 'draft',
             'subjects' => [],
         ]);
 
@@ -149,7 +147,6 @@ final class CurriculaEndpointTest extends TestCase
             'program_id' => $program->id,
             'name' => 'Cyclic Curriculum',
             'effective_school_year' => '2026-2027',
-            'status' => 'draft',
             'subjects' => [
                 ['subject_id' => $a->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true, 'prerequisites' => [
                     ['prerequisite_subject_id' => $b->id, 'minimum_grade' => '75'],
@@ -177,7 +174,6 @@ final class CurriculaEndpointTest extends TestCase
             'program_id' => $program->id,
             'name' => 'Transitively Cyclic Curriculum',
             'effective_school_year' => '2026-2027',
-            'status' => 'draft',
             'subjects' => [
                 ['subject_id' => $a->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true, 'prerequisites' => [
                     ['prerequisite_subject_id' => $b->id, 'minimum_grade' => '75'],
@@ -205,7 +201,6 @@ final class CurriculaEndpointTest extends TestCase
             'program_id' => $program->id,
             'name' => 'BSCS 2026 Curriculum',
             'effective_school_year' => '2026-2027',
-            'status' => 'draft',
             'subjects' => [
                 ['subject_id' => $intro->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
             ],
@@ -215,7 +210,6 @@ final class CurriculaEndpointTest extends TestCase
         $response = $this->withToken($token)->patchJson("/api/v1/curricula/{$curriculumId}", [
             'name' => 'BSCS 2026 Curriculum (revised)',
             'effective_school_year' => '2026-2027',
-            'status' => 'active',
             'subjects' => [
                 ['subject_id' => $dataStructures->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
             ],
@@ -223,7 +217,7 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('data.name', 'BSCS 2026 Curriculum (revised)');
-        $response->assertJsonPath('data.status', 'active');
+        $response->assertJsonPath('data.status', 'draft');
         $response->assertJsonCount(1, 'data.subjects');
         $response->assertJsonPath('data.subjects.0.code', 'CS102');
         $this->assertDatabaseCount('curriculum_subjects', 1);
@@ -265,7 +259,6 @@ final class CurriculaEndpointTest extends TestCase
         $response = $this->withToken($token)->patchJson("/api/v1/curricula/{$curriculum->id}", [
             'name' => 'BSCS 2026 Curriculum',
             'effective_school_year' => '2026-2027',
-            'status' => 'active',
             'subjects' => [
                 ['subject_id' => $intro->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
                 ['subject_id' => $dataStructures->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true],
@@ -305,7 +298,7 @@ final class CurriculaEndpointTest extends TestCase
         $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.update@grc.test');
 
         $response = $this->withToken($token)->patchJson("/api/v1/curricula/{$curriculum->id}", [
-            'name' => 'Hijacked', 'effective_school_year' => '2026-2027', 'status' => 'active', 'subjects' => [],
+            'name' => 'Hijacked', 'effective_school_year' => '2026-2027', 'subjects' => [],
         ]);
 
         $response->assertForbidden();

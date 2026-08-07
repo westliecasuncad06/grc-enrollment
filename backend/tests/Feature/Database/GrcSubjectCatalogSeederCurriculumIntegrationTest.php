@@ -46,7 +46,6 @@ final class GrcSubjectCatalogSeederCurriculumIntegrationTest extends TestCase
             'program_id' => $program->id,
             'name' => 'BSIT CCS Curriculum',
             'effective_school_year' => '2026-2027',
-            'status' => 'draft',
             'subjects' => [
                 ['subject_id' => $intro->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
                 [
