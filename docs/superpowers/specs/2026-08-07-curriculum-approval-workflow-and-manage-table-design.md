@@ -37,8 +37,10 @@ Draft --submit--> PendingDeanReview --dean_approve--> PendingExecutiveReview --e
 ### 2.1 Authorization scoping
 
 - **Submit** (`Draft → PendingDeanReview`): Program Chair, only for curricula whose `program.college` matches the chair's own `college` (existing convention, e.g. `AutoAssignSectionScheduleReferences`'s college scoping).
-- **Dean actions** (`dean_approve`, `dean_return`): Dean, only for curricula whose `program.college` matches the dean's own `college`.
-- **Executive actions** (`executive_approve`, `executive_return`): Executive Director, unscoped (institution-wide, matching their existing "Enrollment" module scope).
+- **Dean actions** (`dean_approve`, `dean_return`): any Dean, unscoped by college.
+- **Executive actions** (`executive_approve`, `executive_return`): any Executive Director, unscoped by college.
+
+Corrected from an earlier draft of this spec: `ScheduleProposalPolicy::approveAsDean()`/`approveAsExecutive()` check only `$user->role`, not college — per `NotifyScheduleTransition`'s docblock, "neither the Dean nor the Executive Director is scoped to a single college in this system... every active Dean/Executive Director is a legitimate reviewer for any college." `CurriculumPolicy` follows that exact, already-established precedent rather than inventing college-scoping for these two roles.
 
 `CurriculumPolicy` gains `submit(User, Curriculum)`, `approveAsDean(User, Curriculum)`, `approveAsExecutive(User, Curriculum)`, following the exact shape of `ScheduleProposalPolicy`.
 
@@ -55,10 +57,10 @@ This is a **new, separate** endpoint from the existing `PATCH /curricula/{curric
 
 ### 2.4 Notifications
 
-Four new `NotificationType` cases, mirroring the existing `Schedule*` family exactly:
+Four new `NotificationType` cases, mirroring the existing `Schedule*` family exactly. Recipients are resolved by role, not by a specific reviewer id — every active Dean/Executive Director is notified (matching 2.1's unscoped review authorization and `NotifyScheduleTransition`'s existing `activeUserIdsForRole()` pattern):
 
-- `CurriculumSubmittedForDean` — sent to the reviewing Dean when a chair submits.
-- `CurriculumDeanApproved` — sent to the reviewing Executive Director (now the item needing their review) and to the submitting chair (progress update).
+- `CurriculumSubmittedForDean` — sent to every active Dean when a chair submits.
+- `CurriculumDeanApproved` — sent to every active Executive Director (now the item needing their review) and to the submitting chair (progress update).
 - `CurriculumExecutiveApproved` — sent to the chair; curriculum is now `Active`.
 - `CurriculumReturned` — sent to the chair, includes the reason; fired for both `dean_return` and `executive_return`.
 
@@ -68,6 +70,7 @@ There is currently no write endpoint for `Subject` at all (`SubjectController` i
 
 - New `POST /api/v1/subjects` — body `{ code, title, units }`. Authorized to `ProgramChair` only (`SubjectPolicy::create`), matching the existing `CurriculumPolicy::create` shape.
 - `code` is validated unique (case-insensitive) against `subjects.code`. On conflict, the request fails with a 422 pointing at the field, so the frontend can tell the chair to search for the existing subject instead of retrying blindly.
+- `Subject` also carries `college` and `status` (`SubjectStatus::Active`/`Inactive`) columns not mentioned above. The new endpoint sets `status` to `Active` always (immediately usable, matching the endpoint having no review gate) and `college` to the acting chair's own `college` (the same value already used for the chair's own scoping elsewhere) — the request body does not accept either field.
 - The created `Subject` is immediately a real, permanent catalog row (subjects are a flat global catalog today, not versioned per curriculum-draft or per college) — consistent with how `curriculum_subjects.subject_id` already references it via foreign key. It is visible to every program's catalog search from that point on, independent of whether the curriculum it was created from is ever submitted or approved.
 
 ### 2.6 Migration
@@ -123,7 +126,7 @@ Clicking it opens a confirmation `Dialog`:
 
 A new sidebar module, `curriculum-approvals`, added to both roles' module lists (`role-capabilities.ts`), positioned near their existing schedule-approval module.
 
-- **List view**: one row per curriculum awaiting that role's decision (`PendingDeanReview` for Dean, scoped to their college; `PendingExecutiveReview` for Executive Director, unscoped) — program, curriculum name, effective school year, submitting chair, submitted-at. Empty state when nothing is pending.
+- **List view**: one row per curriculum awaiting that role's decision (`PendingDeanReview` for Dean; `PendingExecutiveReview` for Executive Director — both unscoped by college, per 2.1) — program, curriculum name, effective school year, submitting chair, submitted-at. Empty state when nothing is pending.
 - **Review action**: opens the same style of review dialog as `schedule-review-dialog.tsx` (sticky header with program/curriculum/submitter summary, scrollable body, sticky footer) — the body reuses the read-only grouped subject table (same component as 3.5's preview and the View tab).
 - **Decision actions** in the sticky footer: `Return with notes` (opens the existing-pattern reason-required confirmation) and `Approve`. Labels: Dean's approve reads `Approve — send to Executive Director`; Executive Director's reads `Approve — activate curriculum`.
 
