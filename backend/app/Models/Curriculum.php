@@ -18,6 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?int $effective_start_year
  * @property ?int $effective_end_year
  * @property CurriculumStatus $status
+ * @property ?int $decided_by
+ * @property ?CarbonImmutable $decided_at
+ * @property ?string $last_decision_reason
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Program $program
@@ -33,6 +36,9 @@ final class Curriculum extends Model
         'effective_start_year',
         'effective_end_year',
         'status',
+        'decided_by',
+        'decided_at',
+        'last_decision_reason',
     ];
 
     /**
@@ -42,6 +48,7 @@ final class Curriculum extends Model
     {
         return [
             'status' => CurriculumStatus::class,
+            'decided_at' => 'immutable_datetime',
         ];
     }
 
