@@ -23,4 +23,8 @@ enum NotificationType: string
     case EnrollmentChangeRequestSubmitted = 'enrollment_change_request_submitted';
     case EnrollmentChangeRequestApproved = 'enrollment_change_request_approved';
     case EnrollmentChangeRequestRejected = 'enrollment_change_request_rejected';
+    case CurriculumSubmittedForDean = 'curriculum_submitted_for_dean';
+    case CurriculumDeanApproved = 'curriculum_dean_approved';
+    case CurriculumExecutiveApproved = 'curriculum_executive_approved';
+    case CurriculumReturned = 'curriculum_returned';
 }
