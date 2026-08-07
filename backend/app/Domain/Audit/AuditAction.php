@@ -8,6 +8,16 @@ final class AuditAction
 
     public const CURRICULUM_UPDATED = 'curriculum.updated';
 
+    public const CURRICULUM_SUBMITTED = 'curriculum.submitted';
+
+    public const CURRICULUM_DEAN_APPROVED = 'curriculum.dean_approved';
+
+    public const CURRICULUM_DEAN_RETURNED = 'curriculum.dean_returned';
+
+    public const CURRICULUM_EXECUTIVE_APPROVED = 'curriculum.executive_approved';
+
+    public const CURRICULUM_EXECUTIVE_RETURNED = 'curriculum.executive_returned';
+
     public const FACULTY_AVAILABILITY_CREATED = 'faculty_availability.created';
 
     public const FACULTY_AVAILABILITY_UPDATED = 'faculty_availability.updated';
@@ -124,6 +134,11 @@ final class AuditAction
         return [
             self::CURRICULUM_CREATED,
             self::CURRICULUM_UPDATED,
+            self::CURRICULUM_SUBMITTED,
+            self::CURRICULUM_DEAN_APPROVED,
+            self::CURRICULUM_DEAN_RETURNED,
+            self::CURRICULUM_EXECUTIVE_APPROVED,
+            self::CURRICULUM_EXECUTIVE_RETURNED,
             self::FACULTY_AVAILABILITY_CREATED,
             self::FACULTY_AVAILABILITY_UPDATED,
             self::FACULTY_AVAILABILITY_DELETED,
