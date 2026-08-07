@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Curriculum\CreateCurriculum;
+use App\Actions\Curriculum\TransitionCurriculum;
 use App\Actions\Curriculum\UpdateCurriculum;
 use App\Domain\Identity\UserRole;
 use App\Http\Controllers\Controller;
@@ -15,6 +16,7 @@ use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 final class CurriculumController extends Controller
 {
@@ -81,6 +83,53 @@ final class CurriculumController extends Controller
             'effective_school_year' => $request->validated('effective_school_year'),
             'status' => $request->validated('status'),
         ], $request->subjects(), $curriculum, $contextFactory->fromRequest($request));
+
+        return $this->cachePrivateResponse(CurriculumResource::make($curriculum)->response($request));
+    }
+
+    /**
+     * Which Policy ability governs each transition action — one route
+     * serves the Program Chair, Dean, and Executive Director instead of a
+     * single `role:` middleware, matching ScheduleProposalController.
+     *
+     * @var array<string, string>
+     */
+    private const ABILITY_FOR_ACTION = [
+        'submit' => 'submit',
+        'dean_approve' => 'approveAsDean',
+        'dean_return' => 'approveAsDean',
+        'executive_approve' => 'approveAsExecutive',
+        'executive_return' => 'approveAsExecutive',
+    ];
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function transition(
+        Request $request,
+        Curriculum $curriculum,
+        TransitionCurriculum $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
+
+        $validated = $request->validate([
+            'action' => ['required', 'string', Rule::in(array_keys(self::ABILITY_FOR_ACTION))],
+            'reason' => ['sometimes', 'nullable', 'string', 'max:1000'],
+        ]);
+
+        $ability = self::ABILITY_FOR_ACTION[$validated['action']];
+        $ability === 'submit'
+            ? $this->authorize($ability, $curriculum)
+            : $this->authorize($ability, Curriculum::class);
+
+        $curriculum = $action->execute(
+            $curriculum,
+            $validated['action'],
+            $user,
+            $validated['reason'] ?? null,
+            $contextFactory->fromRequest($request),
+        );
 
         return $this->cachePrivateResponse(CurriculumResource::make($curriculum)->response($request));
     }

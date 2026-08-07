@@ -78,6 +78,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::patch('/academic-term-workflows/{workflow}', [AcademicTermWorkflowController::class, 'update'])->name('academic-term-workflows.update');
         Route::get('/subjects', SubjectController::class)->name('subjects');
         Route::get('/curricula', [CurriculumController::class, 'index'])->name('curricula.index');
+
+        // Every transition (submit, dean_approve, dean_return,
+        // executive_approve, executive_return) needs a *different* role, so
+        // a single blanket `role:` middleware doesn't fit this one route —
+        // CurriculumPolicy resolves the right ability per request, same
+        // shape as schedule-proposals.update. See ADR 0011.
+        Route::patch('/curricula/{curriculum}/transition', [CurriculumController::class, 'transition'])->name('curricula.transition');
         Route::get('/subject-offerings', [SubjectOfferingController::class, 'index'])->name('subject-offerings.index');
         Route::get('/academic-term-section-plans', [AcademicTermSectionPlanController::class, 'index'])->name('academic-term-section-plans.index');
         Route::get('/faculty-availabilities', [FacultyAvailabilityController::class, 'index'])->name('faculty-availabilities.index');
