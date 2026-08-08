@@ -19,6 +19,7 @@ const sectionShape = {
   capacity: z.number().int().min(1, "Capacity must be at least 1."),
   viability_threshold: z.number().int().min(1).nullable(),
   status: z.enum(["planned", "published", "closed", "cancelled"]),
+  override_reason: z.string().trim().max(1000).nullable().optional(),
 }
 
 function validateSchedule(
@@ -84,6 +85,9 @@ export const sectionEditorSchema = z
     ends_at_time: value.ends_at_time || null,
     room: value.room || null,
     modality: value.modality ?? null,
+    ...(value.override_reason === undefined
+      ? {}
+      : { override_reason: value.override_reason?.trim() || null }),
   }))
   .pipe(sectionInputSchema)
 
@@ -100,7 +104,10 @@ export const scheduleProposalSchema = z
     section_plan_id: z.number().int().positive().nullable().optional(),
     is_submitted: z.boolean().optional(),
     is_returned: z.boolean().optional(),
-    returned_by_role: z.enum(["dean", "executive_director"]).nullable().optional(),
+    returned_by_role: z
+      .enum(["dean", "executive_director"])
+      .nullable()
+      .optional(),
     status: z.enum([
       "draft",
       "dean_approved",
@@ -113,23 +120,25 @@ export const scheduleProposalSchema = z
     decided_by_name: z.string().min(1).nullable().optional(),
     decided_at: z.iso.datetime().nullable(),
     decision_reason: z.string().nullable(),
-    decision_history: z.array(
-      z
-        .object({
-          action: z.enum([
-            "dean_approve",
-            "dean_return",
-            "executive_approve",
-            "executive_return",
-          ]),
-          action_label: z.string().min(1),
-          actor_name: z.string().min(1),
-          actor_role: z.enum(["dean", "executive_director"]),
-          decided_at: z.iso.datetime(),
-          notes: z.string().nullable(),
-        })
-        .strict(),
-    ).optional(),
+    decision_history: z
+      .array(
+        z
+          .object({
+            action: z.enum([
+              "dean_approve",
+              "dean_return",
+              "executive_approve",
+              "executive_return",
+            ]),
+            action_label: z.string().min(1),
+            actor_name: z.string().min(1),
+            actor_role: z.enum(["dean", "executive_director"]),
+            decided_at: z.iso.datetime(),
+            notes: z.string().nullable(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict()
 export const scheduleProposalsEnvelopeSchema = z

@@ -30,8 +30,8 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "schedule-approvals": "Enrollment planning review",
   "curriculum-approvals": "Curriculum Approvals",
   "schedule-proposals": "Schedule proposals",
-  "sections-schedules": "Sections and schedules",
-  "faculty-assignment": "Faculty assignment",
+  "schedule-faculty-loading": "Schedule & Faculty Loading",
+  rooms: "Rooms operations",
   enrollment: "Select your subjects",
   "grade-approvals": "Grade approvals",
   "academic-transcripts": "Academic transcripts",
@@ -56,21 +56,28 @@ const migratedRegionNames: Partial<Record<string, string>> = {
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the thirty-seven role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(37)
+  it("dispatches exactly the thirty-five role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(35)
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )
 
     for (const moduleId of connectedModuleIds) {
       const ModuleComponent = connectedModuleRegistry[moduleId]
+      const role = (
+        Object.keys(rolePortalDefinitions) as Array<
+          keyof typeof rolePortalDefinitions
+        >
+      ).find((candidate) =>
+        rolePortalDefinitions[candidate].modules.some(
+          (module) => module.id === moduleId,
+        ),
+      )
       const view = renderWithSession(<ModuleComponent />, {
         session: {
           userId: "5",
-          displayName:
-            moduleId === "curriculum-approvals" ? "Dean" : "Admission Staff",
-          role:
-            moduleId === "curriculum-approvals" ? "dean" : "admission_staff",
+          displayName: role === "dean" ? "Dean" : "Test User",
+          role: role ?? "admission_staff",
           signedInAt: "2026-07-29T12:00:00Z",
         },
       })

@@ -30,6 +30,7 @@ final class Subject extends Model
         'college',
         'title',
         'units',
+        'room_requirement',
         'status',
     ];
 

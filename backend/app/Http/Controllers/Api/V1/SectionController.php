@@ -93,6 +93,7 @@ final class SectionController extends Controller
             'capacity' => $request->validated('capacity'),
             'viability_threshold' => $request->validated('viability_threshold'),
             'status' => $request->validated('status'),
+            'override_reason' => $request->validated('override_reason'),
         ], $section, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(SectionResource::make($section)->response($request));

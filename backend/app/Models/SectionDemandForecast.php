@@ -27,11 +27,18 @@ final class SectionDemandForecast extends Model
     protected $fillable = [
         'prediction_run_id',
         'academic_term_id',
+        'program_id',
+        'curriculum_id',
         'subject_id',
+        'year_level',
+        'historical_school_year',
+        'historical_semester',
+        'historical_year_level',
         'predicted_demand',
         'suggested_section_count',
         'confidence_lower',
         'confidence_upper',
+        'rationale',
     ];
 
     /**
@@ -44,6 +51,9 @@ final class SectionDemandForecast extends Model
             'confidence_lower' => 'decimal:2',
             'confidence_upper' => 'decimal:2',
             'suggested_section_count' => 'integer',
+            'year_level' => 'integer',
+            'historical_year_level' => 'integer',
+            'rationale' => 'array',
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];

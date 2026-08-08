@@ -7,8 +7,10 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Models\AcademicTerm;
+use App\Models\ScheduleGenerationRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 final class ScheduleGenerationEndpointTest extends TestCase
@@ -19,6 +21,7 @@ final class ScheduleGenerationEndpointTest extends TestCase
 
     public function test_a_program_chair_can_start_an_idempotent_schedule_generation_run(): void
     {
+        Queue::fake();
         $term = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
         $token = $this->tokenFor(UserRole::ProgramChair, 'chair.generation@grc.test', CollegeCode::Ccs);
 
@@ -43,6 +46,23 @@ final class ScheduleGenerationEndpointTest extends TestCase
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
         $this->assertDatabaseCount('schedule_generation_runs', 0);
+    }
+
+    public function test_a_completed_generation_can_be_run_again(): void
+    {
+        Queue::fake();
+        $term = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.rerun@grc.test', CollegeCode::Ccs);
+
+        $first = $this->withToken($token)->postJson("/api/v1/academic-terms/{$term->id}/schedule-generation-runs");
+        $first->assertCreated();
+        ScheduleGenerationRun::query()->findOrFail($first->json('data.id'))->update(['status' => 'succeeded']);
+
+        $this->withToken($token)
+            ->postJson("/api/v1/academic-terms/{$term->id}/schedule-generation-runs")
+            ->assertCreated()
+            ->assertJsonPath('data.id', $first->json('data.id') + 1);
+        $this->assertDatabaseCount('schedule_generation_runs', 2);
     }
 
     public function test_a_non_program_chair_cannot_start_schedule_generation(): void

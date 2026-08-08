@@ -21,7 +21,11 @@ final class CurriculumScheduleReferenceMigrationTest extends TestCase
 
     public function test_migrations_are_fully_reversible(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 1])->assertExitCode(0);
+        // Six later migrations currently follow the reference migration, so
+        // the seventh rollback reaches the reference migration itself.
+        // Roll back through this one rather than only rolling back the latest
+        // unrelated scheduling migration.
+        $this->artisan('migrate:rollback', ['--step' => 7])->assertExitCode(0);
 
         $this->assertFalse(Schema::hasColumn('curriculum_subjects', 'reference_day'));
 

@@ -22,9 +22,7 @@ const expectedModuleIds = {
   program_chair: [
     "program-chair-enrollment",
     "subjects-prerequisites",
-    "sections-schedules",
-    "faculty-assignment",
-    "demand-forecast",
+    "schedule-faculty-loading",
     "rooms",
     "schedule-proposals",
   ],
@@ -99,8 +97,14 @@ describe("getRoleModule", () => {
     expect(getRoleModule("student", "enrollment")?.label).toBe("Enrollment")
     expect(getRoleModule("student", "payment-queue")).toBeNull()
     expect(getRoleModule("student", "unknown")).toBeNull()
-    expect(getRoleModule("dean", "schedule-approvals")?.label).toBe("Enrollment")
-    expect(getRoleModule("executive_director", "master-schedule")?.label).toBe("Enrollment")
-    expect(getRoleModule("program_chair", "subjects-prerequisites")?.label).toBe("Curriculum Editor")
+    expect(getRoleModule("dean", "schedule-approvals")?.label).toBe(
+      "Enrollment",
+    )
+    expect(getRoleModule("executive_director", "master-schedule")?.label).toBe(
+      "Enrollment",
+    )
+    expect(
+      getRoleModule("program_chair", "subjects-prerequisites")?.label,
+    ).toBe("Curriculum Editor")
   })
 })

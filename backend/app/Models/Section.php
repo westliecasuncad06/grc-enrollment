@@ -59,6 +59,7 @@ final class Section extends Model
         'recommendation_source',
         'recommended_capacity',
         'recommendation_prediction_run_id',
+        'manual_override_reason',
         'viability_threshold',
         'enrolled_count',
         'is_block_exclusive',

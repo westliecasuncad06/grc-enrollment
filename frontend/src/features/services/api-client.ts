@@ -121,7 +121,7 @@ async function readJson(response: Response): Promise<unknown> {
 interface RequestOptions {
   authenticated?: boolean
   body?: unknown
-  method: "GET" | "POST" | "PATCH" | "DELETE"
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   signal?: AbortSignal
 }
 
@@ -246,6 +246,14 @@ export function patchAuthenticatedJson(
   signal?: AbortSignal,
 ): Promise<unknown> {
   return request(path, { authenticated: true, body, method: "PATCH", signal })
+}
+
+export function putAuthenticatedJson(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return request(path, { authenticated: true, body, method: "PUT", signal })
 }
 
 export function deleteAuthenticatedJson(

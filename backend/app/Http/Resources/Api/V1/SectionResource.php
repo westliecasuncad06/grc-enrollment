@@ -60,6 +60,10 @@ final class SectionResource extends JsonResource
             'is_block_exclusive' => $this->resource->is_block_exclusive,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
+            'recommendation_source' => $this->resource->recommendation_source,
+            'recommended_capacity' => $this->resource->recommended_capacity,
+            'recommendation_prediction_run_id' => $this->resource->recommendation_prediction_run_id,
+            'manual_override_reason' => $this->resource->manual_override_reason,
         ];
     }
 }

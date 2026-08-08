@@ -14,6 +14,8 @@ final class AuditableType
 
     public const SECTION = 'section';
 
+    public const FACULTY_LOAD_THRESHOLD = 'faculty_load_threshold';
+
     public const SCHEDULE_PROPOSAL = 'schedule_proposal';
 
     public const STUDENT_PROFILE = 'student_profile';
@@ -55,6 +57,7 @@ final class AuditableType
             self::FACULTY_AVAILABILITY,
             self::FACULTY_SUBJECT_PREFERENCE,
             self::SECTION,
+            self::FACULTY_LOAD_THRESHOLD,
             self::SCHEDULE_PROPOSAL,
             self::STUDENT_PROFILE,
             self::AUDIT_LOG,

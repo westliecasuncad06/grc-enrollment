@@ -29,7 +29,8 @@ final class UpdateSection
      *     modality: ?string,
      *     capacity: int,
      *     viability_threshold: ?int,
-     *     status: string
+     *     status: string,
+     *     override_reason?: ?string
      * }  $validatedData
      */
     public function execute(
@@ -72,6 +73,7 @@ final class UpdateSection
                 'capacity_source' => $capacitySource,
                 'viability_threshold' => $validatedData['viability_threshold'],
                 'status' => $validatedData['status'],
+                'manual_override_reason' => $validatedData['override_reason'] ?? $section->manual_override_reason,
             ]);
             $section->refresh();
 
@@ -82,7 +84,7 @@ final class UpdateSection
                 $section->id,
                 $beforeValues,
                 self::snapshot($section),
-                null,
+                $validatedData['override_reason'] ?? null,
                 $context,
             );
 

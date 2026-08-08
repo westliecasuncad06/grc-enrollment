@@ -9,11 +9,11 @@ use Illuminate\Database\Eloquent\Model;
 final class RoomCatalogEntry extends Model
 {
     /** @var list<string> */
-    protected $fillable = ['name', 'college'];
+    protected $fillable = ['name', 'college', 'capacity', 'room_type'];
 
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['college' => CollegeCode::class];
+        return ['college' => CollegeCode::class, 'capacity' => 'integer'];
     }
 }

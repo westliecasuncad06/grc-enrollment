@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1\Section;
 
 use App\Domain\Identity\UserRole;
+use App\Domain\Scheduling\RoomConflictDetector;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
@@ -45,6 +46,7 @@ final class UpdateSectionRequest extends FormRequest
             'capacity' => ['required', 'integer', 'min:1'],
             'viability_threshold' => ['nullable', 'integer', 'min:1'],
             'status' => ['required', Rule::enum(SectionStatus::class)],
+            'override_reason' => ['nullable', 'string', 'max:1000'],
         ];
     }
 
@@ -57,7 +59,33 @@ final class UpdateSectionRequest extends FormRequest
                     'This professor is already assigned to another section that conflicts with this schedule.',
                 );
             }
+            if ($this->hasRoomConflict()) {
+                $validator->errors()->add(
+                    'room',
+                    'This room is already physically occupied by another section at the proposed time.',
+                );
+            }
+            /** @var ?Section $section */
+            $section = $this->route('section');
+            if ($section instanceof Section && $section->recommendation_prediction_run_id !== null && $this->changesGeneratedAssignment($section) && ! filled($this->input('override_reason'))) {
+                $validator->errors()->add('override_reason', 'Explain why this generated assignment is being overridden.');
+            }
         });
+    }
+
+    private function changesGeneratedAssignment(Section $section): bool
+    {
+        foreach (['professor_id', 'schedule_days', 'starts_at_time', 'ends_at_time', 'room', 'modality'] as $field) {
+            $current = $section->{$field};
+            if ($current instanceof SectionModality) {
+                $current = $current->value;
+            }
+            if ($this->input($field) != $current) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function hasProfessorConflict(): bool
@@ -86,6 +114,36 @@ final class UpdateSectionRequest extends FormRequest
             'schedule_days' => $this->input('schedule_days'),
             'starts_at_time' => $this->input('starts_at_time'),
             'ends_at_time' => $this->input('ends_at_time'),
+        ], $existing);
+    }
+
+    private function hasRoomConflict(): bool
+    {
+        $room = $this->input('room');
+        if (! is_string($room) || trim($room) === '') {
+            return false;
+        }
+
+        $existing = array_values(
+            Section::query()
+                ->where('room', $room)
+                ->where('academic_term_id', $this->input('academic_term_id'))
+                ->whereKeyNot($this->route('section'))
+                ->get(['schedule_days', 'starts_at_time', 'ends_at_time', 'modality'])
+                ->map(fn (Section $section): array => [
+                    'schedule_days' => $section->schedule_days,
+                    'starts_at_time' => $section->starts_at_time,
+                    'ends_at_time' => $section->ends_at_time,
+                    'modality' => $section->modality?->value,
+                ])
+                ->all(),
+        );
+
+        return app(RoomConflictDetector::class)->hasConflict([
+            'schedule_days' => $this->input('schedule_days'),
+            'starts_at_time' => $this->input('starts_at_time'),
+            'ends_at_time' => $this->input('ends_at_time'),
+            'modality' => $this->input('modality'),
         ], $existing);
     }
 }

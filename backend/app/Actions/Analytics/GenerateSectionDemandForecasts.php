@@ -2,11 +2,12 @@
 
 namespace App\Actions\Analytics;
 
+use App\Actions\Scheduling\ApplyDemandForecastToDraft;
+use App\Actions\Scheduling\GenerateFacultyAssignmentRecommendations;
 use App\Domain\Analytics\HistoricalCohortResolver;
 use App\Domain\Analytics\PredictionRunStatus;
 use App\Domain\Analytics\PredictionType;
 use App\Domain\Scheduling\ScheduleGenerationStatus;
-use App\Actions\Scheduling\ApplyDemandForecastToDraft;
 use App\Models\CurriculumSubject;
 use App\Models\PredictionRun;
 use App\Models\ScheduleGenerationRun;
@@ -27,6 +28,7 @@ final class GenerateSectionDemandForecasts
         private readonly HistoricalCohortResolver $historicalCohortResolver,
         private readonly SectionDemandPredictionClient $predictionClient,
         private readonly ApplyDemandForecastToDraft $applyDemandForecastToDraft,
+        private readonly GenerateFacultyAssignmentRecommendations $facultyRecommendations,
     ) {}
 
     public function execute(ScheduleGenerationRun $generationRun): void
@@ -130,6 +132,7 @@ final class GenerateSectionDemandForecasts
                     $forecast = $forecastByKey->get($key);
                     if (! is_array($forecast)) {
                         $warnings[] = "No demand forecast returned for subject {$placement->subject_id}.";
+
                         continue;
                     }
 
@@ -143,10 +146,21 @@ final class GenerateSectionDemandForecasts
                             'subject_id' => $placement->subject_id,
                         ],
                         [
+                            'program_id' => $placement->curriculum->program_id,
+                            'curriculum_id' => $placement->curriculum_id,
+                            'year_level' => $placement->year_level,
+                            'historical_school_year' => $this->historicalCohortResolver->resolve($term->school_year, $term->semester, $placement->year_level)->schoolYear,
+                            'historical_semester' => $this->historicalCohortResolver->resolve($term->school_year, $term->semester, $placement->year_level)->semester,
+                            'historical_year_level' => $this->historicalCohortResolver->resolve($term->school_year, $term->semester, $placement->year_level)->yearLevel,
                             'predicted_demand' => $forecast['predicted_demand'],
                             'suggested_section_count' => $forecast['suggested_section_count'],
                             'confidence_lower' => $forecast['confidence_lower'],
                             'confidence_upper' => $forecast['confidence_upper'],
+                            'rationale' => [
+                                'model_strategy' => $response['strategy'] ?? 'unknown',
+                                'section_formula' => 'ceil(predicted demand / recommended capacity)',
+                                'recommended_capacity' => 40,
+                            ],
                         ],
                     );
                 }
@@ -164,6 +178,7 @@ final class GenerateSectionDemandForecasts
                 'completed_at' => now(),
             ]);
             $warnings = array_merge($warnings, $this->applyDemandForecastToDraft->execute($generationRun, $predictionRun));
+            $warnings = array_merge($warnings, $this->facultyRecommendations->execute($generationRun));
             $generationRun->update([
                 'status' => ScheduleGenerationStatus::Succeeded,
                 'warnings' => $warnings,

@@ -23,7 +23,6 @@ import {
   ShieldCheck,
   UserCheck,
   UserMinus,
-  UserRoundCog,
   Users,
   Waypoints,
   type LucideIcon,
@@ -149,22 +148,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         Network,
       ),
       portalModule(
-        "sections-schedules",
-        "Sections & Schedules",
-        "Plan sections across approved meeting patterns.",
+        "schedule-faculty-loading",
+        "Schedule & Faculty Loading",
+        "Review editable section schedules, faculty loads, conflicts, and advisory recommendations.",
         CalendarDays,
-      ),
-      portalModule(
-        "faculty-assignment",
-        "Faculty Assignment",
-        "Propose faculty assignments for planned sections.",
-        UserRoundCog,
-      ),
-      portalModule(
-        "demand-forecast",
-        "Demand Forecast",
-        "Preview advisory demand signals without automatic enrollment decisions.",
-        BarChart3,
       ),
       portalModule(
         "rooms",

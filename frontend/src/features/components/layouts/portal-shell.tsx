@@ -113,11 +113,7 @@ function PortalNavigation({
               mobile={mobile}
               locked={
                 enrollmentLinksLocked &&
-                [
-                  "sections-schedules",
-                  "faculty-assignment",
-                  "schedule-proposals",
-                ].includes(module.id)
+                ["schedule-proposals"].includes(module.id)
               }
             >
               <Icon data-icon="inline-start" aria-hidden="true" />

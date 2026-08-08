@@ -83,6 +83,15 @@ export const sectionSchema = z
     modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable().optional(),
     capacity: z.number().int().nonnegative(),
     capacity_source: z.enum(["plan", "manual"]),
+    recommendation_source: z.string().nullable().optional(),
+    recommended_capacity: z.number().int().positive().nullable().optional(),
+    recommendation_prediction_run_id: z
+      .number()
+      .int()
+      .positive()
+      .nullable()
+      .optional(),
+    manual_override_reason: z.string().nullable().optional(),
     viability_threshold: z.number().int().positive().nullable(),
     enrolled_count: z.number().int().nonnegative(),
     remaining_seats: z.number().int().nonnegative(),

@@ -91,6 +91,7 @@ export function toSectionReplacement(
       capacity: section.capacity,
       viability_threshold: section.viability_threshold,
       status: section.status,
+      override_reason: section.manual_override_reason ?? null,
       ...changes,
     },
     "section replacement",
@@ -133,7 +134,10 @@ export async function getScheduleReviewSections(
 ): Promise<readonly ScheduleReviewSection[]> {
   return parse(
     scheduleReviewSectionsEnvelopeSchema,
-    await getAuthenticatedJson(`${SCHEDULE_PROPOSALS_PATH}/${proposalId}/sections`, signal),
+    await getAuthenticatedJson(
+      `${SCHEDULE_PROPOSALS_PATH}/${proposalId}/sections`,
+      signal,
+    ),
     "submitted schedule section list",
   ).data
 }

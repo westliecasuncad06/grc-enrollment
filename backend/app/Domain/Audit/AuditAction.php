@@ -36,6 +36,8 @@ final class AuditAction
 
     public const SECTION_UPDATED = 'section.updated';
 
+    public const FACULTY_LOAD_THRESHOLD_UPDATED = 'faculty_load_threshold.updated';
+
     public const SCHEDULE_PROPOSAL_CREATED = 'schedule_proposal.created';
 
     public const SCHEDULE_PROPOSAL_DEAN_APPROVED = 'schedule_proposal.dean_approved';
@@ -150,6 +152,7 @@ final class AuditAction
             self::FACULTY_SUBJECT_PREFERENCE_DELETED,
             self::SECTION_CREATED,
             self::SECTION_UPDATED,
+            self::FACULTY_LOAD_THRESHOLD_UPDATED,
             self::SCHEDULE_PROPOSAL_CREATED,
             self::SCHEDULE_PROPOSAL_DEAN_APPROVED,
             self::SCHEDULE_PROPOSAL_DEAN_RETURNED,

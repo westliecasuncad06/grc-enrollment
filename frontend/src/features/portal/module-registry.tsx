@@ -1,6 +1,5 @@
 import type { ComponentType } from "react"
 
-import { useAuth } from "@/features/auth/use-auth"
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
@@ -8,9 +7,8 @@ import { CurriculumWorkspace } from "@/features/components/portal/curriculum-wor
 import { CurriculumApprovalsWorkspace } from "@/features/components/portal/curriculum-approvals-workspace"
 import { ProgramChairEnrollmentWorkspace } from "@/features/components/portal/program-chair-enrollment-workspace"
 import { AcademicTermWorkspace } from "@/features/components/portal/academic-term-workspace"
-import { FacultyAssignmentWorkspace } from "@/features/components/portal/faculty-assignment-workspace"
 import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
-import { SectionsWorkspace } from "@/features/components/portal/sections-workspace"
+import { ScheduleFacultyLoadingWorkspace } from "@/features/components/portal/schedule-faculty-loading-workspace"
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
 import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
 import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
@@ -39,9 +37,7 @@ export type ConnectedModuleId =
   | "teaching-schedule"
   | "program-chair-enrollment"
   | "subjects-prerequisites"
-  | "sections-schedules"
-  | "faculty-assignment"
-  | "demand-forecast"
+  | "schedule-faculty-loading"
   | "rooms"
   | "schedule-proposals"
   | "schedule-approvals"
@@ -80,9 +76,7 @@ export const connectedModuleIds = [
   "teaching-schedule",
   "program-chair-enrollment",
   "subjects-prerequisites",
-  "sections-schedules",
-  "faculty-assignment",
-  "demand-forecast",
+  "schedule-faculty-loading",
   "rooms",
   "schedule-proposals",
   "schedule-approvals",
@@ -139,21 +133,8 @@ const programChairEnrollmentWorkspace: PortalModuleComponent = () => (
 const academicTermWorkspace: PortalModuleComponent = () => (
   <AcademicTermWorkspace />
 )
-const SectionsModuleWorkspace: PortalModuleComponent = () => {
-  const { session } = useAuth()
-
-  return session?.role === "program_chair" ? (
-    <ProgramChairEnrollmentWorkspace
-      workspaceTitle="Sections and schedules"
-      workspaceDescription="Track the approval of your submitted plan and review every generated section schedule."
-      initialView="tiles"
-    />
-  ) : (
-    <SectionsWorkspace />
-  )
-}
-const facultyAssignmentWorkspace: PortalModuleComponent = () => (
-  <FacultyAssignmentWorkspace />
+const scheduleFacultyLoadingWorkspace: PortalModuleComponent = () => (
+  <ScheduleFacultyLoadingWorkspace />
 )
 const roomsOperationsWorkspace: PortalModuleComponent = () => (
   <RoomsOperationsWorkspace />
@@ -199,9 +180,7 @@ export const connectedModuleRegistry: Readonly<
   "teaching-schedule": teachingScheduleWorkspace,
   "program-chair-enrollment": programChairEnrollmentWorkspace,
   "subjects-prerequisites": curriculumWorkspace,
-  "sections-schedules": SectionsModuleWorkspace,
-  "faculty-assignment": facultyAssignmentWorkspace,
-  "demand-forecast": programChairEnrollmentWorkspace,
+  "schedule-faculty-loading": scheduleFacultyLoadingWorkspace,
   rooms: roomsOperationsWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,

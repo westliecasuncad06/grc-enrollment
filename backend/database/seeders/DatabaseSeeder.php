@@ -40,5 +40,12 @@ final class DatabaseSeeder extends Seeder
             ProgramChairScheduleSampleSeeder::class,
             SectionDemandObservationSeeder::class,
         ]);
+
+        // Keep normal test fixtures lean. PredictivePlanningInputSeeder is
+        // still test-safe when invoked explicitly, while local development
+        // receives the synthetic planning inputs needed for a live smoke run.
+        if (app()->environment('local')) {
+            $this->call(PredictivePlanningInputSeeder::class);
+        }
     }
 }

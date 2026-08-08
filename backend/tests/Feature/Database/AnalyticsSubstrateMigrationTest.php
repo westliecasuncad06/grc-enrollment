@@ -38,8 +38,10 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
 
         $this->assertTrue(Schema::hasTable('section_demand_forecasts'));
         $this->assertSame([
-            'id', 'prediction_run_id', 'academic_term_id', 'subject_id', 'predicted_demand',
-            'suggested_section_count', 'confidence_lower', 'confidence_upper', 'created_at', 'updated_at',
+            'id', 'prediction_run_id', 'academic_term_id', 'program_id', 'curriculum_id',
+            'subject_id', 'year_level', 'historical_school_year', 'historical_semester',
+            'historical_year_level', 'predicted_demand', 'suggested_section_count',
+            'confidence_lower', 'confidence_upper', 'rationale', 'created_at', 'updated_at',
         ], Schema::getColumnListing('section_demand_forecasts'));
 
         $this->assertTrue(Schema::hasTable('attrition_predictions'));
@@ -77,11 +79,18 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
             ['id', 'bigint', 'bigint(20) unsigned', 'NO', null, 20, 0, null],
             ['prediction_run_id', 'bigint', 'bigint(20) unsigned', 'NO', null, 20, 0, null],
             ['academic_term_id', 'bigint', 'bigint(20) unsigned', 'NO', null, 20, 0, null],
+            ['program_id', 'bigint', 'bigint(20) unsigned', 'YES', null, 20, 0, null],
+            ['curriculum_id', 'bigint', 'bigint(20) unsigned', 'YES', null, 20, 0, null],
             ['subject_id', 'bigint', 'bigint(20) unsigned', 'NO', null, 20, 0, null],
+            ['year_level', 'tinyint', 'tinyint(3) unsigned', 'YES', null, 3, 0, null],
+            ['historical_school_year', 'varchar', 'varchar(255)', 'YES', 255, null, null, null],
+            ['historical_semester', 'varchar', 'varchar(255)', 'YES', 255, null, null, null],
+            ['historical_year_level', 'tinyint', 'tinyint(3) unsigned', 'YES', null, 3, 0, null],
             ['predicted_demand', 'decimal', 'decimal(10,2)', 'NO', null, 10, 2, null],
             ['suggested_section_count', 'smallint', 'smallint(5) unsigned', 'NO', null, 5, 0, null],
             ['confidence_lower', 'decimal', 'decimal(10,2)', 'YES', null, 10, 2, null],
             ['confidence_upper', 'decimal', 'decimal(10,2)', 'YES', null, 10, 2, null],
+            ['rationale', 'longtext', 'longtext', 'YES', 4294967295, null, null, null],
             ['created_at', 'timestamp', 'timestamp', 'YES', null, null, null, 0],
             ['updated_at', 'timestamp', 'timestamp', 'YES', null, null, null, 0],
         ], $this->columnMetadataFor('section_demand_forecasts'));
