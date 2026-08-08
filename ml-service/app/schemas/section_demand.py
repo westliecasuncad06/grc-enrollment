@@ -49,12 +49,24 @@ class DemandForecast(BaseModel):
     suggested_section_count: int = Field(ge=0)
 
 
+class DemandModelMetrics(BaseModel):
+    """Quality information that makes an advisory model run auditable."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    training_observation_count: int = Field(ge=0)
+    validation_observation_count: int = Field(ge=0)
+    mae: float | None = Field(default=None, ge=0)
+    rmse: float | None = Field(default=None, ge=0)
+
+
 class SectionDemandPredictionData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model_version: Literal["section-demand-rf-v1"]
     feature_schema_version: Literal["v1"]
     strategy: Literal["random_forest", "historical_baseline"]
+    metrics: DemandModelMetrics
     forecasts: list[DemandForecast]
 
 

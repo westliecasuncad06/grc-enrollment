@@ -83,6 +83,7 @@ final class SaveSectionPlan
                     [
                         'section_count' => (int) ($counts[$yearLevel] ?? $counts[(string) $yearLevel] ?? 0),
                         'students_per_block' => max(1, (int) ($capacity ?? $existingCapacity ?? 40)),
+                        'recommendation_is_overridden' => true,
                         'status' => SectionPlanStatus::Draft,
                         'submitted_by' => null,
                         'submitted_at' => null,

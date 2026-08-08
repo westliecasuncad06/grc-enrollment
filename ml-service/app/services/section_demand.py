@@ -5,6 +5,7 @@ from sklearn.ensemble import RandomForestRegressor
 
 from app.schemas.section_demand import (
     DemandForecast,
+    DemandModelMetrics,
     DemandObservation,
     DemandTarget,
     SectionDemandPredictionData,
@@ -26,6 +27,7 @@ class SectionDemandPredictor:
                 model_version="section-demand-rf-v1",
                 feature_schema_version="v1",
                 strategy="historical_baseline",
+                metrics=self._metrics(len(observations)),
                 forecasts=[self._baseline_forecast(observations[-1], target) for target in targets],
             )
 
@@ -38,7 +40,17 @@ class SectionDemandPredictor:
             model_version="section-demand-rf-v1",
             feature_schema_version="v1",
             strategy="random_forest",
+            metrics=self._metrics(len(observations)),
             forecasts=[self._forest_forecast(model, target) for target in targets],
+        )
+
+    def _metrics(self, observation_count: int) -> DemandModelMetrics:
+        """Avoid publishing accuracy figures when this request lacks a validation set."""
+        return DemandModelMetrics(
+            training_observation_count=observation_count,
+            validation_observation_count=0,
+            mae=None,
+            rmse=None,
         )
 
     def _baseline_forecast(self, observation: DemandObservation, target: DemandTarget) -> DemandForecast:

@@ -6,6 +6,7 @@ use App\Domain\Analytics\HistoricalCohortResolver;
 use App\Domain\Analytics\PredictionRunStatus;
 use App\Domain\Analytics\PredictionType;
 use App\Domain\Scheduling\ScheduleGenerationStatus;
+use App\Actions\Scheduling\ApplyDemandForecastToDraft;
 use App\Models\CurriculumSubject;
 use App\Models\PredictionRun;
 use App\Models\ScheduleGenerationRun;
@@ -25,6 +26,7 @@ final class GenerateSectionDemandForecasts
     public function __construct(
         private readonly HistoricalCohortResolver $historicalCohortResolver,
         private readonly SectionDemandPredictionClient $predictionClient,
+        private readonly ApplyDemandForecastToDraft $applyDemandForecastToDraft,
     ) {}
 
     public function execute(ScheduleGenerationRun $generationRun): void
@@ -73,12 +75,6 @@ final class GenerateSectionDemandForecasts
                     $placement->year_level,
                 );
                 $targetKey = $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->year_level;
-                $targets[] = [
-                    'target_key' => $targetKey,
-                    'subject_id' => $placement->subject_id,
-                    'year_level' => $placement->year_level,
-                    'recommended_capacity' => 40,
-                ];
 
                 $rows = SectionDemandObservation::query()
                     ->where('program_id', $placement->curriculum->program_id)
@@ -91,21 +87,41 @@ final class GenerateSectionDemandForecasts
                     ->orderBy('id')
                     ->get();
 
+                if ($rows->isEmpty()) {
+                    continue;
+                }
+
                 foreach ($rows as $row) {
                     $observations[] = [
-                        'subject_id' => $row->subject_id,
-                        'year_level' => $row->year_level,
-                        'semester' => $history->semester,
                         'cohort_size' => $row->cohort_size,
                         'enrolled_count' => $row->enrolled_count,
                         'section_count' => $row->section_count,
                         'offered_capacity' => $row->offered_capacity,
+                        'year_level' => $row->year_level,
+                        'semester' => $history->semester,
                     ];
                 }
+
+                /** @var SectionDemandObservation $latestObservation */
+                $latestObservation = $rows->last();
+                $targets[] = [
+                    'key' => $targetKey,
+                    'cohort_size' => $latestObservation->cohort_size,
+                    'section_count' => $latestObservation->section_count,
+                    'recommended_capacity' => 40,
+                    'year_level' => $placement->year_level,
+                    'semester' => $term->semester,
+                ];
+            }
+
+            if ($observations === [] || $targets === []) {
+                $this->completeWithoutHistory($generationRun, $predictionRun);
+
+                return;
             }
 
             $response = $this->predictionClient->predict($observations, $targets);
-            $forecastByKey = collect($response['forecasts'] ?? [])->keyBy('target_key');
+            $forecastByKey = collect($response['forecasts'] ?? [])->keyBy('key');
             $warnings = [];
 
             DB::transaction(function () use ($placements, $forecastByKey, $predictionRun, $term, &$warnings): void {
@@ -138,9 +154,16 @@ final class GenerateSectionDemandForecasts
 
             $predictionRun->update([
                 'status' => PredictionRunStatus::Succeeded,
-                'metrics' => ['forecast_count' => $forecastByKey->count()],
+                'model_version' => $response['model_version'] ?? 'section-demand-rf-v1',
+                'feature_schema_version' => $response['feature_schema_version'] ?? 'v1',
+                'metrics' => array_merge([
+                    'forecast_count' => $forecastByKey->count(),
+                    'observation_count' => count($observations),
+                    'strategy' => $response['strategy'] ?? 'unknown',
+                ], is_array($response['metrics'] ?? null) ? $response['metrics'] : []),
                 'completed_at' => now(),
             ]);
+            $warnings = array_merge($warnings, $this->applyDemandForecastToDraft->execute($generationRun, $predictionRun));
             $generationRun->update([
                 'status' => ScheduleGenerationStatus::Succeeded,
                 'warnings' => $warnings,
@@ -171,6 +194,24 @@ final class GenerateSectionDemandForecasts
         $generationRun->update([
             'status' => ScheduleGenerationStatus::Succeeded,
             'warnings' => ['No current-term curriculum subjects were found for this college.'],
+            'completed_at' => now(),
+        ]);
+    }
+
+    private function completeWithoutHistory(ScheduleGenerationRun $generationRun, PredictionRun $predictionRun): void
+    {
+        $predictionRun->update([
+            'status' => PredictionRunStatus::Succeeded,
+            'metrics' => [
+                'forecast_count' => 0,
+                'observation_count' => 0,
+                'strategy' => 'insufficient_history',
+            ],
+            'completed_at' => now(),
+        ]);
+        $generationRun->update([
+            'status' => ScheduleGenerationStatus::Succeeded,
+            'warnings' => ['Insufficient historical demand data for this college and term.'],
             'completed_at' => now(),
         ]);
     }

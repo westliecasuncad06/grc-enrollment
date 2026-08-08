@@ -1,0 +1,163 @@
+<?php
+
+namespace App\Actions\Scheduling;
+
+use App\Domain\Organization\CapacitySource;
+use App\Domain\Organization\SectionBlockCode;
+use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicTermSectionPlan;
+use App\Models\CurriculumSubject;
+use App\Models\PredictionRun;
+use App\Models\ScheduleGenerationRun;
+use App\Models\Section;
+use App\Models\SectionDemandForecast;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Converts advisory demand forecasts into draft-only section recommendations.
+ *
+ * Existing manual plans, manually edited section values, and submitted plans
+ * are deliberately left untouched. A Chair can see a newer recommendation,
+ * then explicitly decide whether to apply it in the normal draft workflow.
+ */
+final class ApplyDemandForecastToDraft
+{
+    /**
+     * @return list<string> warnings that should be shown with the generation run
+     */
+    public function execute(ScheduleGenerationRun $generationRun, PredictionRun $predictionRun): array
+    {
+        $generationRun->loadMissing('academicTerm');
+        $term = $generationRun->academicTerm;
+
+        return DB::transaction(function () use ($generationRun, $predictionRun, $term): array {
+            $forecasts = SectionDemandForecast::query()
+                ->where('prediction_run_id', $predictionRun->id)
+                ->where('academic_term_id', $term->id)
+                ->get()
+                ->keyBy('subject_id');
+
+            if ($forecasts->isEmpty()) {
+                return [];
+            }
+
+            $placements = CurriculumSubject::query()
+                ->with('curriculum.program')
+                ->where(function ($query) use ($term): void {
+                    $query->where('semester', $term->semester)
+                        ->orWhere('semester', 'like', '%'.$term->semester.'%');
+                })
+                ->whereHas('curriculum.program', fn ($programs) => $programs->where('college', $generationRun->college))
+                ->get()
+                ->filter(fn (CurriculumSubject $placement): bool => $forecasts->has($placement->subject_id))
+                ->groupBy(fn (CurriculumSubject $placement): string => $placement->curriculum_id.':'.$placement->year_level);
+
+            $warnings = [];
+            foreach ($placements as $group) {
+                /** @var CurriculumSubject $firstPlacement */
+                $firstPlacement = $group->first();
+                $recommendedSectionCount = (int) $group
+                    ->map(fn (CurriculumSubject $placement): int => (int) $forecasts->get($placement->subject_id)->suggested_section_count)
+                    ->max();
+
+                $plan = AcademicTermSectionPlan::query()
+                    ->where('academic_term_id', $term->id)
+                    ->where('curriculum_id', $firstPlacement->curriculum_id)
+                    ->where('college', $generationRun->college)
+                    ->where('year_level', $firstPlacement->year_level)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($plan !== null && $plan->status === SectionPlanStatus::Submitted) {
+                    $warnings[] = "Skipped submitted {$firstPlacement->year_level}th-year section plan.";
+                    continue;
+                }
+
+                if ($plan === null) {
+                    $plan = AcademicTermSectionPlan::create([
+                        'academic_term_id' => $term->id,
+                        'curriculum_id' => $firstPlacement->curriculum_id,
+                        'college' => $generationRun->college,
+                        'year_level' => $firstPlacement->year_level,
+                        'section_count' => $recommendedSectionCount,
+                        'students_per_block' => 40,
+                        'recommendation_source' => 'predictive',
+                        'recommended_section_count' => $recommendedSectionCount,
+                        'recommendation_is_overridden' => false,
+                        'recommendation_prediction_run_id' => $predictionRun->id,
+                        'status' => SectionPlanStatus::Draft,
+                    ]);
+                } elseif ($plan->recommendation_source === 'predictive' && ! $plan->recommendation_is_overridden) {
+                    $plan->update([
+                        'section_count' => $recommendedSectionCount,
+                        'recommendation_source' => 'predictive',
+                        'recommended_section_count' => $recommendedSectionCount,
+                        'recommendation_prediction_run_id' => $predictionRun->id,
+                    ]);
+                } else {
+                    $plan->update([
+                        'recommendation_source' => 'predictive',
+                        'recommended_section_count' => $recommendedSectionCount,
+                        'recommendation_is_overridden' => true,
+                        'recommendation_prediction_run_id' => $predictionRun->id,
+                    ]);
+                    $warnings[] = "Kept the existing manual {$firstPlacement->year_level}th-year section count.";
+                    continue;
+                }
+
+                $this->materializePredictiveBlocks(
+                    $term->id,
+                    $plan,
+                    $predictionRun,
+                    $firstPlacement,
+                    $group,
+                );
+            }
+
+            return array_values(array_unique($warnings));
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, CurriculumSubject>  $placements
+     */
+    private function materializePredictiveBlocks(
+        int $academicTermId,
+        AcademicTermSectionPlan $plan,
+        PredictionRun $predictionRun,
+        CurriculumSubject $firstPlacement,
+        \Illuminate\Support\Collection $placements,
+    ): void {
+        $program = $firstPlacement->curriculum->program;
+
+        for ($number = 1; $number <= $plan->section_count; $number++) {
+            $code = SectionBlockCode::fromProgram(
+                $program->code,
+                $program->college,
+                $plan->year_level,
+                $number,
+            );
+
+            foreach ($placements as $placement) {
+                Section::query()->firstOrCreate(
+                    [
+                        'academic_term_id' => $academicTermId,
+                        'subject_id' => $placement->subject_id,
+                        'section_code' => $code,
+                    ],
+                    [
+                        'section_plan_id' => $plan->id,
+                        'capacity' => $plan->students_per_block,
+                        'capacity_source' => CapacitySource::Plan,
+                        'recommendation_source' => 'predictive',
+                        'recommended_capacity' => $plan->students_per_block,
+                        'recommendation_prediction_run_id' => $predictionRun->id,
+                        'is_block_exclusive' => true,
+                        'status' => SectionStatus::Planned,
+                    ],
+                );
+            }
+        }
+    }
+}

@@ -11,7 +11,7 @@ final class SectionDemandPredictionClient
     /**
      * @param  list<array{cohort_size: int, enrolled_count: int, section_count: int, offered_capacity: int, year_level: int, semester: string}>  $observations
      * @param  list<array{key: string, cohort_size: int, section_count: int, recommended_capacity: int, year_level: int, semester: string}>  $targets
-     * @return array{model_version: string, feature_schema_version: string, strategy: string, forecasts: list<array{key: string, predicted_demand: float|int, confidence_lower: float|int, confidence_upper: float|int, suggested_section_count: int}>}
+     * @return array{model_version: string, feature_schema_version: string, strategy: string, metrics?: array{training_observation_count: int, validation_observation_count: int, mae: float|int|null, rmse: float|int|null}, forecasts: list<array{key: string, predicted_demand: float|int, confidence_lower: float|int, confidence_upper: float|int, suggested_section_count: int}>}
      */
     public function predict(array $observations, array $targets): array
     {
@@ -37,7 +37,7 @@ final class SectionDemandPredictionClient
             throw new UnexpectedValueException('Prediction service returned an invalid response.');
         }
 
-        /** @var array{model_version: string, feature_schema_version: string, strategy: string, forecasts: list<array{key: string, predicted_demand: float|int, confidence_lower: float|int, confidence_upper: float|int, suggested_section_count: int}>} $data */
+        /** @var array{model_version: string, feature_schema_version: string, strategy: string, metrics?: array{training_observation_count: int, validation_observation_count: int, mae: float|int|null, rmse: float|int|null}, forecasts: list<array{key: string, predicted_demand: float|int, confidence_lower: float|int, confidence_upper: float|int, suggested_section_count: int}>} $data */
         return $data;
     }
 }

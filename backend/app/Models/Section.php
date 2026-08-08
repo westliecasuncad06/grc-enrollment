@@ -26,6 +26,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?SectionModality $modality
  * @property int $capacity
  * @property CapacitySource $capacity_source
+ * @property ?string $recommendation_source
+ * @property ?int $recommended_capacity
+ * @property ?int $recommendation_prediction_run_id
  * @property ?int $viability_threshold
  * @property int $enrolled_count
  * @property ?bool $is_block_exclusive
@@ -53,6 +56,9 @@ final class Section extends Model
         'modality',
         'capacity',
         'capacity_source',
+        'recommendation_source',
+        'recommended_capacity',
+        'recommendation_prediction_run_id',
         'viability_threshold',
         'enrolled_count',
         'is_block_exclusive',
@@ -69,6 +75,7 @@ final class Section extends Model
             'modality' => SectionModality::class,
             'capacity' => 'integer',
             'capacity_source' => CapacitySource::class,
+            'recommended_capacity' => 'integer',
             'viability_threshold' => 'integer',
             'enrolled_count' => 'integer',
             'is_block_exclusive' => 'boolean',

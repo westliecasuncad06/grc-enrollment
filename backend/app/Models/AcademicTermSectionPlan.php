@@ -13,7 +13,9 @@ final class AcademicTermSectionPlan extends Model
 
     protected $fillable = [
         'academic_term_id', 'curriculum_id', 'college', 'year_level',
-        'section_count', 'students_per_block', 'status', 'submitted_by', 'submitted_at',
+        'section_count', 'students_per_block', 'recommendation_source',
+        'recommended_section_count', 'recommendation_is_overridden', 'recommendation_prediction_run_id',
+        'status', 'submitted_by', 'submitted_at',
     ];
 
     protected function casts(): array
@@ -22,6 +24,8 @@ final class AcademicTermSectionPlan extends Model
             'year_level' => 'integer',
             'section_count' => 'integer',
             'students_per_block' => 'integer',
+            'recommended_section_count' => 'integer',
+            'recommendation_is_overridden' => 'boolean',
             'status' => SectionPlanStatus::class,
             'submitted_at' => 'immutable_datetime',
         ];

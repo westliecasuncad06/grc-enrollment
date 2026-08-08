@@ -64,6 +64,12 @@ def test_section_demand_prediction_returns_nonnegative_bounded_forecast() -> Non
     assert body["feature_schema_version"] == "v1"
     assert body["model_version"] == "section-demand-rf-v1"
     assert body["strategy"] == "random_forest"
+    assert body["metrics"] == {
+        "training_observation_count": 4,
+        "validation_observation_count": 0,
+        "mae": None,
+        "rmse": None,
+    }
     forecast = body["forecasts"][0]
     assert forecast["key"] == "bsit-1-fundacc"
     assert forecast["predicted_demand"] >= 0
@@ -106,4 +112,10 @@ def test_section_demand_prediction_falls_back_to_source_demand_when_history_is_s
     assert response.status_code == 200
     body = response.json()["data"]
     assert body["strategy"] == "historical_baseline"
+    assert body["metrics"] == {
+        "training_observation_count": 1,
+        "validation_observation_count": 0,
+        "mae": None,
+        "rmse": None,
+    }
     assert body["forecasts"][0]["predicted_demand"] == 38.0
