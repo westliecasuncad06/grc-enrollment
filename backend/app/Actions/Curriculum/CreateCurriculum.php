@@ -5,6 +5,7 @@ namespace App\Actions\Curriculum;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Curriculum\CurriculumStatus;
 use App\Models\Curriculum;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -20,12 +21,13 @@ final class CreateCurriculum
 
     public function __construct(
         private readonly SynchronizeCurriculumSubjects $synchronizer,
+        private readonly ResolveCurriculumEffectiveSchoolYear $effectiveSchoolYearResolver,
         private readonly CurriculumAuditSnapshot $snapshot,
         private readonly AuditRecorder $auditRecorder,
     ) {}
 
     /**
-     * @param  array{program_id: int, name: string, effective_school_year: string, status: string}  $validatedData
+     * @param  array{program_id: int, name: string}  $validatedData
      * @param  list<array{subject_id: int, year_level: int, semester: string, is_required: bool, prerequisites: list<array{prerequisite_subject_id: int, minimum_grade: string}>}>  $subjects
      */
     public function execute(
@@ -38,8 +40,8 @@ final class CreateCurriculum
             $curriculum = Curriculum::create([
                 'program_id' => $validatedData['program_id'],
                 'name' => $validatedData['name'],
-                'effective_school_year' => $validatedData['effective_school_year'],
-                'status' => $validatedData['status'],
+                'effective_school_year' => $this->effectiveSchoolYearResolver->execute(),
+                'status' => CurriculumStatus::Draft,
             ]);
 
             $this->synchronizer->execute($curriculum, $subjects);

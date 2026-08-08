@@ -33,6 +33,8 @@ const curricula = [
     effective_school_year: "2024-2029",
     status: "active",
     status_label: "Active",
+    decided_at: null,
+    last_decision_reason: null,
     subjects: [
       {
         subject_id: 11,
@@ -74,6 +76,8 @@ const curricula = [
     effective_school_year: "2018-2023",
     status: "archived",
     status_label: "Archived",
+    decided_at: null,
+    last_decision_reason: null,
     subjects: [
       {
         subject_id: 14,
@@ -95,6 +99,8 @@ const curricula = [
     effective_school_year: "2024-2029",
     status: "active",
     status_label: "Active",
+    decided_at: null,
+    last_decision_reason: null,
     subjects: [
       {
         subject_id: 21,

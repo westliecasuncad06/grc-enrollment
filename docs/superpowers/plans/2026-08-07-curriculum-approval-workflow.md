@@ -958,6 +958,8 @@ This is the core of the feature. No dedicated unit test for `TransitionCurriculu
 - Consumes: `CurriculumTransitionRules` (Task 4), `NotifyCurriculumTransition` (Task 6), `CurriculumPolicy` (Task 7), existing `AuditRecorder`, `CurriculumAuditSnapshot`.
 - Produces: `PATCH /api/v1/curricula/{curriculum}/transition` — consumed by frontend Tasks 12 and 14.
 
+**Post-Task-8 correction:** the test code below chains `withToken($chairToken)` → `withToken($deanToken)` → `withToken($executiveToken)` for *different* users within single test methods (`test_dean_approves_a_submission...`, `test_dean_return_requires_a_reason...`, `test_executive_approves_and_activates...`). This trips a previously-documented Sanctum guard-caching bug in this exact codebase (see the `schedule-api-layer-completion-slice` memory and `ScheduleProposalsEndpointTest`'s existing convention): the guard resolves and caches the *first* authenticated user for the rest of the test method, so the second/third `withToken()` call doesn't actually switch actors. Task 8's implementer restructured these three methods to one authenticated actor per method, building the "already submitted" precondition directly via Eloquent instead of a prior live HTTP call as a different user — see the actual committed test file for the corrected shape rather than copying the bodies below verbatim.
+
 - [ ] **Step 1: Write the failing endpoint test**
 
 Create `backend/tests/Feature/Api/V1/CurriculumTransitionEndpointTest.php`:
@@ -1073,7 +1075,11 @@ final class CurriculumTransitionEndpointTest extends TestCase
 
         $response->assertOk();
         self::assertSame('pending_executive_review', $response->json('data.status'));
-        self::assertSame(1, Notification::query()->where('type', NotificationType::CurriculumDeanApproved->value)->count());
+        // CurriculumTransitionNotificationPlan::forAction('dean_approve', ...) emits two
+        // rows sharing this one NotificationType (submitter + every active Executive
+        // Director) — not one. (Corrected post-Task-8: the plan originally asserted 1
+        // here, an error caught by Task 8's implementer via direct verification.)
+        self::assertSame(2, Notification::query()->where('type', NotificationType::CurriculumDeanApproved->value)->count());
     }
 
     public function test_dean_return_requires_a_reason_and_sends_the_curriculum_back_to_draft(): void

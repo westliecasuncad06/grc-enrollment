@@ -57,6 +57,8 @@ const curricula = {
       effective_school_year: "2026-2027",
       status: "active",
       status_label: "Active",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [],
     },
     {
@@ -67,6 +69,8 @@ const curricula = {
       effective_school_year: "2026-2027",
       status: "active",
       status_label: "Active",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [],
     },
   ],

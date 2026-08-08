@@ -28,6 +28,8 @@ final class CurriculumResource extends JsonResource
      *     effective_school_year: string,
      *     status: string,
      *     status_label: string,
+     *     decided_at: ?string,
+     *     last_decision_reason: ?string,
      *     subjects: list<array<string, mixed>>
      * }
      */
@@ -41,6 +43,8 @@ final class CurriculumResource extends JsonResource
             'effective_school_year' => $this->resource->effective_school_year,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
+            'decided_at' => $this->resource->decided_at?->toIso8601String(),
+            'last_decision_reason' => $this->resource->last_decision_reason,
             'subjects' => array_values($this->resource->subjectPlacements
                 ->map(fn (CurriculumSubject $placement): array => $this->placementToArray($placement))
                 ->all()),

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -40,14 +41,24 @@ final class Program extends Model
 
     /**
      * Restricts the result set for learner-scoped roles to learner-visible
-     * programs. Planning roles (see UserRole::isLearnerScoped()) are passed
-     * through unfiltered — they see the full catalog.
+     * programs. Program Chairs receive only their assigned college's
+     * programs; without an assigned college, they receive none. Other
+     * planning roles (see UserRole::isLearnerScoped()) are passed through
+     * unfiltered — they see the full catalog.
      *
      * @param  Builder<Program>  $query
      * @return Builder<Program>
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
+        if ($user->role === UserRole::ProgramChair) {
+            if ($user->college === null) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            return $query->where('college', $user->college->value);
+        }
+
         if (! $user->role->isLearnerScoped()) {
             return $query;
         }

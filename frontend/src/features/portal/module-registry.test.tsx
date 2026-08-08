@@ -28,6 +28,7 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   grades: "Grades",
   "digital-com": "Digital COM",
   "schedule-approvals": "Enrollment planning review",
+  "curriculum-approvals": "Curriculum Approvals",
   "schedule-proposals": "Schedule proposals",
   "sections-schedules": "Sections and schedules",
   "faculty-assignment": "Faculty assignment",
@@ -55,8 +56,8 @@ const migratedRegionNames: Partial<Record<string, string>> = {
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the thirty-four role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(34)
+  it("dispatches exactly the thirty-five role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(35)
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )
@@ -66,8 +67,10 @@ describe("connectedModuleRegistry", () => {
       const view = renderWithSession(<ModuleComponent />, {
         session: {
           userId: "5",
-          displayName: "Admission Staff",
-          role: "admission_staff",
+          displayName:
+            moduleId === "curriculum-approvals" ? "Dean" : "Admission Staff",
+          role:
+            moduleId === "curriculum-approvals" ? "dean" : "admission_staff",
           signedInAt: "2026-07-29T12:00:00Z",
         },
       })
@@ -80,6 +83,35 @@ describe("connectedModuleRegistry", () => {
       ).toBeInTheDocument()
       view.unmount()
     }
+  })
+
+  it("connects curriculum approvals for Dean and Executive Director", () => {
+    expect(connectedModuleIds).toContain("curriculum-approvals")
+    expect(connectedModuleRegistry["curriculum-approvals"]).toBeDefined()
+
+    for (const role of ["dean", "executive_director"] as const) {
+      expect(rolePortalDefinitions[role].modules).toContainEqual(
+        expect.objectContaining({
+          id: "curriculum-approvals",
+          label: "Curriculum Approvals",
+        }),
+      )
+    }
+
+    const ModuleComponent = connectedModuleRegistry["curriculum-approvals"]
+    const view = renderWithSession(<ModuleComponent />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    expect(
+      view.getByRole("region", { name: "Curriculum Approvals" }),
+    ).toBeInTheDocument()
+    view.unmount()
   })
 
   it("does not connect any module outside the registry", () => {

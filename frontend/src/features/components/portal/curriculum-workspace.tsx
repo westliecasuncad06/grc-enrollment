@@ -2,9 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Trash2Icon, XIcon } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Controller, useForm, useWatch } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -26,6 +25,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/features/components/ui/dialog"
@@ -36,7 +36,6 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
-import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import {
   Select,
   SelectContent,
@@ -44,14 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/features/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
 import {
   Tabs,
   TabsContent,
@@ -66,29 +57,61 @@ import {
   useProgramsQuery,
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
+import {
+  useAddCurriculumSubjectPlacementMutation,
+  useCurrentCurriculumSubjectsQuery,
+} from "@/features/hooks/use-curriculum-authoring"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import {
   storeCurriculumInputSchema,
   type CurriculumSubjectInput,
   type StoreCurriculumInput,
 } from "@/features/schemas/curriculum-schema"
+import type { Curriculum } from "@/features/schemas/reference-data-schema"
 import {
   createCurriculum,
   replaceCurriculum,
   toCurriculumReplacement,
+  transitionCurriculum,
 } from "@/features/services/curriculum-service"
 import { PrerequisiteEditor } from "@/features/components/portal/prerequisite-editor"
 import { CurriculumView } from "@/features/components/portal/curriculum-view"
+import { CurriculumCreationWizard } from "@/features/components/portal/curriculum-creation-wizard"
+import { CurriculumSubjectSpreadsheet } from "@/features/components/portal/curriculum-subject-spreadsheet"
+import { CurriculumSubjectRowDialog } from "@/features/components/portal/curriculum-subject-row-dialog"
 
-const fresh: StoreCurriculumInput = {
+type CurriculumWorkspaceValues = StoreCurriculumInput
+
+const fresh: CurriculumWorkspaceValues = {
   program_id: 0,
   name: "",
-  effective_school_year: "",
-  status: "draft",
   subjects: [],
 }
+
+function valuesFromCurriculum(
+  curriculum: Curriculum,
+): CurriculumWorkspaceValues {
+  return {
+    program_id: curriculum.program_id,
+    name: curriculum.name,
+    subjects: curriculum.subjects.map(
+      ({ subject_id, year_level, semester, is_required, prerequisites }) => ({
+        subject_id,
+        year_level,
+        semester,
+        is_required,
+        prerequisites: prerequisites.map(
+          ({ prerequisite_subject_id, minimum_grade }) => ({
+            prerequisite_subject_id,
+            minimum_grade,
+          }),
+        ),
+      }),
+    ),
+  }
+}
+
 const years = [1, 2, 3, 4] as const
-const semesters = ["1st", "2nd"] as const
 /** Default minimum grade for an edge added from a placement row. */
 const defaultMinimumGrade = "75"
 /**
@@ -108,21 +131,36 @@ export function CurriculumWorkspace() {
   const subjectsQuery = useSubjectsQuery()
   const curriculaQuery = useCurriculaQuery()
   const [selectedId, setSelectedIdState] = useState(0)
+  const [isEditing, setIsEditing] = useState(false)
+  const [rowDialogOpen, setRowDialogOpen] = useState(false)
+  // Replacement payloads deliberately contain placement IDs only. Keep the
+  // details returned by the authoritative curriculum response beside the form
+  // values so a newly-created subject can render immediately while an
+  // invalidate-triggered list refresh is still in flight.
+  const [placementDetails, setPlacementDetails] = useState<
+    Curriculum["subjects"]
+  >([])
+  const selectedCurriculum = (curriculaQuery.data ?? []).find(
+    (item) => item.id === selectedId,
+  )
+  const candidateSubjectsQuery = useCurrentCurriculumSubjectsQuery(
+    selectedCurriculum?.program_id ?? null,
+  )
+  const placementMutation = useAddCurriculumSubjectPlacementMutation()
   // Mirrored in a ref so an in-flight save can tell, on resolution, whether the
   // chair has since switched to a different curriculum.
   const selectedIdRef = useRef(0)
   const setSelectedId = useCallback((id: number) => {
     selectedIdRef.current = id
     setSelectedIdState(id)
+    setRowDialogOpen(false)
   }, [])
-  const [discardTarget, setDiscardTarget] = useState<number | "new" | null>(
-    null,
-  )
-  const [placementSubjectId, setPlacementSubjectId] = useState(0)
+  const [discardTarget, setDiscardTarget] = useState<number | null>(null)
   const [activeYear, setActiveYear] = useState("1")
   const [graphOpen, setGraphOpen] = useState(false)
   const [requestError, setRequestError] = useState("")
-  const form = useForm<StoreCurriculumInput>({
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
+  const form = useForm<CurriculumWorkspaceValues>({
     resolver: zodResolver(storeCurriculumInputSchema),
     defaultValues: fresh,
   })
@@ -135,26 +173,61 @@ export function CurriculumWorkspace() {
       exact: true,
     })
   const mutation = useMutation({
-    mutationFn: (input: StoreCurriculumInput) =>
-      selectedId > 0
-        ? replaceCurriculum(selectedId, toCurriculumReplacement(input))
-        : createCurriculum(input),
+    mutationFn: (input: CurriculumWorkspaceValues) =>
+      replaceCurriculum(selectedId, toCurriculumReplacement(input)),
     onSuccess: invalidate,
   })
-  const { mutateAsync, isPending } = mutation
+  const createMutation = useMutation({ mutationFn: createCurriculum })
+  const { mutateAsync } = mutation
+  const isPending =
+    mutation.isPending ||
+    createMutation.isPending ||
+    placementMutation.isPending
   // The placement graph as last loaded or last written. The autosave effect
   // compares against it so that reloading a curriculum — or editing only the
   // header fields the discard dialog still guards — never triggers a write.
   const persistedPlacements = useRef(JSON.stringify(fresh.subjects))
   const applyValues = useCallback(
-    (values: StoreCurriculumInput) => {
+    (values: CurriculumWorkspaceValues, details?: Curriculum["subjects"]) => {
       persistedPlacements.current = JSON.stringify(values.subjects)
+      if (details) setPlacementDetails(details)
       form.reset(values)
     },
     [form],
   )
+  const addSubjectRow = async (
+    input: Parameters<typeof placementMutation.mutateAsync>[0]["input"],
+  ) => {
+    if (!selectedCurriculum) return
+
+    const updated = await placementMutation.mutateAsync({
+      curriculumId: selectedCurriculum.id,
+      input,
+    })
+    queryClient.setQueryData<Curriculum[]>(curriculaQueryKey(userId), (old) =>
+      (old ?? []).map((item) => (item.id === updated.id ? updated : item)),
+    )
+    applyValues(valuesFromCurriculum(updated), updated.subjects)
+  }
+  const transitionMutation = useMutation({
+    mutationFn: (action: "submit") =>
+      transitionCurriculum(selectedId, { action }),
+    onSuccess: (updated) => {
+      // The transition response already carries the authoritative post-write
+      // status, so write it straight into the cache instead of invalidating —
+      // an invalidate-triggered refetch could otherwise race this update and
+      // briefly (or, against a slow read replica, not-so-briefly) show the
+      // pre-submit status again.
+      queryClient.setQueryData<Curriculum[]>(curriculaQueryKey(userId), (old) =>
+        (old ?? []).map((item) => (item.id === updated.id ? updated : item)),
+      )
+      applyValues(valuesFromCurriculum(updated), updated.subjects)
+      setIsEditing(false)
+      setSubmitDialogOpen(false)
+    },
+  })
   const save = useCallback(
-    async (input: StoreCurriculumInput) => {
+    async (input: CurriculumWorkspaceValues) => {
       setRequestError("")
       // Both captured before the request so the response can be discarded if
       // the chair moved on while it was in flight. Resetting the form to this
@@ -185,120 +258,66 @@ export function CurriculumWorkspace() {
       (item) => item.id === id,
     )
     setSelectedId(id)
+    setIsEditing(false)
     if (curriculum)
-      applyValues({
-        program_id: curriculum.program_id,
-        name: curriculum.name,
-        effective_school_year: curriculum.effective_school_year,
-        status: curriculum.status,
-        subjects: curriculum.subjects.map(
-          ({
-            subject_id,
-            year_level,
-            semester,
-            is_required,
-            prerequisites,
-          }) => ({
-            subject_id,
-            year_level,
-            semester,
-            is_required,
-            prerequisites: prerequisites.map(
-              ({ prerequisite_subject_id, minimum_grade }) => ({
-                prerequisite_subject_id,
-                minimum_grade,
-              }),
-            ),
-          }),
-        ),
-      })
+      applyValues(valuesFromCurriculum(curriculum), curriculum.subjects)
   }
+  const isLocked = !isEditing || selectedCurriculum?.status !== "draft"
   const requestEdit = (id: number) => {
     if (id === selectedId) return
-    if (id === 0) return startNew()
-    if (form.formState.isDirty) return setDiscardTarget(id)
+    if (form.formState.isDirty && isEditing) return setDiscardTarget(id)
+    if (id === 0) {
+      setSelectedId(0)
+      setIsEditing(false)
+      applyValues(fresh, [])
+      return
+    }
     edit(id)
   }
-  const startNew = () => {
-    if (selectedId > 0 || form.formState.isDirty) return setDiscardTarget("new")
-    setSelectedId(0)
-    applyValues(fresh)
+  const createFromWizard = async (input: StoreCurriculumInput) => {
+    setRequestError("")
+    try {
+      const created = await createMutation.mutateAsync(input)
+      queryClient.setQueryData<Curriculum[]>(
+        curriculaQueryKey(userId),
+        (old) => [
+          ...(old ?? []).filter((item) => item.id !== created.id),
+          created,
+        ],
+      )
+      setSelectedId(created.id)
+      setIsEditing(false)
+      applyValues(valuesFromCurriculum(created), created.subjects)
+    } catch (error) {
+      setRequestError(
+        "Curriculum could not be created. Check the connection or conflicting changes, then retry.",
+      )
+      throw error
+    }
   }
   const setPlacements = (placements: CurriculumSubjectInput[]) =>
     form.setValue("subjects", placements, {
       shouldDirty: true,
       shouldValidate: true,
     })
-  const addPlacement = () => {
-    if (placementSubjectId <= 0)
-      return form.setError("subjects", {
-        message: "Select a subject to place.",
-      })
-    if (
-      form
-        .getValues("subjects")
-        .some((placement) => placement.subject_id === placementSubjectId)
-    )
-      return form.setError("subjects", {
-        message: "This subject is already placed in this curriculum.",
-      })
-    setPlacements([
-      ...form.getValues("subjects"),
-      {
-        subject_id: placementSubjectId,
-        year_level: Number(activeYear),
-        semester: semesters[0],
-        is_required: true,
-        prerequisites: [],
-      },
-    ])
-    setPlacementSubjectId(0)
-  }
-  const updatePlacement = (
-    index: number,
-    update: Partial<CurriculumSubjectInput>,
-  ) =>
-    setPlacements(
-      form
-        .getValues("subjects")
-        .map((placement, row) =>
-          row === index ? { ...placement, ...update } : placement,
-        ),
-    )
-  const removePlacement = (index: number) =>
-    setPlacements(form.getValues("subjects").filter((_, row) => row !== index))
-  const addPrerequisite = (index: number, prerequisiteSubjectId: number) => {
-    const placement = form.getValues("subjects")[index]
-    updatePlacement(index, {
-      prerequisites: [
-        ...placement.prerequisites,
-        {
-          prerequisite_subject_id: prerequisiteSubjectId,
-          minimum_grade: defaultMinimumGrade,
-        },
-      ],
-    })
-  }
-  const removePrerequisite = (index: number, prerequisiteSubjectId: number) => {
-    const placement = form.getValues("subjects")[index]
-    updatePlacement(index, {
-      prerequisites: placement.prerequisites.filter(
-        (edge) => edge.prerequisite_subject_id !== prerequisiteSubjectId,
-      ),
-    })
-  }
-
   const placementSignature = JSON.stringify(formSubjects)
   const isDirty = form.formState.isDirty
+  const hasUnsavedPlacementChanges =
+    persistedPlacements.current !== placementSignature
   // A brand-new curriculum has nothing to PATCH and no complete payload to
   // POST until its header fields are filled in, so autosave stays quiet until
   // the whole form is a valid create/replace request.
   const autosaveReady =
     storeCurriculumInputSchema.safeParse(watchedValues).success
   useEffect(() => {
-    if (!isDirty || isPending) return
-    if (autosaveReady && persistedPlacements.current === placementSignature)
+    if (
+      !selectedCurriculum ||
+      (!isDirty && !hasUnsavedPlacementChanges) ||
+      isPending ||
+      isLocked
+    )
       return
+    if (autosaveReady && !hasUnsavedPlacementChanges) return
     const timer = setTimeout(() => {
       // Nothing can be written until the whole form is a valid request. Run
       // validation instead of writing, so the fields blocking the autosave are
@@ -309,30 +328,46 @@ export function CurriculumWorkspace() {
       void save(form.getValues())
     }, autosaveDelayMs)
     return () => clearTimeout(timer)
-  }, [autosaveReady, form, isDirty, isPending, placementSignature, save])
+  }, [
+    autosaveReady,
+    form,
+    isDirty,
+    isLocked,
+    isPending,
+    hasUnsavedPlacementChanges,
+    placementSignature,
+    save,
+    selectedCurriculum,
+  ])
 
-  const catalog = subjectsQuery.data ?? []
-  const catalogOptions = catalog.map((subject) => ({
-    value: String(subject.id),
-    label: subject.code,
-  }))
-  const subjectFor = (id: number) =>
-    catalog.find((subject) => subject.id === id)
-  const codeFor = (id: number) => subjectFor(id)?.code ?? `Subject ${id}`
-  const placementsForYear = (year: number) =>
-    formSubjects
-      .map((placement, index) => ({ placement, index }))
-      .filter(({ placement }) => placement.year_level === year)
-  const allYearsPopulated = years.every((year) =>
-    formSubjects.some((placement) => placement.year_level === year),
-  )
-  const saveState = isPending
-    ? "Saving…"
-    : isDirty && !autosaveReady
-      ? "Not saved — fix the highlighted fields"
-      : mutation.isSuccess
-        ? "Saved"
-        : "Edits save automatically"
+  const catalog = [...(subjectsQuery.data ?? [])]
+  for (const subject of placementDetails) {
+    if (
+      subject.units !== undefined &&
+      !catalog.some((candidate) => candidate.id === subject.subject_id)
+    )
+      catalog.push({
+        type: "subject",
+        id: subject.subject_id,
+        code: subject.code,
+        title: subject.title,
+        units: subject.units,
+        status: "active",
+        status_label: "Active",
+        is_completion_only: false,
+      })
+  }
+  const saveState = !isEditing
+    ? "Read-only preview"
+    : isPending
+      ? "Saving…"
+      : isDirty && !autosaveReady
+        ? "Not saved — fix the highlighted fields"
+        : mutation.isSuccess
+          ? "Saved"
+          : mutation.isError
+            ? "Save failed — edit again to retry"
+            : "Edits save automatically"
   const referenceDataQuery = {
     isPending:
       programsQuery.isPending ||
@@ -370,7 +405,7 @@ export function CurriculumWorkspace() {
               <TabsTrigger value="view">View</TabsTrigger>
             </TabsList>
             <TabsContent value="manage" className="grid gap-4">
-              <div className="flex gap-2">
+              <div className="grid gap-2">
                 <Field>
                   <FieldLabel htmlFor="curriculum-select">
                     Curriculum
@@ -383,7 +418,7 @@ export function CurriculumWorkspace() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">New curriculum</SelectItem>
+                      <SelectItem value="0">Select a curriculum</SelectItem>
                       {(curriculaQuery.data ?? []).map((curriculum) => (
                         <SelectItem
                           key={curriculum.id}
@@ -395,378 +430,195 @@ export function CurriculumWorkspace() {
                     </SelectContent>
                   </Select>
                 </Field>
-                <div className="flex items-end">
-                  <Button type="button" variant="outline" onClick={startNew}>
-                    New curriculum
-                  </Button>
-                </div>
               </div>
-              <FieldGroup>
-                <Field data-invalid={Boolean(form.formState.errors.program_id)}>
-                  <FieldLabel htmlFor="curriculum-program">Program</FieldLabel>
-                  <Controller
-                    control={form.control}
-                    name="program_id"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value ? String(field.value) : ""}
-                        onValueChange={(value) => field.onChange(Number(value))}
-                        disabled={selectedId > 0}
-                      >
-                        <SelectTrigger
-                          id="curriculum-program"
-                          className="w-full"
-                          aria-invalid={Boolean(
-                            form.formState.errors.program_id,
-                          )}
-                        >
-                          <SelectValue placeholder="Select a program" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(programsQuery.data ?? []).map((program) => (
-                            <SelectItem
-                              key={program.id}
-                              value={String(program.id)}
-                            >
-                              {program.code} — {program.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  <FieldError>
-                    {form.formState.errors.program_id?.message}
-                  </FieldError>
-                </Field>
-                <Field data-invalid={Boolean(form.formState.errors.name)}>
-                  <FieldLabel htmlFor="curriculum-name">
-                    Curriculum name
-                  </FieldLabel>
-                  <Input
-                    id="curriculum-name"
-                    aria-invalid={Boolean(form.formState.errors.name)}
-                    {...form.register("name")}
-                  />
-                  <FieldError>{form.formState.errors.name?.message}</FieldError>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="effective-school-year">
-                    Effective school year
-                  </FieldLabel>
-                  <Input
-                    id="effective-school-year"
-                    {...form.register("effective_school_year")}
-                  />
-                  <FieldError>
-                    {form.formState.errors.effective_school_year?.message}
-                  </FieldError>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="curriculum-status">Status</FieldLabel>
-                  <Controller
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger
-                          id="curriculum-status"
-                          className="w-full"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="archived">Archived</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </Field>
-                <section
-                  aria-label="Curriculum subject placements"
-                  className="grid gap-3"
-                >
-                  <Tabs value={activeYear} onValueChange={setActiveYear}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <TabsList
-                        aria-label="Curriculum year level"
-                        className="w-full sm:w-fit"
-                      >
-                        {years.map((year) => (
-                          <TabsTrigger key={year} value={String(year)}>
-                            {yearLabel(year)}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
+              {selectedCurriculum ? (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-muted/30 p-4">
+                    <div className="grid gap-1">
+                      <p className="text-sm text-muted-foreground">
+                        {(programsQuery.data ?? []).find(
+                          (program) =>
+                            program.id === selectedCurriculum.program_id,
+                        )?.code ?? "Program"}
+                      </p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          aria-live="polite"
-                          className="text-sm text-muted-foreground"
+                        <h2 className="font-heading text-lg font-medium">
+                          {selectedCurriculum.name}
+                        </h2>
+                        <Badge
+                          variant={
+                            selectedCurriculum.status === "draft"
+                              ? "outline"
+                              : "secondary"
+                          }
                         >
-                          {saveState}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setGraphOpen(true)}
-                        >
-                          Prerequisite graph
-                        </Button>
+                          {selectedCurriculum.status_label}
+                        </Badge>
                       </div>
                     </div>
-                    {years.map((year) => (
-                      <TabsContent
-                        key={year}
-                        value={String(year)}
-                        className="grid gap-3"
-                      >
-                        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-                          <Field>
-                            <FieldLabel htmlFor="subject-to-place">
-                              Subject to place
-                            </FieldLabel>
-                            <Select
-                              value={
-                                placementSubjectId > 0
-                                  ? String(placementSubjectId)
-                                  : ""
-                              }
-                              onValueChange={(value) =>
-                                setPlacementSubjectId(Number(value))
-                              }
-                            >
-                              <SelectTrigger
-                                id="subject-to-place"
-                                className="w-full"
-                              >
-                                <SelectValue placeholder="Select a subject" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {catalog.map((subject) => (
-                                  <SelectItem
-                                    key={subject.id}
-                                    value={String(subject.id)}
-                                  >
-                                    {subject.code} — {subject.title}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </Field>
+                    <p className="text-sm text-muted-foreground">
+                      {isEditing ? "Editing Draft" : "Read-only preview"}
+                    </p>
+                  </div>
+                  <FieldGroup>
+                    <Field data-invalid={Boolean(form.formState.errors.name)}>
+                      <FieldLabel htmlFor="curriculum-name">
+                        Curriculum name
+                      </FieldLabel>
+                      <Input
+                        id="curriculum-name"
+                        aria-invalid={Boolean(form.formState.errors.name)}
+                        disabled={isLocked}
+                        {...form.register("name")}
+                      />
+                      <FieldError>
+                        {form.formState.errors.name?.message}
+                      </FieldError>
+                    </Field>
+                  </FieldGroup>
+                  {selectedCurriculum?.last_decision_reason &&
+                    selectedCurriculum.status === "draft" && (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          Returned: {selectedCurriculum.last_decision_reason}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  <section
+                    aria-label="Curriculum subject placements"
+                    className="grid gap-3"
+                  >
+                    <Tabs value={activeYear} onValueChange={setActiveYear}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <TabsList
+                          aria-label="Curriculum year level"
+                          className="w-full sm:w-fit"
+                        >
+                          {years.map((year) => (
+                            <TabsTrigger key={year} value={String(year)}>
+                              {yearLabel(year)}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            aria-live="polite"
+                            className="text-sm text-muted-foreground"
+                          >
+                            {saveState}
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
-                            onClick={addPlacement}
+                            size="sm"
+                            disabled={isLocked}
+                            onClick={() => setGraphOpen(true)}
                           >
-                            Add subject placement
+                            Prerequisite graph
                           </Button>
                         </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Subject Code</TableHead>
-                              <TableHead>Description</TableHead>
-                              <TableHead>Units</TableHead>
-                              <TableHead>Semester</TableHead>
-                              <TableHead>Prerequisite</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {placementsForYear(year).map(
-                              ({ placement, index }) => {
-                                const code = codeFor(placement.subject_id)
-                                const candidates = formSubjects.filter(
-                                  (other) =>
-                                    other.subject_id !== placement.subject_id &&
-                                    !placement.prerequisites.some(
-                                      (edge) =>
-                                        edge.prerequisite_subject_id ===
-                                        other.subject_id,
-                                    ),
-                                )
-                                return (
-                                  <TableRow key={placement.subject_id}>
-                                    <TableCell>
-                                      <div className="flex items-center gap-1">
-                                        <SearchableCombobox
-                                          id={`placement-${placement.subject_id}-subject`}
-                                          label={`Subject code for ${code}`}
-                                          options={catalogOptions}
-                                          value={String(placement.subject_id)}
-                                          onValueChange={(value) => {
-                                            if (value)
-                                              updatePlacement(index, {
-                                                subject_id: Number(value),
-                                              })
-                                          }}
-                                          placeholder="Search subject code"
-                                          emptyMessage="No matching subject."
-                                        />
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          aria-label={`Remove ${code} placement`}
-                                          onClick={() => removePlacement(index)}
-                                        >
-                                          <Trash2Icon />
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      {subjectFor(placement.subject_id)
-                                        ?.title ?? "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                      {subjectFor(placement.subject_id)
-                                        ?.units ?? "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Select
-                                        value={placement.semester}
-                                        onValueChange={(value) =>
-                                          updatePlacement(index, {
-                                            semester: value,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger
-                                          id={`placement-${placement.subject_id}-semester`}
-                                          aria-label={`Semester for ${code}`}
-                                          className="w-full"
-                                        >
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {[
-                                            ...semesters,
-                                            ...(semesters.some(
-                                              (semester) =>
-                                                semester === placement.semester,
-                                            )
-                                              ? []
-                                              : [placement.semester]),
-                                          ].map((semester) => (
-                                            <SelectItem
-                                              key={semester}
-                                              value={semester}
-                                            >
-                                              {semester}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </TableCell>
-                                    <TableCell className="whitespace-normal">
-                                      <div className="flex flex-wrap items-center gap-1">
-                                        {placement.prerequisites.length ===
-                                          0 && (
-                                          <span className="text-muted-foreground">
-                                            None
-                                          </span>
-                                        )}
-                                        {placement.prerequisites.map((edge) => (
-                                          <Badge
-                                            key={edge.prerequisite_subject_id}
-                                            variant="secondary"
-                                            className="gap-1 pr-1"
-                                          >
-                                            {codeFor(
-                                              edge.prerequisite_subject_id,
-                                            )}
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              className="size-5 p-0"
-                                              aria-label={`Remove prerequisite ${codeFor(edge.prerequisite_subject_id)} from ${code}`}
-                                              onClick={() =>
-                                                removePrerequisite(
-                                                  index,
-                                                  edge.prerequisite_subject_id,
-                                                )
-                                              }
-                                            >
-                                              <XIcon />
-                                            </Button>
-                                          </Badge>
-                                        ))}
-                                        <Select
-                                          value=""
-                                          onValueChange={(value) =>
-                                            addPrerequisite(
-                                              index,
-                                              Number(value),
-                                            )
-                                          }
-                                        >
-                                          <SelectTrigger
-                                            id={`placement-${placement.subject_id}-prerequisite`}
-                                            aria-label={`Add prerequisite for ${code}`}
-                                            className="w-auto"
-                                            disabled={candidates.length === 0}
-                                          >
-                                            <SelectValue placeholder="Add" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {candidates.map((candidate) => (
-                                              <SelectItem
-                                                key={candidate.subject_id}
-                                                value={String(
-                                                  candidate.subject_id,
-                                                )}
-                                              >
-                                                {codeFor(candidate.subject_id)}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              },
-                            )}
-                          </TableBody>
-                        </Table>
-                      </TabsContent>
-                    ))}
-                  </Tabs>
-                  <FieldError>
-                    {form.formState.errors.subjects?.message}
-                  </FieldError>
-                </section>
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  {!allYearsPopulated && (
-                    <p className="text-sm text-muted-foreground">
-                      Place at least one subject in every year level before
-                      publishing this curriculum.
-                    </p>
-                  )}
-                  <Button
-                    type="button"
-                    disabled={!allYearsPopulated || isPending}
-                    // Routed through `handleSubmit` so RHF runs the resolver and
-                    // populates the field errors before anything is sent — with
-                    // no form submit left on this screen, this is the only path
-                    // that surfaces "Enter a curriculum name" instead of letting
-                    // the service's own parse throw a connection-shaped error.
-                    onClick={() =>
-                      void form.handleSubmit((values) =>
-                        save({ ...values, status: "active" }),
-                      )()
-                    }
-                  >
-                    Save Curriculum
+                      </div>
+                      {years.map((year) => (
+                        <TabsContent
+                          key={year}
+                          value={String(year)}
+                          className="grid gap-3"
+                        >
+                          <CurriculumSubjectSpreadsheet
+                            yearLevel={year}
+                            subjects={formSubjects}
+                            subjectCatalog={catalog}
+                            defaultMinimumGrade={defaultMinimumGrade}
+                            isLocked={isLocked}
+                            onChange={setPlacements}
+                            onAddRow={() => setRowDialogOpen(true)}
+                          />
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                    <FieldError>
+                      {form.formState.errors.subjects?.message}
+                    </FieldError>
+                  </section>
+                </>
+              ) : session?.role === "program_chair" ? (
+                <CurriculumCreationWizard
+                  programs={programsQuery.data ?? []}
+                  college={session.college}
+                  disabled={createMutation.isPending}
+                  onProceed={createFromWizard}
+                />
+              ) : null}
+              {selectedCurriculum?.status === "draft" && !isEditing && (
+                <div className="flex justify-end">
+                  <Button type="button" onClick={() => setIsEditing(true)}>
+                    Edit curriculum
                   </Button>
                 </div>
-              </FieldGroup>
+              )}
+              {selectedCurriculum?.status === "draft" &&
+                formSubjects.length > 0 && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={() => setSubmitDialogOpen(true)}
+                    >
+                      Submit for Dean Review
+                    </Button>
+                  </div>
+                )}
+              <Dialog
+                open={submitDialogOpen}
+                onOpenChange={setSubmitDialogOpen}
+              >
+                <DialogContent className="max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Review before submitting</DialogTitle>
+                    <DialogDescription>
+                      Every subject below will be sent to the Dean for review.
+                      You will not be able to edit this curriculum again until
+                      it is approved or returned.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {programsQuery.data && (
+                    <CurriculumView
+                      programs={programsQuery.data.filter(
+                        (program) => program.id === watchedValues.program_id,
+                      )}
+                      // CurriculumView only ever renders curricula whose status
+                      // is "active" — this preview stands in a draft about to
+                      // be submitted, so its status is overridden purely for
+                      // this read-only render; nothing here is persisted.
+                      curricula={
+                        selectedCurriculum
+                          ? [
+                              {
+                                ...selectedCurriculum,
+                                status: "active" as const,
+                              },
+                            ]
+                          : []
+                      }
+                    />
+                  )}
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setSubmitDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={transitionMutation.isPending}
+                      onClick={() => transitionMutation.mutate("submit")}
+                    >
+                      Confirm & Submit
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
             <TabsContent value="view">
               <CurriculumView
@@ -777,6 +629,25 @@ export function CurriculumWorkspace() {
           </Tabs>
         )}
       </AsyncBoundary>
+      <CurriculumSubjectRowDialog
+        open={rowDialogOpen && !isLocked}
+        onOpenChange={setRowDialogOpen}
+        yearLevel={Number(activeYear)}
+        candidateQuery={{
+          data: candidateSubjectsQuery.data?.filter(
+            (candidate) =>
+              !formSubjects.some(
+                (placement) => placement.subject_id === candidate.id,
+              ),
+          ),
+          isPending: candidateSubjectsQuery.isPending,
+          isError: candidateSubjectsQuery.isError,
+          error: candidateSubjectsQuery.error,
+          refetch: candidateSubjectsQuery.refetch,
+        }}
+        isSubmitting={placementMutation.isPending}
+        onSubmit={addSubjectRow}
+      />
       <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
@@ -811,9 +682,10 @@ export function CurriculumWorkspace() {
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (discardTarget === "new") {
+                if (discardTarget === 0) {
                   setSelectedId(0)
-                  applyValues(fresh)
+                  setIsEditing(false)
+                  applyValues(fresh, [])
                 } else if (typeof discardTarget === "number") {
                   edit(discardTarget)
                 }

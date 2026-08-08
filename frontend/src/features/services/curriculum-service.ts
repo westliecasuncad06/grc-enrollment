@@ -3,13 +3,22 @@ import { z } from "zod"
 import {
   storeCurriculumInputSchema,
   curriculumReplacementSchema,
+  curriculumSubjectPlacementInputSchema,
+  curriculumTransitionSchema,
   type CurriculumEditorValues,
+  type CurriculumSubjectPlacementInput,
+  type CurriculumTransition,
   type StoreCurriculumInput,
   type UpdateCurriculumInput,
 } from "@/features/schemas/curriculum-schema"
-import { curriculumSchema } from "@/features/schemas/reference-data-schema"
+import {
+  curriculumSchema,
+  subjectsEnvelopeSchema,
+  type Subject,
+} from "@/features/schemas/reference-data-schema"
 import {
   ApiClientError,
+  getAuthenticatedJson,
   patchAuthenticatedJson,
   postAuthenticatedJson,
 } from "@/features/services/api-client"
@@ -41,8 +50,6 @@ export function toCurriculumReplacement(
     curriculumReplacementSchema,
     {
       name: values.name,
-      effective_school_year: values.effective_school_year,
-      status: values.status,
       subjects: values.subjects.map((subject) => ({
         subject_id: subject.subject_id,
         year_level: subject.year_level,
@@ -75,6 +82,43 @@ export async function replaceCurriculum(
   const payload = await patchAuthenticatedJson(
     `${CURRICULA_PATH}/${id}`,
     parse(curriculumReplacementSchema, input, "curriculum replacement request"),
+  )
+  return parse(zEnvelope, payload, "updated curriculum").data
+}
+
+export async function transitionCurriculum(
+  id: number,
+  transition: CurriculumTransition,
+): Promise<Curriculum> {
+  const payload = await patchAuthenticatedJson(
+    `${CURRICULA_PATH}/${id}/transition`,
+    parse(curriculumTransitionSchema, transition, "curriculum transition request"),
+  )
+  return parse(zEnvelope, payload, "transitioned curriculum").data
+}
+
+export async function getCurrentCurriculumSubjects(
+  programId: number,
+  signal?: AbortSignal,
+): Promise<readonly Subject[]> {
+  const payload = await getAuthenticatedJson(
+    `/api/v1/programs/${programId}/current-curriculum-subjects`,
+    signal,
+  )
+  return parse(subjectsEnvelopeSchema, payload, "current curriculum subjects").data
+}
+
+export async function addCurriculumSubjectPlacement(
+  curriculumId: number,
+  input: CurriculumSubjectPlacementInput,
+): Promise<Curriculum> {
+  const payload = await postAuthenticatedJson(
+    `${CURRICULA_PATH}/${curriculumId}/subject-placements`,
+    parse(
+      curriculumSubjectPlacementInputSchema,
+      input,
+      "curriculum subject placement request",
+    ),
   )
   return parse(zEnvelope, payload, "updated curriculum").data
 }

@@ -6,6 +6,8 @@ final class AuditableType
 {
     public const CURRICULUM = 'curriculum';
 
+    public const SUBJECT = 'subject';
+
     public const FACULTY_AVAILABILITY = 'faculty_availability';
 
     public const FACULTY_SUBJECT_PREFERENCE = 'faculty_subject_preference';
@@ -49,6 +51,7 @@ final class AuditableType
     {
         return [
             self::CURRICULUM,
+            self::SUBJECT,
             self::FACULTY_AVAILABILITY,
             self::FACULTY_SUBJECT_PREFERENCE,
             self::SECTION,

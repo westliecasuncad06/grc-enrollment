@@ -4,6 +4,7 @@ namespace Tests\Feature\Api\V1;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\Program;
 use App\Models\User;
@@ -16,13 +17,14 @@ final class ProgramsEndpointTest extends TestCase
 
     private const PASSWORD = 'correct-horse-battery-staple';
 
-    private function tokenFor(UserRole $role, string $email, UserStatus $status = UserStatus::Active): string
+    private function tokenFor(UserRole $role, string $email, UserStatus $status = UserStatus::Active, ?CollegeCode $college = null): string
     {
         User::create([
             'name' => 'Test '.$role->value,
             'email' => $email,
             'password' => self::PASSWORD,
             'role' => $role,
+            'college' => $college,
             'status' => $status,
         ]);
 
@@ -34,8 +36,8 @@ final class ProgramsEndpointTest extends TestCase
 
     private function seedPrograms(): void
     {
-        Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active]);
-        Program::create(['code' => 'BSCRIM', 'name' => 'BS Criminology', 'status' => ProgramStatus::Inactive]);
+        Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active]);
+        Program::create(['code' => 'BSCRIM', 'name' => 'BS Criminology', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Inactive]);
     }
 
     public function test_anonymous_request_is_unauthenticated(): void
@@ -76,10 +78,10 @@ final class ProgramsEndpointTest extends TestCase
             ]);
     }
 
-    public function test_a_program_chair_receives_every_program_regardless_of_status(): void
+    public function test_a_program_chair_receives_every_program_in_their_college_regardless_of_status(): void
     {
         $this->seedPrograms();
-        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.programs@grc.test');
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.programs@grc.test', college: CollegeCode::Ccs);
 
         $response = $this->withToken($token)->getJson('/api/v1/programs');
 

@@ -2,16 +2,15 @@
 
 namespace App\Http\Requests\Api\V1\Curriculum;
 
-use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\PrerequisiteCycleDetector;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 /**
  * Mirrors StoreCurriculumRequest's subject/prerequisite rules exactly — both
  * are full-replace payloads. `program_id` is intentionally absent: a
- * curriculum's owning program does not change after creation.
+ * curriculum's owning program and effective school year do not change after
+ * creation.
  */
 final class UpdateCurriculumRequest extends FormRequest
 {
@@ -27,8 +26,6 @@ final class UpdateCurriculumRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'effective_school_year' => ['required', 'string', 'max:255'],
-            'status' => ['required', Rule::enum(CurriculumStatus::class)],
             'subjects' => ['present', 'array'],
             'subjects.*.subject_id' => ['required', 'integer', 'exists:subjects,id', 'distinct'],
             'subjects.*.year_level' => ['required', 'integer', 'min:1'],

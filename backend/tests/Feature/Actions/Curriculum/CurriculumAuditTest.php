@@ -37,7 +37,6 @@ final class CurriculumAuditTest extends TestCase
                 'program_id' => $program->id,
                 'name' => 'BSCS 2026',
                 'effective_school_year' => '2026-2027',
-                'status' => 'draft',
                 'subjects' => [
                     [
                         'subject_id' => $third->id,
@@ -129,7 +128,6 @@ final class CurriculumAuditTest extends TestCase
             ->patchJson("/api/v1/curricula/{$curriculum->id}", [
                 'name' => 'Replacement curriculum',
                 'effective_school_year' => '2026-2027',
-                'status' => 'active',
                 'subjects' => [
                     [
                         'subject_id' => $second->id,
@@ -173,7 +171,7 @@ final class CurriculumAuditTest extends TestCase
                 'program_id' => $program->id,
                 'name' => 'Replacement curriculum',
                 'effective_school_year' => '2026-2027',
-                'status' => 'active',
+                'status' => 'draft',
                 'subjects' => [
                     [
                         'subject_id' => $second->id,
@@ -204,7 +202,6 @@ final class CurriculumAuditTest extends TestCase
                 'program_id' => $program->id,
                 'name' => 'Rejected curriculum',
                 'effective_school_year' => '2026-2027',
-                'status' => 'draft',
                 'subjects' => [],
             ])
             ->assertForbidden();
@@ -224,7 +221,6 @@ final class CurriculumAuditTest extends TestCase
                     'program_id' => $program->id,
                     'name' => 'Must roll back',
                     'effective_school_year' => '2026-2027',
-                    'status' => 'draft',
                     'subjects' => [
                         [
                             'subject_id' => $second->id,
@@ -278,7 +274,6 @@ final class CurriculumAuditTest extends TestCase
                 ->patchJson("/api/v1/curricula/{$curriculum->id}", [
                     'name' => 'Must not persist',
                     'effective_school_year' => '2026-2027',
-                    'status' => 'active',
                     'subjects' => [
                         [
                             'subject_id' => $second->id,

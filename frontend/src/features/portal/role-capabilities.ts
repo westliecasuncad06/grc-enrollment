@@ -185,6 +185,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ClipboardCheck,
       ),
       portalModule(
+        "curriculum-approvals",
+        "Curriculum Approvals",
+        "Review curricula submitted by Program Chairs and record your decision.",
+        ClipboardCheck,
+      ),
+      portalModule(
         "enrollment-dashboard",
         "Enrollment Dashboard",
         "See where validated enrollment activity will be summarized.",
@@ -219,6 +225,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Enrollment",
         "Review department enrollment plans, record decisions, and publish approved schedules.",
         CalendarDays,
+      ),
+      portalModule(
+        "curriculum-approvals",
+        "Curriculum Approvals",
+        "Review curricula submitted by Program Chairs and record your decision.",
+        ClipboardCheck,
       ),
       portalModule(
         "institution-dashboard",

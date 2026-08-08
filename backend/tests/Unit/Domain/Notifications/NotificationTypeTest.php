@@ -30,6 +30,10 @@ final class NotificationTypeTest extends TestCase
                 'enrollment_change_request_submitted',
                 'enrollment_change_request_approved',
                 'enrollment_change_request_rejected',
+                'curriculum_submitted_for_dean',
+                'curriculum_dean_approved',
+                'curriculum_executive_approved',
+                'curriculum_returned',
             ],
             array_column(NotificationType::cases(), 'value'),
         );

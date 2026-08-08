@@ -5,6 +5,7 @@ import { AdmissionProvisioningWorkspace } from "@/features/components/portal/adm
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
 import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
+import { CurriculumApprovalsWorkspace } from "@/features/components/portal/curriculum-approvals-workspace"
 import { ProgramChairEnrollmentWorkspace } from "@/features/components/portal/program-chair-enrollment-workspace"
 import { AcademicTermWorkspace } from "@/features/components/portal/academic-term-workspace"
 import { FacultyAssignmentWorkspace } from "@/features/components/portal/faculty-assignment-workspace"
@@ -41,6 +42,7 @@ export type ConnectedModuleId =
   | "faculty-assignment"
   | "schedule-proposals"
   | "schedule-approvals"
+  | "curriculum-approvals"
   | "master-schedule"
   | "audit-logs"
   | "enrollment"
@@ -79,6 +81,7 @@ export const connectedModuleIds = [
   "faculty-assignment",
   "schedule-proposals",
   "schedule-approvals",
+  "curriculum-approvals",
   "master-schedule",
   "audit-logs",
   "enrollment",
@@ -165,7 +168,6 @@ const overridesVoidsWorkspace: PortalModuleComponent = () => (
   <RegistrarEnrollmentWorkspace initialModuleId="overrides-voids" />
 )
 
-
 const creditMappingsWorkspace: PortalModuleComponent = () => (
   <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
 )
@@ -193,6 +195,7 @@ export const connectedModuleRegistry: Readonly<
   "faculty-assignment": facultyAssignmentWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,
+  "curriculum-approvals": CurriculumApprovalsWorkspace,
   "master-schedule": MasterScheduleWorkspace,
   "audit-logs": AuditLogsWorkspace,
   enrollment: EnrollmentWorkspace,

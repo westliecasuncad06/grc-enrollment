@@ -83,6 +83,8 @@ const curriculum = {
       effective_school_year: "2026-2027",
       status: "draft",
       status_label: "Draft",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [
         {
           subject_id: 11,
@@ -103,10 +105,11 @@ const curriculum = {
       effective_school_year: "2027-2028",
       status: "draft",
       status_label: "Draft",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [],
     },
-    // Every year level 1-4 carries a placement, so the final "Save Curriculum"
-    // (mark active) button is enabled for this one and disabled for BSCS 2026.
+    // Every year level 1-4 carries a placement.
     {
       type: "curriculum",
       id: 12,
@@ -115,6 +118,8 @@ const curriculum = {
       effective_school_year: "2029-2030",
       status: "draft",
       status_label: "Draft",
+      decided_at: null,
+      last_decision_reason: null,
       subjects: [
         {
           subject_id: 11,
@@ -154,6 +159,28 @@ const curriculum = {
         },
       ],
     },
+    {
+      type: "curriculum",
+      id: 13,
+      program_id: 1,
+      name: "BSCS 2030",
+      effective_school_year: "2030-2031",
+      status: "pending_dean_review",
+      status_label: "Pending Dean Review",
+      decided_at: "2026-08-07T00:00:00Z",
+      last_decision_reason: null,
+      subjects: [
+        {
+          subject_id: 11,
+          code: "CS101",
+          title: "Programming 1",
+          year_level: 1,
+          semester: "1st",
+          is_required: true,
+          prerequisites: [],
+        },
+      ],
+    },
   ],
 } as const
 
@@ -167,6 +194,7 @@ function renderWorkspace() {
       userId: "4",
       displayName: "Chair",
       role: "program_chair",
+      college: "ccs",
       signedInAt: "2026-07-29T12:00:00Z",
     },
   })
@@ -185,6 +213,8 @@ function mockApi(
       return Promise.resolve(new Response(JSON.stringify(programs)))
     if (url(input).endsWith("/subjects"))
       return Promise.resolve(new Response(JSON.stringify(subjects)))
+    if (url(input).includes("/current-curriculum-subjects"))
+      return Promise.resolve(new Response(JSON.stringify(subjects)))
     if (url(input).endsWith("/curricula") && init?.method !== "POST")
       return Promise.resolve(new Response(JSON.stringify(curriculum)))
     return Promise.resolve(onWrite(input, init))
@@ -201,6 +231,15 @@ async function selectOption(
   await waitFor(() => expect(trigger).not.toBeDisabled())
   await user.click(trigger)
   await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
+async function openDraftForEditing(
+  user: ReturnType<typeof userEvent.setup>,
+  curriculumName: string,
+) {
+  await screen.findByLabelText("Curriculum")
+  await selectOption(user, "Curriculum", curriculumName)
+  await user.click(await screen.findByRole("button", { name: "Edit curriculum" }))
 }
 
 // Autosave debounces at 800ms, so every write assertion needs more headroom
@@ -227,9 +266,104 @@ describe("CurriculumWorkspace", () => {
         return parsed.success ? [parsed.data] : []
       })
 
+  it("creates a Draft from the two-step wizard and opens it in a server-owned preview", async () => {
+    const user = userEvent.setup()
+    const createdDraft = {
+      ...curriculum.data[1],
+      id: 20,
+      name: "BSCS 2026 Curriculum",
+      effective_school_year: "2026-2027",
+    }
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).endsWith("/programs"))
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      if (url(input).endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url(input).endsWith("/curricula") && init?.method === "POST")
+        return Promise.resolve(new Response(JSON.stringify({ data: createdDraft })))
+      if (url(input).endsWith("/curricula"))
+        return Promise.resolve(new Response(JSON.stringify(curriculum)))
+      return Promise.resolve(new Response(JSON.stringify({ data: createdDraft })))
+    })
+    renderWorkspace()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Create new curriculum" }),
+    )
+    await user.click(screen.getByLabelText("Program"))
+    await user.click(
+      await screen.findByRole("option", {
+        name: "BSCS — Computer Science",
+      }),
+    )
+    await user.click(screen.getByRole("button", { name: "Next" }))
+    await user.type(
+      screen.getByLabelText("Curriculum name"),
+      "BSCS 2026 Curriculum",
+    )
+    await user.click(screen.getByRole("button", { name: "Proceed" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/curricula"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            program_id: 1,
+            name: "BSCS 2026 Curriculum",
+            subjects: [],
+          }),
+        }),
+      ),
+    )
+    expect(await screen.findByText("Draft")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Edit curriculum" })).toBeInTheDocument()
+    expect(screen.queryByLabelText("Effective school year")).not.toBeInTheDocument()
+    expect(screen.queryByText("Status", { selector: "label" })).not.toBeInTheDocument()
+  })
+
+  it("allows editing only Draft curricula and ends editing after submitting for Dean review", async () => {
+    const user = userEvent.setup()
+    const submitted = {
+      ...curriculum.data[2],
+      status: "pending_dean_review" as const,
+      status_label: "Pending Dean Review",
+    }
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).endsWith("/programs"))
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      if (url(input).endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url(input).endsWith("/curricula") && init?.method !== "PATCH")
+        return Promise.resolve(new Response(JSON.stringify(curriculum)))
+      if (url(input).endsWith("/curricula/12/transition"))
+        return Promise.resolve(new Response(JSON.stringify({ data: submitted })))
+      return Promise.resolve(new Response(JSON.stringify({ data: submitted })))
+    })
+    renderWorkspace()
+    await screen.findByLabelText("Curriculum")
+    await selectOption(user, "Curriculum", "BSCS 2029")
+
+    expect(await screen.findByRole("button", { name: "Edit curriculum" })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Edit curriculum" }))
+    expect(screen.getByLabelText("Curriculum name")).not.toBeDisabled()
+
+    await user.click(screen.getByRole("button", { name: "Submit for Dean Review" }))
+    await user.click(screen.getByRole("button", { name: "Confirm & Submit" }))
+    expect(await screen.findByText("Pending Dean Review")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Edit curriculum" })).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Curriculum name")).toBeDisabled()
+
+    await selectOption(user, "Curriculum", "BSCS 2030")
+    expect(screen.queryByRole("button", { name: "Edit curriculum" })).not.toBeInTheDocument()
+  })
+
   it("shows a separate tab per year level with only code, description, units, semester, and prerequisites", async () => {
+    const user = userEvent.setup()
     fetchMock.mockImplementation(mockApi())
     renderWorkspace()
+
+    await openDraftForEditing(user, "BSCS 2026")
 
     await screen.findByRole("tab", { name: /1st year/i })
     expect(screen.getByRole("tab", { name: /2nd year/i })).toBeInTheDocument()
@@ -257,27 +391,46 @@ describe("CurriculumWorkspace", () => {
     await selectOption(user, "Curriculum", "BSCS 2029")
 
     const table = await screen.findByRole("table")
-    // The combobox renders a visible input plus a hidden value input, so the
-    // code matches more than once — presence is what matters here.
-    expect(within(table).getAllByDisplayValue("CS101")).not.toHaveLength(0)
+    expect(within(table).getByText("CS101")).toBeInTheDocument()
     expect(within(table).getByText("Programming 1")).toBeInTheDocument()
     expect(within(table).getByText("3")).toBeInTheDocument()
     // Year 2's placement belongs to the 2nd Year tab, not this one.
-    expect(within(table).queryAllByDisplayValue("CS201")).toHaveLength(0)
+    expect(within(table).queryByText("CS201")).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("tab", { name: "2nd Year" }))
     expect(
-      within(await screen.findByRole("table")).getAllByDisplayValue("CS201"),
-    ).not.toHaveLength(0)
+      within(await screen.findByRole("table")).getByText("CS201"),
+    ).toBeInTheDocument()
+  })
+
+  it("replaces the legacy placement picker with an Add subject row flow", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockApi())
+    renderWorkspace()
+    await openDraftForEditing(user, "BSCS 2026")
+
+    expect(screen.queryByLabelText("Subject to place")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Add subject placement" }),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Add subject row" }))
+    expect(
+      screen.getByRole("dialog", { name: "Add subject row" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Use existing subject" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Create new subject" }),
+    ).toBeInTheDocument()
   })
 
   it("autosaves an edited placement cell without a save button click", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockApi())
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await selectOption(user, "Semester for CS101", "2nd")
+    await openDraftForEditing(user, "BSCS 2026")
+    await selectOption(user, "Semester for CS101", "2nd Semester")
 
     await waitFor(
       () =>
@@ -299,35 +452,125 @@ describe("CurriculumWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("places a subject into the active year tab and autosaves its metadata", async () => {
+  it("posts an existing current-curriculum subject and exposes the returned row", async () => {
     const user = userEvent.setup()
-    fetchMock.mockImplementation(mockApi())
-    renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await user.click(screen.getByRole("tab", { name: "4th Year" }))
-    await selectOption(user, "Subject to place", "CS102 — Programming 2")
-    await user.click(
-      screen.getByRole("button", { name: "Add subject placement" }),
+    const updated = {
+      ...curriculum.data[0],
+      subjects: [
+        ...curriculum.data[0].subjects,
+        {
+          subject_id: 12,
+          code: "CS102",
+          title: "Programming 2",
+          units: 3,
+          year_level: 4,
+          semester: "2nd",
+          is_required: true,
+          prerequisites: [],
+        },
+      ],
+    }
+    fetchMock.mockImplementation(
+      mockApi((input) =>
+        url(input).endsWith("/curricula/9/subject-placements")
+          ? new Response(JSON.stringify({ data: updated }), { status: 201 })
+          : new Response(JSON.stringify({ data: curriculum.data[0] })),
+      ),
     )
-    await selectOption(user, "Semester for CS102", "2nd")
+    renderWorkspace()
+    await openDraftForEditing(user, "BSCS 2026")
+    await user.click(screen.getByRole("tab", { name: "4th Year" }))
+    await user.click(screen.getByRole("button", { name: "Add subject row" }))
+    await user.click(
+      screen.getByRole("button", { name: "Use existing subject" }),
+    )
+    await user.type(screen.getByPlaceholderText("Search subjects"), "CS102")
+    await user.click(
+      await screen.findByRole("option", { name: "CS102 — Programming 2" }),
+    )
+    await selectOption(user, "Semester", "2nd Semester")
+    await user.click(screen.getByRole("button", { name: "Add subject" }))
 
     await waitFor(
       () =>
-        expect(
-          replacements("/curricula/9").some((body) =>
-            body.subjects.some(
-              (subject) =>
-                subject.subject_id === 12 &&
-                subject.year_level === 4 &&
-                subject.semester === "2nd" &&
-                subject.is_required &&
-                subject.prerequisites.length === 0,
-            ),
-          ),
-        ).toBe(true),
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.stringContaining("/curricula/9/subject-placements"),
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              source: "existing",
+              subject_id: 12,
+              year_level: 4,
+              semester: "2nd",
+            }),
+          }),
+        ),
       autosaveTimeout,
     )
+    expect(
+      within(await screen.findByRole("table", { name: "4th Year subjects" }))
+        .getByText("CS102"),
+    ).toBeInTheDocument()
+  })
+
+  it("posts a new subject and exposes its returned curriculum row", async () => {
+    const user = userEvent.setup()
+    const updated = {
+      ...curriculum.data[0],
+      subjects: [
+        ...curriculum.data[0].subjects,
+        {
+          subject_id: 16,
+          code: "CS205",
+          title: "Web Systems",
+          units: 3,
+          year_level: 2,
+          semester: "1st",
+          is_required: true,
+          prerequisites: [],
+        },
+      ],
+    }
+    fetchMock.mockImplementation(
+      mockApi((input) =>
+        url(input).endsWith("/curricula/9/subject-placements")
+          ? new Response(JSON.stringify({ data: updated }), { status: 201 })
+          : new Response(JSON.stringify({ data: curriculum.data[0] })),
+      ),
+    )
+    renderWorkspace()
+    await openDraftForEditing(user, "BSCS 2026")
+    await user.click(screen.getByRole("tab", { name: "2nd Year" }))
+    await user.click(screen.getByRole("button", { name: "Add subject row" }))
+    await user.click(
+      screen.getByRole("button", { name: "Create new subject" }),
+    )
+    await user.type(screen.getByLabelText("Subject code"), "CS205")
+    await user.type(screen.getByLabelText("Description"), "Web Systems")
+    await user.type(screen.getByLabelText("Units"), "3")
+    await user.click(screen.getByRole("button", { name: "Add subject" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/curricula/9/subject-placements"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            source: "new",
+            code: "CS205",
+            title: "Web Systems",
+            units: 3,
+            year_level: 2,
+            semester: "1st",
+          }),
+        }),
+      ),
+    )
+    const table = await screen.findByRole("table", {
+      name: "2nd Year subjects",
+    })
+    expect(within(table).getByText("CS205")).toBeInTheDocument()
+    expect(within(table).getByText("Web Systems")).toBeInTheDocument()
   })
 
   /**
@@ -342,6 +585,8 @@ describe("CurriculumWorkspace", () => {
       if (url(input).endsWith("/programs"))
         return Promise.resolve(new Response(JSON.stringify(programs)))
       if (url(input).endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url(input).includes("/current-curriculum-subjects"))
         return Promise.resolve(new Response(JSON.stringify(subjects)))
       if (url(input).endsWith("/curricula") && init?.method !== "POST")
         return Promise.resolve(new Response(JSON.stringify(curriculum)))
@@ -360,27 +605,22 @@ describe("CurriculumWorkspace", () => {
     const user = userEvent.setup()
     const gate = mockDeferredWrite(curriculum.data[0])
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await selectOption(user, "Semester for CS101", "2nd")
+    await openDraftForEditing(user, "BSCS 2026")
+    await selectOption(user, "Semester for CS101", "2nd Semester")
     await waitFor(() => expect(gate.release).not.toBeNull(), autosaveTimeout)
 
-    // Placed while the semester write is still open. Resetting the form to the
-    // snapshot that request was built from would wipe this row outright.
-    await selectOption(user, "Subject to place", "CS102 — Programming 2")
-    await user.click(
-      screen.getByRole("button", { name: "Add subject placement" }),
-    )
+    // A second edit made while the first write is open must remain queued.
+    await selectOption(user, "Semester for CS101", "1st Semester")
     gate.release?.()
 
-    expect(
-      await screen.findByLabelText("Subject code for CS102"),
-    ).toBeInTheDocument()
     await waitFor(
       () =>
         expect(
           replacements("/curricula/9").some((body) =>
-            body.subjects.some((subject) => subject.subject_id === 12),
+            body.subjects.some(
+              (subject) =>
+                subject.subject_id === 11 && subject.semester === "1st",
+            ),
           ),
         ).toBe(true),
       autosaveTimeout,
@@ -391,9 +631,8 @@ describe("CurriculumWorkspace", () => {
     const user = userEvent.setup()
     const gate = mockDeferredWrite(curriculum.data[0])
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await selectOption(user, "Semester for CS101", "2nd")
+    await openDraftForEditing(user, "BSCS 2026")
+    await selectOption(user, "Semester for CS101", "2nd Semester")
     await waitFor(() => expect(gate.release).not.toBeNull(), autosaveTimeout)
 
     await selectOption(user, "Curriculum", "BSCS 2027")
@@ -406,39 +645,20 @@ describe("CurriculumWorkspace", () => {
     expect(screen.getByLabelText("Curriculum")).toHaveTextContent("BSCS 2027")
   }, 20000)
 
-  it("swaps a placement's subject from the row combobox and autosaves it", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation(mockApi())
-    renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await user.click(screen.getByLabelText("Subject code for CS101"))
-    await user.click(await screen.findByRole("option", { name: "CS102" }))
-
-    await waitFor(
-      () =>
-        expect(
-          replacements("/curricula/9").some((body) =>
-            body.subjects.some((subject) => subject.subject_id === 12),
-          ),
-        ).toBe(true),
-      autosaveTimeout,
-    )
-  })
-
   it("adds a prerequisite from the placement row and autosaves the edge", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(
       mockApi(() => new Response(JSON.stringify({ data: curriculum.data[2] }))),
     )
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2029")
+    await openDraftForEditing(user, "BSCS 2029")
     await user.click(screen.getByRole("tab", { name: "2nd Year" }))
     await selectOption(user, "Add prerequisite for CS201", "CS101")
 
     expect(
-      within(await screen.findByRole("table")).getByText("CS101"),
+      await within(
+        await screen.findByRole("table", { name: "2nd Year subjects" }),
+      ).findByText("CS101 · 75"),
     ).toBeInTheDocument()
     await waitFor(
       () =>
@@ -457,53 +677,64 @@ describe("CurriculumWorkspace", () => {
     )
   })
 
-  it("shows a final Save Curriculum button once all four years have at least one subject", async () => {
+  it("locks every editing control once the curriculum is not a draft", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockApi())
     renderWorkspace()
     await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2029")
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Save Curriculum" }),
-      ).toBeEnabled(),
-    )
-  })
+    await selectOption(user, "Curriculum", "BSCS 2030")
 
-  it("disables the final Save Curriculum button while a year level has no subjects yet", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation(mockApi())
-    renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-
-    await screen.findByRole("tab", { name: /1st year/i })
+    expect(await screen.findByText("Pending Dean Review")).toBeInTheDocument()
+    expect(screen.getByLabelText("Curriculum name")).toBeDisabled()
     expect(
-      screen.getByRole("button", { name: "Save Curriculum" }),
-    ).toBeDisabled()
+      screen.queryByRole("button", { name: "Submit for Dean Review" }),
+    ).not.toBeInTheDocument()
   })
 
-  it("marks the curriculum active from the final Save Curriculum button", async () => {
+  it("opens a review dialog and submits a draft with at least one subject", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(
-      mockApi(() => new Response(JSON.stringify({ data: curriculum.data[2] }))),
+      mockApi((input) =>
+        url(input).endsWith("/transition")
+          ? new Response(
+              JSON.stringify({
+                data: {
+                  ...curriculum.data[0],
+                  status: "pending_dean_review",
+                  status_label: "Pending Dean Review",
+                },
+              }),
+            )
+          : new Response(JSON.stringify({ data: curriculum.data[0] })),
+      ),
     )
     renderWorkspace()
     await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2029")
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Save Curriculum" }),
-      ).toBeEnabled(),
-    )
-    await user.click(screen.getByRole("button", { name: "Save Curriculum" }))
 
-    await waitFor(() =>
-      expect(
-        replacements("/curricula/12").some((body) => body.status === "active"),
-      ).toBe(true),
+    await selectOption(user, "Curriculum", "BSCS 2026")
+    await user.click(
+      screen.getByRole("button", { name: "Submit for Dean Review" }),
     )
+
+    expect(screen.getByText("Review before submitting")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Confirm & Submit" }))
+
+    expect(await screen.findByText("Pending Dean Review")).toBeInTheDocument()
+  })
+
+  it("hides the Submit button for a draft with no subjects placed", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockApi())
+    renderWorkspace()
+    await screen.findByLabelText("Curriculum")
+
+    await selectOption(user, "Curriculum", "BSCS 2027")
+
+    expect(
+      screen.queryByRole("button", { name: "Submit for Dean Review" }),
+    ).not.toBeInTheDocument()
   })
 
   it("keeps unsaved work until the chair confirms discard", async () => {
@@ -512,21 +743,22 @@ describe("CurriculumWorkspace", () => {
       Promise.resolve(
         new Response(
           JSON.stringify(
-            url(input).endsWith("/programs")
-              ? programs
-              : url(input).endsWith("/subjects")
-                ? subjects
-                : curriculum,
+              url(input).endsWith("/programs")
+                ? programs
+                : url(input).endsWith("/subjects")
+                  ? subjects
+                  : url(input).includes("/current-curriculum-subjects")
+                    ? subjects
+                  : curriculum,
           ),
         ),
       ),
     )
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
+    await openDraftForEditing(user, "BSCS 2026")
     await user.clear(screen.getByLabelText("Curriculum name"))
     await user.type(screen.getByLabelText("Curriculum name"), "Changed")
-    await user.click(screen.getByRole("button", { name: "New curriculum" }))
+    await selectOption(user, "Curriculum", "Select a curriculum")
     expect(screen.getByRole("alertdialog")).toHaveTextContent(
       "Discard unsaved curriculum changes",
     )
@@ -534,7 +766,7 @@ describe("CurriculumWorkspace", () => {
     expect(screen.getByLabelText("Curriculum name")).toHaveValue("Changed")
   })
 
-  it("prevents a duplicate placement", async () => {
+  it("does not offer a subject that is already placed to the row chooser", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input) =>
       Promise.resolve(
@@ -544,25 +776,30 @@ describe("CurriculumWorkspace", () => {
               ? programs
               : url(input).endsWith("/subjects")
                 ? subjects
+                : url(input).includes("/current-curriculum-subjects")
+                  ? subjects
                 : curriculum,
           ),
         ),
       ),
     )
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await selectOption(user, "Subject to place", "CS102 — Programming 2")
+    await openDraftForEditing(user, "BSCS 2026")
+    await user.click(screen.getByRole("button", { name: "Add subject row" }))
     await user.click(
-      screen.getByRole("button", { name: "Add subject placement" }),
+      screen.getByRole("button", { name: "Use existing subject" }),
     )
-    await selectOption(user, "Subject to place", "CS102 — Programming 2")
-    await user.click(
-      screen.getByRole("button", { name: "Add subject placement" }),
+    await user.type(
+      await screen.findByPlaceholderText("Search subjects"),
+      "CS",
     )
+
     expect(
-      screen.getAllByText("This subject is already placed in this curriculum."),
-    ).not.toHaveLength(0)
+      screen.queryByRole("option", { name: "CS101 — Programming 1" }),
+    ).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole("option", { name: "CS102 — Programming 2" }),
+    ).toBeInTheDocument()
   })
 
   it("keeps the selected curriculum and edits when a switch is cancelled", async () => {
@@ -581,8 +818,7 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
+    await openDraftForEditing(user, "BSCS 2026")
     await user.clear(screen.getByLabelText("Curriculum name"))
     await user.type(screen.getByLabelText("Curriculum name"), "Keep this")
     await selectOption(user, "Curriculum", "BSCS 2027")
@@ -594,7 +830,7 @@ describe("CurriculumWorkspace", () => {
     expect(screen.getByLabelText("Curriculum name")).toHaveValue("Keep this")
   })
 
-  it("resets the form after confirming a selector switch to new", async () => {
+  it("returns to the creation CTA after confirming a selector switch", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input) =>
       Promise.resolve(
@@ -610,16 +846,17 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
+    await openDraftForEditing(user, "BSCS 2026")
     await user.clear(screen.getByLabelText("Curriculum name"))
     await user.type(screen.getByLabelText("Curriculum name"), "Discard this")
-    await selectOption(user, "Curriculum", "New curriculum")
+    await selectOption(user, "Curriculum", "Select a curriculum")
     await user.click(screen.getByRole("button", { name: "Discard changes" }))
     expect(screen.getByLabelText("Curriculum")).toHaveTextContent(
-      "New curriculum",
+      "Select a curriculum",
     )
-    expect(screen.getByLabelText("Curriculum name")).toHaveValue("")
+    expect(
+      screen.getByRole("button", { name: "Create new curriculum" }),
+    ).toBeInTheDocument()
   })
 
   it("uses the created curriculum identity on the next autosave", async () => {
@@ -638,14 +875,16 @@ describe("CurriculumWorkspace", () => {
       )
     })
     renderWorkspace()
-    await screen.findByLabelText("Program")
-    await selectOption(user, "Program", "BSCS — Computer Science")
-    await user.type(screen.getByLabelText("Curriculum name"), "New BSCS")
-    await user.type(screen.getByLabelText("Effective school year"), "2026-2027")
-    await selectOption(user, "Subject to place", "CS101 — Programming 1")
     await user.click(
-      screen.getByRole("button", { name: "Add subject placement" }),
+      await screen.findByRole("button", { name: "Create new curriculum" }),
     )
+    await user.click(screen.getByLabelText("Program"))
+    await user.click(
+      await screen.findByRole("option", { name: "BSCS — Computer Science" }),
+    )
+    await user.click(screen.getByRole("button", { name: "Next" }))
+    await user.type(screen.getByLabelText("Curriculum name"), "New BSCS")
+    await user.click(screen.getByRole("button", { name: "Proceed" }))
 
     await waitFor(
       () =>
@@ -655,11 +894,8 @@ describe("CurriculumWorkspace", () => {
         ),
       autosaveTimeout,
     )
-    // The Program select locks once a curriculum has an id, so this is the
-    // observable proof that the create response was applied before the next
-    // edit — without it the assertion below could race the in-flight POST.
-    await waitFor(() => expect(screen.getByLabelText("Program")).toBeDisabled())
-    await selectOption(user, "Semester for CS101", "2nd")
+    await user.click(await screen.findByRole("button", { name: "Edit curriculum" }))
+    await selectOption(user, "Semester for CS101", "2nd Semester")
     await waitFor(
       () =>
         expect(fetchMock).toHaveBeenCalledWith(
@@ -695,9 +931,8 @@ describe("CurriculumWorkspace", () => {
       ),
     )
     renderWorkspace()
-    await screen.findByLabelText("Curriculum")
-    await selectOption(user, "Curriculum", "BSCS 2026")
-    await selectOption(user, "Semester for CS101", "2nd")
+    await openDraftForEditing(user, "BSCS 2026")
+    await selectOption(user, "Semester for CS101", "2nd Semester")
     expect(
       await screen.findAllByText(
         "The submitted subjects contain a direct or transitive prerequisite cycle.",

@@ -15,8 +15,8 @@ vi.setConfig({ testTimeout: 25_000 })
 
 const terms = { data: [{ type: "academic-term", id: 2, school_year: "2026-2027", semester: "1st", starts_at: null, ends_at: null, enrollment_opens_at: null, enrollment_closes_at: null, add_drop_deadline_at: null, grading_deadline_at: null, status: "semester_ongoing", status_label: "Semester Ongoing" }] } as const
 const curricula = { data: [
-  { type: "curriculum", id: 9, program_id: 1, name: "BSCS 2026", effective_school_year: "2026-2027", status: "active", status_label: "Active", subjects: [{ subject_id: 11, code: "CS101", title: "Programming 1", units: 3, year_level: 1, semester: "1st", is_required: true, prerequisites: [] }] },
-  { type: "curriculum", id: 10, program_id: 1, name: "BSCS 2024", effective_school_year: "2024-2025", status: "active", status_label: "Active", subjects: [{ subject_id: 11, code: "CS101", title: "Programming 1", units: 3, year_level: 1, semester: "1st", is_required: true, prerequisites: [] }] },
+  { type: "curriculum", id: 9, program_id: 1, name: "BSCS 2026", effective_school_year: "2026-2027", status: "active", status_label: "Active", decided_at: null, last_decision_reason: null, subjects: [{ subject_id: 11, code: "CS101", title: "Programming 1", units: 3, year_level: 1, semester: "1st", is_required: true, prerequisites: [] }] },
+  { type: "curriculum", id: 10, program_id: 1, name: "BSCS 2024", effective_school_year: "2024-2025", status: "active", status_label: "Active", decided_at: null, last_decision_reason: null, subjects: [{ subject_id: 11, code: "CS101", title: "Programming 1", units: 3, year_level: 1, semester: "1st", is_required: true, prerequisites: [] }] },
 ] } as const
 const plans = { data: [1, 2, 3, 4].map((year) => ({ type: "academic-term-section-plan", id: year, academic_term_id: 2, curriculum_id: 9, college: "ccs", year_level: year, section_count: 0, students_per_block: 40, status: "draft", status_label: "Draft", submitted_at: null })) } as const
 const sections = { data: [

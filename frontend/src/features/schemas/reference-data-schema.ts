@@ -126,8 +126,16 @@ export const curriculumSchema = z
     program_id: z.number().int().positive(),
     name: z.string().min(1),
     effective_school_year: z.string().min(1),
-    status: z.enum(["draft", "active", "archived"]),
+    status: z.enum([
+      "draft",
+      "pending_dean_review",
+      "pending_executive_review",
+      "active",
+      "archived",
+    ]),
     status_label: z.string().min(1),
+    decided_at: z.string().nullable(),
+    last_decision_reason: z.string().nullable(),
     subjects: z.array(curriculumSubjectSchema),
   })
   .strict()
