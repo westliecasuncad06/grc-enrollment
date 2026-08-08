@@ -92,6 +92,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/academic-term-section-plans', [AcademicTermSectionPlanController::class, 'index'])->name('academic-term-section-plans.index');
         Route::get('/faculty-availabilities', [FacultyAvailabilityController::class, 'index'])->name('faculty-availabilities.index');
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
+        Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
         Route::get('/schedule-proposals', [ScheduleProposalController::class, 'index'])->name('schedule-proposals.index');
         Route::get('/schedule-proposals/{scheduleProposal}/sections', [ScheduleProposalController::class, 'sections'])->name('schedule-proposals.sections');
@@ -216,8 +217,6 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // CurriculumPolicy re-checks the role as defense in depth.
         Route::middleware('role:program_chair')->group(function (): void {
             Route::get('/faculty-members', FacultyMemberController::class)->name('faculty-members.index');
-            Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
-
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
             Route::get('/programs/{program}/current-curriculum-subjects', CurrentCurriculumSubjectController::class)->name('programs.current-curriculum-subjects.index');

@@ -97,11 +97,9 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $this->assertSame('Tue', $section->schedule_days);
         $this->assertSame('07:30:00', $section->starts_at_time);
         $this->assertSame('09:30:00', $section->ends_at_time);
-        $this->assertSame('ONLINE', $section->room);
-        // NOTE: Section::modality is cast to the SectionModality backed enum, so
-        // comparing it directly to the string 'online' would fail assertSame's
-        // strict === check. Compare against the enum case instead.
-        $this->assertSame(SectionModality::Online, $section->modality);
+        $this->assertNull($section->room);
+        $this->assertNull($section->modality);
+        $this->assertSame('legacy_online_reassignment', $section->recommendation_source);
         $professor = User::where('name', 'MR. MACINAS')->where('role', UserRole::Faculty)->sole();
         $this->assertSame($professor->id, $section->professor_id);
     }

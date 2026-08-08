@@ -109,16 +109,14 @@ final class AutoAssignSectionScheduleReferences
                 if ($section->ends_at_time === null && $placement->reference_end_time !== null) {
                     $changes['ends_at_time'] = $placement->reference_end_time;
                 }
-                if ($section->room === null && $placement->reference_room !== null) {
-                    $changes['room'] = $placement->reference_room;
-                }
+                $isUnsupportedReferenceModality = false;
                 if ($section->modality === null && $placement->reference_modality !== null) {
                     // The seeded reference_modality values are uppercase/spaced
-                    // (e.g. 'ONLINE', 'HYFLEX A', 'HYFLEX B', 'F2F' — see
+                    // (e.g. 'HYFLEX A', 'HYFLEX B', 'F2F' — see
                     // curriculum-2024-2029-schedule-references.csv), but
                     // Section::modality is cast to the SectionModality backed
                     // enum, whose backing values are lowercase/underscored
-                    // ('online', 'hyflex_a', 'hyflex_b', 'f2f'). Normalize
+                    // ('hyflex_a', 'hyflex_b', 'f2f'). Normalize
                     // before assigning, or the enum cast throws a ValueError.
                     $normalized = strtolower(str_replace(' ', '_', $placement->reference_modality));
                     $modality = SectionModality::tryFrom($normalized);
@@ -127,7 +125,18 @@ final class AutoAssignSectionScheduleReferences
                     // invent/guess a modality — leave the field null.
                     if ($modality !== null) {
                         $changes['modality'] = $modality;
+                    } else {
+                        $isUnsupportedReferenceModality = true;
                     }
+                }
+                if (! $isUnsupportedReferenceModality && $section->room === null && $placement->reference_room !== null) {
+                    $changes['room'] = $placement->reference_room;
+                }
+                if ($isUnsupportedReferenceModality && $section->recommendation_source === null) {
+                    // An old Online-only reference cannot be coerced into a
+                    // physical-week pattern. Keep it visibly incomplete for
+                    // the Chair to reassign instead of guessing a room.
+                    $changes['recommendation_source'] = 'legacy_online_reassignment';
                 }
 
                 if ($changes !== []) {

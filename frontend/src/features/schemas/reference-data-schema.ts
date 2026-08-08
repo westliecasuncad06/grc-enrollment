@@ -80,7 +80,7 @@ export const sectionSchema = z
     starts_at_time: z.string().min(1).nullable(),
     ends_at_time: z.string().min(1).nullable(),
     room: z.string().min(1).nullable(),
-    modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable().optional(),
+    modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable().optional(),
     capacity: z.number().int().nonnegative(),
     capacity_source: z.enum(["plan", "manual"]),
     viability_threshold: z.number().int().positive().nullable(),

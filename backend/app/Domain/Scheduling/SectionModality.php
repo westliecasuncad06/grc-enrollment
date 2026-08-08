@@ -4,7 +4,6 @@ namespace App\Domain\Scheduling;
 
 enum SectionModality: string
 {
-    case Online = 'online';
     case HyflexA = 'hyflex_a';
     case HyflexB = 'hyflex_b';
     case FaceToFace = 'f2f';
@@ -12,7 +11,6 @@ enum SectionModality: string
     public function label(): string
     {
         return match ($this) {
-            self::Online => 'Online',
             self::HyflexA => 'Hyflex A',
             self::HyflexB => 'Hyflex B',
             self::FaceToFace => 'F2F',

@@ -26,7 +26,7 @@ const enrollmentBlockSubjectSchema = z
     ends_at_time: z.string().nullable(),
     room: z.string().nullable(),
     modality: z
-      .enum(["online", "hyflex_a", "hyflex_b", "f2f"])
+      .enum(["hyflex_a", "hyflex_b", "f2f"])
       .nullable()
       .optional(),
     professor_name: z.string().nullable(),

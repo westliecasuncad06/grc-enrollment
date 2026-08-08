@@ -15,7 +15,7 @@ const sectionShape = {
   starts_at_time: nullableTime,
   ends_at_time: nullableTime,
   room: nullableText,
-  modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable(),
+  modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable(),
   capacity: z.number().int().min(1, "Capacity must be at least 1."),
   viability_threshold: z.number().int().min(1).nullable(),
   status: z.enum(["planned", "published", "closed", "cancelled"]),
@@ -72,7 +72,7 @@ export const sectionEditorSchema = z
     starts_at_time: z.string(),
     ends_at_time: z.string(),
     room: z.string().trim().max(255),
-    modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable(),
+    modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable(),
     professor_id: z.number().int().positive().nullable(),
     viability_threshold: z.number().int().min(1).nullable(),
   })
@@ -152,7 +152,7 @@ export const scheduleReviewSectionSchema = z
     starts_at_time: nullableTime,
     ends_at_time: nullableTime,
     room: nullableText,
-    modality: z.enum(["online", "hyflex_a", "hyflex_b", "f2f"]).nullable(),
+    modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable(),
   })
   .strict()
 export const scheduleReviewSectionsEnvelopeSchema = z

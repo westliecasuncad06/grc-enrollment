@@ -56,8 +56,8 @@ const migratedRegionNames: Partial<Record<string, string>> = {
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the thirty-five role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(35)
+  it("dispatches exactly the thirty-seven role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(37)
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )

@@ -384,7 +384,6 @@ export function SectionsWorkspace() {
                         <Select value={field.value ?? ""} onValueChange={field.onChange}>
                           <SelectTrigger id="section-modality" className="w-full"><SelectValue placeholder="Select modality" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="online">Online</SelectItem>
                             <SelectItem value="hyflex_a">Hyflex A</SelectItem>
                             <SelectItem value="hyflex_b">Hyflex B</SelectItem>
                             <SelectItem value="f2f">F2F</SelectItem>

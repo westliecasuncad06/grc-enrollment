@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Identity\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\RoomCatalogEntryResource;
 use App\Models\RoomCatalogEntry;
@@ -20,10 +21,17 @@ final class RoomCatalogEntryController extends Controller
             throw new AuthenticationException;
         }
 
-        abort_unless($actor->college !== null, 403, 'A college-scoped Program Chair is required.');
+        abort_unless(
+            $actor->role === UserRole::ProgramChair || $actor->role === UserRole::RegistrarHead,
+            403,
+            'Rooms are available only to Program Chairs and the Registrar Head.',
+        );
 
         $rooms = RoomCatalogEntry::query()
-            ->where('college', $actor->college->value)
+            ->when(
+                $actor->role === UserRole::ProgramChair,
+                fn ($query) => $query->where('college', $actor->college?->value),
+            )
             ->orderBy('name')
             ->orderBy('id')
             ->get();

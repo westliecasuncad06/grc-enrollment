@@ -167,6 +167,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         BarChart3,
       ),
       portalModule(
+        "rooms",
+        "Rooms",
+        "Review room availability, capacity, and scheduled physical-week use before assigning a section.",
+        Building2,
+      ),
+      portalModule(
         "schedule-proposals",
         "Schedule Proposals",
         "Prepare schedule drafts for authorized review.",
@@ -309,6 +315,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Policy Settings",
         "See where confirmed institutional policy values will eventually be configured.",
         Settings2,
+      ),
+      portalModule(
+        "rooms",
+        "Rooms",
+        "Maintain the authoritative room inventory and review all scheduled room use.",
+        Building2,
       ),
     ],
   },

@@ -29,6 +29,7 @@ import { EnrollmentDashboardWorkspace } from "@/features/components/portal/enrol
 import { InstitutionDashboardWorkspace } from "@/features/components/portal/institution-dashboard-workspace"
 import { StuckStudentsWorkspace } from "@/features/components/portal/stuck-students-workspace"
 import { PolicySettingsWorkspace } from "@/features/components/portal/policy-settings-workspace"
+import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-operations-workspace"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -40,6 +41,8 @@ export type ConnectedModuleId =
   | "subjects-prerequisites"
   | "sections-schedules"
   | "faculty-assignment"
+  | "demand-forecast"
+  | "rooms"
   | "schedule-proposals"
   | "schedule-approvals"
   | "curriculum-approvals"
@@ -79,6 +82,8 @@ export const connectedModuleIds = [
   "subjects-prerequisites",
   "sections-schedules",
   "faculty-assignment",
+  "demand-forecast",
+  "rooms",
   "schedule-proposals",
   "schedule-approvals",
   "curriculum-approvals",
@@ -150,6 +155,9 @@ const SectionsModuleWorkspace: PortalModuleComponent = () => {
 const facultyAssignmentWorkspace: PortalModuleComponent = () => (
   <FacultyAssignmentWorkspace />
 )
+const roomsOperationsWorkspace: PortalModuleComponent = () => (
+  <RoomsOperationsWorkspace />
+)
 const scheduleProposalsWorkspace: PortalModuleComponent = () => (
   <ScheduleProposalsWorkspace />
 )
@@ -193,6 +201,8 @@ export const connectedModuleRegistry: Readonly<
   "subjects-prerequisites": curriculumWorkspace,
   "sections-schedules": SectionsModuleWorkspace,
   "faculty-assignment": facultyAssignmentWorkspace,
+  "demand-forecast": programChairEnrollmentWorkspace,
+  rooms: roomsOperationsWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,
   "curriculum-approvals": CurriculumApprovalsWorkspace,
