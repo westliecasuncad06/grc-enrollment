@@ -11,6 +11,7 @@ use App\Http\Requests\Api\V1\Curriculum\StoreCurriculumRequest;
 use App\Http\Requests\Api\V1\Curriculum\UpdateCurriculumRequest;
 use App\Http\Resources\Api\V1\CurriculumResource;
 use App\Models\Curriculum;
+use App\Models\Program;
 use App\Models\User;
 use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
@@ -33,7 +34,16 @@ final class CurriculumController extends Controller
 
         $curricula = Curriculum::query()
             ->visibleTo($user)
-            ->when($user->role === UserRole::ProgramChair && $user->college !== null, fn ($query) => $query->whereHas('program', fn ($programs) => $programs->where('college', $user->college->value)))
+            ->when(
+                in_array($user->role, [UserRole::ProgramChair, UserRole::Dean], true),
+                function ($query) use ($user) {
+                    if ($user->college === null) {
+                        return $query->whereRaw('1 = 0');
+                    }
+
+                    return $query->whereHas('program', fn ($programs) => $programs->where('college', $user->college->value));
+                },
+            )
             ->with(self::EAGER_LOAD)
             ->orderByDesc('effective_school_year')
             ->orderBy('name')
@@ -51,12 +61,12 @@ final class CurriculumController extends Controller
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $user = $this->authenticatedUser($request);
-        $this->authorize('create', Curriculum::class);
+        $program = Program::query()->findOrFail($request->validated('program_id'));
+        $this->authorize('createForProgram', [Curriculum::class, $program]);
 
         $curriculum = $action->execute($user, [
             'program_id' => $request->validated('program_id'),
             'name' => $request->validated('name'),
-            'effective_school_year' => $request->validated('effective_school_year'),
         ], $request->subjects(), $contextFactory->fromRequest($request));
 
         $response = CurriculumResource::make($curriculum)->response($request);
@@ -79,7 +89,6 @@ final class CurriculumController extends Controller
 
         $curriculum = $action->execute($user, [
             'name' => $request->validated('name'),
-            'effective_school_year' => $request->validated('effective_school_year'),
         ], $request->subjects(), $curriculum, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(CurriculumResource::make($curriculum)->response($request));
@@ -117,7 +126,7 @@ final class CurriculumController extends Controller
         ]);
 
         $ability = self::ABILITY_FOR_ACTION[$validated['action']];
-        $ability === 'submit'
+        in_array($ability, ['submit', 'approveAsDean'], true)
             ? $this->authorize($ability, $curriculum)
             : $this->authorize($ability, Curriculum::class);
 

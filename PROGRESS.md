@@ -4280,3 +4280,344 @@ all nine labels, then passed after the markup change: **1 file / 13 tests
 passed** in 21.48s. Targeted Prettier, `npm run typecheck`, and `git diff
 --check` passed. The role label intentionally remains in the portal sidebar;
 no API, authorization, enrollment behavior, commit, or push changed.
+
+## 2026-08-07 — Curriculum approval workflow audit
+
+The requested workflow was audited against the Claude continuation worktree at
+`.claude/worktrees/curriculum-approval-workflow`, not the main checkout. Tasks
+1–12 are recorded in that worktree's SDD ledger as complete; Task 13's
+`CurriculumApprovalsWorkspace` is implemented at commit `7f6c57e` but remains
+unreviewed. Task 14 (registering the module for Dean and Executive Director)
+has not started, which explains why the approval module is not visible in the
+sidebar. Task 15 full-suite verification has not run.
+
+The audit also found a requirements discrepancy to resolve before completion:
+the current plan/implementation makes `approveAsDean` role-scoped only, while
+the requested behavior says Dean review must be college-scoped. Program Chair
+submission is already college-scoped; Executive Director review is intended to
+remain institution-wide. No application code, commit, or push was changed in
+this audit.
+
+## 2026-08-07 — Curriculum approval workflow implementation continuation
+
+Task 13's review finding about Dean visibility was fixed in the isolated
+worktree: Dean curriculum listing and transition authorization now require a
+matching assigned college, while Executive Director access remains
+institution-wide. Regression tests cover listing isolation and cross-college
+transition denial. Task 14 registered `curriculum-approvals` for Dean and
+Executive Director in the sidebar/module registry and updated exact role/module
+coverage tests. No commit or push was made.
+
+Verification evidence:
+
+- Backend targeted workflow/API tests: **27 tests / 86 assertions passed**.
+- Backend Unit suite: **304 tests / 772 assertions passed**; PHPUnit emitted
+  the existing doc-comment metadata deprecation warning.
+- Backend API v1 suite: **459 tests / 1,819 assertions passed**; the same
+  existing PHPUnit deprecation warnings were emitted.
+- Backend Actions/Auth/Models/Policies groups: **173 tests / 843 assertions
+  passed**.
+- Frontend full Vitest suite: **91 files / 580 tests passed**; jsdom emitted
+  the existing `HTMLCanvasElement.getContext()` warning.
+- Frontend targeted ESLint and Prettier checks passed. TypeScript still reports
+  only the two known pre-existing readonly fixture errors in
+  `curriculum-view.test.tsx` documented in the continuation handoff.
+- The monolithic `php artisan test` command and the full Database feature
+  directory exceeded the six-minute command limit without flushing a result;
+  the exact child test processes were stopped. The relevant curriculum catalog
+  migration suite passed (**12 tests / 25 assertions**), while the existing
+  curriculum versioning migration suite has two environment/migration-order
+  failures unrelated to this approval-workflow change.
+
+## 2026-08-07 — Program Chair curriculum authoring redesign (design discovery)
+
+The user requested a guided Program Chair creation flow and spreadsheet-style
+subject-entry grid. Design discovery has started in the isolated curriculum
+approval worktree because it contains the unmerged approval workflow that
+governs the same editor. No product code, API contract, migration, commit, or
+push has changed in this design phase. The current create endpoint still
+requires `effective_school_year`, while the user wants that field removed from
+the UI; its automatic source must be confirmed before implementation.
+
+**School-year rule confirmed:** The creation UI will not expose an effective
+school-year field. The server will derive it from the active academic term and
+fall back to the latest configured academic term when no term is active. The
+remaining design question is the precise source for reusing an existing
+subject in a new curriculum.
+
+**Subject-entry rules confirmed:** The existing-subject picker will draw only
+from the selected program's current/latest curriculum and exclude all older
+curriculum versions. Choosing “Create new subject” will persist a subject
+record, then place it immediately in the new draft curriculum. This requires
+a new authenticated subject-create API surface because the current v1 API only
+lists subjects.
+
+**Interaction approach approved:** The user selected the guided Draft creation
+flow: a central “Create new curriculum” action opens a Program then Name
+wizard, whose proceed action creates the draft and opens its editor. Existing
+1st–4th Year navigation remains; each spreadsheet row still records whether
+the subject is offered in the 1st or 2nd Semester. No implementation has
+started pending review of the detailed design.
+
+**UI/editing design approved:** The user approved the centered creation action,
+two-step wizard, read-only draft preview, explicit Edit curriculum mode,
+spreadsheet-style year-scoped table, and the New Subject / Use Existing Subject
+row chooser. The next design section defines the API and authorization
+boundaries needed to enforce that behavior.
+
+**Server/data-flow design approved:** Program selection and curriculum creation
+will be college-scoped and server-enforced. The server derives the hidden
+effective school year from the active/latest academic term; reuse candidates
+come only from the selected program's current/latest curriculum; and new
+subjects are atomically created and placed in the editable Draft. Validation,
+audit logging, Draft-only editing, and regression coverage are part of scope.
+
+**Approved design recorded:** The complete Program Chair curriculum-authoring
+design is in `docs/superpowers/specs/2026-08-07-program-chair-curriculum-authoring-design.md`.
+It was self-reviewed for placeholders, internal consistency, scope, and
+ambiguity; no placeholders remained and `git diff --check` passed for the
+specification and progress log. The design doc and progress update are
+intentionally uncommitted because the user has not authorized a commit.
+
+**Specification reviewed:** The user approved the written curriculum-authoring
+specification. The required implementation-planning phase is now in progress;
+no product code has changed and no commit or push is authorized.
+
+**Implementation plan completed:** The task-by-task TDD plan is in
+`docs/superpowers/plans/2026-08-07-program-chair-curriculum-authoring.md`.
+It covers Program Chair college authorization, server-owned school-year
+resolution, current/latest subject sourcing, atomic subject placement, strict
+frontend contracts, the creation wizard, the year/semester spreadsheet, and
+cross-feature verification. The plan passed its placeholder, type-consistency,
+and whitespace self-review. It is intentionally uncommitted; execution awaits
+the user's selected execution mode.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 1 started
+
+Task 1, “Enforce college ownership and server-owned curriculum school year,”
+has started in the existing isolated `curriculum-approval-workflow` worktree.
+The required task brief, PRD, and full progress ledger are being reviewed
+before implementation. An initial documentation-read command used a
+parent-relative task-brief path while already in the worktree and failed
+without modifying application files; the corrected task-local path now reads
+successfully. The pre-existing uncommitted approval-workflow changes remain
+preserved. TDD RED tests are next; no commit or push is authorized.
+
+**Task 1 RED and mutation evidence:** The brief's exact four-file command
+initially failed as intended: 13 tests failed because the resolver class and
+college ownership rules did not yet exist, and creation still accepted the
+forged school year. Two initial test-fixture issues (duplicate policy-test
+emails and the old request requirement rejecting authorization fixtures before
+Policy execution) were corrected without changing product code. After the
+implementation, the same command passed with **32 tests / 93 assertions**.
+An explicit PATCH school-year mutation check then temporarily reintroduced the
+unsafe controller/action path; its focused test failed as expected because the
+response changed from `2026-2027` to forged `1999-2000`. The guarded path has
+been restored; final exact verification is next. No commit or push has been
+performed.
+
+**Task 1 final verification:** The brief's exact final command passed with
+**32 tests / 94 assertions** in 15.13 seconds. It covers the new resolver,
+college-scoped program visibility and curriculum create/update authorization,
+forged create/PATCH school-year protection, existing Draft-only locking, and
+approval-policy coverage. The directly affected `ProgramsEndpointTest` also
+passed with **5 tests / 9 assertions**, and `git diff --check` passed. The
+implementation and detailed TDD/self-review report are recorded in
+`.superpowers/sdd/2026-08-07-program-chair-curriculum-authoring/task-1-report.md`.
+No commit or push was performed; pre-existing approval-workflow changes remain
+unmodified.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 2 started
+
+Task 2, “Current-curriculum subject sourcing and atomic row creation,” has
+started in the existing isolated `curriculum-approval-workflow` worktree after
+reviewing its task brief, PRD, approved design, implementation plan, and
+progress ledger. Task 1's required resolver and college-aware policy are
+present with its independently reviewed passing verification. The existing
+uncommitted approval-workflow and Task 1 changes will be preserved. TDD RED
+tests are next; no commit or push is authorized.
+
+**Task 2 RED:** The focused authoring command failed as intended with **10
+failed tests / 6 assertions** in 15.66 seconds: all seven endpoint cases
+received the expected absent-route 404 responses, and all three resolver cases
+reported the missing resolver class. One setup-only duplicate placement in the
+distinct-subject test was rejected by the existing database uniqueness
+constraint before exercising the missing endpoint; that fixture is removed
+without changing the required behavior. No production Task 2 code was present
+when RED was observed.
+
+**Task 2 execution interruption:** The first subagent hit an external usage
+quota before it could report GREEN verification. It left the Task 2 files
+uncommitted in the isolated worktree; no commit or push was performed. The next
+implementer must inspect those files, preserve the established RED coverage,
+finish or correct the implementation, and run the exact Task 2 regression set.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 3 restarted
+
+The first Task 3 frontend implementer left uncommitted partial schema, service,
+hook, and test work but did not report a test outcome after the normal focused
+verification window. It was stopped without discarding files; a fresh
+implementer will inspect, complete, and verify only that bounded Task 3 scope.
+No commit or push was performed.
+
+**Task 2 completion:** The interrupted implementation was inspected and
+completed without changing Task 1 behavior or the pre-existing approval
+workflow. It now resolves the selected program's active curriculum for the
+server-derived current/latest school year, falls back to the latest active
+version by effective school year/name, exposes a college-authorized
+current-curriculum subject source endpoint, and atomically creates new or
+existing subject placements in Draft curricula. New subjects derive college
+and Active status from the authenticated Program Chair, existing subjects are
+restricted to the resolved current/latest source, duplicate codes/placements
+are rejected, and curriculum/subject audit vocabulary and events are present.
+
+The interrupted endpoint tests used Laravel's default top-level
+`assertJsonValidationErrors()` helper even though this API wraps validation
+details under `error.errors`; those assertions were corrected to the existing
+API envelope without weakening the behavior checks. The exact Task 2 command
+from the brief passed with **32 tests / 121 assertions**. The per-file run
+also confirmed 3 resolver tests / 9 assertions, 7 authoring tests / 43
+assertions, 17 curriculum endpoint tests / 61 assertions, 3 lock tests / 6
+assertions, and 2 audit vocabulary tests / 2 assertions. `git diff --check`
+passed. No commit or push was performed. The detailed implementation report
+is in `.superpowers/sdd/2026-08-07-program-chair-curriculum-authoring/task-2-report.md`.
+
+Known concern for the later cross-feature pass: the local database still has
+the previously documented migration privilege blocker for
+`2026_08_07_000004_add_decision_columns_to_curricula`; no grants or migration
+state were changed here.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 3 started
+
+Task 3, “Frontend authoring contracts, service calls, and query hooks,” has
+started in the isolated `curriculum-approval-workflow` worktree. Task 2’s
+reviewed GET current-subject-source and POST subject-placement contracts are
+the only backend interfaces being consumed. The implementation will use TDD,
+preserve the existing approval-workflow and Tasks 1–2 changes, and will not
+commit or push.
+
+The recovery pass found partial Task 3 files already present. The initial
+focused frontend command passed with **15 tests / 15 tests**, but inspection
+identified a nullable-program query-key contract gap and missing explicit
+coverage for the POST response contract. Those are being corrected within
+Task 3 only; no Task 1–2 or approval files are being reverted.
+
+**Task 3 recovery completion:** The schema/service/hook tests now pass with
+**18 tests / 18 tests**. The current-subject query preserves a nullable
+program ID instead of using a fabricated `0`, and the POST response contract
+has explicit failure coverage. `npm run typecheck` exits 1 only for the two
+known unrelated readonly fixture errors in
+`frontend/src/features/components/portal/curriculum-view.test.tsx` at lines
+126 and 201; no Task 3 or workspace-bridge errors remain. `git diff --check`
+passed. A temporary type bridge keeps the legacy pre-Task-4 workspace form
+compilable while stripping its server-owned effective-school-year field before
+create requests; the visible legacy controls remain Task 4 scope. Details are
+in `.superpowers/sdd/2026-08-07-program-chair-curriculum-authoring/task-3-report.md`.
+No commit or push was performed.
+
+**Task 3 review/reproduction correction:** Independent review found that the
+temporary type bridge did not bridge React Hook Form's runtime Zod resolver:
+the legacy form still feeds `effective_school_year` into the strict published
+store schema before the mutation can strip it. Re-running the workspace suite
+reproduced the issue with **9 failed / 10 passed** tests. The bounded repair
+will use a UI-local legacy resolver for the pre-Task-4 form while preserving
+the strict public API schemas, and will add existing-subject cache-invalidation
+coverage. No commit or push was performed.
+
+## 2026-08-08 — Task 3 reviewed integration repair started
+
+The reviewed Task 3 repair is scoped to the isolated curriculum-authoring
+worktree. Required repository, PRD, progress, Task 3 brief/report, review
+diff, and reproduction note were read. The repair will add only a local
+React Hook Form resolver/type adapter for the legacy pre-Task-4 workspace and
+focused coverage that an existing-subject placement invalidates the exact
+curricula cache without invalidating the subjects cache. Public Zod API
+schemas and backend/Task 4+ behavior remain unchanged. No commit or push is
+authorized.
+
+**Task 3 reviewed integration repair final evidence:** The requested fresh
+verification was run after the UI-local resolver/type repair. The exact Task 3
+focused command passed with **3 files / 19 tests**; the curriculum workspace
+regression passed with **1 file / 19 tests** and emitted only the known jsdom
+canvas `getContext()` warning. `npm run typecheck` exited 1 only for the two
+known pre-existing readonly fixture errors in
+`frontend/src/features/components/portal/curriculum-view.test.tsx` at lines
+126 and 201. `git diff --check` passed. The repair left public schemas,
+backend behavior, and Task 4+ UI behavior unchanged. No commit or push was
+performed.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 4 started
+
+Task 4, the two-step Program Chair curriculum creation wizard and Draft
+preview/edit boundary, has started in the isolated
+`curriculum-approval-workflow` worktree. The scope preserves the reviewed
+Tasks 1–3 contracts, current approval workflow, return-reason handling,
+reviewer experiences, year tabs, and pre-Task-5 subject controls. It adds no
+dependency or global-theme change and will not commit or push.
+
+**Task 4 execution interruption:** The first UI implementer left uncommitted
+wizard/workspace/test changes but stopped responding after its test and lint
+processes completed, before recording outcomes. The files are preserved. A
+fresh recovery pass must inspect, correct if necessary, and run the exact Task
+4 verification before this task can be reviewed. No commit or push occurred.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 5 recovery started
+
+The first spreadsheet implementer left uncommitted Task 5 component and test
+files but stopped reporting before verification or a task report. The files
+are preserved for a bounded recovery pass that must inspect, complete, and run
+the exact Task 5 test/format checks before merge preparation. No commit or
+push occurred.
+
+**Task 5 recovery test failure:** The focused suite currently has **31/33
+passing** tests. The two failures are: the prerequisite test does not render
+the expected CS101 prerequisite in the second-year table after editing CS201,
+and the existing-subject chooser test mock returns the wrong response shape
+for `/current-curriculum-subjects`, so its search field never appears. A
+root-cause fix and fresh full Task 5 verification are required before merging.
+No commit or push occurred.
+
+**Task 4 recovery completion:** The preserved wizard/workspace implementation
+was inspected against the approved design and Task 4 brief. It keeps the
+creation CTA behind the Program Chair role, displays the already server-scoped
+program list with the authenticated college context, collects Program before
+Curriculum name in an accessible two-step Dialog, and posts exactly
+`{ program_id, name, subjects: [] }`. Created curricula are inserted into the
+query cache and opened as read-only Draft previews; `Edit curriculum` is
+Draft-only, status is a read-only Badge, and effective school year/status are
+not editable inputs. Existing approval transitions, return-reason handling,
+reviewer module, View tab, selector discard safeguards, four year tabs, two
+semester values, prerequisites, and the pre-Task-5 subject controls remain
+present. The exact Task 4 frontend suite passed with **26 tests / 26 tests**;
+the requested ESLint command passed; `git diff --check` passed. No Task 4
+production repair was necessary and no commit or push was performed.
+
+## 2026-08-08 — Program Chair curriculum authoring Task 5 started
+
+Task 5 is limited to the isolated `curriculum-approval-workflow` worktree and
+will replace the legacy subject-placement picker with a controlled,
+year-scoped spreadsheet and new/existing subject-row dialog. The implementation
+will preserve the reviewed Tasks 1–4 behavior, all four Year tabs, the `1st`
+and `2nd` semester API values, prerequisite grade default `75`, debounced
+autosave, Draft locks, and approval preview/transition behavior. The required
+shadcn documentation command completed successfully before coding; no packages,
+global styles, commits, or pushes are authorized.
+
+**Task 5 verification recovery:** The prior implementer was interrupted before
+writing a report. A fresh recovery pass is now inspecting the preserved
+spreadsheet/row-dialog changes and will run the exact Task 5 checks before
+preparing the requested merge evidence. No Task 5 code has been discarded,
+committed, or pushed.
+
+**Task 5 focused failure repair:** The exact four-file Task 5 suite first
+reproduced the recorded **31/33** result. The spreadsheet preserved the full
+prerequisite label as `CS101 · 75`; the workspace assertion incorrectly looked
+for a separate exact `CS101` text node after the placement autosave. It now
+asserts the complete visible label. The existing-subject chooser test mock now
+returns the established `{ data: [...] }` subjects envelope for
+`/current-curriculum-subjects` and waits for the search input before typing.
+The exact focused suite then passed with **4 files / 33 tests** in 37.25s.
+Prettier initially reported existing formatting drift in the three Task 5
+component files; its mechanical formatter was applied, and the required
+Prettier check plus `git diff --check` passed. The known jsdom canvas warning
+remains non-failing. No commit or push was performed.

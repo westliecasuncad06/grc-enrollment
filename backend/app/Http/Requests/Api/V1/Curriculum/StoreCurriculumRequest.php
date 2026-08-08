@@ -10,6 +10,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * Full-replace shape: every subject placement and its prerequisites for the
  * curriculum are submitted in one payload rather than diffed incrementally.
  * UpdateCurriculumRequest mirrors these subject/prerequisite rules exactly.
+ * The effective school year and status are server-owned.
  */
 final class StoreCurriculumRequest extends FormRequest
 {
@@ -26,7 +27,6 @@ final class StoreCurriculumRequest extends FormRequest
         return [
             'program_id' => ['required', 'integer', 'exists:programs,id'],
             'name' => ['required', 'string', 'max:255'],
-            'effective_school_year' => ['required', 'string', 'max:255'],
             'subjects' => ['present', 'array'],
             'subjects.*.subject_id' => ['required', 'integer', 'exists:subjects,id', 'distinct'],
             'subjects.*.year_level' => ['required', 'integer', 'min:1'],

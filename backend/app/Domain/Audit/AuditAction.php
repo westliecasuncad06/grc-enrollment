@@ -8,6 +8,8 @@ final class AuditAction
 
     public const CURRICULUM_UPDATED = 'curriculum.updated';
 
+    public const SUBJECT_CREATED = 'subject.created';
+
     public const CURRICULUM_SUBMITTED = 'curriculum.submitted';
 
     public const CURRICULUM_DEAN_APPROVED = 'curriculum.dean_approved';
@@ -134,6 +136,7 @@ final class AuditAction
         return [
             self::CURRICULUM_CREATED,
             self::CURRICULUM_UPDATED,
+            self::SUBJECT_CREATED,
             self::CURRICULUM_SUBMITTED,
             self::CURRICULUM_DEAN_APPROVED,
             self::CURRICULUM_DEAN_RETURNED,

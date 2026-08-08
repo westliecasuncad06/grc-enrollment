@@ -123,7 +123,7 @@ final class CurriculumTransitionEndpointTest extends TestCase
     public function test_dean_approves_a_submission_and_every_executive_director_is_notified(): void
     {
         $submitter = $this->makeSubmitter();
-        $deanToken = $this->tokenFor(UserRole::Dean, 'dean@grc.test');
+        $deanToken = $this->tokenFor(UserRole::Dean, 'dean@grc.test', CollegeCode::Ccs);
         $this->tokenFor(UserRole::ExecutiveDirector, 'exec@grc.test');
         $curriculum = $this->makeCurriculum(CurriculumStatus::PendingDeanReview);
         $curriculum->update(['decided_by' => $submitter->id, 'decided_at' => now()]);
@@ -145,7 +145,7 @@ final class CurriculumTransitionEndpointTest extends TestCase
     public function test_dean_return_requires_a_reason_and_sends_the_curriculum_back_to_draft(): void
     {
         $submitter = $this->makeSubmitter();
-        $deanToken = $this->tokenFor(UserRole::Dean, 'dean@grc.test');
+        $deanToken = $this->tokenFor(UserRole::Dean, 'dean@grc.test', CollegeCode::Ccs);
         $curriculum = $this->makeCurriculum(CurriculumStatus::PendingDeanReview);
         $curriculum->update(['decided_by' => $submitter->id, 'decided_at' => now()]);
 
@@ -188,12 +188,21 @@ final class CurriculumTransitionEndpointTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_a_dean_from_a_different_college_cannot_approve_someone_elses_curriculum(): void
+    {
+        $deanToken = $this->tokenFor(UserRole::Dean, 'cbae-dean@grc.test', CollegeCode::Cbae);
+        $curriculum = $this->makeCurriculum(CurriculumStatus::PendingDeanReview);
+
+        $this->withToken($deanToken)
+            ->patchJson("/api/v1/curricula/{$curriculum->id}/transition", ['action' => 'dean_approve'])
+            ->assertForbidden();
+    }
+
     public function test_a_program_chair_from_a_different_college_cannot_submit_someone_elses_curriculum(): void
     {
         // makeCurriculum() builds its Program with CollegeCode::Ccs — a
-        // chair whose own college is Cbae must be rejected, unlike
-        // approveAsDean/approveAsExecutive which are role-only (see
-        // CurriculumPolicy::submit()'s docblock).
+        // chair whose own college is Cbae must be rejected, just like
+        // Dean review is scoped to the curriculum's program college.
         $chairToken = $this->tokenFor(UserRole::ProgramChair, 'other-chair@grc.test', CollegeCode::Cbae);
         $curriculum = $this->makeCurriculum(CurriculumStatus::Draft);
 

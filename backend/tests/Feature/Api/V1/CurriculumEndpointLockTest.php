@@ -5,12 +5,15 @@ namespace Tests\Feature\Api\V1;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 final class CurriculumEndpointLockTest extends TestCase
@@ -41,10 +44,23 @@ final class CurriculumEndpointLockTest extends TestCase
         return Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active]);
     }
 
+    private function setCurrentAcademicTerm(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        DB::table('academic_term_current_slots')->where('id', 1)->update([
+            'academic_term_id' => $term->id,
+        ]);
+    }
+
     public function test_a_created_curriculum_always_starts_as_draft_even_if_status_is_sent(): void
     {
         $token = $this->chairToken();
         $program = $this->makeProgram();
+        $this->setCurrentAcademicTerm();
 
         $response = $this->withToken($token)->postJson('/api/v1/curricula', [
             'program_id' => $program->id,

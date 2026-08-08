@@ -75,7 +75,15 @@ export function CurriculumApprovalsWorkspace() {
       : null
 
   const mutation = useMutation({
-    mutationFn: ({ id, action, reason: mutationReason }: { id: number; action: CurriculumAction; reason?: string }) =>
+    mutationFn: ({
+      id,
+      action,
+      reason: mutationReason,
+    }: {
+      id: number
+      action: CurriculumAction
+      reason?: string
+    }) =>
       transitionCurriculum(id, {
         action,
         ...(mutationReason ? { reason: mutationReason } : {}),
@@ -87,7 +95,8 @@ export function CurriculumApprovalsWorkspace() {
     onSuccess: (updated) => {
       queryClient.setQueryData<Curriculum[]>(
         curriculaQueryKey(session?.userId ?? null),
-        (old) => (old ?? []).map((item) => (item.id === updated.id ? updated : item)),
+        (old) =>
+          (old ?? []).map((item) => (item.id === updated.id ? updated : item)),
       )
       setReviewing(null)
       setReturning(null)
@@ -155,7 +164,10 @@ export function CurriculumApprovalsWorkspace() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex gap-2">
-                    <Button type="button" onClick={() => setReviewing(curriculum)}>
+                    <Button
+                      type="button"
+                      onClick={() => setReviewing(curriculum)}
+                    >
                       Review
                     </Button>
                   </CardContent>
@@ -220,8 +232,8 @@ export function CurriculumApprovalsWorkspace() {
           <AlertDialogHeader>
             <AlertDialogTitle>Return {returning?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The curriculum goes back to the Program Chair as a Draft.
-              Explain what needs to change.
+              The curriculum goes back to the Program Chair as a Draft. Explain
+              what needs to change.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Field data-invalid={Boolean(reasonError)}>

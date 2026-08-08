@@ -27,7 +27,7 @@ final class UpdateCurriculum
     ) {}
 
     /**
-     * @param  array{name: string, effective_school_year: string}  $validatedData
+     * @param  array{name: string}  $validatedData
      * @param  list<array{subject_id: int, year_level: int, semester: string, is_required: bool, prerequisites: list<array{prerequisite_subject_id: int, minimum_grade: string}>}>  $subjects
      */
     public function execute(
@@ -48,7 +48,6 @@ final class UpdateCurriculum
 
             $curriculum->update([
                 'name' => $validatedData['name'],
-                'effective_school_year' => $validatedData['effective_school_year'],
             ]);
             $this->synchronizer->execute($curriculum, $subjects);
             $curriculum->refresh();

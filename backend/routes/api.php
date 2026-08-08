@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurriculumController;
+use App\Http\Controllers\Api\V1\CurriculumSubjectPlacementController;
+use App\Http\Controllers\Api\V1\CurrentCurriculumSubjectController;
 use App\Http\Controllers\Api\V1\Dashboard\EnrollmentSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\InstitutionSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\PolicySettingsController;
@@ -217,6 +219,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
+            Route::get('/programs/{program}/current-curriculum-subjects', CurrentCurriculumSubjectController::class)->name('programs.current-curriculum-subjects.index');
+            Route::post('/curricula/{curriculum}/subject-placements', CurriculumSubjectPlacementController::class)->name('curricula.subject-placements.store');
 
             // Sections are the chair's schedule plan, same ownership as
             // curriculum authorship.

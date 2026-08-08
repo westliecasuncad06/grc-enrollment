@@ -9,7 +9,8 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * Mirrors StoreCurriculumRequest's subject/prerequisite rules exactly — both
  * are full-replace payloads. `program_id` is intentionally absent: a
- * curriculum's owning program does not change after creation.
+ * curriculum's owning program and effective school year do not change after
+ * creation.
  */
 final class UpdateCurriculumRequest extends FormRequest
 {
@@ -25,7 +26,6 @@ final class UpdateCurriculumRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'effective_school_year' => ['required', 'string', 'max:255'],
             'subjects' => ['present', 'array'],
             'subjects.*.subject_id' => ['required', 'integer', 'exists:subjects,id', 'distinct'],
             'subjects.*.year_level' => ['required', 'integer', 'min:1'],

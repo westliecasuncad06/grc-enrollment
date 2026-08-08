@@ -29,6 +29,7 @@ const expectedModuleIds = {
   ],
   dean: [
     "schedule-approvals",
+    "curriculum-approvals",
     "enrollment-dashboard",
     "stuck-students",
     "honors",
@@ -36,6 +37,7 @@ const expectedModuleIds = {
   ],
   executive_director: [
     "master-schedule",
+    "curriculum-approvals",
     "institution-dashboard",
     "kpis",
     "reports",

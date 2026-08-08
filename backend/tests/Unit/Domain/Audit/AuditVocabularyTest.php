@@ -14,6 +14,12 @@ final class AuditVocabularyTest extends TestCase
             [
                 'curriculum.created',
                 'curriculum.updated',
+                'subject.created',
+                'curriculum.submitted',
+                'curriculum.dean_approved',
+                'curriculum.dean_returned',
+                'curriculum.executive_approved',
+                'curriculum.executive_returned',
                 'faculty_availability.created',
                 'faculty_availability.updated',
                 'faculty_availability.deleted',
@@ -78,6 +84,7 @@ final class AuditVocabularyTest extends TestCase
         self::assertSame(
             [
                 'curriculum',
+                'subject',
                 'faculty_availability',
                 'faculty_subject_preference',
                 'section',

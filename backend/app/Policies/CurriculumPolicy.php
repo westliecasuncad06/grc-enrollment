@@ -4,22 +4,19 @@ namespace App\Policies;
 
 use App\Domain\Identity\UserRole;
 use App\Models\Curriculum;
+use App\Models\Program;
 use App\Models\User;
 
 /**
  * Read access follows the same shape as ProgramPolicy/AcademicTermPolicy.
- * `create`/`update` are Program-Chair-only by role alone (unchanged — note
- * this means neither actually stops a chair from editing another
- * college's curriculum by id today; that pre-existing gap is out of scope
- * here). The three new abilities below back the approval chain's
+ * `create`/`update` are Program-Chair-only and college-scoped. The three new
+ * abilities below back the approval chain's
  * transition endpoint (CurriculumController::transition): `submit` adds a
  * real college check on top of the role check (see its own docblock) since
- * it starts a chain other people rely on, but `approveAsDean`/
- * `approveAsExecutive` are role-scoped only, NOT college-scoped: per
- * `ScheduleProposalPolicy` and `NotifyScheduleTransition`'s docblock,
- * neither the Dean nor the Executive Director is scoped to a single
- * college in this system — every active Dean/Executive Director is a
- * legitimate reviewer for any college's curriculum.
+ * it starts a chain other people rely on, so the acting Chair must own the
+ * curriculum's college. Dean review is also college-scoped: a Dean may only
+ * act on curricula whose program belongs to the Dean's assigned college.
+ * Executive Director review remains institution-wide.
  */
 final class CurriculumPolicy
 {
@@ -39,24 +36,23 @@ final class CurriculumPolicy
 
     public function create(User $user): bool
     {
-        return $user->role === UserRole::ProgramChair;
+        return $user->role === UserRole::ProgramChair && $user->college !== null;
+    }
+
+    public function createForProgram(User $user, Program $program): bool
+    {
+        return $this->create($user) && $program->college === $user->college;
     }
 
     public function update(User $user, Curriculum $curriculum): bool
     {
-        return $user->role === UserRole::ProgramChair;
+        return $this->create($user) && $curriculum->program->college === $user->college;
     }
 
     /**
-     * Unlike `create`/`update` (Program-Chair-only by role alone — an
-     * existing gap this method deliberately does not repeat), `submit` is
-     * the first step of a chain other people rely on (Dean review,
-     * notifications routed to the submitter), so a role check alone isn't
-     * enough: it must also confirm the curriculum's own program actually
-     * belongs to the acting chair's college, the same defense-in-depth
-     * `AutoAssignSectionScheduleReferences` applies ("the role check alone
-     * does not stop one college's Chair from bulk-writing another
-     * college's [resource]").
+     * Submission is the first step of a chain other people rely on (Dean
+     * review and notifications routed to the submitter), so it confirms the
+     * curriculum belongs to the acting Chair's college.
      */
     public function submit(User $user, Curriculum $curriculum): bool
     {
@@ -67,9 +63,11 @@ final class CurriculumPolicy
         return $user->college !== null && $curriculum->program->college === $user->college;
     }
 
-    public function approveAsDean(User $user): bool
+    public function approveAsDean(User $user, Curriculum $curriculum): bool
     {
-        return $user->role === UserRole::Dean;
+        return $user->role === UserRole::Dean
+            && $user->college !== null
+            && $curriculum->program->college === $user->college;
     }
 
     public function approveAsExecutive(User $user): bool

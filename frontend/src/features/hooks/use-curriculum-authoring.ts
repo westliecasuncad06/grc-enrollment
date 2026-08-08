@@ -1,0 +1,63 @@
+"use client"
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+
+import { useAuth } from "@/features/auth/use-auth"
+import { curriculaQueryKey } from "@/features/hooks/use-curricula"
+import { subjectsQueryKey } from "@/features/hooks/use-reference-data"
+import type { CurriculumSubjectPlacementInput } from "@/features/schemas/curriculum-schema"
+import {
+  addCurriculumSubjectPlacement,
+  getCurrentCurriculumSubjects,
+} from "@/features/services/curriculum-service"
+
+export const currentCurriculumSubjectsQueryKey = (
+  userId: string | null,
+  programId: number | null,
+) => ["current-curriculum-subjects", userId, programId] as const
+
+export function useCurrentCurriculumSubjectsQuery(programId: number | null) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: currentCurriculumSubjectsQueryKey(
+      session?.userId ?? null,
+      programId,
+    ),
+    queryFn: ({ signal }) => {
+      if (programId === null) {
+        return Promise.reject(new Error("A program is required."))
+      }
+
+      return getCurrentCurriculumSubjects(programId, signal)
+    },
+    enabled: session !== null && programId !== null && programId > 0,
+  })
+}
+
+export function useAddCurriculumSubjectPlacementMutation() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+  const userId = session?.userId ?? null
+
+  return useMutation({
+    mutationFn: ({
+      curriculumId,
+      input,
+    }: {
+      curriculumId: number
+      input: CurriculumSubjectPlacementInput
+    }) => addCurriculumSubjectPlacement(curriculumId, input),
+    onSuccess: (_curriculum, { input }) => {
+      queryClient.invalidateQueries({
+        queryKey: curriculaQueryKey(userId),
+        exact: true,
+      })
+      if (input.source === "new")
+        queryClient.invalidateQueries({
+          queryKey: subjectsQueryKey(userId),
+          exact: true,
+        })
+    },
+  })
+}

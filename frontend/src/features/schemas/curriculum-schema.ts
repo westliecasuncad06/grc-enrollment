@@ -22,10 +22,6 @@ export const curriculumSubjectInputSchema = z
 
 const replacementShape = {
   name: z.string().trim().min(1, "Enter a curriculum name."),
-  effective_school_year: z
-    .string()
-    .trim()
-    .min(1, "Enter the effective school year."),
   subjects: z.array(curriculumSubjectInputSchema),
 }
 
@@ -94,7 +90,6 @@ export const storeCurriculumInputSchema = z
   .superRefine((value, context) => {
     const result = curriculumReplacementSchema.safeParse({
       name: value.name,
-      effective_school_year: value.effective_school_year,
       subjects: value.subjects,
     })
     if (!result.success) {
@@ -107,6 +102,30 @@ export const storeCurriculumInputSchema = z
       }
     }
   })
+
+export const curriculumSubjectPlacementInputSchema = z.discriminatedUnion(
+  "source",
+  [
+    z
+      .object({
+        source: z.literal("existing"),
+        subject_id: z.number().int().positive(),
+        year_level: z.number().int().min(1).max(4),
+        semester: z.enum(["1st", "2nd"]),
+      })
+      .strict(),
+    z
+      .object({
+        source: z.literal("new"),
+        code: z.string().trim().min(1, "Enter a subject code."),
+        title: z.string().trim().min(1, "Enter a subject description."),
+        units: z.number().positive("Enter the subject units."),
+        year_level: z.number().int().min(1).max(4),
+        semester: z.enum(["1st", "2nd"]),
+      })
+      .strict(),
+  ],
+)
 
 export const curriculumTransitionSchema = z
   .object({
@@ -127,11 +146,14 @@ export type CurriculumAction = CurriculumTransition["action"]
 export type CurriculumSubjectInput = z.infer<
   typeof curriculumSubjectInputSchema
 >
+export type CurriculumSubjectPlacementInput = z.infer<
+  typeof curriculumSubjectPlacementInputSchema
+>
 export type UpdateCurriculumInput = z.infer<typeof curriculumReplacementSchema>
 export type StoreCurriculumInput = z.infer<typeof storeCurriculumInputSchema>
 export interface CurriculumEditorValues {
   name: string
-  effective_school_year: string
+  effective_school_year?: string
   subjects: readonly {
     subject_id: number
     year_level: number

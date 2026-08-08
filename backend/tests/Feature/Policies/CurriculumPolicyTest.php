@@ -18,20 +18,26 @@ final class CurriculumPolicyTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function makeUser(UserRole $role): User
+    private function makeUser(UserRole $role, ?CollegeCode $college = null, ?string $email = null): User
     {
         return User::create([
             'name' => 'Test '.$role->value,
-            'email' => $role->value.'@grc.test',
+            'email' => $email ?? $role->value.'@grc.test',
             'password' => 'irrelevant-password',
             'role' => $role,
+            'college' => $college,
             'status' => UserStatus::Active,
         ]);
     }
 
     private function makeCurriculum(CurriculumStatus $status): Curriculum
     {
-        $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active]);
+        $program = Program::create([
+            'code' => 'BSCS',
+            'name' => 'BS Computer Science',
+            'college' => CollegeCode::Ccs,
+            'status' => ProgramStatus::Active,
+        ]);
 
         return Curriculum::create([
             'program_id' => $program->id,
@@ -67,21 +73,39 @@ final class CurriculumPolicyTest extends TestCase
         self::assertTrue($policy->view($dean, $draft));
     }
 
-    public function test_only_a_program_chair_may_create_a_curriculum(): void
+    public function test_creating_a_curriculum_requires_a_program_chair_with_a_college(): void
     {
         $policy = new CurriculumPolicy;
 
-        self::assertTrue($policy->create($this->makeUser(UserRole::ProgramChair)));
+        self::assertTrue($policy->create($this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs, 'ccs-chair@grc.test')));
+        self::assertFalse($policy->create($this->makeUser(UserRole::ProgramChair, null, 'unassigned-chair@grc.test')));
         self::assertFalse($policy->create($this->makeUser(UserRole::Dean)));
         self::assertFalse($policy->create($this->makeUser(UserRole::Student)));
     }
 
-    public function test_only_a_program_chair_may_update_a_curriculum(): void
+    public function test_creating_a_curriculum_requires_ownership_of_its_programs_college(): void
+    {
+        $policy = new CurriculumPolicy;
+        $program = Program::create([
+            'code' => 'BSED',
+            'name' => 'BS Education',
+            'college' => CollegeCode::Coe,
+            'status' => ProgramStatus::Active,
+        ]);
+
+        self::assertTrue($policy->createForProgram($this->makeUser(UserRole::ProgramChair, CollegeCode::Coe, 'coe-chair@grc.test'), $program));
+        self::assertFalse($policy->createForProgram($this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs, 'ccs-chair@grc.test'), $program));
+        self::assertFalse($policy->createForProgram($this->makeUser(UserRole::ProgramChair, null, 'unassigned-chair@grc.test'), $program));
+    }
+
+    public function test_updating_a_curriculum_requires_ownership_of_its_programs_college(): void
     {
         $policy = new CurriculumPolicy;
         $curriculum = $this->makeCurriculum(CurriculumStatus::Draft);
 
-        self::assertTrue($policy->update($this->makeUser(UserRole::ProgramChair), $curriculum));
+        self::assertTrue($policy->update($this->makeUser(UserRole::ProgramChair, CollegeCode::Ccs, 'ccs-chair@grc.test'), $curriculum));
+        self::assertFalse($policy->update($this->makeUser(UserRole::ProgramChair, CollegeCode::Cbae, 'cbae-chair@grc.test'), $curriculum));
+        self::assertFalse($policy->update($this->makeUser(UserRole::ProgramChair, null, 'unassigned-chair@grc.test'), $curriculum));
         self::assertFalse($policy->update($this->makeUser(UserRole::RegistrarHead), $curriculum));
     }
 
@@ -104,11 +128,14 @@ final class CurriculumPolicyTest extends TestCase
 
     public function test_only_dean_can_approve_as_dean(): void
     {
-        $dean = $this->makeUser(UserRole::Dean);
+        $curriculum = $this->makeCurriculum(CurriculumStatus::PendingDeanReview);
+        $dean = $this->makeUser(UserRole::Dean, CollegeCode::Ccs);
+        $otherCollegeDean = $this->makeUser(UserRole::Dean, CollegeCode::Cbae, 'cbae-dean@grc.test');
         $chair = $this->makeUser(UserRole::ProgramChair);
 
-        self::assertTrue((new CurriculumPolicy)->approveAsDean($dean));
-        self::assertFalse((new CurriculumPolicy)->approveAsDean($chair));
+        self::assertTrue((new CurriculumPolicy)->approveAsDean($dean, $curriculum));
+        self::assertFalse((new CurriculumPolicy)->approveAsDean($otherCollegeDean, $curriculum));
+        self::assertFalse((new CurriculumPolicy)->approveAsDean($chair, $curriculum));
     }
 
     public function test_only_executive_director_can_approve_as_executive(): void

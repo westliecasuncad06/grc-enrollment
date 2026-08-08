@@ -65,6 +65,7 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/academic-terms/{academicTerm}/enrollment-schedule',
             'PATCH api/v1/academic-terms/{academicTerm}/section-plan',
             'PATCH api/v1/curricula/{curriculum}',
+            'PATCH api/v1/curricula/{curriculum}/transition',
             'PATCH api/v1/enrollment-change-requests/{enrollmentChangeRequest}',
             'PATCH api/v1/enrollments/{enrollment}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
