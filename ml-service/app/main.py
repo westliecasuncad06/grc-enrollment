@@ -12,6 +12,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from app.schemas.health import HealthData, HealthResponse
+from app.schemas.section_demand import (
+    SectionDemandPredictionRequest,
+    SectionDemandPredictionResponse,
+)
+from app.services.section_demand import SectionDemandPredictor
 
 REQUEST_ID_HEADER = "X-Request-ID"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
@@ -65,6 +70,23 @@ async def health() -> HealthResponse:
             status="ok",
             schema_version="v1",
             generated_at=datetime.now(UTC),
+        )
+    )
+
+
+@app.post(
+    "/internal/v1/section-demand/predict",
+    response_model=SectionDemandPredictionResponse,
+    tags=["section-demand"],
+    summary="Predict section demand from aggregate historical observations",
+)
+async def predict_section_demand(
+    request: SectionDemandPredictionRequest,
+) -> SectionDemandPredictionResponse:
+    return SectionDemandPredictionResponse(
+        data=SectionDemandPredictor().predict(
+            request.data.observations,
+            request.data.targets,
         )
     )
 

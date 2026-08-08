@@ -42,6 +42,14 @@ import {
   SelectValue,
 } from "@/features/components/ui/select"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/features/components/ui/table"
+import {
   facultyAvailabilitiesQueryKey,
   facultySubjectPreferencesQueryKey,
   useFacultyAvailabilitiesQuery,
@@ -281,6 +289,21 @@ export function FacultyInputWorkspace() {
           </AlertDescription>
         </Alert>
       )}
+      <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/30 p-3">
+        <Button
+          type="button"
+          onClick={() => document.getElementById("availability-term")?.focus()}
+        >
+          Set availability window
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => document.getElementById("preference-subject")?.focus()}
+        >
+          Add subject preference
+        </Button>
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -439,17 +462,25 @@ export function FacultyInputWorkspace() {
               loadingLabel="Loading your availability windows…"
             >
               {(rows) => (
-                <ul
-                  className="grid gap-2"
-                  aria-label="Saved availability windows"
-                >
-                  {rows.map((row) => (
-                    <li
-                      key={row.id}
-                      className="flex items-center justify-between gap-2 rounded-md border p-3"
-                    >
-                      <span>{availabilitySummary(row)}</span>
-                      <span className="flex gap-2">
+                <div className="overflow-x-auto rounded-md border">
+                  <Table aria-label="Saved availability windows">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Day</TableHead>
+                        <TableHead>Availability window</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((row) => (
+                        <TableRow key={row.id}>
+                          <TableCell className="font-medium">{dayLabel(row.day_of_week)}</TableCell>
+                          <TableCell>
+                            {availabilitySummary(row).split(" · ")[1]}
+                            <span className="sr-only">{availabilitySummary(row)}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="inline-flex gap-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -470,10 +501,13 @@ export function FacultyInputWorkspace() {
                         >
                           Remove
                         </Button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </AsyncBoundary>
           </CardContent>
@@ -624,26 +658,35 @@ export function FacultyInputWorkspace() {
               loadingLabel="Loading your subject preferences…"
             >
               {(rows) => (
-                <ul
-                  className="grid gap-2"
-                  aria-label="Saved subject preferences"
-                >
-                  {rows.map((row) => {
+                <div className="overflow-x-auto rounded-md border">
+                  <Table aria-label="Saved subject preferences">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Rank</TableHead>
+                        <TableHead>Preferred subject</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((row) => {
                     const subject = subjects.find(
                       (item) => item.id === row.subject_id,
                     )
                     return (
-                      <li
-                        key={row.id}
-                        className="flex items-center justify-between gap-2 rounded-md border p-3"
-                      >
-                        <span>
-                          #{row.rank} ·{" "}
+                      <TableRow key={row.id}>
+                        <TableCell className="font-medium">#{row.rank}</TableCell>
+                        <TableCell>
                           {subject
                             ? `${subject.code} — ${subject.title}`
                             : "Subject unavailable"}
-                        </span>
-                        <span className="flex gap-2">
+                          <span className="sr-only">
+                            #{row.rank} · {subject
+                              ? `${subject.code} — ${subject.title}`
+                              : "Subject unavailable"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className="inline-flex gap-2">
                           <Button
                             type="button"
                             variant="outline"
@@ -664,11 +707,14 @@ export function FacultyInputWorkspace() {
                           >
                             Remove
                           </Button>
-                        </span>
-                      </li>
+                          </span>
+                        </TableCell>
+                      </TableRow>
                     )
                   })}
-                </ul>
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </AsyncBoundary>
           </CardContent>

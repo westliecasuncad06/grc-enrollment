@@ -35,6 +35,7 @@ use App\Http\Controllers\Api\V1\ProspectusController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
 use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
+use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\SubjectController;
@@ -238,6 +239,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/academic-terms/{academicTerm}/section-plan/release', [AcademicTermSectionPlanController::class, 'release'])->name('academic-term-section-plans.release');
             Route::post('/academic-terms/{academicTerm}/section-plan/auto-assign', [AcademicTermSectionPlanController::class, 'autoAssign'])->name('academic-term-section-plans.auto-assign');
             Route::post('/academic-terms/{academicTerm}/section-plan/submit', [AcademicTermSectionPlanController::class, 'submit'])->name('academic-term-section-plans.submit');
+            Route::post('/academic-terms/{academicTerm}/schedule-generation-runs', [ScheduleGenerationRunController::class, 'store'])->name('schedule-generation-runs.store');
+            Route::get('/schedule-generation-runs/{scheduleGenerationRun}', [ScheduleGenerationRunController::class, 'show'])->name('schedule-generation-runs.show');
         });
 
         // A Faculty member writes only their own availability/preferences —

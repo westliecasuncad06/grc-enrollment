@@ -38,6 +38,7 @@ final class DatabaseSeeder extends Seeder
             SectionSeeder::class,
             DemoEnrollmentSeeder::class,
             ProgramChairScheduleSampleSeeder::class,
+            SectionDemandObservationSeeder::class,
         ]);
     }
 }

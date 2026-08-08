@@ -47,6 +47,13 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
             'id', 'prediction_run_id', 'student_id', 'risk_probability', 'risk_band', 'explanations',
             'created_at', 'updated_at',
         ], Schema::getColumnListing('attrition_predictions'));
+
+        $this->assertTrue(Schema::hasTable('section_demand_observations'));
+        $this->assertSame([
+            'id', 'academic_term_id', 'program_id', 'curriculum_id', 'subject_id',
+            'college', 'year_level', 'cohort_size', 'enrolled_count', 'section_count',
+            'offered_capacity', 'source', 'created_at', 'updated_at',
+        ], Schema::getColumnListing('section_demand_observations'));
     }
 
     public function test_prediction_table_columns_have_the_approved_mariadb_metadata(): void
