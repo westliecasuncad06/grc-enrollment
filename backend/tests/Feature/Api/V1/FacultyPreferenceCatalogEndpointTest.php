@@ -6,10 +6,8 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
-use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
-use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Program;
@@ -43,11 +41,6 @@ final class FacultyPreferenceCatalogEndpointTest extends TestCase
 
     public function test_it_emits_a_fractional_unit_subject_verbatim(): void
     {
-        AcademicTerm::create([
-            'school_year' => '2026-2027',
-            'semester' => '1st',
-            'status' => AcademicTermStatus::SemesterOngoing,
-        ]);
         $program = Program::create([
             'code' => 'BSIT',
             'name' => 'Information Technology',
@@ -66,6 +59,7 @@ final class FacultyPreferenceCatalogEndpointTest extends TestCase
             'code' => 'LEAD 1',
             'title' => 'Leadership Seminar 1',
             'units' => 1.5,
+            'college' => CollegeCode::Ccs,
             'status' => SubjectStatus::Active,
         ]);
         CurriculumSubject::create([
