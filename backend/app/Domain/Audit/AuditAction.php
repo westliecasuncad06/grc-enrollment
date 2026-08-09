@@ -38,6 +38,10 @@ final class AuditAction
 
     public const FACULTY_CURRICULUM_SUBJECT_PREFERENCE_DELETED = 'faculty_curriculum_subject_preference.deleted';
 
+    public const FACULTY_SPECIALIZATION_CREATED = 'faculty_specialization.created';
+
+    public const FACULTY_SPECIALIZATION_DELETED = 'faculty_specialization.deleted';
+
     public const SECTION_CREATED = 'section.created';
 
     public const SECTION_UPDATED = 'section.updated';
@@ -161,6 +165,8 @@ final class AuditAction
             self::FACULTY_CURRICULUM_SUBJECT_PREFERENCE_CREATED,
             self::FACULTY_CURRICULUM_SUBJECT_PREFERENCE_UPDATED,
             self::FACULTY_CURRICULUM_SUBJECT_PREFERENCE_DELETED,
+            self::FACULTY_SPECIALIZATION_CREATED,
+            self::FACULTY_SPECIALIZATION_DELETED,
             self::SECTION_CREATED,
             self::SECTION_UPDATED,
             self::FACULTY_LOAD_THRESHOLD_UPDATED,

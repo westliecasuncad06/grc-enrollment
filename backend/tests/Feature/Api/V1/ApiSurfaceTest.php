@@ -20,6 +20,8 @@ final class ApiSurfaceTest extends TestCase
 
         $this->assertSame([
             'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
+            'DELETE api/v1/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}',
+            'DELETE api/v1/faculty-specializations/{facultySpecialization}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'GET|HEAD api/v1/academic-grades',
             'GET|HEAD api/v1/academic-record',
@@ -27,6 +29,8 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/academic-term-workflows',
             'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/academic-terms/{academicTerm}/enrollment-windows',
+            'GET|HEAD api/v1/academic-terms/{academicTerm}/faculty-load-report',
+            'GET|HEAD api/v1/academic-terms/{academicTerm}/schedule-generation-runs/latest',
             'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/class-rosters',
@@ -40,16 +44,22 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/enrollment-documents',
             'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
+            'GET|HEAD api/v1/faculty-curriculum-subject-preferences',
             'GET|HEAD api/v1/faculty-members',
+            'GET|HEAD api/v1/faculty-preference-catalog',
+            'GET|HEAD api/v1/faculty-specializations',
             'GET|HEAD api/v1/faculty-subject-preferences',
+            'GET|HEAD api/v1/faculty-teaching-history',
             'GET|HEAD api/v1/grade-slip',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/notifications',
             'GET|HEAD api/v1/payments',
             'GET|HEAD api/v1/programs',
+            'GET|HEAD api/v1/programs/{program}/current-curriculum-subjects',
             'GET|HEAD api/v1/prospectus',
             'GET|HEAD api/v1/queue-tickets',
             'GET|HEAD api/v1/room-options',
+            'GET|HEAD api/v1/schedule-generation-runs/{scheduleGenerationRun}',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/schedule-proposals/{scheduleProposal}/sections',
             'GET|HEAD api/v1/sections',
@@ -69,6 +79,8 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/enrollment-change-requests/{enrollmentChangeRequest}',
             'PATCH api/v1/enrollments/{enrollment}',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
+            'PATCH api/v1/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}',
+            'PATCH api/v1/faculty-members/{facultyMember}/workforce-profile',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'PATCH api/v1/notifications/{notification}/read',
             'PATCH api/v1/queue-tickets/{queueTicket}',
@@ -79,23 +91,28 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/academic-grades',
             'POST api/v1/academic-terms',
             'POST api/v1/academic-terms/{academicTerm}/archive-and-create-next',
+            'POST api/v1/academic-terms/{academicTerm}/schedule-generation-runs',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/auto-assign',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/release',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/submit',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
+            'POST api/v1/curricula/{curriculum}/subject-placements',
             'POST api/v1/enrollments',
             'POST api/v1/enrollments/{enrollment}/change-requests',
             'POST api/v1/enrollments/{enrollment}/payment',
             'POST api/v1/enrollments/{enrollment}/withdraw',
             'POST api/v1/faculty-availabilities',
+            'POST api/v1/faculty-curriculum-subject-preferences',
+            'POST api/v1/faculty-specializations',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
             'POST api/v1/student-profiles',
             'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
+            'PUT api/v1/academic-terms/{academicTerm}/faculty-load-threshold',
         ], $routes);
     }
 
@@ -150,6 +167,9 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.faculty-availabilities.store',
             'api.v1.faculty-availabilities.update',
             'api.v1.faculty-availabilities.destroy',
+            'api.v1.faculty-specializations.index',
+            'api.v1.faculty-specializations.store',
+            'api.v1.faculty-specializations.destroy',
             'api.v1.faculty-subject-preferences.index',
             'api.v1.faculty-subject-preferences.store',
             'api.v1.faculty-subject-preferences.update',
@@ -226,6 +246,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.faculty-availabilities.store',
             'api.v1.faculty-availabilities.update',
             'api.v1.faculty-availabilities.destroy',
+            'api.v1.faculty-specializations.store',
+            'api.v1.faculty-specializations.destroy',
             'api.v1.faculty-subject-preferences.store',
             'api.v1.faculty-subject-preferences.update',
             'api.v1.faculty-subject-preferences.destroy',
@@ -241,6 +263,10 @@ final class ApiSurfaceTest extends TestCase
         $readRoute = Route::getRoutes()->getByName('api.v1.faculty-availabilities.index');
         $this->assertNotNull($readRoute);
         $this->assertNotContains('role:faculty', $readRoute->gatherMiddleware());
+
+        $specializationsReadRoute = Route::getRoutes()->getByName('api.v1.faculty-specializations.index');
+        $this->assertNotNull($specializationsReadRoute);
+        $this->assertNotContains('role:faculty', $specializationsReadRoute->gatherMiddleware());
     }
 
     public function test_section_writes_are_gated_to_the_program_chair_role(): void

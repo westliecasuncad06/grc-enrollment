@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\V1\FacultyCurriculumSubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyLoadReportController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultyPreferenceCatalogController;
+use App\Http\Controllers\Api\V1\FacultySpecializationController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
@@ -95,6 +96,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/subject-offerings', [SubjectOfferingController::class, 'index'])->name('subject-offerings.index');
         Route::get('/academic-term-section-plans', [AcademicTermSectionPlanController::class, 'index'])->name('academic-term-section-plans.index');
         Route::get('/faculty-availabilities', [FacultyAvailabilityController::class, 'index'])->name('faculty-availabilities.index');
+        Route::get('/faculty-specializations', [FacultySpecializationController::class, 'index'])->name('faculty-specializations.index');
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
@@ -265,6 +267,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/faculty-availabilities', [FacultyAvailabilityController::class, 'store'])->name('faculty-availabilities.store');
             Route::patch('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'update'])->name('faculty-availabilities.update');
             Route::delete('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'destroy'])->name('faculty-availabilities.destroy');
+
+            Route::post('/faculty-specializations', [FacultySpecializationController::class, 'store'])->name('faculty-specializations.store');
+            Route::delete('/faculty-specializations/{facultySpecialization}', [FacultySpecializationController::class, 'destroy'])->name('faculty-specializations.destroy');
 
             Route::post('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'store'])->name('faculty-subject-preferences.store');
             Route::patch('/faculty-subject-preferences/{facultySubjectPreference}', [FacultySubjectPreferenceController::class, 'update'])->name('faculty-subject-preferences.update');
