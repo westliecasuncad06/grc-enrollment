@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Faculty\SpecializationProficiency;
 use App\Domain\Identity\FacultyEmploymentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
@@ -12,6 +13,7 @@ use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\FacultyAvailability;
 use App\Models\FacultyCurriculumSubjectPreference;
+use App\Models\FacultySpecialization;
 use App\Models\FacultyTeachingHistory;
 use App\Models\Section;
 use App\Models\Subject;
@@ -65,6 +67,18 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     /** @var array<string, true> */
     private array $curriculumSubjectSemesterKeys = [];
 
+    /** @var array<string, list<array{curriculum_id: int, semester: string, subject_ids: list<int>}>> */
+    private array $preferenceSlotsByCollege = [];
+
+    /** @var array<string, list<int>> */
+    private array $curriculumSubjectIdsByCollege = [];
+
+    /** @var array<int, string> */
+    private array $subjectCollegeById = [];
+
+    /** @var list<int> */
+    private array $unscopedSpecializationSubjectIds = [];
+
     private ?string $localPasswordHash = null;
 
     public function __construct(
@@ -111,6 +125,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             $this->initializeEmploymentTypes();
             $this->seedInactiveFacultyProfiles();
             $this->activateAllFacultyAccounts();
+            $this->seedCompleteFacultyProfiles();
 
             return $resolvedProfessorDirectory;
         });
@@ -558,6 +573,253 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     }
 
     /**
+     * Every local/test faculty identity receives a complete, reproducible
+     * profile. Workbook history stays intact as advisory evidence; profile
+     * choices are regenerated from the stable email hash so reseeds are
+     * idempotent while declared records remain untouched.
+     */
+    private function seedCompleteFacultyProfiles(): void
+    {
+        $faculty = User::query()
+            ->where('role', UserRole::Faculty->value)
+            ->orderBy('id')
+            ->get(['id', 'email', 'college', 'employment_type']);
+        $facultyIds = $faculty->pluck('id')->all();
+
+        FacultyCurriculumSubjectPreference::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->where('origin', 'workbook_seeded')
+            ->delete();
+        FacultyAvailability::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->where('origin', 'workbook_seeded')
+            ->delete();
+        FacultySpecialization::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->where('source', 'seeded')
+            ->delete();
+
+        $availabilitySlotsByProfessor = FacultyAvailability::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->get(['professor_id', 'day_of_week', 'starts_at_time'])
+            ->groupBy('professor_id')
+            ->map(static fn ($windows): array => $windows
+                ->mapWithKeys(static fn (FacultyAvailability $window): array => [
+                    $window->day_of_week.':'.$window->starts_at_time => true,
+                ])
+                ->all())
+            ->all();
+        $declaredPreferenceRows = FacultyCurriculumSubjectPreference::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->get(['professor_id', 'curriculum_id', 'semester', 'subject_id', 'rank'])
+            ->groupBy(static fn (FacultyCurriculumSubjectPreference $preference): string => implode(':', [
+                $preference->professor_id,
+                $preference->curriculum_id,
+                $preference->semester,
+            ]));
+        $declaredSpecializationSubjectIds = FacultySpecialization::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->get(['professor_id', 'subject_id'])
+            ->groupBy('professor_id')
+            ->map(static fn ($specializations): array => array_fill_keys(
+                $specializations->pluck('subject_id')->all(),
+                true,
+            ))
+            ->all();
+        $historySubjectIdsByProfessor = FacultyTeachingHistory::query()
+            ->whereIn('professor_id', $facultyIds)
+            ->orderByDesc('evidence_count')
+            ->orderBy('subject_id')
+            ->get(['professor_id', 'subject_id'])
+            ->groupBy('professor_id')
+            ->map(static fn ($history): array => array_values(array_unique($history->pluck('subject_id')->all())))
+            ->all();
+
+        $timestamp = now()->toDateTimeString();
+        $availabilityRows = [];
+        $preferenceRows = [];
+        $specializationRows = [];
+        foreach ($faculty as $professor) {
+            $hash = $this->profileSeedHash($professor->email);
+            $occupiedAvailabilitySlots = $availabilitySlotsByProfessor[$professor->id] ?? [];
+            foreach ($this->deterministicAvailabilityWindows($professor, $hash) as $window) {
+                $slot = $window['day_of_week'].':'.$window['starts_at_time'];
+                if (isset($occupiedAvailabilitySlots[$slot])) {
+                    continue;
+                }
+                $availabilityRows[] = $window + [
+                    'professor_id' => $professor->id,
+                    'origin' => 'workbook_seeded',
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ];
+                $occupiedAvailabilitySlots[$slot] = true;
+            }
+
+            $existingSpecializations = $declaredSpecializationSubjectIds[$professor->id] ?? [];
+            foreach ($this->deterministicSpecializations(
+                $professor,
+                $hash,
+                $historySubjectIdsByProfessor[$professor->id] ?? [],
+                $existingSpecializations,
+            ) as $specialization) {
+                $specializationRows[] = $specialization + [
+                    'professor_id' => $professor->id,
+                    'source' => 'seeded',
+                    'notes' => null,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ];
+            }
+
+            if ($professor->college === null) {
+                continue;
+            }
+            foreach ($this->preferenceSlotsByCollege[$professor->college->value] ?? [] as $slot) {
+                $preferenceKey = implode(':', [$professor->id, $slot['curriculum_id'], $slot['semester']]);
+                $existingPreferences = $declaredPreferenceRows[$preferenceKey] ?? collect();
+                $occupiedSubjectIds = array_fill_keys($existingPreferences->pluck('subject_id')->all(), true);
+                $occupiedRanks = array_fill_keys($existingPreferences->pluck('rank')->all(), true);
+                $candidateSubjectIds = array_values(array_filter(
+                    $slot['subject_ids'],
+                    static fn (int $subjectId): bool => ! isset($occupiedSubjectIds[$subjectId]),
+                ));
+                $count = min(count($candidateSubjectIds), 5 + ($hash % 4));
+                $rank = 1;
+                foreach ($this->deterministicSubjectIds($candidateSubjectIds, $count, $hash) as $subjectId) {
+                    while (isset($occupiedRanks[$rank])) {
+                        $rank++;
+                    }
+                    $preferenceRows[] = [
+                        'professor_id' => $professor->id,
+                        'curriculum_id' => $slot['curriculum_id'],
+                        'semester' => $slot['semester'],
+                        'subject_id' => $subjectId,
+                        'rank' => $rank,
+                        'origin' => 'workbook_seeded',
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
+                    ];
+                    $occupiedRanks[$rank] = true;
+                    $rank++;
+                }
+            }
+        }
+
+        foreach (array_chunk($availabilityRows, 500) as $rows) {
+            DB::table('faculty_availabilities')->insert($rows);
+        }
+        foreach (array_chunk($preferenceRows, 500) as $rows) {
+            DB::table('faculty_curriculum_subject_preferences')->insert($rows);
+        }
+        foreach (array_chunk($specializationRows, 500) as $rows) {
+            DB::table('faculty_specializations')->insert($rows);
+        }
+    }
+
+    /** @return list<array{day_of_week: int, starts_at_time: string, ends_at_time: string}> */
+    private function deterministicAvailabilityWindows(User $professor, int $hash): array
+    {
+        if ($professor->employment_type === FacultyEmploymentType::FullTime) {
+            return array_map(static fn (int $day): array => [
+                'day_of_week' => $day,
+                'starts_at_time' => '08:00:00',
+                'ends_at_time' => '17:00:00',
+            ], range(1, 5));
+        }
+
+        $days = $this->deterministicSubjectIds(range(1, 6), 3, $hash);
+
+        return array_map(static fn (int $day, int $index): array => [
+            'day_of_week' => $day,
+            'starts_at_time' => sprintf('%02d:00:00', 8 + (($hash >> ($index * 3)) % 6)),
+            'ends_at_time' => sprintf('%02d:00:00', 12 + (($hash >> ($index * 3)) % 6)),
+        ], $days, array_keys($days));
+    }
+
+    /**
+     * @param  list<int>  $historySubjectIds
+     * @param  array<int, true>  $existingSubjectIds
+     * @return list<array{subject_id: int, proficiency: string}>
+     */
+    private function deterministicSpecializations(
+        User $professor,
+        int $hash,
+        array $historySubjectIds,
+        array $existingSubjectIds,
+    ): array {
+        $desiredCount = 4 + ($hash % 7);
+        if ($professor->college === null) {
+            return array_map(static fn (int $subjectId): array => [
+                'subject_id' => $subjectId,
+                'proficiency' => SpecializationProficiency::Secondary->value,
+            ], $this->deterministicSubjectIds(
+                array_values(array_filter(
+                    $this->unscopedSpecializationSubjectIds,
+                    static fn (int $subjectId): bool => ! isset($existingSubjectIds[$subjectId]),
+                )),
+                $desiredCount,
+                $hash,
+            ));
+        }
+
+        $college = $professor->college->value;
+        $primarySubjectIds = array_values(array_filter(
+            $historySubjectIds,
+            fn (int $subjectId): bool => ($this->subjectCollegeById[$subjectId] ?? null) === $college
+                && ! isset($existingSubjectIds[$subjectId]),
+        ));
+        $primarySubjectIds = $this->deterministicSubjectIds($primarySubjectIds, $desiredCount, $hash);
+        $secondarySubjectIds = $this->deterministicSubjectIds(
+            array_values(array_filter(
+                $this->curriculumSubjectIdsByCollege[$college] ?? [],
+                static fn (int $subjectId): bool => ! isset($existingSubjectIds[$subjectId])
+                    && ! in_array($subjectId, $primarySubjectIds, true),
+            )),
+            $desiredCount - count($primarySubjectIds),
+            $hash,
+        );
+
+        return [
+            ...array_map(static fn (int $subjectId): array => [
+                'subject_id' => $subjectId,
+                'proficiency' => SpecializationProficiency::Primary->value,
+            ], $primarySubjectIds),
+            ...array_map(static fn (int $subjectId): array => [
+                'subject_id' => $subjectId,
+                'proficiency' => SpecializationProficiency::Secondary->value,
+            ], $secondarySubjectIds),
+        ];
+    }
+
+    /**
+     * @param  list<int>  $subjectIds
+     * @return list<int>
+     */
+    private function deterministicSubjectIds(array $subjectIds, int $count, int $hash): array
+    {
+        $subjectIds = array_values(array_unique($subjectIds));
+        sort($subjectIds);
+        if ($count === 0 || $subjectIds === []) {
+            return [];
+        }
+
+        $count = min($count, count($subjectIds));
+        $offset = $hash % count($subjectIds);
+        $selected = [];
+        for ($index = 0; $index < $count; $index++) {
+            $selected[] = $subjectIds[($offset + $index) % count($subjectIds)];
+        }
+
+        return $selected;
+    }
+
+    private function profileSeedHash(string $email): int
+    {
+        return (int) sprintf('%u', crc32($email));
+    }
+
+    /**
      * Preload the subject, curriculum, and placement data used by every
      * workbook row. This keeps the local-only seed deterministic without
      * issuing hundreds of repeated catalog queries.
@@ -565,13 +827,22 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     private function loadReferenceData(): void
     {
         $this->subjectsByCollegeAndCode = [];
-        foreach (Subject::query()->get(['id', 'college', 'code']) as $subject) {
+        $this->subjectCollegeById = [];
+        $this->curriculumSubjectIdsByCollege = [];
+        $subjects = Subject::query()->orderBy('college')->orderBy('code')->orderBy('id')->get(['id', 'college', 'code']);
+        $duplicateCodeCounts = $subjects->groupBy('code')->map->count();
+        foreach ($subjects as $subject) {
             if ($subject->college === null) {
                 continue;
             }
+            $this->subjectCollegeById[$subject->id] = $subject->college->value;
             $this->subjectsByCollegeAndCode[
                 $this->subjectKey($subject->college->value, $subject->code)
             ] = $subject;
+            if (preg_match('/^(?:NSTP|PATHFIT|PE)/iu', $subject->code) === 1
+                || ($duplicateCodeCounts[$subject->code] ?? 0) > 1) {
+                $this->unscopedSpecializationSubjectIds[] = $subject->id;
+            }
         }
 
         $curricula = Curriculum::query()
@@ -593,13 +864,42 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 
         $curriculumIds = $curricula->pluck('id');
         $this->curriculumSubjectSemesterKeys = [];
+        /** @var array<string, array<string, array{curriculum_id: int, semester: string, subject_ids: list<int>}>> */
+        $preferenceSlotsByCollegeAndKey = [];
         foreach (CurriculumSubject::query()
             ->whereIn('curriculum_id', $curriculumIds)
+            ->orderBy('curriculum_id')
+            ->orderBy('subject_id')
             ->get(['curriculum_id', 'subject_id', 'semester']) as $placement) {
             $this->curriculumSubjectSemesterKeys[
                 $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->semester
             ] = true;
+            $curriculum = $curricula->firstWhere('id', $placement->curriculum_id);
+            $college = $curriculum?->program?->college?->value;
+            if ($college === null || ($this->subjectCollegeById[$placement->subject_id] ?? null) !== $college) {
+                continue;
+            }
+            foreach (explode('|', $placement->semester) as $semester) {
+                $slotKey = $placement->curriculum_id.':'.$semester;
+                $slot = $preferenceSlotsByCollegeAndKey[$college][$slotKey] ?? [
+                    'curriculum_id' => $placement->curriculum_id,
+                    'semester' => $semester,
+                    'subject_ids' => [],
+                ];
+                $slot['subject_ids'][] = $placement->subject_id;
+                $preferenceSlotsByCollegeAndKey[$college][$slotKey] = $slot;
+                $this->curriculumSubjectIdsByCollege[$college][] = $placement->subject_id;
+            }
         }
+
+        $this->preferenceSlotsByCollege = [];
+        foreach ($preferenceSlotsByCollegeAndKey as $college => $slots) {
+            $this->preferenceSlotsByCollege[$college] = array_values($slots);
+        }
+        foreach ($this->curriculumSubjectIdsByCollege as $college => $subjectIds) {
+            $this->curriculumSubjectIdsByCollege[$college] = array_values(array_unique($subjectIds));
+        }
+        $this->unscopedSpecializationSubjectIds = array_values(array_unique($this->unscopedSpecializationSubjectIds));
 
     }
 

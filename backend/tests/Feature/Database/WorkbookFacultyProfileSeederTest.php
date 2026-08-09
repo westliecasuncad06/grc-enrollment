@@ -12,11 +12,16 @@ use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
+use App\Models\FacultyAvailability;
 use App\Models\FacultyCurriculumSubjectPreference;
+use App\Models\FacultySpecialization;
 use App\Models\FacultyTeachingHistory;
 use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
+use Database\Seeders\GrcCurriculumSeeder;
+use Database\Seeders\GrcSubjectCatalogSeeder;
+use Database\Seeders\ProgramSeeder;
 use Database\Seeders\WorkbookFacultyProfileSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -64,19 +69,17 @@ CSV;
             $placeholderFaculty->refresh();
             $this->assertDoesNotMatchRegularExpression('/\b(demo|testing)\b/iu', $placeholderFaculty->name);
             $this->assertTrue(Hash::check('password', $placeholderFaculty->password));
-            $this->assertSame(2, FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count());
+            $this->assertSame(8, FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count());
             $this->assertSame(2, FacultyTeachingHistory::query()->where('professor_id', $professor->id)->count());
-            $this->assertDatabaseHas('faculty_availabilities', [
-                'professor_id' => $professor->id,
-                'academic_term_id' => AcademicTerm::query()->where('semester', '2nd')->sole()->id,
-                'day_of_week' => 2,
-                'starts_at_time' => '13:00:00',
-                'ends_at_time' => '15:00:00',
-                'origin' => 'workbook_seeded',
-            ]);
+            $this->assertGreaterThan(0, FacultyAvailability::query()
+                ->where('professor_id', $professor->id)
+                ->where('origin', 'workbook_seeded')
+                ->count());
+            $this->assertSame(0, FacultyAvailability::query()->where('day_of_week', 7)->count());
 
             (new WorkbookFacultyProfileSeeder($fixturePath))->run();
             $this->assertSame(1, User::query()->where('email', $professor->email)->count());
+            $this->assertSame(8, FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count());
             $this->assertSame(2, FacultyTeachingHistory::query()->where('professor_id', $professor->id)->count());
         } finally {
             unlink($fixturePath);
@@ -162,6 +165,180 @@ CSV;
         } finally {
             @unlink($csvPath);
             @unlink($directoryPath);
+        }
+    }
+
+    public function test_every_professor_receives_availability_preferences_and_specializations(): void
+    {
+        $this->seed([
+            ProgramSeeder::class,
+            GrcSubjectCatalogSeeder::class,
+            GrcCurriculumSeeder::class,
+        ]);
+
+        (new WorkbookFacultyProfileSeeder(
+            base_path('database/seeders/data/curriculum-2024-2029-schedule-references.csv'),
+            base_path('../Subject And Prerequisuite/Professor_Department_List.md'),
+        ))->run();
+
+        $professors = User::query()
+            ->where('role', UserRole::Faculty->value)
+            ->orderBy('id')
+            ->get();
+
+        $this->assertGreaterThanOrEqual(145, $professors->count());
+        $this->assertCount(
+            145,
+            $professors->filter(
+                static fn (User $professor): bool => str_starts_with($professor->email, 'faculty.list.')
+                    && str_ends_with($professor->email, '@grc.test'),
+            ),
+        );
+        $this->assertSame(0, FacultyAvailability::query()->where('day_of_week', 7)->count());
+
+        $generalEducationSubjectIds = Subject::query()
+            ->select('code')
+            ->groupBy('code')
+            ->havingRaw('count(distinct college) > 1')
+            ->pluck('code');
+
+        foreach ($professors as $professor) {
+            $this->assertGreaterThan(
+                0,
+                FacultyAvailability::query()
+                    ->where('professor_id', $professor->id)
+                    ->where('origin', 'workbook_seeded')
+                    ->count(),
+                "{$professor->email} is missing reusable workbook availability.",
+            );
+            $this->assertGreaterThanOrEqual(
+                4,
+                FacultySpecialization::query()->where('professor_id', $professor->id)->count(),
+                "{$professor->email} is missing seeded specializations.",
+            );
+
+            if ($professor->college === null) {
+                $this->assertSame(
+                    0,
+                    FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count(),
+                    "{$professor->email} must not receive college curriculum preferences.",
+                );
+                $this->assertSame(
+                    0,
+                    FacultySpecialization::query()
+                        ->where('professor_id', $professor->id)
+                        ->whereHas('subject', fn ($query) => $query
+                            ->whereNotLike('code', 'NSTP%')
+                            ->whereNotLike('code', 'PATHFIT%')
+                            ->whereNotLike('code', 'PE%')
+                            ->whereNotIn('code', $generalEducationSubjectIds))
+                        ->count(),
+                    "{$professor->email} must only receive PE, NSTP, or general-education specializations.",
+                );
+
+                continue;
+            }
+
+            $curricula = Curriculum::query()
+                ->whereHas('program', fn ($query) => $query->where('college', $professor->college->value))
+                ->get();
+            foreach ($curricula as $curriculum) {
+                foreach (['1st', '2nd'] as $semester) {
+                    $availableSubjectCount = CurriculumSubject::query()
+                        ->where('curriculum_id', $curriculum->id)
+                        ->where(function ($query) use ($semester): void {
+                            $query->where('semester', $semester)
+                                ->orWhere('semester', '1st|2nd');
+                        })
+                        ->count();
+                    if ($availableSubjectCount === 0) {
+                        continue;
+                    }
+
+                    $preferences = FacultyCurriculumSubjectPreference::query()
+                        ->where('professor_id', $professor->id)
+                        ->where('curriculum_id', $curriculum->id)
+                        ->where('semester', $semester)
+                        ->where('origin', 'workbook_seeded')
+                        ->orderBy('rank')
+                        ->get();
+
+                    $this->assertGreaterThanOrEqual(
+                        min(5, $availableSubjectCount),
+                        $preferences->count(),
+                        "{$professor->email} is missing {$curriculum->name} {$semester} preferences.",
+                    );
+                    $this->assertLessThanOrEqual(min(8, $availableSubjectCount), $preferences->count());
+                    $this->assertSame(range(1, $preferences->count()), $preferences->pluck('rank')->all());
+                }
+            }
+        }
+    }
+
+    public function test_it_preserves_every_declared_profile_record_when_completing_a_faculty_profile(): void
+    {
+        $this->seedReferenceCatalog();
+        $professor = User::create([
+            'name' => 'Declared Profile Faculty',
+            'email' => 'declared.profile.faculty@grc.test',
+            'password' => 'previous-local-password',
+            'role' => UserRole::Faculty,
+            'college' => CollegeCode::Ccs,
+            'status' => UserStatus::Active,
+        ]);
+        $curriculum = Curriculum::query()
+            ->whereHas('program', fn ($query) => $query->where('college', CollegeCode::Ccs->value))
+            ->sole();
+        $subjects = Subject::query()->where('college', CollegeCode::Ccs->value)->orderBy('id')->get();
+        FacultyAvailability::create([
+            'professor_id' => $professor->id,
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '12:00:00',
+            'origin' => 'declared',
+        ]);
+        FacultyCurriculumSubjectPreference::create([
+            'professor_id' => $professor->id,
+            'curriculum_id' => $curriculum->id,
+            'semester' => '1st',
+            'subject_id' => $subjects->first()->id,
+            'rank' => 1,
+            'origin' => 'declared',
+        ]);
+        foreach ($subjects->take(7) as $subject) {
+            FacultySpecialization::create([
+                'professor_id' => $professor->id,
+                'subject_id' => $subject->id,
+                'proficiency' => 'primary',
+                'source' => 'declared',
+            ]);
+        }
+        $fixturePath = $this->writeFixture();
+
+        try {
+            (new WorkbookFacultyProfileSeeder($fixturePath))->run();
+
+            $this->assertDatabaseHas('faculty_availabilities', [
+                'professor_id' => $professor->id,
+                'day_of_week' => 1,
+                'starts_at_time' => '08:00:00',
+                'ends_at_time' => '12:00:00',
+                'origin' => 'declared',
+            ]);
+            $this->assertDatabaseHas('faculty_curriculum_subject_preferences', [
+                'professor_id' => $professor->id,
+                'curriculum_id' => $curriculum->id,
+                'semester' => '1st',
+                'subject_id' => $subjects->first()->id,
+                'rank' => 1,
+                'origin' => 'declared',
+            ]);
+            $this->assertSame(7, FacultySpecialization::query()
+                ->where('professor_id', $professor->id)
+                ->where('source', 'declared')
+                ->count());
+        } finally {
+            @unlink($fixturePath);
         }
     }
 
