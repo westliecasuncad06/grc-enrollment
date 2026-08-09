@@ -121,6 +121,33 @@ final class FacultyAvailabilitiesEndpointTest extends TestCase
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
     }
 
+    public function test_declaring_over_a_seeded_slot_replaces_it(): void
+    {
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.seeded-slot@grc.test');
+        FacultyAvailability::create([
+            'professor_id' => $professor->id,
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '12:00:00',
+            'origin' => 'workbook_seeded',
+        ]);
+
+        $this->withToken($token)->postJson('/api/v1/faculty-availabilities', [
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '17:00:00',
+        ])->assertCreated();
+
+        $this->assertDatabaseCount('faculty_availabilities', 1);
+        $this->assertDatabaseHas('faculty_availabilities', [
+            'professor_id' => $professor->id,
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '17:00:00',
+            'origin' => 'declared',
+        ]);
+    }
+
     public function test_a_faculty_member_sees_only_their_own_availability_in_the_index(): void
     {
         [$professorA, $tokenA] = $this->tokenFor(UserRole::Faculty, 'professor.a@grc.test');

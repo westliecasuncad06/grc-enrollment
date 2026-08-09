@@ -20,6 +20,13 @@ final class CreateFacultyAvailability
     public function execute(User $actor, array $validatedData, AuditRequestContext $context): FacultyAvailability
     {
         return DB::transaction(function () use ($actor, $validatedData, $context): FacultyAvailability {
+            FacultyAvailability::query()
+                ->where('professor_id', $actor->id)
+                ->where('day_of_week', $validatedData['day_of_week'])
+                ->where('starts_at_time', $validatedData['starts_at_time'])
+                ->where('origin', 'workbook_seeded')
+                ->delete();
+
             $availability = FacultyAvailability::create([
                 'professor_id' => $actor->id,
                 'day_of_week' => $validatedData['day_of_week'],

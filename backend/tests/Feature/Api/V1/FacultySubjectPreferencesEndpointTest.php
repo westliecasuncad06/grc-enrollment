@@ -7,8 +7,8 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
-use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
@@ -216,5 +216,60 @@ final class FacultySubjectPreferencesEndpointTest extends TestCase
         $this->withToken($token)->getJson('/api/v1/faculty-teaching-history')
             ->assertOk()->assertJsonCount(0, 'data');
         $this->assertSame(1, FacultyCurriculumSubjectPreference::query()->count());
+    }
+
+    public function test_omitting_rank_appends_after_the_seeded_preferences(): void
+    {
+        $program = Program::create([
+            'code' => 'BSIT',
+            'name' => 'Information Technology',
+            'college' => CollegeCode::Ccs,
+            'status' => ProgramStatus::Active,
+        ]);
+        $curriculum = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => '2024–2029',
+            'effective_school_year' => '2024-2029',
+            'effective_start_year' => 2024,
+            'effective_end_year' => 2029,
+            'status' => CurriculumStatus::Active,
+        ]);
+        $subjects = collect(['CS301', 'CS302', 'CS303', 'CS304'])->map(
+            fn (string $code): Subject => $this->makeSubject($code),
+        );
+        $subjects->each(fn (Subject $subject) => CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $subject->id,
+            'year_level' => 3,
+            'semester' => '1st',
+            'is_required' => true,
+        ]));
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.omitting-rank@grc.test');
+        $professor->update(['college' => CollegeCode::Ccs]);
+
+        $subjects->take(3)->each(fn (Subject $subject, int $index) => FacultyCurriculumSubjectPreference::create([
+            'professor_id' => $professor->id,
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $subject->id,
+            'semester' => '1st',
+            'rank' => $index + 1,
+            'origin' => 'workbook_seeded',
+        ]));
+
+        $response = $this->withToken($token)->postJson('/api/v1/faculty-curriculum-subject-preferences', [
+            'curriculum_id' => $curriculum->id,
+            'semester' => '1st',
+            'subject_id' => $subjects->last()->id,
+        ]);
+
+        $response->assertCreated()->assertJsonPath('data.rank', 4);
+        $this->assertDatabaseHas('faculty_curriculum_subject_preferences', [
+            'professor_id' => $professor->id,
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $subjects->last()->id,
+            'semester' => '1st',
+            'rank' => 4,
+            'origin' => 'declared',
+        ]);
     }
 }

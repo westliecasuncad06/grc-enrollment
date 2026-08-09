@@ -14,13 +14,22 @@ final class CreateFacultyCurriculumSubjectPreference
 {
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
-    /** @param array{curriculum_id: int, subject_id: int, semester: string, rank: int} $validatedData */
+    /** @param array{curriculum_id: int, subject_id: int, semester: string, rank?: int} $validatedData */
     public function execute(User $actor, array $validatedData, AuditRequestContext $context): FacultyCurriculumSubjectPreference
     {
         return DB::transaction(function () use ($actor, $validatedData, $context): FacultyCurriculumSubjectPreference {
+            $rank = $validatedData['rank'] ?? ((int) FacultyCurriculumSubjectPreference::query()
+                ->where('professor_id', $actor->id)
+                ->where('curriculum_id', $validatedData['curriculum_id'])
+                ->where('semester', $validatedData['semester'])
+                ->max('rank') + 1);
+
             $preference = FacultyCurriculumSubjectPreference::create([
                 'professor_id' => $actor->id,
-                ...$validatedData,
+                'curriculum_id' => $validatedData['curriculum_id'],
+                'subject_id' => $validatedData['subject_id'],
+                'semester' => $validatedData['semester'],
+                'rank' => $rank,
                 'origin' => 'declared',
             ]);
             $preference->refresh();

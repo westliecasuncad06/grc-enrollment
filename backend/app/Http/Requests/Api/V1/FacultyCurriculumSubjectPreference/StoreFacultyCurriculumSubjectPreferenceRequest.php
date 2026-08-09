@@ -28,7 +28,7 @@ final class StoreFacultyCurriculumSubjectPreferenceRequest extends FormRequest
                     ->where('semester', $this->input('semester'))),
             ],
             'rank' => [
-                'required', 'integer', 'min:1',
+                'sometimes', 'integer', 'min:1',
                 Rule::unique('faculty_curriculum_subject_preferences')->where(fn ($query) => $query
                     ->where('professor_id', $this->user()?->id)
                     ->where('curriculum_id', $this->input('curriculum_id'))

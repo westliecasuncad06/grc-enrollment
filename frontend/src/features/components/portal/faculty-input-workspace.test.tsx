@@ -93,7 +93,7 @@ function renderWorkspace() {
     },
   })
 }
-function stubData(fetchMock: ReturnType<typeof vi.fn>) {
+function stubData(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
   fetchMock.mockImplementation((input, init) => {
     const url = requestUrl(input)
     if (url.endsWith("/academic-terms"))
@@ -184,6 +184,51 @@ describe("FacultyInputWorkspace", () => {
     expect(
       screen.queryByRole("option", { name: "Sunday" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("renders an availability day validation error from the API", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      const url = requestUrl(input)
+      if (url.endsWith("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (url.endsWith("/faculty-preference-catalog"))
+        return Promise.resolve(new Response(JSON.stringify(catalog)))
+      if (
+        url.endsWith("/faculty-availabilities") &&
+        (!init?.method || init.method === "GET")
+      )
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      if (url.endsWith("/faculty-availabilities") && init?.method === "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "Invalid",
+                errors: { day_of_week: ["Choose an available teaching day."] },
+                request_id: "request-day-1",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      if (url.endsWith("/faculty-curriculum-subject-preferences"))
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      if (url.endsWith("/faculty-teaching-history"))
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWorkspace()
+    await screen.findByRole("button", { name: "Save availability" })
+
+    await user.type(screen.getByLabelText("Start time"), "08:00:00")
+    await user.type(screen.getByLabelText("End time"), "10:00:00")
+    await user.click(screen.getByRole("button", { name: "Save availability" }))
+
+    expect(
+      await screen.findByText("Choose an available teaching day."),
+    ).toBeInTheDocument()
   })
 
   it("uses the searchable curriculum subject picker and maps validation to rank", async () => {

@@ -324,7 +324,11 @@ export function FacultyInputWorkspace() {
               }
             >
               <FieldGroup>
-                <Field>
+                <Field
+                  data-invalid={Boolean(
+                    availabilityForm.formState.errors.day_of_week,
+                  )}
+                >
                   <FieldLabel htmlFor="availability-day">Day</FieldLabel>
                   <Controller
                     control={availabilityForm.control}
@@ -348,6 +352,9 @@ export function FacultyInputWorkspace() {
                       </Select>
                     )}
                   />
+                  <FieldError>
+                    {availabilityForm.formState.errors.day_of_week?.message}
+                  </FieldError>
                 </Field>
                 <Field
                   data-invalid={Boolean(
