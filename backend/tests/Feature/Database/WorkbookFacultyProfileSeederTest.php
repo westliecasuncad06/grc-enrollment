@@ -59,7 +59,7 @@ CSV;
             $professor = User::query()->where('name', 'Henry N. Corrales')->sole();
             $this->assertTrue(Hash::check('password', $professor->password));
             $legacyFaculty = User::query()->where('email', 'faculty.ccs.corrales@grc.test')->sole();
-            $this->assertSame(UserStatus::Disabled, $legacyFaculty->status);
+            $this->assertSame(UserStatus::Active, $legacyFaculty->status);
             $this->assertTrue(Hash::check('password', $legacyFaculty->password));
             $placeholderFaculty->refresh();
             $this->assertDoesNotMatchRegularExpression('/\b(demo|testing)\b/iu', $placeholderFaculty->name);
@@ -83,7 +83,7 @@ CSV;
         }
     }
 
-    public function test_it_assigns_a_local_employment_type_and_creates_named_inactive_faculty_accounts(): void
+    public function test_it_assigns_a_local_employment_type_and_creates_named_active_faculty_accounts(): void
     {
         $this->seedReferenceCatalog();
         $fixturePath = $this->writeFixture([
@@ -107,10 +107,61 @@ CSV;
                 'name' => 'Marian S. Villanueva',
                 'college' => CollegeCode::Ccs->value,
                 'employment_type' => 'part_time',
-                'status' => UserStatus::Disabled->value,
+                'status' => UserStatus::Active->value,
             ]);
         } finally {
             @unlink($fixturePath);
+        }
+    }
+
+    public function test_it_creates_active_accounts_from_the_canonical_professor_department_list_and_rewrites_the_directory(): void
+    {
+        $this->seedReferenceCatalog();
+        $existingFaculty = User::create([
+            'name' => 'Existing Faculty',
+            'email' => 'existing.faculty@grc.test',
+            'password' => 'previous-local-password',
+            'role' => UserRole::Faculty,
+            'college' => CollegeCode::Ccs,
+            'status' => UserStatus::Disabled,
+        ]);
+        $csvPath = $this->writeFixture();
+        $directoryPath = $this->writeProfessorDepartmentListFixture();
+
+        try {
+            (new WorkbookFacultyProfileSeeder($csvPath, $directoryPath))->run();
+
+            $scopedProfessor = User::query()->where('name', 'Anabel Reyes')->sole();
+            $this->assertSame(CollegeCode::Ccs, $scopedProfessor->college);
+            $this->assertSame(UserStatus::Active, $scopedProfessor->status);
+            $this->assertTrue(Hash::check('password', $scopedProfessor->password));
+
+            $coach = User::query()->where('name', 'Ana Coach')->sole();
+            $this->assertNull($coach->college);
+            $this->assertSame(UserStatus::Active, $coach->status);
+
+            $unidentified = User::query()->where('name', 'Sofia Maestro')->sole();
+            $this->assertStringContainsString(' ', $unidentified->name);
+            $this->assertSame(UserStatus::Active, $unidentified->status);
+
+            $existingFaculty->refresh();
+            $this->assertSame(UserStatus::Active, $existingFaculty->status);
+
+            $directory = file_get_contents($directoryPath);
+            self::assertIsString($directory);
+            $this->assertStringContainsString('| Professor Name | Email | Department |', $directory);
+            $this->assertStringContainsString($scopedProfessor->email, $directory);
+            $this->assertStringContainsString('CCS', $directory);
+            $this->assertStringNotContainsString('password', strtolower($directory));
+
+            (new WorkbookFacultyProfileSeeder($csvPath, $directoryPath))->run();
+            $rewrittenDirectory = file_get_contents($directoryPath);
+            self::assertIsString($rewrittenDirectory);
+            $this->assertStringContainsString($scopedProfessor->email, $rewrittenDirectory);
+            $this->assertStringContainsString('| Ana Coach |', $rewrittenDirectory);
+        } finally {
+            @unlink($csvPath);
+            @unlink($directoryPath);
         }
     }
 
@@ -193,6 +244,22 @@ CSV;
             $lines[] = implode(',', [$college, $program, 1, $semester, $code, $day, $start, $end, '3A', 'F2F', $professor, 100 + $index, '']);
         }
         file_put_contents($path, implode(PHP_EOL, $lines).PHP_EOL);
+
+        return $path;
+    }
+
+    private function writeProfessorDepartmentListFixture(): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'grc_professor_directory_').'.md';
+        file_put_contents($path, <<<'MARKDOWN'
+# Professor and Department List
+
+| No. | Professor Name | Department |
+|---:|---|---|
+| 1 | Dr. Anabel Reyes | CCS |
+| 2 | Ana Coach | Coaches |
+| 3 | Maestro | Unidentified |
+MARKDOWN);
 
         return $path;
     }

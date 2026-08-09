@@ -34,6 +34,8 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 {
     private const CSV_PATH = __DIR__.'/data/curriculum-2024-2029-schedule-references.csv';
 
+    private const PROFESSOR_DIRECTORY_PATH = __DIR__.'/../../../Subject And Prerequisuite/Professor_Department_List.md';
+
     private const PASSWORD = 'password';
 
     private const FULL_TIME_PREFERENCE_THRESHOLD = 6;
@@ -68,16 +70,23 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 
     private ?string $localPasswordHash = null;
 
-    public function __construct(private readonly ?string $csvPathOverride = null) {}
+    public function __construct(
+        private readonly ?string $csvPathOverride = null,
+        private readonly ?string $professorDirectoryPathOverride = null,
+    ) {}
 
     public function run(): void
     {
         $this->guardEnvironment();
         $rows = $this->readRows($this->csvPathOverride ?? self::CSV_PATH);
         $profiles = $this->profileRows($rows);
+        $professorDirectoryPath = $this->professorDirectoryPath();
+        $professorDirectoryEntries = $professorDirectoryPath === null
+            ? []
+            : $this->readProfessorDirectory($professorDirectoryPath);
         $this->loadReferenceData();
 
-        DB::transaction(function () use ($profiles): void {
+        $resolvedProfessorDirectory = DB::transaction(function () use ($profiles, $professorDirectoryEntries): array {
             /** @var array<string, User> $usersByProfile */
             $usersByProfile = [];
             foreach ($profiles as $profileKey => $profile) {
@@ -96,13 +105,168 @@ final class WorkbookFacultyProfileSeeder extends Seeder
                 );
             }
 
+            $resolvedProfessorDirectory = $this->synchronizeProfessorDirectory(
+                $professorDirectoryEntries,
+            );
             $this->deactivateLegacyLocalFaculty(array_values($usersByProfile));
             $this->replaceWorkbookEvidence($profiles, $usersByProfile);
             $this->ensureLocalFacultyAccounts();
             $this->initializeEmploymentTypes();
             $this->seedInactiveFacultyProfiles();
-            $this->writeAccountReport();
+            $this->activateAllFacultyAccounts();
+
+            return $resolvedProfessorDirectory;
         });
+
+        $this->writeAccountReport();
+        if ($professorDirectoryPath !== null) {
+            $this->writeProfessorDirectory(
+                $professorDirectoryPath,
+                $resolvedProfessorDirectory,
+            );
+        }
+    }
+
+    /**
+     * @return list<array{number: ?int, name: string, email: ?string, department: string}>
+     */
+    private function readProfessorDirectory(string $path): array
+    {
+        if (! is_file($path)) {
+            throw new RuntimeException("WorkbookFacultyProfileSeeder could not find its professor directory at {$path}");
+        }
+
+        $entries = [];
+        foreach (preg_split('/\R/u', File::get($path)) ?: [] as $line) {
+            if (preg_match('/^\|\s*(\d+)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*$/u', $line, $matches) === 1) {
+                $number = (int) $matches[1];
+                $name = trim($matches[2]);
+                $email = null;
+                $department = trim($matches[3]);
+            } elseif (preg_match('/^\|\s*(.*?)\s*\|\s*([^|\s]+@grc\.test)\s*\|\s*(.*?)\s*\|\s*$/iu', $line, $matches) === 1) {
+                $number = null;
+                $name = trim($matches[1]);
+                $email = strtolower(trim($matches[2]));
+                $department = trim($matches[3]);
+            } else {
+                continue;
+            }
+            if ($name === '' || $department === '') {
+                continue;
+            }
+            $entries[] = [
+                'number' => $number,
+                'name' => $name,
+                'email' => $email,
+                'department' => $department,
+            ];
+        }
+
+        return $entries;
+    }
+
+    private function professorDirectoryPath(): ?string
+    {
+        if ($this->professorDirectoryPathOverride !== null) {
+            return $this->professorDirectoryPathOverride;
+        }
+
+        return app()->environment('local') && is_file(self::PROFESSOR_DIRECTORY_PATH)
+            ? self::PROFESSOR_DIRECTORY_PATH
+            : null;
+    }
+
+    /**
+     * @param  list<array{number: ?int, name: string, email: ?string, department: string}>  $entries
+     * @return list<array{name: string, email: string, department: string}>
+     */
+    private function synchronizeProfessorDirectory(array $entries): array
+    {
+        $resolvedEntries = [];
+        foreach ($entries as $entry) {
+            $college = CollegeCode::tryFrom(strtolower($entry['department']));
+            $name = $this->professorDirectoryDisplayName($entry['name']);
+            $email = $entry['email'] ?? $this->professorDirectoryEmail($college, $name, $entry);
+            $professor = User::firstOrNew(['email' => $email]);
+            $professor->fill([
+                'name' => $name,
+                'password' => $this->localPasswordHash(),
+                'role' => UserRole::Faculty,
+                'college' => $college,
+                'status' => UserStatus::Active,
+            ]);
+            if ($professor->employment_type === null) {
+                $professor->employment_type = FacultyEmploymentType::PartTime;
+            }
+            $professor->save();
+            $resolvedEntries[] = [
+                'name' => $professor->name,
+                'email' => $professor->email,
+                'department' => $entry['department'],
+            ];
+        }
+
+        return $resolvedEntries;
+    }
+
+    private function professorDirectoryDisplayName(string $sourceName): string
+    {
+        $withoutHonorific = trim((string) preg_replace(
+            '/^(?:mr|mrs|ms|dr|atty)\.?\s+/iu',
+            '',
+            $sourceName,
+        ));
+        $tokens = preg_split('/\s+/u', $withoutHonorific) ?: [];
+        $firstToken = str_replace('.', '', $tokens[0] ?? '');
+
+        if (count($tokens) >= 2 && mb_strlen($firstToken) > 2) {
+            return $withoutHonorific;
+        }
+
+        return WorkbookFacultyProfileName::displayName([$sourceName]);
+    }
+
+    /**
+     * @param  array{number: ?int, name: string, email: ?string, department: string}  $entry
+     */
+    private function professorDirectoryEmail(?CollegeCode $college, string $name, array $entry): string
+    {
+        $scope = $college?->value ?? 'unassigned';
+        $key = $entry['department'].'|'.$entry['name'];
+
+        return 'faculty.list.'.$scope.'.'.Str::slug($name).'.'.substr(sha1($key), 0, 8).'@grc.test';
+    }
+
+    private function activateAllFacultyAccounts(): void
+    {
+        User::query()
+            ->where('role', UserRole::Faculty->value)
+            ->update(['status' => UserStatus::Active->value]);
+    }
+
+    /**
+     * @param  list<array{name: string, email: string, department: string}>  $entries
+     */
+    private function writeProfessorDirectory(string $path, array $entries): void
+    {
+        $lines = [
+            '# Professor and Department List',
+            '',
+            '| Professor Name | Email | Department |',
+            '|---|---|---|',
+        ];
+        foreach ($entries as $entry) {
+            $lines[] = sprintf(
+                '| %s | %s | %s |',
+                $entry['name'],
+                $entry['email'],
+                $entry['department'],
+            );
+        }
+        $lines[] = '';
+        $lines[] = '**Total professors:** '.count($entries);
+
+        File::put($path, implode(PHP_EOL, $lines).PHP_EOL);
     }
 
     /** @return list<array<string, string>> */
