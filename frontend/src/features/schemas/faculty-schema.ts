@@ -81,3 +81,103 @@ export type FacultySubjectPreference = z.infer<
 export type FacultySubjectPreferenceInput = z.infer<
   typeof facultySubjectPreferenceInputSchema
 >
+
+const curriculumSubjectSchema = z
+  .object({
+    id: z.number().int().positive(),
+    code: z.string().min(1),
+    title: z.string().min(1),
+    units: z.number().int().positive(),
+  })
+  .strict()
+
+export const facultyPreferenceCatalogEntrySchema = z
+  .object({
+    curriculum_id: z.number().int().positive(),
+    program_id: z.number().int().positive(),
+    program_code: z.string().min(1),
+    program_name: z.string().min(1),
+    curriculum_name: z.string().min(1),
+    effective_school_year: z.string().min(1),
+    version_label: z.enum(["new", "old"]),
+    semesters: z
+      .array(
+        z
+          .object({
+            semester: z.enum(["1st", "2nd"]),
+            subjects: z.array(curriculumSubjectSchema),
+          })
+          .strict(),
+      )
+      .length(2),
+  })
+  .strict()
+
+export const facultyPreferenceCatalogEnvelopeSchema = z
+  .object({ data: z.array(facultyPreferenceCatalogEntrySchema) })
+  .strict()
+
+export const facultyCurriculumSubjectPreferenceSchema = z
+  .object({
+    type: z.literal("faculty_curriculum_subject_preference"),
+    id: z.number().int().positive(),
+    professor_id: z.number().int().positive(),
+    curriculum_id: z.number().int().positive(),
+    subject_id: z.number().int().positive(),
+    semester: z.enum(["1st", "2nd"]),
+    rank: z.number().int().positive(),
+    origin: z.enum(["declared", "workbook_seeded"]),
+  })
+  .strict()
+
+export const facultyCurriculumSubjectPreferencesEnvelopeSchema = z
+  .object({ data: z.array(facultyCurriculumSubjectPreferenceSchema) })
+  .strict()
+
+export const facultyCurriculumSubjectPreferenceEnvelopeSchema = z
+  .object({ data: facultyCurriculumSubjectPreferenceSchema })
+  .strict()
+
+export const facultyCurriculumSubjectPreferenceInputSchema = z
+  .object({
+    curriculum_id: z.number().int().positive("Select a curriculum."),
+    semester: z.enum(["1st", "2nd"]),
+    subject_id: z.number().int().positive("Select a subject."),
+    rank: z.number().int().positive("Rank must be at least 1."),
+  })
+  .strict()
+
+export const facultyTeachingHistorySchema = z
+  .object({
+    type: z.literal("faculty_teaching_history"),
+    id: z.number().int().positive(),
+    professor_id: z.number().int().positive(),
+    curriculum_id: z.number().int().positive(),
+    subject_id: z.number().int().positive(),
+    semester: z.enum(["1st", "2nd"]),
+    source_kind: z.string().min(1),
+    source_workbook: z.string().min(1),
+    raw_alias: z.string().nullable(),
+    evidence_count: z.number().int().positive(),
+    subject_code: z.string().nullable(),
+    subject_title: z.string().nullable(),
+    curriculum_name: z.string().nullable(),
+  })
+  .strict()
+
+export const facultyTeachingHistoriesEnvelopeSchema = z
+  .object({ data: z.array(facultyTeachingHistorySchema) })
+  .strict()
+
+export type FacultyPreferenceCatalogEntry = z.infer<
+  typeof facultyPreferenceCatalogEntrySchema
+>
+export type FacultyCurriculumSubjectPreference = z.infer<
+  typeof facultyCurriculumSubjectPreferenceSchema
+>
+export type FacultyCurriculumSubjectPreferenceInput = z.infer<
+  typeof facultyCurriculumSubjectPreferenceInputSchema
+>
+export type FacultyTeachingHistory = z.infer<
+  typeof facultyTeachingHistorySchema
+>

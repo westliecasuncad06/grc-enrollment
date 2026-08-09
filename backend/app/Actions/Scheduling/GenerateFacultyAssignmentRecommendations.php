@@ -12,7 +12,9 @@ use App\Domain\Scheduling\SectionModality;
 use App\Models\CurriculumSubject;
 use App\Models\FacultyAssignmentRecommendation;
 use App\Models\FacultyAvailability;
+use App\Models\FacultyCurriculumSubjectPreference;
 use App\Models\FacultySubjectPreference;
+use App\Models\FacultyTeachingHistory;
 use App\Models\RoomCatalogEntry;
 use App\Models\ScheduleGenerationRun;
 use App\Models\Section;
@@ -56,11 +58,22 @@ final class GenerateFacultyAssignmentRecommendations
             ->where('college', $run->college)
             ->orderBy('id')
             ->get(['id']);
-        $preferences = FacultySubjectPreference::query()
+        $legacyPreferences = FacultySubjectPreference::query()
             ->where('academic_term_id', $run->academic_term_id)
             ->whereIn('professor_id', $faculty->pluck('id'))
             ->get()
             ->keyBy(fn (FacultySubjectPreference $preference): string => $preference->professor_id.':'.$preference->subject_id);
+        $semester = $run->academicTerm->semester;
+        $reusablePreferences = FacultyCurriculumSubjectPreference::query()
+            ->where('semester', $semester)
+            ->whereIn('professor_id', $faculty->pluck('id'))
+            ->get()
+            ->keyBy(fn (FacultyCurriculumSubjectPreference $preference): string => $preference->professor_id.':'.$preference->curriculum_id.':'.$preference->subject_id);
+        $teachingHistory = FacultyTeachingHistory::query()
+            ->where('semester', $semester)
+            ->whereIn('professor_id', $faculty->pluck('id'))
+            ->get()
+            ->keyBy(fn (FacultyTeachingHistory $history): string => $history->professor_id.':'.$history->curriculum_id.':'.$history->subject_id);
         $availabilities = FacultyAvailability::query()
             ->where('academic_term_id', $run->academic_term_id)
             ->whereIn('professor_id', $faculty->pluck('id'))
@@ -90,11 +103,18 @@ final class GenerateFacultyAssignmentRecommendations
                 continue;
             }
             $candidates = [];
+            $curriculumId = $section->sectionPlan?->curriculum_id;
             foreach ($faculty as $member) {
-                $preference = $preferences->get($member->id.':'.$section->subject_id);
-                if (! $preference instanceof FacultySubjectPreference) {
+                $preference = $curriculumId === null
+                    ? null
+                    : $reusablePreferences->get($member->id.':'.$curriculumId.':'.$section->subject_id);
+                $preference ??= $legacyPreferences->get($member->id.':'.$section->subject_id);
+                if (! $preference instanceof FacultyCurriculumSubjectPreference && ! $preference instanceof FacultySubjectPreference) {
                     continue;
                 }
+                $history = $curriculumId === null
+                    ? null
+                    : $teachingHistory->get($member->id.':'.$curriculumId.':'.$section->subject_id);
                 $availabilityMatch = $this->isAvailable(
                     $section,
                     $availabilities->get($member->id)?->all() ?? [],
@@ -106,6 +126,7 @@ final class GenerateFacultyAssignmentRecommendations
                 $candidates[] = [
                     'id' => $member->id,
                     'preference_rank' => $preference->rank,
+                    'teaching_history_evidence' => $history instanceof FacultyTeachingHistory ? $history->evidence_count : 0,
                     'availability_match' => $availabilityMatch,
                     'conflict_free' => $conflictFree,
                     'assigned_units' => $assignedUnits[$member->id] ?? 0,

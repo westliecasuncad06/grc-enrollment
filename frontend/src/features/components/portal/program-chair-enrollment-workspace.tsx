@@ -80,6 +80,10 @@ import {
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import { useFacultySubjectPreferencesQuery } from "@/features/hooks/use-faculty-input"
 import {
+  latestScheduleGenerationRunQueryKey,
+  useLatestScheduleGenerationRunQuery,
+} from "@/features/hooks/use-schedule-generation"
+import {
   useAcademicTermsQuery,
   useCurriculaQuery,
   useSectionsQuery,
@@ -111,11 +115,9 @@ import {
 import { replaceSection } from "@/features/services/scheduling-service"
 import { isApiClientError } from "@/features/services/api-client"
 import {
-  getLatestScheduleGenerationRun,
   getScheduleGenerationRun,
   startScheduleGeneration,
 } from "@/features/services/schedule-generation-service"
-import type { ScheduleGenerationRun } from "@/features/schemas/schedule-generation-schema"
 
 const years = [1, 2, 3, 4] as const
 const days = ["M", "T", "W", "Th", "F", "Sat"] as const
@@ -431,13 +433,18 @@ export function ProgramChairEnrollmentWorkspace({
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [error, setError] = useState("")
-  const [generationRun, setGenerationRun] = useState<ScheduleGenerationRun | null>(null)
   const [forecastOpen, setForecastOpen] = useState(false)
   const termId = currentTerm?.id ?? 0
+  const latestGenerationRunQuery = useLatestScheduleGenerationRunQuery(termId)
+  const generationRun = latestGenerationRunQuery.data ?? null
+  const latestGenerationRunKey = useMemo(
+    () => latestScheduleGenerationRunQueryKey(session?.userId ?? null, termId),
+    [session?.userId, termId],
+  )
   const generationMutation = useMutation({
     mutationFn: () => startScheduleGeneration(termId),
     onSuccess: (run) => {
-      setGenerationRun(run)
+      queryClient.setQueryData(latestGenerationRunKey, run)
       setForecastOpen(true)
       void queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(session?.userId ?? null),
@@ -447,27 +454,41 @@ export function ProgramChairEnrollmentWorkspace({
         queryKey: ["section-plans", session?.userId ?? null, termId],
       })
     },
-    onError: () => setError("The predictive schedule could not be started. Please try again."),
+    onError: () =>
+      setError(
+        "The predictive schedule could not be started. Please try again.",
+      ),
   })
   useEffect(() => {
-    if (termId === 0) return
-    void getLatestScheduleGenerationRun(termId).then(setGenerationRun).catch(() => undefined)
-  }, [termId])
-  useEffect(() => {
-    if (generationRun?.status !== "queued" && generationRun?.status !== "running") return
+    if (
+      generationRun?.status !== "queued" &&
+      generationRun?.status !== "running"
+    )
+      return
     const poll = window.setTimeout(() => {
       void getScheduleGenerationRun(generationRun.id)
         .then((run) => {
-          setGenerationRun(run)
+          queryClient.setQueryData(latestGenerationRunKey, run)
           if (run.status !== "queued" && run.status !== "running") {
-            void queryClient.invalidateQueries({ queryKey: sectionsQueryKey(session?.userId ?? null), exact: true })
-            void queryClient.invalidateQueries({ queryKey: ["section-plans", session?.userId ?? null, termId] })
+            void queryClient.invalidateQueries({
+              queryKey: sectionsQueryKey(session?.userId ?? null),
+              exact: true,
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ["section-plans", session?.userId ?? null, termId],
+            })
           }
         })
         .catch(() => undefined)
     }, 1_500)
     return () => window.clearTimeout(poll)
-  }, [generationRun, queryClient, session?.userId, termId])
+  }, [
+    generationRun,
+    latestGenerationRunKey,
+    queryClient,
+    session?.userId,
+    termId,
+  ])
   const currentProposal = (proposalsQuery.data ?? []).find(
     (proposal) => proposal.academic_term_id === termId,
   )
@@ -881,11 +902,20 @@ export function ProgramChairEnrollmentWorkspace({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
             <div className="grid gap-1">
               <p className="font-medium">Section Demand Forecasting</p>
-              <p className="text-sm text-muted-foreground">Uses aggregate historical enrollment, curriculum placement, ranked faculty subject preferences, and declared availability as planning inputs. Recommendations remain editable.</p>
+              <p className="text-sm text-muted-foreground">
+                Uses aggregate historical enrollment, curriculum placement,
+                ranked faculty subject preferences, and declared availability as
+                planning inputs. Recommendations remain editable.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <motion.span layoutId="demand-forecast-surface">
-                <Button type="button" variant="outline" onClick={() => setForecastOpen(true)} disabled={!generationRun}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setForecastOpen(true)}
+                  disabled={termId === 0}
+                >
                   Demand Forecast
                 </Button>
               </motion.span>
@@ -894,17 +924,21 @@ export function ProgramChairEnrollmentWorkspace({
                 onClick={() => void generationMutation.mutateAsync()}
                 disabled={termId === 0 || generationMutation.isPending}
               >
-                {generationMutation.isPending ? "Generating schedule…" : "Generate Schedule"}
+                {generationMutation.isPending
+                  ? "Generating schedule…"
+                  : "Generate Schedule"}
               </Button>
             </div>
           </div>
           {generationRun && (
             <Alert>
               <AlertDescription>
-                {generationRun.status === "queued" || generationRun.status === "running"
+                {generationRun.status === "queued" ||
+                generationRun.status === "running"
                   ? "Your predictive schedule is being generated. You can continue reviewing the current editable draft."
                   : generationRun.status === "failed"
-                    ? generationRun.error_summary ?? "The forecast could not be generated."
+                    ? (generationRun.error_summary ??
+                      "The forecast could not be generated.")
                     : `Demand forecast complete${generationRun.warnings.length ? ` with ${generationRun.warnings.length} warning(s)` : ""}. Review and edit sections before approval.`}
               </AlertDescription>
             </Alert>
@@ -1453,7 +1487,14 @@ export function ProgramChairEnrollmentWorkspace({
         </CardContent>
       </Card>
 
-      <DemandForecastDialog open={forecastOpen} onOpenChange={setForecastOpen} run={generationRun} />
+      <DemandForecastDialog
+        open={forecastOpen}
+        onOpenChange={setForecastOpen}
+        run={generationRun}
+        loading={latestGenerationRunQuery.isPending}
+        error={latestGenerationRunQuery.isError}
+        onRetry={() => void latestGenerationRunQuery.refetch()}
+      />
 
       <Dialog
         open={editingSection !== null}

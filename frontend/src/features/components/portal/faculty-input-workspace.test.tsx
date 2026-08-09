@@ -24,17 +24,25 @@ const terms = {
     },
   ],
 } as const
-const subjects = {
+const catalog = {
   data: [
     {
-      type: "subject",
-      id: 101,
-      code: "CS101",
-      title: "Programming 1",
-      units: 3,
-      status: "active",
-      status_label: "Active",
-      is_completion_only: false,
+      curriculum_id: 11,
+      program_id: 2,
+      program_code: "BSIT",
+      program_name: "Information Technology",
+      curriculum_name: "2024–2029",
+      effective_school_year: "2024-2029",
+      version_label: "new",
+      semesters: [
+        {
+          semester: "1st",
+          subjects: [
+            { id: 101, code: "CS101", title: "Programming 1", units: 3 },
+          ],
+        },
+        { semester: "2nd", subjects: [] },
+      ],
     },
   ],
 } as const
@@ -48,19 +56,23 @@ const availability = {
   ends_at_time: "10:00:00",
 } as const
 const preference = {
-  type: "faculty_subject_preference",
+  type: "faculty_curriculum_subject_preference",
   id: 6,
   professor_id: 5,
-  academic_term_id: 1,
+  curriculum_id: 11,
+  semester: "1st",
   subject_id: 101,
   rank: 1,
+  origin: "workbook_seeded",
 } as const
 
 function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") return input
-  return input instanceof URL ? input.toString() : input.url
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url
 }
-
 function renderWorkspace() {
   return renderWithSession(<FacultyInputWorkspace />, {
     session: {
@@ -71,37 +83,70 @@ function renderWorkspace() {
     },
   })
 }
+function stubData(fetchMock: ReturnType<typeof vi.fn>) {
+  fetchMock.mockImplementation((input, init) => {
+    const url = requestUrl(input)
+    if (url.endsWith("/academic-terms"))
+      return Promise.resolve(new Response(JSON.stringify(terms)))
+    if (url.endsWith("/faculty-preference-catalog"))
+      return Promise.resolve(new Response(JSON.stringify(catalog)))
+    if (
+      url.endsWith("/faculty-availabilities") &&
+      (!init?.method || init.method === "GET")
+    )
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [availability] })),
+      )
+    if (
+      url.endsWith("/faculty-curriculum-subject-preferences") &&
+      (!init?.method || init.method === "GET")
+    )
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [preference] })),
+      )
+    if (url.endsWith("/faculty-teaching-history"))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    if (init?.method === "PATCH")
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: { ...availability, starts_at_time: "09:00:00" },
+          }),
+        ),
+      )
+    return Promise.resolve(new Response(null, { status: 204 }))
+  })
+}
 
 describe("FacultyInputWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("renders an accessible empty state before faculty input exists", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = requestUrl(input)
-      if (url.endsWith("/academic-terms"))
-        return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/subjects"))
-        return Promise.resolve(new Response(JSON.stringify(subjects)))
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    })
+  it("shows a curriculum and semester-filtered saved preference table", async () => {
+    stubData(fetchMock)
     renderWorkspace()
+    expect(await screen.findByText("CS101 — Programming 1")).toBeInTheDocument()
+    expect(screen.getByText("Seeded")).toBeInTheDocument()
     expect(
-      await screen.findByText("No availability windows yet."),
+      screen.getByText("No workbook teaching history is available yet."),
     ).toBeInTheDocument()
-    expect(screen.getByText("No subject preferences yet.")).toBeInTheDocument()
   })
 
-  it("maps a rank conflict 422 to the preference field", async () => {
+  it("uses the searchable curriculum subject picker and maps validation to rank", async () => {
     const user = userEvent.setup()
-    fetchMock.mockImplementation((input) => {
+    fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
       if (url.endsWith("/academic-terms"))
         return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/subjects"))
-        return Promise.resolve(new Response(JSON.stringify(subjects)))
-      if (url.endsWith("/faculty-subject-preferences"))
+      if (url.endsWith("/faculty-preference-catalog"))
+        return Promise.resolve(new Response(JSON.stringify(catalog)))
+      if (url.endsWith("/faculty-availabilities"))
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      if (
+        url.endsWith("/faculty-curriculum-subject-preferences") &&
+        init?.method === "POST"
+      )
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -109,7 +154,9 @@ describe("FacultyInputWorkspace", () => {
                 code: "VALIDATION_FAILED",
                 message: "Invalid",
                 errors: {
-                  rank: ["This rank is already in use for this term."],
+                  rank: [
+                    "This rank is already in use for this curriculum semester.",
+                  ],
                 },
                 request_id: "request-5",
               },
@@ -120,49 +167,24 @@ describe("FacultyInputWorkspace", () => {
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
     renderWorkspace()
-    const subjectTrigger = await screen.findByLabelText("Preferred subject")
-    await user.click(subjectTrigger)
-    await user.click(
-      await screen.findByRole("option", { name: "CS101 — Programming 1" }),
-    )
-    await user.clear(screen.getByLabelText("Preference rank"))
-    await user.type(screen.getByLabelText("Preference rank"), "1")
+    const subjectPicker = await screen.findByLabelText("Preferred subject")
+    await user.click(subjectPicker)
+    await user.click(await screen.findByText("CS101 — Programming 1"))
     await user.click(
       screen.getByRole("button", { name: "Save subject preference" }),
     )
     expect(
-      await screen.findByText("This rank is already in use for this term."),
+      await screen.findByText(
+        "This rank is already in use for this curriculum semester.",
+      ),
     ).toBeInTheDocument()
   })
 
   it("edits and confirms removal of an availability before deleting it", async () => {
     const user = userEvent.setup()
-    fetchMock.mockImplementation((input, init) => {
-      const url = requestUrl(input)
-      if (url.endsWith("/academic-terms"))
-        return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/subjects"))
-        return Promise.resolve(new Response(JSON.stringify(subjects)))
-      if (url.endsWith("/faculty-availabilities") && init?.method !== "POST")
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: [availability] })),
-        )
-      if (url.endsWith("/faculty-subject-preferences"))
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: [preference] })),
-        )
-      if (init?.method === "PATCH")
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: { ...availability, starts_at_time: "09:00:00" },
-            }),
-          ),
-        )
-      return Promise.resolve(new Response(null, { status: 204 }))
-    })
+    stubData(fetchMock)
     renderWorkspace()
-    await screen.findByText("Monday · 08:00–10:00")
+    await screen.findByRole("button", { name: "Edit availability" })
     await user.click(screen.getByRole("button", { name: "Edit availability" }))
     await user.clear(screen.getByLabelText("Start time"))
     await user.type(screen.getByLabelText("Start time"), "09:00:00")
@@ -183,24 +205,9 @@ describe("FacultyInputWorkspace", () => {
   })
 
   it("has no detectable accessibility violations once loaded", async () => {
-    fetchMock.mockImplementation((input) => {
-      const url = requestUrl(input)
-      if (url.endsWith("/academic-terms"))
-        return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/subjects"))
-        return Promise.resolve(new Response(JSON.stringify(subjects)))
-      if (url.endsWith("/faculty-availabilities"))
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: [availability] })),
-        )
-      if (url.endsWith("/faculty-subject-preferences"))
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: [preference] })),
-        )
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    })
+    stubData(fetchMock)
     const { container } = renderWorkspace()
-    await screen.findByText("Monday · 08:00–10:00")
+    await screen.findByText("CS101 — Programming 1")
     expect(await axe(container)).toHaveNoViolations()
   })
 })

@@ -12,6 +12,8 @@ final class AuditableType
 
     public const FACULTY_SUBJECT_PREFERENCE = 'faculty_subject_preference';
 
+    public const FACULTY_CURRICULUM_SUBJECT_PREFERENCE = 'faculty_curriculum_subject_preference';
+
     public const SECTION = 'section';
 
     public const FACULTY_LOAD_THRESHOLD = 'faculty_load_threshold';
@@ -56,6 +58,7 @@ final class AuditableType
             self::SUBJECT,
             self::FACULTY_AVAILABILITY,
             self::FACULTY_SUBJECT_PREFERENCE,
+            self::FACULTY_CURRICULUM_SUBJECT_PREFERENCE,
             self::SECTION,
             self::FACULTY_LOAD_THRESHOLD,
             self::SCHEDULE_PROPOSAL,

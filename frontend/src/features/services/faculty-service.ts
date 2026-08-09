@@ -14,6 +14,15 @@ import {
   type FacultyAvailabilityInput,
   type FacultySubjectPreference,
   type FacultySubjectPreferenceInput,
+  facultyCurriculumSubjectPreferenceEnvelopeSchema,
+  facultyCurriculumSubjectPreferenceInputSchema,
+  facultyCurriculumSubjectPreferencesEnvelopeSchema,
+  facultyPreferenceCatalogEnvelopeSchema,
+  facultyTeachingHistoriesEnvelopeSchema,
+  type FacultyCurriculumSubjectPreference,
+  type FacultyCurriculumSubjectPreferenceInput,
+  type FacultyPreferenceCatalogEntry,
+  type FacultyTeachingHistory,
 } from "@/features/schemas/faculty-schema"
 import {
   ApiClientError,
@@ -27,6 +36,11 @@ import { formatAcademicTerm } from "@/features/services/reference-data-service"
 export const FACULTY_AVAILABILITIES_PATH = "/api/v1/faculty-availabilities"
 export const FACULTY_SUBJECT_PREFERENCES_PATH =
   "/api/v1/faculty-subject-preferences"
+export const FACULTY_PREFERENCE_CATALOG_PATH =
+  "/api/v1/faculty-preference-catalog"
+export const FACULTY_CURRICULUM_SUBJECT_PREFERENCES_PATH =
+  "/api/v1/faculty-curriculum-subject-preferences"
+export const FACULTY_TEACHING_HISTORY_PATH = "/api/v1/faculty-teaching-history"
 
 function parseContract<T>(
   schema: {
@@ -174,6 +188,93 @@ export async function deleteFacultySubjectPreference(
   id: number,
 ): Promise<void> {
   await deleteAuthenticatedJson(`${FACULTY_SUBJECT_PREFERENCES_PATH}/${id}`)
+}
+
+export async function getFacultyPreferenceCatalog(
+  signal?: AbortSignal,
+): Promise<readonly FacultyPreferenceCatalogEntry[]> {
+  const payload = await getAuthenticatedJson(
+    FACULTY_PREFERENCE_CATALOG_PATH,
+    signal,
+  )
+  return parseContract(
+    facultyPreferenceCatalogEnvelopeSchema,
+    payload,
+    "faculty preference catalog",
+  ).data
+}
+
+export async function getFacultyCurriculumSubjectPreferences(
+  signal?: AbortSignal,
+): Promise<readonly FacultyCurriculumSubjectPreference[]> {
+  const payload = await getAuthenticatedJson(
+    FACULTY_CURRICULUM_SUBJECT_PREFERENCES_PATH,
+    signal,
+  )
+  return parseContract(
+    facultyCurriculumSubjectPreferencesEnvelopeSchema,
+    payload,
+    "curriculum subject preference list",
+  ).data
+}
+
+export async function createFacultyCurriculumSubjectPreference(
+  input: FacultyCurriculumSubjectPreferenceInput,
+): Promise<FacultyCurriculumSubjectPreference> {
+  const payload = await postAuthenticatedJson(
+    FACULTY_CURRICULUM_SUBJECT_PREFERENCES_PATH,
+    parseInput(
+      facultyCurriculumSubjectPreferenceInputSchema,
+      input,
+      "curriculum subject preference",
+    ),
+  )
+  return parseContract(
+    facultyCurriculumSubjectPreferenceEnvelopeSchema,
+    payload,
+    "created curriculum subject preference",
+  ).data
+}
+
+export async function updateFacultyCurriculumSubjectPreference(
+  id: number,
+  input: FacultyCurriculumSubjectPreferenceInput,
+): Promise<FacultyCurriculumSubjectPreference> {
+  const payload = await patchAuthenticatedJson(
+    `${FACULTY_CURRICULUM_SUBJECT_PREFERENCES_PATH}/${id}`,
+    parseInput(
+      facultyCurriculumSubjectPreferenceInputSchema,
+      input,
+      "curriculum subject preference",
+    ),
+  )
+  return parseContract(
+    facultyCurriculumSubjectPreferenceEnvelopeSchema,
+    payload,
+    "updated curriculum subject preference",
+  ).data
+}
+
+export async function deleteFacultyCurriculumSubjectPreference(
+  id: number,
+): Promise<void> {
+  await deleteAuthenticatedJson(
+    `${FACULTY_CURRICULUM_SUBJECT_PREFERENCES_PATH}/${id}`,
+  )
+}
+
+export async function getFacultyTeachingHistory(
+  signal?: AbortSignal,
+): Promise<readonly FacultyTeachingHistory[]> {
+  const payload = await getAuthenticatedJson(
+    FACULTY_TEACHING_HISTORY_PATH,
+    signal,
+  )
+  return parseContract(
+    facultyTeachingHistoriesEnvelopeSchema,
+    payload,
+    "faculty teaching history",
+  ).data
 }
 
 export interface TeachingScheduleRow {

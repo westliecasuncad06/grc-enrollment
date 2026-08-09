@@ -3,13 +3,20 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Domain\Audit\AuditAction;
+use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
+use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
+use App\Models\FacultyCurriculumSubjectPreference;
 use App\Models\FacultySubjectPreference;
+use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -165,5 +172,49 @@ final class FacultySubjectPreferencesEndpointTest extends TestCase
         ]);
 
         $response->assertOk()->assertJsonPath('data.rank', 2);
+    }
+
+    public function test_a_faculty_member_can_save_and_read_a_curriculum_semester_preference_without_exposing_another_college_catalog(): void
+    {
+        $subject = $this->makeSubject('CS201');
+        $otherSubject = $this->makeSubject('ED201');
+        $ccsProgram = Program::create([
+            'code' => 'BSIT', 'name' => 'Information Technology', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active,
+        ]);
+        $coeProgram = Program::create([
+            'code' => 'BSED', 'name' => 'Secondary Education', 'college' => CollegeCode::Coe, 'status' => ProgramStatus::Active,
+        ]);
+        $ccsCurriculum = Curriculum::create([
+            'program_id' => $ccsProgram->id, 'name' => '2024–2029', 'effective_school_year' => '2024-2029',
+            'effective_start_year' => 2024, 'effective_end_year' => 2029, 'status' => CurriculumStatus::Active,
+        ]);
+        $coeCurriculum = Curriculum::create([
+            'program_id' => $coeProgram->id, 'name' => '2024–2029', 'effective_school_year' => '2024-2029',
+            'effective_start_year' => 2024, 'effective_end_year' => 2029, 'status' => CurriculumStatus::Active,
+        ]);
+        CurriculumSubject::create(['curriculum_id' => $ccsCurriculum->id, 'subject_id' => $subject->id, 'year_level' => 2, 'semester' => '1st', 'is_required' => true]);
+        CurriculumSubject::create(['curriculum_id' => $coeCurriculum->id, 'subject_id' => $otherSubject->id, 'year_level' => 2, 'semester' => '1st', 'is_required' => true]);
+        [$faculty, $token] = $this->tokenFor(UserRole::Faculty, 'professor.catalog@grc.test');
+        $faculty->update(['college' => CollegeCode::Ccs]);
+
+        $catalog = $this->withToken($token)->getJson('/api/v1/faculty-preference-catalog');
+        $catalog->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.curriculum_id', $ccsCurriculum->id);
+
+        $response = $this->withToken($token)->postJson('/api/v1/faculty-curriculum-subject-preferences', [
+            'curriculum_id' => $ccsCurriculum->id,
+            'semester' => '1st',
+            'subject_id' => $subject->id,
+            'rank' => 1,
+        ]);
+
+        $response->assertCreated()->assertJsonPath('data.origin', 'declared');
+        $this->assertDatabaseHas('faculty_curriculum_subject_preferences', [
+            'professor_id' => $faculty->id, 'curriculum_id' => $ccsCurriculum->id, 'subject_id' => $subject->id, 'semester' => '1st',
+        ]);
+        $this->withToken($token)->getJson('/api/v1/faculty-curriculum-subject-preferences')
+            ->assertOk()->assertJsonPath('data.0.professor_id', $faculty->id);
+        $this->withToken($token)->getJson('/api/v1/faculty-teaching-history')
+            ->assertOk()->assertJsonCount(0, 'data');
+        $this->assertSame(1, FacultyCurriculumSubjectPreference::query()->count());
     }
 }

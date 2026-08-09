@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 
 import { useAuth } from "@/features/auth/use-auth"
@@ -34,6 +34,7 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import {
   Select,
   SelectContent,
@@ -51,30 +52,29 @@ import {
 } from "@/features/components/ui/table"
 import {
   facultyAvailabilitiesQueryKey,
-  facultySubjectPreferencesQueryKey,
+  facultyCurriculumSubjectPreferencesQueryKey,
   useFacultyAvailabilitiesQuery,
-  useFacultySubjectPreferencesQuery,
+  useFacultyCurriculumSubjectPreferencesQuery,
+  useFacultyPreferenceCatalogQuery,
+  useFacultyTeachingHistoryQuery,
 } from "@/features/hooks/use-faculty-input"
-import {
-  useAcademicTermsQuery,
-  useSubjectsQuery,
-} from "@/features/hooks/use-reference-data"
+import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import {
   facultyAvailabilityInputSchema,
-  facultySubjectPreferenceInputSchema,
+  facultyCurriculumSubjectPreferenceInputSchema,
   type FacultyAvailability,
   type FacultyAvailabilityInput,
-  type FacultySubjectPreference,
-  type FacultySubjectPreferenceInput,
+  type FacultyCurriculumSubjectPreference,
+  type FacultyCurriculumSubjectPreferenceInput,
 } from "@/features/schemas/faculty-schema"
 import {
   createFacultyAvailability,
-  createFacultySubjectPreference,
+  createFacultyCurriculumSubjectPreference,
   deleteFacultyAvailability,
-  deleteFacultySubjectPreference,
+  deleteFacultyCurriculumSubjectPreference,
   updateFacultyAvailability,
-  updateFacultySubjectPreference,
+  updateFacultyCurriculumSubjectPreference,
 } from "@/features/services/faculty-service"
 import {
   formatAcademicTerm,
@@ -97,55 +97,52 @@ const emptyAvailability: FacultyAvailabilityInput = {
   starts_at_time: "",
   ends_at_time: "",
 }
-const emptyPreference: FacultySubjectPreferenceInput = {
-  academic_term_id: 0,
+const emptyPreference: FacultyCurriculumSubjectPreferenceInput = {
+  curriculum_id: 0,
+  semester: "1st",
   subject_id: 0,
   rank: 1,
 }
+
+type Removal =
+  | { kind: "availability"; row: FacultyAvailability }
+  | { kind: "preference"; row: FacultyCurriculumSubjectPreference }
 
 function dayLabel(day: number): string {
   return weekdays.find(([value]) => value === day)?.[1] ?? "Unknown day"
 }
 
-function availabilitySummary(availability: FacultyAvailability): string {
-  return `${dayLabel(availability.day_of_week)} · ${availability.starts_at_time.slice(0, 5)}–${availability.ends_at_time.slice(0, 5)}`
+function availabilitySummary(row: FacultyAvailability): string {
+  return `${dayLabel(row.day_of_week)} · ${row.starts_at_time.slice(0, 5)}–${row.ends_at_time.slice(0, 5)}`
 }
 
 export function FacultyInputWorkspace() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const termsQuery = useAcademicTermsQuery()
-  const subjectsQuery = useSubjectsQuery()
   const availabilitiesQuery = useFacultyAvailabilitiesQuery()
-  const preferencesQuery = useFacultySubjectPreferencesQuery()
+  const catalogQuery = useFacultyPreferenceCatalogQuery()
+  const preferencesQuery = useFacultyCurriculumSubjectPreferencesQuery()
+  const historyQuery = useFacultyTeachingHistoryQuery()
+  const userId = session?.userId ?? null
   const [editingAvailability, setEditingAvailability] =
     useState<FacultyAvailability | null>(null)
   const [editingPreference, setEditingPreference] =
-    useState<FacultySubjectPreference | null>(null)
-  const [removal, setRemoval] = useState<
-    | { kind: "availability"; row: FacultyAvailability }
-    | { kind: "preference"; row: FacultySubjectPreference }
-    | null
-  >(null)
+    useState<FacultyCurriculumSubjectPreference | null>(null)
+  const [removal, setRemoval] = useState<Removal | null>(null)
+  const [preferenceSearch, setPreferenceSearch] = useState("")
   const [requestError, setRequestError] = useState("")
-  // Unlike the Controller-only-`defaultValue` pattern used elsewhere (see
-  // ADR 0015), these two forms render unconditionally — not gated behind
-  // AsyncBoundary — so each `academic_term_id` Controller mounts immediately,
-  // well before the active term is known, and stays mounted (no `key` swap)
-  // once it resolves. That makes the classic `useEffect` + `form.setValue()`
-  // populate-once-loaded pattern the correct one here: the Controller is
-  // already stably registered by the time the effect fires, so the update
-  // reaches it cleanly (the opposite of the late-mounting-Controller race
-  // this same pattern would hit if the field were AsyncBoundary-gated).
+
   const availabilityForm = useForm<FacultyAvailabilityInput>({
     resolver: zodResolver(facultyAvailabilityInputSchema),
     defaultValues: emptyAvailability,
   })
-  const preferenceForm = useForm<FacultySubjectPreferenceInput>({
-    resolver: zodResolver(facultySubjectPreferenceInputSchema),
+  const preferenceForm = useForm<FacultyCurriculumSubjectPreferenceInput>({
+    resolver: zodResolver(facultyCurriculumSubjectPreferenceInputSchema),
     defaultValues: emptyPreference,
   })
-  const userId = session?.userId ?? null
+  const selectedCurriculumId = preferenceForm.watch("curriculum_id")
+  const selectedSemester = preferenceForm.watch("semester")
 
   const invalidateAvailabilities = () =>
     queryClient.invalidateQueries({
@@ -154,10 +151,9 @@ export function FacultyInputWorkspace() {
     })
   const invalidatePreferences = () =>
     queryClient.invalidateQueries({
-      queryKey: facultySubjectPreferencesQueryKey(userId),
+      queryKey: facultyCurriculumSubjectPreferencesQueryKey(userId),
       exact: true,
     })
-
   const availabilityMutation = useMutation({
     mutationFn: ({
       id,
@@ -177,19 +173,19 @@ export function FacultyInputWorkspace() {
       input,
     }: {
       id?: number
-      input: FacultySubjectPreferenceInput
+      input: FacultyCurriculumSubjectPreferenceInput
     }) =>
       id === undefined
-        ? createFacultySubjectPreference(input)
-        : updateFacultySubjectPreference(id, input),
+        ? createFacultyCurriculumSubjectPreference(input)
+        : updateFacultyCurriculumSubjectPreference(id, input),
     onSuccess: invalidatePreferences,
   })
   const removalMutation = useMutation({
-    mutationFn: (target: NonNullable<typeof removal>) =>
+    mutationFn: (target: Removal) =>
       target.kind === "availability"
         ? deleteFacultyAvailability(target.row.id)
-        : deleteFacultySubjectPreference(target.row.id),
-    onSuccess: async (_, target) => {
+        : deleteFacultyCurriculumSubjectPreference(target.row.id),
+    onSuccess: async (_result, target) => {
       await (target.kind === "availability"
         ? invalidateAvailabilities()
         : invalidatePreferences())
@@ -200,15 +196,53 @@ export function FacultyInputWorkspace() {
 
   const activeTerm = getActiveAcademicTerm(termsQuery.data)
   useEffect(() => {
-    if (!activeTerm) return
-    if (availabilityForm.getValues("academic_term_id") === 0) {
+    if (activeTerm && availabilityForm.getValues("academic_term_id") === 0) {
       availabilityForm.setValue("academic_term_id", activeTerm.id)
     }
-    if (preferenceForm.getValues("academic_term_id") === 0) {
-      preferenceForm.setValue("academic_term_id", activeTerm.id)
+  }, [activeTerm, availabilityForm])
+  useEffect(() => {
+    if (selectedCurriculumId === 0 && catalogQuery.data?.[0]) {
+      preferenceForm.setValue(
+        "curriculum_id",
+        catalogQuery.data[0].curriculum_id,
+      )
     }
-  }, [activeTerm, availabilityForm, preferenceForm])
+  }, [catalogQuery.data, preferenceForm, selectedCurriculumId])
 
+  const selectedCurriculum = catalogQuery.data?.find(
+    (entry) => entry.curriculum_id === selectedCurriculumId,
+  )
+  const curriculumSubjects =
+    selectedCurriculum?.semesters.find(
+      (entry) => entry.semester === selectedSemester,
+    )?.subjects ?? []
+  const subjectOptions = curriculumSubjects.map((subject) => ({
+    value: String(subject.id),
+    label: `${subject.code} — ${subject.title}`,
+  }))
+  const subjectsById = useMemo(
+    () =>
+      new Map(
+        (catalogQuery.data ?? [])
+          .flatMap((entry) =>
+            entry.semesters.flatMap((semester) => semester.subjects),
+          )
+          .map((subject) => [subject.id, subject]),
+      ),
+    [catalogQuery.data],
+  )
+  const savedPreferences = (preferencesQuery.data ?? []).filter((row) => {
+    const subject = subjectsById.get(row.subject_id)
+    const text = `${subject?.code ?? ""} ${subject?.title ?? ""}`.toLowerCase()
+    return (
+      row.curriculum_id === selectedCurriculumId &&
+      row.semester === selectedSemester &&
+      text.includes(preferenceSearch.toLowerCase())
+    )
+  })
+
+  const isSaving =
+    availabilityMutation.isPending || preferenceMutation.isPending
   const saveAvailability = async (input: FacultyAvailabilityInput) => {
     setRequestError("")
     try {
@@ -222,66 +256,51 @@ export function FacultyInputWorkspace() {
         academic_term_id: activeTerm?.id ?? 0,
       })
     } catch (error) {
-      if (!applyApiFieldErrors(error, availabilityForm.setError)) {
+      if (!applyApiFieldErrors(error, availabilityForm.setError))
         setRequestError(
           "Availability could not be saved. Check the connection and try again.",
         )
-      }
     }
   }
-
-  const savePreference = async (input: FacultySubjectPreferenceInput) => {
+  const savePreference = async (
+    input: FacultyCurriculumSubjectPreferenceInput,
+  ) => {
     setRequestError("")
     try {
       await preferenceMutation.mutateAsync({ id: editingPreference?.id, input })
       setEditingPreference(null)
       preferenceForm.reset({
-        ...emptyPreference,
-        academic_term_id: activeTerm?.id ?? 0,
+        curriculum_id: input.curriculum_id,
+        semester: input.semester,
+        subject_id: 0,
+        rank: 1,
       })
     } catch (error) {
-      if (!applyApiFieldErrors(error, preferenceForm.setError)) {
+      if (!applyApiFieldErrors(error, preferenceForm.setError))
         setRequestError(
           "Subject preference could not be saved. Check the connection and try again.",
         )
-      }
     }
   }
 
-  const startAvailabilityEdit = (row: FacultyAvailability) => {
-    setEditingAvailability(row)
-    availabilityForm.reset({
-      academic_term_id: row.academic_term_id,
-      day_of_week: row.day_of_week,
-      starts_at_time: row.starts_at_time,
-      ends_at_time: row.ends_at_time,
-    })
-  }
-  const startPreferenceEdit = (row: FacultySubjectPreference) => {
-    setEditingPreference(row)
-    preferenceForm.reset({
-      academic_term_id: row.academic_term_id,
-      subject_id: row.subject_id,
-      rank: row.rank,
-    })
-  }
-
-  const isSaving =
-    availabilityMutation.isPending || preferenceMutation.isPending
-  const terms = termsQuery.data ?? []
-  const subjects = subjectsQuery.data ?? []
+  const inputErrors =
+    termsQuery.isError ||
+    availabilitiesQuery.isError ||
+    catalogQuery.isError ||
+    preferencesQuery.isError ||
+    historyQuery.isError
 
   return (
     <WorkspacePage
       title="Availability and preferences"
-      description="State when you can teach and rank the subjects you prefer per academic term."
-      lastUpdated={availabilitiesQuery.dataUpdatedAt}
+      description="Declare teaching availability, then rank curriculum subjects for each semester. The schedule recommendation uses these preferences as advisory evidence."
+      lastUpdated={Math.max(
+        availabilitiesQuery.dataUpdatedAt,
+        preferencesQuery.dataUpdatedAt,
+        historyQuery.dataUpdatedAt,
+      )}
     >
-      {(termsQuery.isError ||
-        subjectsQuery.isError ||
-        availabilitiesQuery.isError ||
-        preferencesQuery.isError ||
-        requestError) && (
+      {(inputErrors || requestError) && (
         <Alert variant="destructive">
           <AlertDescription>
             {requestError ||
@@ -299,17 +318,20 @@ export function FacultyInputWorkspace() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => document.getElementById("preference-subject")?.focus()}
+          onClick={() =>
+            document.getElementById("preference-curriculum")?.focus()
+          }
         >
           Add subject preference
         </Button>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <Card>
           <CardHeader>
             <CardTitle level={2}>Availability windows</CardTitle>
             <CardDescription>
-              Use ISO weekdays and 24-hour HH:mm:ss times.
+              Use your actual academic-term availability. Times are checked
+              before recommendation.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -344,7 +366,7 @@ export function FacultyInputWorkspace() {
                           <SelectValue placeholder="Select an academic term" />
                         </SelectTrigger>
                         <SelectContent>
-                          {terms.map((term) => (
+                          {(termsQuery.data ?? []).map((term) => (
                             <SelectItem key={term.id} value={String(term.id)}>
                               {formatAcademicTerm(term)}
                             </SelectItem>
@@ -360,11 +382,7 @@ export function FacultyInputWorkspace() {
                     }
                   </FieldError>
                 </Field>
-                <Field
-                  data-invalid={Boolean(
-                    availabilityForm.formState.errors.day_of_week,
-                  )}
-                >
+                <Field>
                   <FieldLabel htmlFor="availability-day">Day</FieldLabel>
                   <Controller
                     control={availabilityForm.control}
@@ -388,9 +406,6 @@ export function FacultyInputWorkspace() {
                       </Select>
                     )}
                   />
-                  <FieldError>
-                    {availabilityForm.formState.errors.day_of_week?.message}
-                  </FieldError>
                 </Field>
                 <Field
                   data-invalid={Boolean(
@@ -467,41 +482,49 @@ export function FacultyInputWorkspace() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Day</TableHead>
-                        <TableHead>Availability window</TableHead>
+                        <TableHead>Window</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rows.map((row) => (
                         <TableRow key={row.id}>
-                          <TableCell className="font-medium">{dayLabel(row.day_of_week)}</TableCell>
+                          <TableCell className="font-medium">
+                            {dayLabel(row.day_of_week)}
+                          </TableCell>
                           <TableCell>
                             {availabilitySummary(row).split(" · ")[1]}
-                            <span className="sr-only">{availabilitySummary(row)}</span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className="inline-flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-label="Edit availability"
-                          onClick={() => startAvailabilityEdit(row)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-label="Remove availability"
-                          onClick={() =>
-                            setRemoval({ kind: "availability", row })
-                          }
-                        >
-                          Remove
-                        </Button>
-                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              aria-label="Edit availability"
+                              onClick={() => {
+                                setEditingAvailability(row)
+                                availabilityForm.reset({
+                                  academic_term_id: row.academic_term_id,
+                                  day_of_week: row.day_of_week,
+                                  starts_at_time: row.starts_at_time,
+                                  ends_at_time: row.ends_at_time,
+                                })
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="ml-2"
+                              aria-label="Remove availability"
+                              onClick={() =>
+                                setRemoval({ kind: "availability", row })
+                              }
+                            >
+                              Remove
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -516,7 +539,8 @@ export function FacultyInputWorkspace() {
           <CardHeader>
             <CardTitle level={2}>Subject preferences</CardTitle>
             <CardDescription>
-              Rank each requested subject once for the selected term.
+              Choose New or Old curriculum context, then rank the subjects you
+              prefer for that semester.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -529,28 +553,39 @@ export function FacultyInputWorkspace() {
               <FieldGroup>
                 <Field
                   data-invalid={Boolean(
-                    preferenceForm.formState.errors.academic_term_id,
+                    preferenceForm.formState.errors.curriculum_id,
                   )}
                 >
-                  <FieldLabel htmlFor="preference-term">
-                    Academic term
+                  <FieldLabel htmlFor="preference-curriculum">
+                    Curriculum
                   </FieldLabel>
                   <Controller
                     control={preferenceForm.control}
-                    name="academic_term_id"
+                    name="curriculum_id"
                     render={({ field }) => (
                       <Select
                         value={field.value ? String(field.value) : ""}
-                        onValueChange={(value) => field.onChange(Number(value))}
-                        disabled={isSaving || termsQuery.isLoading}
+                        onValueChange={(value) => {
+                          field.onChange(Number(value))
+                          preferenceForm.setValue("subject_id", 0)
+                        }}
+                        disabled={isSaving || catalogQuery.isLoading}
                       >
-                        <SelectTrigger id="preference-term" className="w-full">
-                          <SelectValue placeholder="Select an academic term" />
+                        <SelectTrigger
+                          id="preference-curriculum"
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select a curriculum" />
                         </SelectTrigger>
                         <SelectContent>
-                          {terms.map((term) => (
-                            <SelectItem key={term.id} value={String(term.id)}>
-                              {formatAcademicTerm(term)}
+                          {(catalogQuery.data ?? []).map((entry) => (
+                            <SelectItem
+                              key={entry.curriculum_id}
+                              value={String(entry.curriculum_id)}
+                            >
+                              {entry.program_code} ·{" "}
+                              {entry.version_label === "new" ? "New" : "Old"} ·{" "}
+                              {entry.curriculum_name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -558,8 +593,41 @@ export function FacultyInputWorkspace() {
                     )}
                   />
                   <FieldError>
-                    {preferenceForm.formState.errors.academic_term_id?.message}
+                    {preferenceForm.formState.errors.curriculum_id?.message}
                   </FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel>Semester</FieldLabel>
+                  <div
+                    className="grid grid-cols-2 gap-2"
+                    role="group"
+                    aria-label="Preference semester"
+                  >
+                    <Button
+                      type="button"
+                      variant={
+                        selectedSemester === "1st" ? "default" : "outline"
+                      }
+                      onClick={() => {
+                        preferenceForm.setValue("semester", "1st")
+                        preferenceForm.setValue("subject_id", 0)
+                      }}
+                    >
+                      1st Semester
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={
+                        selectedSemester === "2nd" ? "default" : "outline"
+                      }
+                      onClick={() => {
+                        preferenceForm.setValue("semester", "2nd")
+                        preferenceForm.setValue("subject_id", 0)
+                      }}
+                    >
+                      2nd Semester
+                    </Button>
+                  </div>
                 </Field>
                 <Field
                   data-invalid={Boolean(
@@ -573,28 +641,22 @@ export function FacultyInputWorkspace() {
                     control={preferenceForm.control}
                     name="subject_id"
                     render={({ field }) => (
-                      <Select
+                      <SearchableCombobox
+                        id="preference-subject"
+                        label="Preferred subject"
+                        options={subjectOptions}
                         value={field.value ? String(field.value) : ""}
-                        onValueChange={(value) => field.onChange(Number(value))}
-                        disabled={isSaving || subjectsQuery.isLoading}
-                      >
-                        <SelectTrigger
-                          id="preference-subject"
-                          className="w-full"
-                        >
-                          <SelectValue placeholder="Select a subject" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {subjects.map((subject) => (
-                            <SelectItem
-                              key={subject.id}
-                              value={String(subject.id)}
-                            >
-                              {subject.code} — {subject.title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onValueChange={(value) =>
+                          field.onChange(Number(value) || 0)
+                        }
+                        placeholder={
+                          selectedCurriculum
+                            ? "Search code or subject title"
+                            : "Select a curriculum first"
+                        }
+                        emptyMessage="No matching curriculum subject."
+                        disabled={isSaving || !selectedCurriculum}
+                      />
                     )}
                   />
                   <FieldError>
@@ -623,11 +685,7 @@ export function FacultyInputWorkspace() {
                 <div className="flex gap-2">
                   <Button
                     type="submit"
-                    disabled={
-                      isSaving ||
-                      termsQuery.isLoading ||
-                      subjectsQuery.isLoading
-                    }
+                    disabled={isSaving || !selectedCurriculum}
                   >
                     {editingPreference
                       ? "Update subject preference"
@@ -640,8 +698,10 @@ export function FacultyInputWorkspace() {
                       onClick={() => {
                         setEditingPreference(null)
                         preferenceForm.reset({
-                          ...emptyPreference,
-                          academic_term_id: activeTerm?.id ?? 0,
+                          curriculum_id: selectedCurriculumId,
+                          semester: selectedSemester,
+                          subject_id: 0,
+                          rank: 1,
                         })
                       }}
                     >
@@ -651,67 +711,90 @@ export function FacultyInputWorkspace() {
                 </div>
               </FieldGroup>
             </form>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <Input
+                aria-label="Search saved subject preferences"
+                value={preferenceSearch}
+                onChange={(event) => setPreferenceSearch(event.target.value)}
+                placeholder="Filter saved subjects"
+              />
+              <p className="self-center text-sm text-muted-foreground">
+                {selectedCurriculum
+                  ? `${selectedCurriculum.version_label === "new" ? "New" : "Old"} · ${selectedSemester} semester`
+                  : "Choose a curriculum"}
+              </p>
+            </div>
             <AsyncBoundary
               query={preferencesQuery}
-              isEmpty={(rows) => rows.length === 0}
-              emptyMessage="No subject preferences yet."
+              isEmpty={() => savedPreferences.length === 0}
+              emptyMessage="No saved subject preferences for this curriculum and semester."
               loadingLabel="Loading your subject preferences…"
             >
-              {(rows) => (
+              {() => (
                 <div className="overflow-x-auto rounded-md border">
-                  <Table aria-label="Saved subject preferences">
+                  <Table aria-label="Saved curriculum subject preferences">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Rank</TableHead>
-                        <TableHead>Preferred subject</TableHead>
+                        <TableHead>Subject</TableHead>
+                        <TableHead>Source</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rows.map((row) => {
-                    const subject = subjects.find(
-                      (item) => item.id === row.subject_id,
-                    )
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">#{row.rank}</TableCell>
-                        <TableCell>
-                          {subject
-                            ? `${subject.code} — ${subject.title}`
-                            : "Subject unavailable"}
-                          <span className="sr-only">
-                            #{row.rank} · {subject
-                              ? `${subject.code} — ${subject.title}`
-                              : "Subject unavailable"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className="inline-flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            aria-label="Edit subject preference"
-                            onClick={() => startPreferenceEdit(row)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            aria-label="Remove subject preference"
-                            onClick={() =>
-                              setRemoval({ kind: "preference", row })
-                            }
-                          >
-                            Remove
-                          </Button>
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
+                      {savedPreferences.map((row) => {
+                        const subject = subjectsById.get(row.subject_id)
+                        return (
+                          <TableRow key={row.id}>
+                            <TableCell className="font-medium">
+                              #{row.rank}
+                            </TableCell>
+                            <TableCell>
+                              {subject
+                                ? `${subject.code} — ${subject.title}`
+                                : "Subject unavailable"}
+                            </TableCell>
+                            <TableCell>
+                              <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">
+                                {row.origin === "workbook_seeded"
+                                  ? "Seeded"
+                                  : "Declared"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                aria-label="Edit subject preference"
+                                onClick={() => {
+                                  setEditingPreference(row)
+                                  preferenceForm.reset({
+                                    curriculum_id: row.curriculum_id,
+                                    semester: row.semester,
+                                    subject_id: row.subject_id,
+                                    rank: row.rank,
+                                  })
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="ml-2"
+                                aria-label="Remove subject preference"
+                                onClick={() =>
+                                  setRemoval({ kind: "preference", row })
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -720,6 +803,56 @@ export function FacultyInputWorkspace() {
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle level={2}>Teaching history</CardTitle>
+          <CardDescription>
+            Read-only workbook-reference evidence used only as an explainable
+            tie-breaker after curriculum preference.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AsyncBoundary
+            query={historyQuery}
+            isEmpty={(rows) => rows.length === 0}
+            emptyMessage="No workbook teaching history is available yet."
+            loadingLabel="Loading teaching history…"
+          >
+            {(rows) => (
+              <div className="overflow-x-auto rounded-md border">
+                <Table aria-label="Teaching history">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Curriculum</TableHead>
+                      <TableHead>Semester</TableHead>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>Evidence</TableHead>
+                      <TableHead>Source</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          {row.curriculum_name ?? "Curriculum unavailable"}
+                        </TableCell>
+                        <TableCell>{row.semester}</TableCell>
+                        <TableCell>
+                          {row.subject_code
+                            ? `${row.subject_code} — ${row.subject_title ?? ""}`
+                            : "Subject unavailable"}
+                        </TableCell>
+                        <TableCell>{row.evidence_count}</TableCell>
+                        <TableCell>{row.source_workbook}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </AsyncBoundary>
+        </CardContent>
+      </Card>
       <AlertDialog
         open={removal !== null}
         onOpenChange={(open) => {
@@ -735,7 +868,8 @@ export function FacultyInputWorkspace() {
                 : "subject preference"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action removes this faculty input from the current term.
+              This removes the saved faculty input. Historical workbook evidence
+              remains unchanged.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

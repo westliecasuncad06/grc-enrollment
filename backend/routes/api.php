@@ -24,9 +24,12 @@ use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
 use App\Http\Controllers\Api\V1\EnrollmentWindowController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
+use App\Http\Controllers\Api\V1\FacultyCurriculumSubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyLoadReportController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
+use App\Http\Controllers\Api\V1\FacultyPreferenceCatalogController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
+use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -251,6 +254,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // The Policy re-checks professor_id === auth()->id() as defense in
         // depth (ADR 0008's pattern, applied to a new authorization shape).
         Route::middleware('role:faculty')->group(function (): void {
+            Route::get('/faculty-preference-catalog', FacultyPreferenceCatalogController::class)->name('faculty-preference-catalog.index');
+            Route::get('/faculty-curriculum-subject-preferences', [FacultyCurriculumSubjectPreferenceController::class, 'index'])->name('faculty-curriculum-subject-preferences.index');
+            Route::post('/faculty-curriculum-subject-preferences', [FacultyCurriculumSubjectPreferenceController::class, 'store'])->name('faculty-curriculum-subject-preferences.store');
+            Route::patch('/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}', [FacultyCurriculumSubjectPreferenceController::class, 'update'])->name('faculty-curriculum-subject-preferences.update');
+            Route::delete('/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}', [FacultyCurriculumSubjectPreferenceController::class, 'destroy'])->name('faculty-curriculum-subject-preferences.destroy');
+            Route::get('/faculty-teaching-history', [FacultyTeachingHistoryController::class, 'index'])->name('faculty-teaching-history.index');
+
             Route::post('/faculty-availabilities', [FacultyAvailabilityController::class, 'store'])->name('faculty-availabilities.store');
             Route::patch('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'update'])->name('faculty-availabilities.update');
             Route::delete('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'destroy'])->name('faculty-availabilities.destroy');

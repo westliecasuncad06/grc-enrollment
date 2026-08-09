@@ -35,6 +35,7 @@ final class DatabaseSeeder extends Seeder
             GrcCurriculumScheduleReferenceSeeder::class,
             RoomCatalogSeeder::class,
             CatalogFacultySeeder::class,
+            WorkbookFacultyProfileSeeder::class,
             SectionSeeder::class,
             DemoEnrollmentSeeder::class,
             ProgramChairScheduleSampleSeeder::class,

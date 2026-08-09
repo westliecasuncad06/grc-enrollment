@@ -31,4 +31,29 @@ final class FacultyLoadPlannerTest extends TestCase
         self::assertNull($result['professor_id']);
         self::assertSame(['no_available_preferred_faculty'], $result['rationale']);
     }
+
+    public function test_it_uses_prior_teaching_evidence_to_break_equal_preference_ranks_before_load_balancing(): void
+    {
+        $result = (new FacultyLoadPlanner)->choose([
+            [
+                'id' => 10,
+                'preference_rank' => 1,
+                'teaching_history_evidence' => 0,
+                'availability_match' => true,
+                'conflict_free' => true,
+                'assigned_units' => 0,
+            ],
+            [
+                'id' => 11,
+                'preference_rank' => 1,
+                'teaching_history_evidence' => 3,
+                'availability_match' => true,
+                'conflict_free' => true,
+                'assigned_units' => 6,
+            ],
+        ]);
+
+        self::assertSame(11, $result['professor_id']);
+        self::assertContains('prior_teaching_evidence', $result['rationale']);
+    }
 }

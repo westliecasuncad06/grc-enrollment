@@ -40,6 +40,7 @@ final class FacultyAvailability extends Model
         'day_of_week',
         'starts_at_time',
         'ends_at_time',
+        'origin',
     ];
 
     /**

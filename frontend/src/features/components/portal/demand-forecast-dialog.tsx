@@ -27,10 +27,16 @@ export function DemandForecastDialog({
   open,
   onOpenChange,
   run,
+  loading = false,
+  error = false,
+  onRetry,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   run: ScheduleGenerationRun | null
+  loading?: boolean
+  error?: boolean
+  onRetry?: () => void
 }) {
   const reducedMotion = useReducedMotion()
   const facultyLoad = run?.faculty_load
@@ -72,7 +78,11 @@ export function DemandForecastDialog({
               <Badge
                 variant={run?.status === "failed" ? "destructive" : "secondary"}
               >
-                {running ? "Generating" : (run?.status ?? "No run")}
+                {loading
+                  ? "Loading"
+                  : running
+                    ? "Generating"
+                    : (run?.status ?? "No run")}
               </Badge>
             </div>
           </DialogHeader>
@@ -82,6 +92,26 @@ export function DemandForecastDialog({
               Building the demand forecast, faculty-loading recommendation, and
               editable draft…
             </p>
+          )}
+          {loading && run === null && (
+            <p className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
+              Loading the latest forecast…
+            </p>
+          )}
+          {error && run === null && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              <span>The latest forecast could not be loaded.</span>
+              {onRetry && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRetry}
+                >
+                  Retry
+                </Button>
+              )}
+            </div>
           )}
           {run?.status === "failed" && (
             <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -203,9 +233,11 @@ export function DemandForecastDialog({
                         colSpan={5}
                         className="py-9 text-center text-muted-foreground"
                       >
-                        {running
-                          ? "Forecasting demand…"
-                          : "No forecast rows are available yet."}
+                        {loading
+                          ? "Loading the latest forecast…"
+                          : running
+                            ? "Forecasting demand…"
+                            : "No forecast rows are available yet."}
                       </TableCell>
                     </TableRow>
                   )}
