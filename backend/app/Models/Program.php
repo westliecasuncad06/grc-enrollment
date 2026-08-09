@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Domain\Identity\UserRole;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
-use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;

@@ -12,6 +12,7 @@ use App\Models\PredictionRun;
 use App\Models\ScheduleGenerationRun;
 use App\Models\Section;
 use App\Models\SectionDemandForecast;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -71,6 +72,7 @@ final class ApplyDemandForecastToDraft
 
                 if ($plan !== null && $plan->status === SectionPlanStatus::Submitted) {
                     $warnings[] = "Skipped submitted {$firstPlacement->year_level}th-year section plan.";
+
                     continue;
                 }
 
@@ -103,6 +105,7 @@ final class ApplyDemandForecastToDraft
                         'recommendation_prediction_run_id' => $predictionRun->id,
                     ]);
                     $warnings[] = "Kept the existing manual {$firstPlacement->year_level}th-year section count.";
+
                     continue;
                 }
 
@@ -120,14 +123,14 @@ final class ApplyDemandForecastToDraft
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, CurriculumSubject>  $placements
+     * @param  Collection<int, CurriculumSubject>  $placements
      */
     private function materializePredictiveBlocks(
         int $academicTermId,
         AcademicTermSectionPlan $plan,
         PredictionRun $predictionRun,
         CurriculumSubject $firstPlacement,
-        \Illuminate\Support\Collection $placements,
+        Collection $placements,
     ): void {
         $program = $firstPlacement->curriculum->program;
 

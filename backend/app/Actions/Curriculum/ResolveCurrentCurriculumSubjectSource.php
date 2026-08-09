@@ -5,6 +5,7 @@ namespace App\Actions\Curriculum;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Models\Curriculum;
 use App\Models\Program;
+use Illuminate\Database\Eloquent\Builder;
 
 final class ResolveCurrentCurriculumSubjectSource
 {
@@ -31,9 +32,9 @@ final class ResolveCurrentCurriculumSubjectSource
     }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Builder<Curriculum>
+     * @return Builder<Curriculum>
      */
-    private function activeCurricula(Program $program): \Illuminate\Database\Eloquent\Builder
+    private function activeCurricula(Program $program): Builder
     {
         return Curriculum::query()
             ->where('program_id', $program->id)
