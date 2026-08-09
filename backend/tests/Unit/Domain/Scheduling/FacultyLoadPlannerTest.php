@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Domain\Scheduling;
 
+use App\Domain\Faculty\SpecializationProficiency;
 use App\Domain\Scheduling\FacultyLoadPlanner;
 use PHPUnit\Framework\TestCase;
 
@@ -55,5 +56,28 @@ final class FacultyLoadPlannerTest extends TestCase
 
         self::assertSame(11, $result['professor_id']);
         self::assertContains('prior_teaching_evidence', $result['rationale']);
+    }
+
+    public function test_a_secondary_specialization_breaks_an_equal_preference_rank_tie(): void
+    {
+        $result = (new FacultyLoadPlanner)->choose([
+            [
+                'id' => 10,
+                'preference_rank' => 1,
+                'specialization_match' => SpecializationProficiency::Secondary,
+                'availability_match' => true,
+                'conflict_free' => true,
+                'assigned_units' => 9,
+            ],
+            [
+                'id' => 11,
+                'preference_rank' => 1,
+                'availability_match' => true,
+                'conflict_free' => true,
+                'assigned_units' => 0,
+            ],
+        ]);
+
+        self::assertSame(10, $result['professor_id']);
     }
 }

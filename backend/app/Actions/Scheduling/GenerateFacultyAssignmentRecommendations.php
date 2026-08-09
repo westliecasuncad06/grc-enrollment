@@ -13,6 +13,7 @@ use App\Models\CurriculumSubject;
 use App\Models\FacultyAssignmentRecommendation;
 use App\Models\FacultyAvailability;
 use App\Models\FacultyCurriculumSubjectPreference;
+use App\Models\FacultySpecialization;
 use App\Models\FacultySubjectPreference;
 use App\Models\FacultyTeachingHistory;
 use App\Models\RoomCatalogEntry;
@@ -78,6 +79,11 @@ final class GenerateFacultyAssignmentRecommendations
             ->whereIn('professor_id', $faculty->pluck('id'))
             ->get()
             ->groupBy('professor_id');
+        $specializations = FacultySpecialization::query()
+            ->whereIn('professor_id', $faculty->pluck('id'))
+            ->whereIn('subject_id', $sections->pluck('subject_id')->unique())
+            ->get()
+            ->keyBy(fn (FacultySpecialization $specialization): string => $specialization->professor_id.':'.$specialization->subject_id);
 
         $assignedUnits = [];
         $assignedSlots = [];
@@ -93,6 +99,7 @@ final class GenerateFacultyAssignmentRecommendations
                     [
                         'recommended_professor_id' => $section->professor_id,
                         'preference_rank' => null,
+                        'specialization_match' => null,
                         'availability_match' => false,
                         'conflict_free' => true,
                         'rationale' => ['existing_draft_assignment'],
@@ -114,6 +121,7 @@ final class GenerateFacultyAssignmentRecommendations
                 $history = $curriculumId === null
                     ? null
                     : $teachingHistory->get($member->id.':'.$curriculumId.':'.$section->subject_id);
+                $specializationMatch = $specializations->get($member->id.':'.$section->subject_id)?->proficiency;
                 $availabilityMatch = $this->isAvailable(
                     $section,
                     $availabilities->get($member->id)?->all() ?? [],
@@ -125,6 +133,7 @@ final class GenerateFacultyAssignmentRecommendations
                 $candidates[] = [
                     'id' => $member->id,
                     'preference_rank' => $preference->rank,
+                    'specialization_match' => $specializationMatch,
                     'teaching_history_evidence' => $history instanceof FacultyTeachingHistory ? $history->evidence_count : 0,
                     'availability_match' => $availabilityMatch,
                     'conflict_free' => $conflictFree,
@@ -140,6 +149,7 @@ final class GenerateFacultyAssignmentRecommendations
                 [
                     'recommended_professor_id' => $selectedId,
                     'preference_rank' => $selected['preference_rank'] ?? null,
+                    'specialization_match' => $selected['specialization_match']?->value,
                     'availability_match' => $selected['availability_match'] ?? false,
                     'conflict_free' => $selected['conflict_free'] ?? false,
                     'rationale' => $choice['rationale'],
