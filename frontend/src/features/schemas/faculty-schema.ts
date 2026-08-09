@@ -87,7 +87,7 @@ const curriculumSubjectSchema = z
     id: z.number().int().positive(),
     code: z.string().min(1),
     title: z.string().min(1),
-    units: z.number().int().positive(),
+    units: z.number().nonnegative(),
   })
   .strict()
 

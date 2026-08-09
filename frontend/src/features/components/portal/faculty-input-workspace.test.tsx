@@ -38,7 +38,8 @@ const catalog = {
         {
           semester: "1st",
           subjects: [
-            { id: 101, code: "CS101", title: "Programming 1", units: 3 },
+            { id: 501, code: "LEAD 1", title: "Leadership Seminar 1", units: 1.5 },
+            { id: 502, code: "IT 101", title: "Introduction to Computing", units: 3 },
           ],
         },
         { semester: "2nd", subjects: [] },
@@ -61,7 +62,7 @@ const preference = {
   professor_id: 5,
   curriculum_id: 11,
   semester: "1st",
-  subject_id: 101,
+  subject_id: 501,
   rank: 1,
   origin: "workbook_seeded",
 } as const
@@ -97,6 +98,8 @@ function stubData(fetchMock: ReturnType<typeof vi.fn>) {
       return Promise.resolve(
         new Response(JSON.stringify({ data: [availability] })),
       )
+    if (url.endsWith("/faculty-subject-preferences"))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     if (
       url.endsWith("/faculty-curriculum-subject-preferences") &&
       (!init?.method || init.method === "GET")
@@ -126,7 +129,15 @@ describe("FacultyInputWorkspace", () => {
   it("shows a curriculum and semester-filtered saved preference table", async () => {
     stubData(fetchMock)
     renderWorkspace()
-    expect(await screen.findByText("CS101 — Programming 1")).toBeInTheDocument()
+    expect(
+      await screen.findByText("LEAD 1 — Leadership Seminar 1"),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("combobox", { name: /curriculum/i }),
+    ).toBeEnabled()
+    expect(
+      screen.queryByText(/Faculty input could not be loaded/i),
+    ).not.toBeInTheDocument()
     expect(screen.getByText("Seeded")).toBeInTheDocument()
     expect(
       screen.getByText("No workbook teaching history is available yet."),
@@ -169,7 +180,7 @@ describe("FacultyInputWorkspace", () => {
     renderWorkspace()
     const subjectPicker = await screen.findByLabelText("Preferred subject")
     await user.click(subjectPicker)
-    await user.click(await screen.findByText("CS101 — Programming 1"))
+    await user.click(await screen.findByText("LEAD 1 — Leadership Seminar 1"))
     await user.click(
       screen.getByRole("button", { name: "Save subject preference" }),
     )
@@ -207,7 +218,7 @@ describe("FacultyInputWorkspace", () => {
   it("has no detectable accessibility violations once loaded", async () => {
     stubData(fetchMock)
     const { container } = renderWorkspace()
-    await screen.findByText("CS101 — Programming 1")
+    await screen.findByText("LEAD 1 — Leadership Seminar 1")
     expect(await axe(container)).toHaveNoViolations()
   })
 })
