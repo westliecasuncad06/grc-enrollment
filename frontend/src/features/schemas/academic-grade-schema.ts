@@ -20,8 +20,8 @@ export const gradeMarkValues = [
   "DRP",
 ] as const
 
-/** The four non-numeric marks — never sent for an ordinary academic subject. */
-export const completionOnlyMarkValues = ["C", "NC", "INC", "DRP"] as const
+/** Leadership subjects use only Complete or Incomplete marks. */
+export const completionOnlyMarkValues = ["C", "INC"] as const
 
 /** Every mark an ordinary (non-completion-only) subject may take. */
 export const academicMarkValues = [

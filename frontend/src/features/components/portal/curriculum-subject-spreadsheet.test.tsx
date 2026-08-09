@@ -65,7 +65,7 @@ function ControlledSpreadsheet({ locked = false }: { locked?: boolean }) {
       yearLevel={1}
       subjects={subjects}
       subjectCatalog={catalog}
-      defaultMinimumGrade="75"
+      prerequisiteSubjects={catalog.slice(1)}
       isLocked={locked}
       onChange={setSubjects}
       onAddRow={vi.fn()}
@@ -88,7 +88,9 @@ describe("CurriculumSubjectSpreadsheet", () => {
 
     const table = screen.getByRole("table", { name: "1st Year subjects" })
     expect(
-      within(table).getAllByRole("columnheader").map((cell) => cell.textContent),
+      within(table)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
     ).toEqual([
       "Subject Code",
       "Description",
@@ -117,13 +119,58 @@ describe("CurriculumSubjectSpreadsheet", () => {
     )
   })
 
-  it("adds a placed subject as a prerequisite with the default grade 75", async () => {
+  it("adds a searchable subject from the latest active curriculum as a prerequisite", async () => {
     const user = userEvent.setup()
     render(<ControlledSpreadsheet />)
 
-    await chooseOption(user, "Add prerequisite for CS101", "CS102")
+    await user.click(
+      screen.getByRole("button", { name: "Add prerequisite for CS101" }),
+    )
+    await user.type(screen.getByLabelText("Search prerequisites"), "CS201")
+    await user.click(screen.getByRole("button", { name: "CS201 — Algorithms" }))
 
-    expect(screen.getByText("CS102 · 75")).toBeInTheDocument()
+    expect(screen.getByText("CS201")).toBeInTheDocument()
+    expect(screen.queryByText(/75/)).not.toBeInTheDocument()
+  })
+
+  it("offers None to clear an existing prerequisite", async () => {
+    const user = userEvent.setup()
+    render(<ControlledSpreadsheet />)
+
+    await user.click(
+      screen.getByRole("button", { name: "Add prerequisite for CS101" }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "CS102 — Data Structures" }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Edit prerequisites for CS101" }),
+    )
+    await user.click(screen.getByRole("button", { name: "None" }))
+
+    expect(screen.getByText("None")).toBeInTheDocument()
+  })
+
+  it("opens the prerequisite editor when a row already has prerequisites", async () => {
+    const user = userEvent.setup()
+    render(<ControlledSpreadsheet />)
+
+    await user.click(
+      screen.getByRole("button", { name: "Add prerequisite for CS101" }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "CS102 — Data Structures" }),
+    )
+
+    expect(
+      screen.getByRole("button", { name: "Edit prerequisites for CS101" }),
+    ).toBeInTheDocument()
+    await user.click(
+      screen.getByRole("button", { name: "Edit prerequisites for CS101" }),
+    )
+    expect(
+      screen.getByRole("dialog", { name: "Edit prerequisites for CS101" }),
+    ).toBeInTheDocument()
   })
 
   it("disables row creation, semester, prerequisite, and removal controls when locked", () => {
@@ -133,7 +180,9 @@ describe("CurriculumSubjectSpreadsheet", () => {
       screen.getByRole("button", { name: "Add subject row" }),
     ).toBeDisabled()
     expect(screen.getByLabelText("Semester for CS101")).toBeDisabled()
-    expect(screen.getByLabelText("Add prerequisite for CS101")).toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: "Add prerequisite for CS101" }),
+    ).toBeDisabled()
     expect(
       screen.getByRole("button", { name: "Remove CS101 row" }),
     ).toBeDisabled()

@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  allowedMarksForSubject,
   gradeBadgeVariant,
   markTone,
   markToneBadgeVariant,
   markToneRowClass,
 } from "@/features/lib/grade-presentation"
+
+describe("allowedMarksForSubject", () => {
+  it("limits Leadership subjects to Complete or Incomplete", () => {
+    expect(allowedMarksForSubject(true)).toEqual(["C", "INC"])
+  })
+})
 
 describe("gradeBadgeVariant", () => {
   it("maps locked to default", () => {
@@ -30,12 +37,9 @@ describe("markTone", () => {
     expect(markTone("5.00")).toBe("failed")
   })
 
-  it.each(["NC", "INC", "DRP"] as const)(
-    "treats %s as incomplete",
-    (mark) => {
-      expect(markTone(mark)).toBe("incomplete")
-    },
-  )
+  it.each(["NC", "INC", "DRP"] as const)("treats %s as incomplete", (mark) => {
+    expect(markTone(mark)).toBe("incomplete")
+  })
 
   it.each(["1.00", "1.75", "2.50", "3.00", "C"] as const)(
     "treats %s as passed",

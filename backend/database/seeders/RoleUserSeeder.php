@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -46,14 +47,25 @@ final class RoleUserSeeder extends Seeder
             foreach (UserRole::cases() as $role) {
                 $identity = self::IDENTITIES[$role->value];
 
+                $attributes = [
+                    'name' => $identity['name'],
+                    'password' => self::PASSWORD,
+                    'role' => $role,
+                    'status' => UserStatus::Active,
+                ];
+
+                // The local curriculum approval journey uses the CCS BSIT
+                // program. A Dean must carry an explicit college scope for
+                // the curriculum index and approval policy to reveal those
+                // records; the Executive Director intentionally remains
+                // institution-wide without a college assignment.
+                if ($role === UserRole::Dean) {
+                    $attributes['college'] = CollegeCode::Ccs;
+                }
+
                 User::updateOrCreate(
                     ['email' => $identity['email']],
-                    [
-                        'name' => $identity['name'],
-                        'password' => self::PASSWORD,
-                        'role' => $role,
-                        'status' => UserStatus::Active,
-                    ],
+                    $attributes,
                 );
             }
         });

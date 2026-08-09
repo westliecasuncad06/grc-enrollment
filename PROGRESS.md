@@ -1,5 +1,32 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-08-07 — Curriculum editor View-tab continuation
+
+Session resumed from Claude's uncommitted frontend refinement for the
+Curriculum Editor: keep the editor open with Manage/View tabs, make the View
+tab browse published and archived curriculum versions, show prerequisite
+badges, and keep Program Chair numeric section-count inputs clearable. The
+working tree already contains this scoped frontend diff plus unrelated
+untracked artifacts; no backend/API/auth changes are in scope until the
+focused behavior is verified. No commit or push is authorized.
+
+Focused baseline: the direct Curriculum View/Workspace and Program Chair
+regression suite passed 3 files / 48 tests. TypeScript and targeted ESLint
+were clean; Prettier identified style-only drift in five already-touched
+files, which was formatted in place without changing unrelated files. A
+fresh focused rerun and production build remain before handoff.
+
+Post-format verification: the focused suite passed again at 3 files / 48
+tests; TypeScript, targeted ESLint, Prettier check, and `git diff --check`
+passed. The Next.js production build also passed, compiling the Tailwind v4
+active-tab variant and all five routes. A full serial Vitest sweep is the
+remaining broad regression check for the shared Tabs primitive.
+
+Final verification: `npx vitest run --no-file-parallelism` passed with 90
+files / 570 tests. The known non-fatal jsdom canvas notices were the only
+runner output. No backend/API checks were needed for this frontend-only
+continuation; no commit or push was made.
+
 **Last updated:** 2026-08-06 · **PRD version:** v3.2 · **Branch:** `main`
 at `314ace6` (Phase 7c and the grading/enrollment-completion slice — ADR
 0021 — are both merged). The working tree currently carries two further
@@ -4621,3 +4648,509 @@ Prettier initially reported existing formatting drift in the three Task 5
 component files; its mechanical formatter was applied, and the required
 Prettier check plus `git diff --check` passed. The known jsdom canvas warning
 remains non-failing. No commit or push was performed.
+
+## 2026-08-08 — Curriculum prerequisite and Leadership-grade refinement
+
+On `main`, refined the Program Chair curriculum editor without disturbing the
+restored uncommitted work. The top-level Curriculum dropdown is no longer
+shown at the start of Manage: creating a curriculum remains central, while
+saved curricula open through an explicit dialog. Prerequisite editing now has
+no visible minimum-grade field or grade text; newly added edges retain the
+compatible stored threshold of `75`, with a responsive code-only chip and
+separate remove control to prevent overlap. Leadership subjects now allow only
+Complete (`C`) or Incomplete (`INC`); numeric subjects retain the existing
+1.00–3.00 passing rule. Focused verification passed: frontend **53 tests**
+across five files and backend **37 tests / 187 assertions**. The jsdom canvas
+notice is non-failing. No commit or push was performed.
+
+**Typecheck note:** `npm run typecheck` was attempted after the focused tests
+and formatting pass, but remains blocked by two pre-existing mock-signature
+errors in `curriculum-subject-row-dialog.test.tsx` (lines 43 and 47). That file
+is outside this refinement and was not changed. `git diff --check` remains
+clean.
+
+## 2026-08-08 — Inline searchable prerequisite picker
+
+Removed the standalone Prerequisite Graph entry point. Each curriculum table
+row now owns its prerequisite interaction: **Add** opens a search field over
+eligible subjects already placed in the current curriculum; once a prerequisite
+exists, that control changes to **Edit**. Existing prerequisites remain visible
+and removable, and already-selected/self subjects are excluded from search.
+The focused spreadsheet and workspace checks passed with **27 tests**. No
+commit or push was performed.
+
+**Latest-active source refinement:** The prerequisite picker now receives its
+candidates from the existing `current-curriculum-subjects` endpoint, which
+resolves the program's latest active curriculum. The picker no longer limits
+search results to the in-progress draft's rows, and includes a `None` action
+to clear the selected row's prerequisites. The focused spreadsheet/workspace
+suite passed with **28 tests**. No commit or push was performed.
+
+## 2026-08-08 — Curriculum submission failure investigation
+
+The saved curriculum did not submit because the local MariaDB schema had not
+run migration `2026_08_07_000004_add_decision_columns_to_curricula`. The
+server log records `SQLSTATE[42S22] Unknown column 'decided_by'` at
+`TransitionCurriculum.php:83`; because the transition runs in a transaction,
+the status update rolled back before the Dean could receive it. `php artisan
+migrate:status` confirmed that this is the only pending migration. The next
+step is to apply and verify that migration, then rerun the approval endpoint
+tests. No commit or push occurred.
+
+**Migration attempt blocked:** The application database account `grc_app` does
+not have MariaDB `ALTER` permission, so Laravel correctly left the migration
+pending and the schema unchanged. The next diagnostic step is a read-only
+check for the local XAMPP administrator connection; only if that connection is
+available will the same pending, reversible migration be applied with the
+required schema privilege. No commit or push occurred.
+
+**Resolved:** The local XAMPP MariaDB administrator applied the pending
+`2026_08_07_000004_add_decision_columns_to_curricula` migration successfully.
+Migration status now shows it as ran (batch 2), and the normal application
+connection confirms all three columns are available. The focused curriculum
+approval validation passed with **32 tests / 93 assertions**, covering submit,
+Dean review/return, Executive review/approval, notifications, Draft locking,
+and current-subject authoring. No commit or push was performed.
+
+## 2026-08-08 — Dean curriculum review visibility investigation
+
+The successfully submitted `BSIT 2030 Curriculum` is persisted as
+`pending_dean_review` under the CCS-scoped BSIT program. The Dean screen was
+empty because local `dean.seed@grc.test` had `college = NULL`; the curriculum
+index intentionally returns no college-scoped records to a Dean without a
+college assignment. A new RoleUserSeeder regression test first failed on that
+missing scope and then passed after assigning the synthetic Seed Dean to CCS.
+The existing local Seed Dean row is now being aligned to that seed contract so
+the pending review appears without weakening cross-college authorization. No
+commit or push occurred.
+
+**Resolved and verified:** The existing Seed Dean is now CCS-scoped. The exact
+live query shape used by the Curriculum Approvals list returns `BSIT 2030
+Curriculum` for that account. The RoleUserSeeder regression suite and the
+curriculum transition endpoint suite pass with **20 tests / 89 assertions**.
+No commit or push occurred.
+
+## 2026-08-08 — Program Chair curriculum lifecycle UI refinement started
+
+The Program Chair requested that Manage represent exactly one current
+in-progress curriculum (Draft, pending Dean review, or pending Executive
+review), rather than exposing a list of historical duplicates in "Open saved
+curriculum." That current item remains in the Manage stage until final
+Executive approval; only final-approved curricula belong in View. A returned
+Draft must reopen with its recorded return notes and edit controls enabled.
+Existing records will be filtered from the UI, not deleted. The Dean review
+dialog will also use the read-only preview layout without squeezed filters.
+No commit or push is authorized.
+
+**Lifecycle UI verification:** The focused Program Chair, published View, and
+Dean review suites passed with **36 tests** after the one-current-workflow and
+read-only preview changes. The initial Prettier check identified style-only
+formatting drift in four touched frontend files; formatter output and a fresh
+verification pass are required before handoff. No commit or push occurred.
+
+**Completed:** Prettier now passes for all six touched UI/test files, and the
+post-format focused suite again passes with **3 files / 36 tests**. `git diff
+--check` also passes. The known unrelated project-wide typecheck issue remains
+the pre-existing mock-signature failure in `curriculum-subject-row-dialog.test.tsx`.
+No commit or push occurred.
+
+## 2026-08-09 — Predictive schedule generation and Room Sync started
+
+The approved Program Chair scheduling vertical slice has started directly on
+`main` at the user's request. It will replace manual enrollment planning with
+one predictive Generate Schedule flow; add section-demand forecasting,
+faculty-load support, editable recommendations, room synchronization and
+availability, and the professor-input table redesign. Existing uncommitted
+work is user-owned and must remain outside the scoped commit. The user has
+explicitly authorized a verified commit and push as a saving point; neither
+will occur until the applicable tests and checks provide fresh evidence.
+
+**Baseline-check interruption:** the first parallel frontend/backend focused
+test command exceeded its 60-second command limit before returning output.
+It is not recorded as a pass; the checks must be rerun individually with
+observable output before implementation results are assessed.
+
+**Predictive cohort-rule milestone:** Added the pure `HistoricalCohortResolver`
+and `HistoricalCohortReference` through a red-green cycle. Its three unit
+tests cover the same-year second-semester lookup, advancing Years 2–4 from the
+prior second semester, and the incoming First Year/First Semester prior-year
+exception; they pass with **3 tests / 9 assertions**. The focused frontend
+baseline remains unverified because the runner exceeded its command limit.
+
+**Historical-demand substrate milestone:** Added the de-identified
+`section_demand_observations` model and reversible migration, with term,
+program, curriculum, subject, year-level, cohort, enrollment, section,
+capacity, college, and source fields. The first migration run correctly
+exposed MariaDB error 1059 because the explicit unique-index name was 71
+characters; a targeted comparison confirmed the 64-character identifier
+limit, and shortening only that name resolved it. The model-cast and migration
+contract checks pass with **2 tests / 13 assertions**.
+
+**ML contract milestone:** Added the private
+`POST /internal/v1/section-demand/predict` contract to `ml-service`. It
+accepts aggregate observations and generation targets, uses a deterministic
+Random Forest when at least four observations are available, and explicitly
+falls back to the latest historical demand when they are sparse. Red-green
+tests now pass with **2 pytest tests** and confirm nonnegative, bounded output
+and the sparse-history fallback. Laravel integration has not started yet, so
+no browser-visible prediction endpoint exists at this milestone.
+
+**Laravel-to-ML boundary milestone:** Added the private-only
+`SectionDemandPredictionClient`, prediction-service environment configuration,
+and a focused fake-HTTP contract test. The test initially showed PHP mock JSON
+normalizes `38.0` to numeric `38`; the assertion now correctly validates the
+numeric value, which is the documented contract. The client test passes with
+**1 test / 3 assertions** and confirms aggregate payloads contain no student
+identifier. Generation runs and public API endpoints are the next slice.
+
+**Schedule-generation entry-point milestone:** Added a Program Chair-only,
+college-scoped, active-run-idempotent API lifecycle at
+`POST /api/v1/academic-terms/{term}/schedule-generation-runs`, together with a
+protected read resource. The focused endpoint suite passes with **3 tests / 12
+assertions**.
+
+**Forecast execution and UI milestone:** Added an asynchronous generation job
+that persists only aggregate demand forecasts from the ML service, plus a
+local/test-only synthetic aggregate observation seeder. The Program Chair
+screen now starts from a single **Generate Schedule** action and explicitly
+labels forecast results as editable advice; faculty availability and subject
+preferences now have quick-entry buttons and tabular saved records. Focused
+Laravel checks pass. The first frontend typecheck attempt again exceeded the
+60-second command limit with no output, so it remains unresolved rather than
+reported as a pass.
+
+**Verification checkpoint:** Focused frontend component checks pass (faculty
+input: **4 tests**; Program Chair enrollment workspace: **21 tests**), ML
+service suite passes (**8 tests**), and PHP syntax checks pass for all added
+backend production files. A full `php artisan test --no-coverage` run also
+exceeded the 60-second command limit without returning output, so only the
+focused Laravel suites are verified in this session; this must not be treated
+as a full-suite pass.
+
+## 2026-08-09 — Room Sync and editable predictive schedule redesign
+
+The approved Operations Board design is being documented before implementation.
+The next vertical slice will repair the COE generation failure and the broken
+Laravel-to-FastAPI contract, make Random Forest execution observable, turn
+forecast output into an editable draft, add Registrar Head-owned room inventory
+with Program Chair assignment access, enforce capacity/type/room conflicts, and
+model explicit HyFlex A/B alternate-week room sharing. Existing user-owned
+working-tree changes remain out of scope and must be preserved.
+
+**Predictive contract repair in progress:** Red tests reproduced the two
+generation defects: FastAPI response keys were not matched by Laravel, and an
+empty historical dataset incorrectly ended the run as failed. The repaired
+action now submits only the private FastAPI schema, records model strategy and
+observation count, and safely completes with an explicit advisory warning when
+there is insufficient data. Targeted Laravel and ML contract tests have passed;
+the pending local schema migrations will be applied next to clear the real COE
+generation error before the editable-draft slice starts.
+
+**Migration checkpoint:** The application account can read the local MariaDB
+database but, by design, cannot run DDL. `php artisan migrate --force` stopped
+at the first pending predictive migration with MariaDB error 1142 (CREATE
+denied to `grc_app`). No schema was changed and the COE error remains until the
+same migrations are run through the local privileged migrator account.
+
+**Local schema recovery:** The local XAMPP MariaDB privileged migrator was
+available and ran only the two pending predictive migrations successfully.
+The application account was not granted any additional permissions. The ML
+service was not running at `127.0.0.1:8100` at this checkpoint, so live
+end-to-end health verification still needs the local service process started.
+
+**Editable predictive-draft milestone:** Forecast output now creates only
+draft, chair-editable section plans and block sections, records the advisory
+source and prediction run, and preserves any manual plan count or assigned
+section fields on later regenerations. The migration initially hit MariaDB's
+64-character foreign-key identifier limit in the isolated test database; the
+foreign names were shortened explicitly, after which the focused draft tests
+passed (**2 tests / 27 assertions**) and the three local predictive migrations
+were all applied successfully through the privileged migrator. Focused
+generation tests pass (**2 tests / 14 assertions**).
+
+**Rooms/navigation and modality milestone:** Connected the previously hidden
+Program Chair Demand Forecast destination, added a Rooms Operations destination
+for Program Chairs and Registrar Heads, and widened the read-only legacy room
+catalog accordingly (Registrar Staff remains excluded). The Rooms workspace
+shows room records and active-term scheduled use. Online-only is no longer a
+supported scheduling modality: its migration clears old room/modality values
+and flags each row for reassignment; reference imports do the same rather than
+guessing a physical schedule. The focused reference-import suite passes
+(**10 tests / 27 assertions**) and `npm run lint:fast` exits successfully with
+only pre-existing fast-refresh warnings. A TypeScript check also found two
+pre-existing Vitest mock typing errors and one new Room Board subject-label
+error; the new error was corrected, while the unrelated existing test typing
+errors remain unresolved.
+
+**Room Board filter milestone:** The approved Rooms Operations redesign now
+provides room-name search plus availability, modality, and schedule-day
+filters. The summary cards, room availability table, scheduled-use list, empty
+state, and Clear filters action all derive from the same active filter set.
+Focused component coverage passes (**3 tests**) and `npm run lint:fast` exits
+successfully with only the existing fast-refresh warnings.
+
+**Room Board saving point:** The filter implementation and its focused test
+were committed and pushed as `5a0296b`. A full frontend Vitest run was started
+after the focused checks but exceeded the 60-second command limit without
+returning any test output; it is intentionally not recorded as a pass.
+
+## 2026-08-09 — Predictive Enrollment and Schedule & Faculty Loading implementation started
+
+The user explicitly approved the consolidated predictive-enrollment plan and
+authorized implementation directly on `main`, followed by one scoped saving
+point. This session will first perform the guarded active-term CCS draft reset,
+then implement the forecast-result API/UI, term-level faculty-load threshold,
+explainable faculty recommendations, consolidated Program Chair workspace, and
+navigation changes. Existing unrelated working-tree changes remain user-owned
+and must not be staged or modified outside necessary adjacent hunks. No
+verification result is claimed until the applicable commands complete with
+observable output.
+
+**Guarded-reset milestone:** Added `ResetDraftSchedulePlanning`, a transaction
+that deletes only one college's draft plans and their planned, unenrolled
+sections, and refuses to run if a proposal, submitted plan, enrolled section,
+or non-planned section exists. Its two focused behavior tests each passed when
+run independently (the combined class command exceeded the local 60-second
+tool window because this MariaDB suite recreates the schema per test).
+
+**Local reset completed:** Fresh preflight confirmed exactly 135 CCS planned,
+unenrolled sections, 8 CCS draft plans, and no CCS proposal in active term
+2027–2028 2nd semester. `ResetDraftSchedulePlanning` then removed exactly
+those 135 sections and 8 plans. Catalog, curriculum, historical observation,
+faculty, audit, and non-CCS records were not targeted.
+
+**Schema migration permission checkpoint:** The normal `grc_app` account
+correctly rejected the new migration with MariaDB 1142 CREATE denied on
+`faculty_load_thresholds`. No table was created and no application permission
+was changed. The next step is the existing local XAMPP privileged migrator
+path, keeping the application account least-privileged.
+
+**Schema repair and local planning-data milestone:** The privileged migrator
+first exposed MariaDB's 64-character FK-name limit. The failed migration left
+two newly created, empty partial tables; their counts were verified as zero,
+then only those tables were removed before retrying with explicit short FK
+names. The complete reversible migration then applied successfully. The
+local/test-only predictive planning seeder ran afterward to create current-term
+CCS faculty availability/preference inputs and room metadata; it does not run
+in production.
+
+**Faculty-loading and room-safety milestone:** The draft generator now keeps
+its faculty recommendation separate from the editable section assignment,
+uses ranked preferences, availability, conflict checks, load balancing and a
+stable tie-break, and emits manual-review warnings instead of inventing missing
+room metadata. Program Chairs can configure a college/term load threshold with
+an audit record. A new pure room detector permits only complementary HyFlex
+A/B physical-week sharing; matching patterns and F2F overlaps are rejected.
+Focused RoomConflictDetector coverage passes (**2 tests / 3 assertions**) and
+the cross-college latest-generation endpoint check passes (**1 test / 4
+assertions**). PHPUnit's pre-existing doc-comment metadata warnings remain
+non-failing.
+
+**Live local predictive smoke:** The private FastAPI service was started only
+on `127.0.0.1` and its synthetic-data suite passed (**8 tests**). The
+local-only planning seed now supplies aggregate historical cohort observations,
+ranked subject preferences, availability windows, room metadata, and reference
+meeting inputs for the active 2027–2028 2nd semester. The live CCS run
+succeeded with **Random Forest**, **135 aggregate observations**, **45 subject
+forecasts**, **90 draft section-subject recommendations**, **90 faculty
+recommendations**, and **90 assigned physical rooms**. No student-level data
+was read or written. Earlier smoke-generated drafts were safely reset under
+the same guarded Draft-only action before this final synthetic result was
+created.
+
+**Verification checkpoint:** Focused backend behavior/endpoint suites, ML
+service tests (**8 tests**), frontend focused component tests (**8 tests**),
+frontend production build, PHP syntax checks, `git diff --check`, and Pint
+format verification all pass. The frontend standalone typecheck still reports
+two pre-existing Vitest mock-signature errors in
+`curriculum-subject-row-dialog.test.tsx`; the predictive files typecheck as
+part of the successful production build. The broad database-seeder PHPUnit
+suite is unusually slow on this local MariaDB setup and remains running, so it
+is not yet recorded as a full-suite pass.
+
+## 2026-08-09 — Schedule & Faculty Loading filter investigation
+
+Reported defect: selecting Year 1 returns no generated schedule rows. The
+live CCS data confirms the generated rows use subject-like codes such as
+`IT101`, while their actual year is correctly stored on the linked section
+plan (`year_level = 1`). The frontend filter currently derives the year from
+the first character of `section_code`, so it compares an empty value against
+`"1"` and excludes every row. The corrective design will filter through the
+section-plan year level instead. A companion searchable professor assignment
+finder is also requested; it will use the existing faculty-load report so each
+matching professor shows their assigned subjects and total units.
+
+**Completed:** Year filtering now reads `year_level` from the linked section
+plan rather than deriving it from the section code, so generated codes such as
+`IT101` correctly appear under Year 1. The workspace also has a case-insensitive
+`Find professor` input that narrows the professor selector, generated rows, and
+Faculty Load Report cards, where assigned subject codes and total units remain
+visible. The focused Vitest suite passes **2 tests**, and frontend lint/build
+pass with only the three existing fast-refresh warnings in shared UI files.
+
+## 2026-08-09 — Forecast navigation, room sync, and faculty reference-data investigation
+
+Started a scoped investigation into the Demand Forecast action losing its
+ready state after navigation, generated schedule-to-room synchronization, and
+local/test-only professor reference data derived from the two supplied
+2024–2029 curriculum workbooks. The requested professor accounts will use
+synthetic school emails and the documented local password only; no production
+credentials or student-level data will be introduced. Existing unrelated
+working-tree changes remain out of scope and will be preserved.
+
+## 2026-08-09 — Forecast reliability and workbook faculty data implementation
+
+The approved implementation is starting directly on `main` under the earlier
+explicit saving-point authorization. Work will be test-first, preserve the
+unrelated dirty working tree, and use only the existing deterministic workbook
+extract. The local account list remains ignored under `backend/storage`.
+
+**Implementation milestone:** Added user/term-scoped Demand Forecast caching,
+reusable curriculum/semester faculty preferences, workbook teaching history,
+and deterministic local-only full-name faculty profile synchronization. The
+faculty portal now uses New/Old curriculum and semester filters, searchable
+subjects, seeded/declared source badges, and read-only teaching history. The
+legacy term-scoped preference API remains available as a compatibility
+fallback. Focused backend and frontend tests pass. A targeted frontend ESLint
+command exceeded the local 60-second tool limit without returning diagnostics;
+it is explicitly not recorded as passed and will be retried during final
+verification.
+
+**Local migration blocker:** `php artisan migrate` reached the new workbook
+faculty-reference migration but the configured local `grc_app` MariaDB user
+was denied `CREATE` on the schema. No partial table was created (the statement
+failed at `CREATE TABLE`). The next safe step is to use the local privileged
+development database account already used for earlier schema migrations, then
+rerun migration status before seeding or resetting planning data.
+
+**Migration and seed checkpoint:** The privileged local-only migration command
+subsequently applied the workbook-reference schema successfully. The first
+seed command used an over-escaped class name and did not run. The corrected
+seeder command exceeded the local 60-second command limit before returning,
+so its database effects must be inspected and the seeder made bounded before
+any guarded CCS reset is attempted.
+
+**Completed locally and pushed:** The privileged local migration created the
+new reference tables without changing the application account's permissions.
+The bounded local synchronization produced 400 active, full-name faculty
+profiles, 1,014 reusable preferences/history records, and 220 seeded
+availability windows; the ignored local report was generated at
+`backend/storage/app/local-reports/professor-accounts.md`. The guarded CCS
+preflight confirmed 12 Draft plans, 90 planned sections, and zero proposals,
+enrollments, or overrides. Its transactional reset removed exactly those 90
+sections and 12 plans, then a fresh generation run completed successfully with
+Random Forest. All 90 regenerated CCS sections have a configured Room catalog
+entry; 6 have a fully eligible faculty recommendation and 84 are deliberately
+left editable/unassigned because no matching preferred faculty availability
+exists in the workbook reference data. Focused Laravel checks pass (**19 tests
+/ 71 assertions**), focused frontend checks pass (**30 tests**), the frontend
+production build passes, and the fast lint check reports only three existing
+shared-UI Fast Refresh warnings. The scoped code was committed and pushed to
+`main` as `aac1a7b`; unrelated working-tree changes and raw/report artifacts
+remain unstaged and unpushed.
+
+## 2026-08-09 — Faculty employment status and complete local account coverage
+
+Started the approved local-only faculty workforce slice. It adds an explicit
+Full-time/Part-time planning classification (33 units is shown only as the
+Full-time reference), inactive faculty records, and scoped Program Chair
+controls with an audit trail. Existing faculty records will remain intact;
+the local synchronization will only fill missing employment values, normalize
+synthetic test accounts, and add deterministic inactive faculty records.
+
+**Test-first checkpoint:** Backend endpoint coverage now verifies college
+scoping, inactive-directory retrieval, audited employment/status changes, and
+the required reason for deactivation. Frontend coverage verifies the new
+Program Chair workforce editor. The initial migration index exceeded MariaDB's
+key-length limit and was corrected by removing the unnecessary composite index
+before applying the schema locally.
+
+**Completed locally:** The employment-type migration is applied. The
+optimized, transaction-safe local synchronization now reports 445 Faculty
+accounts, all with full non-placeholder names, `@grc.test` emails, the shared
+local password, and a non-null employment type (7 Full-time, 438 Part-time).
+It includes 212 inactive accounts, including 12 deterministic inactive
+profiles distributed across the four colleges. The ignored account reference
+has been regenerated at `backend/storage/app/local-reports/professor-accounts.md`,
+grouped by department with the desired subject, availability, teaching-history,
+and current-unit columns. Of the faculty roster, 189 have workbook-derived
+preferences/history and 218 have workbook-derived availability; the rest
+remain deliberately visible for a Program Chair to configure manually.
+
+**Verification:** Focused Laravel tests pass (**15 tests / 72 assertions**),
+the focused Schedule & Faculty Loading Vitest suite passes (**3 tests**),
+targeted Prettier/ESLint checks pass, and the frontend production build passes.
+The Program Chair workforce editor now lists active and inactive faculty in
+their own college, supports Active/Inactive and Full-time/Part-time updates,
+requires a reason for deactivation, and writes an audit record. No schedule
+plans, enrollments, curricula, historical forecast data, or Room assignments
+were reset by this faculty-account synchronization.
+
+## 2026-08-09 — Canonical professor directory synchronization
+
+The user supplied `Subject And Prerequisuite/Professor_Department_List.md` as
+the canonical local professor list and requested one active account per entry,
+with only Name, Email, and Department shown in that same Markdown file. The
+new local-only synchronization will preserve college scope only where the
+source identifies COE, CCS, CBAE, or COA; Coaches and Unidentified entries
+will remain Active but unscoped rather than being assigned to a guessed
+college. The raw source and local account report remain untracked.
+
+**Completed locally:** The canonical 145-entry Markdown source now contains
+only Professor Name, local `@grc.test` Email, and Department. A local-only,
+idempotent synchronization creates or updates every listed Faculty account,
+preserves COE/CCS/CBAE/COA scope, leaves Coaches and Unidentified entries
+unscoped, and activates the complete Faculty directory. The local database now
+has 590 Faculty accounts and zero inactive Faculty accounts; all 145 source
+emails resolve to an Active account with the expected scope.
+
+## 2026-08-09 — Removal of obsolete CCS sample faculty account
+
+The local-only `Sample Faculty — CCS` account (`faculty.sample.ccs@grc.test`)
+was confirmed to be absent from the canonical professor directory and to have
+no section, recommendation, preference, teaching-history, audit, proposal, or
+generation-run records. The account, its six fixture availability windows, and
+its one personal access token were removed transactionally, so no generated
+schedule or canonical faculty record was affected. The legacy local fixture
+seeder can recreate this account only if it is explicitly run again.
+
+## 2026-08-09 — Wide-screen public and Faculty portal UI refinement
+
+Started a focused frontend-only layout refinement for the public landing hero
+and the Faculty GRC Connect primary Availability Preferences entry. The goal is
+to keep the existing GRC editorial crimson-and-gold identity while giving wide
+screens a deliberate readable frame and preventing the primary action card
+from appearing unintentionally centered. Existing user-owned frontend changes
+remain out of scope and will be preserved.
+
+**Design-service blocker:** Superdesign successfully created the project and
+baseline landing reproduction, but both attempts to generate the two requested
+wide-screen variants failed with `ECONNRESET`. No frontend source was changed
+and the local Superdesign workflow artifacts were removed; retry this visual
+iteration after the design service connection is restored.
+
+**Retry checkpoint:** A later authenticated retry reached the generation queue
+but exceeded the local 64-second response window twice. The public landing
+baseline remains available on the remote canvas, but no design variant or
+frontend implementation was produced.
+
+## 2026-08-09 — Direct wide-screen layout correction
+
+The user requested a direct correction rather than another remote design pass.
+Investigation confirmed that the GRC Connect primary action inherits the shared
+button `white-space: nowrap`, giving it a minimum content width greater than a
+narrow action card. The public landing’s side gutters come from its isolated
+`96rem` shell cap. A focused CSS contract test now captures the expected
+edge-to-edge public shell and wrapping primary action before the minimal CSS
+override is applied.
+
+**Completed:** The public shell is now full-width with no outer max-width,
+side border, or shadow, while its internal header and hero spacing remain
+unchanged. The Faculty action now fills its card, can shrink below the former
+nowrap minimum, and wraps its label rather than overhanging. The focused CSS
+contract test passed after the change; the landing-page suite (**4 tests**) and
+GRC Connect overview suite (**13 tests**) passed; Prettier passed; fast lint
+completed with only the three existing Fast Refresh warnings. The attempted
+production build exceeded the local 64-second command window, so it is not
+recorded as a build pass. Browser-based visual inspection was unavailable in
+this environment.

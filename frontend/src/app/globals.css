@@ -18,6 +18,16 @@
   }
 }
 
+/* Radix sets `data-state="active"|"inactive"`, not a bare `data-active`
+   attribute, so Tailwind's built-in `data-active:` variant (which matches
+   `[data-active]`) never matched — the active Tabs trigger never got its
+   highlight. */
+@custom-variant data-active {
+  &:where([data-state="active"]) {
+    @slot;
+  }
+}
+
 @theme inline {
   --font-heading: "Newsreader Variable", Georgia, serif;
   --font-sans: "IBM Plex Sans Variable", sans-serif;
@@ -1894,7 +1904,11 @@
 .public-masthead {
   min-height: 6.25rem;
   background:
-    radial-gradient(circle at 82% 0%, rgb(255 255 255 / 13%), transparent 18rem),
+    radial-gradient(
+      circle at 82% 0%,
+      rgb(255 255 255 / 13%),
+      transparent 18rem
+    ),
     linear-gradient(112deg, #65000a, var(--primary) 56%, #8e0619);
   border-bottom: 0;
 }
@@ -1964,8 +1978,16 @@
   overflow: hidden;
   color: var(--primary-foreground);
   background:
-    radial-gradient(circle at 84% 11%, rgb(255 255 255 / 17%), transparent 16rem),
-    radial-gradient(circle at 52% 115%, rgb(212 175 55 / 26%), transparent 28rem),
+    radial-gradient(
+      circle at 84% 11%,
+      rgb(255 255 255 / 17%),
+      transparent 16rem
+    ),
+    radial-gradient(
+      circle at 52% 115%,
+      rgb(212 175 55 / 26%),
+      transparent 28rem
+    ),
     linear-gradient(135deg, #4d0007, #920818 53%, #bd0b25);
 }
 
@@ -2230,7 +2252,11 @@
 .portal-sidebar {
   color: var(--primary-foreground);
   background:
-    radial-gradient(circle at 110% 5%, rgb(255 255 255 / 14%), transparent 15rem),
+    radial-gradient(
+      circle at 110% 5%,
+      rgb(255 255 255 / 14%),
+      transparent 15rem
+    ),
     linear-gradient(180deg, #6f000b, var(--primary) 56%, #870615);
   border-right: 0;
 }
@@ -2282,16 +2308,24 @@
 
 .grc-connect-hero {
   display: grid;
-  grid-template-columns: minmax(12rem, 0.65fr) minmax(0, 1.35fr) minmax(13rem, 0.55fr);
+  grid-template-columns: minmax(12rem, 0.65fr) minmax(0, 1.35fr) minmax(
+      13rem,
+      0.55fr
+    );
   gap: clamp(1.25rem, 3vw, 2.5rem);
   align-items: end;
   padding: clamp(1.5rem, 4vw, 3.5rem);
   color: var(--primary-foreground);
   background:
-    radial-gradient(circle at 90% 8%, rgb(255 255 255 / 17%), transparent 16rem),
+    radial-gradient(
+      circle at 90% 8%,
+      rgb(255 255 255 / 17%),
+      transparent 16rem
+    ),
     linear-gradient(125deg, #580008, var(--primary) 55%, #9a071a);
   border-radius: calc(var(--radius) * 1.5);
-  box-shadow: 0 1.25rem 2.75rem color-mix(in srgb, var(--primary) 18%, transparent);
+  box-shadow: 0 1.25rem 2.75rem
+    color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .grc-connect-hero__identity {
@@ -2352,7 +2386,8 @@
 
 .portal-module-card--primary {
   border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
-  box-shadow: 0 0.65rem 1.5rem color-mix(in srgb, var(--primary) 12%, transparent);
+  box-shadow: 0 0.65rem 1.5rem
+    color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .portal-planned-capabilities {
@@ -2494,4 +2529,32 @@
   .grc-connect-hero__action [data-slot="button"] {
     width: 100%;
   }
+}
+
+/* Keep the public experience edge-to-edge on wide screens. The page's own
+   sections retain their existing content padding, but the former 96rem shell
+   cap no longer leaves unrelated white gutters beside the GRC hero. */
+.institutional-shell {
+  width: 100%;
+  margin-inline: 0;
+  border-inline: 0;
+  box-shadow: none;
+}
+
+/* Button's shared `white-space: nowrap` is correct for compact controls, but
+   the Faculty start card can be narrower than this label. Make this one
+   primary action fill, and wrap within, its own card instead of overflowing it. */
+.grc-connect-hero__action {
+  min-width: 0;
+}
+
+.grc-connect-hero__action [data-slot="button"] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  height: auto;
+  justify-content: space-between;
+  white-space: normal;
+  text-align: left;
 }

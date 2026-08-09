@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 
+import { Badge } from "@/features/components/ui/badge"
 import { Field, FieldLabel } from "@/features/components/ui/field"
 import {
   Select,
@@ -43,6 +44,13 @@ function yearLabel(year: number) {
   return `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"} Year`
 }
 
+/** The most recent version (by effective_school_year) is "New curriculum";
+ * every earlier version for that program is "Old curriculum" — mirrors the
+ * labeling in program-chair-enrollment-workspace.tsx's curriculumAgeLabel. */
+function curriculumVersionLabel(index: number) {
+  return index === 0 ? "New curriculum" : "Old curriculum"
+}
+
 /**
  * Mirrors the backend's `SemesterCoverage::parse` bucketing (see
  * `backend/app/Domain/Curriculum/SemesterCoverage.php`) so a composite
@@ -67,11 +75,15 @@ interface ViewRow {
 export function CurriculumView({
   programs,
   curricula,
+  preview = false,
 }: {
   programs: readonly Program[]
   curricula: readonly Curriculum[]
+  preview?: boolean
 }) {
-  const activeCurricula = useMemo(
+  // View is the published catalog. Draft and in-review curricula remain in
+  // Manage until the Executive Director grants the final approval.
+  const viewableCurricula = useMemo(
     () => curricula.filter((curriculum) => curriculum.status === "active"),
     [curricula],
   )
@@ -79,22 +91,41 @@ export function CurriculumView({
     () =>
       programs
         .filter((program) =>
-          activeCurricula.some(
+          viewableCurricula.some(
             (curriculum) => curriculum.program_id === program.id,
           ),
         )
         .slice()
         .sort((a, b) => a.code.localeCompare(b.code)),
-    [programs, activeCurricula],
+    [programs, viewableCurricula],
   )
   const [programId, setProgramId] = useState(0)
+  const [curriculumId, setCurriculumId] = useState(0)
   const [yearFilter, setYearFilter] = useState("all")
   const [semesterFilter, setSemesterFilter] = useState("all")
 
   const selectedProgramId =
     programId > 0 ? programId : (availablePrograms[0]?.id ?? 0)
-  const curriculum = activeCurricula.find(
-    (item) => item.program_id === selectedProgramId,
+  const selectedProgram = availablePrograms.find(
+    (program) => program.id === selectedProgramId,
+  )
+  const programCurricula = useMemo(
+    () =>
+      viewableCurricula
+        .filter((item) => item.program_id === selectedProgramId)
+        .slice()
+        .sort((a, b) =>
+          b.effective_school_year.localeCompare(a.effective_school_year),
+        ),
+    [viewableCurricula, selectedProgramId],
+  )
+  const selectedCurriculumId = programCurricula.some(
+    (item) => item.id === curriculumId,
+  )
+    ? curriculumId
+    : (programCurricula[0]?.id ?? 0)
+  const curriculum = programCurricula.find(
+    (item) => item.id === selectedCurriculumId,
   )
 
   const rows = useMemo<ViewRow[]>(() => {
@@ -127,60 +158,130 @@ export function CurriculumView({
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field>
-          <FieldLabel htmlFor="curriculum-view-program">Program</FieldLabel>
-          <Select
-            value={selectedProgramId > 0 ? String(selectedProgramId) : ""}
-            onValueChange={(value) => setProgramId(Number(value))}
-          >
-            <SelectTrigger id="curriculum-view-program" className="w-full">
-              <SelectValue placeholder="Select a program" />
-            </SelectTrigger>
-            <SelectContent>
-              {availablePrograms.map((program) => (
-                <SelectItem key={program.id} value={String(program.id)}>
-                  {program.code} — {program.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="curriculum-view-year">Year level</FieldLabel>
-          <Select value={yearFilter} onValueChange={setYearFilter}>
-            <SelectTrigger id="curriculum-view-year" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearFilterOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="curriculum-view-semester">Semester</FieldLabel>
-          <Select value={semesterFilter} onValueChange={setSemesterFilter}>
-            <SelectTrigger id="curriculum-view-semester" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {semesterFilterOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
+      {!preview && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Field>
+            <FieldLabel htmlFor="curriculum-view-program">Program</FieldLabel>
+            <Select
+              value={selectedProgramId > 0 ? String(selectedProgramId) : ""}
+              onValueChange={(value) => {
+                setProgramId(Number(value))
+                setCurriculumId(0)
+              }}
+            >
+              <SelectTrigger
+                id="curriculum-view-program"
+                className="w-full overflow-hidden"
+              >
+                <SelectValue placeholder="Select a program">
+                  {selectedProgram && (
+                    <span className="block truncate">
+                      {selectedProgram.code} — {selectedProgram.name}
+                    </span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {availablePrograms.map((program) => (
+                  <SelectItem key={program.id} value={String(program.id)}>
+                    {program.code} — {program.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="curriculum-view-curriculum">
+              Curriculum
+            </FieldLabel>
+            <Select
+              value={
+                selectedCurriculumId > 0 ? String(selectedCurriculumId) : ""
+              }
+              onValueChange={(value) => setCurriculumId(Number(value))}
+            >
+              <SelectTrigger
+                id="curriculum-view-curriculum"
+                className="w-full overflow-hidden"
+              >
+                <SelectValue placeholder="Select a curriculum">
+                  {curriculum && (
+                    <span className="block truncate">
+                      {curriculum.name} ·{" "}
+                      {curriculumVersionLabel(
+                        programCurricula.findIndex(
+                          (item) => item.id === curriculum.id,
+                        ),
+                      )}
+                    </span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {/* `item.name` already carries the school year (e.g. "BSIT
+                  Curriculum 2024-2029" — see GrcCurriculumSeeder), so it
+                  isn't repeated here. */}
+                {programCurricula.map((item, index) => (
+                  <SelectItem key={item.id} value={String(item.id)}>
+                    <span className="block truncate">
+                      {item.name} · {curriculumVersionLabel(index)}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="curriculum-view-year">Year level</FieldLabel>
+            <Select value={yearFilter} onValueChange={setYearFilter}>
+              <SelectTrigger id="curriculum-view-year" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearFilterOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="curriculum-view-semester">Semester</FieldLabel>
+            <Select value={semesterFilter} onValueChange={setSemesterFilter}>
+              <SelectTrigger id="curriculum-view-semester" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {semesterFilterOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+      )}
+
+      {preview && curriculum && selectedProgram && (
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+          <div>
+            <p className="text-xs text-muted-foreground">Program</p>
+            <p className="font-medium">
+              {selectedProgram.code} — {selectedProgram.name}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Curriculum</p>
+            <p className="font-medium">{curriculum.name}</p>
+          </div>
+        </div>
+      )}
 
       {availablePrograms.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No active curriculum is available to view yet.
+          No curriculum is available to view yet.
         </p>
       )}
       {availablePrograms.length > 0 && rows.length === 0 && (
@@ -189,29 +290,92 @@ export function CurriculumView({
         </p>
       )}
 
-      {rows.map((row) => (
-        <Table key={`${row.year_level}-${row.semester}`}>
-          <TableCaption>
-            {yearLabel(row.year_level)} · {row.semester} Semester
-          </TableCaption>
+      {preview && rows.length > 0 && (
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Code</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Units</TableHead>
+              <TableHead>Prerequisites</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {row.subjects.map((subject) => (
-              <TableRow key={subject.subject_id}>
-                <TableCell>{subject.code}</TableCell>
-                <TableCell>{subject.title}</TableCell>
-                <TableCell>{subject.units ?? "—"}</TableCell>
-              </TableRow>
-            ))}
+            {rows.flatMap((row) => [
+              <TableRow key={`${row.year_level}-${row.semester}-heading`}>
+                <TableCell colSpan={4} className="bg-muted/40 font-medium">
+                  {yearLabel(row.year_level)} · {row.semester} Semester
+                </TableCell>
+              </TableRow>,
+              ...row.subjects.map((subject) => (
+                <TableRow key={subject.subject_id}>
+                  <TableCell>{subject.code}</TableCell>
+                  <TableCell>{subject.title}</TableCell>
+                  <TableCell>{subject.units ?? "—"}</TableCell>
+                  <TableCell>
+                    {subject.prerequisites.length === 0 ? (
+                      <span className="text-muted-foreground">None</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {subject.prerequisites.map((prerequisite) => (
+                          <Badge
+                            key={prerequisite.prerequisite_subject_id}
+                            variant="secondary"
+                          >
+                            {prerequisite.code}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )),
+            ])}
           </TableBody>
         </Table>
-      ))}
+      )}
+
+      {!preview &&
+        rows.map((row) => (
+          <Table key={`${row.year_level}-${row.semester}`}>
+            <TableCaption>
+              {yearLabel(row.year_level)} · {row.semester} Semester
+            </TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Units</TableHead>
+                <TableHead>Prerequisites</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {row.subjects.map((subject) => (
+                <TableRow key={subject.subject_id}>
+                  <TableCell>{subject.code}</TableCell>
+                  <TableCell>{subject.title}</TableCell>
+                  <TableCell>{subject.units ?? "—"}</TableCell>
+                  <TableCell>
+                    {subject.prerequisites.length === 0 ? (
+                      <span className="text-muted-foreground">None</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {subject.prerequisites.map((prerequisite) => (
+                          <Badge
+                            key={prerequisite.prerequisite_subject_id}
+                            variant="secondary"
+                          >
+                            {prerequisite.code}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ))}
     </div>
   )
 }

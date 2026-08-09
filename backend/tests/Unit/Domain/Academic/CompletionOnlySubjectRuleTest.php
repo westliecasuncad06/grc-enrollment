@@ -58,11 +58,11 @@ final class CompletionOnlySubjectRuleTest extends TestCase
         self::assertFalse(CompletionOnlySubjectRule::matches('LEAD 1', []));
     }
 
-    public function test_allowed_marks_for_a_completion_only_subject_is_exactly_the_four_completion_marks(): void
+    public function test_allowed_marks_for_a_completion_only_subject_is_complete_or_incomplete_only(): void
     {
         $allowed = CompletionOnlySubjectRule::allowedMarks('LEAD 1', self::PREFIXES);
 
-        self::assertSame(['C', 'NC', 'INC', 'DRP'], array_column($allowed, 'value'));
+        self::assertSame(['C', 'INC'], array_column($allowed, 'value'));
     }
 
     public function test_allowed_marks_for_an_academic_subject_is_numeric_plus_inc_and_drp_never_c_or_nc(): void

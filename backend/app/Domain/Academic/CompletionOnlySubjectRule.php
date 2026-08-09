@@ -3,7 +3,7 @@
 namespace App\Domain\Academic;
 
 /**
- * Identifies subjects graded Complete/Not-Complete instead of numerically —
+ * Identifies subjects graded Complete/Incomplete instead of numerically —
  * Leadership (LEAD 1–8) per user direction (2026-08-04). Pure and
  * config-driven (`config('enrollment.grading.completion_only_code_prefixes')`),
  * so amending which subjects are completion-only never requires a code
@@ -53,7 +53,7 @@ final class CompletionOnlySubjectRule
     public static function allowedMarks(string $code, array $prefixes): array
     {
         if (self::matches($code, $prefixes)) {
-            return GradeMark::completionCases();
+            return GradeMark::completionOnlyCases();
         }
 
         return [

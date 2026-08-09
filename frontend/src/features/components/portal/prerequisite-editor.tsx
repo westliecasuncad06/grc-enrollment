@@ -5,7 +5,6 @@ import { useState } from "react"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import { Field, FieldLabel } from "@/features/components/ui/field"
-import { Input } from "@/features/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -52,7 +51,6 @@ export function PrerequisiteEditor({
 }: PrerequisiteEditorProps) {
   const [subjectId, setSubjectId] = useState(0)
   const [prerequisiteId, setPrerequisiteId] = useState(0)
-  const [minimumGrade, setMinimumGrade] = useState("75")
   const [error, setError] = useState("")
   const selected = subjects.find((subject) => subject.subject_id === subjectId)
 
@@ -79,7 +77,7 @@ export function PrerequisiteEditor({
                 ...subject.prerequisites,
                 {
                   prerequisite_subject_id: prerequisiteId,
-                  minimum_grade: minimumGrade.trim() || "75",
+                  minimum_grade: "75",
                 },
               ],
             }
@@ -99,7 +97,7 @@ export function PrerequisiteEditor({
           <AlertDescription>{error || graphError}</AlertDescription>
         </Alert>
       )}
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <Field>
           <FieldLabel htmlFor="prerequisite-subject">
             Subject for prerequisite
@@ -143,27 +141,23 @@ export function PrerequisiteEditor({
             </SelectContent>
           </Select>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="minimum-grade">Minimum grade</FieldLabel>
-          <Input
-            id="minimum-grade"
-            value={minimumGrade}
-            onChange={(event) => setMinimumGrade(event.target.value)}
-          />
-        </Field>
         <div className="flex items-end">
           <Button type="button" onClick={addEdge}>
             Add prerequisite
           </Button>
         </div>
       </div>
-      <ul className="grid gap-1" aria-label="Current prerequisites">
+      <ul className="grid gap-2" aria-label="Current prerequisites">
         {subjects.flatMap((subject) =>
           subject.prerequisites.map((edge) => (
-            <li key={`${subject.subject_id}-${edge.prerequisite_subject_id}`}>
-              {nameFor(subject.subject_id)} requires{" "}
-              {nameFor(edge.prerequisite_subject_id)} (minimum{" "}
-              {edge.minimum_grade}){" "}
+            <li
+              key={`${subject.subject_id}-${edge.prerequisite_subject_id}`}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2"
+            >
+              <span>
+                {nameFor(subject.subject_id)} requires{" "}
+                {nameFor(edge.prerequisite_subject_id)}
+              </span>
               <Button
                 type="button"
                 variant="ghost"

@@ -1,9 +1,18 @@
 "use client"
 
+import { useState } from "react"
 import { Trash2Icon, XIcon } from "lucide-react"
 
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
+import { Input } from "@/features/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -27,21 +36,27 @@ export interface CurriculumSubjectSpreadsheetProps {
   yearLevel: number
   subjects: readonly CurriculumSubjectInput[]
   subjectCatalog: readonly Subject[]
-  defaultMinimumGrade: string
+  prerequisiteSubjects: readonly Subject[]
   isLocked: boolean
   onChange: (subjects: CurriculumSubjectInput[]) => void
   onAddRow: () => void
 }
 
+const fixedPrerequisiteMinimumGrade = "75"
+
 export function CurriculumSubjectSpreadsheet({
   yearLevel,
   subjects,
   subjectCatalog,
-  defaultMinimumGrade,
+  prerequisiteSubjects,
   isLocked,
   onChange,
   onAddRow,
 }: CurriculumSubjectSpreadsheetProps) {
+  const [prerequisiteEditorIndex, setPrerequisiteEditorIndex] = useState<
+    number | null
+  >(null)
+  const [prerequisiteSearch, setPrerequisiteSearch] = useState("")
   const rows = subjects
     .map((subject, index) => ({ subject, index }))
     .filter(({ subject }) => subject.year_level === yearLevel)
@@ -63,7 +78,7 @@ export function CurriculumSubjectSpreadsheet({
         ...subject.prerequisites,
         {
           prerequisite_subject_id: prerequisiteSubjectId,
-          minimum_grade: defaultMinimumGrade,
+          minimum_grade: fixedPrerequisiteMinimumGrade,
         },
       ],
     })
@@ -75,6 +90,26 @@ export function CurriculumSubjectSpreadsheet({
         (edge) => edge.prerequisite_subject_id !== prerequisiteSubjectId,
       ),
     })
+  }
+  const clearPrerequisites = (index: number) =>
+    replaceRow(index, { prerequisites: [] })
+  const editingPrerequisiteSubject =
+    prerequisiteEditorIndex === null ? null : subjects[prerequisiteEditorIndex]
+  const prerequisiteCandidates = editingPrerequisiteSubject
+    ? prerequisiteSubjects.filter(
+        (candidate) =>
+          candidate.id !== editingPrerequisiteSubject.subject_id &&
+          !editingPrerequisiteSubject.prerequisites.some(
+            (edge) => edge.prerequisite_subject_id === candidate.id,
+          ) &&
+          `${candidate.code} ${candidate.title}`
+            .toLowerCase()
+            .includes(prerequisiteSearch.trim().toLowerCase()),
+      )
+    : []
+  const openPrerequisiteEditor = (index: number) => {
+    setPrerequisiteSearch("")
+    setPrerequisiteEditorIndex(index)
   }
   const yearName = `${yearLevel}${yearLevel === 1 ? "st" : yearLevel === 2 ? "nd" : yearLevel === 3 ? "rd" : "th"} Year`
 
@@ -114,15 +149,6 @@ export function CurriculumSubjectSpreadsheet({
           {rows.map(({ subject, index }) => {
             const code = codeFor(subject.subject_id)
             const details = subjectFor(subject.subject_id)
-            const candidates = subjects.filter(
-              (candidate) =>
-                candidate.subject_id !== subject.subject_id &&
-                !subject.prerequisites.some(
-                  (edge) =>
-                    edge.prerequisite_subject_id === candidate.subject_id,
-                ),
-            )
-
             return (
               <TableRow key={subject.subject_id}>
                 <TableCell>
@@ -167,19 +193,19 @@ export function CurriculumSubjectSpreadsheet({
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell className="whitespace-normal">
-                  <div className="flex min-w-52 flex-wrap items-center gap-1">
+                <TableCell className="min-w-64 align-top whitespace-normal">
+                  <div className="flex flex-wrap items-center gap-2">
                     {subject.prerequisites.length === 0 && (
                       <span className="text-muted-foreground">None</span>
                     )}
                     {subject.prerequisites.map((edge) => (
-                      <Badge
+                      <div
                         key={edge.prerequisite_subject_id}
-                        variant="secondary"
-                        className="gap-1 pr-1"
+                        className="flex items-center gap-1"
                       >
-                        {codeFor(edge.prerequisite_subject_id)} ·{" "}
-                        {edge.minimum_grade}
+                        <Badge variant="secondary">
+                          {codeFor(edge.prerequisite_subject_id)}
+                        </Badge>
                         <Button
                           type="button"
                           variant="ghost"
@@ -195,34 +221,22 @@ export function CurriculumSubjectSpreadsheet({
                         >
                           <XIcon aria-hidden="true" />
                         </Button>
-                      </Badge>
+                      </div>
                     ))}
-                    <Select
-                      value=""
-                      onValueChange={(value) =>
-                        addPrerequisite(index, Number(value))
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={
+                        subject.prerequisites.length > 0
+                          ? `Edit prerequisites for ${code}`
+                          : `Add prerequisite for ${code}`
                       }
-                      disabled={isLocked || candidates.length === 0}
+                      disabled={isLocked}
+                      onClick={() => openPrerequisiteEditor(index)}
                     >
-                      <SelectTrigger
-                        aria-label={`Add prerequisite for ${code}`}
-                        className="w-auto"
-                      >
-                        <SelectValue placeholder="Add" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {candidates.map((candidate) => (
-                            <SelectItem
-                              key={candidate.subject_id}
-                              value={String(candidate.subject_id)}
-                            >
-                              {codeFor(candidate.subject_id)}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                      {subject.prerequisites.length > 0 ? "Edit" : "Add"}
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -230,6 +244,66 @@ export function CurriculumSubjectSpreadsheet({
           })}
         </TableBody>
       </Table>
+      <Dialog
+        open={prerequisiteEditorIndex !== null}
+        onOpenChange={(open) => !open && setPrerequisiteEditorIndex(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingPrerequisiteSubject
+                ? `Edit prerequisites for ${codeFor(editingPrerequisiteSubject.subject_id)}`
+                : "Edit prerequisites"}
+            </DialogTitle>
+            <DialogDescription>
+              Search subjects from the latest active curriculum.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="Search prerequisites"
+            placeholder="Search by subject code or description"
+            value={prerequisiteSearch}
+            onChange={(event) => setPrerequisiteSearch(event.target.value)}
+          />
+          <div className="grid max-h-56 gap-1 overflow-y-auto">
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              disabled={!editingPrerequisiteSubject?.prerequisites.length}
+              onClick={() => {
+                if (prerequisiteEditorIndex !== null)
+                  clearPrerequisites(prerequisiteEditorIndex)
+                setPrerequisiteEditorIndex(null)
+              }}
+            >
+              None
+            </Button>
+            {prerequisiteCandidates.map((candidate) => {
+              return (
+                <Button
+                  key={candidate.id}
+                  type="button"
+                  variant="outline"
+                  className="justify-start"
+                  onClick={() => {
+                    if (prerequisiteEditorIndex !== null)
+                      addPrerequisite(prerequisiteEditorIndex, candidate.id)
+                    setPrerequisiteEditorIndex(null)
+                  }}
+                >
+                  {candidate.code} — {candidate.title}
+                </Button>
+              )
+            })}
+            {prerequisiteCandidates.length === 0 && (
+              <p className="py-3 text-sm text-muted-foreground">
+                No eligible subjects found.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

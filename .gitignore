@@ -56,3 +56,5 @@ Thumbs.db
 /coverage/
 *.log
 /.playwright-mcp/
+/.superpowers/
+/frontend/test-output.txt

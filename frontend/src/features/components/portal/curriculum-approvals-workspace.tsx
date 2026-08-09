@@ -182,27 +182,31 @@ export function CurriculumApprovalsWorkspace() {
         open={reviewing !== null}
         onOpenChange={(open) => !open && setReviewing(null)}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-5xl gap-0 overflow-hidden p-0 sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>{reviewing?.name}</DialogTitle>
-            <DialogDescription>
-              {reviewing && programFor(reviewing.program_id)?.name} ·{" "}
-              {reviewing?.effective_school_year}
-            </DialogDescription>
+            <div className="border-b bg-muted/30 px-6 py-5 pr-14">
+              <DialogTitle>{reviewing?.name}</DialogTitle>
+              <DialogDescription>
+                {reviewing && programFor(reviewing.program_id)?.name} ·{" "}
+                {reviewing?.effective_school_year}
+              </DialogDescription>
+            </div>
           </DialogHeader>
-          {reviewing && programsQuery.data && (
-            <CurriculumView
-              programs={programsQuery.data.filter(
-                (program) => program.id === reviewing.program_id,
-              )}
-              // CurriculumView only ever renders curricula whose status is
-              // "active" — this preview stands in for a curriculum awaiting
-              // this reviewer's decision, so its status is overridden purely
-              // for this read-only render; nothing here is persisted.
-              curricula={[{ ...reviewing, status: "active" as const }]}
-            />
-          )}
-          <DialogFooter>
+          <div className="max-h-[calc(90vh-11rem)] overflow-y-auto px-6 py-5">
+            {reviewing && programsQuery.data && (
+              <CurriculumView
+                preview
+                programs={programsQuery.data.filter(
+                  (program) => program.id === reviewing.program_id,
+                )}
+                // CurriculumView only renders published curricula. This
+                // review-only preview temporarily supplies the pending
+                // record as active without persisting that status.
+                curricula={[{ ...reviewing, status: "active" as const }]}
+              />
+            )}
+          </div>
+          <DialogFooter className="border-t bg-background px-6 py-4 sm:justify-end">
             <Button
               type="button"
               variant="outline"

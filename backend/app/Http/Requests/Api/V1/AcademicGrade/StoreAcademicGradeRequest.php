@@ -109,7 +109,7 @@ final class StoreAcademicGradeRequest extends FormRequest
 
         if (! in_array($mark, $allowed, true)) {
             $message = CompletionOnlySubjectRule::matches($subject->code, $prefixes)
-                ? "{$subject->code} is a Leadership subject and is recorded as Complete (C) or Not Complete (NC), not a numeric grade."
+                ? "{$subject->code} is a Leadership subject and is recorded as Complete (C) or Incomplete (INC), not a numeric grade."
                 : "{$subject->code} cannot be recorded as Complete/Not Complete.";
 
             $validator->errors()->add('mark', $message);

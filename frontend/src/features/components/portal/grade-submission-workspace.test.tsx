@@ -129,9 +129,7 @@ function stubGradeRoutes(
       )
     }
     if (url.includes("/subjects")) {
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: subjects })),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
     }
     return Promise.resolve(new Response(JSON.stringify({ data: sections })))
   })
@@ -279,7 +277,7 @@ describe("GradeSubmissionWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("offers only Complete/Not Complete marks for a Leadership subject, never a numeric grade", async () => {
+  it("offers only Complete or Incomplete marks for a Leadership subject, never a numeric grade", async () => {
     stubGradeRoutes(fetchMock)
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
@@ -293,8 +291,11 @@ describe("GradeSubmissionWorkspace", () => {
       screen.getByRole("option", { name: "C — Complete" }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("option", { name: "NC — Not Complete" }),
+      screen.getByRole("option", { name: "INC — Incomplete" }),
     ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: /Not Complete|Dropped/ }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("option", { name: /Excellent/ }),
     ).not.toBeInTheDocument()
@@ -310,7 +311,9 @@ describe("GradeSubmissionWorkspace", () => {
     const table = await screen.findByRole("table", { name: "Roster grades" })
     await user.click(within(table).getByLabelText(/Mark for 2026-0001/))
 
-    expect(screen.getByRole("option", { name: /Excellent/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole("option", { name: /Excellent/ }),
+    ).toBeInTheDocument()
     expect(screen.getByRole("option", { name: /Failed/ })).toBeInTheDocument()
     expect(
       screen.queryByRole("option", { name: "C — Complete" }),

@@ -74,7 +74,6 @@ import {
   toCurriculumReplacement,
   transitionCurriculum,
 } from "@/features/services/curriculum-service"
-import { PrerequisiteEditor } from "@/features/components/portal/prerequisite-editor"
 import { CurriculumView } from "@/features/components/portal/curriculum-view"
 import { CurriculumCreationWizard } from "@/features/components/portal/curriculum-creation-wizard"
 import { CurriculumSubjectSpreadsheet } from "@/features/components/portal/curriculum-subject-spreadsheet"
@@ -112,8 +111,6 @@ function valuesFromCurriculum(
 }
 
 const years = [1, 2, 3, 4] as const
-/** Default minimum grade for an edge added from a placement row. */
-const defaultMinimumGrade = "75"
 /**
  * Quiet period before a placement edit is pushed to the server. Long enough
  * that a chair walking a row's cells produces one write instead of four.
@@ -122,6 +119,26 @@ const autosaveDelayMs = 800
 
 function yearLabel(year: number) {
   return `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"} Year`
+}
+
+function isInProgress(curriculum: Curriculum) {
+  return (
+    curriculum.status === "draft" ||
+    curriculum.status === "pending_dean_review" ||
+    curriculum.status === "pending_executive_review"
+  )
+}
+
+function latestInProgressCurriculum(curricula: readonly Curriculum[]) {
+  return curricula
+    .filter(isInProgress)
+    .slice()
+    .sort(
+      (left, right) =>
+        right.effective_school_year.localeCompare(left.effective_school_year) ||
+        right.id - left.id,
+    )
+    .slice(0, 1)
 }
 
 export function CurriculumWorkspace() {
@@ -140,7 +157,13 @@ export function CurriculumWorkspace() {
   const [placementDetails, setPlacementDetails] = useState<
     Curriculum["subjects"]
   >([])
-  const selectedCurriculum = (curriculaQuery.data ?? []).find(
+  // Manage owns one current workflow only. Historical and final-approved
+  // curricula stay in View; keeping just the latest Draft/pending item here
+  // also prevents accidental edits to an older saved copy.
+  const inProgressCurricula = latestInProgressCurriculum(
+    curriculaQuery.data ?? [],
+  )
+  const selectedCurriculum = inProgressCurricula.find(
     (item) => item.id === selectedId,
   )
   const candidateSubjectsQuery = useCurrentCurriculumSubjectsQuery(
@@ -155,9 +178,9 @@ export function CurriculumWorkspace() {
     setSelectedIdState(id)
     setRowDialogOpen(false)
   }, [])
-  const [discardTarget, setDiscardTarget] = useState<number | null>(null)
   const [activeYear, setActiveYear] = useState("1")
-  const [graphOpen, setGraphOpen] = useState(false)
+  const [curriculumPickerOpen, setCurriculumPickerOpen] = useState(false)
+  const [discardTarget, setDiscardTarget] = useState<number | null>(null)
   const [requestError, setRequestError] = useState("")
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
   const form = useForm<CurriculumWorkspaceValues>({
@@ -225,6 +248,11 @@ export function CurriculumWorkspace() {
       setIsEditing(false)
       setSubmitDialogOpen(false)
     },
+    onError: () => {
+      setRequestError(
+        "Curriculum could not be submitted for Dean review. Save the latest changes and try again.",
+      )
+    },
   })
   const save = useCallback(
     async (input: CurriculumWorkspaceValues) => {
@@ -264,7 +292,8 @@ export function CurriculumWorkspace() {
   }
   const isLocked = !isEditing || selectedCurriculum?.status !== "draft"
   const requestEdit = (id: number) => {
-    if (id === selectedId) return
+    if (id === selectedId) return setCurriculumPickerOpen(false)
+    setCurriculumPickerOpen(false)
     if (form.formState.isDirty && isEditing) return setDiscardTarget(id)
     if (id === 0) {
       setSelectedId(0)
@@ -405,32 +434,6 @@ export function CurriculumWorkspace() {
               <TabsTrigger value="view">View</TabsTrigger>
             </TabsList>
             <TabsContent value="manage" className="grid gap-4">
-              <div className="grid gap-2">
-                <Field>
-                  <FieldLabel htmlFor="curriculum-select">
-                    Curriculum
-                  </FieldLabel>
-                  <Select
-                    value={String(selectedId)}
-                    onValueChange={(value) => requestEdit(Number(value))}
-                  >
-                    <SelectTrigger id="curriculum-select" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Select a curriculum</SelectItem>
-                      {(curriculaQuery.data ?? []).map((curriculum) => (
-                        <SelectItem
-                          key={curriculum.id}
-                          value={String(curriculum.id)}
-                        >
-                          {curriculum.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
               {selectedCurriculum ? (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-muted/30 p-4">
@@ -456,9 +459,19 @@ export function CurriculumWorkspace() {
                         </Badge>
                       </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {isEditing ? "Editing Draft" : "Read-only preview"}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        {isEditing ? "Editing Draft" : "Read-only preview"}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurriculumPickerOpen(true)}
+                      >
+                        Change curriculum
+                      </Button>
+                    </div>
                   </div>
                   <FieldGroup>
                     <Field data-invalid={Boolean(form.formState.errors.name)}>
@@ -501,21 +514,23 @@ export function CurriculumWorkspace() {
                           ))}
                         </TabsList>
                         <div className="flex flex-wrap items-center gap-2">
+                          {isEditing && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isPending || !autosaveReady}
+                              onClick={() => void save(form.getValues())}
+                            >
+                              Save changes
+                            </Button>
+                          )}
                           <span
                             aria-live="polite"
                             className="text-sm text-muted-foreground"
                           >
                             {saveState}
                           </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isLocked}
-                            onClick={() => setGraphOpen(true)}
-                          >
-                            Prerequisite graph
-                          </Button>
                         </div>
                       </div>
                       {years.map((year) => (
@@ -528,7 +543,9 @@ export function CurriculumWorkspace() {
                             yearLevel={year}
                             subjects={formSubjects}
                             subjectCatalog={catalog}
-                            defaultMinimumGrade={defaultMinimumGrade}
+                            prerequisiteSubjects={
+                              candidateSubjectsQuery.data ?? []
+                            }
                             isLocked={isLocked}
                             onChange={setPlacements}
                             onAddRow={() => setRowDialogOpen(true)}
@@ -542,12 +559,25 @@ export function CurriculumWorkspace() {
                   </section>
                 </>
               ) : session?.role === "program_chair" ? (
-                <CurriculumCreationWizard
-                  programs={programsQuery.data ?? []}
-                  college={session.college}
-                  disabled={createMutation.isPending}
-                  onProceed={createFromWizard}
-                />
+                <div className="grid gap-3">
+                  <CurriculumCreationWizard
+                    programs={programsQuery.data ?? []}
+                    college={session.college}
+                    disabled={createMutation.isPending}
+                    onProceed={createFromWizard}
+                  />
+                  {inProgressCurricula.length > 0 && (
+                    <div className="flex justify-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setCurriculumPickerOpen(true)}
+                      >
+                        Open saved curriculum
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ) : null}
               {selectedCurriculum?.status === "draft" && !isEditing && (
                 <div className="flex justify-end">
@@ -582,6 +612,7 @@ export function CurriculumWorkspace() {
                   </DialogHeader>
                   {programsQuery.data && (
                     <CurriculumView
+                      preview
                       programs={programsQuery.data.filter(
                         (program) => program.id === watchedValues.program_id,
                       )}
@@ -648,21 +679,36 @@ export function CurriculumWorkspace() {
         isSubmitting={placementMutation.isPending}
         onSubmit={addSubjectRow}
       />
-      <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+      <Dialog
+        open={curriculumPickerOpen}
+        onOpenChange={setCurriculumPickerOpen}
+      >
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Prerequisite graph</DialogTitle>
+            <DialogTitle>Open saved curriculum</DialogTitle>
             <DialogDescription>
-              Every prerequisite edge in this curriculum. Rows added from a year
-              tab use a minimum grade of {defaultMinimumGrade}; change it here.
+              Select a curriculum to review or edit its draft.
             </DialogDescription>
           </DialogHeader>
-          <PrerequisiteEditor
-            subjects={formSubjects}
-            subjectCatalog={catalog}
-            graphError={form.formState.errors.subjects?.message}
-            onChange={setPlacements}
-          />
+          <Field>
+            <FieldLabel htmlFor="curriculum-select">Curriculum</FieldLabel>
+            <Select
+              value={String(selectedId)}
+              onValueChange={(value) => requestEdit(Number(value))}
+            >
+              <SelectTrigger id="curriculum-select" className="w-full">
+                <SelectValue placeholder="Select a curriculum" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Select a curriculum</SelectItem>
+                {inProgressCurricula.map((curriculum) => (
+                  <SelectItem key={curriculum.id} value={String(curriculum.id)}>
+                    {curriculum.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
         </DialogContent>
       </Dialog>
       <AlertDialog

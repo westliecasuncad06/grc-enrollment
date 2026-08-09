@@ -40,7 +40,7 @@ export const gradeMarkLabel: Record<GradeMarkValue, string> = {
 
 /**
  * Which marks a subject may take — Leadership subjects (completion-only)
- * are Complete/Not-Complete/Incomplete/Dropped only, never a numeric grade.
+ * are Complete or Incomplete only, never a numeric grade.
  */
 export function allowedMarksForSubject(
   isCompletionOnly: boolean,

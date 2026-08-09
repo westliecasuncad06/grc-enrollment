@@ -4,6 +4,7 @@ namespace Tests\Feature\Database;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\User;
 use Database\Seeders\RoleUserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,6 +44,17 @@ final class RoleUserSeederTest extends TestCase
         foreach ($emails as $email) {
             $this->assertStringEndsWith('@grc.test', $email);
         }
+    }
+
+    public function test_the_seed_dean_is_scoped_to_ccs_for_local_curriculum_reviews(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'dean.seed@grc.test',
+            'role' => UserRole::Dean->value,
+            'college' => CollegeCode::Ccs->value,
+        ]);
     }
 
     public function test_seeded_passwords_are_hashed_not_stored_in_plain_text(): void

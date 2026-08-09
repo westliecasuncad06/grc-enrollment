@@ -124,4 +124,12 @@ enum GradeMark: string
     {
         return [self::Complete, self::NotComplete, self::Incomplete, self::Dropped];
     }
+
+    /**
+     * @return list<self>
+     */
+    public static function completionOnlyCases(): array
+    {
+        return [self::Complete, self::Incomplete];
+    }
 }
