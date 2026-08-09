@@ -160,23 +160,37 @@ export function FacultySubjectPreferencePanel() {
     setRequestError("")
     try {
       await preferenceMutation.mutateAsync({ id: editing?.id, input })
-      if (!specializationsBySubject.has(input.subject_id)) {
-        await specializationMutation.mutateAsync({
-          subject_id: input.subject_id,
-          proficiency,
-        })
-      }
-      setEditing(null)
-      form.reset({
-        curriculum_id: input.curriculum_id,
-        semester: input.semester,
-        subject_id: 0,
-      })
     } catch (error) {
       if (!applyApiFieldErrors(error, form.setError))
         setRequestError(
           "Subject preference could not be saved. Check the connection and try again.",
         )
+      return
+    }
+
+    // The preference write succeeded regardless of what happens next, so its
+    // success path (form reset, exit edit mode) always runs. The
+    // specialization write below is independent: its failure must not be
+    // reported as the preference save failing, and it must not route field
+    // errors into a form that has already been reset.
+    setEditing(null)
+    form.reset({
+      curriculum_id: input.curriculum_id,
+      semester: input.semester,
+      subject_id: 0,
+    })
+
+    if (!specializationsBySubject.has(input.subject_id)) {
+      try {
+        await specializationMutation.mutateAsync({
+          subject_id: input.subject_id,
+          proficiency,
+        })
+      } catch {
+        setRequestError(
+          "Preference saved, but the proficiency could not be recorded. Try setting it again.",
+        )
+      }
     }
   }
 

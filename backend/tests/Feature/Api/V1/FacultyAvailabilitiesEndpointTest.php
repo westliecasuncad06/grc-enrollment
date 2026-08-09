@@ -148,6 +148,42 @@ final class FacultyAvailabilitiesEndpointTest extends TestCase
         ]);
     }
 
+    public function test_updating_over_a_seeded_slot_replaces_it(): void
+    {
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.update-seeded-slot@grc.test');
+        FacultyAvailability::create([
+            'professor_id' => $professor->id,
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '17:00:00',
+            'origin' => 'workbook_seeded',
+        ]);
+        $declared = FacultyAvailability::create([
+            'professor_id' => $professor->id,
+            'day_of_week' => 2,
+            'starts_at_time' => '09:00:00',
+            'ends_at_time' => '10:00:00',
+            'origin' => 'declared',
+        ]);
+
+        $response = $this->withToken($token)->patchJson("/api/v1/faculty-availabilities/{$declared->id}", [
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '09:00:00',
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseCount('faculty_availabilities', 1);
+        $this->assertDatabaseHas('faculty_availabilities', [
+            'id' => $declared->id,
+            'professor_id' => $professor->id,
+            'day_of_week' => 1,
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '09:00:00',
+            'origin' => 'declared',
+        ]);
+    }
+
     public function test_a_faculty_member_sees_only_their_own_availability_in_the_index(): void
     {
         [$professorA, $tokenA] = $this->tokenFor(UserRole::Faculty, 'professor.a@grc.test');

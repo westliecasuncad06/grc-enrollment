@@ -98,6 +98,10 @@ final class WorkbookFacultyProfileSeeder extends Seeder
         $this->loadReferenceData();
 
         $resolvedProfessorDirectory = DB::transaction(function () use ($profiles, $professorDirectoryEntries): array {
+            FacultyCurriculumSubjectPreference::query()->where('origin', 'workbook_seeded')->delete();
+            FacultyAvailability::query()->where('origin', 'workbook_seeded')->delete();
+            FacultySpecialization::query()->where('source', 'seeded')->delete();
+
             /** @var array<string, User> $usersByProfile */
             $usersByProfile = [];
             foreach ($profiles as $profileKey => $profile) {
@@ -585,19 +589,6 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             ->orderBy('id')
             ->get(['id', 'email', 'college', 'employment_type']);
         $facultyIds = $faculty->pluck('id')->all();
-
-        FacultyCurriculumSubjectPreference::query()
-            ->whereIn('professor_id', $facultyIds)
-            ->where('origin', 'workbook_seeded')
-            ->delete();
-        FacultyAvailability::query()
-            ->whereIn('professor_id', $facultyIds)
-            ->where('origin', 'workbook_seeded')
-            ->delete();
-        FacultySpecialization::query()
-            ->whereIn('professor_id', $facultyIds)
-            ->where('source', 'seeded')
-            ->delete();
 
         $availabilitySlotsByProfessor = FacultyAvailability::query()
             ->whereIn('professor_id', $facultyIds)

@@ -86,6 +86,38 @@ CSV;
         }
     }
 
+    public function test_it_retains_the_real_workbook_evidence_derived_preference_after_completing_profiles(): void
+    {
+        $this->seedReferenceCatalog();
+        $fixturePath = $this->writeFixture();
+
+        try {
+            (new WorkbookFacultyProfileSeeder($fixturePath))->run();
+
+            $professor = User::query()->where('name', 'Henry N. Corrales')->sole();
+            $curriculum = Curriculum::query()
+                ->whereHas('program', fn ($query) => $query->where('college', CollegeCode::Ccs->value))
+                ->sole();
+            $subject = Subject::query()->where('code', 'IT101')->where('college', CollegeCode::Ccs->value)->sole();
+
+            // The fixture's only 1st-semester evidence for this professor is
+            // IT101, so the real evidence-derived preference must land at
+            // rank 1 and survive `seedCompleteFacultyProfiles()`'s gap-fill
+            // pass untouched — it must not be wiped and replaced by an
+            // arbitrary hash-derived subject/rank.
+            $this->assertDatabaseHas('faculty_curriculum_subject_preferences', [
+                'professor_id' => $professor->id,
+                'curriculum_id' => $curriculum->id,
+                'semester' => '1st',
+                'subject_id' => $subject->id,
+                'rank' => 1,
+                'origin' => 'workbook_seeded',
+            ]);
+        } finally {
+            @unlink($fixturePath);
+        }
+    }
+
     public function test_it_assigns_a_local_employment_type_and_creates_named_active_faculty_accounts(): void
     {
         $this->seedReferenceCatalog();
@@ -175,103 +207,118 @@ CSV;
             GrcSubjectCatalogSeeder::class,
             GrcCurriculumSeeder::class,
         ]);
+        $directoryPath = $this->copyRealProfessorDepartmentListFixture();
 
-        (new WorkbookFacultyProfileSeeder(
-            base_path('database/seeders/data/curriculum-2024-2029-schedule-references.csv'),
-            base_path('../Subject And Prerequisuite/Professor_Department_List.md'),
-        ))->run();
+        try {
+            (new WorkbookFacultyProfileSeeder(
+                base_path('database/seeders/data/curriculum-2024-2029-schedule-references.csv'),
+                $directoryPath,
+            ))->run();
 
-        $professors = User::query()
-            ->where('role', UserRole::Faculty->value)
-            ->orderBy('id')
-            ->get();
-
-        $this->assertGreaterThanOrEqual(145, $professors->count());
-        $this->assertCount(
-            145,
-            $professors->filter(
-                static fn (User $professor): bool => str_starts_with($professor->email, 'faculty.list.')
-                    && str_ends_with($professor->email, '@grc.test'),
-            ),
-        );
-        $this->assertSame(0, FacultyAvailability::query()->where('day_of_week', 7)->count());
-
-        $generalEducationSubjectIds = Subject::query()
-            ->select('code')
-            ->groupBy('code')
-            ->havingRaw('count(distinct college) > 1')
-            ->pluck('code');
-
-        foreach ($professors as $professor) {
-            $this->assertGreaterThan(
-                0,
-                FacultyAvailability::query()
-                    ->where('professor_id', $professor->id)
-                    ->where('origin', 'workbook_seeded')
-                    ->count(),
-                "{$professor->email} is missing reusable workbook availability.",
-            );
-            $this->assertGreaterThanOrEqual(
-                4,
-                FacultySpecialization::query()->where('professor_id', $professor->id)->count(),
-                "{$professor->email} is missing seeded specializations.",
-            );
-
-            if ($professor->college === null) {
-                $this->assertSame(
-                    0,
-                    FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count(),
-                    "{$professor->email} must not receive college curriculum preferences.",
-                );
-                $this->assertSame(
-                    0,
-                    FacultySpecialization::query()
-                        ->where('professor_id', $professor->id)
-                        ->whereHas('subject', fn ($query) => $query
-                            ->whereNotLike('code', 'NSTP%')
-                            ->whereNotLike('code', 'PATHFIT%')
-                            ->whereNotLike('code', 'PE%')
-                            ->whereNotIn('code', $generalEducationSubjectIds))
-                        ->count(),
-                    "{$professor->email} must only receive PE, NSTP, or general-education specializations.",
-                );
-
-                continue;
-            }
-
-            $curricula = Curriculum::query()
-                ->whereHas('program', fn ($query) => $query->where('college', $professor->college->value))
+            $professors = User::query()
+                ->where('role', UserRole::Faculty->value)
+                ->orderBy('id')
                 ->get();
-            foreach ($curricula as $curriculum) {
-                foreach (['1st', '2nd'] as $semester) {
-                    $availableSubjectCount = CurriculumSubject::query()
-                        ->where('curriculum_id', $curriculum->id)
-                        ->where(function ($query) use ($semester): void {
-                            $query->where('semester', $semester)
-                                ->orWhere('semester', '1st|2nd');
-                        })
-                        ->count();
-                    if ($availableSubjectCount === 0) {
-                        continue;
-                    }
 
-                    $preferences = FacultyCurriculumSubjectPreference::query()
+            $this->assertGreaterThanOrEqual(145, $professors->count());
+            $this->assertCount(
+                145,
+                $professors->filter(
+                    static fn (User $professor): bool => str_starts_with($professor->email, 'faculty.list.')
+                        && str_ends_with($professor->email, '@grc.test'),
+                ),
+            );
+            $this->assertSame(0, FacultyAvailability::query()->where('day_of_week', 7)->count());
+
+            $generalEducationSubjectIds = Subject::query()
+                ->select('code')
+                ->groupBy('code')
+                ->havingRaw('count(distinct college) > 1')
+                ->pluck('code');
+
+            foreach ($professors as $professor) {
+                $this->assertGreaterThan(
+                    0,
+                    FacultyAvailability::query()
                         ->where('professor_id', $professor->id)
-                        ->where('curriculum_id', $curriculum->id)
-                        ->where('semester', $semester)
                         ->where('origin', 'workbook_seeded')
-                        ->orderBy('rank')
-                        ->get();
+                        ->count(),
+                    "{$professor->email} is missing reusable workbook availability.",
+                );
+                $this->assertGreaterThanOrEqual(
+                    4,
+                    FacultySpecialization::query()->where('professor_id', $professor->id)->count(),
+                    "{$professor->email} is missing seeded specializations.",
+                );
 
-                    $this->assertGreaterThanOrEqual(
-                        min(5, $availableSubjectCount),
-                        $preferences->count(),
-                        "{$professor->email} is missing {$curriculum->name} {$semester} preferences.",
+                if ($professor->college === null) {
+                    $this->assertSame(
+                        0,
+                        FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count(),
+                        "{$professor->email} must not receive college curriculum preferences.",
                     );
-                    $this->assertLessThanOrEqual(min(8, $availableSubjectCount), $preferences->count());
-                    $this->assertSame(range(1, $preferences->count()), $preferences->pluck('rank')->all());
+                    $this->assertSame(
+                        0,
+                        FacultySpecialization::query()
+                            ->where('professor_id', $professor->id)
+                            ->whereHas('subject', fn ($query) => $query
+                                ->whereNotLike('code', 'NSTP%')
+                                ->whereNotLike('code', 'PATHFIT%')
+                                ->whereNotLike('code', 'PE%')
+                                ->whereNotIn('code', $generalEducationSubjectIds))
+                            ->count(),
+                        "{$professor->email} must only receive PE, NSTP, or general-education specializations.",
+                    );
+
+                    continue;
+                }
+
+                $curricula = Curriculum::query()
+                    ->whereHas('program', fn ($query) => $query->where('college', $professor->college->value))
+                    ->get();
+                foreach ($curricula as $curriculum) {
+                    foreach (['1st', '2nd'] as $semester) {
+                        $availableSubjectCount = CurriculumSubject::query()
+                            ->where('curriculum_id', $curriculum->id)
+                            ->where(function ($query) use ($semester): void {
+                                $query->where('semester', $semester)
+                                    ->orWhere('semester', '1st|2nd');
+                            })
+                            ->count();
+                        if ($availableSubjectCount === 0) {
+                            continue;
+                        }
+
+                        $preferences = FacultyCurriculumSubjectPreference::query()
+                            ->where('professor_id', $professor->id)
+                            ->where('curriculum_id', $curriculum->id)
+                            ->where('semester', $semester)
+                            ->where('origin', 'workbook_seeded')
+                            ->orderBy('rank')
+                            ->get();
+
+                        $this->assertGreaterThanOrEqual(
+                            min(5, $availableSubjectCount),
+                            $preferences->count(),
+                            "{$professor->email} is missing {$curriculum->name} {$semester} preferences.",
+                        );
+                        // Upper bound is the subject pool itself, not a fixed
+                        // 8: a professor's real workbook-derived evidence for
+                        // this curriculum/semester is preserved (Finding 1)
+                        // and gap-filled on top up to 5-8 *additional*
+                        // subjects, so genuine evidence can legitimately push
+                        // the total above 8 when the pool is large enough.
+                        $this->assertLessThanOrEqual(
+                            $availableSubjectCount,
+                            $preferences->count(),
+                            "{$professor->email} has more {$curriculum->name} {$semester} preferences than subjects exist.",
+                        );
+                        $this->assertSame(range(1, $preferences->count()), $preferences->pluck('rank')->all());
+                    }
                 }
             }
+        } finally {
+            @unlink($directoryPath);
         }
     }
 
@@ -421,6 +468,22 @@ CSV;
             $lines[] = implode(',', [$college, $program, 1, $semester, $code, $day, $start, $end, '3A', 'F2F', $professor, 100 + $index, '']);
         }
         file_put_contents($path, implode(PHP_EOL, $lines).PHP_EOL);
+
+        return $path;
+    }
+
+    /**
+     * The real, git-tracked professor directory is read-only source data for
+     * the seeder to synchronize against, but `WorkbookFacultyProfileSeeder`
+     * writes its resolved directory back to whatever path it is given.
+     * Tests that need the real 145-professor directory content must operate
+     * on a disposable copy, never the tracked file itself.
+     */
+    private function copyRealProfessorDepartmentListFixture(): string
+    {
+        $source = base_path('../Subject And Prerequisuite/Professor_Department_List.md');
+        $path = tempnam(sys_get_temp_dir(), 'grc_professor_directory_real_').'.md';
+        copy($source, $path);
 
         return $path;
     }

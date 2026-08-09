@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -64,5 +64,61 @@ describe("FacultyAvailabilityPanel", () => {
       expect.stringContaining("/api/v1/faculty-availabilities"),
       expect.objectContaining({ method: "GET" }),
     )
+  })
+
+  it("edits and confirms removal of an availability before deleting it", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      const requestUrl = url(input)
+      if (
+        requestUrl.endsWith("/faculty-availabilities") &&
+        (!init?.method || init.method === "GET")
+      )
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [availability] })),
+        )
+      if (
+        requestUrl.endsWith("/faculty-availabilities/4") &&
+        init?.method === "PATCH"
+      )
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: { ...availability, starts_at_time: "09:00:00" },
+            }),
+          ),
+        )
+      if (
+        requestUrl.endsWith("/faculty-availabilities/4") &&
+        init?.method === "DELETE"
+      )
+        return Promise.resolve(new Response(null, { status: 204 }))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWithSession(<FacultyInputWorkspace />, { session })
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit availability" }),
+    )
+    await user.clear(screen.getByLabelText("Start time"))
+    await user.type(screen.getByLabelText("Start time"), "09:00:00")
+    await user.click(
+      screen.getByRole("button", { name: "Update availability" }),
+    )
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remove availability" }),
+    )
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "Remove availability",
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm removal" }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/faculty-availabilities/4"),
+        expect.objectContaining({ method: "DELETE" }),
+      )
+    })
   })
 })
