@@ -1,8 +1,11 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi, type Mock } from "vitest"
 
-import { CurriculumSubjectRowDialog } from "@/features/components/portal/curriculum-subject-row-dialog"
+import {
+  CurriculumSubjectRowDialog,
+  type CurriculumSubjectRowDialogProps,
+} from "@/features/components/portal/curriculum-subject-row-dialog"
 import type { Subject } from "@/features/schemas/reference-data-schema"
 import { ApiClientError } from "@/features/services/api-client"
 
@@ -27,15 +30,24 @@ const readyCandidates = {
   refetch: vi.fn(),
 }
 
+type SubmitMock = Mock<CurriculumSubjectRowDialogProps["onSubmit"]>
+type OpenChangeMock = Mock<CurriculumSubjectRowDialogProps["onOpenChange"]>
+
 function renderDialog(
   options: {
     candidateQuery?: typeof readyCandidates
-    onSubmit?: ReturnType<typeof vi.fn>
-    onOpenChange?: ReturnType<typeof vi.fn>
+    onSubmit?: SubmitMock
+    onOpenChange?: OpenChangeMock
   } = {},
 ) {
-  const onSubmit = options.onSubmit ?? vi.fn().mockResolvedValue(undefined)
-  const onOpenChange = options.onOpenChange ?? vi.fn()
+  const onSubmit =
+    options.onSubmit ??
+    vi
+      .fn<CurriculumSubjectRowDialogProps["onSubmit"]>()
+      .mockResolvedValue(undefined)
+  const onOpenChange =
+    options.onOpenChange ??
+    vi.fn<CurriculumSubjectRowDialogProps["onOpenChange"]>()
 
   render(
     <CurriculumSubjectRowDialog
@@ -94,9 +106,7 @@ describe("CurriculumSubjectRowDialog", () => {
     const user = userEvent.setup()
     const { onSubmit } = renderDialog()
 
-    await user.click(
-      screen.getByRole("button", { name: "Create new subject" }),
-    )
+    await user.click(screen.getByRole("button", { name: "Create new subject" }))
     await user.type(screen.getByLabelText("Subject code"), " CS205 ")
     await user.type(screen.getByLabelText("Description"), " Web Systems ")
     await user.type(screen.getByLabelText("Units"), "3")
@@ -140,12 +150,12 @@ describe("CurriculumSubjectRowDialog", () => {
         code: ["The subject code is already used in this college."],
       },
     })
-    const onSubmit = vi.fn().mockRejectedValue(duplicate)
+    const onSubmit = vi
+      .fn<CurriculumSubjectRowDialogProps["onSubmit"]>()
+      .mockRejectedValue(duplicate)
     renderDialog({ onSubmit })
 
-    await user.click(
-      screen.getByRole("button", { name: "Create new subject" }),
-    )
+    await user.click(screen.getByRole("button", { name: "Create new subject" }))
     await user.type(screen.getByLabelText("Subject code"), "CS205")
     await user.type(screen.getByLabelText("Description"), "Web Systems")
     await user.type(screen.getByLabelText("Units"), "3")
