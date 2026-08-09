@@ -18,7 +18,6 @@ final class FacultyAvailabilityResource extends JsonResource
      *     type: string,
      *     id: int,
      *     professor_id: int,
-     *     academic_term_id: int,
      *     day_of_week: int,
      *     starts_at_time: string,
      *     ends_at_time: string
@@ -30,7 +29,6 @@ final class FacultyAvailabilityResource extends JsonResource
             'type' => 'faculty_availability',
             'id' => $this->resource->id,
             'professor_id' => $this->resource->professor_id,
-            'academic_term_id' => $this->resource->academic_term_id,
             'day_of_week' => $this->resource->day_of_week,
             'starts_at_time' => $this->resource->starts_at_time,
             'ends_at_time' => $this->resource->ends_at_time,

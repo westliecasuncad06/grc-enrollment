@@ -75,7 +75,6 @@ final class GenerateFacultyAssignmentRecommendations
             ->get()
             ->keyBy(fn (FacultyTeachingHistory $history): string => $history->professor_id.':'.$history->curriculum_id.':'.$history->subject_id);
         $availabilities = FacultyAvailability::query()
-            ->where('academic_term_id', $run->academic_term_id)
             ->whereIn('professor_id', $faculty->pluck('id'))
             ->get()
             ->groupBy('professor_id');

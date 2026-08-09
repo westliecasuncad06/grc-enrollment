@@ -58,7 +58,6 @@ import {
   useFacultyPreferenceCatalogQuery,
   useFacultyTeachingHistoryQuery,
 } from "@/features/hooks/use-faculty-input"
-import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import {
   facultyAvailabilityInputSchema,
@@ -76,10 +75,6 @@ import {
   updateFacultyAvailability,
   updateFacultyCurriculumSubjectPreference,
 } from "@/features/services/faculty-service"
-import {
-  formatAcademicTerm,
-  getActiveAcademicTerm,
-} from "@/features/services/reference-data-service"
 
 const weekdays = [
   [1, "Monday"],
@@ -88,11 +83,9 @@ const weekdays = [
   [4, "Thursday"],
   [5, "Friday"],
   [6, "Saturday"],
-  [7, "Sunday"],
 ] as const
 
 const emptyAvailability: FacultyAvailabilityInput = {
-  academic_term_id: 0,
   day_of_week: 1,
   starts_at_time: "",
   ends_at_time: "",
@@ -119,7 +112,6 @@ function availabilitySummary(row: FacultyAvailability): string {
 export function FacultyInputWorkspace() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
-  const termsQuery = useAcademicTermsQuery()
   const availabilitiesQuery = useFacultyAvailabilitiesQuery()
   const catalogQuery = useFacultyPreferenceCatalogQuery()
   const preferencesQuery = useFacultyCurriculumSubjectPreferencesQuery()
@@ -194,12 +186,6 @@ export function FacultyInputWorkspace() {
     onError: () => setRequestError("The item could not be removed. Try again."),
   })
 
-  const activeTerm = getActiveAcademicTerm(termsQuery.data)
-  useEffect(() => {
-    if (activeTerm && availabilityForm.getValues("academic_term_id") === 0) {
-      availabilityForm.setValue("academic_term_id", activeTerm.id)
-    }
-  }, [activeTerm, availabilityForm])
   useEffect(() => {
     if (selectedCurriculumId === 0 && catalogQuery.data?.[0]) {
       preferenceForm.setValue(
@@ -251,10 +237,7 @@ export function FacultyInputWorkspace() {
         input,
       })
       setEditingAvailability(null)
-      availabilityForm.reset({
-        ...emptyAvailability,
-        academic_term_id: activeTerm?.id ?? 0,
-      })
+      availabilityForm.reset(emptyAvailability)
     } catch (error) {
       if (!applyApiFieldErrors(error, availabilityForm.setError))
         setRequestError(
@@ -284,7 +267,6 @@ export function FacultyInputWorkspace() {
   }
 
   const inputErrors =
-    termsQuery.isError ||
     availabilitiesQuery.isError ||
     catalogQuery.isError ||
     preferencesQuery.isError ||
@@ -330,8 +312,8 @@ export function FacultyInputWorkspace() {
           <CardHeader>
             <CardTitle level={2}>Availability windows</CardTitle>
             <CardDescription>
-              Use your actual academic-term availability. Times are checked
-              before recommendation.
+              Use your recurring weekly availability. Times are checked before
+              recommendation.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -342,46 +324,6 @@ export function FacultyInputWorkspace() {
               }
             >
               <FieldGroup>
-                <Field
-                  data-invalid={Boolean(
-                    availabilityForm.formState.errors.academic_term_id,
-                  )}
-                >
-                  <FieldLabel htmlFor="availability-term">
-                    Academic term
-                  </FieldLabel>
-                  <Controller
-                    control={availabilityForm.control}
-                    name="academic_term_id"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value ? String(field.value) : ""}
-                        onValueChange={(value) => field.onChange(Number(value))}
-                        disabled={isSaving || termsQuery.isLoading}
-                      >
-                        <SelectTrigger
-                          id="availability-term"
-                          className="w-full"
-                        >
-                          <SelectValue placeholder="Select an academic term" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(termsQuery.data ?? []).map((term) => (
-                            <SelectItem key={term.id} value={String(term.id)}>
-                              {formatAcademicTerm(term)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  <FieldError>
-                    {
-                      availabilityForm.formState.errors.academic_term_id
-                        ?.message
-                    }
-                  </FieldError>
-                </Field>
                 <Field>
                   <FieldLabel htmlFor="availability-day">Day</FieldLabel>
                   <Controller
@@ -444,10 +386,7 @@ export function FacultyInputWorkspace() {
                   </FieldError>
                 </Field>
                 <div className="flex gap-2">
-                  <Button
-                    type="submit"
-                    disabled={isSaving || termsQuery.isLoading}
-                  >
+                  <Button type="submit" disabled={isSaving}>
                     {editingAvailability
                       ? "Update availability"
                       : "Save availability"}
@@ -458,10 +397,7 @@ export function FacultyInputWorkspace() {
                       variant="outline"
                       onClick={() => {
                         setEditingAvailability(null)
-                        availabilityForm.reset({
-                          ...emptyAvailability,
-                          academic_term_id: activeTerm?.id ?? 0,
-                        })
+                        availabilityForm.reset(emptyAvailability)
                       }}
                     >
                       Cancel edit
@@ -504,7 +440,6 @@ export function FacultyInputWorkspace() {
                               onClick={() => {
                                 setEditingAvailability(row)
                                 availabilityForm.reset({
-                                  academic_term_id: row.academic_term_id,
                                   day_of_week: row.day_of_week,
                                   starts_at_time: row.starts_at_time,
                                   ends_at_time: row.ends_at_time,

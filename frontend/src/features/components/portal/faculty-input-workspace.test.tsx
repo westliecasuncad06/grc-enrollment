@@ -38,8 +38,18 @@ const catalog = {
         {
           semester: "1st",
           subjects: [
-            { id: 501, code: "LEAD 1", title: "Leadership Seminar 1", units: 1.5 },
-            { id: 502, code: "IT 101", title: "Introduction to Computing", units: 3 },
+            {
+              id: 501,
+              code: "LEAD 1",
+              title: "Leadership Seminar 1",
+              units: 1.5,
+            },
+            {
+              id: 502,
+              code: "IT 101",
+              title: "Introduction to Computing",
+              units: 3,
+            },
           ],
         },
         { semester: "2nd", subjects: [] },
@@ -51,7 +61,6 @@ const availability = {
   type: "faculty_availability",
   id: 4,
   professor_id: 5,
-  academic_term_id: 1,
   day_of_week: 1,
   starts_at_time: "08:00:00",
   ends_at_time: "10:00:00",
@@ -142,6 +151,26 @@ describe("FacultyInputWorkspace", () => {
     expect(
       screen.getByText("No workbook teaching history is available yet."),
     ).toBeInTheDocument()
+  })
+
+  it("does not ask for an academic term for recurring availability", async () => {
+    stubData(fetchMock)
+    renderWorkspace()
+    await screen.findByRole("button", { name: "Edit availability" })
+    expect(
+      screen.queryByRole("combobox", { name: "Academic term" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("offers Monday through Saturday without Sunday", async () => {
+    const user = userEvent.setup()
+    stubData(fetchMock)
+    renderWorkspace()
+    await screen.findByRole("button", { name: "Edit availability" })
+    await user.click(screen.getByRole("combobox", { name: "Day" }))
+    expect(
+      screen.queryByRole("option", { name: "Sunday" }),
+    ).not.toBeInTheDocument()
   })
 
   it("uses the searchable curriculum subject picker and maps validation to rank", async () => {

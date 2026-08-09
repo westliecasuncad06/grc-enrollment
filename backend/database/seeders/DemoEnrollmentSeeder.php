@@ -509,7 +509,6 @@ final class DemoEnrollmentSeeder extends Seeder
                     FacultyAvailability::updateOrCreate(
                         [
                             'professor_id' => $professor->id,
-                            'academic_term_id' => $currentTerm->id,
                             'day_of_week' => $dayOfWeek,
                             'starts_at_time' => '08:00:00',
                         ],

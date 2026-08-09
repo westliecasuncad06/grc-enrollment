@@ -65,9 +65,6 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     /** @var array<string, true> */
     private array $curriculumSubjectSemesterKeys = [];
 
-    /** @var array<string, list<AcademicTerm>> */
-    private array $planningTermsBySemester = [];
-
     private ?string $localPasswordHash = null;
 
     public function __construct(
@@ -470,15 +467,12 @@ final class WorkbookFacultyProfileSeeder extends Seeder
                     continue;
                 }
                 foreach ($this->days($row['day'] ?? '') as $day) {
-                    foreach ($this->termsForSemester($semester) as $term) {
-                        $availability[$professor->id.':'.$term->id.':'.$day][] = [
-                            'professor_id' => $professor->id,
-                            'academic_term_id' => $term->id,
-                            'day_of_week' => $day,
-                            'starts_at_time' => $start,
-                            'ends_at_time' => $end,
-                        ];
-                    }
+                    $availability[$professor->id.':'.$day][] = [
+                        'professor_id' => $professor->id,
+                        'day_of_week' => $day,
+                        'starts_at_time' => $start,
+                        'ends_at_time' => $end,
+                    ];
                 }
             }
         }
@@ -542,7 +536,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
         }
     }
 
-    /** @param array<string, list<array{professor_id: int, academic_term_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string}>> $availability */
+    /** @param array<string, list<array{professor_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string}>> $availability */
     private function persistAvailability(array $availability): void
     {
         foreach ($availability as $windows) {
@@ -563,14 +557,8 @@ final class WorkbookFacultyProfileSeeder extends Seeder
         }
     }
 
-    /** @return list<AcademicTerm> */
-    private function termsForSemester(string $semester): array
-    {
-        return $this->planningTermsBySemester[$semester] ?? [];
-    }
-
     /**
-     * Preload the subject, curriculum, placement, and term data used by every
+     * Preload the subject, curriculum, and placement data used by every
      * workbook row. This keeps the local-only seed deterministic without
      * issuing hundreds of repeated catalog queries.
      */
@@ -613,12 +601,6 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             ] = true;
         }
 
-        $this->planningTermsBySemester = AcademicTerm::query()
-            ->whereNotIn('status', ['archived', 'semester_closed'])
-            ->get()
-            ->groupBy('semester')
-            ->map(static fn ($terms): array => $terms->values()->all())
-            ->all();
     }
 
     private function subjectKey(string $college, string $code): string
@@ -637,12 +619,11 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             'thursday' => 4, 'thu' => 4, 'th' => 4,
             'friday' => 5, 'fri' => 5, 'f' => 5,
             'saturday' => 6, 'sat' => 6,
-            'sunday' => 7, 'sun' => 7,
         ];
         if (isset($known[$value])) {
             return [$known[$value]];
         }
-        preg_match_all('/th|sat|sun|m|t|w|f/u', str_replace(['/', ',', ' '], '', $value), $matches);
+        preg_match_all('/th|sat|m|t|w|f/u', str_replace(['/', ',', ' '], '', $value), $matches);
 
         return array_values(array_unique(array_filter(array_map(static fn (string $token): ?int => $known[$token] ?? null, $matches[0] ?? []))));
     }
@@ -706,9 +687,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             ->get()
             ->groupBy('professor_id');
         $availability = FacultyAvailability::query()
-            ->with('academicTerm')
             ->whereIn('professor_id', $facultyIds)
-            ->orderBy('academic_term_id')
             ->orderBy('day_of_week')
             ->orderBy('starts_at_time')
             ->get()
@@ -750,7 +729,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
                     $codes['2nd'] === [] ? null : '2nd: '.implode(', ', array_unique($codes['2nd'])),
                 ]));
                 $desiredAvailability = $availability->get($user->id, collect())
-                    ->map(fn (FacultyAvailability $window): string => $window->academicTerm->school_year.' '.$window->academicTerm->semester.' '.self::dayLabel($window->day_of_week).' '.$window->starts_at_time.'-'.$window->ends_at_time)
+                    ->map(fn (FacultyAvailability $window): string => self::dayLabel($window->day_of_week).' '.$window->starts_at_time.'-'.$window->ends_at_time)
                     ->implode('; ');
                 $teachingHistory = $history->get($user->id, collect())
                     ->map(fn (FacultyTeachingHistory $entry): string => $entry->subject->code.' ×'.$entry->evidence_count)

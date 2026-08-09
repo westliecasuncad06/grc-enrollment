@@ -16,7 +16,6 @@ const availability = {
   type: "faculty_availability",
   id: 4,
   professor_id: 5,
-  academic_term_id: 1,
   day_of_week: 1,
   starts_at_time: "08:00:00",
   ends_at_time: "10:00:00",
@@ -53,7 +52,6 @@ describe("faculty-service", () => {
     await expect(getFacultyAvailabilities()).resolves.toEqual([availability])
     await expect(
       createFacultyAvailability({
-        academic_term_id: 1,
         day_of_week: 1,
         starts_at_time: "08:00:00",
         ends_at_time: "10:00:00",
@@ -61,7 +59,6 @@ describe("faculty-service", () => {
     ).resolves.toEqual(availability)
     await expect(
       updateFacultyAvailability(4, {
-        academic_term_id: 1,
         day_of_week: 1,
         starts_at_time: "09:00:00",
         ends_at_time: "10:00:00",
@@ -108,11 +105,21 @@ describe("faculty-service", () => {
     await expect(deleteFacultySubjectPreference(6)).resolves.toBeUndefined()
   })
 
-  it("rejects availability times that would violate the published contract before fetch", async () => {
+  it("rejects Sunday availability before fetch", async () => {
     await expect(
       createFacultyAvailability({
-        academic_term_id: 1,
-        day_of_week: 8,
+        day_of_week: 7,
+        starts_at_time: "08:00:00",
+        ends_at_time: "09:00:00",
+      }),
+    ).rejects.toMatchObject({ kind: "contract" })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("rejects malformed availability times before fetch", async () => {
+    await expect(
+      createFacultyAvailability({
+        day_of_week: 1,
         starts_at_time: "08:00",
         ends_at_time: "07:00:00",
       }),

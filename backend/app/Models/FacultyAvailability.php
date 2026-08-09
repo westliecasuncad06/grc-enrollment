@@ -8,19 +8,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A recurring weekly availability window for one professor in one term.
- * `day_of_week` uses ISO-8601 numbering (1 = Monday … 7 = Sunday).
+ * A recurring weekly availability window for one professor.
+ * `day_of_week` uses ISO-8601 numbering (1 = Monday … 6 = Saturday).
  *
  * @property int $id
  * @property int $professor_id
- * @property int $academic_term_id
  * @property int $day_of_week
  * @property string $starts_at_time
  * @property string $ends_at_time
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read User $professor
- * @property-read AcademicTerm $academicTerm
  */
 final class FacultyAvailability extends Model
 {
@@ -36,7 +34,6 @@ final class FacultyAvailability extends Model
     /** @var list<string> */
     protected $fillable = [
         'professor_id',
-        'academic_term_id',
         'day_of_week',
         'starts_at_time',
         'ends_at_time',
@@ -59,14 +56,6 @@ final class FacultyAvailability extends Model
     public function professor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'professor_id');
-    }
-
-    /**
-     * @return BelongsTo<AcademicTerm, $this>
-     */
-    public function academicTerm(): BelongsTo
-    {
-        return $this->belongsTo(AcademicTerm::class);
     }
 
     /**

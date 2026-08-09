@@ -18,16 +18,15 @@ final class UpdateFacultyAvailabilityRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'academic_term_id' => ['required', 'integer', 'exists:academic_terms,id'],
-            'day_of_week' => ['required', 'integer', 'between:1,7'],
+            'day_of_week' => ['required', 'integer', 'between:1,6'],
             'starts_at_time' => [
                 'required',
                 'date_format:H:i:s',
                 Rule::unique('faculty_availabilities')->where(
                     fn ($query) => $query
                         ->where('professor_id', $this->user()?->id)
-                        ->where('academic_term_id', $this->input('academic_term_id'))
-                        ->where('day_of_week', $this->input('day_of_week')),
+                        ->where('day_of_week', $this->integer('day_of_week'))
+                        ->where('origin', 'declared'),
                 )->ignore($this->route('facultyAvailability')),
             ],
             'ends_at_time' => ['required', 'date_format:H:i:s', 'after:starts_at_time'],

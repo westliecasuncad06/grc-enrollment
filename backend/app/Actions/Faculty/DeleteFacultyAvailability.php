@@ -33,12 +33,11 @@ final class DeleteFacultyAvailability
         });
     }
 
-    /** @return array{professor_id: int, academic_term_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string} */
+    /** @return array{professor_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string} */
     private static function snapshot(FacultyAvailability $availability): array
     {
         return [
             'professor_id' => $availability->professor_id,
-            'academic_term_id' => $availability->academic_term_id,
             'day_of_week' => $availability->day_of_week,
             'starts_at_time' => $availability->starts_at_time,
             'ends_at_time' => $availability->ends_at_time,

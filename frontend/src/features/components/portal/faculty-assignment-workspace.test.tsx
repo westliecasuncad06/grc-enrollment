@@ -68,8 +68,13 @@ const directory = {
       type: "faculty_member",
       id: 12,
       name: "Prof. Reyes",
+      college: "ccs",
       status: "active",
       status_label: "Active",
+      employment_type: "part_time",
+      employment_type_label: "Part-time",
+      planning_unit_reference: null,
+      is_assignable: true,
     },
   ],
 }
@@ -79,7 +84,6 @@ const availability = {
       type: "faculty_availability",
       id: 1,
       professor_id: 12,
-      academic_term_id: 2,
       day_of_week: 1,
       starts_at_time: "08:00:00",
       ends_at_time: "12:00:00",
@@ -121,7 +125,7 @@ describe("FacultyAssignmentWorkspace", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("offers active faculty with matching availability and preferences for unassigned sections", async () => {
+  it("uses a faculty member's term-independent availability for the selected term", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input, init) =>
       Promise.resolve(

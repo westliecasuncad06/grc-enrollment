@@ -9,8 +9,7 @@ export const facultyAvailabilitySchema = z
     type: z.literal("faculty_availability"),
     id: z.number().int().positive(),
     professor_id: z.number().int().positive(),
-    academic_term_id: z.number().int().positive(),
-    day_of_week: z.number().int().min(1).max(7),
+    day_of_week: z.number().int().min(1).max(6),
     starts_at_time: timeSchema,
     ends_at_time: timeSchema,
   })
@@ -25,8 +24,7 @@ export const facultyAvailabilityEnvelopeSchema = z
   .strict()
 
 const availabilityInputShape = {
-  academic_term_id: z.number().int().positive("Select an academic term."),
-  day_of_week: z.number().int().min(1).max(7),
+  day_of_week: z.number().int().min(1).max(6),
   starts_at_time: timeSchema,
   ends_at_time: timeSchema,
 }

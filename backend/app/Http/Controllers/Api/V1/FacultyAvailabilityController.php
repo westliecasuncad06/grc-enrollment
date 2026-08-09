@@ -29,7 +29,6 @@ final class FacultyAvailabilityController extends Controller
 
         $availabilities = FacultyAvailability::query()
             ->visibleTo($user)
-            ->orderBy('academic_term_id')
             ->orderBy('day_of_week')
             ->orderBy('starts_at_time')
             ->get();
@@ -49,7 +48,6 @@ final class FacultyAvailabilityController extends Controller
         $this->authorize('create', FacultyAvailability::class);
 
         $availability = $action->execute($user, [
-            'academic_term_id' => $request->validated('academic_term_id'),
             'day_of_week' => $request->validated('day_of_week'),
             'starts_at_time' => $request->validated('starts_at_time'),
             'ends_at_time' => $request->validated('ends_at_time'),
@@ -74,7 +72,6 @@ final class FacultyAvailabilityController extends Controller
         $this->authorize('update', $facultyAvailability);
 
         $availability = $action->execute($user, [
-            'academic_term_id' => $request->validated('academic_term_id'),
             'day_of_week' => $request->validated('day_of_week'),
             'starts_at_time' => $request->validated('starts_at_time'),
             'ends_at_time' => $request->validated('ends_at_time'),

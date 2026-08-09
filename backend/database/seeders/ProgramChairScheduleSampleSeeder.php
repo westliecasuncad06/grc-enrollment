@@ -68,7 +68,7 @@ final class ProgramChairScheduleSampleSeeder extends Seeder
 
             foreach ($facultyByCollege as $college => $faculty) {
                 FacultyAvailability::updateOrCreate(
-                    ['professor_id' => $faculty->id, 'academic_term_id' => $term->id, 'day_of_week' => 1, 'starts_at_time' => '08:00:00'],
+                    ['professor_id' => $faculty->id, 'day_of_week' => 1, 'starts_at_time' => '08:00:00'],
                     ['ends_at_time' => '12:00:00'],
                 );
                 $curriculum = $this->activeCurriculumFor($college);

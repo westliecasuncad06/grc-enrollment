@@ -15,7 +15,7 @@ final class UpdateFacultyAvailability
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{academic_term_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string}  $validatedData
+     * @param  array{day_of_week: int, starts_at_time: string, ends_at_time: string}  $validatedData
      */
     public function execute(
         User $actor,
@@ -27,7 +27,6 @@ final class UpdateFacultyAvailability
             $beforeValues = self::snapshot($availability);
 
             $availability->update([
-                'academic_term_id' => $validatedData['academic_term_id'],
                 'day_of_week' => $validatedData['day_of_week'],
                 'starts_at_time' => $validatedData['starts_at_time'],
                 'ends_at_time' => $validatedData['ends_at_time'],
@@ -49,12 +48,11 @@ final class UpdateFacultyAvailability
         });
     }
 
-    /** @return array{professor_id: int, academic_term_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string} */
+    /** @return array{professor_id: int, day_of_week: int, starts_at_time: string, ends_at_time: string} */
     private static function snapshot(FacultyAvailability $availability): array
     {
         return [
             'professor_id' => $availability->professor_id,
-            'academic_term_id' => $availability->academic_term_id,
             'day_of_week' => $availability->day_of_week,
             'starts_at_time' => $availability->starts_at_time,
             'ends_at_time' => $availability->ends_at_time,

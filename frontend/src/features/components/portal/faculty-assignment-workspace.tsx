@@ -80,9 +80,7 @@ export function FacultyAssignmentWorkspace() {
     (directoryQuery.data ?? []).find((member) => member.id === professorId) ??
     null
   const availability = (availabilitiesQuery.data ?? []).filter(
-    (item) =>
-      item.professor_id === professorId &&
-      item.academic_term_id === selectedTermId,
+    (item) => item.professor_id === professorId,
   )
   const preferences = (preferencesQuery.data ?? []).filter(
     (item) =>

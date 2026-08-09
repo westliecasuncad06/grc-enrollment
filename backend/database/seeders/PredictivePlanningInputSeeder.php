@@ -51,7 +51,7 @@ final class PredictivePlanningInputSeeder extends Seeder
         foreach ($faculty as $member) {
             foreach (range(1, 6) as $day) {
                 FacultyAvailability::updateOrCreate(
-                    ['professor_id' => $member->id, 'academic_term_id' => $term->id, 'day_of_week' => $day, 'starts_at_time' => '08:00:00'],
+                    ['professor_id' => $member->id, 'day_of_week' => $day, 'starts_at_time' => '08:00:00'],
                     ['ends_at_time' => '17:00:00'],
                 );
             }
