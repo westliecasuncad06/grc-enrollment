@@ -6,6 +6,7 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -38,11 +39,11 @@ final class FacultyMembersEndpointTest extends TestCase
 
     public function test_program_chair_receives_active_faculty_only_in_name_then_id_order_with_an_audit_record(): void
     {
-        $chair = $this->makeUser('directory-chair', UserRole::ProgramChair);
-        $firstFaculty = $this->makeUser('directory-first', UserRole::Faculty, 'Ada Faculty');
-        $secondFaculty = $this->makeUser('directory-second', UserRole::Faculty, 'Ada Faculty');
-        $disabledFaculty = $this->makeUser('directory-disabled', UserRole::Faculty, 'Disabled Faculty', UserStatus::Disabled);
-        $nonFaculty = $this->makeUser('directory-non-faculty', UserRole::Dean, 'Dean User');
+        $chair = $this->makeUser('directory-chair', UserRole::ProgramChair, null, UserStatus::Active, CollegeCode::Ccs);
+        $firstFaculty = $this->makeUser('directory-first', UserRole::Faculty, 'Ada Faculty', UserStatus::Active, CollegeCode::Ccs);
+        $secondFaculty = $this->makeUser('directory-second', UserRole::Faculty, 'Ada Faculty', UserStatus::Active, CollegeCode::Ccs);
+        $disabledFaculty = $this->makeUser('directory-disabled', UserRole::Faculty, 'Disabled Faculty', UserStatus::Disabled, CollegeCode::Ccs);
+        $nonFaculty = $this->makeUser('directory-non-faculty', UserRole::Dean, 'Dean User', UserStatus::Active, CollegeCode::Ccs);
 
         $response = $this->withToken($this->tokenFor($chair))
             ->getJson('/api/v1/faculty-members');
@@ -59,7 +60,7 @@ final class FacultyMembersEndpointTest extends TestCase
             ->assertJsonPath('data.1.id', $secondFaculty->id);
 
         self::assertSame(
-            ['type', 'id', 'name', 'status', 'status_label'],
+            ['type', 'id', 'name', 'college', 'status', 'status_label', 'employment_type', 'employment_type_label', 'planning_unit_reference', 'is_assignable'],
             array_keys($response->json('data.0')),
         );
         $response->assertDontSee($firstFaculty->email);
@@ -67,6 +68,14 @@ final class FacultyMembersEndpointTest extends TestCase
         $response->assertDontSee($disabledFaculty->email);
         $response->assertDontSee($nonFaculty->email);
         self::assertNull($response->json('data.2'));
+
+        $this->withToken($this->tokenFor($chair))
+            ->getJson('/api/v1/faculty-members?include_inactive=1')
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.2.id', $disabledFaculty->id)
+            ->assertJsonPath('data.2.status_label', 'Inactive')
+            ->assertJsonPath('data.2.is_assignable', false);
 
         $this->assertDatabaseHas('audit_logs', [
             'actor_user_id' => $chair->id,
@@ -79,8 +88,8 @@ final class FacultyMembersEndpointTest extends TestCase
 
     public function test_an_audit_write_failure_returns_no_directory_payload(): void
     {
-        $chair = $this->makeUser('failing-directory-chair', UserRole::ProgramChair);
-        $this->makeUser('failing-directory-faculty', UserRole::Faculty);
+        $chair = $this->makeUser('failing-directory-chair', UserRole::ProgramChair, null, UserStatus::Active, CollegeCode::Ccs);
+        $this->makeUser('failing-directory-faculty', UserRole::Faculty, null, UserStatus::Active, CollegeCode::Ccs);
 
         AuditLog::creating(static function (): never {
             throw new \RuntimeException('Injected audit write failure.');
@@ -101,6 +110,59 @@ final class FacultyMembersEndpointTest extends TestCase
         }
     }
 
+    public function test_a_program_chair_can_audit_an_employment_and_active_status_change_only_for_their_college(): void
+    {
+        $chair = $this->makeUser('workforce-chair', UserRole::ProgramChair, 'Chair User', UserStatus::Active, CollegeCode::Ccs);
+        $faculty = $this->makeUser('workforce-faculty', UserRole::Faculty, 'Ada Faculty', UserStatus::Active, CollegeCode::Ccs);
+        $otherCollegeFaculty = $this->makeUser('workforce-other', UserRole::Faculty, 'Bea Faculty', UserStatus::Active, CollegeCode::Coe);
+
+        $response = $this->withToken($this->tokenFor($chair))
+            ->patchJson("/api/v1/faculty-members/{$faculty->id}/workforce-profile", [
+                'status' => UserStatus::Disabled->value,
+                'employment_type' => 'part_time',
+                'reason' => 'No current teaching assignment.',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.status', UserStatus::Disabled->value)
+            ->assertJsonPath('data.employment_type', 'part_time')
+            ->assertJsonPath('data.is_assignable', false);
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_user_id' => $chair->id,
+            'auditable_id' => $faculty->id,
+            'reason' => 'No current teaching assignment.',
+        ]);
+
+        $this->withToken($this->tokenFor($chair))
+            ->patchJson("/api/v1/faculty-members/{$otherCollegeFaculty->id}/workforce-profile", [
+                'status' => UserStatus::Active->value,
+                'employment_type' => 'full_time',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_making_an_active_faculty_member_inactive_requires_a_reason(): void
+    {
+        $chair = $this->makeUser('reason-chair', UserRole::ProgramChair, 'Chair User', UserStatus::Active, CollegeCode::Ccs);
+        $faculty = $this->makeUser('reason-faculty', UserRole::Faculty, 'Ada Faculty', UserStatus::Active, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($chair))
+            ->patchJson("/api/v1/faculty-members/{$faculty->id}/workforce-profile", [
+                'status' => UserStatus::Disabled->value,
+                'employment_type' => 'part_time',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'error.errors.reason.0',
+                'Provide a reason when making an active faculty account inactive.',
+            );
+
+        $this->assertDatabaseHas('users', [
+            'id' => $faculty->id,
+            'status' => UserStatus::Active->value,
+        ]);
+    }
+
     /**
      * @return iterable<string, array{UserRole}>
      */
@@ -118,12 +180,14 @@ final class FacultyMembersEndpointTest extends TestCase
         UserRole $role = UserRole::Student,
         ?string $name = null,
         UserStatus $status = UserStatus::Active,
+        ?CollegeCode $college = null,
     ): User {
         return User::create([
             'name' => $name ?? 'Faculty directory '.$handle,
             'email' => $handle.'@private.grc.test',
             'password' => 'irrelevant-password',
             'role' => $role,
+            'college' => $college,
             'status' => $status,
         ]);
     }

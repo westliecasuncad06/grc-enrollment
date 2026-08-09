@@ -26,6 +26,8 @@ final class AuditableType
 
     public const FACULTY_DIRECTORY = 'faculty_directory';
 
+    public const FACULTY_WORKFORCE_PROFILE = 'faculty_workforce_profile';
+
     public const ENROLLMENT = 'enrollment';
 
     public const ACADEMIC_GRADE = 'academic_grade';
@@ -65,6 +67,7 @@ final class AuditableType
             self::STUDENT_PROFILE,
             self::AUDIT_LOG,
             self::FACULTY_DIRECTORY,
+            self::FACULTY_WORKFORCE_PROFILE,
             self::ENROLLMENT,
             self::ACADEMIC_GRADE,
             self::QUEUE_TICKET,

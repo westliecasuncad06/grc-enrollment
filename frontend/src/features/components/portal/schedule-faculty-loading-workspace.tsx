@@ -49,9 +49,21 @@ import {
   replaceSection,
   toSectionReplacement,
 } from "@/features/services/scheduling-service"
+import { updateFacultyWorkforceProfile } from "@/features/services/faculty-directory-service"
 import type { Section } from "@/features/schemas/reference-data-schema"
+import type { FacultyMember } from "@/features/schemas/scheduling-schema"
 
 const asTime = (value: string) => (value ? `${value}:00`.slice(0, 8) : "")
+
+function matchesProfessorSearch(
+  name: string | null | undefined,
+  normalizedSearch: string,
+) {
+  return (
+    !normalizedSearch ||
+    (name ?? "").toLocaleLowerCase().includes(normalizedSearch)
+  )
+}
 
 export function ScheduleFacultyLoadingWorkspace() {
   const { session } = useAuth()
@@ -60,6 +72,7 @@ export function ScheduleFacultyLoadingWorkspace() {
   const sectionsQuery = useSectionsQuery()
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
+  const workforceQuery = useFacultyDirectoryQuery(true)
   const term = getActiveAcademicTerm(termsQuery.data)
   const termId = term?.id ?? 0
   const plansQuery = useSectionPlansQuery(termId, term !== null)
@@ -74,7 +87,10 @@ export function ScheduleFacultyLoadingWorkspace() {
     professor: "all",
     state: "all",
   })
+  const [professorSearch, setProfessorSearch] = useState("")
   const [editing, setEditing] = useState<Section | null>(null)
+  const [workforceEditing, setWorkforceEditing] =
+    useState<FacultyMember | null>(null)
   const [draft, setDraft] = useState({
     professor_id: "",
     schedule_days: "",
@@ -86,10 +102,25 @@ export function ScheduleFacultyLoadingWorkspace() {
     override_reason: "",
   })
   const [threshold, setThreshold] = useState("")
+  const [workforceDraft, setWorkforceDraft] = useState({
+    status: "active" as "active" | "disabled",
+    employment_type: "part_time" as "full_time" | "part_time",
+    reason: "",
+  })
   const currentSections = (sectionsQuery.data ?? []).filter(
     (section) => section.academic_term_id === termId,
   )
   const plans = plansQuery.data ?? []
+  const planYearById = useMemo(
+    () =>
+      new Map(
+        (plansQuery.data ?? []).map((plan) => [
+          plan.id,
+          String(plan.year_level),
+        ]),
+      ),
+    [plansQuery.data],
+  )
   const subjectMap = useMemo(
     () =>
       new Map(
@@ -104,10 +135,21 @@ export function ScheduleFacultyLoadingWorkspace() {
       ),
     [facultyQuery.data],
   )
+  const normalizedProfessorSearch = professorSearch.trim().toLocaleLowerCase()
+  const matchingFacultyDirectory = useMemo(
+    () =>
+      (facultyQuery.data ?? []).filter((faculty) =>
+        matchesProfessorSearch(faculty.name, normalizedProfessorSearch),
+      ),
+    [facultyQuery.data, normalizedProfessorSearch],
+  )
   const visible = useMemo(
     () =>
       currentSections.filter((section) => {
-        const year = /^([1-4])/u.exec(section.section_code)?.[1] ?? ""
+        const year = planYearById.get(section.section_plan_id ?? -1) ?? ""
+        const professorName = section.professor_id
+          ? facultyMap.get(section.professor_id)?.name
+          : null
         const incomplete =
           section.professor_id === null ||
           !section.schedule_days ||
@@ -122,11 +164,36 @@ export function ScheduleFacultyLoadingWorkspace() {
               .includes(filter.subject.toLocaleLowerCase())) &&
           (filter.professor === "all" ||
             String(section.professor_id ?? "none") === filter.professor) &&
+          matchesProfessorSearch(professorName, normalizedProfessorSearch) &&
           (filter.state === "all" ||
             (filter.state === "incomplete" ? incomplete : !incomplete))
         )
       }),
-    [currentSections, filter, subjectMap],
+    [
+      currentSections,
+      facultyMap,
+      filter,
+      normalizedProfessorSearch,
+      planYearById,
+      subjectMap,
+    ],
+  )
+  const visibleFaculty = useMemo(
+    () =>
+      (reportQuery.data?.faculty ?? []).filter((faculty) =>
+        matchesProfessorSearch(
+          faculty.professor_name,
+          normalizedProfessorSearch,
+        ),
+      ),
+    [reportQuery.data?.faculty, normalizedProfessorSearch],
+  )
+  const visibleWorkforce = useMemo(
+    () =>
+      (workforceQuery.data ?? []).filter((faculty) =>
+        matchesProfessorSearch(faculty.name, normalizedProfessorSearch),
+      ),
+    [workforceQuery.data, normalizedProfessorSearch],
   )
   const saveSection = useMutation({
     mutationFn: async () => {
@@ -161,6 +228,23 @@ export function ScheduleFacultyLoadingWorkspace() {
       void reportQuery.refetch()
     },
   })
+  const saveWorkforceProfile = useMutation({
+    mutationFn: async () => {
+      if (!workforceEditing) throw new Error("Choose a faculty member to edit.")
+      return updateFacultyWorkforceProfile(workforceEditing.id, {
+        status: workforceDraft.status,
+        employment_type: workforceDraft.employment_type,
+        reason: workforceDraft.reason || undefined,
+      })
+    },
+    onSuccess: () => {
+      setWorkforceEditing(null)
+      void queryClient.invalidateQueries({
+        queryKey: ["faculty-directory", session?.userId ?? null],
+      })
+      void reportQuery.refetch()
+    },
+  })
   const open = (section: Section) => {
     setEditing(section)
     setDraft({
@@ -174,12 +258,21 @@ export function ScheduleFacultyLoadingWorkspace() {
       override_reason: "",
     })
   }
+  const openWorkforceProfile = (faculty: FacultyMember) => {
+    setWorkforceEditing(faculty)
+    setWorkforceDraft({
+      status: faculty.status,
+      employment_type: faculty.employment_type ?? "part_time",
+      reason: "",
+    })
+  }
   const query = {
     isPending:
       termsQuery.isPending ||
       sectionsQuery.isPending ||
       subjectsQuery.isPending ||
       facultyQuery.isPending ||
+      workforceQuery.isPending ||
       plansQuery.isPending ||
       reportQuery.isPending,
     isError:
@@ -187,6 +280,7 @@ export function ScheduleFacultyLoadingWorkspace() {
       sectionsQuery.isError ||
       subjectsQuery.isError ||
       facultyQuery.isError ||
+      workforceQuery.isError ||
       plansQuery.isError ||
       reportQuery.isError,
     error:
@@ -194,6 +288,7 @@ export function ScheduleFacultyLoadingWorkspace() {
       sectionsQuery.error ??
       subjectsQuery.error ??
       facultyQuery.error ??
+      workforceQuery.error ??
       plansQuery.error ??
       reportQuery.error,
     data: true as const,
@@ -202,6 +297,7 @@ export function ScheduleFacultyLoadingWorkspace() {
       void sectionsQuery.refetch()
       void subjectsQuery.refetch()
       void facultyQuery.refetch()
+      void workforceQuery.refetch()
       void plansQuery.refetch()
       void reportQuery.refetch()
     },
@@ -255,7 +351,11 @@ export function ScheduleFacultyLoadingWorkspace() {
                     id="faculty-load-threshold"
                     type="number"
                     min="1"
-                    value={threshold || reportQuery.data?.threshold_units || ""}
+                    value={
+                      threshold === ""
+                        ? (reportQuery.data?.threshold_units ?? "")
+                        : threshold
+                    }
                     onChange={(event) => setThreshold(event.target.value)}
                     placeholder="e.g. 18"
                   />
@@ -319,7 +419,7 @@ export function ScheduleFacultyLoadingWorkspace() {
                 </div>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-4">
+                <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-3 xl:grid-cols-5">
                   <label className="grid gap-1 text-sm font-medium">
                     Year
                     <select
@@ -337,9 +437,13 @@ export function ScheduleFacultyLoadingWorkspace() {
                       ))}
                     </select>
                   </label>
-                  <label className="grid gap-1 text-sm font-medium">
+                  <label
+                    className="grid gap-1 text-sm font-medium"
+                    htmlFor="schedule-subject-filter"
+                  >
                     Subject
                     <Input
+                      id="schedule-subject-filter"
                       value={filter.subject}
                       onChange={(event) =>
                         setFilter({ ...filter, subject: event.target.value })
@@ -358,12 +462,26 @@ export function ScheduleFacultyLoadingWorkspace() {
                     >
                       <option value="all">All professors</option>
                       <option value="none">Unassigned</option>
-                      {(facultyQuery.data ?? []).map((faculty) => (
+                      {matchingFacultyDirectory.map((faculty) => (
                         <option key={faculty.id} value={String(faculty.id)}>
                           {faculty.name}
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label
+                    className="grid gap-1 text-sm font-medium"
+                    htmlFor="schedule-professor-search"
+                  >
+                    Find professor
+                    <Input
+                      id="schedule-professor-search"
+                      value={professorSearch}
+                      onChange={(event) =>
+                        setProfessorSearch(event.target.value)
+                      }
+                      placeholder="Search name"
+                    />
                   </label>
                   <label className="grid gap-1 text-sm font-medium">
                     Assignment state
@@ -481,7 +599,7 @@ export function ScheduleFacultyLoadingWorkspace() {
 
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <CardTitle level={2}>Faculty Load Report</CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -489,12 +607,17 @@ export function ScheduleFacultyLoadingWorkspace() {
                       Chair makes an override.
                     </p>
                   </div>
-                  <UsersRound className="size-5 text-primary" />
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline">
+                      {visibleFaculty.length} professors
+                    </Badge>
+                    <UsersRound className="size-5 text-primary" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="grid gap-3">
-                {reportQuery.data?.faculty.length ? (
-                  reportQuery.data.faculty.map((faculty) => (
+                {visibleFaculty.length ? (
+                  visibleFaculty.map((faculty) => (
                     <div
                       key={faculty.professor_id}
                       className="rounded-lg border p-4"
@@ -506,6 +629,7 @@ export function ScheduleFacultyLoadingWorkspace() {
                               `Faculty #${faculty.professor_id}`}
                           </p>
                           <p className="text-sm text-muted-foreground">
+                            Assigned subjects:{" "}
                             {faculty.assignments
                               .map((assignment) => assignment.subject_code)
                               .join(", ")}
@@ -539,11 +663,98 @@ export function ScheduleFacultyLoadingWorkspace() {
                       </div>
                     </div>
                   ))
+                ) : reportQuery.data?.faculty.length ? (
+                  <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                    No professor matches “{professorSearch}”.
+                  </p>
                 ) : (
                   <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
                     Generate a schedule to see the load report.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle level={2}>Faculty workforce</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Manage the local planning status and employment type for
+                      faculty in your college. Inactive faculty cannot be
+                      recommended or assigned.
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {visibleWorkforce.length} faculty
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Faculty member</TableHead>
+                        <TableHead>Account status</TableHead>
+                        <TableHead>Employment type</TableHead>
+                        <TableHead>Planning reference</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleWorkforce.map((faculty) => (
+                        <TableRow key={faculty.id}>
+                          <TableCell className="font-medium">
+                            {faculty.name}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                faculty.is_assignable
+                                  ? "secondary"
+                                  : "destructive"
+                              }
+                            >
+                              {faculty.status_label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {faculty.employment_type_label ?? "Unspecified"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {faculty.planning_unit_reference
+                              ? `${faculty.planning_unit_reference}-unit reference`
+                              : "No fixed reference"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              aria-label={`Edit workforce profile for ${faculty.name}`}
+                              onClick={() => openWorkforceProfile(faculty)}
+                            >
+                              <PencilLine data-icon="inline-start" />
+                              Edit
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {visibleWorkforce.length === 0 && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="py-9 text-center text-muted-foreground"
+                          >
+                            No faculty match the current professor search.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -665,6 +876,102 @@ export function ScheduleFacultyLoadingWorkspace() {
               disabled={saveSection.isPending}
             >
               {saveSection.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={workforceEditing !== null}
+        onOpenChange={(open) => !open && setWorkforceEditing(null)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Update faculty workforce profile</DialogTitle>
+            <DialogDescription>
+              {workforceEditing?.name ?? "Faculty member"} will be available for
+              future schedule recommendations only while their account is
+              active. Marking an active account inactive requires an audit
+              reason.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <Field label="Account status">
+              <select
+                value={workforceDraft.status}
+                onChange={(event) =>
+                  setWorkforceDraft({
+                    ...workforceDraft,
+                    status: event.target.value as "active" | "disabled",
+                  })
+                }
+                className="h-9 rounded-md border bg-background px-2"
+              >
+                <option value="active">Active</option>
+                <option value="disabled">Inactive</option>
+              </select>
+            </Field>
+            <Field label="Employment type">
+              <select
+                value={workforceDraft.employment_type}
+                onChange={(event) =>
+                  setWorkforceDraft({
+                    ...workforceDraft,
+                    employment_type: event.target.value as
+                      "full_time" | "part_time",
+                  })
+                }
+                className="h-9 rounded-md border bg-background px-2"
+              >
+                <option value="full_time">Full-time (33-unit reference)</option>
+                <option value="part_time">Part-time</option>
+              </select>
+            </Field>
+            <Field
+              label={
+                workforceEditing?.status === "active" &&
+                workforceDraft.status === "disabled"
+                  ? "Reason for making this account inactive"
+                  : "Change note (optional)"
+              }
+            >
+              <Input
+                value={workforceDraft.reason}
+                onChange={(event) =>
+                  setWorkforceDraft({
+                    ...workforceDraft,
+                    reason: event.target.value,
+                  })
+                }
+                placeholder="Record the reason for this change"
+              />
+            </Field>
+          </div>
+          {saveWorkforceProfile.error instanceof Error && (
+            <p className="text-sm text-destructive">
+              {saveWorkforceProfile.error.message}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setWorkforceEditing(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void saveWorkforceProfile.mutateAsync()}
+              disabled={
+                saveWorkforceProfile.isPending ||
+                (workforceEditing?.status === "active" &&
+                  workforceDraft.status === "disabled" &&
+                  !workforceDraft.reason.trim())
+              }
+            >
+              {saveWorkforceProfile.isPending
+                ? "Saving…"
+                : "Save workforce profile"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -19,15 +19,16 @@ final readonly class ListFacultyMembers
     /**
      * @return Collection<int, User>
      */
-    public function execute(User $actor, AuditRequestContext $context): Collection
+    public function execute(User $actor, AuditRequestContext $context, bool $includeInactive = false): Collection
     {
-        return DB::transaction(function () use ($actor, $context): Collection {
+        return DB::transaction(function () use ($actor, $context, $includeInactive): Collection {
             $members = User::query()
                 ->where('role', UserRole::Faculty)
-                ->where('status', UserStatus::Active)
+                ->where('college', $actor->college?->value)
+                ->when(! $includeInactive, fn ($query) => $query->where('status', UserStatus::Active))
                 ->orderBy('name')
                 ->orderBy('id')
-                ->get(['id', 'name', 'status']);
+                ->get(['id', 'name', 'college', 'employment_type', 'status']);
 
             $this->auditRecorder->record(
                 $actor,
@@ -35,7 +36,7 @@ final readonly class ListFacultyMembers
                 AuditableType::FACULTY_DIRECTORY,
                 null,
                 null,
-                ['result_count' => $members->count()],
+                ['result_count' => $members->count(), 'include_inactive' => $includeInactive],
                 null,
                 $context,
             );

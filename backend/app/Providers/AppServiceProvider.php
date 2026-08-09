@@ -33,6 +33,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('view-faculty-directory', [FacultyMemberPolicy::class, 'viewAny']);
+        Gate::define('update-faculty-workforce-profile', [FacultyMemberPolicy::class, 'updateWorkforceProfile']);
         Gate::define('view-eligible-subjects', [EligibleSubjectPolicy::class, 'viewAny']);
         Gate::define('view-enrollment-summary', [DashboardPolicy::class, 'viewEnrollmentSummary']);
         Gate::define('view-institution-summary', [DashboardPolicy::class, 'viewInstitutionSummary']);

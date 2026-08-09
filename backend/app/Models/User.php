@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Identity\FacultyEmploymentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
@@ -18,6 +19,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $password
  * @property UserRole $role
  * @property ?CollegeCode $college
+ * @property ?FacultyEmploymentType $employment_type
  * @property UserStatus $status
  * @property ?CarbonImmutable $last_login_at
  * @property ?CarbonImmutable $created_at
@@ -36,6 +38,7 @@ final class User extends Authenticatable
         'password',
         'role',
         'college',
+        'employment_type',
         'status',
         'last_login_at',
     ];
@@ -54,6 +57,7 @@ final class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'college' => CollegeCode::class,
+            'employment_type' => FacultyEmploymentType::class,
             'status' => UserStatus::class,
             'last_login_at' => 'immutable_datetime',
         ];

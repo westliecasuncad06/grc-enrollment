@@ -38,10 +38,18 @@ CSV;
         User::create([
             'name' => 'CORRALES',
             'email' => 'faculty.ccs.corrales@grc.test',
-            'password' => 'password',
+            'password' => 'previous-local-password',
             'role' => UserRole::Faculty,
             'college' => CollegeCode::Ccs,
             'status' => UserStatus::Active,
+        ]);
+        $placeholderFaculty = User::create([
+            'name' => 'Testing Faculty',
+            'email' => 'faculty.seed@grc.test',
+            'password' => 'previous-local-password',
+            'role' => UserRole::Faculty,
+            'college' => CollegeCode::Ccs,
+            'status' => UserStatus::Disabled,
         ]);
         $fixturePath = $this->writeFixture();
 
@@ -50,7 +58,12 @@ CSV;
 
             $professor = User::query()->where('name', 'Henry N. Corrales')->sole();
             $this->assertTrue(Hash::check('password', $professor->password));
-            $this->assertSame(UserStatus::Disabled, User::query()->where('email', 'faculty.ccs.corrales@grc.test')->sole()->status);
+            $legacyFaculty = User::query()->where('email', 'faculty.ccs.corrales@grc.test')->sole();
+            $this->assertSame(UserStatus::Disabled, $legacyFaculty->status);
+            $this->assertTrue(Hash::check('password', $legacyFaculty->password));
+            $placeholderFaculty->refresh();
+            $this->assertDoesNotMatchRegularExpression('/\b(demo|testing)\b/iu', $placeholderFaculty->name);
+            $this->assertTrue(Hash::check('password', $placeholderFaculty->password));
             $this->assertSame(2, FacultyCurriculumSubjectPreference::query()->where('professor_id', $professor->id)->count());
             $this->assertSame(2, FacultyTeachingHistory::query()->where('professor_id', $professor->id)->count());
             $this->assertDatabaseHas('faculty_availabilities', [
@@ -70,6 +83,37 @@ CSV;
         }
     }
 
+    public function test_it_assigns_a_local_employment_type_and_creates_named_inactive_faculty_accounts(): void
+    {
+        $this->seedReferenceCatalog();
+        $fixturePath = $this->writeFixture([
+            ['ccs', 'BSIT', '1st', 'CS101', 'Monday', '08:00 AM', '10:00 AM', 'Ada Santos'],
+            ['ccs', 'BSIT', '1st', 'CS102', 'Tuesday', '08:00 AM', '10:00 AM', 'Ada Santos'],
+            ['ccs', 'BSIT', '1st', 'CS103', 'Wednesday', '08:00 AM', '10:00 AM', 'Ada Santos'],
+            ['ccs', 'BSIT', '2nd', 'CS201', 'Thursday', '08:00 AM', '10:00 AM', 'Ada Santos'],
+            ['ccs', 'BSIT', '2nd', 'CS202', 'Friday', '08:00 AM', '10:00 AM', 'Ada Santos'],
+            ['ccs', 'BSIT', '2nd', 'CS203', 'Saturday', '08:00 AM', '10:00 AM', 'Ada Santos'],
+        ]);
+
+        try {
+            (new WorkbookFacultyProfileSeeder($fixturePath))->run();
+
+            $this->assertDatabaseHas('users', [
+                'name' => 'Ada Santos',
+                'employment_type' => 'full_time',
+                'status' => UserStatus::Active->value,
+            ]);
+            $this->assertDatabaseHas('users', [
+                'name' => 'Marian S. Villanueva',
+                'college' => CollegeCode::Ccs->value,
+                'employment_type' => 'part_time',
+                'status' => UserStatus::Disabled->value,
+            ]);
+        } finally {
+            @unlink($fixturePath);
+        }
+    }
+
     private function seedReferenceCatalog(): void
     {
         $program = Program::create([
@@ -86,7 +130,24 @@ CSV;
             'effective_end_year' => 2029,
             'status' => CurriculumStatus::Active,
         ]);
-        foreach ([['IT101', '1st'], ['IT201', '2nd']] as [$code, $semester]) {
+        $sharedProgram = Program::create([
+            'code' => 'SHARED',
+            'name' => 'Shared catalog program',
+            'college' => null,
+            'status' => ProgramStatus::Active,
+        ]);
+        Curriculum::create([
+            'program_id' => $sharedProgram->id,
+            'name' => 'Shared curriculum',
+            'effective_school_year' => '2024-2029',
+            'effective_start_year' => 2024,
+            'effective_end_year' => 2029,
+            'status' => CurriculumStatus::Active,
+        ]);
+        foreach ([
+            ['IT101', '1st'], ['CS101', '1st'], ['CS102', '1st'], ['CS103', '1st'],
+            ['IT201', '2nd'], ['CS201', '2nd'], ['CS202', '2nd'], ['CS203', '2nd'],
+        ] as [$code, $semester]) {
             $subject = Subject::create([
                 'code' => $code,
                 'college' => CollegeCode::Ccs,
@@ -102,6 +163,13 @@ CSV;
                 'is_required' => true,
             ]);
         }
+        Subject::create([
+            'code' => 'COMMON101',
+            'college' => null,
+            'title' => 'Shared catalog subject',
+            'units' => 3,
+            'status' => SubjectStatus::Active,
+        ]);
         foreach (['1st', '2nd'] as $semester) {
             AcademicTerm::create([
                 'school_year' => '2027-2028',
@@ -111,10 +179,20 @@ CSV;
         }
     }
 
-    private function writeFixture(): string
+    /** @param list<array{string, string, string, string, string, string, string, string}>|null $rows */
+    private function writeFixture(?array $rows = null): string
     {
         $path = tempnam(sys_get_temp_dir(), 'grc_workbook_faculty_').'.csv';
-        file_put_contents($path, self::FIXTURE_CSV);
+        if ($rows === null) {
+            file_put_contents($path, self::FIXTURE_CSV);
+
+            return $path;
+        }
+        $lines = ['college,program_code,year_level,semester,subject_code,day,start_time,end_time,room,modality,professor_name,sched_id,notes'];
+        foreach ($rows as $index => [$college, $program, $semester, $code, $day, $start, $end, $professor]) {
+            $lines[] = implode(',', [$college, $program, 1, $semester, $code, $day, $start, $end, '3A', 'F2F', $professor, 100 + $index, '']);
+        }
+        file_put_contents($path, implode(PHP_EOL, $lines).PHP_EOL);
 
         return $path;
     }

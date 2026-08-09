@@ -68,6 +68,8 @@ final class AuditAction
 
     public const FACULTY_DIRECTORY_LIST_VIEWED = 'faculty_directory.list_viewed';
 
+    public const FACULTY_WORKFORCE_PROFILE_UPDATED = 'faculty_workforce_profile.updated';
+
     public const ENROLLMENT_SUBMITTED = 'enrollment.submitted';
 
     public const ENROLLMENT_REGISTRAR_APPROVED = 'enrollment.registrar_approved';
@@ -174,6 +176,7 @@ final class AuditAction
             self::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED,
             self::AUDIT_LOG_LIST_VIEWED,
             self::FACULTY_DIRECTORY_LIST_VIEWED,
+            self::FACULTY_WORKFORCE_PROFILE_UPDATED,
             self::ENROLLMENT_SUBMITTED,
             self::ENROLLMENT_REGISTRAR_APPROVED,
             self::ENROLLMENT_REGISTRAR_REJECTED,

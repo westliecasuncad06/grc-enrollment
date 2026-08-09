@@ -221,6 +221,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // CurriculumPolicy re-checks the role as defense in depth.
         Route::middleware('role:program_chair')->group(function (): void {
             Route::get('/faculty-members', FacultyMemberController::class)->name('faculty-members.index');
+            Route::patch('/faculty-members/{facultyMember}/workforce-profile', [FacultyMemberController::class, 'updateWorkforceProfile'])->name('faculty-members.workforce-profile.update');
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
             Route::get('/programs/{program}/current-curriculum-subjects', CurrentCurriculumSubjectController::class)->name('programs.current-curriculum-subjects.index');

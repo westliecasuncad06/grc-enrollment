@@ -78,17 +78,24 @@ export const sectionEditorSchema = z
     viability_threshold: z.number().int().min(1).nullable(),
   })
   .strict()
-  .transform((value) => ({
-    ...value,
-    schedule_days: value.schedule_days || null,
-    starts_at_time: value.starts_at_time || null,
-    ends_at_time: value.ends_at_time || null,
-    room: value.room || null,
-    modality: value.modality ?? null,
-    ...(value.override_reason === undefined
-      ? {}
-      : { override_reason: value.override_reason?.trim() || null }),
-  }))
+  .transform((value) => {
+    const overrideReason = value.override_reason?.trim()
+
+    return {
+      ...value,
+      schedule_days: value.schedule_days || null,
+      starts_at_time: value.starts_at_time || null,
+      ends_at_time: value.ends_at_time || null,
+      room: value.room || null,
+      modality: value.modality ?? null,
+      ...(value.override_reason === undefined
+        ? {}
+        : {
+            override_reason:
+              overrideReason === "" ? null : (overrideReason ?? null),
+          }),
+    }
+  })
   .pipe(sectionInputSchema)
 
 export const scheduleProposalSchema = z
@@ -196,12 +203,27 @@ export const facultyMemberSchema = z
     type: z.literal("faculty_member"),
     id: z.number().int().positive(),
     name: z.string().min(1),
-    status: z.literal("active"),
+    college: z.enum(["ccs", "coe", "coa", "cbae"]).nullable(),
+    status: z.enum(["active", "disabled"]),
     status_label: z.string().min(1),
+    employment_type: z.enum(["full_time", "part_time"]).nullable(),
+    employment_type_label: z.string().min(1).nullable(),
+    planning_unit_reference: z.number().int().positive().nullable(),
+    is_assignable: z.boolean(),
   })
   .strict()
 export const facultyMembersEnvelopeSchema = z
   .object({ data: z.array(facultyMemberSchema) })
+  .strict()
+export const facultyMemberEnvelopeSchema = z
+  .object({ data: facultyMemberSchema })
+  .strict()
+export const facultyWorkforceProfileInputSchema = z
+  .object({
+    status: z.enum(["active", "disabled"]),
+    employment_type: z.enum(["full_time", "part_time"]),
+    reason: z.string().trim().max(1000).optional(),
+  })
   .strict()
 
 export type SectionInput = z.infer<typeof sectionInputSchema>
@@ -214,3 +236,6 @@ export type ScheduleProposalTransition = z.infer<
   typeof scheduleProposalTransitionSchema
 >
 export type FacultyMember = z.infer<typeof facultyMemberSchema>
+export type FacultyWorkforceProfileInput = z.infer<
+  typeof facultyWorkforceProfileInputSchema
+>

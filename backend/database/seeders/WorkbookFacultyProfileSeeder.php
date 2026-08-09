@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Identity\FacultyEmploymentType;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
@@ -12,12 +13,14 @@ use App\Models\CurriculumSubject;
 use App\Models\FacultyAvailability;
 use App\Models\FacultyCurriculumSubjectPreference;
 use App\Models\FacultyTeachingHistory;
+use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use DateTime;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use RuntimeException;
 use SplFileObject;
@@ -33,6 +36,38 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 
     private const PASSWORD = 'password';
 
+    private const FULL_TIME_PREFERENCE_THRESHOLD = 6;
+
+    /** @var array<string, list<string>> */
+    private const INACTIVE_PROFILES = [
+        'ccs' => ['Marian S. Villanueva', 'Jerome D. Aguilar', 'Liza P. Navarro'],
+        'coe' => ['Imelda R. Valdez', 'Noel P. Salvador', 'Rosalie T. Aquino'],
+        'cbae' => ['Oscar M. Fernandez', 'Celeste D. Aragon', 'Victor L. Ramos'],
+        'coa' => ['Teresita L. Cruz', 'Ramon C. de Leon', 'Sandra M. Bautista'],
+    ];
+
+    /** @var list<string> */
+    private const LEGACY_PLACEHOLDER_NAMES = [
+        'Adrian M. Navarro', 'Bianca S. Mercado', 'Carlos D. Ramos',
+        'Diana L. Santos', 'Elena P. Cruz', 'Felix R. Mendoza',
+        'Grace T. Villanueva', 'Hector A. Aguilar', 'Iris N. Bautista',
+        'Jonas C. Garcia', 'Kara F. Domingo', 'Lorenzo V. Reyes',
+    ];
+
+    /** @var array<string, Subject> */
+    private array $subjectsByCollegeAndCode = [];
+
+    /** @var array<string, list<Curriculum>> */
+    private array $currentAndPreviousCurriculaByProgram = [];
+
+    /** @var array<string, true> */
+    private array $curriculumSubjectSemesterKeys = [];
+
+    /** @var array<string, list<AcademicTerm>> */
+    private array $planningTermsBySemester = [];
+
+    private ?string $localPasswordHash = null;
+
     public function __construct(private readonly ?string $csvPathOverride = null) {}
 
     public function run(): void
@@ -40,6 +75,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
         $this->guardEnvironment();
         $rows = $this->readRows($this->csvPathOverride ?? self::CSV_PATH);
         $profiles = $this->profileRows($rows);
+        $this->loadReferenceData();
 
         DB::transaction(function () use ($profiles): void {
             /** @var array<string, User> $usersByProfile */
@@ -52,7 +88,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
                     ['email' => $email],
                     [
                         'name' => $name,
-                        'password' => self::PASSWORD,
+                        'password' => $this->localPasswordHash(),
                         'role' => UserRole::Faculty,
                         'college' => $college,
                         'status' => UserStatus::Active,
@@ -62,7 +98,10 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 
             $this->deactivateLegacyLocalFaculty(array_values($usersByProfile));
             $this->replaceWorkbookEvidence($profiles, $usersByProfile);
-            $this->writeAccountReport($profiles, $usersByProfile);
+            $this->ensureLocalFacultyAccounts();
+            $this->initializeEmploymentTypes();
+            $this->seedInactiveFacultyProfiles();
+            $this->writeAccountReport();
         });
     }
 
@@ -141,6 +180,82 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     }
 
     /**
+     * Existing faculty records are identities already, but a local report and
+     * repeatable demo need every account to have a safe local email and a
+     * displayable full name. This never changes active/inactive status.
+     */
+    private function ensureLocalFacultyAccounts(): void
+    {
+        User::query()
+            ->where('role', UserRole::Faculty->value)
+            ->orderBy('id')
+            ->each(function (User $faculty): void {
+                $changes = [];
+                if (! str_ends_with(strtolower($faculty->email), '@grc.test')) {
+                    $college = $faculty->college?->value ?? 'unassigned';
+                    $changes['email'] = "faculty.{$college}.legacy-{$faculty->id}@grc.test";
+                }
+                if (! str_contains(trim($faculty->name), ' ')
+                    || preg_match('/\b(demo|testing)\b/iu', $faculty->name) === 1) {
+                    $changes['name'] = $this->localFullNameFor($faculty);
+                }
+                // This seeder is deliberately restricted to local/testing
+                // environments. The shared local credential is part of the
+                // generated account report so every listed professor can be
+                // checked manually without a separate password reset.
+                $changes['password'] = $this->localPasswordHash();
+                if ($changes !== []) {
+                    $faculty->update($changes);
+                }
+            });
+    }
+
+    /**
+     * Null is the seed-only sentinel. Once the Program Chair chooses an
+     * employment type it is never overwritten by later workbook reseeds.
+     */
+    private function initializeEmploymentTypes(): void
+    {
+        $preferenceCounts = FacultyCurriculumSubjectPreference::query()
+            ->selectRaw('professor_id, count(distinct subject_id) as preference_count')
+            ->groupBy('professor_id')
+            ->pluck('preference_count', 'professor_id');
+
+        User::query()
+            ->where('role', UserRole::Faculty->value)
+            ->whereNull('employment_type')
+            ->orderBy('id')
+            ->each(function (User $faculty) use ($preferenceCounts): void {
+                $count = (int) ($preferenceCounts[$faculty->id] ?? 0);
+                $faculty->update([
+                    'employment_type' => $count >= self::FULL_TIME_PREFERENCE_THRESHOLD
+                        ? FacultyEmploymentType::FullTime
+                        : FacultyEmploymentType::PartTime,
+                ]);
+            });
+    }
+
+    private function seedInactiveFacultyProfiles(): void
+    {
+        foreach (self::INACTIVE_PROFILES as $collegeValue => $names) {
+            $college = CollegeCode::from($collegeValue);
+            foreach ($names as $index => $name) {
+                User::updateOrCreate(
+                    ['email' => "inactive.{$collegeValue}.".($index + 1).'@grc.test'],
+                    [
+                        'name' => $name,
+                        'password' => $this->localPasswordHash(),
+                        'role' => UserRole::Faculty,
+                        'college' => $college,
+                        'employment_type' => FacultyEmploymentType::PartTime,
+                        'status' => UserStatus::Disabled,
+                    ],
+                );
+            }
+        }
+    }
+
+    /**
      * @param  array<string, array{college: CollegeCode, aliases: list<string>, rows: list<array<string, string>>}>  $profiles
      * @param  array<string, User>  $usersByProfile
      */
@@ -166,10 +281,9 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             $professor = $usersByProfile[$profileKey];
             foreach ($profile['rows'] as $row) {
                 $semester = trim($row['semester']);
-                $subject = Subject::query()
-                    ->where('college', $profile['college']->value)
-                    ->where('code', trim($row['subject_code']))
-                    ->first();
+                $subject = $this->subjectsByCollegeAndCode[
+                    $this->subjectKey($profile['college']->value, $row['subject_code'])
+                ] ?? null;
                 if ($subject !== null) {
                     foreach ($this->matchingCurricula($row, $subject->id) as $curriculum) {
                         $key = implode(':', [$professor->id, $curriculum->id, $semester, $subject->id]);
@@ -213,26 +327,16 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     private function matchingCurricula(array $row, int $subjectId): array
     {
         $semester = trim($row['semester']);
+        $programKey = strtolower(trim($row['college'])).'|'.strtoupper(trim($row['program_code']));
 
-        return Curriculum::query()
-            ->whereHas('program', fn ($programs) => $programs
-                ->where('code', trim($row['program_code']))
-                ->where('college', strtolower(trim($row['college']))),
-            )
-            ->whereIn('status', ['active', 'archived'])
-            ->orderByDesc('effective_start_year')
-            ->get()
-            ->groupBy('program_id')
-            ->flatMap(static fn ($curricula) => $curricula->take(2))
-            ->filter(static fn (Curriculum $curriculum): bool => CurriculumSubject::query()
-                ->where('curriculum_id', $curriculum->id)
-                ->where('subject_id', $subjectId)
-                ->where(function ($placements) use ($semester): void {
-                    $placements->where('semester', $semester)->orWhere('semester', '1st|2nd');
-                })->exists(),
-            )
-            ->values()
-            ->all();
+        return array_values(array_filter(
+            $this->currentAndPreviousCurriculaByProgram[$programKey] ?? [],
+            fn (Curriculum $curriculum): bool => isset($this->curriculumSubjectSemesterKeys[
+                $curriculum->id.':'.$subjectId.':'.$semester
+            ]) || isset($this->curriculumSubjectSemesterKeys[
+                $curriculum->id.':'.$subjectId.':1st|2nd'
+            ]),
+        ));
     }
 
     /** @param array<string, array{professor_id: int, curriculum_id: int, semester: string, subject_id: int, subject_code: string, raw_alias: string, evidence_count: int}> $evidence */
@@ -298,11 +402,64 @@ final class WorkbookFacultyProfileSeeder extends Seeder
     /** @return list<AcademicTerm> */
     private function termsForSemester(string $semester): array
     {
-        return AcademicTerm::query()
-            ->where('semester', $semester)
+        return $this->planningTermsBySemester[$semester] ?? [];
+    }
+
+    /**
+     * Preload the subject, curriculum, placement, and term data used by every
+     * workbook row. This keeps the local-only seed deterministic without
+     * issuing hundreds of repeated catalog queries.
+     */
+    private function loadReferenceData(): void
+    {
+        $this->subjectsByCollegeAndCode = [];
+        foreach (Subject::query()->get(['id', 'college', 'code']) as $subject) {
+            if ($subject->college === null) {
+                continue;
+            }
+            $this->subjectsByCollegeAndCode[
+                $this->subjectKey($subject->college->value, $subject->code)
+            ] = $subject;
+        }
+
+        $curricula = Curriculum::query()
+            ->with('program')
+            ->whereIn('status', ['active', 'archived'])
+            ->orderByDesc('effective_start_year')
+            ->get();
+        $this->currentAndPreviousCurriculaByProgram = [];
+        foreach ($curricula->groupBy('program_id') as $programCurricula) {
+            $selected = $programCurricula->take(2)->values();
+            $program = $selected->first()?->program;
+            if ($program === null || $program->college === null) {
+                continue;
+            }
+            $this->currentAndPreviousCurriculaByProgram[
+                $program->college->value.'|'.strtoupper($program->code)
+            ] = $selected->all();
+        }
+
+        $curriculumIds = $curricula->pluck('id');
+        $this->curriculumSubjectSemesterKeys = [];
+        foreach (CurriculumSubject::query()
+            ->whereIn('curriculum_id', $curriculumIds)
+            ->get(['curriculum_id', 'subject_id', 'semester']) as $placement) {
+            $this->curriculumSubjectSemesterKeys[
+                $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->semester
+            ] = true;
+        }
+
+        $this->planningTermsBySemester = AcademicTerm::query()
             ->whereNotIn('status', ['archived', 'semester_closed'])
             ->get()
+            ->groupBy('semester')
+            ->map(static fn ($terms): array => $terms->values()->all())
             ->all();
+    }
+
+    private function subjectKey(string $college, string $code): string
+    {
+        return strtolower(trim($college)).'|'.strtoupper(trim($code));
     }
 
     /** @return list<int> */
@@ -347,47 +504,116 @@ final class WorkbookFacultyProfileSeeder extends Seeder
         return 'faculty.'.$college->value.'.'.Str::slug($name).'.'.substr(sha1($profileKey), 0, 6).'@grc.test';
     }
 
-    /**
-     * @param  array<string, array{college: CollegeCode, aliases: list<string>, rows: list<array<string, string>>}>  $profiles
-     * @param  array<string, User>  $usersByProfile
-     */
-    private function writeAccountReport(array $profiles, array $usersByProfile): void
+    private function localPasswordHash(): string
+    {
+        return $this->localPasswordHash ??= Hash::make(self::PASSWORD);
+    }
+
+    private function localFullNameFor(User $faculty): string
+    {
+        if (preg_match('/\b(demo|testing)\b/iu', $faculty->name) === 1) {
+            return self::LEGACY_PLACEHOLDER_NAMES[
+                $faculty->id % count(self::LEGACY_PLACEHOLDER_NAMES)
+            ];
+        }
+
+        return WorkbookFacultyProfileName::displayName([$faculty->name]);
+    }
+
+    private function writeAccountReport(): void
     {
         $lines = [
             '# Local professor accounts',
             '',
-            'Generated from the local 2024–2029 workbook reference extract. Shared password: `password`.',
-            '',
-            '| Department | Professor | Email | Classification | 1st semester preferences | 2nd semester preferences |',
-            '| --- | --- | --- | --- | --- | --- |',
+            'Generated from local faculty accounts and the 2024–2029 workbook reference extract. Shared password: `password`.',
         ];
-        $accounts = [];
-        foreach ($profiles as $profileKey => $profile) {
-            $user = $usersByProfile[$profileKey];
-            $codes = ['1st' => [], '2nd' => []];
-            foreach (FacultyCurriculumSubjectPreference::query()->with('subject')->where('professor_id', $user->id)->get() as $preference) {
-                $codes[$preference->semester] ??= [];
-                $codes[$preference->semester][] = $preference->subject->code;
+        $faculty = User::query()
+            ->where('role', UserRole::Faculty->value)
+            ->orderBy('college')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get();
+        $facultyIds = $faculty->pluck('id');
+        $preferences = FacultyCurriculumSubjectPreference::query()
+            ->with('subject')
+            ->whereIn('professor_id', $facultyIds)
+            ->orderBy('semester')
+            ->orderBy('rank')
+            ->get()
+            ->groupBy('professor_id');
+        $availability = FacultyAvailability::query()
+            ->with('academicTerm')
+            ->whereIn('professor_id', $facultyIds)
+            ->orderBy('academic_term_id')
+            ->orderBy('day_of_week')
+            ->orderBy('starts_at_time')
+            ->get()
+            ->groupBy('professor_id');
+        $history = FacultyTeachingHistory::query()
+            ->with('subject')
+            ->whereIn('professor_id', $facultyIds)
+            ->orderByDesc('evidence_count')
+            ->get()
+            ->groupBy('professor_id');
+        $currentTerm = AcademicTerm::query()->where('status', 'semester_ongoing')->first();
+        $assignedUnits = $currentTerm === null
+            ? collect()
+            : Section::query()
+                ->with('subject')
+                ->where('academic_term_id', $currentTerm->id)
+                ->whereIn('professor_id', $facultyIds)
+                ->get()
+                ->groupBy('professor_id')
+                ->map(static fn ($sections): float => (float) $sections->sum(static fn (Section $section): float => (float) $section->subject->units));
+
+        $facultyByCollege = $faculty->groupBy(
+            static fn (User $user): string => strtoupper($user->college?->value ?? 'unassigned'),
+        );
+        foreach ($facultyByCollege as $college => $collegeFaculty) {
+            $lines[] = '';
+            $lines[] = '## '.$college;
+            $lines[] = '';
+            $lines[] = '| Professor | Email | Account status | Employment type | Planning reference | Desired subjects | Desired availability | Teaching history | Current assigned units |';
+            $lines[] = '| --- | --- | --- | --- | --- | --- | --- | --- | --- |';
+            foreach ($collegeFaculty as $user) {
+                $codes = ['1st' => [], '2nd' => []];
+                foreach ($preferences->get($user->id, collect()) as $preference) {
+                    $codes[$preference->semester] ??= [];
+                    $codes[$preference->semester][] = $preference->subject->code;
+                }
+                $desiredSubjects = implode(', ', array_filter([
+                    $codes['1st'] === [] ? null : '1st: '.implode(', ', array_unique($codes['1st'])),
+                    $codes['2nd'] === [] ? null : '2nd: '.implode(', ', array_unique($codes['2nd'])),
+                ]));
+                $desiredAvailability = $availability->get($user->id, collect())
+                    ->map(fn (FacultyAvailability $window): string => $window->academicTerm->school_year.' '.$window->academicTerm->semester.' '.self::dayLabel($window->day_of_week).' '.$window->starts_at_time.'-'.$window->ends_at_time)
+                    ->implode('; ');
+                $teachingHistory = $history->get($user->id, collect())
+                    ->map(fn (FacultyTeachingHistory $entry): string => $entry->subject->code.' ×'.$entry->evidence_count)
+                    ->implode(', ');
+                $lines[] = sprintf(
+                    '| %s | %s | %s | %s | %s | %s | %s | %s | %s |',
+                    $user->name,
+                    $user->email,
+                    $user->status === UserStatus::Active ? 'Active' : 'Inactive',
+                    $user->employment_type?->label() ?? 'Part-time',
+                    $user->employment_type?->planningUnitReference() === null ? '—' : $user->employment_type->planningUnitReference().' units',
+                    $desiredSubjects ?: '—',
+                    $desiredAvailability ?: '—',
+                    $teachingHistory ?: '—',
+                    ($assignedUnits[$user->id] ?? 0).' units',
+                );
             }
-            $allCodes = array_merge($codes['1st'], $codes['2nd']);
-            $serviceOnly = $allCodes !== [] && collect($allCodes)->every(static fn (string $code): bool => preg_match('/^(LEAD|NSTP|PATHFIT|PE|RIZAL|PHILHIS|MATHWRLD|KOMFIL|CONWRLD|ARTAPP|ETHICS|PURPCOMM|PSPEAK|SCITECH|ENVISCI)/u', $code) === 1);
-            $accounts[] = [
-                'college' => strtoupper($profile['college']->value),
-                'name' => $user->name,
-                'email' => $user->email,
-                'classification' => $serviceOnly ? 'Service faculty' : 'Department faculty',
-                'first' => implode(', ', array_unique($codes['1st'])),
-                'second' => implode(', ', array_unique($codes['2nd'])),
-            ];
-        }
-        usort($accounts, static fn (array $left, array $right): int => [$left['college'], $left['name']] <=> [$right['college'], $right['name']]);
-        foreach ($accounts as $account) {
-            $lines[] = sprintf('| %s | %s | %s | %s | %s | %s |', $account['college'], $account['name'], $account['email'], $account['classification'], $account['first'] ?: '—', $account['second'] ?: '—');
         }
 
         $directory = storage_path('app/local-reports');
         File::ensureDirectoryExists($directory);
         File::put($directory.'/professor-accounts.md', implode(PHP_EOL, $lines).PHP_EOL);
+    }
+
+    private static function dayLabel(int $day): string
+    {
+        return [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'][$day] ?? 'Unknown';
     }
 
     private function guardEnvironment(): void
