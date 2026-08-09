@@ -7,6 +7,7 @@ import {
   getFacultyAvailabilities,
   getFacultyCurriculumSubjectPreferences,
   getFacultyPreferenceCatalog,
+  getFacultySpecializations,
   getFacultySubjectPreferences,
   getFacultyTeachingHistory,
 } from "@/features/services/faculty-service"
@@ -22,6 +23,8 @@ export const facultyCurriculumSubjectPreferencesQueryKey = (
 ) => ["faculty-curriculum-subject-preferences", userId] as const
 export const facultyTeachingHistoryQueryKey = (userId: string | null) =>
   ["faculty-teaching-history", userId] as const
+export const facultySpecializationsQueryKey = (userId: string | null) =>
+  ["faculty-specializations", userId] as const
 
 export function useFacultyAvailabilitiesQuery() {
   const { session } = useAuth()
@@ -71,6 +74,16 @@ export function useFacultyTeachingHistoryQuery() {
   return useQuery({
     queryKey: facultyTeachingHistoryQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getFacultyTeachingHistory(signal),
+    enabled: session !== null,
+  })
+}
+
+export function useFacultySpecializationsQuery() {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: facultySpecializationsQueryKey(session?.userId ?? null),
+    queryFn: ({ signal }) => getFacultySpecializations(signal),
     enabled: session !== null,
   })
 }

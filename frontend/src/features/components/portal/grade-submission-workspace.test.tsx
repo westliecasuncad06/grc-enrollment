@@ -137,7 +137,7 @@ function stubGradeRoutes(
 
 async function selectSection(
   user: ReturnType<typeof userEvent.setup>,
-  name: RegExp = /CS101-A/,
+  name = /CS101-A/,
 ) {
   const trigger = await screen.findByLabelText("Section")
   await user.click(trigger)

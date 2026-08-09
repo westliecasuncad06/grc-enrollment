@@ -217,7 +217,7 @@ export function RoomsOperationsWorkspace() {
                   <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
                     <span className="font-medium">{section.section_code} · Subject #{section.subject_id}</span>
                     <span>{section.room} · {section.schedule_days} {section.starts_at_time?.slice(0, 5)}–{section.ends_at_time?.slice(0, 5)}</span>
-                    {section.modality && <Badge variant="outline">{modalityLabel[section.modality as keyof typeof modalityLabel] ?? "Needs reassignment"}</Badge>}
+                    {section.modality && <Badge variant="outline">{modalityLabel[section.modality] ?? "Needs reassignment"}</Badge>}
                   </div>
                 ))}
               </CardContent>

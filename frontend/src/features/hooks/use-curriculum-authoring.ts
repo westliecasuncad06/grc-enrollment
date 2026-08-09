@@ -49,12 +49,12 @@ export function useAddCurriculumSubjectPlacementMutation() {
       input: CurriculumSubjectPlacementInput
     }) => addCurriculumSubjectPlacement(curriculumId, input),
     onSuccess: (_curriculum, { input }) => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: curriculaQueryKey(userId),
         exact: true,
       })
       if (input.source === "new")
-        queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: subjectsQueryKey(userId),
           exact: true,
         })

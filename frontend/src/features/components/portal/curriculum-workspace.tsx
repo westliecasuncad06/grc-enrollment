@@ -209,10 +209,11 @@ export function CurriculumWorkspace() {
   // The placement graph as last loaded or last written. The autosave effect
   // compares against it so that reloading a curriculum — or editing only the
   // header fields the discard dialog still guards — never triggers a write.
-  const persistedPlacements = useRef(JSON.stringify(fresh.subjects))
+  const [persistedPlacementSignature, setPersistedPlacementSignature] =
+    useState(JSON.stringify(fresh.subjects))
   const applyValues = useCallback(
     (values: CurriculumWorkspaceValues, details?: Curriculum["subjects"]) => {
-      persistedPlacements.current = JSON.stringify(values.subjects)
+      setPersistedPlacementSignature(JSON.stringify(values.subjects))
       if (details) setPlacementDetails(details)
       form.reset(values)
     },
@@ -332,7 +333,7 @@ export function CurriculumWorkspace() {
   const placementSignature = JSON.stringify(formSubjects)
   const isDirty = form.formState.isDirty
   const hasUnsavedPlacementChanges =
-    persistedPlacements.current !== placementSignature
+    persistedPlacementSignature !== placementSignature
   // A brand-new curriculum has nothing to PATCH and no complete payload to
   // POST until its header fields are filled in, so autosave stays quiet until
   // the whole form is a valid create/replace request.
@@ -353,7 +354,7 @@ export function CurriculumWorkspace() {
       // actually highlighted rather than silently swallowing every edit — this
       // screen has no submit button to run it for us.
       if (!autosaveReady) return void form.trigger()
-      persistedPlacements.current = placementSignature
+      setPersistedPlacementSignature(placementSignature)
       void save(form.getValues())
     }, autosaveDelayMs)
     return () => clearTimeout(timer)

@@ -65,9 +65,9 @@ describe("connectedModuleRegistry", () => {
     for (const moduleId of connectedModuleIds) {
       const ModuleComponent = connectedModuleRegistry[moduleId]
       const role = (
-        Object.keys(rolePortalDefinitions) as Array<
-          keyof typeof rolePortalDefinitions
-        >
+        Object.keys(
+          rolePortalDefinitions,
+        ) as (keyof typeof rolePortalDefinitions)[]
       ).find((candidate) =>
         rolePortalDefinitions[candidate].modules.some(
           (module) => module.id === moduleId,

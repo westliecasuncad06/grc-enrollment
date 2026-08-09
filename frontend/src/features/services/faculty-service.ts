@@ -7,11 +7,16 @@ import {
   facultyAvailabilitiesEnvelopeSchema,
   facultyAvailabilityEnvelopeSchema,
   facultyAvailabilityInputSchema,
+  facultySpecializationEnvelopeSchema,
+  facultySpecializationInputSchema,
+  facultySpecializationsEnvelopeSchema,
   facultySubjectPreferenceEnvelopeSchema,
   facultySubjectPreferenceInputSchema,
   facultySubjectPreferencesEnvelopeSchema,
   type FacultyAvailability,
   type FacultyAvailabilityInput,
+  type FacultySpecialization,
+  type FacultySpecializationInput,
   type FacultySubjectPreference,
   type FacultySubjectPreferenceInput,
   facultyCurriculumSubjectPreferenceEnvelopeSchema,
@@ -41,6 +46,7 @@ export const FACULTY_PREFERENCE_CATALOG_PATH =
 export const FACULTY_CURRICULUM_SUBJECT_PREFERENCES_PATH =
   "/api/v1/faculty-curriculum-subject-preferences"
 export const FACULTY_TEACHING_HISTORY_PATH = "/api/v1/faculty-teaching-history"
+export const FACULTY_SPECIALIZATIONS_PATH = "/api/v1/faculty-specializations"
 
 function parseContract<T>(
   schema: {
@@ -275,6 +281,44 @@ export async function getFacultyTeachingHistory(
     payload,
     "faculty teaching history",
   ).data
+}
+
+export async function getFacultySpecializations(
+  signal?: AbortSignal,
+): Promise<readonly FacultySpecialization[]> {
+  const payload = await getAuthenticatedJson(
+    FACULTY_SPECIALIZATIONS_PATH,
+    signal,
+  )
+
+  return parseContract(
+    facultySpecializationsEnvelopeSchema,
+    payload,
+    "faculty specialization list",
+  ).data
+}
+
+export async function createFacultySpecialization(
+  input: FacultySpecializationInput,
+): Promise<FacultySpecialization> {
+  const payload = await postAuthenticatedJson(
+    FACULTY_SPECIALIZATIONS_PATH,
+    parseInput(
+      facultySpecializationInputSchema,
+      input,
+      "faculty specialization",
+    ),
+  )
+
+  return parseContract(
+    facultySpecializationEnvelopeSchema,
+    payload,
+    "created faculty specialization",
+  ).data
+}
+
+export async function deleteFacultySpecialization(id: number): Promise<void> {
+  await deleteAuthenticatedJson(`${FACULTY_SPECIALIZATIONS_PATH}/${id}`)
 }
 
 export interface TeachingScheduleRow {

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -6,24 +6,13 @@ import { axe } from "vitest-axe"
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { renderWithSession } from "@/tests/render-app"
 
-const terms = {
-  data: [
-    {
-      type: "academic-term",
-      id: 1,
-      school_year: "2026-2027",
-      semester: "1st",
-      starts_at: null,
-      ends_at: null,
-      enrollment_opens_at: null,
-      enrollment_closes_at: null,
-      add_drop_deadline_at: null,
-      grading_deadline_at: null,
-      status: "semester_ongoing",
-      status_label: "Semester Ongoing",
-    },
-  ],
-} as const
+const facultySession = {
+  userId: "5",
+  displayName: "Faculty",
+  role: "faculty" as const,
+  signedInAt: "2026-07-29T12:00:00Z",
+}
+
 const catalog = {
   data: [
     {
@@ -57,6 +46,7 @@ const catalog = {
     },
   ],
 } as const
+
 const availability = {
   type: "faculty_availability",
   id: 4,
@@ -65,6 +55,7 @@ const availability = {
   starts_at_time: "08:00:00",
   ends_at_time: "10:00:00",
 } as const
+
 const preference = {
   type: "faculty_curriculum_subject_preference",
   id: 6,
@@ -76,6 +67,17 @@ const preference = {
   origin: "workbook_seeded",
 } as const
 
+const specialization = {
+  type: "faculty-specialization",
+  id: 9,
+  professor_id: 5,
+  subject_id: 501,
+  proficiency: "primary",
+  proficiency_label: "Primary",
+  source: "declared",
+  notes: null,
+} as const
+
 function requestUrl(input: RequestInfo | URL): string {
   return typeof input === "string"
     ? input
@@ -83,21 +85,11 @@ function requestUrl(input: RequestInfo | URL): string {
       ? input.toString()
       : input.url
 }
-function renderWorkspace() {
-  return renderWithSession(<FacultyInputWorkspace />, {
-    session: {
-      userId: "5",
-      displayName: "Faculty",
-      role: "faculty",
-      signedInAt: "2026-07-29T12:00:00Z",
-    },
-  })
-}
+
 function stubData(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
   fetchMock.mockImplementation((input, init) => {
     const url = requestUrl(input)
-    if (url.endsWith("/academic-terms"))
-      return Promise.resolve(new Response(JSON.stringify(terms)))
+
     if (url.endsWith("/faculty-preference-catalog"))
       return Promise.resolve(new Response(JSON.stringify(catalog)))
     if (
@@ -107,8 +99,10 @@ function stubData(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
       return Promise.resolve(
         new Response(JSON.stringify({ data: [availability] })),
       )
-    if (url.endsWith("/faculty-subject-preferences"))
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    if (url.endsWith("/faculty-specializations"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [specialization] })),
+      )
     if (
       url.endsWith("/faculty-curriculum-subject-preferences") &&
       (!init?.method || init.method === "GET")
@@ -118,194 +112,74 @@ function stubData(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
       )
     if (url.endsWith("/faculty-teaching-history"))
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    if (init?.method === "PATCH")
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            data: { ...availability, starts_at_time: "09:00:00" },
-          }),
-        ),
-      )
+
     return Promise.resolve(new Response(null, { status: 204 }))
   })
 }
 
 describe("FacultyInputWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
+
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("shows a curriculum and semester-filtered saved preference table", async () => {
-    stubData(fetchMock)
-    renderWorkspace()
-    expect(
-      await screen.findByText("LEAD 1 — Leadership Seminar 1"),
-    ).toBeInTheDocument()
-    expect(
-      await screen.findByRole("combobox", { name: /curriculum/i }),
-    ).toBeEnabled()
-    expect(
-      screen.queryByText(/Faculty input could not be loaded/i),
-    ).not.toBeInTheDocument()
-    expect(screen.getByText("Seeded")).toBeInTheDocument()
-    expect(
-      screen.getByText("No workbook teaching history is available yet."),
-    ).toBeInTheDocument()
-  })
-
-  it("does not ask for an academic term for recurring availability", async () => {
-    stubData(fetchMock)
-    renderWorkspace()
-    await screen.findByRole("button", { name: "Edit availability" })
-    expect(
-      screen.queryByRole("combobox", { name: "Academic term" }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("focuses the availability day control from the shortcut", async () => {
+  it("keeps availability and subject preferences on separate tabs", async () => {
     const user = userEvent.setup()
     stubData(fetchMock)
-    renderWorkspace()
-    await screen.findByRole("button", { name: "Edit availability" })
+    renderWithSession(<FacultyInputWorkspace />, { session: facultySession })
+
+    expect(
+      await screen.findByRole("tab", { name: "Availability window" }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "Subject preferences" }))
+
+    expect(
+      await screen.findByRole("table", { name: /subject preferences/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Day$/)).not.toBeInTheDocument()
+  })
+
+  it("lists declared specializations inside the subject preferences tab", async () => {
+    const user = userEvent.setup()
+    stubData(fetchMock)
+    renderWithSession(<FacultyInputWorkspace />, { session: facultySession })
 
     await user.click(
-      screen.getByRole("button", { name: "Set availability window" }),
+      await screen.findByRole("tab", { name: "Subject preferences" }),
     )
 
-    expect(screen.getByRole("combobox", { name: "Day" })).toHaveFocus()
-  })
-
-  it("offers Monday through Saturday without Sunday", async () => {
-    const user = userEvent.setup()
-    stubData(fetchMock)
-    renderWorkspace()
-    await screen.findByRole("button", { name: "Edit availability" })
-    await user.click(screen.getByRole("combobox", { name: "Day" }))
     expect(
-      screen.queryByRole("option", { name: "Sunday" }),
-    ).not.toBeInTheDocument()
-  })
-
-  it("renders an availability day validation error from the API", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((input, init) => {
-      const url = requestUrl(input)
-      if (url.endsWith("/academic-terms"))
-        return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/faculty-preference-catalog"))
-        return Promise.resolve(new Response(JSON.stringify(catalog)))
-      if (
-        url.endsWith("/faculty-availabilities") &&
-        (!init?.method || init.method === "GET")
-      )
-        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-      if (url.endsWith("/faculty-availabilities") && init?.method === "POST")
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              error: {
-                code: "VALIDATION_FAILED",
-                message: "Invalid",
-                errors: { day_of_week: ["Choose an available teaching day."] },
-                request_id: "request-day-1",
-              },
-            }),
-            { status: 422 },
-          ),
-        )
-      if (url.endsWith("/faculty-curriculum-subject-preferences"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-      if (url.endsWith("/faculty-teaching-history"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    })
-    renderWorkspace()
-    await screen.findByRole("button", { name: "Save availability" })
-
-    await user.type(screen.getByLabelText("Start time"), "08:00:00")
-    await user.type(screen.getByLabelText("End time"), "10:00:00")
-    await user.click(screen.getByRole("button", { name: "Save availability" }))
-
-    expect(
-      await screen.findByText("Choose an available teaching day."),
+      await screen.findByText("Declared specializations"),
     ).toBeInTheDocument()
-  })
-
-  it("uses the searchable curriculum subject picker and maps validation to rank", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((input, init) => {
-      const url = requestUrl(input)
-      if (url.endsWith("/academic-terms"))
-        return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/faculty-preference-catalog"))
-        return Promise.resolve(new Response(JSON.stringify(catalog)))
-      if (url.endsWith("/faculty-availabilities"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-      if (
-        url.endsWith("/faculty-curriculum-subject-preferences") &&
-        init?.method === "POST"
-      )
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              error: {
-                code: "VALIDATION_FAILED",
-                message: "Invalid",
-                errors: {
-                  rank: [
-                    "This rank is already in use for this curriculum semester.",
-                  ],
-                },
-                request_id: "request-5",
-              },
-            }),
-            { status: 422 },
-          ),
-        )
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    })
-    renderWorkspace()
-    const subjectPicker = await screen.findByLabelText("Preferred subject")
-    await user.click(subjectPicker)
-    await user.click(await screen.findByText("LEAD 1 — Leadership Seminar 1"))
-    await user.click(
-      screen.getByRole("button", { name: "Save subject preference" }),
-    )
     expect(
-      await screen.findByText(
-        "This rank is already in use for this curriculum semester.",
-      ),
+      within(
+        screen.getByRole("table", { name: "Declared specializations" }),
+      ).getByText("Primary"),
     ).toBeInTheDocument()
-  })
-
-  it("edits and confirms removal of an availability before deleting it", async () => {
-    const user = userEvent.setup()
-    stubData(fetchMock)
-    renderWorkspace()
-    await screen.findByRole("button", { name: "Edit availability" })
-    await user.click(screen.getByRole("button", { name: "Edit availability" }))
-    await user.clear(screen.getByLabelText("Start time"))
-    await user.type(screen.getByLabelText("Start time"), "09:00:00")
-    await user.click(
-      screen.getByRole("button", { name: "Update availability" }),
-    )
-    await user.click(
-      screen.getByRole("button", { name: "Remove availability" }),
-    )
-    expect(screen.getByRole("alertdialog")).toHaveTextContent(
-      "Remove availability",
-    )
-    await user.click(screen.getByRole("button", { name: "Confirm removal" }))
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/faculty-availabilities/4"),
-      expect.objectContaining({ method: "DELETE" }),
+      expect.stringContaining("/api/v1/faculty-specializations"),
+      expect.objectContaining({ method: "GET" }),
     )
   })
 
-  it("has no detectable accessibility violations once loaded", async () => {
+  it("does not fetch or render faculty input for an unauthorized role", () => {
+    renderWithSession(<FacultyInputWorkspace />, {
+      session: { ...facultySession, role: "executive_director" },
+    })
+
+    expect(
+      screen.getByText("This workspace is not available for your role."),
+    ).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("has no detectable accessibility violations once the tabs load", async () => {
     stubData(fetchMock)
-    const { container } = renderWorkspace()
-    await screen.findByText("LEAD 1 — Leadership Seminar 1")
+    const { container } = renderWithSession(<FacultyInputWorkspace />, {
+      session: facultySession,
+    })
+
+    await screen.findByRole("tab", { name: "Availability window" })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

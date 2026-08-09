@@ -334,7 +334,7 @@ describe("PortalShell", () => {
       }),
     ).not.toHaveAttribute("aria-disabled")
     expect(
-      within(navigation).getByRole("link", { name: "Sections & Schedules" }),
+      within(navigation).getByRole("link", { name: "Schedule Proposals" }),
     ).toHaveAttribute("aria-disabled", "true")
   })
 })

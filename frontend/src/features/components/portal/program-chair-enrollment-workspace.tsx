@@ -437,14 +437,13 @@ export function ProgramChairEnrollmentWorkspace({
   const termId = currentTerm?.id ?? 0
   const latestGenerationRunQuery = useLatestScheduleGenerationRunQuery(termId)
   const generationRun = latestGenerationRunQuery.data ?? null
-  const latestGenerationRunKey = useMemo(
-    () => latestScheduleGenerationRunQueryKey(session?.userId ?? null, termId),
-    [session?.userId, termId],
-  )
   const generationMutation = useMutation({
     mutationFn: () => startScheduleGeneration(termId),
     onSuccess: (run) => {
-      queryClient.setQueryData(latestGenerationRunKey, run)
+      queryClient.setQueryData(
+        latestScheduleGenerationRunQueryKey(session?.userId ?? null, termId),
+        run,
+      )
       setForecastOpen(true)
       void queryClient.invalidateQueries({
         queryKey: sectionsQueryKey(session?.userId ?? null),
@@ -468,7 +467,13 @@ export function ProgramChairEnrollmentWorkspace({
     const poll = window.setTimeout(() => {
       void getScheduleGenerationRun(generationRun.id)
         .then((run) => {
-          queryClient.setQueryData(latestGenerationRunKey, run)
+          queryClient.setQueryData(
+            latestScheduleGenerationRunQueryKey(
+              session?.userId ?? null,
+              termId,
+            ),
+            run,
+          )
           if (run.status !== "queued" && run.status !== "running") {
             void queryClient.invalidateQueries({
               queryKey: sectionsQueryKey(session?.userId ?? null),
@@ -482,13 +487,7 @@ export function ProgramChairEnrollmentWorkspace({
         .catch(() => undefined)
     }, 1_500)
     return () => window.clearTimeout(poll)
-  }, [
-    generationRun,
-    latestGenerationRunKey,
-    queryClient,
-    session?.userId,
-    termId,
-  ])
+  }, [generationRun, queryClient, session?.userId, termId])
   const currentProposal = (proposalsQuery.data ?? []).find(
     (proposal) => proposal.academic_term_id === termId,
   )

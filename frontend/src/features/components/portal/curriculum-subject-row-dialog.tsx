@@ -1,8 +1,8 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useState } from "react"
+import { useForm, useWatch } from "react-hook-form"
 import { z } from "zod"
 
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
@@ -93,6 +93,10 @@ export function CurriculumSubjectRowDialog({
     resolver: zodResolver(newSubjectSchema),
     defaultValues: newSubjectDefaults,
   })
+  const selectedSemester = useWatch({
+    control: form.control,
+    name: "semester",
+  })
   const selected = (candidateQuery.data ?? []).find(
     (subject) => String(subject.id) === selectedId,
   )
@@ -110,12 +114,6 @@ export function CurriculumSubjectRowDialog({
     if (!nextOpen) reset()
     onOpenChange(nextOpen)
   }
-
-  useEffect(() => {
-    if (!open) reset()
-    // `form` is stable for the life of this dialog instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
 
   const submitInput = async (input: CurriculumSubjectPlacementInput) => {
     setRequestError("")
@@ -289,16 +287,18 @@ export function CurriculumSubjectRowDialog({
           <form
             id="new-curriculum-subject-form"
             className="flex flex-col gap-4"
-            onSubmit={form.handleSubmit((values) =>
-              submitInput({
-                source: "new",
-                code: values.code.trim(),
-                title: values.title.trim(),
-                units: values.units,
-                year_level: yearLevel,
-                semester: values.semester,
-              }),
-            )}
+            onSubmit={(event) =>
+              void form.handleSubmit((values) =>
+                submitInput({
+                  source: "new",
+                  code: values.code.trim(),
+                  title: values.title.trim(),
+                  units: values.units,
+                  year_level: yearLevel,
+                  semester: values.semester,
+                }),
+              )(event)
+            }
           >
             <FieldGroup>
               <Field data-invalid={Boolean(form.formState.errors.code)}>
@@ -342,7 +342,7 @@ export function CurriculumSubjectRowDialog({
                     Semester
                   </FieldLabel>
                   <Select
-                    value={form.watch("semester")}
+                    value={selectedSemester}
                     onValueChange={(value) => {
                       if (value === "1st" || value === "2nd")
                         form.setValue("semester", value)

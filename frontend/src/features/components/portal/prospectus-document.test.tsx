@@ -178,7 +178,7 @@ describe("ProspectusDocument", () => {
     renderWithSession(<ProspectusDocument studentId={4} />)
 
     await screen.findByText(/BS Information Technology/)
-    expect(url(fetchMock.mock.calls[0]![0])).toContain("student_id=4")
+    expect(url(fetchMock.mock.calls[0][0])).toContain("student_id=4")
   })
 
   it("shows unplaced entries in their own table when present", async () => {
@@ -191,7 +191,10 @@ describe("ProspectusDocument", () => {
     renderWithSession(<ProspectusDocument />)
 
     const table = await screen.findByText("Additional / credited subjects")
-    expect(within(table.closest("table")!).getByText("ELEC1")).toBeInTheDocument()
+    const additionalSubjectsTable = table.closest("table")
+    if (!additionalSubjectsTable)
+      throw new Error("Additional subjects caption is not in a table.")
+    expect(within(additionalSubjectsTable).getByText("ELEC1")).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {
