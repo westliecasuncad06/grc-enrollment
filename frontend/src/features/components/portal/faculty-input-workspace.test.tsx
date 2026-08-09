@@ -162,6 +162,19 @@ describe("FacultyInputWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("focuses the availability day control from the shortcut", async () => {
+    const user = userEvent.setup()
+    stubData(fetchMock)
+    renderWorkspace()
+    await screen.findByRole("button", { name: "Edit availability" })
+
+    await user.click(
+      screen.getByRole("button", { name: "Set availability window" }),
+    )
+
+    expect(screen.getByRole("combobox", { name: "Day" })).toHaveFocus()
+  })
+
   it("offers Monday through Saturday without Sunday", async () => {
     const user = userEvent.setup()
     stubData(fetchMock)

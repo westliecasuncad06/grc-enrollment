@@ -293,7 +293,7 @@ export function FacultyInputWorkspace() {
       <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/30 p-3">
         <Button
           type="button"
-          onClick={() => document.getElementById("availability-term")?.focus()}
+          onClick={() => document.getElementById("availability-day")?.focus()}
         >
           Set availability window
         </Button>
