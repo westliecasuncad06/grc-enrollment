@@ -395,53 +395,44 @@ final class GenerateStudentRosterFile extends Command
     private function rosterSection(array $sections, array $roster): array
     {
         $lines = [];
-        $first = true;
+        $currentCollege = null;
+        $currentYear = null;
 
-        foreach (self::COLLEGE_ORDER as $college) {
-            $collegeSections = array_values(array_filter(
-                $sections,
-                static fn (array $section): bool => $section['college'] === $college,
-            ));
-            usort(
-                $collegeSections,
-                static fn (array $a, array $b): int => [$a['year_level'], $a['section_code']] <=> [$b['year_level'], $b['section_code']],
-            );
-
-            $byYear = [];
-            foreach ($collegeSections as $section) {
-                $byYear[$section['year_level']][] = $section;
-            }
-            ksort($byYear);
-
-            if (! $first) {
-                $lines[] = '';
-            }
-            $first = false;
-            $lines[] = '## '.$college->label();
-
-            foreach ($byYear as $year => $yearSections) {
-                $lines[] = '';
-                $lines[] = '### Year '.$year;
-
-                foreach ($yearSections as $section) {
-                    $lines[] = '';
-                    $lines[] = '#### '.$section['section_code'];
-                    $lines[] = '';
-                    $lines[] = '| Student No. | Name | Email | Program | Section | Year | Category |';
-                    $lines[] = '|---|---|---|---|---|---|---|';
-
-                    foreach ($roster[$this->sectionKey($section)] as $identity) {
-                        $lines[] = sprintf(
-                            '| %s | %s | %s | %s | %s | %d | Regular |',
-                            $identity['student_number'],
-                            $identity['name'],
-                            $identity['email'],
-                            $section['program_code'],
-                            $section['section_code'],
-                            $section['year_level'],
-                        );
-                    }
+        foreach ($this->orderedSections($sections) as $section) {
+            // Emit college header when college changes
+            if ($section['college'] !== $currentCollege) {
+                if ($currentCollege !== null) {
+                    $lines[] = '';  // blank line before new college (not before first)
                 }
+                $currentCollege = $section['college'];
+                $currentYear = null;  // Reset year when college changes
+                $lines[] = '## '.$currentCollege->label();
+            }
+
+            // Emit year header when year changes within the same college
+            if ($section['year_level'] !== $currentYear) {
+                $currentYear = $section['year_level'];
+                $lines[] = '';
+                $lines[] = '### Year '.$currentYear;
+            }
+
+            // Emit section data
+            $lines[] = '';
+            $lines[] = '#### '.$section['section_code'];
+            $lines[] = '';
+            $lines[] = '| Student No. | Name | Email | Program | Section | Year | Category |';
+            $lines[] = '|---|---|---|---|---|---|---|';
+
+            foreach ($roster[$this->sectionKey($section)] as $identity) {
+                $lines[] = sprintf(
+                    '| %s | %s | %s | %s | %s | %d | Regular |',
+                    $identity['student_number'],
+                    $identity['name'],
+                    $identity['email'],
+                    $section['program_code'],
+                    $section['section_code'],
+                    $section['year_level'],
+                );
             }
         }
 
