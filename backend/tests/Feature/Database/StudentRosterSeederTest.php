@@ -2,12 +2,15 @@
 
 namespace Tests\Feature\Database;
 
+use App\Actions\Academic\ReclassifyStudentEnrollmentCategory;
+use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicGrade;
@@ -407,8 +410,128 @@ final class StudentRosterSeederTest extends TestCase
         $this->assertSame($gradesBefore, AcademicGrade::query()->count());
     }
 
+    public function test_roughly_a_tenth_of_students_are_derived_as_irregular(): void
+    {
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->reclassifyAllStudents();
+
+        $total = StudentProfile::count();
+        $irregular = StudentProfile::where('enrollment_category', 'irregular')->count();
+
+        $this->assertGreaterThan((int) ($total * 0.07), $irregular);
+        $this->assertLessThan((int) ($total * 0.13), $irregular);
+    }
+
+    public function test_no_first_year_student_is_irregular(): void
+    {
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->reclassifyAllStudents();
+
+        $this->assertSame(0, StudentProfile::where('year_level', 1)->where('enrollment_category', 'irregular')->count());
+    }
+
+    public function test_every_irregular_student_has_grade_evidence(): void
+    {
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->reclassifyAllStudents();
+
+        foreach (StudentProfile::where('enrollment_category', 'irregular')->get() as $student) {
+            $this->assertTrue(AcademicGrade::where('student_id', $student->id)
+                ->whereIn('mark', ['5.00', 'INC', 'NC', 'DRP'])->exists());
+        }
+    }
+
+    public function test_running_the_seeder_twice_does_not_change_the_derived_categories(): void
+    {
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->reclassifyAllStudents();
+
+        $before = StudentProfile::query()->orderBy('id')->pluck('enrollment_category', 'id');
+
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->reclassifyAllStudents();
+
+        $after = StudentProfile::query()->orderBy('id')->pluck('enrollment_category', 'id');
+
+        $this->assertSame($before->all(), $after->all());
+    }
+
+    public function test_enrollment_category_stays_null_when_no_term_is_semester_ongoing(): void
+    {
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+
+        $this->assertSame(0, StudentProfile::whereNotNull('enrollment_category')->count());
+    }
+
+    /**
+     * Mirrors what `php artisan students:reclassify` (and, per the Task 4
+     * brief, the IT Control automation ahead of enrollment) does once a
+     * Registrar Head has actually opened a `semester_ongoing` term —
+     * `StudentRosterSeeder` itself only auto-classifies when one already
+     * exists at seed time (see `reclassifyIfTermIsOngoing()`), and
+     * `AcademicTermSeeder` deliberately leaves none, so every test that
+     * needs a derived category arranges one here exactly like the real
+     * post-seed workflow would.
+     */
+    private function reclassifyAllStudents(): void
+    {
+        $currentTerm = AcademicTerm::where('school_year', '2026-2027')->where('semester', '1st')->sole();
+        $currentTerm->update(['status' => AcademicTermStatus::SemesterOngoing]);
+
+        $registrarHead = User::query()->where('role', UserRole::RegistrarHead)->first()
+            ?? User::create([
+                'name' => 'Registrar Head',
+                'email' => 'registrar.head@grc.test',
+                'password' => 'password',
+                'role' => UserRole::RegistrarHead,
+                'status' => UserStatus::Active,
+            ]);
+
+        app(ReclassifyStudentEnrollmentCategory::class)->executeMany(
+            StudentProfile::query()->get(),
+            $currentTerm,
+            $registrarHead,
+            new AuditRequestContext('student-roster-seeder-test', null),
+        );
+    }
+
     private function fixturePath(): string
     {
         return __DIR__.'/../../fixtures/students-profile-sample.md';
+    }
+
+    /**
+     * The ordinary 17-student `students-profile-sample.md` fixture is too
+     * small for `test_roughly_a_tenth_of_students_are_derived_as_irregular()`'s
+     * `(int) ($total * 0.07)` / `(int) ($total * 0.13)` window to ever admit
+     * an achievable integer count (17 * 0.07 and 17 * 0.13 both truncate to
+     * the same integer, leaving no room between them — true of most small
+     * totals, not just 17).
+     *
+     * This 160-student fixture is a dedicated, larger roster built for this
+     * one concern: 30 BSBA-FM year-2 (`FM201`) + 30 BSA year-3 (`ACC301`)
+     * students as the eligible (year 2-4) population — deliberately kept on
+     * the SAME sparse two-subject curriculum `students-profile-sample.md`
+     * already registers, not BSIT's dense per-term one, because a cohort
+     * with many completed terms of six-subjects-per-term coverage
+     * accumulates enough locked-grade rows that `gradeMarkFor()`'s own
+     * 10%-per-row "marginal" bucket alone organically blocks Regular
+     * standing for nearly the whole cohort, swamping this test's ~10%
+     * target before `StudentRosterSeeder::seedIrregularStudents()`'s own
+     * selection even runs (confirmed empirically while writing this test:
+     * a 30-student BSIT year-4 cohort alone pushed the irregular count to
+     * ~47% of the eligible population). The remaining 100 rows are
+     * BSIT year-1 (`IT101`) students — never eligible, so they never turn
+     * irregular, but they dilute `StudentProfile::count()` enough that the
+     * 60-strong eligible population's own irregular count (organic +
+     * `IRREGULAR_SELECTION_STRIDE`-forced, deterministic at 15) lands
+     * inside the (0.07 * 160, 0.13 * 160) = (11, 20) window with real
+     * margin on both sides. Every other test in this file intentionally
+     * keeps using the smaller shared fixture.
+     */
+    private function irregularFixturePath(): string
+    {
+        return __DIR__.'/../../fixtures/students-profile-irregular-sample.md';
     }
 }

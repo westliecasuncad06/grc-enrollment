@@ -2,8 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Academic\ReclassifyStudentEnrollmentCategory;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Faculty\SpecializationProficiency;
@@ -11,6 +13,7 @@ use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CapacitySource;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\SectionBlockCode;
@@ -21,12 +24,15 @@ use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Program;
+use App\Models\StudentProfile;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -93,6 +99,26 @@ final class StudentRosterSeeder extends Seeder
     private const SLOT_COUNT = 24;
 
     /**
+     * Every Nth eligible (year 2-4) student, in stable id order, is forced
+     * irregular — see `selectIrregularCandidates()`.
+     */
+    private const IRREGULAR_SELECTION_STRIDE = 10;
+
+    /** Year 1 has no completed term yet, so it is never eligible. */
+    private const IRREGULAR_MIN_YEAR_LEVEL = 2;
+
+    /**
+     * The four `GradeMark` cases `EnrollmentCategoryClassifier::classify()`
+     * treats as blocking Regular standing (see `GradeMark::blocksRegularStanding()`)
+     * — `rewriteGradesToFailing()` cycles a candidate's rewritten rows
+     * through all four so every one of the classifier's match arms gets
+     * real seeded evidence, not just `Failed`.
+     *
+     * @var list<GradeMark>
+     */
+    private const FAILING_MARKS = [GradeMark::Failed, GradeMark::Incomplete, GradeMark::NotComplete, GradeMark::Dropped];
+
+    /**
      * Professor round-robin cursor, keyed by "{subject_id}|{college}" ->
      * index into that key's ordered candidate list. Rebuilt fresh on every
      * `run()` call so reruns are deterministic.
@@ -153,6 +179,7 @@ final class StudentRosterSeeder extends Seeder
         }
 
         $this->seedSectionHistory();
+        $this->seedIrregularStudents();
     }
 
     /**
@@ -691,6 +718,200 @@ final class StudentRosterSeeder extends Seeder
             $bucketRoll < 90 => [GradeMark::Satisfactory, GradeMark::Fair, GradeMark::Passed][$withinBucketIndex],
             default => [GradeMark::Failed, GradeMark::Incomplete, GradeMark::Dropped][$withinBucketIndex],
         };
+    }
+
+    /**
+     * Derives ~10% of the roster as "irregular" from real failing marks
+     * (Task 4 of the student-accounts-and-academic-history-seed plan):
+     * picks a deterministic subset of eligible students, rewrites a few of
+     * their own already-seeded locked grades to a failing mark, then asks
+     * `ReclassifyStudentEnrollmentCategory` to derive `enrollment_category`
+     * from that evidence — the category itself is never written directly
+     * here, matching `DemoEnrollmentSeeder::reclassify()`'s precedent.
+     *
+     * A no-op before any accounts exist to rewrite grades for (e.g. an
+     * empty roster file — `run()` already returned earlier in that case,
+     * but `selectIrregularCandidates()` guards independently too).
+     */
+    private function seedIrregularStudents(): void
+    {
+        $candidates = $this->selectIrregularCandidates();
+        if ($candidates === []) {
+            return;
+        }
+
+        $this->rewriteGradesToFailing($candidates);
+        $this->reclassifyIfTermIsOngoing();
+    }
+
+    /**
+     * Every `IRREGULAR_SELECTION_STRIDE`th (10th) student among those with a
+     * completed term to have failed one (year levels 2-4), in the same
+     * stable `id` ordering `cohortStudents()` already relies on elsewhere in
+     * this seeder. `student_profiles` rows are upserted, never recreated,
+     * so a given student's `id` — and therefore whether they land on a
+     * stride boundary — never changes across reruns, which is what keeps
+     * this selection (and everything downstream of it) idempotent.
+     *
+     * Not scoped to any one college: `student_profiles.id` order follows
+     * insertion order, which in turn follows the roster file's own
+     * college-by-college layout, so striding across the *entire* eligible
+     * population lands inside every college's own contiguous id block
+     * rather than favoring whichever college happens to sort first —
+     * verified against the real roster in the Task 4 report rather than
+     * assumed.
+     *
+     * @return list<\stdClass>
+     */
+    private function selectIrregularCandidates(): array
+    {
+        $eligible = DB::table('student_profiles')
+            ->where('year_level', '>=', self::IRREGULAR_MIN_YEAR_LEVEL)
+            ->orderBy('id')
+            ->get(['id', 'student_number']);
+
+        $selected = [];
+        foreach (array_values($eligible->all()) as $index => $student) {
+            if ($index % self::IRREGULAR_SELECTION_STRIDE === 0) {
+                $selected[] = $student;
+            }
+        }
+
+        return $selected;
+    }
+
+    /**
+     * Rewrites 1-3 of each candidate's own already-locked grade rows (from
+     * the section/enrollment history `seedSectionHistory()` just built) to
+     * a failing mark, earliest completed term first — so a candidate with
+     * more than one available row gets a genuine multi-term backlog, not
+     * just one bad grade in isolation — and cycling the mark type through
+     * all of `FAILING_MARKS` so every branch of
+     * `EnrollmentCategoryClassifier::classify()`'s match arm gets exercised
+     * across the full candidate population.
+     *
+     * Both "how many rows" and "which mark" are `crc32()`-hash-derived from
+     * stable identifiers only (student number, subject id, term id) — the
+     * same pattern `gradeMarkFor()` already uses — never `rand()`, so a
+     * rerun always rewrites the exact same rows to the exact same marks and
+     * never compounds (a student who already carries a failing mark from
+     * `gradeMarkFor()`'s own "marginal" bucket just gets that same value
+     * written again).
+     *
+     * @param  list<\stdClass>  $candidates
+     */
+    private function rewriteGradesToFailing(array $candidates): void
+    {
+        $studentIds = array_map(static fn (\stdClass $candidate): int => (int) $candidate->id, $candidates);
+
+        $gradesByStudent = [];
+        DB::table('academic_grades')
+            ->whereIn('student_id', $studentIds)
+            ->where('status', GradeStatus::Locked->value)
+            ->orderBy('student_id')
+            ->orderBy('academic_term_id')
+            ->orderBy('id')
+            ->get(['id', 'student_id', 'subject_id', 'academic_term_id'])
+            ->each(function (object $grade) use (&$gradesByStudent): void {
+                $gradesByStudent[$grade->student_id][] = $grade;
+            });
+
+        $now = now();
+
+        foreach ($candidates as $candidate) {
+            $rows = $gradesByStudent[$candidate->id] ?? [];
+            if ($rows === []) {
+                // No locked grade evidence to rewrite (e.g. a trimmed test
+                // roster whose curriculum fixture doesn't cover this
+                // student's cohort) — never force a category without real
+                // grade evidence behind it.
+                continue;
+            }
+
+            $failureCount = min(count($rows), $this->failureCountFor($candidate->student_number));
+
+            for ($i = 0; $i < $failureCount; $i++) {
+                $row = $rows[$i];
+                $mark = self::FAILING_MARKS[$this->failingMarkIndexFor($candidate->student_number, $row->subject_id, $row->academic_term_id)];
+
+                DB::table('academic_grades')->where('id', $row->id)->update([
+                    'mark' => $mark->value,
+                    'final_grade' => $mark->isNumeric() ? $mark->value : null,
+                    'updated_at' => $now,
+                ]);
+            }
+        }
+    }
+
+    /** 1-3 failing rows per candidate, hash-derived from their student number alone. */
+    private function failureCountFor(string $studentNumber): int
+    {
+        $hash = (int) sprintf('%u', crc32('irregular-count:'.$studentNumber));
+
+        return 1 + ($hash % 3);
+    }
+
+    /** Index into `FAILING_MARKS`, hash-derived per (student, subject, term). */
+    private function failingMarkIndexFor(string $studentNumber, int $subjectId, int $termId): int
+    {
+        $hash = (int) sprintf('%u', crc32('irregular-mark:'.$studentNumber.':'.$subjectId.':'.$termId));
+
+        return $hash % count(self::FAILING_MARKS);
+    }
+
+    /**
+     * `ReclassifyStudentEnrollmentCategory` needs a `semester_ongoing` term
+     * to know which of a student's placements are already "completed", and
+     * `AcademicTermSeeder` deliberately leaves none — a clean seed always
+     * needs the Registrar Head to archive-and-open the next term through
+     * the ordinary workflow first (see that seeder's own docblock). When
+     * that hasn't happened yet, every `enrollment_category` here stays
+     * `null` (the same seed-only sentinel `DemoEnrollmentSeeder` uses) and
+     * this just logs a deferred notice — the actual derivation must run
+     * once a `semester_ongoing` term exists, via the already-shipped
+     * `php artisan students:reclassify` (`ReclassifyStudentEnrollmentCategories`)
+     * command. A later plan (referenced by this task's own brief as "the IT
+     * Control automation") is expected to invoke that same command
+     * automatically ahead of enrollment, but as of this seed it does not
+     * exist yet — deliberately not named here so this notice never promises
+     * automation that isn't wired up.
+     */
+    private function reclassifyIfTermIsOngoing(): void
+    {
+        $currentTerm = AcademicTerm::query()
+            ->where('status', AcademicTermStatus::SemesterOngoing)
+            ->first();
+
+        if ($currentTerm === null) {
+            Log::notice(
+                '[StudentRosterSeeder] No semester_ongoing term found — deferring enrollment_category '.
+                'derivation for the roster just seeded. Run `php artisan students:reclassify` once the '.
+                'Registrar Head opens the next term.',
+            );
+
+            return;
+        }
+
+        $students = StudentProfile::query()->get();
+        if ($students->isEmpty()) {
+            return;
+        }
+
+        $actor = User::query()->where('role', UserRole::RegistrarHead)->first();
+        if ($actor === null) {
+            throw new RuntimeException(
+                'StudentRosterSeeder found a semester_ongoing term but no registrar_head user to attribute the '.
+                'enrollment_category reclassification audit trail to. Seed at least one registrar_head user '.
+                '(e.g. via RoleUserSeeder) before StudentRosterSeeder.',
+            );
+        }
+
+        app(ReclassifyStudentEnrollmentCategory::class)->executeMany(
+            $students,
+            $currentTerm,
+            $actor,
+            new AuditRequestContext('student-roster-seed', null),
+        );
     }
 
     /**
