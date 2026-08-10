@@ -29,6 +29,11 @@ final class GenerateStudentRosterFileTest extends TestCase
         $this->assertSame("# stale\n", file_get_contents($path));
     }
 
+    public function test_the_committed_roster_file_is_in_sync_with_the_generator(): void
+    {
+        $this->artisan('students:generate-roster-file', ['--check' => true])->assertExitCode(0);
+    }
+
     public function test_it_refuses_to_run_outside_local_and_testing(): void
     {
         app()->detectEnvironment(fn () => 'production');
