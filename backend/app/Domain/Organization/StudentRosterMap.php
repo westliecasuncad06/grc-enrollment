@@ -191,7 +191,7 @@ final class StudentRosterMap
      * deterministically for scenarios where students progress linearly without repeats or gaps.
      *
      * @param  int  $yearLevel  The student's year level (1–4)
-     * @return int              The entry year (calendar year)
+     * @return int The entry year (calendar year)
      */
     public static function entryYearFor(int $yearLevel): int
     {
