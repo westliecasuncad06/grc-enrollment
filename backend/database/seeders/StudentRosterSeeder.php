@@ -63,6 +63,13 @@ final class StudentRosterSeeder extends Seeder
 
     private const SECTION_CHUNK_SIZE = 1000;
 
+    /**
+     * Every block — real or synthetic — caps at 40 seats. Historical block
+     * *counts* are derived from this same number (`ceil(headcount / 40)`),
+     * see `historicalBlocks()`.
+     */
+    private const BLOCK_CAPACITY = 40;
+
     /** @var list<string> */
     private const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -73,6 +80,9 @@ final class StudentRosterSeeder extends Seeder
         ['13:00:00', '15:00:00'],
         ['15:00:00', '17:00:00'],
     ];
+
+    /** Total distinct (day, time) combinations professor slot-cycling can try. */
+    private const SLOT_COUNT = 24;
 
     /**
      * Professor round-robin cursor, keyed by "{subject_id}|{college}" ->
@@ -202,16 +212,27 @@ final class StudentRosterSeeder extends Seeder
      *
      * Grouping the map's rows by (college, program, year_level) recovers
      * one "cohort" per group: the population currently sitting at that
-     * year level in that program. Each cohort entered in the year
-     * `StudentRosterMap::entryYearFor()` reports for its year level, so its
-     * position in any of the seven terms is `currentYearLevel - academic
-     * years elapsed since that term`. Only the *current* term ("today",
-     * academic-year-elapsed = 0) reflects the real, already-known block
-     * codes from the map — every earlier term for that same cohort has no
-     * known historical block assignment, so it gets exactly one synthetic
-     * representative block (`SectionBlockCode::fromProgram(..., blockOrdinal: 1)`,
-     * or the roster's own verbatim `EDUC1xx` code for first-year COE,
-     * which `fromProgram()` cannot reproduce — see `coePrefix()`).
+     * year level in that program, along with its real total headcount (the
+     * sum of `size` across that group's blocks — this data model has no
+     * attrition, so a cohort's headcount is the same in every one of its
+     * years). Each cohort entered in the year `StudentRosterMap::entryYearFor()`
+     * reports for its year level, so its position in any of the seven terms
+     * is `currentYearLevel - academic years elapsed since that term`.
+     *
+     * Only the *current* term ("today", academic-year-elapsed = 0) reflects
+     * the real, already-known block codes from the map. Every earlier term
+     * for that same cohort has no known historical block *assignment*, but
+     * its headcount is still known (same as today's, no attrition), so it
+     * gets `ceil(headcount / 40)` synthetic representative blocks —
+     * `SectionBlockCode::fromProgram(..., blockOrdinal: 1..N)` — the same
+     * scale a real cohort of that size would have needed. The roster's own
+     * verbatim `EDUC1xx` codes (which `fromProgram()` cannot reproduce —
+     * see `coePrefix()`) are a one-time naming artifact of the real
+     * *current* COE year-1 intake specifically, so they are only ever used
+     * via the `$isToday` branch below (reading `$cohort['blocks']`
+     * straight from the map) — never projected onto a different cohort's
+     * own historical year-1 term, which uses normal `fromProgram()` naming
+     * like any other college/year combination.
      *
      * Two cohorts of the same program never collide on a (term, computed
      * year level) pair (they differ in current year level, so their
@@ -236,7 +257,6 @@ final class StudentRosterSeeder extends Seeder
         $programCodes = array_values(array_unique(array_column($cohorts, 'program_code')));
         $programIdByCode = Program::query()->whereIn('code', $programCodes)->pluck('id', 'code')->all();
         $curriculumIdByProgramId = $this->activeCurriculumIdsByProgramId($programIdByCode);
-        $educCodeByProgram = $this->educVerbatimCodesByProgram();
 
         $roomsByCollege = $this->roomsByCollege();
         $this->preloadProfessorCandidates();
@@ -246,9 +266,13 @@ final class StudentRosterSeeder extends Seeder
         $planKeys = [];
 
         // Pass 1: compute every (term, cohort) contribution and the plan
-        // row it belongs to, without touching subjects/professors yet —
-        // the plan must exist (and its id be known) before any `sections`
-        // row can reference `section_plan_id`.
+        // row it belongs to, without touching professors yet — the plan
+        // must exist (and its id be known) before any `sections` row can
+        // reference `section_plan_id`. Subjects ARE resolved here (not
+        // deferred to pass 2) so a (curriculum, year_level, semester) with
+        // zero curriculum subjects is skipped entirely — no plan row and no
+        // sections — rather than writing a plan row whose `section_count`
+        // would overstate a `sections` count of zero.
         $contributions = [];
         foreach ($cohorts as $cohort) {
             $programId = $programIdByCode[$cohort['program_code']] ?? null;
@@ -270,7 +294,12 @@ final class StudentRosterSeeder extends Seeder
                 $isToday = $academicYearsElapsed === 0;
                 $blocks = $isToday
                     ? $cohort['blocks']
-                    : [$this->historicalBlockCode($cohort['program_code'], $cohort['college'], $yearLevel, $educCodeByProgram)];
+                    : $this->historicalBlocks($cohort['program_code'], $cohort['college'], $yearLevel, $cohort['headcount']);
+
+                $subjects = $this->curriculumSubjectsFor($curriculumId, $yearLevel, $term['semester']);
+                if ($subjects->isEmpty()) {
+                    continue;
+                }
 
                 $planKey = implode('|', [$term['id'], $curriculumId, $cohort['college']->value, $yearLevel]);
                 if (! isset($planKeys[$planKey])) {
@@ -295,6 +324,7 @@ final class StudentRosterSeeder extends Seeder
                     'semester' => $term['semester'],
                     'plan_key' => $planKey,
                     'blocks' => $blocks,
+                    'subjects' => $subjects,
                 ];
             }
         }
@@ -317,19 +347,19 @@ final class StudentRosterSeeder extends Seeder
         // into one `sections` row per (block, subject).
         $sectionRows = [];
         foreach ($contributions as $contribution) {
-            $subjects = $this->curriculumSubjectsFor($contribution['curriculum_id'], $contribution['year_level'], $contribution['semester']);
-            if ($subjects->isEmpty()) {
-                continue;
-            }
-
             $planId = $planIdByKey[$contribution['plan_key']] ?? null;
 
             foreach ($contribution['blocks'] as $blockCode) {
-                foreach ($subjects as $curriculumSubject) {
+                foreach ($contribution['subjects'] as $curriculumSubject) {
                     $subjectId = $curriculumSubject->subject_id;
-                    [$day, $starts, $ends] = $this->deterministicSlot($contribution['term']['id'], $blockCode, $subjectId);
                     $room = $this->deterministicRoom($contribution['college'], $contribution['term']['id'], $blockCode, $subjectId, $roomsByCollege);
-                    $professorId = $this->pickProfessor($subjectId, $contribution['curriculum_id'], $contribution['college'], $contribution['term']['id'], $day, $starts);
+                    [$professorId, $day, $starts, $ends] = $this->pickProfessor(
+                        $subjectId,
+                        $contribution['curriculum_id'],
+                        $contribution['college'],
+                        $contribution['term']['id'],
+                        $blockCode,
+                    );
 
                     $sectionRows[] = [
                         'academic_term_id' => $contribution['term']['id'],
@@ -341,7 +371,7 @@ final class StudentRosterSeeder extends Seeder
                         'starts_at_time' => $starts,
                         'ends_at_time' => $ends,
                         'room' => $room,
-                        'capacity' => 40,
+                        'capacity' => self::BLOCK_CAPACITY,
                         'capacity_source' => CapacitySource::Plan->value,
                         'is_block_exclusive' => true,
                         'status' => SectionStatus::Closed->value,
@@ -392,8 +422,11 @@ final class StudentRosterSeeder extends Seeder
      * Groups `StudentRosterMap::sections()` rows into the 41 (college,
      * program, current-year-level) cohorts, sorted deterministically so
      * professor round-robin assignment is reproducible across reruns.
+     * `headcount` is the sum of every block's `size` in the group — the
+     * cohort's real total population, reused as-is for every one of its
+     * historical terms since this data model has no attrition.
      *
-     * @return list<array{college: CollegeCode, program_code: string, year_level: int, blocks: list<string>}>
+     * @return list<array{college: CollegeCode, program_code: string, year_level: int, blocks: list<string>, headcount: int}>
      */
     private function cohortsFromRosterMap(): array
     {
@@ -404,6 +437,7 @@ final class StudentRosterSeeder extends Seeder
             $cohorts[$key]['program_code'] ??= $row['program_code'];
             $cohorts[$key]['year_level'] ??= $row['year_level'];
             $cohorts[$key]['blocks'][] = $row['section_code'];
+            $cohorts[$key]['headcount'] = ($cohorts[$key]['headcount'] ?? 0) + $row['size'];
         }
 
         $cohorts = array_values($cohorts);
@@ -414,36 +448,33 @@ final class StudentRosterSeeder extends Seeder
     }
 
     /**
-     * COE's shared first-year `EDUC1xx` block cannot be reconstructed by
-     * `SectionBlockCode::fromProgram()` — `coePrefix()` maps a program code
-     * to its *own* major prefix (ELEM/FIL/ENG/SOCSCI/VAL), which is only
-     * correct from year 2 onward. Year 1 is a single shared block per major
-     * split out in the roster map itself, so the verbatim code is read
-     * back from there — the first (lowest-ordinal) block the map lists for
-     * that program at year 1.
+     * `ceil(headcount / 40)` synthetic historical blocks for a cohort's
+     * projected year level in a term before "today", ordinals 1..N via
+     * `SectionBlockCode::fromProgram()` — the same naming `seedSectionHistory()`
+     * already uses for the ordinal-1 block, just carried through however
+     * many blocks the cohort's real headcount needs.
      *
-     * @return array<string, string>
+     * Deliberately does NOT special-case COE year 1's verbatim `EDUC1xx`
+     * codes: those are a one-time naming artifact of the real *current*
+     * COE year-1 intake (handled by the `$isToday` branch in
+     * `seedSectionHistory()`, which reads `StudentRosterMap` codes
+     * directly) and were never actually assigned to any other cohort's own
+     * historical freshman year — a different cohort's year-1 projection
+     * uses normal per-program naming (`ELEM101`, `FIL101`, `ENG101`,
+     * `SOCSCI101`, `VAL101`, ...) like any other college/year combination.
+     *
+     * @return list<string>
      */
-    private function educVerbatimCodesByProgram(): array
+    private function historicalBlocks(string $programCode, CollegeCode $college, int $yearLevel, int $headcount): array
     {
-        $codes = [];
-        foreach (StudentRosterMap::sections() as $row) {
-            if ($row['college'] === CollegeCode::Coe && $row['year_level'] === 1) {
-                $codes[$row['program_code']] ??= $row['section_code'];
-            }
+        $blockCount = max(1, (int) ceil($headcount / self::BLOCK_CAPACITY));
+
+        $blocks = [];
+        for ($ordinal = 1; $ordinal <= $blockCount; $ordinal++) {
+            $blocks[] = SectionBlockCode::fromProgram($programCode, $college, $yearLevel, $ordinal);
         }
 
-        return $codes;
-    }
-
-    /** @param  array<string, string>  $educCodeByProgram */
-    private function historicalBlockCode(string $programCode, CollegeCode $college, int $yearLevel, array $educCodeByProgram): string
-    {
-        if ($college === CollegeCode::Coe && $yearLevel === 1) {
-            return $educCodeByProgram[$programCode] ?? SectionBlockCode::fromProgram($programCode, $college, $yearLevel, 1);
-        }
-
-        return SectionBlockCode::fromProgram($programCode, $college, $yearLevel, 1);
+        return $blocks;
     }
 
     /**
@@ -501,18 +532,32 @@ final class StudentRosterSeeder extends Seeder
     }
 
     /**
-     * Deterministic, hash-derived day/time slot for a section — stable
-     * across reruns because it only depends on stable identifiers (the
-     * term id, the block's section code, and the subject id), never on
-     * insertion order or randomness.
+     * Deterministic, hash-derived *base* slot index (0..23) for a section —
+     * stable across reruns because it only depends on stable identifiers
+     * (the term id, the block's section code, and the subject id), never on
+     * insertion order or randomness. `pickProfessor()` starts its slot
+     * search here and cycles forward through `slotAt()` if the professor
+     * pool is already booked at this slot.
+     */
+    private function deterministicSlotIndex(int $termId, string $blockCode, int $subjectId): int
+    {
+        $hash = (int) sprintf('%u', crc32($termId.':'.$blockCode.':'.$subjectId));
+
+        return $hash % self::SLOT_COUNT;
+    }
+
+    /**
+     * Resolves a slot index (0..23) into its (day, starts, ends) triple.
+     * `self::SLOT_COUNT` (24) must equal
+     * `count(SCHEDULE_DAYS) * count(TIME_SLOTS)` (6 * 4) for this mapping
+     * to cover every combination exactly once.
      *
      * @return array{0: string, 1: string, 2: string}
      */
-    private function deterministicSlot(int $termId, string $blockCode, int $subjectId): array
+    private function slotAt(int $slotIndex): array
     {
-        $hash = (int) sprintf('%u', crc32($termId.':'.$blockCode.':'.$subjectId));
-        $day = self::SCHEDULE_DAYS[$hash % count(self::SCHEDULE_DAYS)];
-        [$starts, $ends] = self::TIME_SLOTS[intdiv($hash, count(self::SCHEDULE_DAYS)) % count(self::TIME_SLOTS)];
+        $day = self::SCHEDULE_DAYS[$slotIndex % count(self::SCHEDULE_DAYS)];
+        [$starts, $ends] = self::TIME_SLOTS[intdiv($slotIndex, count(self::SCHEDULE_DAYS)) % count(self::TIME_SLOTS)];
 
         return [$day, $starts, $ends];
     }
@@ -552,15 +597,21 @@ final class StudentRosterSeeder extends Seeder
             $this->professorCandidateCache[$key][] = (int) $row->professor_id;
         }
 
+        // College-scoped, matching tier 1 and tier 3: nothing enforces
+        // within-college preferences at the API level
+        // (`CreateFacultyCurriculumSubjectPreference` has no such
+        // validation), so a cross-college preference row must never leak
+        // into a different college's candidate pool here.
         $preferences = DB::table('faculty_curriculum_subject_preferences')
             ->join('users', 'users.id', '=', 'faculty_curriculum_subject_preferences.professor_id')
             ->where('users.role', UserRole::Faculty->value)
+            ->whereNotNull('users.college')
             ->orderBy('faculty_curriculum_subject_preferences.rank')
             ->orderBy('faculty_curriculum_subject_preferences.professor_id')
-            ->get(['faculty_curriculum_subject_preferences.curriculum_id', 'faculty_curriculum_subject_preferences.subject_id', 'faculty_curriculum_subject_preferences.professor_id']);
+            ->get(['faculty_curriculum_subject_preferences.curriculum_id', 'faculty_curriculum_subject_preferences.subject_id', 'users.college', 'faculty_curriculum_subject_preferences.professor_id']);
 
         foreach ($preferences as $row) {
-            $key = 'preference|'.$row->curriculum_id.'|'.$row->subject_id;
+            $key = 'preference|'.$row->curriculum_id.'|'.$row->subject_id.'|'.$row->college;
             $this->professorCandidateCache[$key][] = (int) $row->professor_id;
         }
 
@@ -593,7 +644,7 @@ final class StudentRosterSeeder extends Seeder
 
         $tiers = array_merge(
             $this->professorCandidateCache['specialist|'.$subjectId.'|'.$college->value] ?? [],
-            $this->professorCandidateCache['preference|'.$curriculumId.'|'.$subjectId] ?? [],
+            $this->professorCandidateCache['preference|'.$curriculumId.'|'.$subjectId.'|'.$college->value] ?? [],
             $this->professorCandidateCache['any|'.$college->value] ?? [],
         );
 
@@ -603,41 +654,66 @@ final class StudentRosterSeeder extends Seeder
     /**
      * Round-robins through the ordered candidate list for this
      * (subject, college) so the load spreads across every eligible
-     * professor instead of always picking the first, and skips any
-     * candidate already booked at this exact (term, day, start time) slot.
-     * Falls back to the next candidate in rotation if every candidate is
-     * already booked, so a section is never left without a professor —
-     * only `test_every_historical_section_has_a_professor()`'s zero-null
-     * guarantee is authoritative here, not collision-freedom.
+     * professor instead of always picking the first. Starts at the
+     * deterministic base slot (`deterministicSlotIndex()`) and, if every
+     * candidate is already booked there, cycles forward through the
+     * remaining `SLOT_COUNT` (24) day/time combinations looking for one
+     * where some eligible candidate is free — the section's own
+     * schedule_days/starts_at_time/ends_at_time move to whichever slot the
+     * professor was actually booked at, so the two are never
+     * inconsistent. Only double-books (last resort) if every
+     * (candidate × slot) combination is exhausted, and even then throws
+     * rather than silently double-booking — matching this codebase's
+     * "local/testing only, throw on broken invariant" convention for
+     * seeders (see `guardEnvironment()`), since silent data corruption in a
+     * scheduling seeder is worse than a loud failure telling you the
+     * candidate pool or slot space is too small.
+     *
+     * Also throws immediately if the (subject, curriculum, college) has no
+     * eligible candidates at all — the brief's hard requirement ("every
+     * historical section has a professor") must never be satisfied by
+     * silently returning null.
+     *
+     * @return array{0: int, 1: string, 2: string, 3: string} professor_id, day, starts_at_time, ends_at_time
      */
-    private function pickProfessor(int $subjectId, int $curriculumId, CollegeCode $college, int $termId, string $day, string $starts): ?int
+    private function pickProfessor(int $subjectId, int $curriculumId, CollegeCode $college, int $termId, string $blockCode): array
     {
         $candidates = $this->professorCandidates($subjectId, $curriculumId, $college);
         if ($candidates === []) {
-            return null;
+            throw new RuntimeException(
+                "StudentRosterSeeder found no eligible professor for college '{$college->value}' (subject id {$subjectId}). ".
+                'Seed at least one Faculty user for every college before running StudentRosterSeeder.',
+            );
         }
 
         $count = count($candidates);
         $cursorKey = $subjectId.'|'.$college->value;
         $startIndex = $this->professorCursor[$cursorKey] ?? 0;
-        $slotKey = $termId.':'.$day.':'.$starts;
+        $baseSlotIndex = $this->deterministicSlotIndex($termId, $blockCode, $subjectId);
 
-        for ($i = 0; $i < $count; $i++) {
-            $index = ($startIndex + $i) % $count;
-            $professorId = $candidates[$index];
-            if (! isset($this->bookedSlots[$slotKey][$professorId])) {
-                $this->bookedSlots[$slotKey][$professorId] = true;
-                $this->professorCursor[$cursorKey] = ($index + 1) % $count;
+        for ($slotOffset = 0; $slotOffset < self::SLOT_COUNT; $slotOffset++) {
+            [$day, $starts, $ends] = $this->slotAt(($baseSlotIndex + $slotOffset) % self::SLOT_COUNT);
+            $slotKey = $termId.':'.$day.':'.$starts;
 
-                return $professorId;
+            for ($i = 0; $i < $count; $i++) {
+                $index = ($startIndex + $i) % $count;
+                $professorId = $candidates[$index];
+                if (! isset($this->bookedSlots[$slotKey][$professorId])) {
+                    $this->bookedSlots[$slotKey][$professorId] = true;
+                    $this->professorCursor[$cursorKey] = ($index + 1) % $count;
+
+                    return [$professorId, $day, $starts, $ends];
+                }
             }
         }
 
-        $professorId = $candidates[$startIndex];
-        $this->bookedSlots[$slotKey][$professorId] = true;
-        $this->professorCursor[$cursorKey] = ($startIndex + 1) % $count;
+        $slotCount = self::SLOT_COUNT;
 
-        return $professorId;
+        throw new RuntimeException(
+            "StudentRosterSeeder exhausted every eligible professor across all {$slotCount} day/time slots for ".
+            "subject id {$subjectId} in college '{$college->value}' (term id {$termId}, block '{$blockCode}') without ".
+            'finding a free assignment — the candidate pool or slot space is too small for this scale.',
+        );
     }
 
     /**
