@@ -2,6 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Academic\GradeMark;
+use App\Domain\Academic\GradeStatus;
+use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Faculty\SpecializationProficiency;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
@@ -63,6 +67,10 @@ final class StudentRosterSeeder extends Seeder
 
     private const SECTION_CHUNK_SIZE = 1000;
 
+    private const ENROLLMENT_CHUNK_SIZE = 1000;
+
+    private const ENROLLMENT_DETAIL_CHUNK_SIZE = 2000;
+
     /**
      * Every block — real or synthetic — caps at 40 seats. Historical block
      * *counts* are derived from this same number (`ceil(headcount / 40)`),
@@ -107,6 +115,17 @@ final class StudentRosterSeeder extends Seeder
 
     /** @var array<string, Collection<int, CurriculumSubject>> */
     private array $curriculumSubjectCache = [];
+
+    /**
+     * Real `student_profiles` members of a cohort, keyed by "{program_id}|
+     * {year_level}" — the same grouping key `cohortsFromRosterMap()` uses
+     * (a student's *current* program + year level, not any per-term
+     * projection). Populated lazily by `cohortStudents()` since most test
+     * fixtures only ever populate a handful of these keys.
+     *
+     * @var array<string, list<\stdClass>>
+     */
+    private array $cohortStudentsCache = [];
 
     public function __construct(private readonly ?string $rosterPath = null) {}
 
@@ -325,6 +344,13 @@ final class StudentRosterSeeder extends Seeder
                     'plan_key' => $planKey,
                     'blocks' => $blocks,
                     'subjects' => $subjects,
+                    // The cohort's own identity — NOT the same as
+                    // `year_level` above, which is this *term's* projected
+                    // year level. `seedEnrollmentHistory()` needs the
+                    // cohort's real (current) program + year level to find
+                    // its actual `student_profiles` members.
+                    'program_code' => $cohort['program_code'],
+                    'cohort_year_level' => $cohort['year_level'],
                 ];
             }
         }
@@ -392,6 +418,279 @@ final class StudentRosterSeeder extends Seeder
                 ],
             );
         }
+
+        $this->seedEnrollmentHistory($contributions, $programIdByCode);
+    }
+
+    /**
+     * Enrolls every real `student_profiles` row into the block sections
+     * `seedSectionHistory()` just built for its own cohort, term by term,
+     * and locks in a grade for every subject.
+     *
+     * **Student-to-block assignment.** A cohort's members are exactly the
+     * `student_profiles` rows sharing its (program, *current* year_level) —
+     * the same grouping key `cohortsFromRosterMap()` uses. Neither task's
+     * brief specifies which of a cohort's real individual students lands in
+     * which of Task 2's `ceil(headcount / 40)` block sections, so this uses
+     * deterministic round robin: members are ordered by `id` (stable across
+     * reruns — accounts are upserted, never recreated), then
+     * `members[i % count(blocks)]` assigns member `i` to a block. Every
+     * member of a cohort takes the SAME subjects in a given term (blocks
+     * only vary the section/schedule/professor, never the subject list —
+     * `is_block_exclusive` sections), so the round robin only decides which
+     * block's section row a student's `enrollment_subjects`/`academic_grades`
+     * rows point at.
+     *
+     * **Grade distribution.** `gradeMarkFor()` hashes `(student_number,
+     * subject_id, academic_term_id)` with the same `crc32()` pattern
+     * `deterministicSlotIndex()` already uses elsewhere in this seeder, so
+     * the same run always reproduces the same mark. See that method's
+     * docblock for the bucket breakdown and what "marginal" means here.
+     *
+     * A cohort with zero real members in the current roster (StudentRosterMap
+     * describes the full production shape and routinely outruns a trimmed
+     * test fixture — the same precedent `seedSectionHistory()` already
+     * documents) simply contributes no enrollment rows; its sections were
+     * still built and still needed a professor, but nobody sits in them.
+     *
+     * @param  list<array{term: array{id: int, school_year: string, semester: string, start_year: int}, curriculum_id: int, college: CollegeCode, year_level: int, semester: string, plan_key: string, blocks: list<string>, subjects: Collection<int, CurriculumSubject>, program_code: string, cohort_year_level: int}>  $contributions
+     * @param  array<string, int>  $programIdByCode
+     */
+    private function seedEnrollmentHistory(array $contributions, array $programIdByCode): void
+    {
+        if ($contributions === []) {
+            return;
+        }
+
+        $subjectIds = [];
+        foreach ($contributions as $contribution) {
+            foreach ($contribution['subjects'] as $curriculumSubject) {
+                $subjectIds[$curriculumSubject->subject_id] = true;
+            }
+        }
+        $unitsBySubjectId = DB::table('subjects')->whereIn('id', array_keys($subjectIds))->pluck('units', 'id');
+
+        $sectionLookup = [];
+        foreach (DB::table('sections')->select(['id', 'academic_term_id', 'subject_id', 'section_code', 'professor_id'])->cursor() as $section) {
+            $sectionLookup[$section->academic_term_id.'|'.$section->subject_id.'|'.$section->section_code] = [
+                'id' => (int) $section->id,
+                'professor_id' => $section->professor_id !== null ? (int) $section->professor_id : null,
+            ];
+        }
+
+        $now = now();
+
+        /** @var array<string, array<string, mixed>> $enrollmentRows keyed by "{student_id}|{term_id}" */
+        $enrollmentRows = [];
+        /** @var list<array{student_id: int, student_number: string, term_id: int, subject_id: int, section_id: int, professor_id: ?int}> $subjectAssignments */
+        $subjectAssignments = [];
+
+        foreach ($contributions as $contribution) {
+            if ($contribution['subjects']->isEmpty() || $contribution['blocks'] === []) {
+                continue;
+            }
+
+            $programId = $programIdByCode[$contribution['program_code']] ?? null;
+            if ($programId === null) {
+                continue;
+            }
+
+            $members = $this->cohortStudents($programId, $contribution['cohort_year_level']);
+            if ($members === []) {
+                continue;
+            }
+
+            $blocks = $contribution['blocks'];
+            $blockCount = count($blocks);
+            $termId = $contribution['term']['id'];
+
+            $totalUnits = 0;
+            foreach ($contribution['subjects'] as $curriculumSubject) {
+                $totalUnits += (int) ($unitsBySubjectId[$curriculumSubject->subject_id] ?? 0);
+            }
+
+            foreach ($members as $index => $member) {
+                $blockCode = $blocks[$index % $blockCount];
+                $key = $member->id.'|'.$termId;
+
+                $enrollmentRows[$key] ??= [
+                    'student_id' => $member->id,
+                    'academic_term_id' => $termId,
+                    'status' => EnrollmentStatus::Enrolled->value,
+                    'total_units' => $totalUnits,
+                    'submitted_at' => $now,
+                    'registrar_decided_at' => $now,
+                    'payment_confirmed_at' => $now,
+                    'enrolled_at' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                foreach ($contribution['subjects'] as $curriculumSubject) {
+                    $subjectId = $curriculumSubject->subject_id;
+                    $section = $sectionLookup[$termId.'|'.$subjectId.'|'.$blockCode] ?? null;
+                    if ($section === null) {
+                        // Never happens in practice — pass 2 above builds a
+                        // `sections` row for every (block, subject) pair
+                        // this same `$contribution['subjects']`/`['blocks']`
+                        // produces — but skip defensively rather than crash
+                        // a multi-thousand-row seed run over one bad pairing.
+                        continue;
+                    }
+
+                    $subjectAssignments[] = [
+                        'student_id' => $member->id,
+                        'student_number' => $member->student_number,
+                        'term_id' => $termId,
+                        'subject_id' => $subjectId,
+                        'section_id' => $section['id'],
+                        'professor_id' => $section['professor_id'],
+                    ];
+                }
+            }
+        }
+
+        if ($enrollmentRows === []) {
+            return;
+        }
+
+        foreach (array_chunk($enrollmentRows, self::ENROLLMENT_CHUNK_SIZE) as $chunk) {
+            DB::table('enrollments')->upsert(
+                $chunk,
+                // Informational for MySQL/MariaDB (its grammar always
+                // relies on the table's real unique index regardless of
+                // this list — see `enrollments_unique_active_per_student_term`
+                // on the generated `active_academic_term_id` column, which
+                // mirrors `academic_term_id` for every non-terminal status
+                // this seeder ever writes). Listed here for portability and
+                // to document intent.
+                ['student_id', 'academic_term_id'],
+                ['status', 'total_units', 'submitted_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at', 'updated_at'],
+            );
+        }
+
+        $studentIds = array_values(array_unique(array_column($enrollmentRows, 'student_id')));
+        $termIds = array_values(array_unique(array_column($enrollmentRows, 'academic_term_id')));
+
+        $enrollmentIdByKey = [];
+        foreach (DB::table('enrollments')->select(['id', 'student_id', 'academic_term_id'])->whereIn('student_id', $studentIds)->whereIn('academic_term_id', $termIds)->cursor() as $row) {
+            $enrollmentIdByKey[$row->student_id.'|'.$row->academic_term_id] = (int) $row->id;
+        }
+
+        $enrollmentSubjectRows = [];
+        $academicGradeRows = [];
+        foreach ($subjectAssignments as $assignment) {
+            $enrollmentId = $enrollmentIdByKey[$assignment['student_id'].'|'.$assignment['term_id']] ?? null;
+            if ($enrollmentId === null) {
+                continue;
+            }
+
+            $enrollmentSubjectRows[] = [
+                'enrollment_id' => $enrollmentId,
+                'section_id' => $assignment['section_id'],
+                'status' => EnrollmentSubjectStatus::Enrolled->value,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+
+            $mark = $this->gradeMarkFor($assignment['student_number'], $assignment['subject_id'], $assignment['term_id']);
+
+            $academicGradeRows[] = [
+                'student_id' => $assignment['student_id'],
+                'subject_id' => $assignment['subject_id'],
+                'section_id' => $assignment['section_id'],
+                'academic_term_id' => $assignment['term_id'],
+                'final_grade' => $mark->isNumeric() ? $mark->value : null,
+                'mark' => $mark->value,
+                'remarks' => null,
+                'status' => GradeStatus::Locked->value,
+                'encoded_by' => $assignment['professor_id'],
+                'submitted_at' => $now,
+                'locked_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        foreach (array_chunk($enrollmentSubjectRows, self::ENROLLMENT_DETAIL_CHUNK_SIZE) as $chunk) {
+            DB::table('enrollment_subjects')->upsert(
+                $chunk,
+                ['enrollment_id', 'section_id'],
+                ['status', 'updated_at'],
+            );
+        }
+
+        foreach (array_chunk($academicGradeRows, self::ENROLLMENT_DETAIL_CHUNK_SIZE) as $chunk) {
+            DB::table('academic_grades')->upsert(
+                $chunk,
+                ['student_id', 'subject_id', 'academic_term_id'],
+                ['section_id', 'final_grade', 'mark', 'status', 'encoded_by', 'submitted_at', 'locked_at', 'updated_at'],
+            );
+        }
+
+        // `enrollment_subjects` was bulk-inserted above, which never
+        // maintains `sections.enrolled_count` (a manually-tracked counter,
+        // not a DB trigger) — recompute it in one statement, once, after
+        // every term's rows are in.
+        DB::statement(<<<'SQL'
+            UPDATE sections s SET enrolled_count = (
+              SELECT COUNT(*) FROM enrollment_subjects es
+              WHERE es.section_id = s.id AND es.status <> 'dropped'
+            )
+        SQL);
+    }
+
+    /**
+     * Real `student_profiles` members of the cohort at (program, current
+     * year_level), ordered by `id` for a stable round robin. Cached per
+     * (program, year_level) since the same cohort is looked up once per
+     * historical term it appears in.
+     *
+     * @return list<\stdClass>
+     */
+    private function cohortStudents(int $programId, int $yearLevel): array
+    {
+        $cacheKey = $programId.'|'.$yearLevel;
+
+        return $this->cohortStudentsCache[$cacheKey] ??= array_values(DB::table('student_profiles')
+            ->where('program_id', $programId)
+            ->where('year_level', $yearLevel)
+            ->orderBy('id')
+            ->get(['id', 'student_number'])
+            ->all());
+    }
+
+    /**
+     * Deterministic per `(student_number, subject_id, academic_term_id)` —
+     * same `crc32()`-hash-then-modulo pattern `deterministicSlotIndex()`
+     * uses — so a rerun always reproduces the same grade for the same
+     * student/subject/term. `$hash % 100` picks the percentile bucket the
+     * brief specifies (15 / 45 / 30 / 10); `intdiv($hash, 100) % 3` then
+     * picks which of that bucket's three marks, using the *next* base-3
+     * digit of the same hash rather than a second hash call.
+     *
+     * "Marginal" (the bottom 10%) is read as the marks that
+     * `GradeMark::blocksRegularStanding()` treats as blocking a student's
+     * Regular standing on a required subject — Failed, Incomplete, and
+     * Dropped — deliberately excluding `NotComplete` ('NC') and `Complete`
+     * ('C'), both of which `GradeMark`'s own docblock reserves exclusively
+     * for completion-only subjects that this seeder's ordinary lecture
+     * subjects never are. This choice is also what gives Task 4 (irregular
+     * student derivation, out of scope here) real "blocks regular standing"
+     * signal to work with instead of an all-passing roster.
+     */
+    private function gradeMarkFor(string $studentNumber, int $subjectId, int $termId): GradeMark
+    {
+        $hash = (int) sprintf('%u', crc32($studentNumber.':'.$subjectId.':'.$termId));
+        $bucketRoll = $hash % 100;
+        $withinBucketIndex = intdiv($hash, 100) % 3;
+
+        return match (true) {
+            $bucketRoll < 15 => [GradeMark::Excellent, GradeMark::HighDistinction, GradeMark::WithDistinction][$withinBucketIndex],
+            $bucketRoll < 60 => [GradeMark::VeryGood, GradeMark::Good, GradeMark::VerySatisfactory][$withinBucketIndex],
+            $bucketRoll < 90 => [GradeMark::Satisfactory, GradeMark::Fair, GradeMark::Passed][$withinBucketIndex],
+            default => [GradeMark::Failed, GradeMark::Incomplete, GradeMark::Dropped][$withinBucketIndex],
+        };
     }
 
     /**

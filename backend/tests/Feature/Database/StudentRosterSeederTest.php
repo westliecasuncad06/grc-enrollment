@@ -10,10 +10,13 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
+use App\Models\Enrollment;
+use App\Models\EnrollmentSubject;
 use App\Models\Program;
 use App\Models\RoomCatalogEntry;
 use App\Models\Section;
@@ -42,23 +45,63 @@ final class StudentRosterSeederTest extends TestCase
     /**
      * (curriculum code) => list of {year_level, semester, subject_code}
      * needed for `sections`/`academic_term_section_plans` generation to have
-     * something to attach to. BSIT covers all four year levels (1st
-     * semester) so the cohort walked back from year 4 to year 1 has a real
-     * subject at every stop; BSA/BSBA-FM only need the year level their
-     * fixture roster row actually uses.
+     * something to attach to. BSA/BSBA-FM only need the year level their
+     * fixture roster row actually uses. BSIT is deliberately NOT listed here
+     * — see `bsitCurriculumSubjects()`, which covers every (year_level,
+     * semester) combination the year-4 IT401 student's 7-term cohort walk
+     * touches, with several subjects per combination (not just one), so
+     * `test_a_fourth_year_student_has_seven_completed_terms_of_locked_grades()`
+     * has enough grade rows to exceed its ">40" assertion.
      *
      * @var list<array{program: string, year_level: int, semester: string, subject_code: string}>
      */
     private const CURRICULUM_SUBJECTS = [
-        ['program' => 'BSIT', 'year_level' => 1, 'semester' => '1st', 'subject_code' => 'IT101S'],
-        ['program' => 'BSIT', 'year_level' => 2, 'semester' => '1st', 'subject_code' => 'IT201S'],
-        ['program' => 'BSIT', 'year_level' => 3, 'semester' => '1st', 'subject_code' => 'IT301S'],
-        ['program' => 'BSIT', 'year_level' => 4, 'semester' => '1st', 'subject_code' => 'IT401S'],
         ['program' => 'BSA', 'year_level' => 1, 'semester' => '1st', 'subject_code' => 'ACC101S'],
         ['program' => 'BSA', 'year_level' => 3, 'semester' => '1st', 'subject_code' => 'ACC301S'],
         ['program' => 'BSBA-FM', 'year_level' => 1, 'semester' => '1st', 'subject_code' => 'FM101S'],
         ['program' => 'BSBA-FM', 'year_level' => 2, 'semester' => '1st', 'subject_code' => 'FM201S'],
     ];
+
+    /**
+     * Six subjects per (year_level, semester) combination that BSIT's own
+     * year-4 (entry 2023) cohort passes through across all seven
+     * `AcademicTermSeeder` terms: both semesters at years 1-3, and only the
+     * 1st semester at year 4 (the current, still-open term). Year levels
+     * 1-3 also happen to be exactly what the year-2/year-3/"today" BSIT
+     * cohorts need for their own shorter walks (see
+     * `StudentRosterSeeder::seedSectionHistory()`'s docblock — cohorts never
+     * collide on the same (term, computed year level) pair), so nothing
+     * beyond this single generated set is required.
+     *
+     * @return list<array{program: string, year_level: int, semester: string, subject_code: string}>
+     */
+    private function bsitCurriculumSubjects(): array
+    {
+        $combinations = [
+            ['year_level' => 1, 'semester' => '1st'],
+            ['year_level' => 1, 'semester' => '2nd'],
+            ['year_level' => 2, 'semester' => '1st'],
+            ['year_level' => 2, 'semester' => '2nd'],
+            ['year_level' => 3, 'semester' => '1st'],
+            ['year_level' => 3, 'semester' => '2nd'],
+            ['year_level' => 4, 'semester' => '1st'],
+        ];
+
+        $rows = [];
+        foreach ($combinations as $combination) {
+            $semesterTag = $combination['semester'] === '1st' ? 'A' : 'B';
+            for ($n = 1; $n <= 6; $n++) {
+                $rows[] = [
+                    'program' => 'BSIT',
+                    'year_level' => $combination['year_level'],
+                    'semester' => $combination['semester'],
+                    'subject_code' => "IT{$combination['year_level']}{$semesterTag}{$n}",
+                ];
+            }
+        }
+
+        return $rows;
+    }
 
     protected function setUp(): void
     {
@@ -90,7 +133,9 @@ final class StudentRosterSeederTest extends TestCase
     /** @param array<string, Curriculum> $curricula */
     private function seedSectionHistoryFixtures(array $curricula): void
     {
-        foreach (self::CURRICULUM_SUBJECTS as $definition) {
+        $curriculumSubjects = array_merge(self::CURRICULUM_SUBJECTS, $this->bsitCurriculumSubjects());
+
+        foreach ($curriculumSubjects as $definition) {
             $college = self::PROGRAMS[$definition['program']]['college'];
             $subject = Subject::create([
                 'code' => $definition['subject_code'],
@@ -113,16 +158,20 @@ final class StudentRosterSeederTest extends TestCase
         // college") has enough candidates to avoid exhausting all
         // `SLOT_COUNT` (24) day/time slots now that historical blocks scale
         // with cohort headcount (Task 2 fix brief item 1): CCS/BSIT's own
-        // current term alone needs professors for 31 sections (9 + 8 + 7 + 7
-        // blocks across its four cohorts), well past what a single
-        // candidate's 24 slots could ever cover.
+        // current term alone needs professors for 31 blocks (9 + 8 + 7 + 7
+        // across its four cohorts), and Task 3's `bsitCurriculumSubjects()`
+        // multiplies that by 6 subjects per block (up to ~186 sections all
+        // competing for the same term/day/time booking space, since
+        // `pickProfessor()`'s slot-booking key is not subject-scoped) — 20
+        // candidates x 24 slots = 480 comfortably covers that worst case,
+        // where 6 never could.
         $collegeValues = array_unique(array_map(
             static fn (array $definition): string => $definition['college']->value,
             self::PROGRAMS,
         ));
         foreach ($collegeValues as $collegeValue) {
             $college = CollegeCode::from($collegeValue);
-            for ($i = 1; $i <= 6; $i++) {
+            for ($i = 1; $i <= 20; $i++) {
                 User::create([
                     'name' => "Faculty {$college->value} {$i}",
                     'email' => "faculty.{$college->value}.{$i}@grc.test",
@@ -252,12 +301,12 @@ final class StudentRosterSeederTest extends TestCase
     public function test_tier_two_preference_fallback_is_scoped_to_the_sections_college(): void
     {
         $curriculum = Curriculum::query()->whereHas('program', fn ($query) => $query->where('code', 'BSIT'))->sole();
-        $subject = Subject::query()->where('code', 'IT101S')->sole();
+        $subject = Subject::query()->where('code', 'IT1A1')->sole();
 
         // A faculty preference row for a professor in a DIFFERENT college
         // than BSIT's (CCS), ranked first — if tier 2 isn't college-scoped,
         // this outsider would be preferred over CCS's own faculty for every
-        // IT101S section.
+        // IT1A1 section.
         $outsider = User::create([
             'name' => 'Outsider Professor',
             'email' => 'outsider@grc.test',
@@ -319,6 +368,43 @@ final class StudentRosterSeederTest extends TestCase
         (new StudentRosterSeeder($this->fixturePath()))->run();
 
         $this->assertSame($before, Section::query()->count());
+    }
+
+    public function test_a_fourth_year_student_has_seven_completed_terms_of_locked_grades(): void
+    {
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+
+        $student = StudentProfile::where('student_number', '2023-06-01455')->sole();
+
+        $this->assertSame(7, Enrollment::where('student_id', $student->id)->count());
+        $this->assertSame(7, Enrollment::where('student_id', $student->id)->where('status', 'enrolled')->count());
+        $this->assertGreaterThan(40, AcademicGrade::where('student_id', $student->id)->where('status', 'locked')->count());
+    }
+
+    public function test_section_enrolled_counts_match_the_enrollment_subject_rows(): void
+    {
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+
+        foreach (Section::where('status', 'closed')->get() as $section) {
+            $this->assertSame(
+                EnrollmentSubject::where('section_id', $section->id)->where('status', '!=', 'dropped')->count(),
+                $section->enrolled_count,
+            );
+        }
+    }
+
+    public function test_running_the_enrollment_history_twice_does_not_duplicate_rows(): void
+    {
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+        $enrollmentsBefore = Enrollment::query()->count();
+        $enrollmentSubjectsBefore = EnrollmentSubject::query()->count();
+        $gradesBefore = AcademicGrade::query()->count();
+
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+
+        $this->assertSame($enrollmentsBefore, Enrollment::query()->count());
+        $this->assertSame($enrollmentSubjectsBefore, EnrollmentSubject::query()->count());
+        $this->assertSame($gradesBefore, AcademicGrade::query()->count());
     }
 
     private function fixturePath(): string

@@ -65,10 +65,18 @@ edit the command, not this file.
 | 2026-06-01664 | Consuelo Y. Wright | s2601664@grc.test | BSIT | IT101 | 1 | Regular |
 | 2026-06-01665 | Rosario B. Dalisay | s2601665@grc.test | BSIT | IT101 | 1 | Regular |
 
+### Year 4
+
+#### IT401
+
+| Student No. | Name | Email | Program | Section | Year | Category |
+|---|---|---|---|---|---|---|
+| 2023-06-01455 | Federico L. Ignacio | s2301455@grc.test | BSIT | IT401 | 4 | Regular |
+
 ## Footer
 
-**Total sections:** 3
-**Total students:** 16
+**Total sections:** 4
+**Total students:** 17
 
 Regenerate with `php artisan students:generate-roster-file` after any `StudentRosterMap` or
 `StudentIdentityGenerator` change — do not hand-edit this file. `Category` above is always
