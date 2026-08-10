@@ -38,16 +38,33 @@ final class DatabaseSeeder extends Seeder
             WorkbookFacultyProfileSeeder::class,
             SectionSeeder::class,
             DemoEnrollmentSeeder::class,
-            StudentRosterSeeder::class,
-            ProgramChairScheduleSampleSeeder::class,
+            // Synthetic section_demand_observations fallback data, seeded
+            // BEFORE StudentRosterSeeder on purpose (Task 5 of the
+            // student-accounts-and-academic-history-seed plan):
+            // StudentRosterSeeder's own final step aggregates real
+            // enrollment history into that same table
+            // (`source = 'derived_from_enrollments'`), upserting over any
+            // synthetic row at a shared key. That only replaces synthetic
+            // with real if the synthetic rows are already there when
+            // StudentRosterSeeder runs — reversing this order would let
+            // these synthetic seeders overwrite the real derived rows
+            // instead, silently making the roster's real students invisible
+            // to the forecaster again.
             SectionDemandObservationSeeder::class,
         ]);
 
         // Keep normal test fixtures lean. PredictivePlanningInputSeeder is
         // still test-safe when invoked explicitly, while local development
-        // receives the synthetic planning inputs needed for a live smoke run.
+        // receives the synthetic planning inputs needed for a live smoke
+        // run — also before StudentRosterSeeder, for the same
+        // upsert-ordering reason as SectionDemandObservationSeeder above.
         if (app()->environment('local')) {
             $this->call(PredictivePlanningInputSeeder::class);
         }
+
+        $this->call([
+            StudentRosterSeeder::class,
+            ProgramChairScheduleSampleSeeder::class,
+        ]);
     }
 }

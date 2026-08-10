@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Actions\Academic\ReclassifyStudentEnrollmentCategory;
+use App\Actions\Analytics\DeriveSectionDemandObservations;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditRequestContext;
@@ -49,11 +50,13 @@ use RuntimeException;
  * never carry a `Student No.` column, so a row is only recognized when its
  * first cell matches the `YYYY-NN-NNNNN` student-number shape.
  *
- * This is deliberately accounts-only: enrollment/grade history, the
- * regular/irregular derivation, and demand observations are seeded by later
- * tasks in the same plan, not here. `enrollment_category` is always left
- * null, the same seed-only sentinel `DemoEnrollmentSeeder` uses until a real
- * classifier run derives it.
+ * Originally accounts-only; `run()` now also builds enrollment/grade
+ * history, derives the regular/irregular split, and (Task 5 of the
+ * student-accounts-and-academic-history-seed plan) aggregates that same
+ * history into `section_demand_observations` via
+ * `DeriveSectionDemandObservations` as its final step. `enrollment_category`
+ * is always left null here — the same seed-only sentinel `DemoEnrollmentSeeder`
+ * uses — until a real classifier run derives it.
  *
  * Depends on `ProgramSeeder` and `GrcCurriculumSeeder` having already run —
  * every program code in the roster must resolve to a seeded `Program`, and
@@ -180,6 +183,13 @@ final class StudentRosterSeeder extends Seeder
 
         $this->seedSectionHistory();
         $this->seedIrregularStudents();
+
+        // Task 5: real enrollment/section history just seeded above is
+        // aggregated into section_demand_observations (source =
+        // 'derived_from_enrollments'), replacing any synthetic seed rows at
+        // the same key so GenerateSectionDemandForecasts reads real history
+        // wherever it exists.
+        app(DeriveSectionDemandObservations::class)->execute();
     }
 
     /**
