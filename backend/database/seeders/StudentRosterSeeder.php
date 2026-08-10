@@ -691,20 +691,31 @@ final class StudentRosterSeeder extends Seeder
      * Deterministic per `(student_number, subject_id, academic_term_id)` —
      * same `crc32()`-hash-then-modulo pattern `deterministicSlotIndex()`
      * uses — so a rerun always reproduces the same grade for the same
-     * student/subject/term. `$hash % 100` picks the percentile bucket the
-     * brief specifies (15 / 45 / 30 / 10); `intdiv($hash, 100) % 3` then
-     * picks which of that bucket's three marks, using the *next* base-3
-     * digit of the same hash rather than a second hash call.
+     * student/subject/term. `$hash % 100` picks the percentile bucket;
+     * `intdiv($hash, 100) % 3` then picks which of that bucket's three
+     * marks, using the *next* base-3 digit of the same hash rather than a
+     * second hash call.
      *
-     * "Marginal" (the bottom 10%) is read as the marks that
-     * `GradeMark::blocksRegularStanding()` treats as blocking a student's
-     * Regular standing on a required subject — Failed, Incomplete, and
-     * Dropped — deliberately excluding `NotComplete` ('NC') and `Complete`
-     * ('C'), both of which `GradeMark`'s own docblock reserves exclusively
-     * for completion-only subjects that this seeder's ordinary lecture
-     * subjects never are. This choice is also what gives Task 4 (irregular
-     * student derivation, out of scope here) real "blocks regular standing"
-     * signal to work with instead of an all-passing roster.
+     * **Clean baseline only — no failing marks here.** This originally had
+     * a fourth ~10% "marginal" bucket (Failed/Incomplete/Dropped), but that
+     * gave *every* graded subject-instance for *every* student an
+     * independent 10% chance of a blocking mark. Composed with
+     * `EnrollmentCategoryClassifier::classify()`'s zero-threshold "any
+     * single blocking mark in any completed term makes the student
+     * irregular" rule, that made ~96% of the real 3,210-student roster's
+     * eligible (year 2-4) population organically "irregular" — an upper-year
+     * student accumulates 40-70+ graded subject-instances, so the odds of
+     * *zero* failures across that many independent 10%-chance draws
+     * approaches zero. See
+     * `.superpowers/sdd/2026-08-09-student-accounts-and-academic-history-seed/task-4-report.md`
+     * (fix report appended at the bottom) for the full investigation.
+     *
+     * The removed 10% is redistributed across the three passing buckets
+     * (15 / 45 / 40, instead of the original 15 / 45 / 30 / 10) so the
+     * distribution still covers 100% of cases while remaining entirely
+     * passing. `EnrollmentCategoryClassifier` now only ever sees a blocking
+     * mark where Task 4's `rewriteGradesToFailing()` deliberately put one —
+     * the sole place a failing mark is written anywhere in this seeder.
      */
     private function gradeMarkFor(string $studentNumber, int $subjectId, int $termId): GradeMark
     {
@@ -715,8 +726,7 @@ final class StudentRosterSeeder extends Seeder
         return match (true) {
             $bucketRoll < 15 => [GradeMark::Excellent, GradeMark::HighDistinction, GradeMark::WithDistinction][$withinBucketIndex],
             $bucketRoll < 60 => [GradeMark::VeryGood, GradeMark::Good, GradeMark::VerySatisfactory][$withinBucketIndex],
-            $bucketRoll < 90 => [GradeMark::Satisfactory, GradeMark::Fair, GradeMark::Passed][$withinBucketIndex],
-            default => [GradeMark::Failed, GradeMark::Incomplete, GradeMark::Dropped][$withinBucketIndex],
+            default => [GradeMark::Satisfactory, GradeMark::Fair, GradeMark::Passed][$withinBucketIndex],
         };
     }
 

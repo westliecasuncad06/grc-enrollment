@@ -509,26 +509,27 @@ final class StudentRosterSeederTest extends TestCase
      * the same integer, leaving no room between them — true of most small
      * totals, not just 17).
      *
-     * This 160-student fixture is a dedicated, larger roster built for this
+     * This 70-student fixture is a dedicated, larger roster built for this
      * one concern: 30 BSBA-FM year-2 (`FM201`) + 30 BSA year-3 (`ACC301`)
      * students as the eligible (year 2-4) population — deliberately kept on
      * the SAME sparse two-subject curriculum `students-profile-sample.md`
-     * already registers, not BSIT's dense per-term one, because a cohort
-     * with many completed terms of six-subjects-per-term coverage
-     * accumulates enough locked-grade rows that `gradeMarkFor()`'s own
-     * 10%-per-row "marginal" bucket alone organically blocks Regular
-     * standing for nearly the whole cohort, swamping this test's ~10%
-     * target before `StudentRosterSeeder::seedIrregularStudents()`'s own
-     * selection even runs (confirmed empirically while writing this test:
-     * a 30-student BSIT year-4 cohort alone pushed the irregular count to
-     * ~47% of the eligible population). The remaining 100 rows are
-     * BSIT year-1 (`IT101`) students — never eligible, so they never turn
-     * irregular, but they dilute `StudentProfile::count()` enough that the
-     * 60-strong eligible population's own irregular count (organic +
-     * `IRREGULAR_SELECTION_STRIDE`-forced, deterministic at 15) lands
-     * inside the (0.07 * 160, 0.13 * 160) = (11, 20) window with real
-     * margin on both sides. Every other test in this file intentionally
-     * keeps using the smaller shared fixture.
+     * already registers, not BSIT's dense per-term one, to avoid piling up
+     * more graded subject-instances than necessary. The remaining 10 rows
+     * are BSIT year-1 (`IT101`) students — never eligible (year_level < 2),
+     * so they never turn irregular, but give
+     * `test_no_first_year_student_is_irregular()` a population to assert
+     * zero against and pad `StudentProfile::count()` a little.
+     *
+     * Since the Task 3/4 crosscut fix (`gradeMarkFor()`'s baseline is now
+     * clean/passing-only — see that method's docblock), the only irregular
+     * students in this fixture are `StudentRosterSeeder::seedIrregularStudents()`'s
+     * own deliberate `IRREGULAR_SELECTION_STRIDE`-based selection: every
+     * 10th student among the 60 eligible (year 2-4), i.e. exactly 6
+     * (indices 0, 10, 20, 30, 40, 50). 6 / 70 = 8.57%, which lands inside
+     * `(0.07 * 70, 0.13 * 70) = (4, 9)` (using the same truncating `(int)`
+     * cast the assertion uses) with real margin on both sides. Every other
+     * test in this file intentionally keeps using the smaller shared
+     * fixture.
      */
     private function irregularFixturePath(): string
     {
