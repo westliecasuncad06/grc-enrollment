@@ -7,6 +7,7 @@ use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
@@ -73,8 +74,24 @@ final class DeriveSectionDemandObservationsCommandTest extends TestCase
             'academic_standing' => 'good',
         ]);
 
+        // The plan carries the authoritative "what year level was this
+        // section actually offered at" value (year_level 1 here, distinct
+        // from the student's own year_level 3 above) — see
+        // DeriveSectionDemandObservations's docblock. Every section
+        // DeriveSectionDemandObservations aggregates must have one; a
+        // section with no section_plan_id is excluded from its query.
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => CollegeCode::Ccs->value,
+            'year_level' => 1,
+            'section_count' => 1,
+            'status' => 'submitted',
+        ]);
+
         $section = Section::create([
             'academic_term_id' => $term->id,
+            'section_plan_id' => $plan->id,
             'subject_id' => $subject->id,
             'section_code' => 'IT301A',
             'capacity' => 40,

@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Aggregates real enrollment history (`enrollment_subjects` joined to
- * `sections`, `enrollments`, `student_profiles`, `programs`, and
- * `curricula`) into `section_demand_observations` rows with
+ * `sections`, `academic_term_section_plans`, `curricula`, `programs`, and
+ * `enrollments`) into `section_demand_observations` rows with
  * `source = 'derived_from_enrollments'`, upserting on the table's real
  * unique key (`academic_term_id`, `program_id`, `curriculum_id`,
  * `subject_id`, `year_level`) so a derived row replaces any synthetic seed
@@ -21,17 +21,29 @@ use Illuminate\Support\Facades\DB;
  * supersede. A key with no matching real enrollment history is never
  * touched — its synthetic fallback row, if one exists, survives untouched.
  *
- * `year_level` here is each student's *current* `student_profiles.year_level`
- * at the time this runs, not a reconstructed per-historical-term value —
- * this schema has nowhere else to read one from (neither `enrollments` nor
- * `academic_grades` carry a year level, and `curriculum_subjects.year_level`
- * describes a curriculum *plan* position, not any individual student's own
- * placement in a specific past term). This matches the exact join-table list
- * this class's own brief specifies (`sections`, `enrollments`,
- * `student_profiles`, `programs`, `curricula` — deliberately no
- * `curriculum_subjects`), and is consistent with how `GenerateSectionDemandForecasts`
- * already reads this same column: as "the year level to plan capacity for",
- * not as "the year level the observation's term historically was".
+ * **`year_level` is read from `academic_term_section_plans.year_level` via
+ * `sections.section_plan_id`, NOT from `student_profiles.year_level`.**
+ * (Corrected after task review — the first version of this class used the
+ * enrolled student's *current* year level, which is only correct for a
+ * student's most recent term; for every earlier historical term it silently
+ * disagreed with the year level the section was actually planned/offered
+ * at.) `StudentRosterSeeder::seedSectionHistory()` computes the real
+ * per-term projected year level for each historical cohort
+ * (`$yearLevel = $cohort['year_level'] - $academicYearsElapsed`) and stores
+ * it on the `academic_term_section_plans` row each of that term's sections
+ * points to via `section_plan_id` — that is the authoritative "what year
+ * level was this section planned/offered at" value, and it is also exactly
+ * what `GenerateSectionDemandForecasts` queries `SectionDemandObservation`
+ * by (via `HistoricalCohortResolver::resolve()`, which walks a *target*
+ * placement's year level backwards the same way, then looks up observations
+ * at that resolved year level — never at a student's current standing).
+ * `program_id`/`curriculum_id` are likewise read from the plan's own
+ * `curriculum_id` (and that curriculum's `program_id`) rather than the
+ * enrolled student's own profile fields — a student's declared program/
+ * curriculum doesn't drift across terms the way their year level does, but
+ * sourcing every dimension from the section's own plan keeps this
+ * consistently tied to "what was actually offered", not "who happened to
+ * enroll in it". `student_profiles` is therefore not joined here at all.
  */
 final class DeriveSectionDemandObservations
 {
@@ -116,27 +128,33 @@ final class DeriveSectionDemandObservations
      * dependent on `sec.id`, which the query already groups by, but MySQL/
      * MariaDB only recognizes that exemption for a table's own primary key,
      * not a query-builder-composed `GROUP BY` list.
+     *
+     * A section with no `section_plan_id` (nullable — e.g. a section built
+     * outside `StudentRosterSeeder::seedSectionHistory()`) is excluded by
+     * the inner join to `academic_term_section_plans`: there is nowhere
+     * else to read its year level from, and the column is `NOT NULL`, so
+     * fabricating one would be worse than not producing a row at all.
      */
     private function sectionLevelQuery(?AcademicTerm $term): Builder
     {
         return DB::table('enrollment_subjects as es')
             ->join('sections as sec', 'sec.id', '=', 'es.section_id')
+            ->join('academic_term_section_plans as atsp', 'atsp.id', '=', 'sec.section_plan_id')
+            ->join('curricula as c', 'c.id', '=', 'atsp.curriculum_id')
+            ->join('programs as p', 'p.id', '=', 'c.program_id')
             ->join('enrollments as e', 'e.id', '=', 'es.enrollment_id')
-            ->join('student_profiles as sp', 'sp.id', '=', 'e.student_id')
-            ->join('programs as p', 'p.id', '=', 'sp.program_id')
-            ->join('curricula as c', 'c.id', '=', 'sp.curriculum_id')
             ->where('es.status', '!=', EnrollmentSubjectStatus::Dropped->value)
             ->whereNotIn('e.status', EnrollmentStatus::terminalValues())
             ->whereNotNull('p.college')
             ->when($term?->id, fn ($query, int $termId) => $query->where('sec.academic_term_id', $termId))
-            ->groupBy(['sec.academic_term_id', 'sp.program_id', 'sp.curriculum_id', 'sec.subject_id', 'p.college', 'sp.year_level', 'sec.id'])
+            ->groupBy(['sec.academic_term_id', 'c.program_id', 'atsp.curriculum_id', 'sec.subject_id', 'p.college', 'atsp.year_level', 'sec.id'])
             ->select([
                 'sec.academic_term_id as academic_term_id',
-                'sp.program_id as program_id',
-                'sp.curriculum_id as curriculum_id',
+                'c.program_id as program_id',
+                'atsp.curriculum_id as curriculum_id',
                 'sec.subject_id as subject_id',
                 'p.college as college',
-                'sp.year_level as year_level',
+                'atsp.year_level as year_level',
                 DB::raw('MAX(sec.capacity) as section_capacity'),
                 DB::raw('COUNT(DISTINCT e.student_id) as section_enrolled'),
             ]);
@@ -147,21 +165,31 @@ final class DeriveSectionDemandObservations
      * year_level) — independent of subject/curriculum/section, unlike
      * `enrolled_count`. This is `cohort_size`'s denominator: "how many
      * students at this program and year level are enrolled this term",
-     * regardless of which of that term's subjects they took.
+     * regardless of which of that term's subjects they took. Joined through
+     * the same `sections` -> `academic_term_section_plans` -> `curricula`
+     * chain as `sectionLevelQuery()` (rather than a simpler
+     * `enrollments`/`student_profiles`-only query) for the same reason:
+     * `year_level` has to be the historically-correct plan value, and that
+     * only exists on the plan a student's enrolled sections point to, not
+     * on their own profile.
      *
      * @return array<string, int>
      */
     private function cohortSizes(?AcademicTerm $term): array
     {
-        $rows = DB::table('enrollments as e')
-            ->join('student_profiles as sp', 'sp.id', '=', 'e.student_id')
+        $rows = DB::table('enrollment_subjects as es')
+            ->join('sections as sec', 'sec.id', '=', 'es.section_id')
+            ->join('academic_term_section_plans as atsp', 'atsp.id', '=', 'sec.section_plan_id')
+            ->join('curricula as c', 'c.id', '=', 'atsp.curriculum_id')
+            ->join('enrollments as e', 'e.id', '=', 'es.enrollment_id')
+            ->where('es.status', '!=', EnrollmentSubjectStatus::Dropped->value)
             ->whereNotIn('e.status', EnrollmentStatus::terminalValues())
-            ->when($term?->id, fn ($query, int $termId) => $query->where('e.academic_term_id', $termId))
-            ->groupBy(['e.academic_term_id', 'sp.program_id', 'sp.year_level'])
+            ->when($term?->id, fn ($query, int $termId) => $query->where('sec.academic_term_id', $termId))
+            ->groupBy(['sec.academic_term_id', 'c.program_id', 'atsp.year_level'])
             ->select([
-                'e.academic_term_id as academic_term_id',
-                'sp.program_id as program_id',
-                'sp.year_level as year_level',
+                'sec.academic_term_id as academic_term_id',
+                'c.program_id as program_id',
+                'atsp.year_level as year_level',
                 DB::raw('COUNT(DISTINCT e.student_id) as cohort_size'),
             ])
             ->get();

@@ -10,6 +10,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicTerm;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
@@ -254,6 +255,180 @@ final class DeriveSectionDemandObservationsTest extends TestCase
         $after = SectionDemandObservation::where('source', 'derived_from_enrollments')->count();
 
         $this->assertSame($before, $after);
+    }
+
+    /**
+     * The exact bug task review caught: a student's `student_profiles.year_level`
+     * is their CURRENT standing (4 here), completely unrelated to what year
+     * level the historical section they're enrolled in was actually planned
+     * at (1 here, via `academic_term_section_plans.year_level`). The
+     * resulting observation's `year_level` must be the plan's historical
+     * value, never the student's current one — that's what
+     * `GenerateSectionDemandForecasts` looks up by by (via
+     * `HistoricalCohortResolver`), and using the student's current value
+     * would make this derived row invisible to its own consumer for every
+     * term except a student's most recent one.
+     */
+    public function test_year_level_comes_from_the_historical_section_plan_not_the_students_current_profile(): void
+    {
+        $program = Program::query()->where('code', 'BSA')->sole();
+        $curriculum = Curriculum::query()->where('program_id', $program->id)->sole();
+        $term = AcademicTerm::query()->orderBy('id')->firstOrFail();
+
+        $subject = Subject::create([
+            'code' => 'HISTYR1', 'college' => CollegeCode::Coa,
+            'title' => 'Historical Year Level Probe', 'units' => 3, 'status' => SubjectStatus::Active,
+        ]);
+
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => CollegeCode::Coa->value,
+            'year_level' => 1,
+            'section_count' => 1,
+            'status' => 'submitted',
+        ]);
+
+        $section = Section::create([
+            'academic_term_id' => $term->id,
+            'section_plan_id' => $plan->id,
+            'subject_id' => $subject->id,
+            'section_code' => 'HISTYR1A',
+            'capacity' => 40,
+            'capacity_source' => 'plan',
+            'status' => 'closed',
+        ]);
+
+        $user = User::create(['name' => 'Senior Student', 'email' => 'senior.student@grc.test', 'password' => 'password', 'role' => 'student', 'status' => 'active']);
+        $student = StudentProfile::create([
+            'user_id' => $user->id,
+            'student_number' => '2020-06-09001',
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'entry_year' => 2020,
+            // Deliberately far from the plan's year_level (1) above — this
+            // value must never leak into the derived observation.
+            'year_level' => 4,
+            'admission_status' => 'admitted',
+            'academic_standing' => 'good',
+        ]);
+
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => 'enrolled',
+            'total_units' => 3,
+        ]);
+
+        EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id,
+            'section_id' => $section->id,
+            'status' => 'enrolled',
+        ]);
+
+        app(DeriveSectionDemandObservations::class)->execute();
+
+        $observation = SectionDemandObservation::where([
+            'academic_term_id' => $term->id,
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $subject->id,
+        ])->sole();
+
+        $this->assertSame(1, $observation->year_level);
+        $this->assertNotSame($student->year_level, $observation->year_level);
+    }
+
+    /**
+     * A fully hand-computable scenario, independent of `StudentRosterSeeder`,
+     * closing the coverage gap task review flagged: only `enrolled_count` had
+     * ever been asserted against real computed output before this test —
+     * `cohort_size`, `section_count`, and `offered_capacity` were only ever
+     * used as fixture-seeding values in the overwrite tests above, never
+     * verified as the Action's own output.
+     *
+     * Cohort (program BSA, plan year_level 2, this term): 4 distinct
+     * students total — 3 took Subject A (across two sections, so a
+     * duplicate-section student doesn't double count), 1 took Subject B.
+     *   Subject A: enrolled_count=3 (distinct students, not row count),
+     *              section_count=2, offered_capacity=40+35=75, cohort_size=4.
+     *   Subject B: enrolled_count=1, section_count=1, offered_capacity=40,
+     *              cohort_size=4 (same cohort denominator as Subject A —
+     *              cohort_size counts every student at this program/year
+     *              level that term, regardless of which subject they took).
+     */
+    public function test_it_computes_cohort_size_section_count_and_offered_capacity_from_real_data(): void
+    {
+        $program = Program::query()->where('code', 'BSA')->sole();
+        $curriculum = Curriculum::query()->where('program_id', $program->id)->sole();
+        $term = AcademicTerm::query()->orderBy('id')->firstOrFail();
+
+        $subjectA = Subject::create(['code' => 'CNT101', 'college' => CollegeCode::Coa, 'title' => 'Count Probe A', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $subjectB = Subject::create(['code' => 'CNT102', 'college' => CollegeCode::Coa, 'title' => 'Count Probe B', 'units' => 3, 'status' => SubjectStatus::Active]);
+
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => CollegeCode::Coa->value,
+            'year_level' => 2,
+            'section_count' => 3,
+            'status' => 'submitted',
+        ]);
+
+        $sectionA1 = Section::create(['academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subjectA->id, 'section_code' => 'CNT101A', 'capacity' => 40, 'capacity_source' => 'plan', 'status' => 'closed']);
+        $sectionA2 = Section::create(['academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subjectA->id, 'section_code' => 'CNT101B', 'capacity' => 35, 'capacity_source' => 'plan', 'status' => 'closed']);
+        $sectionB1 = Section::create(['academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subjectB->id, 'section_code' => 'CNT102A', 'capacity' => 40, 'capacity_source' => 'plan', 'status' => 'closed']);
+
+        // student1 -> Subject A / sectionA1, student2 -> Subject A / sectionA2,
+        // student3 -> Subject A / sectionA1 (same section as student1, proving
+        // enrolled_count/section_count dedupe correctly), student4 -> Subject B.
+        $assignments = [
+            ['number' => '2021-06-00001', 'section' => $sectionA1],
+            ['number' => '2021-06-00002', 'section' => $sectionA2],
+            ['number' => '2021-06-00003', 'section' => $sectionA1],
+            ['number' => '2021-06-00004', 'section' => $sectionB1],
+        ];
+
+        foreach ($assignments as $assignment) {
+            $user = User::create(['name' => 'Count Probe '.$assignment['number'], 'email' => $assignment['number'].'@grc.test', 'password' => 'password', 'role' => 'student', 'status' => 'active']);
+            $student = StudentProfile::create([
+                'user_id' => $user->id,
+                'student_number' => $assignment['number'],
+                'program_id' => $program->id,
+                'curriculum_id' => $curriculum->id,
+                'entry_year' => 2021,
+                'year_level' => 2,
+                'admission_status' => 'admitted',
+                'academic_standing' => 'good',
+            ]);
+            $enrollment = Enrollment::create([
+                'student_id' => $student->id,
+                'academic_term_id' => $term->id,
+                'status' => 'enrolled',
+                'total_units' => 3,
+            ]);
+            EnrollmentSubject::create([
+                'enrollment_id' => $enrollment->id,
+                'section_id' => $assignment['section']->id,
+                'status' => 'enrolled',
+            ]);
+        }
+
+        app(DeriveSectionDemandObservations::class)->execute();
+
+        $key = ['academic_term_id' => $term->id, 'program_id' => $program->id, 'curriculum_id' => $curriculum->id, 'year_level' => 2];
+
+        $observationA = SectionDemandObservation::where($key + ['subject_id' => $subjectA->id])->sole();
+        $this->assertSame(3, $observationA->enrolled_count);
+        $this->assertSame(2, $observationA->section_count);
+        $this->assertSame(75, $observationA->offered_capacity);
+        $this->assertSame(4, $observationA->cohort_size);
+
+        $observationB = SectionDemandObservation::where($key + ['subject_id' => $subjectB->id])->sole();
+        $this->assertSame(1, $observationB->enrolled_count);
+        $this->assertSame(1, $observationB->section_count);
+        $this->assertSame(40, $observationB->offered_capacity);
+        $this->assertSame(4, $observationB->cohort_size);
     }
 
     /**
