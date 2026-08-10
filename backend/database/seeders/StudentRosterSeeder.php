@@ -2,15 +2,24 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Faculty\SpecializationProficiency;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CapacitySource;
+use App\Domain\Organization\CollegeCode;
+use App\Domain\Organization\SectionBlockCode;
+use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Organization\StudentRosterMap;
+use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicTerm;
 use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
 use App\Models\Program;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
@@ -52,6 +61,43 @@ final class StudentRosterSeeder extends Seeder
 
     private const STUDENT_NUMBER_PATTERN = '/^\d{4}-\d{2}-\d{5}$/';
 
+    private const SECTION_CHUNK_SIZE = 1000;
+
+    /** @var list<string> */
+    private const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    /** @var list<array{0: string, 1: string}> */
+    private const TIME_SLOTS = [
+        ['08:00:00', '10:00:00'],
+        ['10:00:00', '12:00:00'],
+        ['13:00:00', '15:00:00'],
+        ['15:00:00', '17:00:00'],
+    ];
+
+    /**
+     * Professor round-robin cursor, keyed by "{subject_id}|{college}" ->
+     * index into that key's ordered candidate list. Rebuilt fresh on every
+     * `run()` call so reruns are deterministic.
+     *
+     * @var array<string, int>
+     */
+    private array $professorCursor = [];
+
+    /**
+     * Which professors are already booked at a given (term, day, start
+     * time) slot, so the same professor is never handed two sections that
+     * overlap. Keyed by "{term_id}:{day}:{start}" -> {professor_id: true}.
+     *
+     * @var array<string, array<int, true>>
+     */
+    private array $bookedSlots = [];
+
+    /** @var array<string, list<int>> */
+    private array $professorCandidateCache = [];
+
+    /** @var array<string, Collection<int, CurriculumSubject>> */
+    private array $curriculumSubjectCache = [];
+
     public function __construct(private readonly ?string $rosterPath = null) {}
 
     public function run(): void
@@ -76,6 +122,8 @@ final class StudentRosterSeeder extends Seeder
         foreach (array_chunk($rows, self::CHUNK_SIZE) as $chunk) {
             $this->upsertChunk($chunk, $programIdByCode, $curriculumIdByProgramId, $passwordHash, $now);
         }
+
+        $this->seedSectionHistory();
     }
 
     /**
@@ -140,6 +188,456 @@ final class StudentRosterSeeder extends Seeder
             ['student_number'],
             ['user_id', 'program_id', 'curriculum_id', 'entry_year', 'year_level', 'admission_status', 'academic_standing', 'updated_at'],
         );
+    }
+
+    /**
+     * Builds `academic_term_section_plans` + `sections` history for every
+     * `StudentRosterMap` block across all seven academic terms.
+     *
+     * `StudentRosterMap::sections()` is a static structural catalog of the
+     * 107 blocks GRC currently runs, independent of which specific roster
+     * rows were parsed above — it always describes the full current-term
+     * shape, so a cohort walked backwards can reconstruct history even
+     * against a trimmed test roster.
+     *
+     * Grouping the map's rows by (college, program, year_level) recovers
+     * one "cohort" per group: the population currently sitting at that
+     * year level in that program. Each cohort entered in the year
+     * `StudentRosterMap::entryYearFor()` reports for its year level, so its
+     * position in any of the seven terms is `currentYearLevel - academic
+     * years elapsed since that term`. Only the *current* term ("today",
+     * academic-year-elapsed = 0) reflects the real, already-known block
+     * codes from the map — every earlier term for that same cohort has no
+     * known historical block assignment, so it gets exactly one synthetic
+     * representative block (`SectionBlockCode::fromProgram(..., blockOrdinal: 1)`,
+     * or the roster's own verbatim `EDUC1xx` code for first-year COE,
+     * which `fromProgram()` cannot reproduce — see `coePrefix()`).
+     *
+     * Two cohorts of the same program never collide on a (term, computed
+     * year level) pair (they differ in current year level, so their
+     * projected year levels in any shared term differ too), so this never
+     * produces two different block lists for the same
+     * (term, section_code, subject) key.
+     */
+    private function seedSectionHistory(): void
+    {
+        $terms = $this->orderedTerms();
+        if ($terms === []) {
+            return;
+        }
+
+        $currentStartYear = max(array_column($terms, 'start_year'));
+
+        $cohorts = $this->cohortsFromRosterMap();
+        if ($cohorts === []) {
+            return;
+        }
+
+        $programCodes = array_values(array_unique(array_column($cohorts, 'program_code')));
+        $programIdByCode = Program::query()->whereIn('code', $programCodes)->pluck('id', 'code')->all();
+        $curriculumIdByProgramId = $this->activeCurriculumIdsByProgramId($programIdByCode);
+        $educCodeByProgram = $this->educVerbatimCodesByProgram();
+
+        $roomsByCollege = $this->roomsByCollege();
+        $this->preloadProfessorCandidates();
+
+        $now = now();
+        $planRows = [];
+        $planKeys = [];
+
+        // Pass 1: compute every (term, cohort) contribution and the plan
+        // row it belongs to, without touching subjects/professors yet —
+        // the plan must exist (and its id be known) before any `sections`
+        // row can reference `section_plan_id`.
+        $contributions = [];
+        foreach ($cohorts as $cohort) {
+            $programId = $programIdByCode[$cohort['program_code']] ?? null;
+            $curriculumId = $programId !== null ? ($curriculumIdByProgramId[$programId] ?? null) : null;
+            if ($curriculumId === null) {
+                // Program not seeded in this environment/test — StudentRosterMap
+                // is a static catalog of the *real* production block shape and
+                // deliberately outruns any single test's minimal fixture.
+                continue;
+            }
+
+            foreach ($terms as $term) {
+                $academicYearsElapsed = $currentStartYear - $term['start_year'];
+                $yearLevel = $cohort['year_level'] - $academicYearsElapsed;
+                if ($yearLevel < 1 || $yearLevel > $cohort['year_level']) {
+                    continue;
+                }
+
+                $isToday = $academicYearsElapsed === 0;
+                $blocks = $isToday
+                    ? $cohort['blocks']
+                    : [$this->historicalBlockCode($cohort['program_code'], $cohort['college'], $yearLevel, $educCodeByProgram)];
+
+                $planKey = implode('|', [$term['id'], $curriculumId, $cohort['college']->value, $yearLevel]);
+                if (! isset($planKeys[$planKey])) {
+                    $planKeys[$planKey] = true;
+                    $planRows[] = [
+                        'academic_term_id' => $term['id'],
+                        'curriculum_id' => $curriculumId,
+                        'college' => $cohort['college']->value,
+                        'year_level' => $yearLevel,
+                        'section_count' => count($blocks),
+                        'status' => SectionPlanStatus::Submitted->value,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+
+                $contributions[] = [
+                    'term' => $term,
+                    'curriculum_id' => $curriculumId,
+                    'college' => $cohort['college'],
+                    'year_level' => $yearLevel,
+                    'semester' => $term['semester'],
+                    'plan_key' => $planKey,
+                    'blocks' => $blocks,
+                ];
+            }
+        }
+
+        if ($planRows === []) {
+            return;
+        }
+
+        foreach (array_chunk($planRows, self::SECTION_CHUNK_SIZE) as $chunk) {
+            DB::table('academic_term_section_plans')->upsert(
+                $chunk,
+                ['academic_term_id', 'curriculum_id', 'college', 'year_level'],
+                ['section_count', 'status', 'updated_at'],
+            );
+        }
+
+        $planIdByKey = $this->planIdsByKey(array_keys($planKeys));
+
+        // Pass 2: now that every plan id is known, expand each contribution
+        // into one `sections` row per (block, subject).
+        $sectionRows = [];
+        foreach ($contributions as $contribution) {
+            $subjects = $this->curriculumSubjectsFor($contribution['curriculum_id'], $contribution['year_level'], $contribution['semester']);
+            if ($subjects->isEmpty()) {
+                continue;
+            }
+
+            $planId = $planIdByKey[$contribution['plan_key']] ?? null;
+
+            foreach ($contribution['blocks'] as $blockCode) {
+                foreach ($subjects as $curriculumSubject) {
+                    $subjectId = $curriculumSubject->subject_id;
+                    [$day, $starts, $ends] = $this->deterministicSlot($contribution['term']['id'], $blockCode, $subjectId);
+                    $room = $this->deterministicRoom($contribution['college'], $contribution['term']['id'], $blockCode, $subjectId, $roomsByCollege);
+                    $professorId = $this->pickProfessor($subjectId, $contribution['curriculum_id'], $contribution['college'], $contribution['term']['id'], $day, $starts);
+
+                    $sectionRows[] = [
+                        'academic_term_id' => $contribution['term']['id'],
+                        'section_plan_id' => $planId,
+                        'subject_id' => $subjectId,
+                        'section_code' => $blockCode,
+                        'professor_id' => $professorId,
+                        'schedule_days' => $day,
+                        'starts_at_time' => $starts,
+                        'ends_at_time' => $ends,
+                        'room' => $room,
+                        'capacity' => 40,
+                        'capacity_source' => CapacitySource::Plan->value,
+                        'is_block_exclusive' => true,
+                        'status' => SectionStatus::Closed->value,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+            }
+        }
+
+        foreach (array_chunk($sectionRows, self::SECTION_CHUNK_SIZE) as $chunk) {
+            DB::table('sections')->upsert(
+                $chunk,
+                ['academic_term_id', 'subject_id', 'section_code'],
+                [
+                    'section_plan_id', 'professor_id', 'schedule_days', 'starts_at_time', 'ends_at_time',
+                    'room', 'capacity', 'capacity_source', 'is_block_exclusive', 'status', 'updated_at',
+                ],
+            );
+        }
+    }
+
+    /**
+     * All seven `AcademicTermSeeder` terms, oldest first, with a parsed
+     * academic-year start for computing "how many academic years ago".
+     *
+     * @return list<array{id: int, school_year: string, semester: string, start_year: int}>
+     */
+    private function orderedTerms(): array
+    {
+        $terms = AcademicTerm::query()
+            ->get(['id', 'school_year', 'semester'])
+            ->map(fn (AcademicTerm $term): array => [
+                'id' => $term->id,
+                'school_year' => $term->school_year,
+                'semester' => $term->semester,
+                'start_year' => (int) substr($term->school_year, 0, 4),
+            ])
+            ->all();
+
+        usort($terms, fn (array $a, array $b): int => $a['start_year'] <=> $b['start_year']
+            ?: ($a['semester'] === $b['semester'] ? 0 : ($a['semester'] === '1st' ? -1 : 1)));
+
+        return $terms;
+    }
+
+    /**
+     * Groups `StudentRosterMap::sections()` rows into the 41 (college,
+     * program, current-year-level) cohorts, sorted deterministically so
+     * professor round-robin assignment is reproducible across reruns.
+     *
+     * @return list<array{college: CollegeCode, program_code: string, year_level: int, blocks: list<string>}>
+     */
+    private function cohortsFromRosterMap(): array
+    {
+        $cohorts = [];
+        foreach (StudentRosterMap::sections() as $row) {
+            $key = $row['college']->value.'|'.$row['program_code'].'|'.$row['year_level'];
+            $cohorts[$key]['college'] ??= $row['college'];
+            $cohorts[$key]['program_code'] ??= $row['program_code'];
+            $cohorts[$key]['year_level'] ??= $row['year_level'];
+            $cohorts[$key]['blocks'][] = $row['section_code'];
+        }
+
+        $cohorts = array_values($cohorts);
+        usort($cohorts, fn (array $a, array $b): int => [$a['college']->value, $a['program_code'], $a['year_level']]
+            <=> [$b['college']->value, $b['program_code'], $b['year_level']]);
+
+        return $cohorts;
+    }
+
+    /**
+     * COE's shared first-year `EDUC1xx` block cannot be reconstructed by
+     * `SectionBlockCode::fromProgram()` — `coePrefix()` maps a program code
+     * to its *own* major prefix (ELEM/FIL/ENG/SOCSCI/VAL), which is only
+     * correct from year 2 onward. Year 1 is a single shared block per major
+     * split out in the roster map itself, so the verbatim code is read
+     * back from there — the first (lowest-ordinal) block the map lists for
+     * that program at year 1.
+     *
+     * @return array<string, string>
+     */
+    private function educVerbatimCodesByProgram(): array
+    {
+        $codes = [];
+        foreach (StudentRosterMap::sections() as $row) {
+            if ($row['college'] === CollegeCode::Coe && $row['year_level'] === 1) {
+                $codes[$row['program_code']] ??= $row['section_code'];
+            }
+        }
+
+        return $codes;
+    }
+
+    /** @param  array<string, string>  $educCodeByProgram */
+    private function historicalBlockCode(string $programCode, CollegeCode $college, int $yearLevel, array $educCodeByProgram): string
+    {
+        if ($college === CollegeCode::Coe && $yearLevel === 1) {
+            return $educCodeByProgram[$programCode] ?? SectionBlockCode::fromProgram($programCode, $college, $yearLevel, 1);
+        }
+
+        return SectionBlockCode::fromProgram($programCode, $college, $yearLevel, 1);
+    }
+
+    /**
+     * @param  list<string>  $keys
+     * @return array<string, int>
+     */
+    private function planIdsByKey(array $keys): array
+    {
+        $planIdByKey = array_fill_keys($keys, null);
+
+        DB::table('academic_term_section_plans')
+            ->select(['id', 'academic_term_id', 'curriculum_id', 'college', 'year_level'])
+            ->get()
+            ->each(function (object $plan) use (&$planIdByKey): void {
+                $key = implode('|', [$plan->academic_term_id, $plan->curriculum_id, $plan->college, $plan->year_level]);
+                if (array_key_exists($key, $planIdByKey)) {
+                    $planIdByKey[$key] = $plan->id;
+                }
+            });
+
+        return $planIdByKey;
+    }
+
+    /**
+     * `curriculum_subjects.semester` is either a plain `'1st'`/`'2nd'` or
+     * the composite `'1st|2nd'` written for subjects offered either
+     * semester (see `SemesterCoverage`) — both must match a query for
+     * either single semester.
+     *
+     * @return Collection<int, CurriculumSubject>
+     */
+    private function curriculumSubjectsFor(int $curriculumId, int $yearLevel, string $semester): Collection
+    {
+        $cacheKey = $curriculumId.'|'.$yearLevel.'|'.$semester;
+
+        return $this->curriculumSubjectCache[$cacheKey] ??= CurriculumSubject::query()
+            ->where('curriculum_id', $curriculumId)
+            ->where('year_level', $yearLevel)
+            ->where(function ($query) use ($semester): void {
+                $query->where('semester', $semester)->orWhere('semester', '1st|2nd');
+            })
+            ->orderBy('subject_id')
+            ->get();
+    }
+
+    /** @return array<string, list<string>> */
+    private function roomsByCollege(): array
+    {
+        $rooms = [];
+        foreach (DB::table('room_catalog_entries')->orderBy('id')->get(['college', 'name']) as $entry) {
+            $rooms[(string) $entry->college][] = (string) $entry->name;
+        }
+
+        return $rooms;
+    }
+
+    /**
+     * Deterministic, hash-derived day/time slot for a section — stable
+     * across reruns because it only depends on stable identifiers (the
+     * term id, the block's section code, and the subject id), never on
+     * insertion order or randomness.
+     *
+     * @return array{0: string, 1: string, 2: string}
+     */
+    private function deterministicSlot(int $termId, string $blockCode, int $subjectId): array
+    {
+        $hash = (int) sprintf('%u', crc32($termId.':'.$blockCode.':'.$subjectId));
+        $day = self::SCHEDULE_DAYS[$hash % count(self::SCHEDULE_DAYS)];
+        [$starts, $ends] = self::TIME_SLOTS[intdiv($hash, count(self::SCHEDULE_DAYS)) % count(self::TIME_SLOTS)];
+
+        return [$day, $starts, $ends];
+    }
+
+    /** @param  array<string, list<string>>  $roomsByCollege */
+    private function deterministicRoom(CollegeCode $college, int $termId, string $blockCode, int $subjectId, array $roomsByCollege): ?string
+    {
+        $rooms = $roomsByCollege[$college->value] ?? [];
+        if ($rooms === []) {
+            return null;
+        }
+
+        $hash = (int) sprintf('%u', crc32('room:'.$termId.':'.$blockCode.':'.$subjectId));
+
+        return $rooms[$hash % count($rooms)];
+    }
+
+    /**
+     * Preloads every candidate ordering this seeder will ever need for
+     * professor assignment, so picking a professor for one of potentially
+     * thousands of `sections` rows never issues its own query.
+     */
+    private function preloadProfessorCandidates(): void
+    {
+        $this->professorCandidateCache = [];
+
+        $specialists = DB::table('faculty_specializations')
+            ->join('users', 'users.id', '=', 'faculty_specializations.professor_id')
+            ->where('faculty_specializations.proficiency', SpecializationProficiency::Primary->value)
+            ->where('users.role', UserRole::Faculty->value)
+            ->whereNotNull('users.college')
+            ->orderBy('faculty_specializations.professor_id')
+            ->get(['faculty_specializations.subject_id', 'users.college', 'faculty_specializations.professor_id']);
+
+        foreach ($specialists as $row) {
+            $key = 'specialist|'.$row->subject_id.'|'.$row->college;
+            $this->professorCandidateCache[$key][] = (int) $row->professor_id;
+        }
+
+        $preferences = DB::table('faculty_curriculum_subject_preferences')
+            ->join('users', 'users.id', '=', 'faculty_curriculum_subject_preferences.professor_id')
+            ->where('users.role', UserRole::Faculty->value)
+            ->orderBy('faculty_curriculum_subject_preferences.rank')
+            ->orderBy('faculty_curriculum_subject_preferences.professor_id')
+            ->get(['faculty_curriculum_subject_preferences.curriculum_id', 'faculty_curriculum_subject_preferences.subject_id', 'faculty_curriculum_subject_preferences.professor_id']);
+
+        foreach ($preferences as $row) {
+            $key = 'preference|'.$row->curriculum_id.'|'.$row->subject_id;
+            $this->professorCandidateCache[$key][] = (int) $row->professor_id;
+        }
+
+        $facultyByCollege = DB::table('users')
+            ->where('role', UserRole::Faculty->value)
+            ->whereNotNull('college')
+            ->orderBy('id')
+            ->get(['id', 'college']);
+
+        foreach ($facultyByCollege as $row) {
+            $key = 'any|'.$row->college;
+            $this->professorCandidateCache[$key][] = (int) $row->id;
+        }
+    }
+
+    /**
+     * Ordered, deduplicated professor candidates for a (subject,
+     * curriculum, college): `primary` specialists first, then reusable
+     * curriculum preferences, then any faculty in the section's college —
+     * exactly the fallback chain the brief specifies.
+     *
+     * @return list<int>
+     */
+    private function professorCandidates(int $subjectId, int $curriculumId, CollegeCode $college): array
+    {
+        $cacheKey = 'candidates|'.$subjectId.'|'.$curriculumId.'|'.$college->value;
+        if (isset($this->professorCandidateCache[$cacheKey])) {
+            return $this->professorCandidateCache[$cacheKey];
+        }
+
+        $tiers = array_merge(
+            $this->professorCandidateCache['specialist|'.$subjectId.'|'.$college->value] ?? [],
+            $this->professorCandidateCache['preference|'.$curriculumId.'|'.$subjectId] ?? [],
+            $this->professorCandidateCache['any|'.$college->value] ?? [],
+        );
+
+        return $this->professorCandidateCache[$cacheKey] = array_values(array_unique($tiers));
+    }
+
+    /**
+     * Round-robins through the ordered candidate list for this
+     * (subject, college) so the load spreads across every eligible
+     * professor instead of always picking the first, and skips any
+     * candidate already booked at this exact (term, day, start time) slot.
+     * Falls back to the next candidate in rotation if every candidate is
+     * already booked, so a section is never left without a professor —
+     * only `test_every_historical_section_has_a_professor()`'s zero-null
+     * guarantee is authoritative here, not collision-freedom.
+     */
+    private function pickProfessor(int $subjectId, int $curriculumId, CollegeCode $college, int $termId, string $day, string $starts): ?int
+    {
+        $candidates = $this->professorCandidates($subjectId, $curriculumId, $college);
+        if ($candidates === []) {
+            return null;
+        }
+
+        $count = count($candidates);
+        $cursorKey = $subjectId.'|'.$college->value;
+        $startIndex = $this->professorCursor[$cursorKey] ?? 0;
+        $slotKey = $termId.':'.$day.':'.$starts;
+
+        for ($i = 0; $i < $count; $i++) {
+            $index = ($startIndex + $i) % $count;
+            $professorId = $candidates[$index];
+            if (! isset($this->bookedSlots[$slotKey][$professorId])) {
+                $this->bookedSlots[$slotKey][$professorId] = true;
+                $this->professorCursor[$cursorKey] = ($index + 1) % $count;
+
+                return $professorId;
+            }
+        }
+
+        $professorId = $candidates[$startIndex];
+        $this->bookedSlots[$slotKey][$professorId] = true;
+        $this->professorCursor[$cursorKey] = ($startIndex + 1) % $count;
+
+        return $professorId;
     }
 
     /**
