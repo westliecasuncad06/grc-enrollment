@@ -441,6 +441,82 @@ final class DeriveSectionDemandObservationsTest extends TestCase
      * student's own `enrollment_subjects` row rather than guessing at the
      * `sections` table directly.
      */
+    /**
+     * The exact bug the final review caught: the section-level query used to
+     * drive off `enrollment_subjects`, so a section with zero non-dropped
+     * enrollments contributed to neither `section_count` nor
+     * `offered_capacity` — making `offered_capacity` mean "capacity of
+     * sections that had at least one student" instead of "capacity actually
+     * offered", the wrong denominator for utilization-based forecasting.
+     *
+     * Cohort (program BSA, plan year_level 2, this term): Subject A has two
+     * sections — one with a real enrolled student, one entirely empty — and
+     * Subject B has one section with zero enrollments at all. Both empty
+     * sections must still be counted and contribute their capacity, while
+     * contributing nothing to `enrolled_count`.
+     */
+    public function test_a_section_with_zero_enrollments_still_contributes_to_section_count_and_capacity(): void
+    {
+        $program = Program::query()->where('code', 'BSA')->sole();
+        $curriculum = Curriculum::query()->where('program_id', $program->id)->sole();
+        $term = AcademicTerm::query()->orderBy('id')->firstOrFail();
+
+        $subjectA = Subject::create(['code' => 'ZERO101', 'college' => CollegeCode::Coa, 'title' => 'Zero-Enrollment Probe A', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $subjectB = Subject::create(['code' => 'ZERO102', 'college' => CollegeCode::Coa, 'title' => 'Zero-Enrollment Probe B', 'units' => 3, 'status' => SubjectStatus::Active]);
+
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => CollegeCode::Coa->value,
+            'year_level' => 2,
+            'section_count' => 3,
+            'status' => 'submitted',
+        ]);
+
+        $sectionA1 = Section::create(['academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subjectA->id, 'section_code' => 'ZERO101A', 'capacity' => 40, 'capacity_source' => 'plan', 'status' => 'closed']);
+        Section::create(['academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subjectA->id, 'section_code' => 'ZERO101B', 'capacity' => 30, 'capacity_source' => 'plan', 'status' => 'closed']);
+        Section::create(['academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subjectB->id, 'section_code' => 'ZERO102A', 'capacity' => 25, 'capacity_source' => 'plan', 'status' => 'closed']);
+
+        $user = User::create(['name' => 'Zero Probe Student', 'email' => 'zero.probe@grc.test', 'password' => 'password', 'role' => 'student', 'status' => 'active']);
+        $student = StudentProfile::create([
+            'user_id' => $user->id,
+            'student_number' => '2022-06-00001',
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'entry_year' => 2022,
+            'year_level' => 2,
+            'admission_status' => 'admitted',
+            'academic_standing' => 'good',
+        ]);
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => 'enrolled',
+            'total_units' => 3,
+        ]);
+        EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id,
+            'section_id' => $sectionA1->id,
+            'status' => 'enrolled',
+        ]);
+        // sectionA2 and Subject B's only section deliberately get no
+        // enrollment_subjects row at all.
+
+        app(DeriveSectionDemandObservations::class)->execute();
+
+        $key = ['academic_term_id' => $term->id, 'program_id' => $program->id, 'curriculum_id' => $curriculum->id, 'year_level' => 2];
+
+        $observationA = SectionDemandObservation::where($key + ['subject_id' => $subjectA->id])->sole();
+        $this->assertSame(1, $observationA->enrolled_count);
+        $this->assertSame(2, $observationA->section_count);
+        $this->assertSame(70, $observationA->offered_capacity);
+
+        $observationB = SectionDemandObservation::where($key + ['subject_id' => $subjectB->id])->sole();
+        $this->assertSame(0, $observationB->enrolled_count);
+        $this->assertSame(1, $observationB->section_count);
+        $this->assertSame(25, $observationB->offered_capacity);
+    }
+
     private function termIdForStudentSubject(string $studentNumber, string $subjectCode): int
     {
         $student = StudentProfile::query()->where('student_number', $studentNumber)->sole();

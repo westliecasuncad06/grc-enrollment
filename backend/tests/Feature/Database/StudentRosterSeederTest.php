@@ -373,6 +373,46 @@ final class StudentRosterSeederTest extends TestCase
         $this->assertSame($before, Section::query()->count());
     }
 
+    /**
+     * The exact bug the final review caught: `orderedTerms()` used to treat
+     * every `academic_terms` row as either "today" or a completed
+     * historical term, with no status filter. If a Registrar Head opens a
+     * new term (the ordinary archive-and-open workflow) and this seeder is
+     * then rerun against that non-fresh database, the live
+     * `semester_ongoing` term must never be populated with fabricated
+     * `enrolled` enrollments or `locked` academic_grades.
+     */
+    public function test_seeding_skips_a_semester_ongoing_term(): void
+    {
+        $ongoingTerm = AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+
+        // A real `semester_ongoing` term makes `reclassifyIfTermIsOngoing()`
+        // run for real (see that method) — it needs a registrar_head user to
+        // attribute the audit trail to, same as the real DatabaseSeeder
+        // chain (RoleUserSeeder) always provides one ahead of this seeder.
+        User::create([
+            'name' => 'Registrar Head', 'email' => 'registrar.head@grc.test',
+            'password' => 'password', 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+        ]);
+
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+
+        $this->assertSame(0, Section::where('academic_term_id', $ongoingTerm->id)->count());
+        $this->assertSame(0, AcademicTermSectionPlan::where('academic_term_id', $ongoingTerm->id)->count());
+        $this->assertSame(0, Enrollment::where('academic_term_id', $ongoingTerm->id)->count());
+        $this->assertSame(0, AcademicGrade::where('academic_term_id', $ongoingTerm->id)->count());
+
+        // Every other (completed) term is still seeded normally — this
+        // isn't just "the ongoing term is empty", the rest of history is
+        // unaffected by the filter.
+        $this->assertGreaterThan(0, Section::query()->count());
+        $this->assertGreaterThan(0, Enrollment::query()->count());
+    }
+
     public function test_a_fourth_year_student_has_seven_completed_terms_of_locked_grades(): void
     {
         (new StudentRosterSeeder($this->fixturePath()))->run();
@@ -439,6 +479,122 @@ final class StudentRosterSeederTest extends TestCase
             $this->assertTrue(AcademicGrade::where('student_id', $student->id)
                 ->whereIn('mark', ['5.00', 'INC', 'NC', 'DRP'])->exists());
         }
+    }
+
+    /**
+     * The exact bug the final review caught: `selectIrregularCandidates()`
+     * used to stride across every `student_profiles` row by `id` with no
+     * scope to the roster THIS seeder parsed. In the real `DatabaseSeeder`
+     * chain, `DemoEnrollmentSeeder` runs first and its 10 demo profiles
+     * therefore occupy the lowest ids — landing one of them (a documented-
+     * Regular account) on the stride's very first boundary and silently
+     * converting it to Irregular. This reproduces that shape directly: a
+     * profile created BEFORE `run()` (so it gets the lowest id, same as the
+     * real ordering), sharing the roster's own program, at an eligible year
+     * level, but with a student number the fixture roster never mentions.
+     */
+    public function test_irregular_selection_never_reaches_a_student_outside_the_parsed_roster(): void
+    {
+        $program = Program::query()->where('code', 'BSA')->sole();
+        $curriculum = Curriculum::query()->where('program_id', $program->id)->sole();
+        $subject = Subject::query()->where('code', 'ACC301S')->sole();
+        $term = AcademicTerm::query()->orderBy('id')->firstOrFail();
+        $encoder = User::query()->where('role', UserRole::Faculty)->firstOrFail();
+
+        $outsideUser = User::create([
+            'name' => 'Seed Student Two',
+            'email' => 'student2.seed@grc.test',
+            'password' => 'password',
+            'role' => UserRole::Student,
+            'status' => UserStatus::Active,
+        ]);
+        $outsideProfile = StudentProfile::create([
+            'user_id' => $outsideUser->id,
+            'student_number' => '2023-06-00002',
+            'program_id' => $program->id,
+            'curriculum_id' => $curriculum->id,
+            'entry_year' => 2023,
+            'year_level' => 2,
+            'admission_status' => AdmissionStatus::Admitted,
+            'academic_standing' => AcademicStanding::Good,
+        ]);
+
+        // Pre-existing clean locked grade evidence, exactly like
+        // `DemoEnrollmentSeeder` leaves behind for its own documented-
+        // Regular accounts.
+        AcademicGrade::create([
+            'student_id' => $outsideProfile->id,
+            'subject_id' => $subject->id,
+            'academic_term_id' => $term->id,
+            'final_grade' => '1.00',
+            'mark' => '1.00',
+            'status' => 'locked',
+            'encoded_by' => $encoder->id,
+            'submitted_at' => now(),
+            'locked_at' => now(),
+        ]);
+
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->reclassifyAllStudents();
+
+        $this->assertDatabaseHas('academic_grades', [
+            'student_id' => $outsideProfile->id,
+            'subject_id' => $subject->id,
+            'academic_term_id' => $term->id,
+            'mark' => '1.00',
+        ]);
+
+        $outsideProfile->refresh();
+        $this->assertSame('regular', $outsideProfile->enrollment_category);
+    }
+
+    /**
+     * Pins the Task 3/4 crosscut invariant directly: `gradeMarkFor()`'s
+     * baseline is clean/passing-only, so the ONLY `academic_grades` rows
+     * that may ever carry a blocking mark are the ones
+     * `rewriteGradesToFailing()` deliberately wrote for
+     * `selectIrregularCandidates()`'s own selected ~10% cohort. Every other
+     * student — regardless of year level, program, or how many graded
+     * subject-instances they accumulate — must have zero blocking marks.
+     * Deliberately independent of the sparse two-subject curriculum
+     * fixture's density: this counts real rows across the whole roster
+     * rather than asserting against any one student, so a reintroduced
+     * small failure-chance in the baseline would show up here even if it
+     * happened to miss every individually-asserted student.
+     */
+    public function test_only_the_selected_irregular_cohort_ever_has_a_failing_mark(): void
+    {
+        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+
+        // Mirrors `selectIrregularCandidates()`'s own documented,
+        // deterministic stride (every 10th eligible year 2-4 student, in
+        // stable id order) so this test pins the invariant without
+        // reaching into the seeder's private internals.
+        $eligible = StudentProfile::query()
+            ->where('year_level', '>=', 2)
+            ->orderBy('id')
+            ->pluck('id')
+            ->values();
+
+        // Mirrors `StudentRosterSeeder::IRREGULAR_SELECTION_STRIDE` (10) —
+        // that constant is private, so the value is duplicated here rather
+        // than reached into.
+        $stride = 10;
+        $selectedIds = [];
+        foreach ($eligible as $index => $id) {
+            if ($index % $stride === 0) {
+                $selectedIds[] = $id;
+            }
+        }
+
+        $this->assertNotEmpty($selectedIds, 'fixture must produce at least one selected irregular candidate');
+
+        $baselineOffenders = AcademicGrade::query()
+            ->whereNotIn('student_id', $selectedIds)
+            ->whereIn('mark', ['5.00', 'INC', 'NC', 'DRP'])
+            ->count();
+
+        $this->assertSame(0, $baselineOffenders, 'a student outside the selected irregular cohort has a blocking mark');
     }
 
     public function test_running_the_seeder_twice_does_not_change_the_derived_categories(): void

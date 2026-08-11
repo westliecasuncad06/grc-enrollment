@@ -182,7 +182,7 @@ final class StudentRosterSeeder extends Seeder
         }
 
         $this->seedSectionHistory();
-        $this->seedIrregularStudents();
+        $this->seedIrregularStudents(array_column($rows, 'student_number'));
 
         // Task 5: real enrollment/section history just seeded above is
         // aggregated into section_demand_observations (source =
@@ -752,10 +752,13 @@ final class StudentRosterSeeder extends Seeder
      * A no-op before any accounts exist to rewrite grades for (e.g. an
      * empty roster file — `run()` already returned earlier in that case,
      * but `selectIrregularCandidates()` guards independently too).
+     *
+     * @param  list<string>  $rosterStudentNumbers  every student number this
+     *                                              run's `parseRoster()` produced — see `selectIrregularCandidates()`.
      */
-    private function seedIrregularStudents(): void
+    private function seedIrregularStudents(array $rosterStudentNumbers): void
     {
-        $candidates = $this->selectIrregularCandidates();
+        $candidates = $this->selectIrregularCandidates($rosterStudentNumbers);
         if ($candidates === []) {
             return;
         }
@@ -781,11 +784,29 @@ final class StudentRosterSeeder extends Seeder
      * verified against the real roster in the Task 4 report rather than
      * assumed.
      *
+     * Scoped to `$rosterStudentNumbers` — the student numbers THIS run's
+     * `parseRoster()` actually produced — so this selection can never reach
+     * into accounts a different seeder created. `DemoEnrollmentSeeder` runs
+     * before this seeder in `DatabaseSeeder` and its 10 demo profiles
+     * therefore occupy the lowest `student_profiles` ids; without this
+     * scope, striding "every 10th student_profiles row by id" would always
+     * land on one of those demo accounts (e.g. `student2.seed@grc.test`, a
+     * 2nd-year account `docs/testing/SEEDED_IDENTITIES.md` and
+     * `DemoEnrollmentSeeder`'s own docblock document as deliberately kept
+     * Regular for manual QA) and silently rewrite its locked grades to
+     * failing marks. `DemoEnrollmentSeeder` itself is never touched here.
+     *
+     * @param  list<string>  $rosterStudentNumbers
      * @return list<\stdClass>
      */
-    private function selectIrregularCandidates(): array
+    private function selectIrregularCandidates(array $rosterStudentNumbers): array
     {
+        if ($rosterStudentNumbers === []) {
+            return [];
+        }
+
         $eligible = DB::table('student_profiles')
+            ->whereIn('student_number', $rosterStudentNumbers)
             ->where('year_level', '>=', self::IRREGULAR_MIN_YEAR_LEVEL)
             ->orderBy('id')
             ->get(['id', 'student_number']);
@@ -938,11 +959,23 @@ final class StudentRosterSeeder extends Seeder
      * All seven `AcademicTermSeeder` terms, oldest first, with a parsed
      * academic-year start for computing "how many academic years ago".
      *
+     * Filtered to completed statuses only (`archived`, `semester_closed`) —
+     * NOT every row in `academic_terms`. This is what keeps the seeder
+     * structurally safe to rerun against a non-fresh database: once a
+     * Registrar Head opens a new term (e.g. via the archive-and-open
+     * workflow this plan's own manual-verification checklist walks
+     * through), that term is `semester_ongoing`, and a rerun must never
+     * fabricate `enrolled` enrollments or `locked` academic_grades against
+     * a term real students may already be actively enrolling in.
+     * `draft`/`for_dean_approval` terms are excluded for the same reason —
+     * neither is a completed term with real history to reconstruct.
+     *
      * @return list<array{id: int, school_year: string, semester: string, start_year: int}>
      */
     private function orderedTerms(): array
     {
         $terms = AcademicTerm::query()
+            ->whereIn('status', [AcademicTermStatus::Archived->value, AcademicTermStatus::SemesterClosed->value])
             ->get(['id', 'school_year', 'semester'])
             ->map(fn (AcademicTerm $term): array => [
                 'id' => $term->id,

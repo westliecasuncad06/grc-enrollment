@@ -129,6 +129,20 @@ final class DeriveSectionDemandObservations
      * MariaDB only recognizes that exemption for a table's own primary key,
      * not a query-builder-composed `GROUP BY` list.
      *
+     * Driven off `sections`, NOT `enrollment_subjects` — a section with zero
+     * non-dropped enrollments must still contribute to `section_count`/
+     * `offered_capacity` (this is "capacity actually offered", the correct
+     * denominator for utilization-based forecasting, not "capacity of
+     * sections that had at least one student"). The enrollment/enrollments
+     * side is therefore `leftJoin`ed, with the "not dropped" / "not
+     * terminal" filters moved onto the join's own `ON` clause instead of a
+     * top-level `where()` — a `where()` there would silently turn the left
+     * join back into an inner join by rejecting every row whose `es`/`e`
+     * columns came back NULL, which is exactly the zero-enrollment case this
+     * is meant to keep. `COUNT(DISTINCT e.student_id)` naturally ignores
+     * those NULLs, so a section with no live enrollment contributes 0 to
+     * `enrolled_count` while still counting itself and its capacity.
+     *
      * A section with no `section_plan_id` (nullable — e.g. a section built
      * outside `StudentRosterSeeder::seedSectionHistory()`) is excluded by
      * the inner join to `academic_term_section_plans`: there is nowhere
@@ -137,14 +151,18 @@ final class DeriveSectionDemandObservations
      */
     private function sectionLevelQuery(?AcademicTerm $term): Builder
     {
-        return DB::table('enrollment_subjects as es')
-            ->join('sections as sec', 'sec.id', '=', 'es.section_id')
+        return DB::table('sections as sec')
             ->join('academic_term_section_plans as atsp', 'atsp.id', '=', 'sec.section_plan_id')
             ->join('curricula as c', 'c.id', '=', 'atsp.curriculum_id')
             ->join('programs as p', 'p.id', '=', 'c.program_id')
-            ->join('enrollments as e', 'e.id', '=', 'es.enrollment_id')
-            ->where('es.status', '!=', EnrollmentSubjectStatus::Dropped->value)
-            ->whereNotIn('e.status', EnrollmentStatus::terminalValues())
+            ->leftJoin('enrollment_subjects as es', function ($join): void {
+                $join->on('es.section_id', '=', 'sec.id')
+                    ->where('es.status', '!=', EnrollmentSubjectStatus::Dropped->value);
+            })
+            ->leftJoin('enrollments as e', function ($join): void {
+                $join->on('e.id', '=', 'es.enrollment_id')
+                    ->whereNotIn('e.status', EnrollmentStatus::terminalValues());
+            })
             ->whereNotNull('p.college')
             ->when($term?->id, fn ($query, int $termId) => $query->where('sec.academic_term_id', $termId))
             ->groupBy(['sec.academic_term_id', 'c.program_id', 'atsp.curriculum_id', 'sec.subject_id', 'p.college', 'atsp.year_level', 'sec.id'])
