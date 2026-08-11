@@ -18,6 +18,7 @@ use App\Models\CurriculumSubject;
 use App\Models\Program;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\StudentSchedulePreference;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -236,6 +237,47 @@ final class EnrollmentBlocksEndpointTest extends TestCase
 
         $response->assertJsonPath('data.0.is_selectable', true);
         $response->assertJsonPath('data.0.subjects.0.professor_name', null);
+    }
+
+    public function test_a_student_without_a_saved_preference_still_receives_every_block_with_a_null_score(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id);
+
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.preference_score', null);
+        $response->assertJsonPath('data.0.preference_reasons', []);
+    }
+
+    public function test_a_saved_preference_scores_a_matching_block_higher(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101', [
+            'schedule_days' => 'MWF', 'starts_at_time' => '09:00:00', 'ends_at_time' => '10:00:00',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        StudentSchedulePreference::create([
+            'student_id' => $student->id,
+            'preferred_days' => [1, 3, 5],
+            'preferred_time_block' => 'morning',
+            'max_days_on_campus' => 3,
+            'avoid_early_first_class' => true,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id);
+
+        $response->assertJsonCount(1, 'data');
+        self::assertGreaterThan(0, $response->json('data.0.preference_score'));
+        self::assertContains('No class before 8:00 AM', $response->json('data.0.preference_reasons'));
     }
 
     public function test_a_non_block_exclusive_section_does_not_appear_as_a_block(): void

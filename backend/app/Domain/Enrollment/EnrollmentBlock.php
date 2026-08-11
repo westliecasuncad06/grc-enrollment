@@ -13,12 +13,19 @@ use App\Models\Section;
  * binding constraint, since enrolling in the block means enrolling in
  * every subject at once. A block with one full section is not selectable
  * even if its other six sections have plenty of seats.
+ *
+ * `preferenceScore`/`preferenceReasons` are purely informational —
+ * `SchedulePreferenceScorer::score()`'s rating of this block's sections
+ * against the caller's `StudentSchedulePreference`. They never affect
+ * `isSelectable`, `seatsRemaining`, or block membership; `preferenceScore`
+ * is `null` when the student has no saved preference.
  */
 final readonly class EnrollmentBlock
 {
     /**
      * @param  list<Section>  $sections
      * @param  list<array{code: string, message: string}>  $reasons
+     * @param  list<string>  $preferenceReasons
      */
     public function __construct(
         public string $blockCode,
@@ -30,5 +37,7 @@ final readonly class EnrollmentBlock
         public int $seatsRemaining,
         public bool $isSelectable,
         public array $reasons,
+        public ?int $preferenceScore = null,
+        public array $preferenceReasons = [],
     ) {}
 }

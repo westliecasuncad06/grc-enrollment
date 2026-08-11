@@ -25,6 +25,8 @@ final class EligibleSubjectResource extends JsonResource
      *     is_required: bool,
      *     is_eligible: bool,
      *     reasons: list<array{code: string, message: string}>,
+     *     preference_score: ?int,
+     *     preference_reasons: list<string>,
      *     available_sections: mixed
      * }
      */
@@ -41,6 +43,8 @@ final class EligibleSubjectResource extends JsonResource
             'is_required' => $this->resource->placement->is_required,
             'is_eligible' => $this->resource->isEligible,
             'reasons' => $this->resource->reasons,
+            'preference_score' => $this->resource->preferenceScore,
+            'preference_reasons' => $this->resource->preferenceReasons,
             'available_sections' => SectionResource::collection($this->resource->availableSections),
         ];
     }

@@ -29,6 +29,8 @@ final class EnrollmentBlockResource extends JsonResource
      *     capacity: ?int,
      *     is_selectable: bool,
      *     reasons: list<array{code: string, message: string}>,
+     *     preference_score: ?int,
+     *     preference_reasons: list<string>,
      *     subjects: list<array{
      *         section_id: int,
      *         subject_id: int,
@@ -62,6 +64,8 @@ final class EnrollmentBlockResource extends JsonResource
             'capacity' => count($capacities) === 1 ? $capacities[0] : null,
             'is_selectable' => $this->resource->isSelectable,
             'reasons' => $this->resource->reasons,
+            'preference_score' => $this->resource->preferenceScore,
+            'preference_reasons' => $this->resource->preferenceReasons,
             'subjects' => array_map(fn (Section $section): array => [
                 'section_id' => $section->id,
                 'subject_id' => $section->subject_id,

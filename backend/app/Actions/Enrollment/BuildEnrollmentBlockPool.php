@@ -8,6 +8,7 @@ use App\Domain\Academic\PrerequisiteVerdict;
 use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentBlock;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\SchedulePreferenceScorer;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
@@ -15,6 +16,7 @@ use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\StudentSchedulePreference;
 
 /**
  * The blocks a regular student may choose from: every section their
@@ -58,6 +60,10 @@ final readonly class BuildEnrollmentBlockPool
 
         $alreadyEnrolled = $this->hasActiveEnrollmentThisTerm($student->id, $term->id);
 
+        // Loaded once for the whole pool, not per block — one row per
+        // student, and every block is scored against the same preference.
+        $preference = StudentSchedulePreference::query()->where('student_id', $student->id)->first();
+
         $blocks = $sections
             ->groupBy('section_code')
             ->map(fn ($blockSections, string $blockCode): EnrollmentBlock => $this->buildBlock(
@@ -66,6 +72,7 @@ final readonly class BuildEnrollmentBlockPool
                 array_values($blockSections->all()),
                 $context->viewerWindowIsOpen,
                 $alreadyEnrolled,
+                $preference,
             ));
 
         return array_values($blocks->all());
@@ -80,6 +87,7 @@ final readonly class BuildEnrollmentBlockPool
         array $sections,
         bool $windowIsOpen,
         bool $alreadyEnrolled,
+        ?StudentSchedulePreference $preference,
     ): EnrollmentBlock {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
@@ -157,6 +165,8 @@ final readonly class BuildEnrollmentBlockPool
         $yearLevel = $sectionPlan !== null ? $sectionPlan->year_level : $student->year_level;
         $curriculumId = $sectionPlan !== null ? $sectionPlan->curriculum_id : $student->curriculum_id;
 
+        $scoring = SchedulePreferenceScorer::score($preference, $this->scorableSections($sections));
+
         return new EnrollmentBlock(
             blockCode: $blockCode,
             yearLevel: $yearLevel,
@@ -167,6 +177,28 @@ final readonly class BuildEnrollmentBlockPool
             seatsRemaining: max(0, $seatsRemaining),
             isSelectable: $reasons === [],
             reasons: $reasons,
+            preferenceScore: $scoring['score'],
+            preferenceReasons: $scoring['reasons'],
+        );
+    }
+
+    /**
+     * Adapts `list<Section>` to `SchedulePreferenceScorer::score()`'s plain
+     * `SectionConflictDetector`-shaped rows — additive only, this never
+     * changes what `$sections` itself contains.
+     *
+     * @param  list<Section>  $sections
+     * @return list<array{schedule_days: ?string, starts_at_time: ?string, modality: ?string}>
+     */
+    private function scorableSections(array $sections): array
+    {
+        return array_map(
+            fn (Section $section): array => [
+                'schedule_days' => $section->schedule_days,
+                'starts_at_time' => $section->starts_at_time,
+                'modality' => $section->modality?->value,
+            ],
+            $sections,
         );
     }
 

@@ -10,6 +10,7 @@ use App\Domain\Enrollment\EligibleSubjectEntry;
 use App\Domain\Enrollment\EnrollmentAccessContext;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Enrollment\SchedulePreferenceScorer;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
@@ -17,6 +18,7 @@ use App\Models\CurriculumSubject;
 use App\Models\EnrollmentSubject;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\StudentSchedulePreference;
 
 /**
  * DFD 2.2 "Validate Capacities and Prerequisites": cross-references
@@ -55,8 +57,12 @@ final readonly class BuildEligibleSubjectPool
         // is a property of the term, not of any single placement.
         $context = $this->accessContext->execute($term, $student);
 
+        // Loaded once for the whole pool, not per placement — one row per
+        // student, and every entry is scored against the same preference.
+        $preference = StudentSchedulePreference::query()->where('student_id', $student->id)->first();
+
         return array_values(array_map(
-            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context),
+            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference),
             $placements->all(),
         ));
     }
@@ -66,6 +72,7 @@ final readonly class BuildEligibleSubjectPool
         AcademicTerm $term,
         CurriculumSubject $placement,
         EnrollmentAccessContext $context,
+        ?StudentSchedulePreference $preference,
     ): EligibleSubjectEntry {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
@@ -148,12 +155,36 @@ final readonly class BuildEligibleSubjectPool
             $reasons[] = ['code' => 'eligible', 'message' => 'All curriculum and prerequisite requirements are met.'];
         }
 
+        $scoring = SchedulePreferenceScorer::score($preference, $this->scorableSections($availableSections));
+
         return new EligibleSubjectEntry(
             subject: $placement->subject,
             placement: $placement,
             isEligible: ! $excluded,
             reasons: $reasons,
             availableSections: $availableSections,
+            preferenceScore: $scoring['score'],
+            preferenceReasons: $scoring['reasons'],
+        );
+    }
+
+    /**
+     * Adapts `list<Section>` to `SchedulePreferenceScorer::score()`'s plain
+     * `SectionConflictDetector`-shaped rows — additive only, this never
+     * changes what `$availableSections` itself contains.
+     *
+     * @param  list<Section>  $sections
+     * @return list<array{schedule_days: ?string, starts_at_time: ?string, modality: ?string}>
+     */
+    private function scorableSections(array $sections): array
+    {
+        return array_map(
+            fn (Section $section): array => [
+                'schedule_days' => $section->schedule_days,
+                'starts_at_time' => $section->starts_at_time,
+                'modality' => $section->modality?->value,
+            ],
+            $sections,
         );
     }
 
