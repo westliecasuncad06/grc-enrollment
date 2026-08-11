@@ -17,6 +17,33 @@ import { authenticateViaApi } from "../fixtures/auth"
 // exercised by the backend's own Policy test suite, not duplicated here.
 
 test.describe("cross-role authorization", () => {
+  test("access matrix — IT Control can open only its three assigned workspaces", async ({
+    page,
+    request,
+  }) => {
+    await authenticateViaApi(page, request, "it_admin")
+    await page.goto("/portal")
+
+    const navigation = page.getByRole("navigation", {
+      name: "Role portal navigation",
+    })
+    await expect(navigation.getByRole("link")).toHaveCount(4)
+    await expect(
+      navigation.getByRole("link", { name: "Student Accounts" }),
+    ).toBeVisible()
+    await expect(
+      navigation.getByRole("link", { name: "Faculty Accounts" }),
+    ).toBeVisible()
+    await expect(
+      navigation.getByRole("link", { name: "Enrollment Overrides" }),
+    ).toBeVisible()
+
+    await page.goto("/portal/it-control-enrollment-override")
+    await expect(
+      page.getByRole("heading", { name: "Enrollment overrides" }),
+    ).toBeVisible()
+  })
+
   test("journey 10 — a Student cannot reach a Faculty-only workspace", async ({
     page,
     request,

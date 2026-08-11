@@ -2,6 +2,21 @@ import { z } from "zod"
 
 const collegeSchema = z.enum(["ccs", "coe", "coa", "cbae"])
 const accountStatusSchema = z.enum(["active", "disabled"])
+const automationStepSchema = z.enum([
+  "chair_generate_sections",
+  "dean_approve_all",
+  "executive_publish_all",
+  "students_auto_enroll",
+  "registrar_approve_all",
+  "cashier_confirm_all",
+])
+const automationRunStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "partial",
+  "failed",
+])
 
 const paginationLinksSchema = z
   .object({
@@ -78,6 +93,31 @@ export const itControlFacultyAccountSchema = z
   })
   .strict()
 
+export const itControlAutomationRunSchema = z
+  .object({
+    type: z.literal("it-control-automation-run"),
+    id: z.number().int().positive(),
+    step: automationStepSchema,
+    academic_term_id: z.number().int().positive(),
+    status: automationRunStatusSchema,
+    processed_count: z.number().int().nonnegative(),
+    failed_count: z.number().int().nonnegative(),
+    warnings: z.array(z.string().min(1)),
+    error_summary: z.string().min(1).nullable(),
+    started_at: z.string().datetime({ offset: true }).nullable(),
+    completed_at: z.string().datetime({ offset: true }).nullable(),
+    created_at: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict()
+
+export const itControlAutomationRunResponseSchema = z
+  .object({ data: itControlAutomationRunSchema })
+  .strict()
+
+export const itControlAutomationRunsSchema = z
+  .object({ data: z.array(itControlAutomationRunSchema) })
+  .passthrough()
+
 function paginatedSchema<Item extends z.ZodType>(itemSchema: Item) {
   return z
     .object({
@@ -143,6 +183,13 @@ export type ItControlStudentAccount = z.infer<
 >
 export type ItControlFacultyAccount = z.infer<
   typeof itControlFacultyAccountSchema
+>
+export type ItControlAutomationRun = z.infer<
+  typeof itControlAutomationRunSchema
+>
+export type ItControlAutomationStep = z.infer<typeof automationStepSchema>
+export type ItControlAutomationRunStatus = z.infer<
+  typeof automationRunStatusSchema
 >
 export type PaginatedItControlStudentAccounts = z.infer<
   typeof paginatedItControlStudentAccountsSchema

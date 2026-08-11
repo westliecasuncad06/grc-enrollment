@@ -30,7 +30,7 @@ import { PolicySettingsWorkspace } from "@/features/components/portal/policy-set
 import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-operations-workspace"
 import { ItControlStudentsWorkspace } from "@/features/components/portal/it-control-students-workspace"
 import { ItControlFacultyWorkspace } from "@/features/components/portal/it-control-faculty-workspace"
-import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -143,10 +143,7 @@ const academicTermWorkspace: PortalModuleComponent = () => (
   <AcademicTermWorkspace />
 )
 const enrollmentOverrideWorkspace: PortalModuleComponent = () => (
-  <WorkspacePage
-    title="Enrollment overrides"
-    description="Enrollment override controls will appear here when their authorized API workflow is available."
-  />
+  <ItControlEnrollmentOverrideWorkspace />
 )
 const scheduleFacultyLoadingWorkspace: PortalModuleComponent = () => (
   <ScheduleFacultyLoadingWorkspace />

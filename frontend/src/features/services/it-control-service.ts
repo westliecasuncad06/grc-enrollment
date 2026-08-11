@@ -1,8 +1,12 @@
 import {
   facultyAccountFiltersSchema,
+  itControlAutomationRunResponseSchema,
+  itControlAutomationRunsSchema,
   paginatedItControlFacultyAccountsSchema,
   paginatedItControlStudentAccountsSchema,
   studentAccountFiltersSchema,
+  type ItControlAutomationRun,
+  type ItControlAutomationStep,
   type FacultyAccountFilters,
   type PaginatedItControlFacultyAccounts,
   type PaginatedItControlStudentAccounts,
@@ -11,10 +15,13 @@ import {
 import {
   ApiClientError,
   getAuthenticatedJson,
+  postAuthenticatedJson,
 } from "@/features/services/api-client"
 
 export const IT_CONTROL_STUDENTS_PATH = "/api/v1/it-control/students"
 export const IT_CONTROL_FACULTY_PATH = "/api/v1/it-control/faculty"
+export const IT_CONTROL_AUTOMATION_RUNS_PATH =
+  "/api/v1/it-control/automation-runs"
 
 function parse<T>(
   schema: {
@@ -71,4 +78,43 @@ export async function getItControlFacultyAccounts(
     await getAuthenticatedJson(`${IT_CONTROL_FACULTY_PATH}?${query}`, signal),
     "faculty account list",
   )
+}
+
+export async function getItControlAutomationRuns(
+  signal?: AbortSignal,
+): Promise<ItControlAutomationRun[]> {
+  return parse(
+    itControlAutomationRunsSchema,
+    await getAuthenticatedJson(IT_CONTROL_AUTOMATION_RUNS_PATH, signal),
+    "automation run list",
+  ).data
+}
+
+export async function getItControlAutomationRun(
+  id: number,
+  signal?: AbortSignal,
+): Promise<ItControlAutomationRun> {
+  return parse(
+    itControlAutomationRunResponseSchema,
+    await getAuthenticatedJson(
+      `${IT_CONTROL_AUTOMATION_RUNS_PATH}/${id}`,
+      signal,
+    ),
+    "automation run",
+  ).data
+}
+
+export async function createItControlAutomationRun(
+  step: ItControlAutomationStep,
+  signal?: AbortSignal,
+): Promise<ItControlAutomationRun> {
+  return parse(
+    itControlAutomationRunResponseSchema,
+    await postAuthenticatedJson(
+      IT_CONTROL_AUTOMATION_RUNS_PATH,
+      { step },
+      signal,
+    ),
+    "automation run",
+  ).data
 }
