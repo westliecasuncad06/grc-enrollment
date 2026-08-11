@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
+import { axe } from "vitest-axe"
 
 import { EnrollmentSubjectFilterBar } from "@/features/components/portal/enrollment-subject-filter-bar"
 import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
@@ -168,5 +169,25 @@ describe("EnrollmentSubjectFilterBar", () => {
       screen.getByText("No subjects match the current filters."),
     ).toBeInTheDocument()
     expect(screen.queryByText("IT305")).not.toBeInTheDocument()
+  })
+
+  it("has no detectable accessibility violations", async () => {
+    const subjects = [
+      subject({
+        subject_id: 1,
+        code: "IT305",
+        title: "Systems Integration",
+        preference_score: 40,
+      }),
+      subject({
+        subject_id: 2,
+        code: "IT402",
+        title: "Advanced Systems",
+        preference_score: null,
+      }),
+    ]
+    const { container } = renderBar(subjects)
+
+    expect(await axe(container)).toHaveNoViolations()
   })
 })
