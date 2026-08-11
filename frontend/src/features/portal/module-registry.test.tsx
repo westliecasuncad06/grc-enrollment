@@ -51,13 +51,16 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "institution-dashboard": "Institution dashboard",
   "stuck-students": "Stuck students",
   "policy-settings": "Policy settings",
+  "it-control-students": "IT Control student accounts",
+  "it-control-faculty": "IT Control faculty accounts",
+  "it-control-enrollment-override": "Enrollment overrides",
 }
 
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the thirty-five role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(35)
+  it("dispatches exactly the thirty-eight role-owned connected module IDs", () => {
+    expect(connectedModuleIds).toHaveLength(38)
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )

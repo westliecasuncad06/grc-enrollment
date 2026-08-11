@@ -62,9 +62,24 @@ const expectedModuleIds = {
     "enrollment-documents",
   ],
   accounting_staff: ["payment-queue", "payment-records"],
+  it_admin: [
+    "it-control-students",
+    "it-control-faculty",
+    "it-control-enrollment-override",
+  ],
 } as const
 
 describe("rolePortalDefinitions", () => {
+  it("exposes the three IT control modules in order", () => {
+    expect(
+      rolePortalDefinitions.it_admin.modules.map((module) => module.id),
+    ).toEqual([
+      "it-control-students",
+      "it-control-faculty",
+      "it-control-enrollment-override",
+    ])
+  })
+
   it("covers every demo role with the approved ordered module IDs", () => {
     expect(Object.keys(rolePortalDefinitions)).toEqual(userRoles)
 

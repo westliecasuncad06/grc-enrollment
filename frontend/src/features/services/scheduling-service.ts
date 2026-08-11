@@ -44,6 +44,7 @@ const legalActions: Record<
   registrar_head: { published: ["close"] },
   registrar_staff: {},
   accounting_staff: {},
+  it_admin: {},
 }
 
 export function availableScheduleActions(

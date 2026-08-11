@@ -28,6 +28,9 @@ import { InstitutionDashboardWorkspace } from "@/features/components/portal/inst
 import { StuckStudentsWorkspace } from "@/features/components/portal/stuck-students-workspace"
 import { PolicySettingsWorkspace } from "@/features/components/portal/policy-settings-workspace"
 import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-operations-workspace"
+import { ItControlStudentsWorkspace } from "@/features/components/portal/it-control-students-workspace"
+import { ItControlFacultyWorkspace } from "@/features/components/portal/it-control-faculty-workspace"
+import { WorkspacePage } from "@/features/components/portal/workspace-page"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -65,6 +68,9 @@ export type ConnectedModuleId =
   | "stuck-students"
   | "policy-settings"
   | "academic-terms"
+  | "it-control-students"
+  | "it-control-faculty"
+  | "it-control-enrollment-override"
 
 export type PortalModuleComponent = ComponentType
 
@@ -104,6 +110,9 @@ export const connectedModuleIds = [
   "stuck-students",
   "policy-settings",
   "academic-terms",
+  "it-control-students",
+  "it-control-faculty",
+  "it-control-enrollment-override",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
@@ -132,6 +141,12 @@ const programChairEnrollmentWorkspace: PortalModuleComponent = () => (
 )
 const academicTermWorkspace: PortalModuleComponent = () => (
   <AcademicTermWorkspace />
+)
+const enrollmentOverrideWorkspace: PortalModuleComponent = () => (
+  <WorkspacePage
+    title="Enrollment overrides"
+    description="Enrollment override controls will appear here when their authorized API workflow is available."
+  />
 )
 const scheduleFacultyLoadingWorkspace: PortalModuleComponent = () => (
   <ScheduleFacultyLoadingWorkspace />
@@ -208,6 +223,9 @@ export const connectedModuleRegistry: Readonly<
   "stuck-students": StuckStudentsWorkspace,
   "policy-settings": PolicySettingsWorkspace,
   "academic-terms": academicTermWorkspace,
+  "it-control-students": ItControlStudentsWorkspace,
+  "it-control-faculty": ItControlFacultyWorkspace,
+  "it-control-enrollment-override": enrollmentOverrideWorkspace,
 }
 
 export function isConnectedModuleId(

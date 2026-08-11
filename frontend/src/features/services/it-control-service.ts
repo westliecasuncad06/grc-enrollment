@@ -1,0 +1,74 @@
+import {
+  facultyAccountFiltersSchema,
+  paginatedItControlFacultyAccountsSchema,
+  paginatedItControlStudentAccountsSchema,
+  studentAccountFiltersSchema,
+  type FacultyAccountFilters,
+  type PaginatedItControlFacultyAccounts,
+  type PaginatedItControlStudentAccounts,
+  type StudentAccountFilters,
+} from "@/features/schemas/it-control-schema"
+import {
+  ApiClientError,
+  getAuthenticatedJson,
+} from "@/features/services/api-client"
+
+export const IT_CONTROL_STUDENTS_PATH = "/api/v1/it-control/students"
+export const IT_CONTROL_FACULTY_PATH = "/api/v1/it-control/faculty"
+
+function parse<T>(
+  schema: {
+    safeParse: (
+      value: unknown,
+    ) => { success: true; data: T } | { success: false; error: unknown }
+  },
+  payload: unknown,
+  label: string,
+): T {
+  const result = schema.safeParse(payload)
+  if (result.success) return result.data
+
+  throw new ApiClientError({
+    kind: "contract",
+    message: `The API responded, but its ${label} did not match the published v1 contract.`,
+    cause: result.error,
+  })
+}
+
+function queryString(filters: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined) query.set(key, String(value))
+  }
+
+  return query.toString()
+}
+
+export async function getItControlStudentAccounts(
+  filters: StudentAccountFilters,
+  signal?: AbortSignal,
+): Promise<PaginatedItControlStudentAccounts> {
+  const parsed = parse(studentAccountFiltersSchema, filters, "student filters")
+  const query = queryString(parsed)
+
+  return parse(
+    paginatedItControlStudentAccountsSchema,
+    await getAuthenticatedJson(`${IT_CONTROL_STUDENTS_PATH}?${query}`, signal),
+    "student account list",
+  )
+}
+
+export async function getItControlFacultyAccounts(
+  filters: FacultyAccountFilters,
+  signal?: AbortSignal,
+): Promise<PaginatedItControlFacultyAccounts> {
+  const parsed = parse(facultyAccountFiltersSchema, filters, "faculty filters")
+  const query = queryString(parsed)
+
+  return parse(
+    paginatedItControlFacultyAccountsSchema,
+    await getAuthenticatedJson(`${IT_CONTROL_FACULTY_PATH}?${query}`, signal),
+    "faculty account list",
+  )
+}
