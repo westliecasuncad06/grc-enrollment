@@ -13,6 +13,8 @@ use App\Domain\ItControl\AutomationRunStatus;
 use App\Domain\ItControl\AutomationStep;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Jobs\RunItControlAutomationStep;
 use App\Models\AcademicTerm;
@@ -33,6 +35,7 @@ use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
+use Illuminate\Events\Dispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -238,9 +241,15 @@ final class AutomationStepsTest extends TestCase
     {
         $this->makeTermAndItAdmin();
         $this->makeProgramChairs();
-        $this->makeDraftCcsPlans(201);
+        $this->makeViableCcsPlans(201);
+        foreach (['coe', 'coa', 'cbae'] as $college) {
+            $this->makeViablePlanForCollege($college);
+        }
         Http::fake(fn () => Http::response(['data' => ['service' => 'grc-prediction-service', 'status' => 'ok', 'schema_version' => 'v1']], 200));
 
+        $connection = DB::connection();
+        $eventDispatcher = $connection->getEventDispatcher();
+        $connection->setEventDispatcher(new Dispatcher(app()));
         DB::listen(static function ($query): void {
             if (str_contains($query->sql, 'select `curriculum_id` from `academic_term_section_plans`')
                 && ! str_contains($query->sql, 'limit 200')) {
@@ -251,10 +260,23 @@ final class AutomationStepsTest extends TestCase
         try {
             $run = $this->runStep(AutomationStep::ChairGenerateSections);
         } finally {
-            DB::purge();
+            $connection->setEventDispatcher($eventDispatcher);
         }
 
         $this->assertContains($run->status, [AutomationRunStatus::Succeeded, AutomationRunStatus::Partial]);
+        $this->assertSame(204, $run->processed_count, implode(' ', $run->warnings ?? []));
+        $this->assertSame(0, $run->failed_count, implode(' ', $run->warnings ?? []));
+        $this->assertDatabaseHas('schedule_proposals', [
+            'academic_term_id' => $this->term->id,
+            'college' => 'ccs',
+            'submitted_by' => User::where('email', 'ccs.chair@grc.test')->sole()->id,
+            'status' => 'draft',
+        ]);
+        $this->assertSame(804, AcademicTermSectionPlan::query()->where('academic_term_id', $this->term->id)->where('college', 'ccs')->where('status', SectionPlanStatus::Submitted->value)->count());
+        $this->assertDatabaseHas('academic_term_section_plans', ['academic_term_id' => $this->term->id, 'curriculum_id' => 200, 'status' => SectionPlanStatus::Submitted->value]);
+        $this->assertDatabaseHas('academic_term_section_plans', ['academic_term_id' => $this->term->id, 'curriculum_id' => 201, 'status' => SectionPlanStatus::Submitted->value]);
+        $this->assertDatabaseHas('sections', ['academic_term_id' => $this->term->id, 'section_plan_id' => 800, 'status' => SectionStatus::Planned->value]);
+        $this->assertDatabaseHas('sections', ['academic_term_id' => $this->term->id, 'section_plan_id' => 804, 'status' => SectionStatus::Planned->value]);
     }
 
     private function openEnrollmentTerm(): void
@@ -423,8 +445,11 @@ final class AutomationStepsTest extends TestCase
         return [$curriculum, $subjects];
     }
 
-    private function makeDraftCcsPlans(int $count): void
+    private function makeViableCcsPlans(int $count): void
     {
+        $subject = Subject::create(['code' => 'VPLN101', 'title' => 'Viable plan subject', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $faculty = User::create(['name' => 'Viable Plan Faculty', 'email' => 'viable.plan.faculty@grc.test', 'password' => 'password', 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+
         foreach (range(1, $count) as $number) {
             $program = Program::create([
                 'code' => sprintf('C%03d', $number),
@@ -438,14 +463,68 @@ final class AutomationStepsTest extends TestCase
                 'effective_school_year' => '2027-2028',
                 'status' => CurriculumStatus::Active,
             ]);
-            AcademicTermSectionPlan::create([
+            foreach (range(1, 4) as $yearLevel) {
+                $plan = AcademicTermSectionPlan::create([
+                    'academic_term_id' => $this->term->id,
+                    'curriculum_id' => $curriculum->id,
+                    'college' => 'ccs',
+                    'year_level' => $yearLevel,
+                    'section_count' => 1,
+                    'students_per_block' => 40,
+                    'status' => SectionPlanStatus::Draft,
+                ]);
+                Section::create([
+                    'academic_term_id' => $this->term->id,
+                    'section_plan_id' => $plan->id,
+                    'subject_id' => $subject->id,
+                    'section_code' => "V{$number}-{$yearLevel}",
+                    'professor_id' => $faculty->id,
+                    'schedule_days' => 'M',
+                    'starts_at_time' => '08:00:00',
+                    'ends_at_time' => '09:00:00',
+                    'room' => 'V-101',
+                    'modality' => SectionModality::FaceToFace,
+                    'capacity' => 40,
+                    'enrolled_count' => 0,
+                    'is_block_exclusive' => true,
+                    'status' => SectionStatus::Planned,
+                ]);
+            }
+        }
+    }
+
+    private function makeViablePlanForCollege(string $college): void
+    {
+        $subject = Subject::query()->where('code', 'VPLN101')->sole();
+        $faculty = User::query()->where('email', 'viable.plan.faculty@grc.test')->sole();
+        $program = Program::create(['code' => strtoupper($college), 'college' => $college, 'name' => strtoupper($college).' viable program', 'status' => ProgramStatus::Active]);
+        $curriculum = Curriculum::create(['program_id' => $program->id, 'name' => strtoupper($college).' viable curriculum', 'effective_school_year' => '2027-2028', 'status' => CurriculumStatus::Active]);
+
+        foreach (range(1, 4) as $yearLevel) {
+            $plan = AcademicTermSectionPlan::create([
                 'academic_term_id' => $this->term->id,
                 'curriculum_id' => $curriculum->id,
-                'college' => 'ccs',
-                'year_level' => 1,
+                'college' => $college,
+                'year_level' => $yearLevel,
                 'section_count' => 1,
                 'students_per_block' => 40,
-                'status' => 'draft',
+                'status' => SectionPlanStatus::Draft,
+            ]);
+            Section::create([
+                'academic_term_id' => $this->term->id,
+                'section_plan_id' => $plan->id,
+                'subject_id' => $subject->id,
+                'section_code' => strtoupper($college)."-{$yearLevel}",
+                'professor_id' => $faculty->id,
+                'schedule_days' => 'M',
+                'starts_at_time' => '08:00:00',
+                'ends_at_time' => '09:00:00',
+                'room' => 'V-101',
+                'modality' => SectionModality::FaceToFace,
+                'capacity' => 40,
+                'enrolled_count' => 0,
+                'is_block_exclusive' => true,
+                'status' => SectionStatus::Planned,
             ]);
         }
     }
