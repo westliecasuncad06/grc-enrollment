@@ -55,6 +55,13 @@ final class RunItControlAutomationStepTest extends TestCase
             'initiated_by' => $this->makeUser()->id,
         ]);
         $job = new RunItControlAutomationStep($run->id);
+        User::create([
+            'name' => 'Dean',
+            'email' => 'dean@grc.test',
+            'password' => 'password',
+            'role' => UserRole::Dean,
+            'status' => UserStatus::Active,
+        ]);
 
         ItControlAutomationRun::updating(static function (ItControlAutomationRun $updatingRun): void {
             if ($updatingRun->status === AutomationRunStatus::Succeeded) {

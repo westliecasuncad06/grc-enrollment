@@ -2,7 +2,14 @@
 
 namespace App\Jobs;
 
+use App\Actions\ItControl\RunCashierConfirmAll;
+use App\Actions\ItControl\RunChairGenerateSections;
+use App\Actions\ItControl\RunDeanApproveAll;
+use App\Actions\ItControl\RunExecutivePublishAll;
+use App\Actions\ItControl\RunRegistrarApproveAll;
+use App\Actions\ItControl\RunStudentsAutoEnroll;
 use App\Domain\ItControl\AutomationRunStatus;
+use App\Domain\ItControl\AutomationStep;
 use App\Models\ItControlAutomationRun;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,6 +29,9 @@ final class RunItControlAutomationStep implements ShouldQueue
 
     public function handle(): void
     {
+        if (! app()->environment(['local', 'testing'])) {
+            throw new \LogicException('IT-control automation writes are restricted to local and testing environments.');
+        }
         $run = ItControlAutomationRun::query()->find($this->automationRunId);
 
         if ($run === null || $run->status !== AutomationRunStatus::Queued) {
@@ -34,14 +44,14 @@ final class RunItControlAutomationStep implements ShouldQueue
         ]);
 
         try {
-            // Task 4 deliberately tracks the lifecycle only. Task 5 supplies
-            // the business action selected by the persisted step.
+            $this->actionFor($run->step)->execute($run);
+            $run->refresh();
             $run->update([
-                'status' => AutomationRunStatus::Succeeded,
+                'status' => $run->failed_count === 0 ? AutomationRunStatus::Succeeded : AutomationRunStatus::Partial,
                 'completed_at' => now(),
             ]);
         } catch (Throwable $exception) {
-            $this->persistFailure();
+            $this->persistFailure($exception);
 
             throw $exception;
         }
@@ -49,10 +59,10 @@ final class RunItControlAutomationStep implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        $this->persistFailure();
+        $this->persistFailure($exception);
     }
 
-    private function persistFailure(): void
+    private function persistFailure(?Throwable $exception = null): void
     {
         $run = ItControlAutomationRun::query()->find($this->automationRunId);
 
@@ -62,8 +72,22 @@ final class RunItControlAutomationStep implements ShouldQueue
 
         $run->update([
             'status' => AutomationRunStatus::Failed,
-            'error_summary' => 'IT-control automation run failed. Review the run details and retry.',
+            'error_summary' => $exception !== null && str_contains(strtolower($exception->getMessage()), 'prediction service')
+                ? 'prediction service is unavailable. Review the service connection and retry.'
+                : 'IT-control automation run failed. Review the run details and retry.',
             'completed_at' => now(),
         ]);
+    }
+
+    private function actionFor(AutomationStep $step): object
+    {
+        return match ($step) {
+            AutomationStep::ChairGenerateSections => app(RunChairGenerateSections::class),
+            AutomationStep::DeanApproveAll => app(RunDeanApproveAll::class),
+            AutomationStep::ExecutivePublishAll => app(RunExecutivePublishAll::class),
+            AutomationStep::StudentsAutoEnroll => app(RunStudentsAutoEnroll::class),
+            AutomationStep::RegistrarApproveAll => app(RunRegistrarApproveAll::class),
+            AutomationStep::CashierConfirmAll => app(RunCashierConfirmAll::class),
+        };
     }
 }
