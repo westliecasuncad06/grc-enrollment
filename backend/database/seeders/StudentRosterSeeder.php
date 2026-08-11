@@ -764,7 +764,7 @@ final class StudentRosterSeeder extends Seeder
         }
 
         $this->rewriteGradesToFailing($candidates);
-        $this->reclassifyIfTermIsOngoing();
+        $this->reclassifyAgainstCurrentTerm();
     }
 
     /**
@@ -901,34 +901,30 @@ final class StudentRosterSeeder extends Seeder
     }
 
     /**
-     * `ReclassifyStudentEnrollmentCategory` needs a `semester_ongoing` term
-     * to know which of a student's placements are already "completed", and
-     * `AcademicTermSeeder` deliberately leaves none — a clean seed always
-     * needs the Registrar Head to archive-and-open the next term through
-     * the ordinary workflow first (see that seeder's own docblock). When
-     * that hasn't happened yet, every `enrollment_category` here stays
-     * `null` (the same seed-only sentinel `DemoEnrollmentSeeder` uses) and
-     * this just logs a deferred notice — the actual derivation must run
-     * once a `semester_ongoing` term exists, via the already-shipped
-     * `php artisan students:reclassify` (`ReclassifyStudentEnrollmentCategories`)
-     * command. A later plan (referenced by this task's own brief as "the IT
-     * Control automation") is expected to invoke that same command
-     * automatically ahead of enrollment, but as of this seed it does not
-     * exist yet — deliberately not named here so this notice never promises
-     * automation that isn't wired up.
+     * Classifies the seeded history without mutating the academic-term
+     * lifecycle. An ongoing term remains the authoritative runtime context;
+     * a canonical fresh seed deliberately has none, so its tracked current
+     * slot (2026-2027 1st, `semester_closed`) supplies the semester position
+     * instead. This keeps every fresh-seed category derived from real locked
+     * grades while preserving the Registrar Head's archive/open workflow.
      */
-    private function reclassifyIfTermIsOngoing(): void
+    private function reclassifyAgainstCurrentTerm(): void
     {
         $currentTerm = AcademicTerm::query()
             ->where('status', AcademicTermStatus::SemesterOngoing)
             ->first();
 
         if ($currentTerm === null) {
-            Log::notice(
-                '[StudentRosterSeeder] No semester_ongoing term found — deferring enrollment_category '.
-                'derivation for the roster just seeded. Run `php artisan students:reclassify` once the '.
-                'Registrar Head opens the next term.',
-            );
+            $currentTermId = DB::table('academic_term_current_slots')
+                ->where('id', 1)
+                ->value('academic_term_id');
+            $currentTerm = $currentTermId === null
+                ? null
+                : AcademicTerm::query()->find((int) $currentTermId);
+        }
+
+        if ($currentTerm === null) {
+            Log::notice('[StudentRosterSeeder] No current academic term found — enrollment_category derivation was skipped.');
 
             return;
         }

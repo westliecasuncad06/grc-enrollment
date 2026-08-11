@@ -131,6 +131,14 @@ final class StudentRosterSeederTest extends TestCase
 
         $this->seed(AcademicTermSeeder::class);
         $this->seedSectionHistoryFixtures($curricula);
+
+        User::create([
+            'name' => 'Registrar Head',
+            'email' => 'registrar.head@grc.test',
+            'password' => 'password',
+            'role' => UserRole::RegistrarHead,
+            'status' => UserStatus::Active,
+        ]);
     }
 
     /** @param array<string, Curriculum> $curricula */
@@ -199,7 +207,7 @@ final class StudentRosterSeederTest extends TestCase
 
         $this->assertDatabaseHas('users', ['email' => 's2401455@grc.test', 'role' => 'student', 'status' => 'active']);
         $this->assertDatabaseHas('student_profiles', [
-            'student_number' => '2024-06-01455', 'year_level' => 3, 'entry_year' => 2024, 'enrollment_category' => null,
+            'student_number' => '2024-06-01455', 'year_level' => 3, 'entry_year' => 2024, 'enrollment_category' => 'regular',
         ]);
 
         $user = User::query()->where('email', 's2401455@grc.test')->sole();
@@ -388,15 +396,6 @@ final class StudentRosterSeederTest extends TestCase
             'school_year' => '2026-2027',
             'semester' => '2nd',
             'status' => AcademicTermStatus::SemesterOngoing,
-        ]);
-
-        // A real `semester_ongoing` term makes `reclassifyIfTermIsOngoing()`
-        // run for real (see that method) — it needs a registrar_head user to
-        // attribute the audit trail to, same as the real DatabaseSeeder
-        // chain (RoleUserSeeder) always provides one ahead of this seeder.
-        User::create([
-            'name' => 'Registrar Head', 'email' => 'registrar.head@grc.test',
-            'password' => 'password', 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
         ]);
 
         (new StudentRosterSeeder($this->fixturePath()))->run();
@@ -613,11 +612,29 @@ final class StudentRosterSeederTest extends TestCase
         $this->assertSame($before->all(), $after->all());
     }
 
-    public function test_enrollment_category_stays_null_when_no_term_is_semester_ongoing(): void
+    public function test_fresh_seed_derives_categories_and_includes_ccs_third_year_irregular_students(): void
     {
-        (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        self::assertSame(0, AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->count());
+        self::assertSame(1, AcademicTerm::where('status', AcademicTermStatus::SemesterClosed)->count());
 
-        $this->assertSame(0, StudentProfile::whereNotNull('enrollment_category')->count());
+        (new StudentRosterSeeder($this->ccsThirdYearFixturePath()))->run();
+
+        $this->assertSame(0, StudentProfile::whereNull('enrollment_category')->count());
+        $this->assertGreaterThan(0, StudentProfile::where('enrollment_category', 'regular')->count());
+
+        $ccsThirdYearIrregular = StudentProfile::query()
+            ->where('year_level', 3)
+            ->where('enrollment_category', 'irregular')
+            ->whereHas('program', fn ($query) => $query->where('college', CollegeCode::Ccs))
+            ->get();
+
+        $this->assertNotEmpty($ccsThirdYearIrregular);
+
+        foreach ($ccsThirdYearIrregular as $student) {
+            $this->assertTrue(AcademicGrade::where('student_id', $student->id)
+                ->whereIn('mark', ['5.00', 'INC', 'NC', 'DRP'])
+                ->exists());
+        }
     }
 
     /**
@@ -655,6 +672,11 @@ final class StudentRosterSeederTest extends TestCase
     private function fixturePath(): string
     {
         return __DIR__.'/../../fixtures/students-profile-sample.md';
+    }
+
+    private function ccsThirdYearFixturePath(): string
+    {
+        return __DIR__.'/../../fixtures/students-profile-ccs-third-year-sample.md';
     }
 
     /**
