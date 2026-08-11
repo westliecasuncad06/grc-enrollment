@@ -31,7 +31,7 @@ import {
 } from "@/features/components/ui/card"
 import {
   isActiveItControlAutomationRun,
-  useItControlAutomationRunQuery,
+  useItControlAutomationRunQueries,
   useItControlAutomationRunsQuery,
   useStartItControlAutomationRunMutation,
 } from "@/features/hooks/use-it-control-automation"
@@ -145,29 +145,40 @@ export function ItControlEnrollmentOverrideWorkspace() {
   const [activeRunId, setActiveRunId] = useState<number | null>(null)
   const [overrideOrder, setOverrideOrder] = useState(false)
   const runsQuery = useItControlAutomationRunsQuery(authorized)
-  const reloadedActiveRun = (runsQuery.data ?? []).find((run) =>
-    isActiveItControlAutomationRun(run.status),
+  const activeRunIds = useMemo(
+    () =>
+      [
+        ...(runsQuery.data ?? []),
+        ...(activeRunId === null ? [] : [{ id: activeRunId }]),
+      ]
+        .filter((run) =>
+          "status" in run ? isActiveItControlAutomationRun(run.status) : true,
+        )
+        .map((run) => run.id)
+        .filter((id, index, ids) => ids.indexOf(id) === index),
+    [activeRunId, runsQuery.data],
   )
-  const resolvedActiveRunId = activeRunId ?? reloadedActiveRun?.id ?? null
-  const activeRunQuery = useItControlAutomationRunQuery(
-    resolvedActiveRunId,
+  const activeRunQueries = useItControlAutomationRunQueries(
+    activeRunIds,
     authorized,
   )
   const startRun = useStartItControlAutomationRunMutation()
-  const activeRun = activeRunQuery.data
+  const activeRuns = activeRunQueries.flatMap((query) =>
+    query.data ? [query.data] : [],
+  )
   const runs = useMemo(() => {
     const byStep = latestCompletedRunByStep(runsQuery.data ?? [])
 
-    if (activeRun) byStep.set(activeRun.step, activeRun)
+    for (const activeRun of activeRuns) byStep.set(activeRun.step, activeRun)
 
     return byStep
-  }, [activeRun, runsQuery.data])
+  }, [activeRuns, runsQuery.data])
 
   useEffect(() => {
-    if (activeRun && !isActiveItControlAutomationRun(activeRun.status)) {
+    if (activeRuns.some((run) => !isActiveItControlAutomationRun(run.status))) {
       void runsQuery.refetch()
     }
-  }, [activeRun, runsQuery])
+  }, [activeRuns, runsQuery])
 
   const start = () => {
     if (!pendingStep) return
@@ -190,7 +201,7 @@ export function ItControlEnrollmentOverrideWorkspace() {
       unauthorized={!authorized}
       lastUpdated={Math.max(
         runsQuery.dataUpdatedAt,
-        activeRunQuery.dataUpdatedAt,
+        ...activeRunQueries.map((query) => query.dataUpdatedAt),
       )}
       actions={
         <Button
@@ -203,12 +214,14 @@ export function ItControlEnrollmentOverrideWorkspace() {
         </Button>
       }
     >
-      {(runsQuery.isError || activeRunQuery.isError || startRun.isError) && (
+      {(runsQuery.isError ||
+        activeRunQueries.some((query) => query.isError) ||
+        startRun.isError) && (
         <Alert variant="destructive">
           <AlertTitle>Automation request needs attention</AlertTitle>
           <AlertDescription>
             {runsQuery.error?.message ??
-              activeRunQuery.error?.message ??
+              activeRunQueries.find((query) => query.isError)?.error?.message ??
               startRun.error?.message ??
               "The automation run could not be completed."}
           </AlertDescription>

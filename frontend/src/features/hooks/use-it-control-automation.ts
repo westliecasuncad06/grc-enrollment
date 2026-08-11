@@ -1,9 +1,10 @@
 "use client"
 
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
 import {
+  type ItControlAutomationRun,
   type ItControlAutomationRunStatus,
   type ItControlAutomationStep,
 } from "@/features/schemas/it-control-schema"
@@ -58,6 +59,25 @@ export function useItControlAutomationRunQuery(
     enabled: enabled && session !== null && runId !== null,
     refetchInterval: (query) =>
       isActiveItControlAutomationRun(query.state.data?.status) ? 2_000 : false,
+  })
+}
+
+export function useItControlAutomationRunQueries(
+  runIds: readonly number[],
+  enabled = true,
+) {
+  const { session } = useAuth()
+
+  return useQueries({
+    queries: runIds.map((runId) => ({
+      queryKey: itControlAutomationRunQueryKey(session?.userId ?? null, runId),
+      queryFn: ({ signal }) => getItControlAutomationRun(runId, signal),
+      enabled: enabled && session !== null,
+      refetchInterval: (query: { state: { data?: ItControlAutomationRun } }) =>
+        isActiveItControlAutomationRun(query.state.data?.status)
+          ? 2_000
+          : false,
+    })),
   })
 }
 

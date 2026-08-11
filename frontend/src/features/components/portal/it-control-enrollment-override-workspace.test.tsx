@@ -6,12 +6,12 @@ import { axe } from "vitest-axe"
 import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
 import { renderWithSession } from "@/tests/render-app"
 
-type AutomationRunFixture = {
+interface AutomationRunFixture {
   type: "it-control-automation-run"
   id: number
-  step: "chair_generate_sections"
+  step: "chair_generate_sections" | "dean_approve_all"
   academic_term_id: number
-  status: "queued" | "succeeded"
+  status: "queued" | "running" | "succeeded"
   processed_count: number
   failed_count: number
   warnings: string[]
@@ -172,6 +172,52 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
         expect.anything(),
       ),
     )
+  })
+
+  it("polls every active step returned after reload", async () => {
+    const deanRun: AutomationRunFixture = {
+      ...queuedRun,
+      id: 43,
+      step: "dean_approve_all",
+      status: "running",
+      processed_count: 20,
+    }
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+
+      if (url.endsWith("/automation-runs/42")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: { ...queuedRun, id: 42, processed_count: 10 },
+            }),
+          ),
+        )
+      }
+      if (url.endsWith("/automation-runs/43")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: deanRun })))
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(automationRuns([{ ...queuedRun, id: 42 }, deanRun])),
+        ),
+      )
+    })
+    renderWorkspace()
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/automation-runs/42"),
+        expect.anything(),
+      )
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/automation-runs/43"),
+        expect.anything(),
+      )
+    })
+    expect(await screen.findByText(/10 processed/)).toBeInTheDocument()
+    expect(await screen.findByText(/20 processed/)).toBeInTheDocument()
   })
 
   it("renders the role guard without fetching automation runs for an unauthorized role", () => {
