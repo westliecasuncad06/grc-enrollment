@@ -124,7 +124,7 @@ export function ItControlFacultyWorkspace() {
       unauthorized={!authorized}
       lastUpdated={accountsQuery.dataUpdatedAt}
     >
-      <form onSubmit={form.handleSubmit(apply)}>
+      <form onSubmit={(event) => void form.handleSubmit(apply)(event)}>
         <FieldGroup className="grid gap-3 md:grid-cols-3">
           <Field>
             <FieldLabel htmlFor="it-control-faculty-search">
