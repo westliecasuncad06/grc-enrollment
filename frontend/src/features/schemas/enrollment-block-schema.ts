@@ -25,10 +25,7 @@ const enrollmentBlockSubjectSchema = z
     starts_at_time: z.string().nullable(),
     ends_at_time: z.string().nullable(),
     room: z.string().nullable(),
-    modality: z
-      .enum(["hyflex_a", "hyflex_b", "f2f"])
-      .nullable()
-      .optional(),
+    modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable().optional(),
     professor_name: z.string().nullable(),
     capacity: z.number().int().nonnegative(),
     enrolled_count: z.number().int().nonnegative(),
@@ -54,6 +51,8 @@ export const enrollmentBlockSchema = z
     capacity: z.number().int().positive().nullable(),
     is_selectable: z.boolean(),
     reasons: z.array(enrollmentBlockReasonSchema),
+    preference_score: z.number().int().nullable(),
+    preference_reasons: z.array(z.string()),
     subjects: z.array(enrollmentBlockSubjectSchema).min(1),
   })
   .strict()

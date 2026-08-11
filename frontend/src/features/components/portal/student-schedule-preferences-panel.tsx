@@ -97,8 +97,10 @@ function toFormValues(
  * (Task 2's server-side scoring reads this row), so the mutation invalidates
  * both on success (see `useSaveStudentSchedulePreferenceMutation`).
  *
- * Not yet composed into a parent workspace — Tasks 4–5 build the enrollment
- * table UI this panel will live alongside.
+ * Composed into `EnrollmentWorkspace` (Task 4) above the regular-student
+ * section table — saving here invalidates that table's query, so its
+ * Preference match column reflects the new preference on the very next
+ * render. Not yet wired into the irregular per-subject flow.
  */
 export function StudentSchedulePreferencesPanel() {
   const { session } = useAuth()

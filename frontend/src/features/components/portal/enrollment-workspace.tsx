@@ -8,10 +8,12 @@ import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
-import { EnrollmentBlockChoice } from "@/features/components/portal/enrollment-block-choice"
+import { EnrollmentBlockDetailDialog } from "@/features/components/portal/enrollment-block-detail-dialog"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
+import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
+import { StudentSchedulePreferencesPanel } from "@/features/components/portal/student-schedule-preferences-panel"
 import {
   StatusStepper,
   type StatusStepperStage,
@@ -217,6 +219,7 @@ export function EnrollmentWorkspace() {
   const [selectedBlockCode, setSelectedBlockCode] = useState<string | null>(
     null,
   )
+  const [viewingBlock, setViewingBlock] = useState<EnrollmentBlock | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [fieldErrors, setFieldErrors] = useState<string[]>([])
@@ -314,6 +317,7 @@ export function EnrollmentWorkspace() {
   const chooseBlock = (blockCode: string) => {
     setReceipt(false)
     setSelectedBlockCode(blockCode)
+    setViewingBlock(null)
   }
 
   const submit = async () => {
@@ -365,6 +369,28 @@ export function EnrollmentWorkspace() {
       </Alert>
     ) : null
 
+  // Identical in both the block and per-subject review cards — only the
+  // unit total differs — so both call sites share this instead of repeating
+  // the total-units row and submit button twice.
+  const submitFooter = (totalUnitsValue: number) => (
+    <>
+      <div className="flex items-center justify-between rounded-lg border p-3">
+        <span className="text-sm font-medium text-muted-foreground">
+          Total units
+        </span>
+        <Badge className="text-base">{totalUnitsValue}</Badge>
+      </div>
+      <Button
+        type="button"
+        className="w-full sm:w-auto"
+        onClick={() => setConfirmOpen(true)}
+        disabled={mutation.isPending || enrollmentWindowClosed}
+      >
+        {mutation.isPending ? "Submitting enrollment" : "Submit enrollment"}
+      </Button>
+    </>
+  )
+
   return (
     <WorkspacePage
       title={isRegularAudience ? "Select your section" : "Select your subjects"}
@@ -392,39 +418,32 @@ export function EnrollmentWorkspace() {
       ) : (
         !hasActiveEnrollmentThisTerm &&
         (isRegularAudience ? (
-          <AsyncBoundary
-            query={{
-              isPending: termsQuery.isPending || blocksQuery.isFetching,
-              isError: termsQuery.isError || blocksQuery.isError,
-              error: termsQuery.error ?? blocksQuery.error,
-              data: blocksQuery.data,
-              refetch: () => {
-                void termsQuery.refetch()
-                void blocksQuery.refetch()
-              },
-            }}
-            isEmpty={(all) => all.length === 0}
-            emptyMessage="No sections were generated for your year level and curriculum yet. Contact the Registrar."
-            loadingLabel="Loading your sections…"
-            loadingFallback={<Skeleton className="h-48" />}
-          >
-            {() => (
-              <div role="radiogroup" aria-label="Sections">
-                <StaggerList className="grid gap-3">
-                  {blocks.map((block) => (
-                    <StaggerItem key={block.block_code}>
-                      <EnrollmentBlockChoice
-                        block={block}
-                        selected={block.block_code === selectedBlockCode}
-                        onSelect={() => chooseBlock(block.block_code)}
-                        disabled={enrollmentWindowClosed}
-                      />
-                    </StaggerItem>
-                  ))}
-                </StaggerList>
-              </div>
-            )}
-          </AsyncBoundary>
+          <div className="grid gap-4">
+            <StudentSchedulePreferencesPanel />
+            <AsyncBoundary
+              query={{
+                isPending: termsQuery.isPending || blocksQuery.isFetching,
+                isError: termsQuery.isError || blocksQuery.isError,
+                error: termsQuery.error ?? blocksQuery.error,
+                data: blocksQuery.data,
+                refetch: () => {
+                  void termsQuery.refetch()
+                  void blocksQuery.refetch()
+                },
+              }}
+              isEmpty={(all) => all.length === 0}
+              emptyMessage="No sections were generated for your year level and curriculum yet. Contact the Registrar."
+              loadingLabel="Loading your sections…"
+              loadingFallback={<Skeleton className="h-48" />}
+            >
+              {() => (
+                <EnrollmentSectionTable
+                  blocks={blocks}
+                  onView={(block) => setViewingBlock(block)}
+                />
+              )}
+            </AsyncBoundary>
+          </div>
         ) : (
           <AsyncBoundary
             query={{
@@ -476,8 +495,8 @@ export function EnrollmentWorkspace() {
               <CardHeader>
                 <CardTitle level={2}>Review your section</CardTitle>
                 <CardDescription>
-                  Confirm section {selectedBlock.block_code} before
-                  submitting — every subject below enrolls together.
+                  Confirm section {selectedBlock.block_code} before submitting —
+                  every subject below enrolls together.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
@@ -516,22 +535,7 @@ export function EnrollmentWorkspace() {
                     />
                   )}
                 />
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Total units
-                  </span>
-                  <Badge className="text-base">{selectedBlock.total_units}</Badge>
-                </div>
-                <Button
-                  type="button"
-                  className="w-full sm:w-auto"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={mutation.isPending || enrollmentWindowClosed}
-                >
-                  {mutation.isPending
-                    ? "Submitting enrollment"
-                    : "Submit enrollment"}
-                </Button>
+                {submitFooter(selectedBlock.total_units)}
               </CardContent>
             </Card>
           )
@@ -587,25 +591,17 @@ export function EnrollmentWorkspace() {
                     />
                   )}
                 />
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Total units
-                  </span>
-                  <Badge className="text-base">{totalUnits}</Badge>
-                </div>
-                <Button
-                  type="button"
-                  className="w-full sm:w-auto"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={mutation.isPending || enrollmentWindowClosed}
-                >
-                  {mutation.isPending
-                    ? "Submitting enrollment"
-                    : "Submit enrollment"}
-                </Button>
+                {submitFooter(totalUnits)}
               </CardContent>
             </Card>
           )}
+
+      <EnrollmentBlockDetailDialog
+        block={viewingBlock}
+        onOpenChange={(open) => open || setViewingBlock(null)}
+        onChoose={chooseBlock}
+        disabled={enrollmentWindowClosed}
+      />
 
       <AlertDialog
         open={confirmOpen}

@@ -71,6 +71,8 @@ const enrollmentBlock = {
   capacity: 40,
   is_selectable: true,
   reasons: [],
+  preference_score: null,
+  preference_reasons: [],
   subjects: [
     {
       section_id: 5,
@@ -125,9 +127,95 @@ const addDropClosed = {
   closes_at: null,
 }
 
+const regularStudentSession = {
+  userId: "1",
+  displayName: "Student",
+  role: "student",
+  signedInAt: "2026-07-30T00:00:00Z",
+} as const
+
+const defaultSchedulePreference = {
+  type: "student-schedule-preference",
+  id: null,
+  student_id: 1,
+  preferred_days: null,
+  preferred_time_block: "any",
+  preferred_time_block_label: "No Preference",
+  preferred_modality: null,
+  max_days_on_campus: null,
+  avoid_early_first_class: false,
+  notes: null,
+}
+
+function scoredBlock(overrides: {
+  block_code: string
+  section_id: number
+  preference_score: number | null
+  preference_reasons: string[]
+}) {
+  return {
+    type: "enrollment_block",
+    block_code: overrides.block_code,
+    year_level: 2,
+    curriculum_id: 9,
+    section_plan_id: 12,
+    total_units: 3,
+    seats_remaining: 7,
+    capacity: 40,
+    is_selectable: true,
+    reasons: [],
+    preference_score: overrides.preference_score,
+    preference_reasons: overrides.preference_reasons,
+    subjects: [
+      {
+        section_id: overrides.section_id,
+        subject_id: overrides.section_id,
+        code: "CS201",
+        title: "Data Structures",
+        units: 3,
+        schedule_days: "MWF",
+        starts_at_time: "08:00:00",
+        ends_at_time: "09:00:00",
+        room: "LAB-1",
+        modality: "f2f",
+        professor_name: "Dr. Cruz",
+        capacity: 40,
+        enrolled_count: 33,
+        remaining_seats: 7,
+      },
+    ],
+  }
+}
+
+// IT301/IT302/IT303 exercise the ranked table: a mid score, no score at all
+// (still listed — preferences rank, they never gate), and the highest score.
+const scoredBlocks = [
+  scoredBlock({
+    block_code: "IT301",
+    section_id: 31,
+    preference_score: 40,
+    preference_reasons: ["Matches your preferred time block"],
+  }),
+  scoredBlock({
+    block_code: "IT302",
+    section_id: 32,
+    preference_score: null,
+    preference_reasons: [],
+  }),
+  scoredBlock({
+    block_code: "IT303",
+    section_id: 33,
+    preference_score: 90,
+    preference_reasons: ["Matches your preferred days"],
+  }),
+]
+
 function mockRegularSchedule(input: RequestInfo | URL) {
   const target = url(input)
-  if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
+  if (
+    target.includes("/academic-terms") &&
+    target.includes("enrollment-windows")
+  )
     return Promise.resolve(
       new Response(
         JSON.stringify({
@@ -261,6 +349,10 @@ function mockRegularRoutes(
     const target = url(input)
     if (target.includes("/academic-terms"))
       return Promise.resolve(new Response(JSON.stringify(terms)))
+    if (target.endsWith("/student-schedule-preferences"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: defaultSchedulePreference })),
+      )
     if (target.includes("/enrollment-blocks"))
       return Promise.resolve(
         new Response(
@@ -277,7 +369,11 @@ function mockRegularRoutes(
     if (target.includes("/enrollments"))
       return Promise.resolve(
         new Response(
-          JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta }),
+          JSON.stringify({
+            data: [],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
         ),
       )
     return Promise.resolve(new Response(JSON.stringify({ data: [] })))
@@ -623,15 +719,16 @@ describe("EnrollmentWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Withdraw from this term" }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: "Withdraw" }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Withdraw" })).toBeInTheDocument()
   })
 
   it("shows a closed banner and disables selection and submission when the enrollment window is closed", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)
-      if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
+      if (
+        target.includes("/academic-terms") &&
+        target.includes("enrollment-windows")
+      )
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -671,7 +768,11 @@ describe("EnrollmentWorkspace", () => {
       if (target.includes("/enrollments"))
         return Promise.resolve(
           new Response(
-            JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta }),
+            JSON.stringify({
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
           ),
         )
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
@@ -695,10 +796,7 @@ describe("EnrollmentWorkspace", () => {
     const user = userEvent.setup()
     let submitCall: [RequestInfo | URL, RequestInit | undefined] | null = null
     fetchMock.mockImplementation((input, init) => {
-      if (
-        url(input).includes("/enrollments") &&
-        init?.method === "POST"
-      ) {
+      if (url(input).includes("/enrollments") && init?.method === "POST") {
         submitCall = [input, init]
       }
       return mockRegularRoutes()(input, init)
@@ -713,18 +811,24 @@ describe("EnrollmentWorkspace", () => {
     })
 
     expect(await screen.findByText("Select your section")).toBeInTheDocument()
-    await user.click(await screen.findByText("IT201"))
+    const table = await screen.findByRole("table", {
+      name: /available sections/i,
+    })
+    await user.click(within(table).getByRole("button", { name: /view IT201/i }))
+    const dialog = await screen.findByRole("dialog", { name: /IT201/ })
     expect(
-      await screen.findByText("Review your section"),
+      within(dialog).getByRole("table", { name: /weekly schedule/i }),
     ).toBeInTheDocument()
+    await user.click(
+      within(dialog).getByRole("button", { name: "Choose this section" }),
+    )
+    expect(await screen.findByText("Review your section")).toBeInTheDocument()
     const subjectCard = await screen.findByRole("article", {
       name: "CS201 section review",
     })
     expect(subjectCard).toHaveTextContent("Data Structures")
     expect(subjectCard).toHaveTextContent("MWF")
-    expect(
-      within(subjectCard).getByText("LAB-1"),
-    ).toBeInTheDocument()
+    expect(within(subjectCard).getByText("LAB-1")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     expect(
       screen.getByText(/enrolls you in all 2 subjects of section IT201/),
@@ -740,6 +844,67 @@ describe("EnrollmentWorkspace", () => {
     expect(
       await screen.findByText(/pending registrar approval/),
     ).toBeInTheDocument()
+  })
+
+  it("lists sections in a table and opens the picker modal on view", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    const table = await screen.findByRole("table", {
+      name: /available sections/i,
+    })
+    expect(within(table).getByText("IT301")).toBeInTheDocument()
+
+    await user.click(within(table).getByRole("button", { name: /view IT301/i }))
+
+    const dialog = await screen.findByRole("dialog", { name: /IT301/ })
+    expect(
+      within(dialog).getByRole("table", { name: /weekly schedule/i }),
+    ).toBeInTheDocument()
+    await user.click(
+      within(dialog).getByRole("button", { name: "Choose this section" }),
+    )
+  })
+
+  it("sorts by preference match when preferences are applied", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    await screen.findByRole("table", { name: /available sections/i })
+    await user.click(
+      screen.getByRole("switch", { name: "Apply my preferences" }),
+    )
+    const rows = within(
+      await screen.findByRole("table", { name: /available sections/i }),
+    ).getAllByRole("row")
+    expect(within(rows[1]).getByText("IT303")).toBeInTheDocument() // highest preference_score first
+  })
+
+  it("keeps a low-scoring section selectable", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    const table = await screen.findByRole("table", {
+      name: /available sections/i,
+    })
+    // IT302 has no preference_score at all — it must still be listed and
+    // choosable, since preferences rank sections but never gate them.
+    expect(within(table).getByText("IT302")).toBeInTheDocument()
+
+    await user.click(within(table).getByRole("button", { name: /view IT302/i }))
+    const dialog = await screen.findByRole("dialog", { name: /IT302/ })
+    expect(
+      within(dialog).getByRole("button", { name: "Choose this section" }),
+    ).toBeEnabled()
   })
 
   it("shows an explicit empty state when no sections exist for a regular student's curriculum", async () => {
@@ -763,7 +928,10 @@ describe("EnrollmentWorkspace", () => {
   it("disables section selection when the enrollment window is closed", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)
-      if (target.includes("/academic-terms") && target.includes("enrollment-windows"))
+      if (
+        target.includes("/academic-terms") &&
+        target.includes("enrollment-windows")
+      )
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -774,7 +942,11 @@ describe("EnrollmentWorkspace", () => {
                 enrollment_opens_at: null,
                 enrollment_closes_at: null,
                 audiences: [],
-                viewer: { ...regularViewer, is_open: false, reason: "before_window" },
+                viewer: {
+                  ...regularViewer,
+                  is_open: false,
+                  reason: "before_window",
+                },
                 add_drop: addDropClosed,
               },
             }),
@@ -791,9 +963,15 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    const block = await screen.findByText("IT201")
-    await userEvent.setup().click(block)
-    expect(screen.queryByText("Review your section")).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    const table = await screen.findByRole("table", {
+      name: /available sections/i,
+    })
+    await user.click(within(table).getByRole("button", { name: /view IT201/i }))
+    const dialog = await screen.findByRole("dialog", { name: /IT201/ })
+    expect(
+      within(dialog).getByRole("button", { name: "Choose this section" }),
+    ).toBeDisabled()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {
@@ -862,6 +1040,8 @@ describe("EnrollmentWorkspace", () => {
     expect(
       (await screen.findAllByText("Pending Payment")).length,
     ).toBeGreaterThan(0)
-    expect(screen.queryByText("Pending Registrar Approval")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Pending Registrar Approval"),
+    ).not.toBeInTheDocument()
   })
 })
