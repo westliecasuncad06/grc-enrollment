@@ -186,9 +186,7 @@ export function ItControlEnrollmentOverrideWorkspace() {
     const newlyTerminalRunIds = activeRuns
       .filter((run) => !isActiveItControlAutomationRun(run.status))
       .map((run) => run.id)
-      .filter(
-        (runId) => !refreshedTerminalRunIds.current.includes(runId),
-      )
+      .filter((runId) => !refreshedTerminalRunIds.current.includes(runId))
 
     if (newlyTerminalRunIds.length === 0) return
 
@@ -196,16 +194,18 @@ export function ItControlEnrollmentOverrideWorkspace() {
       ...refreshedTerminalRunIds.current,
       ...newlyTerminalRunIds,
     ]
-    void refetchRuns().then(() => {
-      setRetiredRuns((current) => [
-        ...current.filter((run) => !newlyTerminalRunIds.includes(run.id)),
-        ...activeRuns.filter((run) => newlyTerminalRunIds.includes(run.id)),
-      ])
-      setRetiredRunIds((current) => [
-        ...current,
-        ...newlyTerminalRunIds.filter((runId) => !current.includes(runId)),
-      ])
-    })
+    void refetchRuns()
+      .finally(() => {
+        setRetiredRuns((current) => [
+          ...current.filter((run) => !newlyTerminalRunIds.includes(run.id)),
+          ...activeRuns.filter((run) => newlyTerminalRunIds.includes(run.id)),
+        ])
+        setRetiredRunIds((current) => [
+          ...current,
+          ...newlyTerminalRunIds.filter((runId) => !current.includes(runId)),
+        ])
+      })
+      .catch(() => undefined)
   }, [activeRuns, refetchRuns])
 
   const start = () => {

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
 import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
+import * as automationHooks from "@/features/hooks/use-it-control-automation"
 import { renderWithSession } from "@/tests/render-app"
 
 interface AutomationRunFixture {
@@ -104,7 +105,10 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
     })
   })
 
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
 
   it("runs a step and reports progress until it completes", async () => {
     const user = userEvent.setup()
@@ -265,6 +269,88 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 50))
     expect(historyRequests()).toHaveLength(2)
     expect(detailRequests()).toHaveLength(1)
+  })
+
+  it("retires a terminal run when the history refresh rejects while other runs keep polling", async () => {
+    const terminalRun: AutomationRunFixture = {
+      ...succeededRun,
+      id: 42,
+      processed_count: 10,
+    }
+    const otherRun: AutomationRunFixture = {
+      ...queuedRun,
+      id: 43,
+      step: "dean_approve_all",
+      status: "running",
+      processed_count: 20,
+    }
+    const detailRequests = (runId: number) =>
+      fetchMock.mock.calls.filter(([input]) =>
+        requestUrl(input).endsWith(`/automation-runs/${runId}`),
+      )
+    const rejectedRefetch = vi.fn(() =>
+      Promise.reject(new Error("History refresh unavailable")),
+    )
+    const useRunsQuery = automationHooks.useItControlAutomationRunsQuery
+
+    function useRunsQueryWithRejectedRefetch(enabled = true) {
+      const query = useRunsQuery(enabled)
+
+      return { ...query, refetch: rejectedRefetch }
+    }
+
+    vi.spyOn(
+      automationHooks,
+      "useItControlAutomationRunsQuery",
+    ).mockImplementation(useRunsQueryWithRejectedRefetch)
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+
+      if (url.endsWith("/automation-runs/42")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: terminalRun })),
+        )
+      }
+      if (url.endsWith("/automation-runs/43")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: otherRun })))
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(automationRuns([{ ...queuedRun, id: 42 }, otherRun])),
+        ),
+      )
+    })
+    const { queryClient } = renderWorkspace()
+
+    expect(await screen.findByText(/10 processed/)).toBeInTheDocument()
+    await waitFor(() => expect(rejectedRefetch).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryCache()
+          .find({
+            queryKey: automationHooks.itControlAutomationRunQueryKey(
+              "it-1",
+              42,
+            ),
+          })
+          ?.getObserversCount(),
+      ).toBe(0),
+    )
+    expect(
+      queryClient
+        .getQueryCache()
+        .find({
+          queryKey: automationHooks.itControlAutomationRunQueryKey("it-1", 43),
+        })
+        ?.getObserversCount(),
+    ).toBe(1)
+
+    await new Promise((resolve) => window.setTimeout(resolve, 2_100))
+    expect(detailRequests(42)).toHaveLength(1)
+    expect(detailRequests(43).length).toBeGreaterThan(1)
+    expect(screen.getByText(/10 processed/)).toBeInTheDocument()
   })
 
   it("renders the role guard without fetching automation runs for an unauthorized role", () => {
