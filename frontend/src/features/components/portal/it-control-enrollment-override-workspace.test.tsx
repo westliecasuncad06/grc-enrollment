@@ -220,6 +220,53 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
     expect(await screen.findByText(/20 processed/)).toBeInTheDocument()
   })
 
+  it("retires a terminal detail run and refreshes history only once", async () => {
+    const terminalRun: AutomationRunFixture = {
+      ...succeededRun,
+      id: 42,
+      processed_count: 10,
+    }
+    const historyRequests = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        requestUrl(input).endsWith("/automation-runs"),
+      )
+    const detailRequests = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        requestUrl(input).endsWith("/automation-runs/42"),
+      )
+
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+
+      if (url.endsWith("/automation-runs/42")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: terminalRun })),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            automationRuns(
+              historyRequests().length > 1
+                ? [terminalRun]
+                : [{ ...queuedRun, id: 42 }],
+            ),
+          ),
+        ),
+      )
+    })
+    renderWorkspace()
+
+    await waitFor(() => expect(historyRequests()).toHaveLength(2))
+    expect(detailRequests()).toHaveLength(1)
+    expect(await screen.findByText(/10 processed/)).toBeInTheDocument()
+
+    await new Promise((resolve) => window.setTimeout(resolve, 50))
+    expect(historyRequests()).toHaveLength(2)
+    expect(detailRequests()).toHaveLength(1)
+  })
+
   it("renders the role guard without fetching automation runs for an unauthorized role", () => {
     renderWorkspace("registrar_head")
 

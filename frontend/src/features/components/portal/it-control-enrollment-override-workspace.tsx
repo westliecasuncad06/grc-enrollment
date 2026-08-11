@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { StatusStepper } from "@/features/components/portal/status-stepper"
@@ -142,21 +142,26 @@ export function ItControlEnrollmentOverrideWorkspace() {
   const authorized = session?.role === "it_admin"
   const [pendingStep, setPendingStep] =
     useState<AutomationStepDefinition | null>(null)
-  const [activeRunId, setActiveRunId] = useState<number | null>(null)
+  const [startedRunIds, setStartedRunIds] = useState<readonly number[]>([])
+  const [retiredRunIds, setRetiredRunIds] = useState<readonly number[]>([])
+  const [retiredRuns, setRetiredRuns] = useState<
+    readonly ItControlAutomationRun[]
+  >([])
+  const refreshedTerminalRunIds = useRef<readonly number[]>([])
   const [overrideOrder, setOverrideOrder] = useState(false)
   const runsQuery = useItControlAutomationRunsQuery(authorized)
+  const { refetch: refetchRuns } = runsQuery
   const activeRunIds = useMemo(
     () =>
       [
-        ...(runsQuery.data ?? []),
-        ...(activeRunId === null ? [] : [{ id: activeRunId }]),
+        ...(runsQuery.data ?? [])
+          .filter((run) => isActiveItControlAutomationRun(run.status))
+          .map((run) => run.id),
+        ...startedRunIds,
       ]
-        .filter((run) =>
-          "status" in run ? isActiveItControlAutomationRun(run.status) : true,
-        )
-        .map((run) => run.id)
+        .filter((id) => !retiredRunIds.includes(id))
         .filter((id, index, ids) => ids.indexOf(id) === index),
-    [activeRunId, runsQuery.data],
+    [retiredRunIds, runsQuery.data, startedRunIds],
   )
   const activeRunQueries = useItControlAutomationRunQueries(
     activeRunIds,
@@ -169,16 +174,39 @@ export function ItControlEnrollmentOverrideWorkspace() {
   const runs = useMemo(() => {
     const byStep = latestCompletedRunByStep(runsQuery.data ?? [])
 
+    for (const retiredRun of retiredRuns) {
+      byStep.set(retiredRun.step, retiredRun)
+    }
     for (const activeRun of activeRuns) byStep.set(activeRun.step, activeRun)
 
     return byStep
-  }, [activeRuns, runsQuery.data])
+  }, [activeRuns, retiredRuns, runsQuery.data])
 
   useEffect(() => {
-    if (activeRuns.some((run) => !isActiveItControlAutomationRun(run.status))) {
-      void runsQuery.refetch()
-    }
-  }, [activeRuns, runsQuery])
+    const newlyTerminalRunIds = activeRuns
+      .filter((run) => !isActiveItControlAutomationRun(run.status))
+      .map((run) => run.id)
+      .filter(
+        (runId) => !refreshedTerminalRunIds.current.includes(runId),
+      )
+
+    if (newlyTerminalRunIds.length === 0) return
+
+    refreshedTerminalRunIds.current = [
+      ...refreshedTerminalRunIds.current,
+      ...newlyTerminalRunIds,
+    ]
+    void refetchRuns().then(() => {
+      setRetiredRuns((current) => [
+        ...current.filter((run) => !newlyTerminalRunIds.includes(run.id)),
+        ...activeRuns.filter((run) => newlyTerminalRunIds.includes(run.id)),
+      ])
+      setRetiredRunIds((current) => [
+        ...current,
+        ...newlyTerminalRunIds.filter((runId) => !current.includes(runId)),
+      ])
+    })
+  }, [activeRuns, refetchRuns])
 
   const start = () => {
     if (!pendingStep) return
@@ -187,7 +215,9 @@ export function ItControlEnrollmentOverrideWorkspace() {
       { step: pendingStep.step },
       {
         onSuccess: (run) => {
-          setActiveRunId(run.id)
+          setStartedRunIds((current) =>
+            current.includes(run.id) ? current : [...current, run.id],
+          )
           setPendingStep(null)
         },
       },
