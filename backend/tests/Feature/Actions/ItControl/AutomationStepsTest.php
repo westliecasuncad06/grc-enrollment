@@ -35,6 +35,7 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
@@ -121,7 +122,7 @@ final class AutomationStepsTest extends TestCase
 
         $this->assertSame(AutomationRunStatus::Partial, $run->status);
         $this->assertSame(1, $run->failed_count);
-        $this->assertSame(1, $run->processed_count);
+        $this->assertSame(1, $run->processed_count, implode(' ', $run->warnings ?? []));
         $this->assertStringContainsString($students[0]->student_number, implode(' ', $run->warnings ?? []));
         $this->assertDatabaseHas('enrollments', ['student_id' => $students[1]->id, 'academic_term_id' => $this->term->id]);
     }
@@ -197,27 +198,63 @@ final class AutomationStepsTest extends TestCase
     {
         $this->makeTermAndItAdmin();
         $this->makeProgramChairs();
-        [$curriculum, $subject] = $this->makePredictableCcsCurriculum();
-        $key = "{$curriculum->id}:{$subject->id}:1";
-        Http::fake(function (Request $request) use ($key) {
+        [$curriculum, $subjects] = $this->makePredictableCcsCurriculum();
+        $keys = array_map(fn (Subject $subject, int $yearLevel): string => "{$curriculum->id}:{$subject->id}:{$yearLevel}", $subjects, range(1, 4));
+        Http::fake(function (Request $request) use ($keys) {
             if ($request->method() === 'GET') {
                 return Http::response(['data' => ['service' => 'grc-prediction-service', 'status' => 'ok', 'schema_version' => 'v1']], 200);
             }
 
             return Http::response(['data' => [
                 'model_version' => 'section-demand-rf-v1', 'feature_schema_version' => 'v1', 'strategy' => 'deterministic_test',
-                'forecasts' => [[
+                'forecasts' => array_map(fn (string $key): array => [
                     'key' => $key, 'predicted_demand' => 40, 'confidence_lower' => 35, 'confidence_upper' => 45, 'suggested_section_count' => 1,
-                ]],
+                ], $keys),
             ]], 200);
         });
 
         $run = $this->runStep(AutomationStep::ChairGenerateSections);
 
         $this->assertContains($run->status, [AutomationRunStatus::Succeeded, AutomationRunStatus::Partial], $run->error_summary ?? '');
+        $this->assertSame(1, $run->processed_count, implode(' ', $run->warnings ?? []));
+        $this->assertDatabaseHas('schedule_proposals', [
+            'academic_term_id' => $this->term->id,
+            'college' => 'ccs',
+            'submitted_by' => User::where('email', 'ccs.chair@grc.test')->sole()->id,
+            'status' => 'draft',
+        ]);
+        $this->assertSame(4, AcademicTermSectionPlan::query()->where('academic_term_id', $this->term->id)->where('curriculum_id', $curriculum->id)->where('status', 'submitted')->count());
+        $this->assertDatabaseHas('sections', [
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $subjects[0]->id,
+            'status' => 'planned',
+        ]);
         Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
             && $request->url() === 'http://127.0.0.1:8100/internal/v1/section-demand/predict'
-            && $request['data']['targets'][0]['key'] === $key);
+            && $request['data']['targets'][0]['key'] === $keys[0]);
+    }
+
+    public function test_section_plan_submissions_stream_more_than_two_hundred_curricula_in_bounded_batches(): void
+    {
+        $this->makeTermAndItAdmin();
+        $this->makeProgramChairs();
+        $this->makeDraftCcsPlans(201);
+        Http::fake(fn () => Http::response(['data' => ['service' => 'grc-prediction-service', 'status' => 'ok', 'schema_version' => 'v1']], 200));
+
+        DB::listen(static function ($query): void {
+            if (str_contains($query->sql, 'select `curriculum_id` from `academic_term_section_plans`')
+                && ! str_contains($query->sql, 'limit 200')) {
+                throw new \RuntimeException('Unbounded curriculum submission query.');
+            }
+        });
+
+        try {
+            $run = $this->runStep(AutomationStep::ChairGenerateSections);
+        } finally {
+            DB::purge();
+        }
+
+        $this->assertContains($run->status, [AutomationRunStatus::Succeeded, AutomationRunStatus::Partial]);
     }
 
     private function openEnrollmentTerm(): void
@@ -357,28 +394,60 @@ final class AutomationStepsTest extends TestCase
         }
     }
 
-    /** @return array{Curriculum, Subject} */
+    /** @return array{Curriculum, list<Subject>} */
     private function makePredictableCcsCurriculum(): array
     {
         $program = Program::create(['code' => 'PRD', 'college' => 'ccs', 'name' => 'Predictable Program', 'status' => ProgramStatus::Active]);
         $curriculum = Curriculum::create(['program_id' => $program->id, 'name' => 'Predictable Curriculum', 'effective_school_year' => '2027-2028', 'status' => CurriculumStatus::Active]);
-        $subject = Subject::create(['code' => 'PRD101', 'college' => 'ccs', 'title' => 'Predictable Subject', 'units' => 3, 'room_requirement' => 'lecture', 'status' => SubjectStatus::Active]);
-        CurriculumSubject::create([
-            'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true,
-            'reference_day' => 'M', 'reference_start_time' => '08:00:00', 'reference_end_time' => '09:00:00', 'reference_modality' => 'f2f',
-        ]);
         $history = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::Archived]);
-        SectionDemandObservation::create([
-            'academic_term_id' => $history->id, 'program_id' => $program->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
-            'college' => 'ccs', 'year_level' => 1, 'cohort_size' => 40, 'enrolled_count' => 40, 'section_count' => 1, 'offered_capacity' => 40,
-            'source' => 'test',
-        ]);
-        $faculty = User::create(['name' => 'Predictable Faculty', 'email' => 'predictable.faculty@grc.test', 'password' => 'password', 'role' => UserRole::Faculty, 'college' => 'ccs', 'status' => UserStatus::Active]);
-        FacultyCurriculumSubjectPreference::create(['professor_id' => $faculty->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id, 'semester' => '2nd', 'rank' => 1, 'origin' => 'test']);
-        FacultyAvailability::create(['professor_id' => $faculty->id, 'day_of_week' => 1, 'starts_at_time' => '08:00:00', 'ends_at_time' => '09:00:00', 'origin' => 'test']);
         RoomCatalogEntry::create(['name' => 'R-101', 'college' => 'ccs', 'capacity' => 40, 'room_type' => 'lecture']);
 
-        return [$curriculum, $subject];
+        $subjects = [];
+        foreach ([1 => ['08:00:00', '09:00:00'], 2 => ['10:00:00', '11:00:00'], 3 => ['13:00:00', '14:00:00'], 4 => ['15:00:00', '16:00:00']] as $yearLevel => [$start, $end]) {
+            $subject = Subject::create(['code' => "PRD{$yearLevel}01", 'college' => 'ccs', 'title' => "Predictable {$yearLevel}", 'units' => 3, 'room_requirement' => 'lecture', 'status' => SubjectStatus::Active]);
+            $subjects[] = $subject;
+            CurriculumSubject::create([
+                'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id, 'year_level' => $yearLevel, 'semester' => '2nd', 'is_required' => true,
+                'reference_day' => 'M', 'reference_start_time' => $start, 'reference_end_time' => $end, 'reference_modality' => 'f2f',
+            ]);
+            SectionDemandObservation::create([
+                'academic_term_id' => $history->id, 'program_id' => $program->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
+                'college' => 'ccs', 'year_level' => $yearLevel, 'cohort_size' => 40, 'enrolled_count' => 40, 'section_count' => 1, 'offered_capacity' => 40,
+                'source' => 'test',
+            ]);
+            $faculty = User::create(['name' => "Predictable Faculty {$yearLevel}", 'email' => "predictable.faculty.{$yearLevel}@grc.test", 'password' => 'password', 'role' => UserRole::Faculty, 'college' => 'ccs', 'status' => UserStatus::Active]);
+            FacultyCurriculumSubjectPreference::create(['professor_id' => $faculty->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id, 'semester' => '2nd', 'rank' => 1, 'origin' => 'test']);
+            FacultyAvailability::create(['professor_id' => $faculty->id, 'day_of_week' => 1, 'starts_at_time' => $start, 'ends_at_time' => $end, 'origin' => 'test']);
+        }
+
+        return [$curriculum, $subjects];
+    }
+
+    private function makeDraftCcsPlans(int $count): void
+    {
+        foreach (range(1, $count) as $number) {
+            $program = Program::create([
+                'code' => sprintf('C%03d', $number),
+                'college' => 'ccs',
+                'name' => "Chunk {$number}",
+                'status' => ProgramStatus::Active,
+            ]);
+            $curriculum = Curriculum::create([
+                'program_id' => $program->id,
+                'name' => "Chunk {$number} Curriculum",
+                'effective_school_year' => '2027-2028',
+                'status' => CurriculumStatus::Active,
+            ]);
+            AcademicTermSectionPlan::create([
+                'academic_term_id' => $this->term->id,
+                'curriculum_id' => $curriculum->id,
+                'college' => 'ccs',
+                'year_level' => 1,
+                'section_count' => 1,
+                'students_per_block' => 40,
+                'status' => 'draft',
+            ]);
+        }
     }
 
     private function runStep(AutomationStep $step): ItControlAutomationRun

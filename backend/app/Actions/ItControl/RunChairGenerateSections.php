@@ -57,24 +57,32 @@ final class RunChairGenerateSections
                 throw new RuntimeException('Prediction service is unavailable.');
             }
 
-            $curriculumIds = AcademicTermSectionPlan::query()
+            $hasSectionPlans = false;
+            $submittedCurricula = [];
+            AcademicTermSectionPlan::query()
                 ->where('academic_term_id', $term->id)
                 ->where('college', $college->value)
-                ->pluck('curriculum_id')
-                ->unique();
-            if ($curriculumIds->isEmpty()) {
+                ->select(['id', 'curriculum_id'])
+                ->orderBy('id')
+                ->chunkById(200, function ($plans) use (&$hasSectionPlans, &$submittedCurricula, $term, $chair, $run, $college): void {
+                    $hasSectionPlans = true;
+
+                    foreach ($plans->pluck('curriculum_id')->unique() as $curriculumId) {
+                        if (isset($submittedCurricula[$curriculumId])) {
+                            continue;
+                        }
+                        $submittedCurricula[$curriculumId] = true;
+
+                        try {
+                            $this->saveSectionPlan->submit($term, $curriculumId, $chair, $this->context($run));
+                            $this->processed($run);
+                        } catch (Throwable $exception) {
+                            $this->warning($run, "{$college->label()} curriculum {$curriculumId}: {$exception->getMessage()}");
+                        }
+                    }
+                });
+            if (! $hasSectionPlans) {
                 $this->warning($run, "{$college->label()} produced no section plans.");
-
-                continue;
-            }
-
-            foreach ($curriculumIds as $curriculumId) {
-                try {
-                    $this->saveSectionPlan->submit($term, $curriculumId, $chair, $this->context($run));
-                    $this->processed($run);
-                } catch (Throwable $exception) {
-                    $this->warning($run, "{$college->label()} curriculum {$curriculumId}: {$exception->getMessage()}");
-                }
             }
         }
     }
