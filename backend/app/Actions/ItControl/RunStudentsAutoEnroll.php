@@ -10,6 +10,7 @@ use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicTerm;
 use App\Models\Enrollment;
 use App\Models\ItControlAutomationRun;
 use App\Models\Section;
@@ -35,16 +36,19 @@ final class RunStudentsAutoEnroll
             throw new \RuntimeException('No published sections are available for automatic enrollment.');
         }
 
-        // Students sharing a curriculum/year resolve the same block sections,
-        // keeping the SubmitEnrollment lock set hot during this bulk run.
-        StudentProfile::query()->orderBy('curriculum_id')->orderBy('year_level')->orderBy('id')->chunkById(200, function ($students) use ($term, $registrar, $run): void {
-            $this->reclassify->executeMany($students, $term, $registrar, $this->context($run));
+        // The cursor must use the same monotonic key as its query predicate:
+        // ordering by curriculum before `chunkById()` can skip lower IDs in
+        // later curricula. We keep ID-keyed retrieval and sort each bounded
+        // batch for section-lock locality only after it has been retrieved.
+        StudentProfile::query()->orderBy('id')->lazyById(200)->chunk(200)->each(function ($students) use ($term, $registrar, $run): void {
+            $students = $students->sortBy(['curriculum_id', 'year_level', 'id']);
             foreach ($students as $student) {
                 if (Enrollment::query()->where('student_id', $student->id)->where('academic_term_id', $term->id)
                     ->whereNotIn('status', EnrollmentStatus::terminalValues())->exists()) {
                     continue;
                 }
                 try {
+                    $this->reclassify->execute($student, $term, $registrar, $this->context($run));
                     $student->refresh();
                     $sectionIds = $student->enrollment_category === EnrollmentCategory::Regular->value
                         ? $this->regularSections($student, $term)
@@ -62,7 +66,7 @@ final class RunStudentsAutoEnroll
     }
 
     /** @return list<int> */
-    private function regularSections(StudentProfile $student, $term): array
+    private function regularSections(StudentProfile $student, AcademicTerm $term): array
     {
         $blocks = array_values(array_filter($this->blocks->execute($student, $term), fn ($block): bool => $block->isSelectable));
         usort($blocks, fn ($left, $right): int => (($right->preferenceScore ?? -1) <=> ($left->preferenceScore ?? -1)) ?: ($left->blockCode <=> $right->blockCode));
@@ -71,7 +75,7 @@ final class RunStudentsAutoEnroll
     }
 
     /** @return list<int> */
-    private function irregularSections(StudentProfile $student, $term): array
+    private function irregularSections(StudentProfile $student, AcademicTerm $term): array
     {
         $entries = array_values(array_filter($this->eligibleSubjects->execute($student, $term), fn ($entry): bool => $entry->isEligible));
         usort($entries, fn ($left, $right): int => count($right->placement->prerequisites) <=> count($left->placement->prerequisites));

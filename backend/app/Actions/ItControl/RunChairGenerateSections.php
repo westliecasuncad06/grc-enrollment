@@ -51,6 +51,7 @@ final class RunChairGenerateSections
             ]);
             $this->generateForecasts->execute($generationRun);
             $generationRun->refresh();
+            $this->advisoryWarnings($run, $generationRun->warnings ?? []);
 
             if ($generationRun->status === ScheduleGenerationStatus::Failed) {
                 throw new RuntimeException('Prediction service is unavailable.');
