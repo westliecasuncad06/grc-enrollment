@@ -4,7 +4,7 @@
 // dedicated to testing; it never touches grc_enrollment (dev) and never
 // issues a schema-wildcard GRANT, the one statement shape documented to have
 // crashed this MariaDB install (docs/runbooks/mariadb-local.md). --seed runs
-// the full DatabaseSeeder chain: the 9 role identities, 3 student lifecycle
+// the full DatabaseSeeder chain: the 10 supported-role identities, 3 student lifecycle
 // scenarios, and the reference catalog (programs, terms, subjects,
 // curricula, sections) every journey's API-arranged preconditions build on.
 //

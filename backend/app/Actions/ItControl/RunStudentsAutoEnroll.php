@@ -9,6 +9,7 @@ use App\Actions\Enrollment\SubmitEnrollment;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\UserRole;
+use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
@@ -26,6 +27,7 @@ final class RunStudentsAutoEnroll implements RunsItControlAutomationStep
         private readonly BuildEnrollmentBlockPool $blocks,
         private readonly BuildEligibleSubjectPool $eligibleSubjects,
         private readonly SubmitEnrollment $submitEnrollment,
+        private readonly SectionConflictDetector $conflictDetector,
     ) {}
 
     public function execute(ItControlAutomationRun $run): void
@@ -50,13 +52,16 @@ final class RunStudentsAutoEnroll implements RunsItControlAutomationStep
                 try {
                     $this->reclassify->execute($student, $term, $registrar, $this->context($run));
                     $student->refresh();
-                    $sectionIds = $student->enrollment_category === EnrollmentCategory::Regular->value
-                        ? $this->regularSections($student, $term)
-                        : $this->irregularSections($student, $term);
+                    if ($student->enrollment_category === EnrollmentCategory::Regular->value) {
+                        [$sectionIds, $blockCode] = $this->regularSelection($student, $term);
+                    } else {
+                        $sectionIds = $this->irregularSections($student, $term);
+                        $blockCode = null;
+                    }
                     if ($sectionIds === []) {
                         throw new \RuntimeException('No eligible published sections are available.');
                     }
-                    $this->submitEnrollment->execute($student, $term, $sectionIds, $student->user, $this->context($run));
+                    $this->submitEnrollment->execute($student, $term, $sectionIds, $student->user, $this->context($run), $blockCode);
                     $this->processed($run);
                 } catch (Throwable $exception) {
                     $this->warning($run, "Student {$student->student_number}: {$exception->getMessage()}");
@@ -65,13 +70,15 @@ final class RunStudentsAutoEnroll implements RunsItControlAutomationStep
         });
     }
 
-    /** @return list<int> */
-    private function regularSections(StudentProfile $student, AcademicTerm $term): array
+    /** @return array{0: list<int>, 1: ?string} */
+    private function regularSelection(StudentProfile $student, AcademicTerm $term): array
     {
         $blocks = array_values(array_filter($this->blocks->execute($student, $term), fn ($block): bool => $block->isSelectable));
         usort($blocks, fn ($left, $right): int => (($right->preferenceScore ?? -1) <=> ($left->preferenceScore ?? -1)) ?: ($left->blockCode <=> $right->blockCode));
 
-        return $blocks === [] ? [] : array_map(fn ($section): int => $section->id, $blocks[0]->sections);
+        return $blocks === []
+            ? [[], null]
+            : [array_map(fn ($section): int => $section->id, $blocks[0]->sections), $blocks[0]->blockCode];
     }
 
     /** @return list<int> */
@@ -82,13 +89,30 @@ final class RunStudentsAutoEnroll implements RunsItControlAutomationStep
         $limit = config('enrollment.overload_max_units') ?? config('enrollment.max_regular_units');
         $units = 0.0;
         $sectionIds = [];
+        /** @var list<array{schedule_days: ?string, starts_at_time: ?string, ends_at_time: ?string}> $selectedSlots */
+        $selectedSlots = [];
         foreach ($entries as $entry) {
-            $section = $entry->availableSections[0] ?? null;
-            if ($section === null || ($limit !== null && $units + $entry->subject->units > (float) $limit)) {
+            if ($limit !== null && $units + $entry->subject->units > (float) $limit) {
                 continue;
             }
-            $sectionIds[] = $section->id;
-            $units += $entry->subject->units;
+
+            foreach ($entry->availableSections as $section) {
+                $slot = [
+                    'schedule_days' => $section->schedule_days,
+                    'starts_at_time' => $section->starts_at_time,
+                    'ends_at_time' => $section->ends_at_time,
+                ];
+
+                if ($this->conflictDetector->hasConflict($slot, $selectedSlots)) {
+                    continue;
+                }
+
+                $sectionIds[] = $section->id;
+                $selectedSlots[] = $slot;
+                $units += $entry->subject->units;
+
+                break;
+            }
         }
 
         return $sectionIds;

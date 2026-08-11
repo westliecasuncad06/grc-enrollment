@@ -111,6 +111,15 @@ describe("ItControlStudentsWorkspace", () => {
     ).not.toHaveLength(0)
   })
 
+  it("renders the current-term enrollment status returned by the account API", async () => {
+    renderWorkspace()
+
+    expect(
+      await screen.findByRole("columnheader", { name: "Current enrollment" }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("Pending payment")).not.toHaveLength(0)
+  })
+
   it("renders the role guard without fetching student accounts for an unauthorized role", () => {
     renderWorkspace("registrar_head")
 

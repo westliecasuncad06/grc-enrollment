@@ -48,10 +48,32 @@ final class AutomationRunsEndpointTest extends TestCase
             ->assertJsonStructure(['data' => ['status', 'processed_count', 'failed_count', 'warnings']]);
     }
 
-    public function test_it_lists_run_history_for_the_current_term(): void
+    public function test_a_sync_queue_failure_returns_the_persisted_terminal_resource(): void
+    {
+        $itAdmin = $this->makeUser('it-admin-sync-failure', UserRole::ItAdmin);
+        $this->makeCurrentTerm();
+
+        $response = $this->withToken($this->tokenFor($itAdmin))
+            ->postJson('/api/v1/it-control/automation-runs', ['step' => 'students_auto_enroll']);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.status', 'failed')
+            ->assertJsonPath('data.error_summary', 'IT-control automation run failed. Review the run details and retry.');
+        $this->assertDatabaseHas('it_control_automation_runs', [
+            'id' => $response->json('data.id'),
+            'status' => 'failed',
+        ]);
+    }
+
+    public function test_it_lists_only_run_history_for_the_current_term(): void
     {
         $itAdmin = $this->makeUser('it-admin-history', UserRole::ItAdmin);
         $term = $this->makeCurrentTerm();
+        $offTerm = AcademicTerm::create([
+            'school_year' => '2025-2026',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::Archived,
+        ]);
         $olderRunId = DB::table('it_control_automation_runs')->insertGetId([
             'step' => 'chair_generate_sections',
             'academic_term_id' => $term->id,
@@ -75,6 +97,28 @@ final class AutomationRunsEndpointTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        $offTermSucceededRunId = DB::table('it_control_automation_runs')->insertGetId([
+            'step' => 'chair_generate_sections',
+            'academic_term_id' => $offTerm->id,
+            'status' => 'succeeded',
+            'processed_count' => 4,
+            'failed_count' => 0,
+            'initiated_by' => $itAdmin->id,
+            'completed_at' => now()->addSecond(),
+            'created_at' => now()->addSecond(),
+            'updated_at' => now()->addSecond(),
+        ]);
+        $offTermActiveRunId = DB::table('it_control_automation_runs')->insertGetId([
+            'step' => 'dean_approve_all',
+            'academic_term_id' => $offTerm->id,
+            'status' => 'running',
+            'processed_count' => 1,
+            'failed_count' => 0,
+            'initiated_by' => $itAdmin->id,
+            'started_at' => now()->addSeconds(2),
+            'created_at' => now()->addSeconds(2),
+            'updated_at' => now()->addSeconds(2),
+        ]);
 
         $response = $this->withToken($this->tokenFor($itAdmin))
             ->getJson('/api/v1/it-control/automation-runs');
@@ -83,7 +127,9 @@ final class AutomationRunsEndpointTest extends TestCase
             ->assertJsonPath('data.0.id', $newerRunId)
             ->assertJsonPath('data.0.failed_count', 1)
             ->assertJsonPath('data.1.id', $olderRunId)
-            ->assertJsonPath('meta.total', 2);
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonMissing(['id' => $offTermSucceededRunId])
+            ->assertJsonMissing(['id' => $offTermActiveRunId]);
     }
 
     public function test_it_refuses_to_run_outside_local_and_testing(): void

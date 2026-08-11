@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 final class AutomationRunController extends Controller
 {
@@ -23,8 +24,19 @@ final class AutomationRunController extends Controller
         $this->authenticatedUser($request);
         $this->authorize('view-it-control-automation-runs');
 
+        $academicTermId = DB::table('academic_term_current_slots')
+            ->where('id', 1)
+            ->value('academic_term_id');
+
         $response = AutomationRunResource::collection(
-            ItControlAutomationRun::query()->latest('id')->paginate(25),
+            ItControlAutomationRun::query()
+                ->when(
+                    is_int($academicTermId),
+                    fn ($query) => $query->where('academic_term_id', $academicTermId),
+                    fn ($query) => $query->whereRaw('1 = 0'),
+                )
+                ->latest('id')
+                ->paginate(25),
         )->response($request);
         $response->headers->set('Cache-Control', 'no-store, private');
 
@@ -74,7 +86,15 @@ final class AutomationRunController extends Controller
             ]);
         });
 
-        RunItControlAutomationStep::dispatch($run->id);
+        try {
+            RunItControlAutomationStep::dispatch($run->id);
+        } catch (Throwable $exception) {
+            $run->refresh();
+
+            if ($run->status !== AutomationRunStatus::Failed) {
+                throw $exception;
+            }
+        }
         $run->refresh();
 
         $response = (new AutomationRunResource($run))->response($request);

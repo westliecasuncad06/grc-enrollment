@@ -3,6 +3,7 @@
 namespace Tests\Feature\Actions\ItControl;
 
 use App\Actions\ItControl\ManagesAutomationRun;
+use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -14,6 +15,7 @@ use App\Domain\ItControl\AutomationStep;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Jobs\RunItControlAutomationStep;
@@ -128,6 +130,52 @@ final class AutomationStepsTest extends TestCase
         $this->assertSame(1, $run->processed_count, implode(' ', $run->warnings ?? []));
         $this->assertStringContainsString($students[0]->student_number, implode(' ', $run->warnings ?? []));
         $this->assertDatabaseHas('enrollments', ['student_id' => $students[1]->id, 'academic_term_id' => $this->term->id]);
+    }
+
+    public function test_regular_auto_enrollment_preserves_the_selected_block_code_in_the_audit(): void
+    {
+        $this->makeTermAndItAdmin();
+        $this->makeSelectableStudents(1);
+
+        $run = $this->runStep(AutomationStep::StudentsAutoEnroll);
+
+        $this->assertSame(AutomationRunStatus::Succeeded, $run->status);
+        $submission = AuditLog::query()->where('action', AuditAction::ENROLLMENT_SUBMITTED)->sole();
+        $this->assertSame('SEL101', $submission->after_values['block_code'] ?? null);
+    }
+
+    public function test_irregular_auto_enrollment_skips_pairwise_conflicts_before_a_com_is_created(): void
+    {
+        $this->makeTermAndItAdmin();
+        [$student, $firstFixtureSection, $secondFixtureSection] = $this->makeIrregularStudentWithConflictingSections();
+        $this->assertTrue(app(SectionConflictDetector::class)->hasConflict(
+            [
+                'schedule_days' => $secondFixtureSection->schedule_days,
+                'starts_at_time' => $secondFixtureSection->starts_at_time,
+                'ends_at_time' => $secondFixtureSection->ends_at_time,
+            ],
+            [[
+                'schedule_days' => $firstFixtureSection->schedule_days,
+                'starts_at_time' => $firstFixtureSection->starts_at_time,
+                'ends_at_time' => $firstFixtureSection->ends_at_time,
+            ]],
+        ));
+
+        $this->assertSame(AutomationRunStatus::Succeeded, $this->runStep(AutomationStep::StudentsAutoEnroll)->status);
+        $this->assertSame(AutomationRunStatus::Succeeded, $this->runStep(AutomationStep::RegistrarApproveAll)->status);
+        $this->assertSame(AutomationRunStatus::Succeeded, $this->runStep(AutomationStep::CashierConfirmAll)->status);
+
+        $enrollment = Enrollment::query()
+            ->where('student_id', $student->id)
+            ->where('academic_term_id', $this->term->id)
+            ->with('enrollmentSubjects')
+            ->sole();
+
+        $this->assertCount(1, $enrollment->enrollmentSubjects);
+        $this->assertDatabaseHas('enrollment_documents', [
+            'enrollment_id' => $enrollment->id,
+            'document_type' => 'com',
+        ]);
     }
 
     public function test_generation_warnings_are_preserved_on_the_durable_automation_run(): void
@@ -382,6 +430,75 @@ final class AutomationStepsTest extends TestCase
         User::firstOrCreate(['email' => 'registrar@grc.test'], [
             'name' => 'Registrar', 'password' => 'password', 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active,
         ]);
+    }
+
+    /** @return array{StudentProfile, Section, Section} */
+    private function makeIrregularStudentWithConflictingSections(): array
+    {
+        $this->makeRegistrar();
+        User::create([
+            'name' => 'Accounting',
+            'email' => 'accounting@grc.test',
+            'password' => 'password',
+            'role' => UserRole::AccountingStaff,
+            'status' => UserStatus::Active,
+        ]);
+        $program = Program::create(['code' => 'IRR', 'name' => 'Irregular Program', 'status' => ProgramStatus::Active]);
+        $curriculum = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => 'Irregular Curriculum',
+            'effective_school_year' => '2027-2028',
+            'status' => CurriculumStatus::Active,
+        ]);
+        $missing = Subject::create(['code' => 'IRR101', 'title' => 'Missing prior subject', 'units' => 3, 'status' => SubjectStatus::Active]);
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id,
+            'subject_id' => $missing->id,
+            'year_level' => 1,
+            'semester' => '1st',
+            'is_required' => true,
+        ]);
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $this->term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => 'ccs',
+            'year_level' => 2,
+            'section_count' => 1,
+            'students_per_block' => 40,
+            'status' => SectionPlanStatus::Submitted,
+        ]);
+
+        $createSection = function (string $code) use ($curriculum, $plan): Section {
+            $subject = Subject::create(['code' => $code, 'title' => $code, 'units' => 3, 'status' => SubjectStatus::Active]);
+            CurriculumSubject::create([
+                'curriculum_id' => $curriculum->id,
+                'subject_id' => $subject->id,
+                'year_level' => 2,
+                'semester' => '2nd',
+                'is_required' => true,
+            ]);
+
+            return Section::create([
+                'academic_term_id' => $this->term->id,
+                'section_plan_id' => $plan->id,
+                'subject_id' => $subject->id,
+                'section_code' => $code,
+                'schedule_days' => 'M',
+                'starts_at_time' => '08:00:00',
+                'ends_at_time' => '09:00:00',
+                'capacity' => 40,
+                'enrolled_count' => 0,
+                'is_block_exclusive' => false,
+                'status' => SectionStatus::Published,
+            ]);
+        };
+        $firstSection = $createSection('IRR201');
+        $secondSection = $createSection('IRR202');
+
+        $student = $this->makeStudent($program, $curriculum, 'IRR-001', 'irregular@student.grc.test');
+        $student->update(['year_level' => 2]);
+
+        return [$student, $firstSection, $secondSection];
     }
 
     private function makeSelectableSection(Curriculum $curriculum, string $code, int $capacity): void

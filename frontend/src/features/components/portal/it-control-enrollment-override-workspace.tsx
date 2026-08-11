@@ -80,7 +80,7 @@ const automationSteps: readonly AutomationStepDefinition[] = [
     label: "Registrar approves all",
     description:
       "Moves submitted enrollment requests to payment and issues queue tickets.",
-    role: "Registrar Head",
+    role: "Registrar Staff",
   },
   {
     step: "cashier_confirm_all",
@@ -151,17 +151,25 @@ export function ItControlEnrollmentOverrideWorkspace() {
   const [overrideOrder, setOverrideOrder] = useState(false)
   const runsQuery = useItControlAutomationRunsQuery(authorized)
   const { refetch: refetchRuns } = runsQuery
+  const currentTermRuns = useMemo(() => {
+    const history = runsQuery.data ?? []
+    const currentTermId = history[0]?.academic_term_id
+
+    return currentTermId === undefined
+      ? []
+      : history.filter((run) => run.academic_term_id === currentTermId)
+  }, [runsQuery.data])
   const activeRunIds = useMemo(
     () =>
       [
-        ...(runsQuery.data ?? [])
+        ...currentTermRuns
           .filter((run) => isActiveItControlAutomationRun(run.status))
           .map((run) => run.id),
         ...startedRunIds,
       ]
         .filter((id) => !retiredRunIds.includes(id))
         .filter((id, index, ids) => ids.indexOf(id) === index),
-    [retiredRunIds, runsQuery.data, startedRunIds],
+    [currentTermRuns, retiredRunIds, startedRunIds],
   )
   const activeRunQueries = useItControlAutomationRunQueries(
     activeRunIds,
@@ -172,7 +180,7 @@ export function ItControlEnrollmentOverrideWorkspace() {
     query.data ? [query.data] : [],
   )
   const runs = useMemo(() => {
-    const byStep = latestCompletedRunByStep(runsQuery.data ?? [])
+    const byStep = latestCompletedRunByStep(currentTermRuns)
 
     for (const retiredRun of retiredRuns) {
       byStep.set(retiredRun.step, retiredRun)
@@ -180,7 +188,7 @@ export function ItControlEnrollmentOverrideWorkspace() {
     for (const activeRun of activeRuns) byStep.set(activeRun.step, activeRun)
 
     return byStep
-  }, [activeRuns, retiredRuns, runsQuery.data])
+  }, [activeRuns, currentTermRuns, retiredRuns])
 
   useEffect(() => {
     const newlyTerminalRunIds = activeRuns

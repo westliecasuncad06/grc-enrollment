@@ -33,6 +33,12 @@ export function isActiveItControlAutomationRun(
   return status !== undefined && activeStatuses.includes(status)
 }
 
+function shouldPollItControlAutomationRun(
+  run: ItControlAutomationRun | undefined,
+) {
+  return run === undefined || isActiveItControlAutomationRun(run.status)
+}
+
 export function useItControlAutomationRunsQuery(enabled = true) {
   const { session } = useAuth()
 
@@ -58,7 +64,7 @@ export function useItControlAutomationRunQuery(
     },
     enabled: enabled && session !== null && runId !== null,
     refetchInterval: (query) =>
-      isActiveItControlAutomationRun(query.state.data?.status) ? 2_000 : false,
+      shouldPollItControlAutomationRun(query.state.data) ? 2_000 : false,
   })
 }
 
@@ -74,9 +80,7 @@ export function useItControlAutomationRunQueries(
       queryFn: ({ signal }) => getItControlAutomationRun(runId, signal),
       enabled: enabled && session !== null,
       refetchInterval: (query: { state: { data?: ItControlAutomationRun } }) =>
-        isActiveItControlAutomationRun(query.state.data?.status)
-          ? 2_000
-          : false,
+        shouldPollItControlAutomationRun(query.state.data) ? 2_000 : false,
     })),
   })
 }

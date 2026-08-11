@@ -10,9 +10,9 @@ import { renderWithSession } from "@/tests/render-app"
 interface AutomationRunFixture {
   type: "it-control-automation-run"
   id: number
-  step: "chair_generate_sections" | "dean_approve_all"
+  step: "chair_generate_sections" | "dean_approve_all" | "cashier_confirm_all"
   academic_term_id: number
-  status: "queued" | "running" | "succeeded"
+  status: "queued" | "running" | "succeeded" | "failed"
   processed_count: number
   failed_count: number
   warnings: string[]
@@ -152,6 +152,72 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
     expect(await screen.findByText(/777 processed/)).toBeInTheDocument()
   })
 
+  it("does not let an off-term success unlock the current workflow", async () => {
+    const currentTermFailure: AutomationRunFixture = {
+      ...succeededRun,
+      id: 44,
+      step: "cashier_confirm_all",
+      academic_term_id: 10,
+      status: "failed",
+      error_summary: "Current-term payment step failed.",
+    }
+    const offTermSuccess: AutomationRunFixture = {
+      ...succeededRun,
+      id: 42,
+      academic_term_id: 9,
+    }
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(automationRuns([currentTermFailure, offTermSuccess])),
+        ),
+      ),
+    )
+
+    renderWorkspace()
+
+    await screen.findByText("Current-term payment step failed.")
+    expect(
+      screen.getByRole("button", { name: /Dean approves all/i }),
+    ).toBeDisabled()
+  })
+
+  it("does not poll an active run from an off term", async () => {
+    const currentTermFailure: AutomationRunFixture = {
+      ...succeededRun,
+      id: 44,
+      step: "cashier_confirm_all",
+      academic_term_id: 10,
+      status: "failed",
+      error_summary: "Current-term payment step failed.",
+    }
+    const offTermActive: AutomationRunFixture = {
+      ...queuedRun,
+      id: 43,
+      academic_term_id: 9,
+      status: "running",
+    }
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(automationRuns([currentTermFailure, offTermActive])),
+        ),
+      ),
+    )
+
+    renderWorkspace()
+
+    await screen.findByText("Current-term payment step failed.")
+    expect(
+      screen.getByRole("button", { name: /Generate all sections/i }),
+    ).toBeEnabled()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        requestUrl(input).endsWith("/automation-runs/43"),
+      ),
+    ).toBe(false)
+  })
+
   it("resumes polling from a queued run returned after reload", async () => {
     fetchMock.mockImplementation((input) => {
       const url = requestUrl(input)
@@ -176,6 +242,57 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
         expect.anything(),
       ),
     )
+  })
+
+  it("continues polling after the first active detail request fails", async () => {
+    let detailRequests = 0
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+
+      if (url.endsWith("/automation-runs/42")) {
+        detailRequests += 1
+
+        if (detailRequests <= 2) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: { message: "Temporary" } }), {
+              status: 503,
+            }),
+          )
+        }
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...queuedRun,
+                id: 42,
+                status: "running",
+                processed_count: 10,
+              },
+            }),
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(automationRuns([{ ...queuedRun, id: 42 }])),
+        ),
+      )
+    })
+    renderWorkspace()
+
+    await waitFor(() => expect(detailRequests).toBe(2), { timeout: 3_000 })
+    await waitFor(() => expect(detailRequests).toBeGreaterThan(2), {
+      timeout: 5_000,
+    })
+    expect(await screen.findByText(/10 processed/)).toBeInTheDocument()
+  })
+
+  it("identifies the enrollment approval actor as Registrar Staff", async () => {
+    renderWorkspace()
+
+    expect(await screen.findByText("Registrar Staff")).toBeInTheDocument()
   })
 
   it("polls every active step returned after reload", async () => {

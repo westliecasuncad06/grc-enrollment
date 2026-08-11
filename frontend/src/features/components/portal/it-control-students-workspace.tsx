@@ -55,6 +55,14 @@ function copyEmail(email: string) {
   void navigator.clipboard?.writeText(email)
 }
 
+function enrollmentStatusLabel(status: string | null) {
+  if (status === null) return "No current enrollment"
+
+  const label = status.replaceAll("_", " ")
+
+  return label[0].toUpperCase() + label.slice(1)
+}
+
 export function ItControlStudentsWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "it_admin"
@@ -97,6 +105,12 @@ export function ItControlStudentsWorkspace() {
       render: (row) => row.enrollment_category ?? "Not recorded",
     },
     { key: "status", header: "Account status", render: (row) => row.status },
+    {
+      key: "current-enrollment",
+      header: "Current enrollment",
+      render: (row) =>
+        enrollmentStatusLabel(row.current_term_enrollment_status),
+    },
   ]
 
   const apply = (values: StudentAccountFilterForm) => {
