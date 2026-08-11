@@ -152,7 +152,7 @@ final class SchedulePreferenceScorer
     {
         $timeBlock = $preference->preferred_time_block;
 
-        if ($startTimes === [] || $timeBlock === null || $timeBlock === PreferredTimeBlock::Any) {
+        if ($startTimes === [] || $timeBlock === PreferredTimeBlock::Any) {
             return [0, null];
         }
 
