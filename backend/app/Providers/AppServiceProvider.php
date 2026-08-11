@@ -7,6 +7,7 @@ use App\Policies\AcademicRecordPolicy;
 use App\Policies\DashboardPolicy;
 use App\Policies\EligibleSubjectPolicy;
 use App\Policies\FacultyMemberPolicy;
+use App\Policies\ItControlPolicy;
 use App\Policies\StuckEnrollmentPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -33,6 +34,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('view-faculty-directory', [FacultyMemberPolicy::class, 'viewAny']);
+        Gate::define('view-it-control-account-browser', [ItControlPolicy::class, 'viewAccountBrowser']);
         Gate::define('update-faculty-workforce-profile', [FacultyMemberPolicy::class, 'updateWorkforceProfile']);
         Gate::define('view-eligible-subjects', [EligibleSubjectPolicy::class, 'viewAny']);
         Gate::define('view-enrollment-summary', [DashboardPolicy::class, 'viewEnrollmentSummary']);

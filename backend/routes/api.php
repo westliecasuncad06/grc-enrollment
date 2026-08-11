@@ -33,6 +33,8 @@ use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
+use App\Http\Controllers\Api\V1\ItControl\StudentAccountController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
@@ -305,6 +307,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             // the system never sits with no current term.
             Route::post('/academic-terms/{academicTerm}/archive-and-create-next', [AcademicTermController::class, 'archiveAndCreateNext'])
                 ->name('academic-terms.archive-and-create-next');
+        });
+
+        Route::prefix('it-control')->name('it-control.')->middleware('role:it_admin')->group(function (): void {
+            Route::get('/students', StudentAccountController::class)->name('students.index');
+            Route::get('/faculty', FacultyAccountController::class)->name('faculty.index');
         });
 
         // Phase 7c: aggregate-only counts, never row-level enrollment data,
