@@ -9,7 +9,7 @@ use App\Models\Enrollment;
 use App\Models\ItControlAutomationRun;
 use Throwable;
 
-final class RunCashierConfirmAll
+final class RunCashierConfirmAll implements RunsItControlAutomationStep
 {
     use ManagesAutomationRun;
 

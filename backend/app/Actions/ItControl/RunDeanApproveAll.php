@@ -9,7 +9,7 @@ use App\Models\ItControlAutomationRun;
 use App\Models\ScheduleProposal;
 use Throwable;
 
-final class RunDeanApproveAll
+final class RunDeanApproveAll implements RunsItControlAutomationStep
 {
     use ManagesAutomationRun;
 

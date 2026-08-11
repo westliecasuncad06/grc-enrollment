@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Throwable;
 
-final class RunChairGenerateSections
+final class RunChairGenerateSections implements RunsItControlAutomationStep
 {
     use ManagesAutomationRun;
 

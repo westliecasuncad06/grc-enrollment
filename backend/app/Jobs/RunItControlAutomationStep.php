@@ -7,6 +7,7 @@ use App\Actions\ItControl\RunChairGenerateSections;
 use App\Actions\ItControl\RunDeanApproveAll;
 use App\Actions\ItControl\RunExecutivePublishAll;
 use App\Actions\ItControl\RunRegistrarApproveAll;
+use App\Actions\ItControl\RunsItControlAutomationStep;
 use App\Actions\ItControl\RunStudentsAutoEnroll;
 use App\Domain\ItControl\AutomationRunStatus;
 use App\Domain\ItControl\AutomationStep;
@@ -79,7 +80,7 @@ final class RunItControlAutomationStep implements ShouldQueue
         ]);
     }
 
-    private function actionFor(AutomationStep $step): object
+    private function actionFor(AutomationStep $step): RunsItControlAutomationStep
     {
         return match ($step) {
             AutomationStep::ChairGenerateSections => app(RunChairGenerateSections::class),

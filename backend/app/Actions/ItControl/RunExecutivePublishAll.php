@@ -9,7 +9,7 @@ use App\Models\ItControlAutomationRun;
 use App\Models\ScheduleProposal;
 use Throwable;
 
-final class RunExecutivePublishAll
+final class RunExecutivePublishAll implements RunsItControlAutomationStep
 {
     use ManagesAutomationRun;
 

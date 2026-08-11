@@ -9,7 +9,7 @@ use App\Models\Enrollment;
 use App\Models\ItControlAutomationRun;
 use Throwable;
 
-final class RunRegistrarApproveAll
+final class RunRegistrarApproveAll implements RunsItControlAutomationStep
 {
     use ManagesAutomationRun;
 

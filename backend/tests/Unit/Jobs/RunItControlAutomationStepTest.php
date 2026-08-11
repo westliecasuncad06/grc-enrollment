@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Jobs;
 
+use App\Actions\ItControl\RunsItControlAutomationStep;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\ItControl\AutomationRunStatus;
@@ -18,6 +19,19 @@ use Tests\TestCase;
 final class RunItControlAutomationStepTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_every_automation_step_resolves_an_executable_action_contract(): void
+    {
+        $job = new RunItControlAutomationStep(1);
+        $actionFor = new \ReflectionMethod($job, 'actionFor');
+
+        foreach (AutomationStep::cases() as $step) {
+            $this->assertInstanceOf(
+                RunsItControlAutomationStep::class,
+                $actionFor->invoke($job, $step),
+            );
+        }
+    }
 
     public function test_it_finalizes_a_running_run_when_the_queue_execution_fails(): void
     {

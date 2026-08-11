@@ -17,7 +17,7 @@ use App\Models\Section;
 use App\Models\StudentProfile;
 use Throwable;
 
-final class RunStudentsAutoEnroll
+final class RunStudentsAutoEnroll implements RunsItControlAutomationStep
 {
     use ManagesAutomationRun;
 
