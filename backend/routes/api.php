@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\ItControl\AutomationRunController;
 use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
 use App\Http\Controllers\Api\V1\ItControl\StudentAccountController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -312,6 +313,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::prefix('it-control')->name('it-control.')->middleware('role:it_admin')->group(function (): void {
             Route::get('/students', StudentAccountController::class)->name('students.index');
             Route::get('/faculty', FacultyAccountController::class)->name('faculty.index');
+            Route::get('/automation-runs', [AutomationRunController::class, 'index'])->name('automation-runs.index');
+            Route::post('/automation-runs', [AutomationRunController::class, 'store'])->name('automation-runs.store');
+            Route::get('/automation-runs/{run}', [AutomationRunController::class, 'show'])->name('automation-runs.show');
         });
 
         // Phase 7c: aggregate-only counts, never row-level enrollment data,

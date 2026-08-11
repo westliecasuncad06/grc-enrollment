@@ -52,6 +52,8 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/faculty-teaching-history',
             'GET|HEAD api/v1/grade-slip',
             'GET|HEAD api/v1/health',
+            'GET|HEAD api/v1/it-control/automation-runs',
+            'GET|HEAD api/v1/it-control/automation-runs/{run}',
             'GET|HEAD api/v1/it-control/faculty',
             'GET|HEAD api/v1/it-control/students',
             'GET|HEAD api/v1/notifications',
@@ -110,6 +112,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/faculty-curriculum-subject-preferences',
             'POST api/v1/faculty-specializations',
             'POST api/v1/faculty-subject-preferences',
+            'POST api/v1/it-control/automation-runs',
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
             'POST api/v1/student-profiles',
@@ -164,6 +167,9 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.academic-grades.update',
             'api.v1.prospectus.show',
             'api.v1.grade-slip.show',
+            'api.v1.it-control.automation-runs.index',
+            'api.v1.it-control.automation-runs.show',
+            'api.v1.it-control.automation-runs.store',
             'api.v1.it-control.faculty.index',
             'api.v1.it-control.students.index',
             'api.v1.queue-tickets.index',
@@ -336,7 +342,13 @@ final class ApiSurfaceTest extends TestCase
         $this->assertNotNull($auditRoute);
         $this->assertContains('role:registrar_head', $auditRoute->gatherMiddleware());
 
-        foreach (['api.v1.it-control.students.index', 'api.v1.it-control.faculty.index'] as $name) {
+        foreach ([
+            'api.v1.it-control.automation-runs.index',
+            'api.v1.it-control.automation-runs.show',
+            'api.v1.it-control.automation-runs.store',
+            'api.v1.it-control.students.index',
+            'api.v1.it-control.faculty.index',
+        ] as $name) {
             $route = Route::getRoutes()->getByName($name);
 
             $this->assertNotNull($route, "Missing route {$name}.");
