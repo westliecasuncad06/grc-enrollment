@@ -13,6 +13,7 @@ enum UserRole: string
     case RegistrarHead = 'registrar_head';
     case RegistrarStaff = 'registrar_staff';
     case AccountingStaff = 'accounting_staff';
+    case ItAdmin = 'it_admin';
 
     public function label(): string
     {
@@ -26,6 +27,7 @@ enum UserRole: string
             self::RegistrarHead => 'Registrar Head',
             self::RegistrarStaff => 'Registrar Staff',
             self::AccountingStaff => 'Accounting Staff',
+            self::ItAdmin => 'IT Control',
         };
     }
 
@@ -44,7 +46,8 @@ enum UserRole: string
             self::Dean,
             self::ExecutiveDirector,
             self::RegistrarHead,
-            self::RegistrarStaff => false,
+            self::RegistrarStaff,
+            self::ItAdmin => false,
         };
     }
 }

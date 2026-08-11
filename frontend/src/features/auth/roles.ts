@@ -1,6 +1,6 @@
 /**
- * The nine PRD §3 roles, mirroring `App\Domain\Identity\UserRole` in the
- * backend.
+ * The PRD §3 roles plus the IT Control role, mirroring
+ * `App\Domain\Identity\UserRole` in the backend.
  *
  * This is a runtime value, not just a type: `schemas/auth-schema.ts` feeds it
  * to `z.enum()` to validate the `role` field on real API responses, so an
@@ -17,6 +17,7 @@ export const userRoles = [
   "registrar_head",
   "registrar_staff",
   "accounting_staff",
+  "it_admin",
 ] as const
 
 export type UserRole = (typeof userRoles)[number]

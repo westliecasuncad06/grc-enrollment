@@ -38,8 +38,8 @@ final class RoleUserSeederTest extends TestCase
 
         $emails = User::pluck('email');
 
-        $this->assertCount(9, $emails);
-        $this->assertCount(9, $emails->unique());
+        $this->assertCount(10, $emails);
+        $this->assertCount(10, $emails->unique());
 
         foreach ($emails as $email) {
             $this->assertStringEndsWith('@grc.test', $email);
@@ -54,6 +54,17 @@ final class RoleUserSeederTest extends TestCase
             'email' => 'dean.seed@grc.test',
             'role' => UserRole::Dean->value,
             'college' => CollegeCode::Ccs->value,
+        ]);
+    }
+
+    public function test_it_seeds_the_it_control_identity(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'it.control@grc.test',
+            'role' => 'it_admin',
+            'status' => UserStatus::Active->value,
         ]);
     }
 
@@ -74,7 +85,7 @@ final class RoleUserSeederTest extends TestCase
 
         $this->seed(RoleUserSeeder::class);
 
-        $this->assertSame(9, User::count());
+        $this->assertSame(10, User::count());
         $this->assertSame($originalIds, User::orderBy('id')->pluck('id')->all());
     }
 
@@ -91,7 +102,7 @@ final class RoleUserSeederTest extends TestCase
         $this->seed(RoleUserSeeder::class);
 
         $this->assertDatabaseHas('users', ['id' => $unrelated->id]);
-        $this->assertSame(10, User::count());
+        $this->assertSame(11, User::count());
     }
 
     public function test_it_seeds_no_programs_or_academic_terms(): void

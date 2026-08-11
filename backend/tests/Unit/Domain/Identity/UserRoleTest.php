@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 
 final class UserRoleTest extends TestCase
 {
-    public function test_role_values_match_the_nine_prd_actors(): void
+    public function test_role_values_match_the_role_catalog(): void
     {
         self::assertSame([
             'student',
@@ -19,7 +19,16 @@ final class UserRoleTest extends TestCase
             'registrar_head',
             'registrar_staff',
             'accounting_staff',
+            'it_admin',
         ], array_column(UserRole::cases(), 'value'));
+    }
+
+    public function test_the_role_catalog_includes_it_admin(): void
+    {
+        $this->assertContains('it_admin', array_column(UserRole::cases(), 'value'));
+        $this->assertSame('IT Control', UserRole::ItAdmin->label());
+        $this->assertFalse(UserRole::ItAdmin->isLearnerScoped());
+        $this->assertCount(10, UserRole::cases());
     }
 
     public function test_role_labels_are_stable_and_human_readable(): void

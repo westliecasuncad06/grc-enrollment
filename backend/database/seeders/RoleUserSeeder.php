@@ -37,6 +37,7 @@ final class RoleUserSeeder extends Seeder
         'registrar_head' => ['name' => 'Seed Registrar Head', 'email' => 'registrar-head.seed@grc.test'],
         'registrar_staff' => ['name' => 'Seed Registrar Staff', 'email' => 'registrar-staff.seed@grc.test'],
         'accounting_staff' => ['name' => 'Seed Accounting Staff', 'email' => 'accounting.seed@grc.test'],
+        'it_admin' => ['name' => 'IT Control', 'email' => 'it.control@grc.test'],
     ];
 
     public function run(): void

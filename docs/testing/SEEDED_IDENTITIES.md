@@ -19,7 +19,7 @@ Next.js risked making a committed password valid in a production build.
 
 The identities below are the primary role-based sign-ins.
 
-## The nine identities
+## The ten identities
 
 One per PRD role. Names and emails are deterministic; reseeding updates these
 rows in place rather than creating duplicates.
@@ -35,6 +35,7 @@ rows in place rather than creating duplicates.
 | `registrar_head` | Seed Registrar Head | `registrar-head.seed@grc.test` |
 | `registrar_staff` | Seed Registrar Staff | `registrar-staff.seed@grc.test` |
 | `accounting_staff` | Seed Accounting Staff | `accounting.seed@grc.test` |
+| `it_admin` | IT Control | `it.control@grc.test` |
 
 All are created with status `active`. Emails use the reserved `.test` TLD
 (RFC 2606), so they can never resolve to a real mailbox.

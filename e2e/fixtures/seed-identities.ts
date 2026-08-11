@@ -16,6 +16,7 @@ export type SeedRole =
   | "registrar_head"
   | "registrar_staff"
   | "accounting_staff"
+  | "it_admin"
 
 export const SEED_IDENTITIES: Record<SeedRole, { email: string; name: string }> = {
   student: { email: "student.seed@grc.test", name: "Seed Student" },
@@ -27,6 +28,7 @@ export const SEED_IDENTITIES: Record<SeedRole, { email: string; name: string }> 
   registrar_head: { email: "registrar-head.seed@grc.test", name: "Seed Registrar Head" },
   registrar_staff: { email: "registrar-staff.seed@grc.test", name: "Seed Registrar Staff" },
   accounting_staff: { email: "accounting.seed@grc.test", name: "Seed Accounting Staff" },
+  it_admin: { email: "it.control@grc.test", name: "IT Control" },
 }
 
 /**
