@@ -33,6 +33,8 @@ const eligibleSubject = {
   is_required: true,
   is_eligible: true,
   reasons: [{ code: "eligible", message: "All requirements are met." }],
+  preference_score: null,
+  preference_reasons: [],
   available_sections: [
     {
       type: "section",

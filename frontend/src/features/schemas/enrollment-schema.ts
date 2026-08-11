@@ -30,6 +30,8 @@ export const eligibleSubjectSchema = z
     is_required: z.boolean(),
     is_eligible: z.boolean(),
     reasons: z.array(eligibleSubjectReasonSchema),
+    preference_score: z.number().int().nullable(),
+    preference_reasons: z.array(z.string()),
     available_sections: z.array(sectionSchema),
   })
   .strict()

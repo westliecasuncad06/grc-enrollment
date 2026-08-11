@@ -36,6 +36,8 @@ const eligibleSubject = {
   is_required: true,
   is_eligible: true,
   reasons: [{ code: "eligible", message: "All requirements are met." }],
+  preference_score: null,
+  preference_reasons: [],
   available_sections: [
     {
       type: "section",
@@ -133,6 +135,153 @@ const regularStudentSession = {
   role: "student",
   signedInAt: "2026-07-30T00:00:00Z",
 } as const
+
+const irregularViewer = {
+  audience: "irregular",
+  label: "Irregular Students",
+  opens_at: null,
+  closes_at: null,
+  is_open: true,
+  reason: "open",
+}
+
+const irregularStudentSession = {
+  userId: "1",
+  displayName: "Student",
+  role: "student",
+  signedInAt: "2026-07-30T00:00:00Z",
+} as const
+
+/** IT 305 meets MWF only; IT 205 meets TTh — used to exercise the Day filter. */
+const filterableSubjects = [
+  {
+    type: "eligible_subject",
+    subject_id: 30,
+    code: "IT 305",
+    title: "Systems Integration",
+    units: 3,
+    year_level: 3,
+    semester: "1st",
+    is_required: true,
+    is_eligible: true,
+    reasons: [{ code: "eligible", message: "All requirements are met." }],
+    preference_score: 40,
+    preference_reasons: ["Matches your preferred time block"],
+    available_sections: [
+      {
+        type: "section",
+        id: 30,
+        academic_term_id: 2,
+        subject_id: 30,
+        section_code: "A",
+        professor_id: 10,
+        schedule_days: "MWF",
+        starts_at_time: "08:00:00",
+        ends_at_time: "09:00:00",
+        room: "R101",
+        capacity: 30,
+        capacity_source: "plan",
+        viability_threshold: null,
+        enrolled_count: 0,
+        remaining_seats: 30,
+        is_block_exclusive: null,
+        status: "published",
+        status_label: "Published",
+      },
+    ],
+  },
+  {
+    type: "eligible_subject",
+    subject_id: 20,
+    code: "IT 205",
+    title: "Web Development",
+    units: 3,
+    year_level: 2,
+    semester: "1st",
+    is_required: true,
+    is_eligible: true,
+    reasons: [{ code: "eligible", message: "All requirements are met." }],
+    preference_score: 90,
+    preference_reasons: ["Matches your preferred days"],
+    available_sections: [
+      {
+        type: "section",
+        id: 20,
+        academic_term_id: 2,
+        subject_id: 20,
+        section_code: "A",
+        professor_id: 20,
+        schedule_days: "TTh",
+        starts_at_time: "13:00:00",
+        ends_at_time: "14:30:00",
+        room: "R202",
+        capacity: 30,
+        capacity_source: "plan",
+        viability_threshold: null,
+        enrolled_count: 0,
+        remaining_seats: 30,
+        is_block_exclusive: null,
+        status: "published",
+        status_label: "Published",
+      },
+    ],
+  },
+]
+
+function mockIrregularSchedule(input: RequestInfo | URL) {
+  const target = url(input)
+  if (
+    target.includes("/academic-terms") &&
+    target.includes("enrollment-windows")
+  )
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: {
+            type: "enrollment_schedule",
+            academic_term_id: 2,
+            status: "semester_ongoing",
+            enrollment_opens_at: null,
+            enrollment_closes_at: null,
+            audiences: [],
+            viewer: irregularViewer,
+            add_drop: addDropClosed,
+          },
+        }),
+      ),
+    )
+  return null
+}
+
+function mockIrregularRoutes(
+  overrides: { subjects?: unknown } = {},
+) {
+  return (input: RequestInfo | URL) => {
+    const scheduleResponse = mockIrregularSchedule(input)
+    if (scheduleResponse) return scheduleResponse
+
+    const target = url(input)
+    if (target.includes("/academic-terms"))
+      return Promise.resolve(new Response(JSON.stringify(terms)))
+    if (target.includes("/eligible-subjects"))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ data: overrides.subjects ?? filterableSubjects }),
+        ),
+      )
+    if (target.includes("/enrollments"))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+  }
+}
 
 const defaultSchedulePreference = {
   type: "student-schedule-preference",
@@ -1043,5 +1192,44 @@ describe("EnrollmentWorkspace", () => {
     expect(
       screen.queryByText("Pending Registrar Approval"),
     ).not.toBeInTheDocument()
+  })
+
+  it("filters the irregular subject pool by day without refetching", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockIrregularRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: irregularStudentSession,
+    })
+
+    await screen.findByRole("heading", { name: /eligible subjects/i })
+    const callsBefore = fetchMock.mock.calls.length
+
+    await user.selectOptions(screen.getByLabelText("Day"), "2")
+
+    expect(fetchMock.mock.calls).toHaveLength(callsBefore)
+    expect(screen.queryByText("IT 305")).not.toBeInTheDocument()
+    expect(screen.getByText(/IT 205/)).toBeInTheDocument()
+  })
+
+  it("sorts the irregular subject pool by preference score when applied, keeping every subject selectable", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockIrregularRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: irregularStudentSession,
+    })
+
+    await screen.findByRole("heading", { name: /eligible subjects/i })
+    await user.click(
+      screen.getByRole("switch", { name: "Apply my preferences" }),
+    )
+
+    const articles = screen.getAllByRole("article")
+    // IT 205 scores 90, IT 305 scores 40 -- highest preference_score first,
+    // but both remain present and their Section selects stay enabled.
+    expect(articles[0]).toHaveAccessibleName(/IT 205/)
+    expect(articles[1]).toHaveAccessibleName(/IT 305/)
+    for (const article of articles) {
+      expect(within(article).getByLabelText("Section")).toBeEnabled()
+    }
   })
 })

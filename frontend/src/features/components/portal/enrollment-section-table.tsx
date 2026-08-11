@@ -2,14 +2,13 @@
 
 import { useState } from "react"
 
+import { ApplyPreferencesSwitch } from "@/features/components/portal/apply-preferences-switch"
 import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
-import { Field, FieldLabel } from "@/features/components/ui/field"
-import { Switch } from "@/features/components/ui/switch"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
 /** Every distinct value across a block's subjects, joined for one table cell. */
@@ -128,16 +127,11 @@ export function EnrollmentSectionTable({
 
   return (
     <div className="grid gap-3">
-      <Field orientation="horizontal">
-        <Switch
-          id="enrollment-section-table-apply-preferences"
-          checked={applyPreferences}
-          onCheckedChange={setApplyPreferences}
-        />
-        <FieldLabel htmlFor="enrollment-section-table-apply-preferences">
-          Apply my preferences
-        </FieldLabel>
-      </Field>
+      <ApplyPreferencesSwitch
+        id="enrollment-section-table-apply-preferences"
+        checked={applyPreferences}
+        onCheckedChange={setApplyPreferences}
+      />
       <DataTable
         caption="Available sections"
         rowKey={(block) => block.block_code}

@@ -11,6 +11,7 @@ import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrol
 import { EnrollmentBlockDetailDialog } from "@/features/components/portal/enrollment-block-detail-dialog"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
+import { EnrollmentSubjectFilterBar } from "@/features/components/portal/enrollment-subject-filter-bar"
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
 import { StudentSchedulePreferencesPanel } from "@/features/components/portal/student-schedule-preferences-panel"
@@ -468,21 +469,36 @@ export function EnrollmentWorkspace() {
             loadingFallback={<Skeleton className="h-48" />}
           >
             {() => (
-              <StaggerList className="grid gap-3">
-                {selectableSubjects.map((subject) => (
-                  <StaggerItem key={subject.subject_id}>
-                    <SectionChoice
-                      subject={subject}
-                      selectedSectionId={selections[subject.subject_id]}
-                      onChoose={(sectionId) =>
-                        chooseSection(subject.subject_id, sectionId)
-                      }
-                      onClear={() => clearSection(subject.subject_id)}
-                      disabled={enrollmentWindowClosed}
-                    />
-                  </StaggerItem>
-                ))}
-              </StaggerList>
+              <Card>
+                <CardHeader>
+                  <CardTitle level={2}>Eligible subjects</CardTitle>
+                  <CardDescription>
+                    Filter the pool and, optionally, sort it by how well each
+                    subject fits your saved schedule preferences.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EnrollmentSubjectFilterBar subjects={selectableSubjects}>
+                    {(subjectsToShow) => (
+                      <StaggerList className="grid gap-3">
+                        {subjectsToShow.map((subject) => (
+                          <StaggerItem key={subject.subject_id}>
+                            <SectionChoice
+                              subject={subject}
+                              selectedSectionId={selections[subject.subject_id]}
+                              onChoose={(sectionId) =>
+                                chooseSection(subject.subject_id, sectionId)
+                              }
+                              onClear={() => clearSection(subject.subject_id)}
+                              disabled={enrollmentWindowClosed}
+                            />
+                          </StaggerItem>
+                        ))}
+                      </StaggerList>
+                    )}
+                  </EnrollmentSubjectFilterBar>
+                </CardContent>
+              </Card>
             )}
           </AsyncBoundary>
         ))
