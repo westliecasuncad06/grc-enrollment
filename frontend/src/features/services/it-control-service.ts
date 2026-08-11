@@ -1,10 +1,11 @@
 import {
   facultyAccountFiltersSchema,
   itControlAutomationRunResponseSchema,
-  itControlAutomationRunsSchema,
   paginatedItControlFacultyAccountsSchema,
+  paginatedItControlAutomationRunsSchema,
   paginatedItControlStudentAccountsSchema,
   studentAccountFiltersSchema,
+  startItControlAutomationRunSchema,
   type ItControlAutomationRun,
   type ItControlAutomationStep,
   type FacultyAccountFilters,
@@ -84,7 +85,7 @@ export async function getItControlAutomationRuns(
   signal?: AbortSignal,
 ): Promise<ItControlAutomationRun[]> {
   return parse(
-    itControlAutomationRunsSchema,
+    paginatedItControlAutomationRunsSchema,
     await getAuthenticatedJson(IT_CONTROL_AUTOMATION_RUNS_PATH, signal),
     "automation run list",
   ).data
@@ -108,11 +109,17 @@ export async function createItControlAutomationRun(
   step: ItControlAutomationStep,
   signal?: AbortSignal,
 ): Promise<ItControlAutomationRun> {
+  const request = parse(
+    startItControlAutomationRunSchema,
+    { step },
+    "automation run request",
+  )
+
   return parse(
     itControlAutomationRunResponseSchema,
     await postAuthenticatedJson(
       IT_CONTROL_AUTOMATION_RUNS_PATH,
-      { step },
+      request,
       signal,
     ),
     "automation run",

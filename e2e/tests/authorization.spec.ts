@@ -42,6 +42,11 @@ test.describe("cross-role authorization", () => {
     await expect(
       page.getByRole("heading", { name: "Enrollment overrides" }),
     ).toBeVisible()
+
+    await page.goto("/portal/audit-logs")
+    await expect(
+      page.getByRole("heading", { name: "Portal module not found" }),
+    ).toBeVisible()
   })
 
   test("journey 10 — a Student cannot reach a Faculty-only workspace", async ({

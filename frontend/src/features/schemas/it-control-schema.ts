@@ -114,10 +114,6 @@ export const itControlAutomationRunResponseSchema = z
   .object({ data: itControlAutomationRunSchema })
   .strict()
 
-export const itControlAutomationRunsSchema = z
-  .object({ data: z.array(itControlAutomationRunSchema) })
-  .passthrough()
-
 function paginatedSchema<Item extends z.ZodType>(itemSchema: Item) {
   return z
     .object({
@@ -134,6 +130,13 @@ export const paginatedItControlStudentAccountsSchema = paginatedSchema(
 export const paginatedItControlFacultyAccountsSchema = paginatedSchema(
   itControlFacultyAccountSchema,
 )
+export const paginatedItControlAutomationRunsSchema = paginatedSchema(
+  itControlAutomationRunSchema,
+)
+
+export const startItControlAutomationRunSchema = z
+  .object({ step: automationStepSchema })
+  .strict()
 
 export const studentAccountFiltersSchema = z
   .object({

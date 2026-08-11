@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -6,7 +6,22 @@ import { axe } from "vitest-axe"
 import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
 import { renderWithSession } from "@/tests/render-app"
 
-const succeededRun = {
+type AutomationRunFixture = {
+  type: "it-control-automation-run"
+  id: number
+  step: "chair_generate_sections"
+  academic_term_id: number
+  status: "queued" | "succeeded"
+  processed_count: number
+  failed_count: number
+  warnings: string[]
+  error_summary: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string | null
+}
+
+const succeededRun: AutomationRunFixture = {
   type: "it-control-automation-run",
   id: 41,
   step: "chair_generate_sections",
@@ -19,9 +34,40 @@ const succeededRun = {
   started_at: "2026-08-12T08:00:00+00:00",
   completed_at: "2026-08-12T08:01:00+00:00",
   created_at: "2026-08-12T08:00:00+00:00",
-} as const
+}
 
-const queuedRun = { ...succeededRun, status: "queued", processed_count: 0 }
+const queuedRun: AutomationRunFixture = {
+  ...succeededRun,
+  status: "queued",
+  processed_count: 0,
+}
+
+function automationRuns(runs: readonly AutomationRunFixture[]) {
+  return {
+    data: runs,
+    links: {
+      first: "https://api.test/it-control/automation-runs?page=1",
+      last: "https://api.test/it-control/automation-runs?page=1",
+      prev: null,
+      next: null,
+    },
+    meta: {
+      current_page: 1,
+      from: runs.length === 0 ? null : 1,
+      last_page: 1,
+      links: [],
+      path: "https://api.test/it-control/automation-runs",
+      per_page: 25,
+      to: runs.length === 0 ? null : runs.length,
+      total: runs.length,
+    },
+  }
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input
+  return input instanceof URL ? input.toString() : input.url
+}
 
 function renderWorkspace(role: "it_admin" | "registrar_head" = "it_admin") {
   return renderWithSession(<ItControlEnrollmentOverrideWorkspace />, {
@@ -40,12 +86,7 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
     fetchMock.mockImplementation((input, init) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url
+      const url = requestUrl(input)
 
       if (init?.method === "POST") {
         return Promise.resolve(
@@ -59,7 +100,7 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
         )
       }
 
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+      return Promise.resolve(new Response(JSON.stringify(automationRuns([]))))
     })
   })
 
@@ -87,6 +128,50 @@ describe("ItControlEnrollmentOverrideWorkspace", () => {
     expect(
       await screen.findByRole("button", { name: /Dean approves all/i }),
     ).toBeDisabled()
+  })
+
+  it("keeps the newest completed run when history includes duplicates", async () => {
+    fetchMock.mockImplementation(() => {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            automationRuns([
+              { ...succeededRun, id: 41, processed_count: 777 },
+              { ...succeededRun, id: 40, processed_count: 123 },
+            ]),
+          ),
+        ),
+      )
+    })
+    renderWorkspace()
+
+    expect(await screen.findByText(/777 processed/)).toBeInTheDocument()
+  })
+
+  it("resumes polling from a queued run returned after reload", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+
+      if (url.endsWith("/automation-runs/42")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { ...queuedRun, id: 42 } })),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(automationRuns([{ ...queuedRun, id: 42 }])),
+        ),
+      )
+    })
+    renderWorkspace()
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/automation-runs/42"),
+        expect.anything(),
+      ),
+    )
   })
 
   it("renders the role guard without fetching automation runs for an unauthorized role", () => {

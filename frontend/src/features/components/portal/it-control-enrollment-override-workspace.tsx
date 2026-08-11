@@ -95,6 +95,10 @@ function isTerminalSuccess(run: ItControlAutomationRun | undefined) {
   return run?.status === "succeeded"
 }
 
+function isTerminal(run: ItControlAutomationRun) {
+  return !isActiveItControlAutomationRun(run.status)
+}
+
 function displayStatus(run: ItControlAutomationRun | undefined) {
   if (!run) return "Idle"
   if (run.status === "queued") return "Running"
@@ -114,8 +118,16 @@ function statusVariant(
   return "outline"
 }
 
-function latestRunByStep(runs: readonly ItControlAutomationRun[]) {
-  return new Map(runs.map((run) => [run.step, run]))
+function latestCompletedRunByStep(runs: readonly ItControlAutomationRun[]) {
+  const completed = new Map<ItControlAutomationStep, ItControlAutomationRun>()
+
+  for (const run of runs) {
+    if (isTerminal(run) && !completed.has(run.step)) {
+      completed.set(run.step, run)
+    }
+  }
+
+  return completed
 }
 
 function formattedTimestamp(run: ItControlAutomationRun) {
@@ -133,11 +145,18 @@ export function ItControlEnrollmentOverrideWorkspace() {
   const [activeRunId, setActiveRunId] = useState<number | null>(null)
   const [overrideOrder, setOverrideOrder] = useState(false)
   const runsQuery = useItControlAutomationRunsQuery(authorized)
-  const activeRunQuery = useItControlAutomationRunQuery(activeRunId, authorized)
+  const reloadedActiveRun = (runsQuery.data ?? []).find((run) =>
+    isActiveItControlAutomationRun(run.status),
+  )
+  const resolvedActiveRunId = activeRunId ?? reloadedActiveRun?.id ?? null
+  const activeRunQuery = useItControlAutomationRunQuery(
+    resolvedActiveRunId,
+    authorized,
+  )
   const startRun = useStartItControlAutomationRunMutation()
   const activeRun = activeRunQuery.data
   const runs = useMemo(() => {
-    const byStep = latestRunByStep(runsQuery.data ?? [])
+    const byStep = latestCompletedRunByStep(runsQuery.data ?? [])
 
     if (activeRun) byStep.set(activeRun.step, activeRun)
 
