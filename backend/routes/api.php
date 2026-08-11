@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
+use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectOfferingController;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
@@ -115,6 +116,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Own-record only — no role gate beyond authentication, since the
         // Policy resolves "whose profile is this" the same way auth/me does.
         Route::get('/student-profile', [StudentProfileController::class, 'show'])->name('student-profile.show');
+
+        // Own-record only, same shape as student-profile.show — no role
+        // gate beyond authentication; StudentSchedulePreferencePolicy
+        // resolves "student role only, and only their own row" for both
+        // the GET and the upsert PUT.
+        Route::get('/student-schedule-preferences', [StudentSchedulePreferenceController::class, 'show'])->name('student-schedule-preferences.show');
+        Route::put('/student-schedule-preferences', [StudentSchedulePreferenceController::class, 'update'])->name('student-schedule-preferences.update');
 
         // Own computed view, not a stored resource — EligibleSubjectPolicy
         // resolves "student role only" the same way FacultyMemberPolicy

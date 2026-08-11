@@ -142,6 +142,8 @@ final class AuditAction
 
     public const ENROLLMENT_CHANGE_REQUEST_REJECTED = 'enrollment_change_request.rejected';
 
+    public const STUDENT_SCHEDULE_PREFERENCE_SAVED = 'student_schedule_preference.saved';
+
     /**
      * @return list<string>
      */
@@ -217,6 +219,7 @@ final class AuditAction
             self::ENROLLMENT_CHANGE_REQUEST_CREATED,
             self::ENROLLMENT_CHANGE_REQUEST_APPROVED,
             self::ENROLLMENT_CHANGE_REQUEST_REJECTED,
+            self::STUDENT_SCHEDULE_PREFERENCE_SAVED,
         ];
     }
 }

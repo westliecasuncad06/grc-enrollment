@@ -65,6 +65,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/stuck-enrollments',
             'GET|HEAD api/v1/student-profile',
+            'GET|HEAD api/v1/student-schedule-preferences',
             'GET|HEAD api/v1/subject-offerings',
             'GET|HEAD api/v1/subjects',
             'GET|HEAD api/v1/transferee-credits',
@@ -113,6 +114,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-threshold',
+            'PUT api/v1/student-schedule-preferences',
         ], $routes);
     }
 
@@ -182,6 +184,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.schedule-proposals.update',
             'api.v1.student-profile.show',
             'api.v1.student-profiles.store',
+            'api.v1.student-schedule-preferences.show',
+            'api.v1.student-schedule-preferences.update',
             'api.v1.dashboards.enrollment-summary',
             'api.v1.dashboards.institution-summary',
             'api.v1.dashboards.policy-settings',

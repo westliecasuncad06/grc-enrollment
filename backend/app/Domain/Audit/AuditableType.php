@@ -52,6 +52,8 @@ final class AuditableType
 
     public const ENROLLMENT_CHANGE_REQUEST = 'enrollment_change_request';
 
+    public const STUDENT_SCHEDULE_PREFERENCE = 'student_schedule_preference';
+
     /**
      * @return list<string>
      */
@@ -82,6 +84,7 @@ final class AuditableType
             self::SECTION_PLAN,
             self::ACADEMIC_TERM_YEAR_LEVEL_WINDOW,
             self::ENROLLMENT_CHANGE_REQUEST,
+            self::STUDENT_SCHEDULE_PREFERENCE,
         ];
     }
 }
