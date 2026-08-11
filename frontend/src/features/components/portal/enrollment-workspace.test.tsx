@@ -263,6 +263,10 @@ function mockIrregularRoutes(
     const target = url(input)
     if (target.includes("/academic-terms"))
       return Promise.resolve(new Response(JSON.stringify(terms)))
+    if (target.endsWith("/student-schedule-preferences"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: defaultSchedulePreference })),
+      )
     if (target.includes("/eligible-subjects"))
       return Promise.resolve(
         new Response(
@@ -1196,6 +1200,17 @@ describe("EnrollmentWorkspace", () => {
     expect(
       screen.queryByText("Pending Registrar Approval"),
     ).not.toBeInTheDocument()
+  })
+
+  it("loads the schedule preference panel for an irregular student", async () => {
+    fetchMock.mockImplementation(mockIrregularRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: irregularStudentSession,
+    })
+
+    expect(
+      await screen.findByRole("checkbox", { name: "Monday" }),
+    ).toBeInTheDocument()
   })
 
   it("filters the irregular subject pool by day without refetching", async () => {
