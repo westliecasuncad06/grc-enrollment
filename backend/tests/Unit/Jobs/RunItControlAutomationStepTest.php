@@ -42,6 +42,44 @@ final class RunItControlAutomationStepTest extends TestCase
         $this->assertNotNull($run->completed_at);
     }
 
+    public function test_it_persists_failure_before_a_retry_can_observe_a_running_run(): void
+    {
+        $run = ItControlAutomationRun::create([
+            'step' => AutomationStep::DeanApproveAll,
+            'academic_term_id' => AcademicTerm::create([
+                'school_year' => '2026-2027',
+                'semester' => '1st',
+                'status' => AcademicTermStatus::SemesterOngoing,
+            ])->id,
+            'status' => AutomationRunStatus::Queued,
+            'initiated_by' => $this->makeUser()->id,
+        ]);
+        $job = new RunItControlAutomationStep($run->id);
+
+        ItControlAutomationRun::updating(static function (ItControlAutomationRun $updatingRun): void {
+            if ($updatingRun->status === AutomationRunStatus::Succeeded) {
+                throw new RuntimeException('The post-running work failed.');
+            }
+        });
+
+        try {
+            $job->handle();
+            $this->fail('The simulated post-running failure was not rethrown.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('The post-running work failed.', $exception->getMessage());
+        }
+
+        $run->refresh();
+        $this->assertSame(AutomationRunStatus::Failed, $run->status);
+        $this->assertSame('IT-control automation run failed. Review the run details and retry.', $run->error_summary);
+        $this->assertNotNull($run->completed_at);
+
+        $job->handle();
+
+        $run->refresh();
+        $this->assertSame(AutomationRunStatus::Failed, $run->status);
+    }
+
     private function makeUser(): User
     {
         return User::create([

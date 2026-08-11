@@ -33,15 +33,26 @@ final class RunItControlAutomationStep implements ShouldQueue
             'started_at' => now(),
         ]);
 
-        // Task 4 deliberately tracks the lifecycle only. Task 5 supplies
-        // the business action selected by the persisted step.
-        $run->update([
-            'status' => AutomationRunStatus::Succeeded,
-            'completed_at' => now(),
-        ]);
+        try {
+            // Task 4 deliberately tracks the lifecycle only. Task 5 supplies
+            // the business action selected by the persisted step.
+            $run->update([
+                'status' => AutomationRunStatus::Succeeded,
+                'completed_at' => now(),
+            ]);
+        } catch (Throwable $exception) {
+            $this->persistFailure();
+
+            throw $exception;
+        }
     }
 
     public function failed(Throwable $exception): void
+    {
+        $this->persistFailure();
+    }
+
+    private function persistFailure(): void
     {
         $run = ItControlAutomationRun::query()->find($this->automationRunId);
 
