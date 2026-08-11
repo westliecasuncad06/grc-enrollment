@@ -637,15 +637,25 @@ final class StudentRosterSeederTest extends TestCase
         }
     }
 
+    public function test_fresh_seed_classifies_a_roster_with_no_irregular_eligible_students(): void
+    {
+        $termStatuses = AcademicTerm::query()->orderBy('id')->pluck('status', 'id');
+
+        (new StudentRosterSeeder($this->firstYearFixturePath()))->run();
+
+        $this->assertSame(0, StudentProfile::whereNull('enrollment_category')->count());
+        $this->assertSame(1, StudentProfile::where('enrollment_category', 'regular')->count());
+        $this->assertSame(
+            $termStatuses->all(),
+            AcademicTerm::query()->orderBy('id')->pluck('status', 'id')->all(),
+        );
+    }
+
     /**
-     * Mirrors what `php artisan students:reclassify` (and, per the Task 4
-     * brief, the IT Control automation ahead of enrollment) does once a
-     * Registrar Head has actually opened a `semester_ongoing` term —
-     * `StudentRosterSeeder` itself only auto-classifies when one already
-     * exists at seed time (see `reclassifyIfTermIsOngoing()`), and
-     * `AcademicTermSeeder` deliberately leaves none, so every test that
-     * needs a derived category arranges one here exactly like the real
-     * post-seed workflow would.
+     * Mirrors the explicit `php artisan students:reclassify` workflow after
+     * a Registrar Head opens a `semester_ongoing` term. The seeder already
+     * derives fresh categories against the current slot; tests that exercise
+     * the later ongoing-term context invoke that same action again here.
      */
     private function reclassifyAllStudents(): void
     {
@@ -677,6 +687,11 @@ final class StudentRosterSeederTest extends TestCase
     private function ccsThirdYearFixturePath(): string
     {
         return __DIR__.'/../../fixtures/students-profile-ccs-third-year-sample.md';
+    }
+
+    private function firstYearFixturePath(): string
+    {
+        return __DIR__.'/../../fixtures/students-profile-first-year-sample.md';
     }
 
     /**

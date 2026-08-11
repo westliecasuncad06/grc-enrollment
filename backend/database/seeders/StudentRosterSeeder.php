@@ -749,9 +749,9 @@ final class StudentRosterSeeder extends Seeder
      * from that evidence — the category itself is never written directly
      * here, matching `DemoEnrollmentSeeder::reclassify()`'s precedent.
      *
-     * A no-op before any accounts exist to rewrite grades for (e.g. an
-     * empty roster file — `run()` already returned earlier in that case,
-     * but `selectIrregularCandidates()` guards independently too).
+     * A roster with no eligible irregular candidates still needs the final
+     * reclassification pass so its clean records are explicitly Regular.
+     * An empty roster file already returns from `run()` before this method.
      *
      * @param  list<string>  $rosterStudentNumbers  every student number this
      *                                              run's `parseRoster()` produced — see `selectIrregularCandidates()`.
@@ -759,11 +759,10 @@ final class StudentRosterSeeder extends Seeder
     private function seedIrregularStudents(array $rosterStudentNumbers): void
     {
         $candidates = $this->selectIrregularCandidates($rosterStudentNumbers);
-        if ($candidates === []) {
-            return;
+        if ($candidates !== []) {
+            $this->rewriteGradesToFailing($candidates);
         }
 
-        $this->rewriteGradesToFailing($candidates);
         $this->reclassifyAgainstCurrentTerm();
     }
 
@@ -937,7 +936,7 @@ final class StudentRosterSeeder extends Seeder
         $actor = User::query()->where('role', UserRole::RegistrarHead)->first();
         if ($actor === null) {
             throw new RuntimeException(
-                'StudentRosterSeeder found a semester_ongoing term but no registrar_head user to attribute the '.
+                'StudentRosterSeeder found a current academic term but no registrar_head user to attribute the '.
                 'enrollment_category reclassification audit trail to. Seed at least one registrar_head user '.
                 '(e.g. via RoleUserSeeder) before StudentRosterSeeder.',
             );
