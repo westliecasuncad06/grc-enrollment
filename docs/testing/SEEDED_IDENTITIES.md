@@ -21,7 +21,7 @@ The identities below are the primary role-based sign-ins.
 
 ## The ten identities
 
-One per PRD role. Names and emails are deterministic; reseeding updates these
+One per supported role. Names and emails are deterministic; reseeding updates these
 rows in place rather than creating duplicates.
 
 | Role | Name | Email |
