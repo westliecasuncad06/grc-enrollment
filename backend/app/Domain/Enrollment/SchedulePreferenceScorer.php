@@ -150,7 +150,7 @@ final class SchedulePreferenceScorer
      */
     private static function scoreTimeBlock(StudentSchedulePreference $preference, array $startTimes): array
     {
-        $timeBlock = $preference->preferred_time_block;
+        $timeBlock = $preference->preferred_time_block ?? PreferredTimeBlock::Any;
 
         if ($startTimes === [] || $timeBlock === PreferredTimeBlock::Any) {
             return [0, null];

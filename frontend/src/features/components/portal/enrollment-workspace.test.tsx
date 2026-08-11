@@ -700,6 +700,10 @@ describe("EnrollmentWorkspace", () => {
       const target = url(input)
       if (target.includes("/academic-terms"))
         return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (target.endsWith("/student-schedule-preferences"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: defaultSchedulePreference })),
+        )
       if (target.includes("/eligible-subjects"))
         return Promise.reject(new TypeError("Failed to fetch"))
       if (target.includes("/enrollments"))

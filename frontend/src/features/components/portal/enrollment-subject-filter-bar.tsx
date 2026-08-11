@@ -25,7 +25,6 @@ const DAY_OPTIONS = [
   { value: "4", label: "Thursday" },
   { value: "5", label: "Friday" },
   { value: "6", label: "Saturday" },
-  { value: "7", label: "Sunday" },
 ] as const
 
 const TIME_BLOCK_OPTIONS = [
