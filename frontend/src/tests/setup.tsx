@@ -71,6 +71,22 @@ if (typeof window !== "undefined") {
       removeEventListener: () => undefined,
       dispatchEvent: () => false,
     }) as MediaQueryList
+  // jsdom implements no ResizeObserver at all — Radix's Switch and Slider
+  // (via @radix-ui/react-use-size) call `new ResizeObserver(...)` directly
+  // in a layout effect to track thumb size, so without a stub any component
+  // rendering one throws and unmounts the whole tree under test.
+  window.ResizeObserver ??= class ResizeObserver {
+    observe() {
+      // No layout to observe under jsdom — Radix only needs the
+      // constructor call itself not to throw.
+    }
+    unobserve() {
+      /* no-op */
+    }
+    disconnect() {
+      /* no-op */
+    }
+  }
 }
 /* eslint-enable @typescript-eslint/unbound-method */
 
