@@ -10,7 +10,7 @@ final class StoreAutomationRunRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return app()->environment(['local', 'testing']);
     }
 
     /** @return array<string, mixed> */

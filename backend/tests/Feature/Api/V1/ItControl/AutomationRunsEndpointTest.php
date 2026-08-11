@@ -104,6 +104,24 @@ final class AutomationRunsEndpointTest extends TestCase
         }
     }
 
+    public function test_it_refuses_an_invalid_payload_outside_local_and_testing_before_validation(): void
+    {
+        $itAdmin = $this->makeUser('it-admin-production-invalid', UserRole::ItAdmin);
+        $this->makeCurrentTerm();
+        $originalEnvironment = app()->environment();
+
+        app()->detectEnvironment(static fn (): string => 'production');
+
+        try {
+            $this->withToken($this->tokenFor($itAdmin))
+                ->postJson('/api/v1/it-control/automation-runs', ['step' => 'not-a-valid-step'])
+                ->assertForbidden()
+                ->assertJsonPath('error.code', 'FORBIDDEN');
+        } finally {
+            app()->detectEnvironment(static fn (): string => $originalEnvironment);
+        }
+    }
+
     public function test_it_rejects_a_second_run_of_the_same_step_while_one_is_active(): void
     {
         Queue::fake();

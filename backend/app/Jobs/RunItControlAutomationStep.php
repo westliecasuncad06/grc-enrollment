@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Throwable;
 
 final class RunItControlAutomationStep implements ShouldQueue
 {
@@ -36,6 +37,21 @@ final class RunItControlAutomationStep implements ShouldQueue
         // the business action selected by the persisted step.
         $run->update([
             'status' => AutomationRunStatus::Succeeded,
+            'completed_at' => now(),
+        ]);
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        $run = ItControlAutomationRun::query()->find($this->automationRunId);
+
+        if ($run === null) {
+            return;
+        }
+
+        $run->update([
+            'status' => AutomationRunStatus::Failed,
+            'error_summary' => 'IT-control automation run failed. Review the run details and retry.',
             'completed_at' => now(),
         ]);
     }

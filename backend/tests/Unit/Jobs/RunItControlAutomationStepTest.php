@@ -1,0 +1,55 @@
+<?php
+
+namespace Tests\Unit\Jobs;
+
+use App\Domain\Identity\UserRole;
+use App\Domain\Identity\UserStatus;
+use App\Domain\ItControl\AutomationRunStatus;
+use App\Domain\ItControl\AutomationStep;
+use App\Domain\Organization\AcademicTermStatus;
+use App\Jobs\RunItControlAutomationStep;
+use App\Models\AcademicTerm;
+use App\Models\ItControlAutomationRun;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
+use Tests\TestCase;
+
+final class RunItControlAutomationStepTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_it_finalizes_a_running_run_when_the_queue_execution_fails(): void
+    {
+        $run = ItControlAutomationRun::create([
+            'step' => AutomationStep::DeanApproveAll,
+            'academic_term_id' => AcademicTerm::create([
+                'school_year' => '2026-2027',
+                'semester' => '1st',
+                'status' => AcademicTermStatus::SemesterOngoing,
+            ])->id,
+            'status' => AutomationRunStatus::Running,
+            'initiated_by' => $this->makeUser()->id,
+            'started_at' => now(),
+        ]);
+
+        (new RunItControlAutomationStep($run->id))->failed(new RuntimeException('Queue worker unavailable.'));
+
+        $run->refresh();
+
+        $this->assertSame(AutomationRunStatus::Failed, $run->status);
+        $this->assertSame('IT-control automation run failed. Review the run details and retry.', $run->error_summary);
+        $this->assertNotNull($run->completed_at);
+    }
+
+    private function makeUser(): User
+    {
+        return User::create([
+            'name' => 'IT Admin',
+            'email' => 'it-admin@grc.test',
+            'password' => 'password',
+            'role' => UserRole::ItAdmin,
+            'status' => UserStatus::Active,
+        ]);
+    }
+}
