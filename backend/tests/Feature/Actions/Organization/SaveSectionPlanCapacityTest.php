@@ -23,6 +23,7 @@ use App\Models\Subject;
 use App\Models\SubjectOffering;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
@@ -145,5 +146,58 @@ final class SaveSectionPlanCapacityTest extends TestCase
 
         self::assertSame(55, $section->refresh()->capacity);
         self::assertSame(CapacitySource::Manual, $section->capacity_source);
+    }
+
+    /**
+     * Per product direction, a Program Chair must still be able to submit
+     * a curriculum for Dean/Executive Director approval even when it
+     * currently has fewer than 4 year-level plans — e.g. a program with no
+     * continuing students in its upper years yet, or one still missing
+     * historical demand data for a specific year. Only a curriculum with
+     * zero plans at all (nothing to release) is rejected.
+     */
+    public function test_releasing_every_year_succeeds_with_fewer_than_four_year_level_plans(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $chair = $this->makeChair();
+        $subject = $this->placeSubject($curriculum, 'ITC');
+
+        AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id,
+            'college' => 'ccs', 'year_level' => 1, 'section_count' => 1,
+            'students_per_block' => 40, 'status' => SectionPlanStatus::Draft,
+        ]);
+        AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id,
+            'college' => 'ccs', 'year_level' => 2, 'section_count' => 1,
+            'students_per_block' => 40, 'status' => SectionPlanStatus::Draft,
+        ]);
+
+        $plans = app(SaveSectionPlan::class)->release(
+            $term, $curriculum->id, $chair, new AuditRequestContext('partial-release-test', null),
+        );
+
+        self::assertCount(2, $plans);
+        self::assertDatabaseHas('sections', [
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject->id,
+        ]);
+    }
+
+    public function test_releasing_a_curriculum_with_zero_plans_is_still_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $chair = $this->makeChair();
+
+        try {
+            app(SaveSectionPlan::class)->release(
+                $term, $curriculum->id, $chair, new AuditRequestContext('empty-release-test', null),
+            );
+            self::fail('Expected releasing a curriculum with no section plans at all to be rejected.');
+        } catch (ValidationException $exception) {
+            self::assertArrayHasKey('counts', $exception->errors());
+        }
     }
 }

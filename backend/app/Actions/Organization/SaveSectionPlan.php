@@ -119,7 +119,14 @@ final class SaveSectionPlan
                 ->get()
                 ->keyBy('year_level');
 
-            if (($yearLevel === null && $plans->count() !== 4) || ($yearLevel !== null && ! $plans->has($yearLevel))) {
+            // A curriculum's real current cohort does not always span all
+            // 4 year levels (e.g. no continuing students in the upper years
+            // yet, or missing historical demand data for one of them) — a
+            // Program Chair must still be able to release and submit
+            // whatever years genuinely have a plan, rather than being
+            // blocked until every one of the 4 is filled in. Only a
+            // curriculum with no plan at all has nothing to release.
+            if (($yearLevel === null && $plans->isEmpty()) || ($yearLevel !== null && ! $plans->has($yearLevel))) {
                 throw ValidationException::withMessages(['counts' => 'Complete the 1st through 4th year section counts first.']);
             }
 
