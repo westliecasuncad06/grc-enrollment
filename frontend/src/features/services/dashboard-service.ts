@@ -2,10 +2,12 @@ import {
   enrollmentSummaryEnvelopeSchema,
   institutionSummaryEnvelopeSchema,
   policySettingsEnvelopeSchema,
+  programChairAnalyticsSummaryEnvelopeSchema,
   stuckEnrollmentsEnvelopeSchema,
   type EnrollmentSummary,
   type InstitutionSummary,
   type PolicySettingsSummary,
+  type ProgramChairAnalyticsSummary,
   type StuckEnrollmentsResponse,
 } from "@/features/schemas/dashboard-schema"
 import {
@@ -17,6 +19,8 @@ export const ENROLLMENT_SUMMARY_PATH = "/api/v1/dashboards/enrollment-summary"
 export const INSTITUTION_SUMMARY_PATH = "/api/v1/dashboards/institution-summary"
 export const POLICY_SETTINGS_PATH = "/api/v1/dashboards/policy-settings"
 export const STUCK_ENROLLMENTS_PATH = "/api/v1/stuck-enrollments"
+export const PROGRAM_CHAIR_ANALYTICS_SUMMARY_PATH =
+  "/api/v1/dashboards/program-chair-analytics-summary"
 
 function parse<T>(
   schema: {
@@ -89,4 +93,19 @@ export async function getStuckEnrollments(
     ),
     "stuck enrollments list",
   )
+}
+
+export async function getProgramChairAnalyticsSummary(
+  academicTermId?: number,
+  signal?: AbortSignal,
+): Promise<ProgramChairAnalyticsSummary> {
+  const envelope = parse(
+    programChairAnalyticsSummaryEnvelopeSchema,
+    await getAuthenticatedJson(
+      withTerm(PROGRAM_CHAIR_ANALYTICS_SUMMARY_PATH, academicTermId),
+      signal,
+    ),
+    "program chair analytics summary",
+  )
+  return envelope.data
 }

@@ -106,6 +106,23 @@
   --chart-3: #52565d;
   --chart-4: #8c9096;
   --chart-5: #d8d2c5;
+  /* Categorical series palette for real multi-series charts (recharts, etc.) —
+     distinct from --chart-1..5 above, which are unused shadcn scaffolding in
+     the institutional red/gold brand hues and were never validated for
+     colorblind-safe adjacent-series separation. Values are the dataviz
+     skill's validated reference palette (see the `dataviz` skill's
+     references/palette.md): fixed hue order, CVD ΔE >= 8 and normal-vision
+     ΔE >= 15 on every adjacent pair, in both light and dark. */
+  --dataviz-series-1: #2a78d6;
+  --dataviz-series-2: #eb6834;
+  --dataviz-series-3: #1baf7a;
+  --dataviz-series-4: #eda100;
+  --dataviz-series-5: #e87ba4;
+  --dataviz-series-6: #008300;
+  --dataviz-series-7: #4a3aa7;
+  --dataviz-series-8: #e34948;
+  --dataviz-grid: #e1e0d9;
+  --dataviz-axis: #c3c2b7;
   --radius: 0.45rem;
   --sidebar: #fbfaf7;
   --sidebar-foreground: var(--ink);
@@ -162,6 +179,16 @@
   --sidebar-accent-foreground: #f8e9ad;
   --sidebar-border: #3d3d42;
   --sidebar-ring: #ef4763;
+  --dataviz-series-1: #3987e5;
+  --dataviz-series-2: #d95926;
+  --dataviz-series-3: #199e70;
+  --dataviz-series-4: #c98500;
+  --dataviz-series-5: #d55181;
+  --dataviz-series-6: #008300;
+  --dataviz-series-7: #9085e9;
+  --dataviz-series-8: #e66767;
+  --dataviz-grid: #2c2c2a;
+  --dataviz-axis: #383835;
 }
 
 @layer base {

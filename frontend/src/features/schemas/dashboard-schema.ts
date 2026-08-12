@@ -99,6 +99,38 @@ export const stuckEnrollmentsEnvelopeSchema = z
   })
   .strict()
 
+const analyticsYearOverYearPointSchema = z
+  .object({
+    school_year: z.string().min(1),
+    semester: z.string().min(1),
+    enrollee_count: z.number().int().nonnegative(),
+  })
+  .strict()
+
+const retentionBreakdownRowSchema = z
+  .object({
+    grade_status: z.string().min(1),
+    enrollment_status: z.string().min(1),
+    count: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export const programChairAnalyticsSummarySchema = z
+  .object({
+    type: z.literal("program_chair_analytics_summary"),
+    academic_term_id: z.number().int().positive(),
+    college: z.string().min(1),
+    enrollment_status_counts: z.record(z.string(), z.number().int().nonnegative()),
+    grade_status_counts: z.record(z.string(), z.number().int().nonnegative()),
+    retention_breakdown: z.array(retentionBreakdownRowSchema),
+    year_over_year: z.array(analyticsYearOverYearPointSchema),
+  })
+  .strict()
+
+export const programChairAnalyticsSummaryEnvelopeSchema = z
+  .object({ data: programChairAnalyticsSummarySchema })
+  .strict()
+
 export type EnrollmentSummary = z.infer<typeof enrollmentSummarySchema>
 export type InstitutionSummary = z.infer<typeof institutionSummarySchema>
 export type PolicyValueState = z.infer<typeof policyValueStateSchema>
@@ -106,4 +138,7 @@ export type PolicySettingsSummary = z.infer<typeof policySettingsSummarySchema>
 export type StuckEnrollment = z.infer<typeof stuckEnrollmentSchema>
 export type StuckEnrollmentsResponse = z.infer<
   typeof stuckEnrollmentsEnvelopeSchema
+>
+export type ProgramChairAnalyticsSummary = z.infer<
+  typeof programChairAnalyticsSummarySchema
 >

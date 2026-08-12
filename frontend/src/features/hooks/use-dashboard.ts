@@ -7,6 +7,7 @@ import {
   getEnrollmentSummary,
   getInstitutionSummary,
   getPolicySettings,
+  getProgramChairAnalyticsSummary,
   getStuckEnrollments,
 } from "@/features/services/dashboard-service"
 
@@ -67,6 +68,27 @@ export function useStuckEnrollmentsQuery(
   return useQuery({
     queryKey: stuckEnrollmentsQueryKey(session?.userId ?? null, academicTermId),
     queryFn: ({ signal }) => getStuckEnrollments(academicTermId, signal),
+    enabled: enabled && session !== null,
+  })
+}
+
+export const programChairAnalyticsSummaryQueryKey = (
+  userId: string | null,
+  academicTermId?: number,
+) => ["program-chair-analytics-summary", userId, academicTermId ?? null] as const
+
+export function useProgramChairAnalyticsSummaryQuery(
+  academicTermId?: number,
+  enabled = true,
+) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: programChairAnalyticsSummaryQueryKey(
+      session?.userId ?? null,
+      academicTermId,
+    ),
+    queryFn: ({ signal }) =>
+      getProgramChairAnalyticsSummary(academicTermId, signal),
     enabled: enabled && session !== null,
   })
 }
