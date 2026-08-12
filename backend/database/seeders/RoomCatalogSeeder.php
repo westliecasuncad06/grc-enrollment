@@ -17,8 +17,17 @@ final class RoomCatalogSeeder extends Seeder
 
         DB::transaction(function (): void {
             foreach (RoomCatalog::all() as $room) {
+                // Without capacity/room_type, GenerateFacultyAssignmentRecommendations's
+                // room auto-assignment can never match any room at all — see
+                // PredictivePlanningInputSeeder for the same defaults this
+                // mirrors, scoped there to CCS only and to a precondition
+                // the real dataset's term timeline can never satisfy.
                 RoomCatalogEntry::updateOrCreate(
                     ['name' => $room['name'], 'college' => $room['college']->value],
+                    [
+                        'capacity' => 45,
+                        'room_type' => str_contains(strtoupper($room['name']), 'LAB') ? 'laboratory' : 'lecture',
+                    ],
                 );
             }
         });
