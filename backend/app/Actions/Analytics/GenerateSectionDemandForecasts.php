@@ -61,7 +61,13 @@ final class GenerateSectionDemandForecasts
                         ->orWhere('semester', 'like', '%'.$term->semester.'%');
                 })
                 ->whereHas('curriculum', fn ($curricula) => $curricula->where('status', CurriculumStatus::Active))
-                ->whereHas('curriculum.program', fn ($programs) => $programs->where('college', $generationRun->college))
+                ->whereHas('curriculum.program', fn ($programs) => $programs
+                    ->where('college', $generationRun->college)
+                    // The Teacher Certificate Program is a one-year intake,
+                    // not a 4-year degree — the automation's documented
+                    // scope is the 1st-4th year degree-program process
+                    // only, so TCP's placements never reach the predictor.
+                    ->where('code', '!=', 'TCP'))
                 ->get();
 
             if ($placements->isEmpty()) {

@@ -167,6 +167,28 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
     }
 
     /**
+     * A small number of placements (23-29 out of 678 with a real
+     * reference_day) have no recorded start/end time at all — genuinely
+     * missing source data, not a parsing gap. Per product direction, this
+     * defaults to the most common real time block already present in the
+     * seeded roster (07:30-10:30) rather than staying unresolved.
+     */
+    public function test_a_subject_with_no_reference_time_at_all_defaults_to_the_common_morning_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'BUSRES', ['reference_day' => 'Wed']);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $section = $this->makeSection($term, $plan, $placement->subject_id);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $section->refresh();
+        $this->assertSame('07:30:00', $section->starts_at_time);
+        $this->assertSame('10:30:00', $section->ends_at_time);
+    }
+
+    /**
      * The seeded reference roster names the same real person inconsistently
      * across placements (e.g. "COACH LORETO" on one subject, "COACH.
      * LORETO" — with a period — on another). `Str::slug()` strips that

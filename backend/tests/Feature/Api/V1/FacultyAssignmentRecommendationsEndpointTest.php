@@ -158,6 +158,28 @@ final class FacultyAssignmentRecommendationsEndpointTest extends TestCase
         self::assertSame(SectionModality::FaceToFace, $section->refresh()->modality);
     }
 
+    /**
+     * A small number of placements have a real reference_day but no
+     * recorded start/end time at all — genuinely missing source data. Per
+     * product direction, this defaults to the most common real time block
+     * already present in the seeded roster (07:30-10:30) rather than
+     * staying unresolved.
+     */
+    public function test_a_reference_with_no_time_value_at_all_defaults_to_the_common_morning_block(): void
+    {
+        [$section, $run] = $this->recommendationContext();
+        $section->update(['starts_at_time' => null, 'ends_at_time' => null]);
+        CurriculumSubject::query()
+            ->where('subject_id', $section->subject_id)
+            ->update(['reference_day' => 'M']);
+
+        app(GenerateFacultyAssignmentRecommendations::class)->execute($run);
+
+        $section->refresh();
+        self::assertSame('07:30:00', $section->starts_at_time);
+        self::assertSame('10:30:00', $section->ends_at_time);
+    }
+
     /** @return array{Section, ScheduleGenerationRun, User, User} */
     private function recommendationContext(): array
     {

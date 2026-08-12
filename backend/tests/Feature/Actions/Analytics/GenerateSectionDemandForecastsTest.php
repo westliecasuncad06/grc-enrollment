@@ -142,4 +142,34 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $this->assertSame(['No current-term curriculum subjects were found for this college.'], $run->warnings);
         Http::assertNothingSent();
     }
+
+    /**
+     * The Teacher Certificate Program is a one-year intake, not a 4-year
+     * degree — the seeded dataset's own cohort mapping treats "1st year"
+     * and "TCP" as the same single-term entry point. Per product
+     * direction, the six-step automation's scope is the 1st-4th year
+     * degree-program process only; TCP was never part of that
+     * documented scope, so its placements should never reach the
+     * predictor at all rather than surface as a permanent "can't
+     * complete" curriculum.
+     */
+    public function test_it_ignores_placements_from_the_teacher_certificate_program(): void
+    {
+        $term = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
+        $program = Program::create(['code' => 'TCP', 'name' => 'Teacher Certificate Program', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe]);
+        $curriculum = Curriculum::create(['program_id' => $program->id, 'name' => 'TCP Curriculum', 'effective_school_year' => '2024-2025', 'status' => CurriculumStatus::Active]);
+        $subject = Subject::create(['code' => 'TCP101', 'college' => CollegeCode::Coe, 'title' => 'TCP Subject', 'units' => 3, 'status' => 'active']);
+        CurriculumSubject::create(['curriculum_id' => $curriculum->id, 'subject_id' => $subject->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true]);
+        $chair = User::create(['name' => 'COE Chair', 'email' => 'chair.tcp@grc.test', 'password' => 'password', 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Coe, 'status' => UserStatus::Active]);
+        $run = ScheduleGenerationRun::create(['academic_term_id' => $term->id, 'college' => 'coe', 'initiated_by' => $chair->id, 'status' => ScheduleGenerationStatus::Queued]);
+
+        Http::fake();
+
+        app(GenerateSectionDemandForecasts::class)->execute($run);
+
+        $run->refresh();
+        $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
+        $this->assertSame(['No current-term curriculum subjects were found for this college.'], $run->warnings);
+        Http::assertNothingSent();
+    }
 }

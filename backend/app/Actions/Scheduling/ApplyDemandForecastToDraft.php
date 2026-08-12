@@ -51,7 +51,12 @@ final class ApplyDemandForecastToDraft
                         ->orWhere('semester', 'like', '%'.$term->semester.'%');
                 })
                 ->whereHas('curriculum', fn ($curricula) => $curricula->where('status', CurriculumStatus::Active))
-                ->whereHas('curriculum.program', fn ($programs) => $programs->where('college', $generationRun->college))
+                ->whereHas('curriculum.program', fn ($programs) => $programs
+                    ->where('college', $generationRun->college)
+                    // The Teacher Certificate Program is a one-year intake,
+                    // not a 4-year degree — out of the automation's
+                    // documented 1st-4th year scope.
+                    ->where('code', '!=', 'TCP'))
                 ->get()
                 ->filter(fn (CurriculumSubject $placement): bool => $forecasts->has($placement->subject_id))
                 ->groupBy(fn (CurriculumSubject $placement): string => $placement->curriculum_id.':'.$placement->year_level);

@@ -103,11 +103,16 @@ final class AutoAssignSectionScheduleReferences
                 if ($section->schedule_days === null && $placement->reference_day !== null) {
                     $changes['schedule_days'] = $placement->reference_day;
                 }
-                if ($section->starts_at_time === null && $placement->reference_start_time !== null) {
-                    $changes['starts_at_time'] = $placement->reference_start_time;
+                // A handful of placements have a real reference_day but no
+                // recorded time at all — genuinely missing source data, not
+                // a parsing gap. Per product direction, default to the
+                // most common real time block already present in the
+                // seeded roster rather than staying unresolved.
+                if ($section->starts_at_time === null && $placement->reference_day !== null) {
+                    $changes['starts_at_time'] = $placement->reference_start_time ?? '07:30:00';
                 }
-                if ($section->ends_at_time === null && $placement->reference_end_time !== null) {
-                    $changes['ends_at_time'] = $placement->reference_end_time;
+                if ($section->ends_at_time === null && $placement->reference_day !== null) {
+                    $changes['ends_at_time'] = $placement->reference_end_time ?? '10:30:00';
                 }
                 if ($section->modality === null) {
                     if ($placement->reference_modality !== null) {

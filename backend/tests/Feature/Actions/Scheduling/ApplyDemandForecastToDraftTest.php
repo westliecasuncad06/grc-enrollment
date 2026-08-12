@@ -171,6 +171,41 @@ final class ApplyDemandForecastToDraftTest extends TestCase
         $this->assertSame($activeCurriculum->id, $plan->curriculum_id);
     }
 
+    /**
+     * The Teacher Certificate Program is a one-year intake, not a 4-year
+     * degree, and is out of the automation's documented 1st-4th year
+     * scope — its placements should never draft sections even if they
+     * happen to share a subject_id with an in-scope forecast.
+     */
+    public function test_it_ignores_a_forecasted_subjects_placement_in_the_teacher_certificate_program(): void
+    {
+        [$term, $activeCurriculum, $firstSubject, , $generationRun, $predictionRun] = $this->createForecastContext();
+        $tcpProgram = Program::create(['code' => 'TCP', 'name' => 'Teacher Certificate Program', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs]);
+        $tcpCurriculum = Curriculum::create([
+            'program_id' => $tcpProgram->id,
+            'name' => 'TCP Curriculum',
+            'effective_school_year' => '2024-2025',
+            'status' => CurriculumStatus::Active,
+        ]);
+        CurriculumSubject::create(['curriculum_id' => $tcpCurriculum->id, 'subject_id' => $firstSubject->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true]);
+        SectionDemandForecast::create([
+            'prediction_run_id' => $predictionRun->id,
+            'academic_term_id' => $term->id,
+            'subject_id' => $firstSubject->id,
+            'predicted_demand' => 74,
+            'suggested_section_count' => 2,
+            'confidence_lower' => 70,
+            'confidence_upper' => 78,
+        ]);
+
+        app(ApplyDemandForecastToDraft::class)->execute($generationRun, $predictionRun);
+
+        $this->assertSame(0, AcademicTermSectionPlan::query()->where('curriculum_id', $tcpCurriculum->id)->count());
+        $this->assertSame(1, AcademicTermSectionPlan::query()->count());
+        $plan = AcademicTermSectionPlan::query()->sole();
+        $this->assertSame($activeCurriculum->id, $plan->curriculum_id);
+    }
+
     private function createForecastContext(): array
     {
         $term = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
