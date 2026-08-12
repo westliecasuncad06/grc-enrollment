@@ -7,6 +7,7 @@ use App\Actions\Scheduling\GenerateFacultyAssignmentRecommendations;
 use App\Domain\Analytics\HistoricalCohortResolver;
 use App\Domain\Analytics\PredictionRunStatus;
 use App\Domain\Analytics\PredictionType;
+use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Scheduling\ScheduleGenerationStatus;
 use App\Models\CurriculumSubject;
 use App\Models\PredictionRun;
@@ -59,6 +60,7 @@ final class GenerateSectionDemandForecasts
                     $query->where('semester', $term->semester)
                         ->orWhere('semester', 'like', '%'.$term->semester.'%');
                 })
+                ->whereHas('curriculum', fn ($curricula) => $curricula->where('status', CurriculumStatus::Active))
                 ->whereHas('curriculum.program', fn ($programs) => $programs->where('college', $generationRun->college))
                 ->get();
 

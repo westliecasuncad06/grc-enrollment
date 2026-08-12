@@ -114,4 +114,32 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $this->assertSame(0, $run->predictionRun->metrics['observation_count']);
         Http::assertNothingSent();
     }
+
+    /**
+     * A retired curriculum version (e.g. a program's old 2012-2017 catalog,
+     * still `archived` in the database because it once graduated students)
+     * has no current students and no `reference_*` schedule data — planning
+     * sections against it is pure noise nobody can ever complete. Only the
+     * college's currently `active` curriculum should ever reach the
+     * predictor.
+     */
+    public function test_it_ignores_placements_from_an_archived_curriculum(): void
+    {
+        $term = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
+        $program = Program::create(['code' => 'BSHRM', 'name' => 'BS HRM', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Cbae]);
+        $archivedCurriculum = Curriculum::create(['program_id' => $program->id, 'name' => 'Old HRM Curriculum', 'effective_school_year' => '2012-2017', 'status' => CurriculumStatus::Archived]);
+        $subject = Subject::create(['code' => 'HR101', 'college' => CollegeCode::Cbae, 'title' => 'Retired Subject', 'units' => 3, 'status' => 'active']);
+        CurriculumSubject::create(['curriculum_id' => $archivedCurriculum->id, 'subject_id' => $subject->id, 'year_level' => 1, 'semester' => '2nd', 'is_required' => true]);
+        $chair = User::create(['name' => 'CBAE Chair', 'email' => 'chair.archived-curriculum@grc.test', 'password' => 'password', 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Cbae, 'status' => UserStatus::Active]);
+        $run = ScheduleGenerationRun::create(['academic_term_id' => $term->id, 'college' => 'cbae', 'initiated_by' => $chair->id, 'status' => ScheduleGenerationStatus::Queued]);
+
+        Http::fake();
+
+        app(GenerateSectionDemandForecasts::class)->execute($run);
+
+        $run->refresh();
+        $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
+        $this->assertSame(['No current-term curriculum subjects were found for this college.'], $run->warnings);
+        Http::assertNothingSent();
+    }
 }

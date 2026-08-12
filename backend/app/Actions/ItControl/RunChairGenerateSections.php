@@ -3,7 +3,9 @@
 namespace App\Actions\ItControl;
 
 use App\Actions\Analytics\GenerateSectionDemandForecasts;
+use App\Actions\Organization\AutoAssignSectionScheduleReferences;
 use App\Actions\Organization\SaveSectionPlan;
+use App\Actions\Scheduling\GenerateFacultyAssignmentRecommendations;
 use App\Domain\Identity\UserRole;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
@@ -21,6 +23,8 @@ final class RunChairGenerateSections implements RunsItControlAutomationStep
 
     public function __construct(
         private readonly GenerateSectionDemandForecasts $generateForecasts,
+        private readonly AutoAssignSectionScheduleReferences $autoAssignSchedule,
+        private readonly GenerateFacultyAssignmentRecommendations $facultyRecommendations,
         private readonly SaveSectionPlan $saveSectionPlan,
     ) {}
 
@@ -68,6 +72,28 @@ final class RunChairGenerateSections implements RunsItControlAutomationStep
             if ($generationRun->status === ScheduleGenerationStatus::Failed) {
                 throw new RuntimeException('Prediction service is unavailable.');
             }
+
+            // Freshly drafted sections carry no day/time/room/professor —
+            // that normally waits on a Program Chair's manual review.
+            // Unattended automation instead fills whatever the curriculum's
+            // seeded schedule reference already answers (day/time/room, and
+            // a professor when the reference names one), the same one-click
+            // action a Chair would use, before asking the recommender again
+            // now that a real day/time exists to check availability against.
+            AcademicTermSectionPlan::query()
+                ->where('academic_term_id', $term->id)
+                ->where('college', $college->value)
+                ->select(['curriculum_id'])
+                ->distinct()
+                ->pluck('curriculum_id')
+                ->each(function (int $curriculumId) use ($term, $chair, $run, $college): void {
+                    try {
+                        $this->autoAssignSchedule->execute($term, $curriculumId, $chair, $this->context($run));
+                    } catch (Throwable $exception) {
+                        $this->warning($run, "{$college->label()} curriculum {$curriculumId}: {$exception->getMessage()}");
+                    }
+                });
+            $this->advisoryWarnings($run, $this->facultyRecommendations->execute($generationRun));
 
             $hasSectionPlans = false;
             $submittedCurricula = [];
