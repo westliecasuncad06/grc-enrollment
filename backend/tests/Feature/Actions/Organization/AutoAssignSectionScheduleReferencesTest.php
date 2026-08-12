@@ -97,9 +97,13 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $this->assertSame('Tue', $section->schedule_days);
         $this->assertSame('07:30:00', $section->starts_at_time);
         $this->assertSame('09:30:00', $section->ends_at_time);
+        // GRC's taxonomy has no standalone "online" modality — a legacy
+        // reference naming one resolves to Hyflex A instead of staying
+        // unresolved. "ONLINE" was only ever a placeholder room name for
+        // that legacy value, never a real room, so room stays unassigned
+        // for the normal room-catalog assignment to fill instead.
         $this->assertNull($section->room);
-        $this->assertNull($section->modality);
-        $this->assertSame('legacy_online_reassignment', $section->recommendation_source);
+        $this->assertSame(SectionModality::HyflexA, $section->modality);
         $professor = User::where('name', 'MR. MACINAS')->where('role', UserRole::Faculty)->sole();
         $this->assertSame($professor->id, $section->professor_id);
     }
@@ -208,7 +212,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
      * SectionModality backing value, the Action must never invent/guess one —
      * it should leave the field null rather than crash or fabricate data.
      */
-    public function test_an_unrecognized_reference_modality_value_is_left_null(): void
+    public function test_an_unrecognized_reference_modality_value_defaults_to_hyflex_a(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -218,7 +222,7 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
 
         app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
 
-        $this->assertNull($section->refresh()->modality);
+        $this->assertSame(SectionModality::HyflexA, $section->refresh()->modality);
     }
 
     /**

@@ -13,6 +13,7 @@ use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Scheduling\ScheduleGenerationStatus;
+use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Http\Resources\Api\V1\FacultyAssignmentRecommendationResource;
 use App\Models\AcademicTerm;
@@ -113,6 +114,29 @@ final class FacultyAssignmentRecommendationsEndpointTest extends TestCase
         self::assertNull($recommendation->recommended_professor_id);
         self::assertNull($recommendation->specialization_match);
         self::assertContains("No available preferred faculty could be recommended for section {$section->id}.", $warnings);
+    }
+
+    /**
+     * GRC's schedule taxonomy only has three modalities (F2F, Hyflex A,
+     * Hyflex B) — a legacy "ONLINE" curriculum reference (from before the
+     * current Hyflex split) has no direct equivalent, so filling a
+     * section's schedule from it should resolve to Hyflex A rather than
+     * leaving the field unresolved, and should not copy "ONLINE" itself in
+     * as if it were a real room name.
+     */
+    public function test_a_legacy_online_reference_resolves_to_hyflex_a_without_a_placeholder_room(): void
+    {
+        [$section, $run] = $this->recommendationContext();
+        $subject = $section->subject;
+        CurriculumSubject::query()
+            ->where('subject_id', $subject->id)
+            ->update(['reference_room' => 'ONLINE', 'reference_modality' => 'ONLINE']);
+
+        app(GenerateFacultyAssignmentRecommendations::class)->execute($run);
+
+        $section->refresh();
+        self::assertSame(SectionModality::HyflexA, $section->modality);
+        self::assertNull($section->room);
     }
 
     /** @return array{Section, ScheduleGenerationRun, User, User} */

@@ -183,22 +183,33 @@ final class GenerateFacultyAssignmentRecommendations
         if ($placement === null) {
             return;
         }
+        // GRC's schedule taxonomy only has three modalities. A legacy
+        // "ONLINE" reference (from before the current Hyflex A/B split)
+        // names a placeholder room, never a real one, so it's excluded
+        // here — the normal room-catalog assignment fills a real room
+        // instead, once the fallback below resolves a concrete modality.
+        $isLegacyOnlineReference = $placement->reference_modality !== null
+            && SectionModality::tryFrom(strtolower(str_replace(' ', '_', $placement->reference_modality))) === null;
+
         $changes = [];
         foreach ([
             'schedule_days' => $placement->reference_day,
             'starts_at_time' => $placement->reference_start_time,
             'ends_at_time' => $placement->reference_end_time,
-            'room' => $placement->reference_room,
+            'room' => $isLegacyOnlineReference ? null : $placement->reference_room,
         ] as $key => $value) {
             if ($section->{$key} === null && $value !== null) {
                 $changes[$key] = $value;
             }
         }
         if ($section->modality === null && $placement->reference_modality !== null) {
-            $modality = SectionModality::tryFrom(strtolower(str_replace(' ', '_', $placement->reference_modality)));
-            if ($modality !== null) {
-                $changes['modality'] = $modality;
-            }
+            // An unmapped legacy value (only ever "ONLINE" in the seeded
+            // roster) has no direct equivalent, so it falls back to Hyflex
+            // A — week 1 face-to-face, alternating — rather than staying an
+            // unresolved gap. A Program Chair can still change it to
+            // Hyflex B or F2F like any other section field.
+            $changes['modality'] = SectionModality::tryFrom(strtolower(str_replace(' ', '_', $placement->reference_modality)))
+                ?? SectionModality::HyflexA;
         }
         if ($changes !== []) {
             $section->update($changes);
