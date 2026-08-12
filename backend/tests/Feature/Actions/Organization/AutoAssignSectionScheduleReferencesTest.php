@@ -145,6 +145,28 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
     }
 
     /**
+     * Per product direction, a subject whose curriculum reference has no
+     * modality column value at all (this is the actual seeded shape for
+     * every non-CCS college — only CCS's rows in
+     * curriculum-2024-2029-schedule-references.csv carry a modality) is
+     * treated as ordinary face-to-face, the least assumption-laden default,
+     * rather than staying an unresolved gap the automation can never
+     * complete.
+     */
+    public function test_a_subject_with_no_reference_modality_at_all_defaults_to_f2f(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'FUNDACC', ['reference_day' => 'Mon', 'reference_start_time' => '06:00:00', 'reference_end_time' => '09:00:00']);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $section = $this->makeSection($term, $plan, $placement->subject_id);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $this->assertSame(SectionModality::FaceToFace, $section->refresh()->modality);
+    }
+
+    /**
      * The seeded reference roster names the same real person inconsistently
      * across placements (e.g. "COACH LORETO" on one subject, "COACH.
      * LORETO" — with a period — on another). `Str::slug()` strips that

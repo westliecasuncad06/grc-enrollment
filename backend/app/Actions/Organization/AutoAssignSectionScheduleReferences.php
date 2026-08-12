@@ -109,25 +109,36 @@ final class AutoAssignSectionScheduleReferences
                 if ($section->ends_at_time === null && $placement->reference_end_time !== null) {
                     $changes['ends_at_time'] = $placement->reference_end_time;
                 }
-                if ($section->modality === null && $placement->reference_modality !== null) {
-                    // The seeded reference_modality values are uppercase/spaced
-                    // (e.g. 'HYFLEX A', 'HYFLEX B', 'F2F' — see
-                    // curriculum-2024-2029-schedule-references.csv), but
-                    // Section::modality is cast to the SectionModality backed
-                    // enum, whose backing values are lowercase/underscored
-                    // ('hyflex_a', 'hyflex_b', 'f2f'). Normalize
-                    // before assigning, or the enum cast throws a ValueError.
-                    $normalized = strtolower(str_replace(' ', '_', $placement->reference_modality));
+                if ($section->modality === null) {
+                    if ($placement->reference_modality !== null) {
+                        // The seeded reference_modality values are uppercase/spaced
+                        // (e.g. 'HYFLEX A', 'HYFLEX B', 'F2F' — see
+                        // curriculum-2024-2029-schedule-references.csv), but
+                        // Section::modality is cast to the SectionModality backed
+                        // enum, whose backing values are lowercase/underscored
+                        // ('hyflex_a', 'hyflex_b', 'f2f'). Normalize
+                        // before assigning, or the enum cast throws a ValueError.
+                        $normalized = strtolower(str_replace(' ', '_', $placement->reference_modality));
 
-                    // GRC's schedule taxonomy only has three modalities.
-                    // The legacy roster's "ONLINE" designation (from before
-                    // the current Hyflex A/B split) has no direct
-                    // equivalent, so it falls back to Hyflex A — week 1
-                    // face-to-face, alternating — rather than staying an
-                    // unresolved gap the automation can never complete on
-                    // its own. A Program Chair can still change it to
-                    // Hyflex B or F2F like any other section field.
-                    $changes['modality'] = SectionModality::tryFrom($normalized) ?? SectionModality::HyflexA;
+                        // GRC's schedule taxonomy only has three modalities.
+                        // The legacy roster's "ONLINE" designation (from before
+                        // the current Hyflex A/B split) has no direct
+                        // equivalent, so it falls back to Hyflex A — week 1
+                        // face-to-face, alternating — rather than staying an
+                        // unresolved gap. A Program Chair can still change it
+                        // to Hyflex B or F2F like any other section field.
+                        $changes['modality'] = SectionModality::tryFrom($normalized) ?? SectionModality::HyflexA;
+                    } elseif ($placement->reference_day !== null) {
+                        // Only CCS's rows in the reference CSV carry a
+                        // modality at all — COE/COA/CBAE's rows have a real
+                        // day/time but leave the modality column blank
+                        // outright. Per product direction, that absence
+                        // defaults to ordinary face-to-face, the least
+                        // assumption-laden option, rather than staying
+                        // unresolved. A placement with no reference data at
+                        // all (no day either) has nothing to default from.
+                        $changes['modality'] = SectionModality::FaceToFace;
+                    }
                 }
                 // The legacy "ONLINE" reference names a placeholder room,
                 // never a real one — skip it so the room stays open for the

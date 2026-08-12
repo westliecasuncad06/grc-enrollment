@@ -202,14 +202,26 @@ final class GenerateFacultyAssignmentRecommendations
                 $changes[$key] = $value;
             }
         }
-        if ($section->modality === null && $placement->reference_modality !== null) {
-            // An unmapped legacy value (only ever "ONLINE" in the seeded
-            // roster) has no direct equivalent, so it falls back to Hyflex
-            // A — week 1 face-to-face, alternating — rather than staying an
-            // unresolved gap. A Program Chair can still change it to
-            // Hyflex B or F2F like any other section field.
-            $changes['modality'] = SectionModality::tryFrom(strtolower(str_replace(' ', '_', $placement->reference_modality)))
-                ?? SectionModality::HyflexA;
+        if ($section->modality === null) {
+            if ($placement->reference_modality !== null) {
+                // An unmapped legacy value (only ever "ONLINE" in the
+                // seeded roster) has no direct equivalent, so it falls back
+                // to Hyflex A — week 1 face-to-face, alternating — rather
+                // than staying an unresolved gap. A Program Chair can
+                // still change it to Hyflex B or F2F like any other
+                // section field.
+                $changes['modality'] = SectionModality::tryFrom(strtolower(str_replace(' ', '_', $placement->reference_modality)))
+                    ?? SectionModality::HyflexA;
+            } elseif ($placement->reference_day !== null) {
+                // Only CCS's rows in the reference CSV carry a modality at
+                // all — COE/COA/CBAE's rows have a real day/time but leave
+                // the modality column blank outright. Per product
+                // direction, that absence defaults to ordinary
+                // face-to-face, the least assumption-laden option, rather
+                // than staying unresolved. A placement with no reference
+                // data at all (no day either) has nothing to default from.
+                $changes['modality'] = SectionModality::FaceToFace;
+            }
         }
         if ($changes !== []) {
             $section->update($changes);

@@ -139,6 +139,25 @@ final class FacultyAssignmentRecommendationsEndpointTest extends TestCase
         self::assertNull($section->room);
     }
 
+    /**
+     * Per product direction, a real day/time reference with no modality
+     * value at all — the actual seeded shape for every non-CCS college's
+     * rows in curriculum-2024-2029-schedule-references.csv, which only
+     * CCS's rows carry a modality for — defaults to ordinary face-to-face
+     * rather than staying an unresolved gap.
+     */
+    public function test_a_reference_with_no_modality_value_at_all_defaults_to_f2f(): void
+    {
+        [$section, $run] = $this->recommendationContext();
+        CurriculumSubject::query()
+            ->where('subject_id', $section->subject_id)
+            ->update(['reference_day' => 'M']);
+
+        app(GenerateFacultyAssignmentRecommendations::class)->execute($run);
+
+        self::assertSame(SectionModality::FaceToFace, $section->refresh()->modality);
+    }
+
     /** @return array{Section, ScheduleGenerationRun, User, User} */
     private function recommendationContext(): array
     {
