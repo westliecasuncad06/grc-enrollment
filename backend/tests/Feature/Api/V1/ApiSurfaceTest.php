@@ -38,6 +38,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/dashboards/enrollment-summary',
             'GET|HEAD api/v1/dashboards/institution-summary',
             'GET|HEAD api/v1/dashboards/policy-settings',
+            'GET|HEAD api/v1/dashboards/program-chair-analytics-summary',
             'GET|HEAD api/v1/eligible-subjects',
             'GET|HEAD api/v1/enrollment-blocks',
             'GET|HEAD api/v1/enrollment-change-requests',

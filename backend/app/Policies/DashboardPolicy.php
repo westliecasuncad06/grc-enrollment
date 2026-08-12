@@ -29,4 +29,9 @@ final class DashboardPolicy
     {
         return $user->role === UserRole::RegistrarHead;
     }
+
+    public function viewAnalytics(User $user): bool
+    {
+        return $user->role === UserRole::ProgramChair;
+    }
 }

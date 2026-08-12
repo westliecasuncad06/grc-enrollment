@@ -42,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-enrollment-summary', [DashboardPolicy::class, 'viewEnrollmentSummary']);
         Gate::define('view-institution-summary', [DashboardPolicy::class, 'viewInstitutionSummary']);
         Gate::define('view-policy-settings', [DashboardPolicy::class, 'viewPolicySettings']);
+        Gate::define('view-analytics', [DashboardPolicy::class, 'viewAnalytics']);
         Gate::define('view-stuck-enrollments', [StuckEnrollmentPolicy::class, 'viewAny']);
         Gate::define('view-academic-record', [AcademicRecordPolicy::class, 'view']);
     }

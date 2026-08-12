@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\CurriculumSubjectPlacementController;
 use App\Http\Controllers\Api\V1\Dashboard\EnrollmentSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\InstitutionSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\PolicySettingsController;
+use App\Http\Controllers\Api\V1\Dashboard\ProgramChairAnalyticsSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\StuckEnrollmentController;
 use App\Http\Controllers\Api\V1\EligibleSubjectController;
 use App\Http\Controllers\Api\V1\EnrollmentBlockController;
@@ -261,6 +262,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/schedule-generation-runs/{scheduleGenerationRun}', [ScheduleGenerationRunController::class, 'show'])->name('schedule-generation-runs.show');
             Route::get('/academic-terms/{academicTerm}/faculty-load-report', [FacultyLoadReportController::class, 'show'])->name('faculty-load-report.show');
             Route::put('/academic-terms/{academicTerm}/faculty-load-threshold', [FacultyLoadReportController::class, 'updateThreshold'])->name('faculty-load-threshold.update');
+            Route::get('/dashboards/program-chair-analytics-summary', ProgramChairAnalyticsSummaryController::class)->name('dashboards.program-chair-analytics-summary');
         });
 
         // A Faculty member writes only their own availability/preferences —
