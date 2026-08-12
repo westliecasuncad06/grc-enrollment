@@ -6,6 +6,7 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Organization\CapacitySource;
 use App\Domain\Organization\SectionBlockCode;
 use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\ScheduleGenerationWarningType;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTermSectionPlan;
 use App\Models\CurriculumSubject;
@@ -26,7 +27,7 @@ use Illuminate\Support\Facades\DB;
 final class ApplyDemandForecastToDraft
 {
     /**
-     * @return list<string> warnings that should be shown with the generation run
+     * @return list<array{type: string, message: string, entity_id: ?int}> warnings that should be shown with the generation run
      */
     public function execute(ScheduleGenerationRun $generationRun, PredictionRun $predictionRun): array
     {
@@ -78,7 +79,11 @@ final class ApplyDemandForecastToDraft
                     ->first();
 
                 if ($plan !== null && $plan->status === SectionPlanStatus::Submitted) {
-                    $warnings[] = "Skipped submitted {$firstPlacement->year_level}th-year section plan.";
+                    $warnings[] = [
+                        'type' => ScheduleGenerationWarningType::SectionPlanSubmittedSkip->value,
+                        'message' => "Skipped submitted {$firstPlacement->year_level}th-year section plan.",
+                        'entity_id' => $firstPlacement->curriculum_id,
+                    ];
 
                     continue;
                 }
@@ -111,7 +116,11 @@ final class ApplyDemandForecastToDraft
                         'recommendation_is_overridden' => true,
                         'recommendation_prediction_run_id' => $predictionRun->id,
                     ]);
-                    $warnings[] = "Kept the existing manual {$firstPlacement->year_level}th-year section count.";
+                    $warnings[] = [
+                        'type' => ScheduleGenerationWarningType::ManualSectionCountKept->value,
+                        'message' => "Kept the existing manual {$firstPlacement->year_level}th-year section count.",
+                        'entity_id' => $firstPlacement->curriculum_id,
+                    ];
 
                     continue;
                 }
@@ -125,7 +134,7 @@ final class ApplyDemandForecastToDraft
                 );
             }
 
-            return array_values(array_unique($warnings));
+            return array_values(array_unique($warnings, SORT_REGULAR));
         });
     }
 

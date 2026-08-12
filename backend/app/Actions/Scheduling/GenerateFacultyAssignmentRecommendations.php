@@ -7,6 +7,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Scheduling\FacultyLoadPlanner;
 use App\Domain\Scheduling\RoomConflictDetector;
 use App\Domain\Scheduling\ScheduleDayParser;
+use App\Domain\Scheduling\ScheduleGenerationWarningType;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
 use App\Models\CurriculumSubject;
@@ -32,7 +33,7 @@ final class GenerateFacultyAssignmentRecommendations
         private readonly RoomConflictDetector $roomConflictDetector,
     ) {}
 
-    /** @return list<string> */
+    /** @return list<array{type: string, message: string, entity_id: ?int}> */
     public function execute(ScheduleGenerationRun $run): array
     {
         $sections = Section::query()
@@ -42,7 +43,11 @@ final class GenerateFacultyAssignmentRecommendations
             ->orderBy('id')
             ->get();
         if ($sections->isEmpty()) {
-            return ['No draft sections are available for faculty loading.'];
+            return [[
+                'type' => ScheduleGenerationWarningType::NoDraftSections->value,
+                'message' => 'No draft sections are available for faculty loading.',
+                'entity_id' => null,
+            ]];
         }
         $warnings = [];
         foreach ($sections as $section) {
@@ -157,7 +162,11 @@ final class GenerateFacultyAssignmentRecommendations
             );
 
             if ($selectedId === null) {
-                $warnings[] = "No available preferred faculty could be recommended for section {$section->id}.";
+                $warnings[] = [
+                    'type' => ScheduleGenerationWarningType::FacultyUnavailable->value,
+                    'message' => "No available preferred faculty could be recommended for section {$section->id}.",
+                    'entity_id' => $section->id,
+                ];
 
                 continue;
             }
@@ -168,7 +177,7 @@ final class GenerateFacultyAssignmentRecommendations
             }
         }
 
-        return array_values(array_unique($warnings));
+        return array_values(array_unique($warnings, SORT_REGULAR));
     }
 
     private function fillReferenceSchedule(Section $section): void
@@ -244,8 +253,9 @@ final class GenerateFacultyAssignmentRecommendations
      * unassigned rather than inventing a physical placement.
      *
      * @param  Collection<int, Section>  $sections
+     * @return ?array{type: string, message: string, entity_id: int}
      */
-    private function assignConfiguredRoom(ScheduleGenerationRun $run, Section $section, Collection $sections): ?string
+    private function assignConfiguredRoom(ScheduleGenerationRun $run, Section $section, Collection $sections): ?array
     {
         if ($section->room !== null) {
             $configured = RoomCatalogEntry::query()
@@ -255,13 +265,25 @@ final class GenerateFacultyAssignmentRecommendations
                 ->whereNotNull('room_type')
                 ->exists();
 
-            return $configured ? null : "Room metadata is incomplete for section {$section->id}; review its room manually.";
+            return $configured ? null : [
+                'type' => ScheduleGenerationWarningType::RoomMetadataIncomplete->value,
+                'message' => "Room metadata is incomplete for section {$section->id}; review its room manually.",
+                'entity_id' => $section->id,
+            ];
         }
         if ($section->subject->room_requirement === null) {
-            return "Subject room requirement is not configured for section {$section->id}; room assignment remains manual.";
+            return [
+                'type' => ScheduleGenerationWarningType::RoomRequirementMissing->value,
+                'message' => "Subject room requirement is not configured for section {$section->id}; room assignment remains manual.",
+                'entity_id' => $section->id,
+            ];
         }
         if ($section->schedule_days === null || $section->starts_at_time === null || $section->ends_at_time === null || $section->modality === null) {
-            return "Schedule metadata is incomplete for section {$section->id}; room assignment remains manual.";
+            return [
+                'type' => ScheduleGenerationWarningType::ScheduleMetadataIncomplete->value,
+                'message' => "Schedule metadata is incomplete for section {$section->id}; room assignment remains manual.",
+                'entity_id' => $section->id,
+            ];
         }
 
         $proposed = [
@@ -297,7 +319,11 @@ final class GenerateFacultyAssignmentRecommendations
             }
         }
 
-        return "No configured {$section->subject->room_requirement} room can accommodate section {$section->id}; assign a room manually.";
+        return [
+            'type' => ScheduleGenerationWarningType::NoRoomAvailable->value,
+            'message' => "No configured {$section->subject->room_requirement} room can accommodate section {$section->id}; assign a room manually.",
+            'entity_id' => $section->id,
+        ];
     }
 
     /** @param list<FacultyAvailability> $availability */

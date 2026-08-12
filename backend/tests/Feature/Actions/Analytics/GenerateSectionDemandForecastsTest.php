@@ -110,7 +110,9 @@ final class GenerateSectionDemandForecastsTest extends TestCase
 
         $run->refresh();
         $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
-        $this->assertSame(['Insufficient historical demand data for this college and term.'], $run->warnings);
+        $this->assertSame(['Insufficient historical demand data for this college and term.'], array_column($run->warnings, 'message'));
+        $this->assertSame(['insufficient_history'], array_column($run->warnings, 'type'));
+        $this->assertSame([null], array_column($run->warnings, 'entity_id'));
         $this->assertSame(0, $run->predictionRun->metrics['observation_count']);
         Http::assertNothingSent();
     }
@@ -139,7 +141,9 @@ final class GenerateSectionDemandForecastsTest extends TestCase
 
         $run->refresh();
         $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
-        $this->assertSame(['No current-term curriculum subjects were found for this college.'], $run->warnings);
+        $this->assertSame(['No current-term curriculum subjects were found for this college.'], array_column($run->warnings, 'message'));
+        $this->assertSame(['no_curriculum_subjects'], array_column($run->warnings, 'type'));
+        $this->assertSame([null], array_column($run->warnings, 'entity_id'));
         Http::assertNothingSent();
     }
 
@@ -169,7 +173,9 @@ final class GenerateSectionDemandForecastsTest extends TestCase
 
         $run->refresh();
         $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
-        $this->assertSame(['No current-term curriculum subjects were found for this college.'], $run->warnings);
+        $this->assertSame(['No current-term curriculum subjects were found for this college.'], array_column($run->warnings, 'message'));
+        $this->assertSame(['no_curriculum_subjects'], array_column($run->warnings, 'type'));
+        $this->assertSame([null], array_column($run->warnings, 'entity_id'));
         Http::assertNothingSent();
     }
 }

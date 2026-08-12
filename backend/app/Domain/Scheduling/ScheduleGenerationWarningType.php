@@ -1,0 +1,18 @@
+<?php
+
+namespace App\Domain\Scheduling;
+
+enum ScheduleGenerationWarningType: string
+{
+    case RoomMetadataIncomplete = 'room_metadata_incomplete';
+    case RoomRequirementMissing = 'room_requirement_missing';
+    case ScheduleMetadataIncomplete = 'schedule_metadata_incomplete';
+    case NoRoomAvailable = 'no_room_available';
+    case NoDraftSections = 'no_draft_sections';
+    case FacultyUnavailable = 'faculty_unavailable';
+    case SectionPlanSubmittedSkip = 'section_plan_submitted_skip';
+    case ManualSectionCountKept = 'manual_section_count_kept';
+    case NoForecastReturned = 'no_forecast_returned';
+    case NoCurriculumSubjects = 'no_curriculum_subjects';
+    case InsufficientHistory = 'insufficient_history';
+}

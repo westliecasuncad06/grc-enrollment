@@ -113,7 +113,12 @@ final class FacultyAssignmentRecommendationsEndpointTest extends TestCase
             ->sole();
         self::assertNull($recommendation->recommended_professor_id);
         self::assertNull($recommendation->specialization_match);
-        self::assertContains("No available preferred faculty could be recommended for section {$section->id}.", $warnings);
+        self::assertContains("No available preferred faculty could be recommended for section {$section->id}.", array_column($warnings, 'message'));
+        self::assertContains([
+            'type' => 'faculty_unavailable',
+            'message' => "No available preferred faculty could be recommended for section {$section->id}.",
+            'entity_id' => $section->id,
+        ], $warnings);
     }
 
     /**

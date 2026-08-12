@@ -9,6 +9,7 @@ use App\Domain\Analytics\PredictionRunStatus;
 use App\Domain\Analytics\PredictionType;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Scheduling\ScheduleGenerationStatus;
+use App\Domain\Scheduling\ScheduleGenerationWarningType;
 use App\Models\CurriculumSubject;
 use App\Models\PredictionRun;
 use App\Models\ScheduleGenerationRun;
@@ -139,7 +140,11 @@ final class GenerateSectionDemandForecasts
                     $key = $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->year_level;
                     $forecast = $forecastByKey->get($key);
                     if (! is_array($forecast)) {
-                        $warnings[] = "No demand forecast returned for subject {$placement->subject_id}.";
+                        $warnings[] = [
+                            'type' => ScheduleGenerationWarningType::NoForecastReturned->value,
+                            'message' => "No demand forecast returned for subject {$placement->subject_id}.",
+                            'entity_id' => $placement->subject_id,
+                        ];
 
                         continue;
                     }
@@ -216,7 +221,11 @@ final class GenerateSectionDemandForecasts
         ]);
         $generationRun->update([
             'status' => ScheduleGenerationStatus::Succeeded,
-            'warnings' => ['No current-term curriculum subjects were found for this college.'],
+            'warnings' => [[
+                'type' => ScheduleGenerationWarningType::NoCurriculumSubjects->value,
+                'message' => 'No current-term curriculum subjects were found for this college.',
+                'entity_id' => null,
+            ]],
             'completed_at' => now(),
         ]);
     }
@@ -234,7 +243,11 @@ final class GenerateSectionDemandForecasts
         ]);
         $generationRun->update([
             'status' => ScheduleGenerationStatus::Succeeded,
-            'warnings' => ['Insufficient historical demand data for this college and term.'],
+            'warnings' => [[
+                'type' => ScheduleGenerationWarningType::InsufficientHistory->value,
+                'message' => 'Insufficient historical demand data for this college and term.',
+                'entity_id' => null,
+            ]],
             'completed_at' => now(),
         ]);
     }

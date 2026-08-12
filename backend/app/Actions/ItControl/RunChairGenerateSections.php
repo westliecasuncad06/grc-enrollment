@@ -67,7 +67,7 @@ final class RunChairGenerateSections implements RunsItControlAutomationStep
             ]);
             $this->generateForecasts->execute($generationRun);
             $generationRun->refresh();
-            $this->advisoryWarnings($run, $generationRun->warnings ?? []);
+            $this->advisoryWarnings($run, array_map(fn (array $w): string => $w['message'], $generationRun->warnings ?? []));
 
             if ($generationRun->status === ScheduleGenerationStatus::Failed) {
                 throw new RuntimeException('Prediction service is unavailable.');
@@ -93,7 +93,7 @@ final class RunChairGenerateSections implements RunsItControlAutomationStep
                         $this->warning($run, "{$college->label()} curriculum {$curriculumId}: {$exception->getMessage()}");
                     }
                 });
-            $this->advisoryWarnings($run, $this->facultyRecommendations->execute($generationRun));
+            $this->advisoryWarnings($run, array_map(fn (array $w): string => $w['message'], $this->facultyRecommendations->execute($generationRun)));
 
             $hasSectionPlans = false;
             $submittedCurricula = [];
