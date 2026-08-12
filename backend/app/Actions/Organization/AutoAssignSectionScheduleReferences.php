@@ -189,10 +189,18 @@ final class AutoAssignSectionScheduleReferences
 
     private function findOrCreateFaculty(string $name): User
     {
+        // The email is derived from a slug of $name, which strips
+        // punctuation — two raw reference names that differ only in
+        // punctuation/spacing (e.g. "COACH LORETO" vs "COACH. LORETO", the
+        // same person named inconsistently across placements) collide on
+        // the same slug. Looking up by that email, the actual unique
+        // constraint, keeps this idempotent; looking up by the differing
+        // $name would not.
         return User::firstOrCreate(
-            ['name' => $name, 'role' => UserRole::Faculty],
+            ['email' => 'prof.'.Str::slug($name).'@grc.test'],
             [
-                'email' => 'prof.'.Str::slug($name).'@grc.test',
+                'name' => $name,
+                'role' => UserRole::Faculty,
                 'password' => 'password',
                 'status' => UserStatus::Active,
             ],

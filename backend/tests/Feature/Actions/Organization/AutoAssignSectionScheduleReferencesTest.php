@@ -140,6 +140,34 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $this->assertNull($section->professor_id);
     }
 
+    /**
+     * The seeded reference roster names the same real person inconsistently
+     * across placements (e.g. "COACH LORETO" on one subject, "COACH.
+     * LORETO" — with a period — on another). `Str::slug()` strips that
+     * punctuation, so both raw names produce the identical
+     * `prof.coach-loreto@grc.test` address. Looking the professor up by
+     * `name` (which differs) instead of the email actually being inserted
+     * let the second `firstOrCreate` call attempt a real duplicate insert.
+     */
+    public function test_it_reuses_one_faculty_account_for_reference_names_that_share_a_slug(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $firstPlacement = $this->makePlacement($curriculum, 'ITD1', ['reference_day' => 'Tue', 'reference_professor_name' => 'COACH LORETO']);
+        $secondPlacement = $this->makePlacement($curriculum, 'ITD2', ['reference_day' => 'Wed', 'reference_professor_name' => 'COACH. LORETO']);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $firstSection = $this->makeSection($term, $plan, $firstPlacement->subject_id, ['section_code' => 'ITD1']);
+        $secondSection = $this->makeSection($term, $plan, $secondPlacement->subject_id, ['section_code' => 'ITD2']);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $firstSection->refresh();
+        $secondSection->refresh();
+        $this->assertSame(1, User::where('email', 'prof.coach-loreto@grc.test')->count());
+        $this->assertNotNull($firstSection->professor_id);
+        $this->assertSame($firstSection->professor_id, $secondSection->professor_id);
+    }
+
     public function test_it_can_be_scoped_to_a_single_year_level(): void
     {
         $term = $this->makeTerm();
