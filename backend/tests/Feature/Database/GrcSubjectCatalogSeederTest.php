@@ -44,6 +44,29 @@ final class GrcSubjectCatalogSeederTest extends TestCase
     }
 
     /**
+     * `GenerateFacultyAssignmentRecommendations::assignConfiguredRoom()`
+     * refuses to auto-assign a room at all when a subject's
+     * `room_requirement` is null — this was previously left to
+     * `PredictivePlanningInputSeeder`, whose own precondition (a term that
+     * is neither `archived` nor `semester_closed`) can never be satisfied
+     * by the real dataset, where every seeded term starts in one of those
+     * two states until the Registrar opens the next one. Every subject
+     * needs a real value from the moment the catalog itself is seeded.
+     */
+    public function test_every_subject_gets_a_room_requirement(): void
+    {
+        $this->seed(GrcSubjectCatalogSeeder::class);
+
+        $this->assertSame(0, Subject::whereNull('room_requirement')->count());
+        $this->assertGreaterThan(0, Subject::where('room_requirement', 'laboratory')->count());
+        $this->assertGreaterThan(0, Subject::where('room_requirement', 'lecture')->count());
+        $labSubject = Subject::whereRaw('UPPER(title) LIKE ?', ['%LAB%'])->first();
+        if ($labSubject !== null) {
+            $this->assertSame('laboratory', $labSubject->room_requirement);
+        }
+    }
+
+    /**
      * Invoked directly rather than through `db:seed`, because the artisan
      * command's own production confirmation prompt would intercept the call
      * before the seeder runs — see RoleUserSeederTest for the same pattern.

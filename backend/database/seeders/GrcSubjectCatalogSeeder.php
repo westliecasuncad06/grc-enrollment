@@ -110,12 +110,20 @@ final class GrcSubjectCatalogSeeder extends Seeder
             return;
         }
 
+        $title = trim($row['description']);
+
         Subject::updateOrCreate(
             ['college' => $college, 'code' => trim($row['subject_code'])],
             [
-                'title' => trim($row['description']),
+                'title' => $title,
                 'units' => (float) $row['units'],
                 'status' => SubjectStatus::Active,
+                // Without this, GenerateFacultyAssignmentRecommendations's
+                // room auto-assignment refuses every subject outright — see
+                // PredictivePlanningInputSeeder for the same "LAB" heuristic
+                // this mirrors, scoped there to a precondition the real
+                // dataset's term timeline can never satisfy.
+                'room_requirement' => str_contains(strtoupper($title), 'LAB') ? 'laboratory' : 'lecture',
             ],
         );
     }
