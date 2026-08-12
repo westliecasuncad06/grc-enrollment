@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "motion/react"
 import { BrainCircuit, Gauge, UsersRound } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { GroupedWarningsList } from "@/features/components/portal/grouped-warnings-list"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -119,11 +120,7 @@ export function DemandForecastDialog({
             </p>
           )}
           {run?.warnings.length ? (
-            <ul className="grid gap-1 rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-              {run.warnings.map((warning) => (
-                <li key={warning}>• {warning}</li>
-              ))}
-            </ul>
+            <GroupedWarningsList warnings={run.warnings} />
           ) : null}
 
           {run?.model && (

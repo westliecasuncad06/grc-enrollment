@@ -20,7 +20,23 @@ describe("DemandForecastDialog", () => {
           prediction_run_id: 7,
           college: "ccs",
           status: "succeeded",
-          warnings: [],
+          warnings: [
+            {
+              type: "room_metadata_incomplete",
+              message: "Section CS101-A is missing room metadata.",
+              entity_id: 12,
+            },
+            {
+              type: "room_metadata_incomplete",
+              message: "Section CS101-B is missing room metadata.",
+              entity_id: 34,
+            },
+            {
+              type: "no_historical_data",
+              message: "No historical data was available for this term.",
+              entity_id: null,
+            },
+          ],
           error_summary: null,
           started_at: null,
           completed_at: null,
@@ -73,6 +89,12 @@ describe("DemandForecastDialog", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "Faculty Loading Support",
     )
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "No historical data was available for this term.",
+    )
+    expect(
+      screen.getByRole("button", { name: "Show 2" }),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Close forecast" }))
     expect(onOpenChange).toHaveBeenCalledWith(false)

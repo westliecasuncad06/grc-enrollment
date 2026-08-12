@@ -68,6 +68,14 @@ const forecastSchema = z
   })
   .strict()
 
+const scheduleGenerationWarningSchema = z
+  .object({
+    type: z.string().min(1),
+    message: z.string().min(1),
+    entity_id: z.number().int().positive().nullable(),
+  })
+  .strict()
+
 export const scheduleGenerationRunSchema = z
   .object({
     type: z.literal("schedule_generation_run"),
@@ -76,7 +84,7 @@ export const scheduleGenerationRunSchema = z
     prediction_run_id: z.number().int().positive().nullable(),
     college: z.string().min(1),
     status: z.enum(["queued", "running", "succeeded", "partial", "failed"]),
-    warnings: z.array(z.string()),
+    warnings: z.array(scheduleGenerationWarningSchema),
     error_summary: z.string().nullable(),
     started_at: z.string().nullable(),
     completed_at: z.string().nullable(),
@@ -116,3 +124,6 @@ export const scheduleGenerationRunEnvelopeSchema = z
 
 export type ScheduleGenerationRun = z.infer<typeof scheduleGenerationRunSchema>
 export type FacultyLoadReport = z.infer<typeof facultyLoadReportSchema>
+export type ScheduleGenerationWarning = z.infer<
+  typeof scheduleGenerationWarningSchema
+>
