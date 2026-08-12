@@ -68,6 +68,7 @@ describe("FacultyAvailabilityPanel", () => {
 
   it("edits and confirms removal of an availability before deleting it", async () => {
     const user = userEvent.setup()
+    let patchBody: unknown = null
     fetchMock.mockImplementation((input, init) => {
       const requestUrl = url(input)
       if (
@@ -80,7 +81,8 @@ describe("FacultyAvailabilityPanel", () => {
       if (
         requestUrl.endsWith("/faculty-availabilities/4") &&
         init?.method === "PATCH"
-      )
+      ) {
+        patchBody = typeof init.body === "string" ? JSON.parse(init.body) : null
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -88,6 +90,7 @@ describe("FacultyAvailabilityPanel", () => {
             }),
           ),
         )
+      }
       if (
         requestUrl.endsWith("/faculty-availabilities/4") &&
         init?.method === "DELETE"
@@ -101,10 +104,14 @@ describe("FacultyAvailabilityPanel", () => {
       await screen.findByRole("button", { name: "Edit availability" }),
     )
     await user.clear(screen.getByLabelText("Start time"))
-    await user.type(screen.getByLabelText("Start time"), "09:00:00")
+    await user.type(screen.getByLabelText("Start time"), "0900")
     await user.click(
       screen.getByRole("button", { name: "Update availability" }),
     )
+
+    await waitFor(() => {
+      expect(patchBody).toMatchObject({ starts_at_time: "09:00:00" })
+    })
 
     await user.click(
       await screen.findByRole("button", { name: "Remove availability" }),

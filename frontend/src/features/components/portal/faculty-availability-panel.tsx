@@ -83,6 +83,12 @@ function dayLabel(day: number): string {
   return weekdays.find(([value]) => value === day)?.[1] ?? "Unknown day"
 }
 
+// Native time inputs report/expect "HH:mm"; the API and validation schema
+// use "HH:mm:ss". Round-trip through this helper rather than asking a
+// professor to type seconds by hand into a free-text field.
+const asTime = (value: string) => (value ? `${value}:00`.slice(0, 8) : "")
+const forTimeInput = (value: string) => value.slice(0, 5)
+
 export function FacultyAvailabilityPanel() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
@@ -191,12 +197,21 @@ export function FacultyAvailabilityPanel() {
             </Field>
             <Field data-invalid={Boolean(form.formState.errors.starts_at_time)}>
               <FieldLabel htmlFor="availability-start">Start time</FieldLabel>
-              <Input
-                id="availability-start"
-                inputMode="numeric"
-                placeholder="08:00:00"
-                disabled={isSaving}
-                {...form.register("starts_at_time")}
+              <Controller
+                control={form.control}
+                name="starts_at_time"
+                render={({ field }) => (
+                  <Input
+                    id="availability-start"
+                    type="time"
+                    disabled={isSaving}
+                    value={forTimeInput(field.value)}
+                    onChange={(event) =>
+                      field.onChange(asTime(event.target.value))
+                    }
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
               <FieldError>
                 {form.formState.errors.starts_at_time?.message}
@@ -204,12 +219,21 @@ export function FacultyAvailabilityPanel() {
             </Field>
             <Field data-invalid={Boolean(form.formState.errors.ends_at_time)}>
               <FieldLabel htmlFor="availability-end">End time</FieldLabel>
-              <Input
-                id="availability-end"
-                inputMode="numeric"
-                placeholder="10:00:00"
-                disabled={isSaving}
-                {...form.register("ends_at_time")}
+              <Controller
+                control={form.control}
+                name="ends_at_time"
+                render={({ field }) => (
+                  <Input
+                    id="availability-end"
+                    type="time"
+                    disabled={isSaving}
+                    value={forTimeInput(field.value)}
+                    onChange={(event) =>
+                      field.onChange(asTime(event.target.value))
+                    }
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
               <FieldError>
                 {form.formState.errors.ends_at_time?.message}
