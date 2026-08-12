@@ -33,6 +33,15 @@ final class RunItControlAutomationStep implements ShouldQueue
         if (! app()->environment(['local', 'testing'])) {
             throw new \LogicException('IT-control automation writes are restricted to local and testing environments.');
         }
+
+        // This step processes every section/curriculum in a college
+        // synchronously (QUEUE_CONNECTION=sync runs it inline within the
+        // request), so the interactive web SAPI's default execution limit
+        // is routinely too short for the institution-wide cohort. Safe only
+        // because the environment guard above already confines this job to
+        // local/testing.
+        set_time_limit(0);
+
         $run = ItControlAutomationRun::query()->find($this->automationRunId);
 
         if ($run === null || $run->status !== AutomationRunStatus::Queued) {

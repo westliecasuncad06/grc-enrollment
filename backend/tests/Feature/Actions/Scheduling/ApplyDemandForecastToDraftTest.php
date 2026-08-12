@@ -135,6 +135,42 @@ final class ApplyDemandForecastToDraftTest extends TestCase
     }
 
     /** @return array{AcademicTerm, Curriculum, Subject, Subject, ScheduleGenerationRun, PredictionRun} */
+    /**
+     * A retired curriculum version can legitimately share the same subject
+     * code as its program's current catalog (e.g. both the archived
+     * 2012-2017 HRM curriculum and the active 2024-2029 one place "HR301").
+     * A forecast keyed only by subject_id must not fan out drafts to every
+     * curriculum that happens to place that subject — only the currently
+     * active one has real students to plan a section for.
+     */
+    public function test_it_ignores_a_forecasted_subjects_placement_in_an_archived_curriculum(): void
+    {
+        [$term, $activeCurriculum, $firstSubject, , $generationRun, $predictionRun] = $this->createForecastContext();
+        $archivedCurriculum = Curriculum::create([
+            'program_id' => $activeCurriculum->program_id,
+            'name' => 'Old BSIT Curriculum',
+            'effective_school_year' => '2012-2017',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        CurriculumSubject::create(['curriculum_id' => $archivedCurriculum->id, 'subject_id' => $firstSubject->id, 'year_level' => 2, 'semester' => '2nd', 'is_required' => true]);
+        SectionDemandForecast::create([
+            'prediction_run_id' => $predictionRun->id,
+            'academic_term_id' => $term->id,
+            'subject_id' => $firstSubject->id,
+            'predicted_demand' => 74,
+            'suggested_section_count' => 2,
+            'confidence_lower' => 70,
+            'confidence_upper' => 78,
+        ]);
+
+        app(ApplyDemandForecastToDraft::class)->execute($generationRun, $predictionRun);
+
+        $this->assertSame(0, AcademicTermSectionPlan::query()->where('curriculum_id', $archivedCurriculum->id)->count());
+        $this->assertSame(1, AcademicTermSectionPlan::query()->count());
+        $plan = AcademicTermSectionPlan::query()->sole();
+        $this->assertSame($activeCurriculum->id, $plan->curriculum_id);
+    }
+
     private function createForecastContext(): array
     {
         $term = AcademicTerm::create(['school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);

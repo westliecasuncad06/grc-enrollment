@@ -2,6 +2,7 @@
 
 namespace App\Actions\Scheduling;
 
+use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Organization\CapacitySource;
 use App\Domain\Organization\SectionBlockCode;
 use App\Domain\Organization\SectionPlanStatus;
@@ -49,6 +50,7 @@ final class ApplyDemandForecastToDraft
                     $query->where('semester', $term->semester)
                         ->orWhere('semester', 'like', '%'.$term->semester.'%');
                 })
+                ->whereHas('curriculum', fn ($curricula) => $curricula->where('status', CurriculumStatus::Active))
                 ->whereHas('curriculum.program', fn ($programs) => $programs->where('college', $generationRun->college))
                 ->get()
                 ->filter(fn (CurriculumSubject $placement): bool => $forecasts->has($placement->subject_id))
