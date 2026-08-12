@@ -54,6 +54,67 @@ final class FacultyAssignmentRecommendationsEndpointTest extends TestCase
         self::assertNotSame($barePreferenceProfessor->id, $recommendation->recommended_professor_id);
     }
 
+    /**
+     * When no active faculty member in the section's college has declared
+     * any preference for its subject, `$candidates` stays empty and the
+     * planner recommends `professor_id: null` — proving `$selected` (looked
+     * up from that empty list) can legitimately be `null` on a real,
+     * unremarkable roster, not just a contrived edge case.
+     */
+    public function test_a_section_with_no_qualifying_candidate_is_recorded_without_a_recommendation(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2027-2028',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $program = Program::create([
+            'code' => 'BSIT', 'name' => 'Bachelor of Science in Information Technology',
+            'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active,
+        ]);
+        $curriculum = Curriculum::create([
+            'program_id' => $program->id, 'name' => 'BSIT Curriculum',
+            'effective_school_year' => '2024-2025', 'status' => CurriculumStatus::Active,
+        ]);
+        $subject = Subject::create([
+            'code' => 'IT202', 'college' => CollegeCode::Ccs, 'title' => 'Algorithms',
+            'units' => 3, 'status' => 'active',
+        ]);
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
+            'year_level' => 2, 'semester' => '1st', 'is_required' => true,
+        ]);
+        $chair = $this->faculty('chair.unqualified@grc.test', UserRole::ProgramChair);
+        // An active CCS faculty member exists but has declared no preference
+        // for IT202 at all — the exact shape that leaves $candidates empty.
+        $this->faculty('uninterested@grc.test');
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id,
+            'college' => CollegeCode::Ccs, 'year_level' => 2, 'section_count' => 1,
+            'students_per_block' => 40, 'status' => SectionPlanStatus::Draft,
+        ]);
+        $section = Section::create([
+            'academic_term_id' => $term->id, 'section_plan_id' => $plan->id, 'subject_id' => $subject->id,
+            'section_code' => 'IT202-A', 'schedule_days' => 'M', 'starts_at_time' => '08:00:00',
+            'ends_at_time' => '11:00:00', 'capacity' => 40, 'capacity_source' => CapacitySource::Plan,
+            'status' => SectionStatus::Planned,
+        ]);
+        $run = ScheduleGenerationRun::create([
+            'academic_term_id' => $term->id, 'college' => CollegeCode::Ccs,
+            'initiated_by' => $chair->id, 'status' => ScheduleGenerationStatus::Succeeded,
+        ]);
+
+        $warnings = app(GenerateFacultyAssignmentRecommendations::class)->execute($run);
+
+        $recommendation = FacultyAssignmentRecommendation::query()
+            ->where('schedule_generation_run_id', $run->id)
+            ->where('section_id', $section->id)
+            ->sole();
+        self::assertNull($recommendation->recommended_professor_id);
+        self::assertNull($recommendation->specialization_match);
+        self::assertContains("No available preferred faculty could be recommended for section {$section->id}.", $warnings);
+    }
+
     /** @return array{Section, ScheduleGenerationRun, User, User} */
     private function recommendationContext(): array
     {

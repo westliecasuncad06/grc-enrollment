@@ -149,7 +149,7 @@ final class GenerateFacultyAssignmentRecommendations
                 [
                     'recommended_professor_id' => $selectedId,
                     'preference_rank' => $selected['preference_rank'] ?? null,
-                    'specialization_match' => $selected['specialization_match']?->value,
+                    'specialization_match' => ($selected['specialization_match'] ?? null)?->value,
                     'availability_match' => $selected['availability_match'] ?? false,
                     'conflict_free' => $selected['conflict_free'] ?? false,
                     'rationale' => $choice['rationale'],
