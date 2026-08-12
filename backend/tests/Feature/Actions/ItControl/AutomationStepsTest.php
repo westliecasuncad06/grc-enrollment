@@ -94,6 +94,37 @@ final class AutomationStepsTest extends TestCase
         $this->assertStringContainsString('prediction service', $run->fresh()->error_summary);
     }
 
+    /**
+     * `ArchiveAndCreateNextTerm` always creates the next term as `draft`
+     * (the Registrar sets dates and opens enrollment afterwards). Generation
+     * must run before a schedule can be published, and `open_enrollment`
+     * itself requires an already-published schedule to exist for the same
+     * term — so if this step demanded `semester_ongoing`, a freshly created
+     * term could never produce its first schedule at all.
+     */
+    public function test_chair_generation_runs_against_a_term_still_in_draft_before_enrollment_opens(): void
+    {
+        $this->term = AcademicTerm::create([
+            'school_year' => '2027-2028',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::Draft,
+        ]);
+        $this->itAdmin = User::create([
+            'name' => 'IT Control',
+            'email' => 'it-control@grc.test',
+            'password' => 'password',
+            'role' => UserRole::ItAdmin,
+            'status' => UserStatus::Active,
+        ]);
+        $this->makeProgramChairs();
+        Http::fake(fn () => Http::response(['data' => ['service' => 'grc-prediction-service', 'status' => 'ok', 'schema_version' => 'v1']], 200));
+
+        $run = $this->runStep(AutomationStep::ChairGenerateSections);
+
+        $this->assertNotSame(AutomationRunStatus::Failed, $run->status, implode(' ', [$run->error_summary, ...($run->warnings ?? [])]));
+        $this->assertStringContainsString('No current-term curriculum subjects were found', implode(' ', $run->warnings ?? []));
+    }
+
     public function test_student_automation_does_not_skip_lower_ids_after_curriculum_ordering(): void
     {
         $this->makeTermAndItAdmin();

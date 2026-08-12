@@ -37,7 +37,19 @@ final class RunChairGenerateSections implements RunsItControlAutomationStep
         }
 
         $term = $run->academicTerm()->firstOrFail();
-        if ($term->status !== AcademicTermStatus::SemesterOngoing) {
+
+        // A freshly created term is always `draft` (`ArchiveAndCreateNextTerm`),
+        // and `open_enrollment` itself requires an already-published schedule
+        // for that same term — so generation must be allowed to run before
+        // enrollment opens, or a new term could never produce its first
+        // schedule. Only a term that has already finished its cycle
+        // (`semester_closed`/`archived`) is rejected.
+        $generableStatuses = [
+            AcademicTermStatus::Draft,
+            AcademicTermStatus::ForDeanApproval,
+            AcademicTermStatus::SemesterOngoing,
+        ];
+        if (! in_array($term->status, $generableStatuses, true)) {
             throw new RuntimeException('No open term is available for section generation.');
         }
 
