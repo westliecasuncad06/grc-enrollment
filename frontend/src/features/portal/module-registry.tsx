@@ -1,6 +1,7 @@
 import type { ComponentType } from "react"
 
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
+import { AnalyticsDashboardWorkspace } from "@/features/components/portal/analytics-dashboard-workspace"
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
 import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
@@ -43,6 +44,7 @@ export type ConnectedModuleId =
   | "schedule-faculty-loading"
   | "rooms"
   | "schedule-proposals"
+  | "program-chair-analytics"
   | "schedule-approvals"
   | "curriculum-approvals"
   | "master-schedule"
@@ -85,6 +87,7 @@ export const connectedModuleIds = [
   "schedule-faculty-loading",
   "rooms",
   "schedule-proposals",
+  "program-chair-analytics",
   "schedule-approvals",
   "curriculum-approvals",
   "master-schedule",
@@ -195,6 +198,7 @@ export const connectedModuleRegistry: Readonly<
   "schedule-faculty-loading": scheduleFacultyLoadingWorkspace,
   rooms: roomsOperationsWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
+  "program-chair-analytics": AnalyticsDashboardWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,
   "curriculum-approvals": CurriculumApprovalsWorkspace,
   "master-schedule": MasterScheduleWorkspace,

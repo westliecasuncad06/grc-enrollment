@@ -165,6 +165,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Prepare schedule drafts for authorized review.",
         FileText,
       ),
+      portalModule(
+        "program-chair-analytics",
+        "Analytics",
+        "Descriptive, diagnostic, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
+        BarChart3,
+      ),
     ],
   },
   dean: {

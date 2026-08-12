@@ -1,5 +1,727 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-08-09 — Five-plan dataset and IT control implementation preflight
+
+Session started to execute, strictly in order, the five approved plans linked
+from `docs/superpowers/specs/2026-08-09-grc-dataset-and-it-control-design.md`.
+Before feature changes, the execution workflow, PRD, existing progress record,
+design specification, and all plan constraints are being reviewed. The normal
+`main` checkout has a pre-existing untracked `grades-com-student1.png`; it is
+out of scope and will remain untouched. No commit or push is authorized.
+
+Preflight identified two execution controls before implementation may start:
+the mandated worktree workflow requires consent to create an isolated
+workspace from this normal `main` checkout, and Plan 2 asks for a commit while
+the repository instruction prohibits commits without an explicit user request.
+No feature code, schema, seed data, or unrelated file has been changed.
+
+User decision: proceed directly on `main` without a worktree and honor any
+plan checkbox that requires a commit. The pre-existing untracked image remains
+out of scope. Implementation will use the required task-by-task TDD and review
+workflow, with the five plans kept in their documented order.
+
+Plan 1 / Task 1 started: the first change is constrained to the faculty catalog
+Zod contract and its regression coverage, using a `1.5`-unit catalog fixture
+to reproduce the reported Availability Preferences parsing failure before the
+schema is widened. The task is under independent TDD and review control.
+
+Task 1 RED investigation: the plan's default focused Vitest command hung
+before running any worker under this machine's default config bundler. The
+non-mutating `--configLoader runner` fallback completed and showed the intended
+failure: the fractional `1.5`-unit fixture causes the catalog envelope to be
+rejected, leaving the Curriculum combobox disabled and rendering the generic
+faculty-input error. Two legacy fixture-label assertions also need test-only
+updates so the RED result remains isolated. The plan-named backend catalog test
+file is absent; a dedicated endpoint regression test will be created at that
+documented path rather than changing an unrelated test. No production schema
+change has yet been made.
+
+Task 1 frontend GREEN: the minimal contract change accepts non-negative
+fractional units and the focused workspace suite passes 4/4 with the local
+config-loader workaround. The new backend regression test is written but its
+focused PHPUnit process exceeds the interactive 64-second tool window before
+emitting output; it will be monitored as a background process to obtain a
+complete terminal result before any commit or task-completion claim.
+
+Task 1 verification evidence: the monitored backend regression completed
+successfully in 37.875s (1 test, 4 assertions). The focused frontend suite
+passes 4/4 with `--configLoader runner`; the default config loader remains a
+local test-runner timeout before test collection. The scoped implementation
+and regression tests were committed as `9c4b50d` and are now under a separate
+task-level spec/quality review; no completion claim is made until that review
+returns clean.
+
+Task 1 review finding: the fractional-unit endpoint regression seeded `LEAD 1`
+without its required college scope, and its report retained contradictory
+timeout/commit statements after the monitored PHPUnit pass. The original
+implementer is correcting the CCS-scoped fixture, removing an unused term
+fixture, and reconciling the report before a scoped re-review. No next task
+will start until this review loop closes.
+
+Task 1 fix-round review is clean: the backend subject fixture is explicitly
+CCS-scoped, the unused term fixture is removed, and the report history is
+reconciled. Fresh controller-side focused frontend/backend verification is now
+running before the ledger is marked complete and Task 2 begins.
+
+Task 1 complete: controller-side focused checks confirmed the frontend suite
+passes 4/4 (with the existing jsdom canvas notice) and the new backend catalog
+regression passes (1 test, 4 assertions, 38.183s). The task-level review and
+scoped re-review are clean; commits are `9c4b50d` and `ac6b3f9`. Plan 1 Task 2
+is the next ordered slice.
+
+Plan 1 / Task 2 started: availability will become a reusable faculty profile
+through a reversible migration, with `academic_term_id` removed and Sunday
+excluded. Endpoint tests must be observed failing before schema/action/request
+changes; consumers and local/test-only seeders will then be updated in the
+same task before the focused scheduling gate.
+
+Task 2 checkpoint: endpoint RED was observed, then backend endpoint GREEN
+passed (9 tests, 27 assertions) and the broader availability/load/scheduling
+gate passed (87 tests, 365 assertions) through a Windows-safe direct PHPUnit
+entry point because the `.bat` wrapper misparsed the literal pipe filter.
+Focused frontend Vitest passed (10 tests; known jsdom canvas notice). The
+required TypeScript command emits no diagnostic but exceeds the interactive
+64-second window, so it is being monitored in the background before any
+completion or commit claim.
+
+Task 2 TypeScript result: the monitored compiler exposes two pre-existing
+Vitest mock-signature errors in `curriculum-subject-row-dialog.test.tsx` and
+one new availability-contract consumer error at
+`faculty-assignment-workspace.tsx:85`. Root cause is verified: the workspace
+still filters availability by the removed term id even though availability is
+now a reusable profile. A test-first, minimal consumer correction is in
+progress; the unrelated pre-existing errors will be reported accurately rather
+than modified outside this task's scope.
+
+Task 2 review blocker: the old unique key permits the same professor/day/start
+slot in multiple terms, while the new reusable-profile key does not; the plan
+does not prescribe whether a migration must fail safely or deterministically
+reconcile such rows. Separately, Task 2's explicitly required uniqueness rule
+checks only `origin='declared'`, while Task 3 is the planned slice that deletes
+an overlapping `workbook_seeded` row before insertion. Pulling that fix into
+Task 2 would violate the requested plan order; leaving it creates a temporary
+database-constraint mismatch. User direction is required before the Task 2
+review loop can continue. A minor frontend shortcut focus regression is also
+open and can be fixed once the task resumes.
+
+User decision: proceed with the review recommendations. Task 2 will add a
+fail-safe migration collision precheck without silently deleting or merging
+valid legacy availability rows. The workbook-seeded slot replacement stays in
+Task 3 as the approved ordered plan requires; its temporary Task 2 mismatch is
+an explicitly authorized deferral. The removed-field shortcut focus regression
+will also be corrected test-first before scoped re-review.
+
+Task 2 fix-round re-review approved the collision precheck and restored focus
+behavior. The user-authorized Task 3 deferral was respected without a workaround
+or scope pull-forward. Fresh controller-side backend/frontend/typecheck evidence
+is running before the task ledger is marked complete.
+
+Task 2 fresh verification: backend availability/load/scheduling coverage passes
+(88 tests, 370 assertions; six non-failing PHPUnit deprecations) and the
+focused frontend set passes (16 tests; known jsdom canvas notices). The required
+repository-wide `npx tsc --noEmit` still fails only at the pre-existing mock
+typing errors in `curriculum-subject-row-dialog.test.tsx:43` and `:47`; no Task
+2 diagnostic remains. Because that file is outside these five plans and the
+user directed that unrelated files remain untouched, Task 2 cannot be marked
+complete or followed by Task 3 without an explicit decision to repair those
+test typings or to accept the documented gate blocker.
+
+User authorization received: make only the minimal, type-safe Vitest mock
+signature repair in `curriculum-subject-row-dialog.test.tsx`, solely to clear
+the required repository TypeScript gate. The existing component behavior tests
+remain the contract; no production behavior or additional unrelated files are
+in scope for this corrective slice.
+
+TypeScript-gate correction complete and pending scoped re-review: dialog test
+mocks now derive their concrete callback signatures from the component props;
+the focused Vitest suite passes 4/4 and `npx tsc --noEmit` exits 0 with no
+diagnostics. Commit `df8ce8e` changes only that user-authorized test file.
+
+Plan 1 Task 2 complete: the original implementation, its safety/focus fix
+round, and the user-authorized test-typing correction all passed independent
+scoped reviews. Final task evidence is backend 88 tests/370 assertions,
+focused frontend 16 tests, and repository `npx tsc --noEmit` exit 0. The next
+ordered slice is Plan 1 Task 3; the pre-existing image remains untouched.
+
+Plan 1 Task 3 started: first-use collisions will be handled only in the
+existing faculty availability/preference create paths. Tests must first show a
+declared slot cannot replace its workbook-seeded counterpart and an omitted
+preference rank is rejected; then the minimal transactional/defaulting fixes
+and visible availability day-field error will be verified.
+
+Plan 1 Task 3 implementation is pending independent review at commit
+`8fbf96f`: RED exposed a seeded-slot composite-key 500, a required omitted
+rank, and a missing rendered day-field error. Focused backend and frontend
+GREEN gates pass. Scoped ESLint has no errors, but one existing React Compiler
+warning in the workspace prevents a zero-warning global lint run and is
+recorded for the planned UI work rather than hidden.
+
+Plan 1 Task 3 complete: independent review confirms the transaction deletes
+only the actor-owned matching `workbook_seeded` slot; default rank is scoped to
+professor/curriculum/semester; and the real API field-error envelope is visible
+in the workspace. Commit `8fbf96f` is cleanly reviewed. Plan 1 Task 4 is next.
+
+Plan 1 Task 4 started: add the reversible `faculty_specializations` capability
+model and its actor-owned, audited API. The endpoint test must fail for the
+absent route before any migration/controller/action implementation; the exact
+API surface list will be updated in the same scoped commit.
+
+Plan 1 Task 4 implementation is pending independent review at `048ec88`.
+Endpoint coverage is green (4 tests/25 assertions) and the exact API-surface
+suite is green (22 tests/241 assertions). A seeming cross-owner DELETE success
+was proven to be Laravel test-client guard caching; the test now uses the
+repository’s established guard reset and verifies the real policy denial.
+
+Plan 1 Task 4 complete: independent review confirms the specialization schema,
+exhaustive proficiency enum, college-scoped validation, actor ownership,
+transactional audit behavior, route placement, and API-surface reconciliation.
+Commit `048ec88` is clean. Plan 1 Task 5 is next.
+
+Plan 1 Task 5 started: a test will first prove that a primary specialization
+outranks a bare higher-ranked preference, then the new reversible recommendation
+column, eager-loaded scoring signal, and resource contract will be implemented.
+Faculty without specialization must retain their existing ordering behavior.
+
+Plan 1 Task 5 implementation is pending independent review at `2098ef0`.
+Primary-over-bare and secondary equal-rank scoring regressions are green, as is
+the reversible migration down/up verification. The current app has no
+assignment-recommendation endpoint/resource consumer; per the listed Task 5
+scope, no new endpoint was invented—the persisted generator result and direct
+resource serialization are covered instead. Repo-wide Pint/PHPStan retain
+unrelated pre-existing blockers, while task-file checks are clean.
+
+Plan 1 Task 5 complete: independent review confirms the migration/model/resource
+contract, batched specialization lookup, and deterministic primary/secondary
+scoring. The no-endpoint decision is correct for the documented existing API
+surface and listed scope. Commit `2098ef0` is clean. Plan 1 Task 6 is next.
+
+Plan 1 Task 6 started: the Faculty Input workspace will be extracted into the
+approved three-tab shell and two bounded panels, with specialization management
+inside Subject preferences. The existing React Compiler warning is now inside
+the intended refactor scope and must be removed so the task’s full frontend
+lint/type/test gate can actually pass. Existing in-repo shadcn components will
+be composed; the local upstream Tabs documentation lookup timed out without
+changing dependencies or source files.
+
+Task 6 structural clarification: the approved Subject Preferences requirements
+(form, filtered preference table/edit-delete flow, and declared-specialization
+list/delete flow) exceed the plan’s roughly 400-line source-file constraint in
+one component. A single internal `faculty-specialization-list.tsx` child is
+authorized solely to keep `FacultySubjectPreferencePanel` bounded; it adds no
+endpoint, dependency, or user workflow and remains owned by that panel.
+
+Plan 1 Task 6 implementation is ready but intentionally uncommitted pending
+the plan's full frontend gate. Its focused 3-file/7-test suite, TypeScript,
+Prettier, and diff checks pass; the former workspace React Compiler warning is
+fixed. Full lint still reports 9 errors/1 warning only in unrelated existing
+files, and full Vitest reports 12 unrelated failed suites/22 tests. Per scope
+rules, those files have not been changed; explicit user authorization is needed
+to repair them before Task 6 can be committed/reviewed and Plan 1 can advance.
+
+User authorization received to make the minimal repairs necessary to clear
+those full-gate blockers. Root-cause investigation will distinguish test-runner
+contention or stale fixtures from genuine product defects before changing any
+unrelated file. No broader refactor, dependency change, or behavior expansion
+is authorized.
+
+After the literal full frontend gate turned green, the Task 6 source-size audit
+found `FacultySubjectPreferencePanel` at 422 formatted lines, above the plan's
+roughly-400 target. A second internal, presentational
+`faculty-subject-preference-form.tsx` child is authorized solely to move form
+rendering while the parent retains form state/mutations/ownership. It adds no
+API, workflow, dependency, or behavior; the full gate must be rerun after it.
+
+Fresh controller verification after the final extraction is terminal green:
+the literal `npm run lint && npx tsc --noEmit && npm run test` chain reached
+`102` passing Vitest files and `631` passing tests. TypeScript must have passed
+because the shell's `&&` reached the test command; the existing non-failing
+jsdom canvas notices remain. The scoped Task 6/gate-repair commit is now ready
+for independent review.
+
+Plan 1 Task 6 complete: commit `2444dcf` cleanly passed independent review.
+The exact full frontend gate remains green (102 files/631 tests), and the
+approved tabs/panel boundaries, strict specialization service contracts, and
+minimal root-cause-backed gate repairs were all verified. Plan 1 Task 7 is next.
+
+Plan 1 Task 7 started: the existing workbook faculty seeder will be extended
+test-first for deterministic, complete reusable availability, ranked preference,
+and specialization profiles. It must retain the local/testing guard, preserve
+declared records, use college-scoped subjects, give Coaches/Unidentified only
+PE/NSTP/general-education subjects, and never create Sunday availability.
+
+Task 7 data constraint: one archived Teacher Certificate semester contains only
+three unique `curriculum_subjects`, while the planned 5–8 preference target is
+incompatible with the preference unique key and source-placement requirement.
+The seeder will preserve institutional data and seed all available rows
+(`min(5, available)`) for this exceptional semester; it will not fabricate
+subjects or use off-curriculum rows. This exception will be documented in the
+task report and verification results.
+
+Plan 1 Task 7 complete: commits `6942333` (unrelated 3-file Pint formatting
+fix, user-approved) and `84779ea` (the seeder work itself). A PHPStan-driven
+refactor of `loadReferenceData()`'s slot-grouping logic fixed 6 errors the
+original diff introduced (root cause, not suppressed); re-verified 0 net-new
+errors against an isolated pre-Task-7 baseline. Full backend PHPUnit
+(1182 tests/37927 assertions, 4 errors/15 failures) confirmed pre-existing
+and unrelated to Task 7 via structural isolation and a direct baseline diff.
+`migrate:fresh --seed` required `--database=mariadb_migrator` (the app's
+`grc_app` user is intentionally DML-only); exit 0, all seeders DONE. Task 7
+independent review: Approved, 3 Minor findings deferred.
+
+Plan 1 final whole-branch review (all 7 tasks, opus): "Ready to merge: With
+fixes" — 5 Important findings, all independently re-verified before the fix
+was dispatched. The most consequential: the Task 7 seeder was deleting the
+real workbook-CSV-derived availability/preferences within the same run that
+had just written them, silently replacing real teaching evidence with
+synthetic hash-derived data; and `UpdateFacultyAvailability` was missing the
+seeded-slot-replacement `CreateFacultyAvailability` already had, so editing a
+declared availability onto a still-seeded slot (common for full-time
+professors, seeded Mon–Fri 08:00) raised a 500. A single fix-wave commit
+(`6c41575`) addressed all 5; a scoped re-review confirmed all ADDRESSED with
+no new breakage, and independently verified the seeder fix's side effect (a
+relaxed test upper-bound) is a correction, not a weakening. Post-fix full
+gates re-run clean: Pint, PHPStan (95 pre-existing errors, unchanged),
+PHPUnit (1184 tests/37931 assertions, same 19 pre-existing failures, 0 new),
+`migrate:fresh --seed` (exit 0), and the full frontend gate (ESLint clean,
+`tsc --noEmit` clean, Vitest 634/634 passing — the first full run showed 17
+failures that were pure resource-contention timeouts in this constrained
+session, none in fix-wave-touched files, and all 17 passed on isolated
+re-run). Manual UI verification from the plan's checklist was not possible
+(no live Chrome extension in this background session); data-layer spot
+checks via direct DB queries confirmed full-time = 5 availability rows,
+part-time = 3, zero Sunday rows system-wide, Coaches/Unidentified = 0
+curriculum preferences with 4–10 specializations, and 557 total faculty.
+
+**Plan 1 complete.** All 7 tasks done, reviewed, and gate-verified on `main`.
+Starting Plan 2 next.
+
+Plan 2 (Roster file) started and completed across 3 tasks: `StudentRosterMap`
+(107 sections/3,210 students across COE/CBAE/COA/CCS, commit `409b317`),
+`StudentIdentityGenerator` (deterministic crc32-derived student number/email/
+name, commit `7b5af9a`), and the `students:generate-roster-file` artisan
+command that writes `Subject And Prerequisuite/Students-Profile.md` (commit
+`b1caf65`, DRY-violation fix `8198372`, `--check` CI-sync test `dd732ca`).
+All 3 tasks independently reviewed Approved; final whole-branch review
+(opus) independently re-parsed all 3,210 generated rows directly (not
+sampled) and found 0 duplicate student numbers/emails, 0 entry-year
+mismatches, 0 email-format deviations — verdict "Ready to merge: Yes."
+
+Mid-Task-3 incident (resolved, not a code defect): a stalled implementer
+subagent's abandoned background PHPUnit process raced the controller's own
+full-gate run against the shared `grc_enrollment_test` database, leaving its
+`migrations` table missing and producing a false spike of ~341 errors/38
+failures on one read. Diagnosed as environmental, fixed by rebuilding the
+test schema (`php artisan migrate:fresh --env=testing --force`); a clean
+re-run confirmed the real baseline unchanged (4 errors/15 failures, all
+pre-existing from Plan 1, 0 new).
+
+**Note for Plan 3:** the 7 `EDUC1xx` COE first-year section codes
+(`StudentRosterMap.php`, 210 students) do **not** round-trip through
+`SectionBlockCode::coePrefix()` — `BEED`/`BSED-ENG`/etc. resolve to
+`ELEM`/`ENG`/etc., never back to `EDUC`. This is deliberate (documented in
+`StudentRosterMap.php`'s class docblock and in the plan itself) and nothing
+to fix in Plan 2, but Plan 3 resolves roster rows against real sections and
+must not match these 210 students by generated block code, or they will
+silently find no section — and `EDUC104`/`EDUC105` (`BSED-ENG`) would
+conceptually collide with the `ENG101`/`ENG102` `SectionBlockCode` produces
+for the same cohort.
+
+**Plan 2 complete.** All 3 tasks done, reviewed, gate-verified, final review
+clean after one fix round. Starting Plan 3 next.
+
+Plan 3 (Student Accounts and Academic History Seed) started and completed
+across 5 tasks, all landing as extensions to `StudentRosterSeeder.php`
+(commits `34409d9`, `2d23e8e`+`24a5d38`, `9ab36a4`, `bb11e8f`+`a6ae84e`,
+`76b818a`+`4f464a3`, final-review fix `0c2d275`), except Task 5 which added
+new files (`DeriveSectionDemandObservations` action + console command).
+
+Pre-flight scan found the plan's "under five minutes for `migrate:fresh --seed`"
+target was already unattainable before this plan started (pre-existing
+seeding phase alone ≈5.5-6 min, dominated by `CatalogFacultySeeder`'s ~3
+min, unrelated to any of the 5 plans). User directed: report real timing,
+don't chase the target, don't expand scope into optimizing unrelated
+seeders.
+
+Three serious cross-task defects were caught by review and fixed before
+merge:
+- **Task 2**: the original design generated exactly one 40-seat block per
+  cohort per historical term regardless of real headcount, undershooting
+  the plan's own ~5,000-section estimate (landed at 2,147). Fixed by
+  scaling to `ceil(headcount/40)` blocks — real count settled at 3,966.
+- **Task 3 + 4**: Task 3's grade distribution gave every graded subject an
+  independent 10% failure chance; combined with the real, unmodified
+  `EnrollmentCategoryClassifier`'s zero-threshold "any single failure =
+  irregular" rule, this compounded to ~96% organic irregularity at real
+  curriculum scale, swamping Task 4's correctly-built 10%-selection
+  mechanism and contradicting the plan's own ~320-student expectation.
+  Fixed by making Task 3's baseline grades clean/passing-only — only
+  Task 4's deliberately-selected cohort ever gets a failing mark. Real
+  rate after the fix: 228/2,289 eligible students = 9.96%.
+- **Task 5**: the demand-observation aggregation grouped by each student's
+  CURRENT year level instead of the historically-correct year level Task 2
+  already computes and stores — silently making nearly every
+  historical-term observation invisible to its real consumer
+  (`GenerateSectionDemandForecasts`) while corrupting unrelated synthetic
+  rows. Fixed by re-sourcing the join through
+  `sections → academic_term_section_plans → curricula → programs`.
+
+The final whole-branch review (opus) additionally found and fixed, in one
+follow-up commit: Task 4's irregular-selection wasn't scoped to the roster
+it parsed and was silently converting a `DemoEnrollmentSeeder` demo account
+documented as Regular into Irregular; the historical-term walk had no
+term-status filter (a `semester_ongoing` term re-seed could fabricate
+locked grades on live data); no test directly pinned the Task 3/4
+clean-baseline invariant; and the demand-observation aggregation excluded
+zero-enrollment sections from its capacity/section counts. All four fixed
+with new regression tests, independently re-verified.
+
+This environment has a confirmed hard external process kill on any
+long-running `vendor/bin/phpunit` invocation (unrelated to test volume —
+confirmed by testing even a 15-file subset), so a single continuous
+full-suite run was not achievable this session despite ~10 attempts with
+various splitting strategies. Full coverage was instead assembled from
+multiple completed sub-runs, with 0 new failures found anywhere against
+the 19 pre-existing failures already established at the end of Plan 1.
+
+Final real `migrate:fresh --database=mariadb_migrator --seed` (`grc_app`
+is intentionally DML-only; the migrator connection has DDL privileges):
+exit 0. `student_profiles`/`users(role=student)` = 3,220; `enrollments` =
+11,956; `academic_grades(status=locked)` = 127,550; `sections(status=closed)`
+= 3,966; `section_demand_observations(source=derived_from_enrollments)` =
+1,490. `enrollment_category` stays null on a fresh seed by design (the
+current term is `semester_closed`, not `semester_ongoing`) — the plan's
+manual-verification step 4 (`php artisan students:reclassify` after the
+Registrar Head opens the next term) is a separate, not-yet-exercised manual
+step.
+
+**Plan 3 complete.** All 5 tasks done, reviewed, gate-verified, final review
+clean after one fix round.
+
+## 2026-08-11 — Plan 4 independent final-fix verification handoff
+
+Resumed from the supplied Claude handoff directly on the user-authorized
+`main` checkout. Plans 1–3 are already complete; Plan 4 is paused only for an
+independent verification of commit `41c2f2e` before it is closed. The existing
+unstaged `PROGRESS.md` and untracked `grades-com-student1.png` remain out of
+scope and will not be staged. Verification will cover irregular-student
+preference reachability, the workspace line constraint/extraction, scorer
+null-hardening, and no-Sunday filter vocabulary before Plan 5 begins.
+
+The first combined Plan 4 backend verification attempt (`pint --dirty`, scoped
+PHPStan, then scorer PHPUnit) exceeded the external 124-second command limit
+without a terminal result. It is not recorded as passing; the independent
+checks are being rerun separately with monitored output.
+
+Independent Plan 4 final-fix review found one Important integration-test gap:
+the shared irregular enrollment-route mock still returns an invalid empty
+payload for the newly mounted schedule-preference query, silently putting that
+panel into an error state during irregular filter/sort tests. The direct
+frontend verifier likewise exceeded the 124-second command limit without a
+terminal result. Plan 4 remains open for a focused test-first fixture/comment
+repair and scoped re-review; no Plan 5 work has begun.
+
+Plan 4 complete after final fix round: commit `3b2f03d` makes the shared
+irregular test route return the complete schedule-preference envelope and adds
+a real irregular-panel loading assertion; its stale composition comment is
+also corrected. Independent scoped re-review approved the fix. Fresh evidence:
+scorer PHPUnit 2/2, scoped backend Pint/PHPStan, targeted frontend ESLint,
+TypeScript, and the three affected frontend suites (31 tests) all pass. The
+plan's browser/manual enrollment flow remains a human verification item; Plan
+5 may now begin in the documented order.
+
+## 2026-08-11 — Plan 5 IT Control Portal started
+
+Plan 4's final fix is independently verified and closed. Plan 5 begins on the
+user-authorized `main` checkout with a dedicated SDD ledger. The `it_admin`
+role will be introduced end to end first; its intentionally temporary frontend
+exhaustive-map errors are owned by Plan 5 Task 3 and cannot be treated as a
+final quality-gate exception. The existing unstaged tracker and untracked image
+remain out of scope.
+
+Plan 5 Task 1 started: add the IT Control role and local/test-only identity
+through the backend catalog, seed fixture, strict frontend role feed, e2e
+fixture, and identity documentation. The backend regression will be observed
+RED before implementation. `PROGRESS.md` remains intentionally unstaged.
+
+Plan 5 Task 1 RED verification is starting with only the UserRole and
+RoleUserSeeder test classes. No production role or seed-fixture code has been
+changed yet.
+
+The documented Windows `.bat` PHPUnit wrapper misparsed the literal
+`UserRole|RoleUserSeeder` filter as a shell pipe before test collection. The
+same focused filter will be rerun through PHPUnit's PHP entrypoint; this is a
+command-wrapper workaround, not a test result.
+
+That combined focused run exceeded the local 64-second execution window before
+returning test output. The isolated UserRole unit regression will provide the
+required RED evidence; the slower seeder suite will be verified after the
+minimal implementation.
+
+Task 1 backend catalog RED is confirmed: `UserRoleTest` reports the missing
+`it_admin` value and its dedicated catalog assertion fails because the enum
+case is absent (5 tests, 11 assertions, 2 expected failures). A focused seed
+identity assertion is being added and will be observed RED before the enum and
+deterministic seed-map implementation.
+
+Task 1 seed-fixture RED is confirmed: the exact IT Control identity assertion
+fails after 22.063 seconds because only the original nine seeded rows exist.
+The minimal implementation now adds only `UserRole::ItAdmin`, its exhaustive
+label and learner-scope match arms, and the same-slug deterministic seed map
+entry.
+
+Task 1 backend GREEN verification is starting with the isolated enum catalog
+and exact seeded-identity regressions, followed by the existing role-matrix
+coverage without weakening its data providers.
+
+Task 1 targeted backend GREEN is confirmed: `UserRoleTest` passes (5 tests,
+14 assertions), and the exact IT Control seed identity passes (1 test, 1
+assertion). PHPUnit reports its existing six non-failing deprecations for the
+database test. The complete seeder class and untouched role-matrix suites are
+next.
+
+The complete `RoleUserSeederTest` class is GREEN (12 tests, 75 assertions).
+Ten existing test files derive their matrices from `UserRole::cases()`; none
+will be weakened. The frontend, e2e, and documentation mirrors are now being
+updated before the untouched denial matrices and the required TypeScript gate
+are run.
+
+The strict frontend role array, e2e `SeedRole` union/map, and seeded-identity
+table now include `it_admin` / `it.control@grc.test`. The required TypeScript
+check is starting; the only expected temporary failures are Task 3-owned
+exhaustive `Record<UserRole, ...>` maps.
+
+The required `npx tsc --noEmit` fails as expected after 20.8 seconds: Task
+3-owned exhaustive role maps lack `it_admin` in `role-capabilities.ts` and
+`scheduling-service.ts`, with the corresponding capabilities contract test
+also reporting the missing key. No Task 3 module/API-map file will be changed
+in Task 1. Existing backend role-matrix denial datasets are now being run for
+the new role without altering their providers.
+
+Matrix inspection confirms that eight endpoint providers automatically name an
+`it_admin` denial dataset from `UserRole::cases()`, while three policy tests
+loop over the same enum at runtime. The unchanged providers and policy classes
+are being executed now to prove the default least-privilege denial.
+
+The existing endpoint matrices are GREEN for `it_admin`: six denial datasets
+pass with 13 assertions (and five existing non-failing PHPUnit deprecations).
+The three loop-based policy classes are next; they are run separately because
+their test names do not include the data-set label.
+
+All three unchanged policy loops are GREEN (7 tests, 54 assertions), including
+their runtime `it_admin` denial assertions. The plan-required full backend
+PHPUnit attempt is starting in a monitored process. It will be allowed to
+reach the known external 9–10 minute hard-kill behavior if necessary; the
+previously established 19 unrelated baseline failures will not be fixed in
+this Task 1 scope.
+
+The full PHPUnit attempt did not reach a terminal result: after 12m24s wall
+time and 351.69 CPU seconds, it remained buffered at 976/1247 tests (78%) for
+about nine minutes while emitting only known baseline failure markers. This is
+a stuck-run variant of the documented time-limit behavior, not a pass or a
+new Task 1 failure. The exact monitored PHPUnit process is being stopped under
+the handoff procedure; completed focused/role-matrix checks are supplementary
+verification only.
+
+The exact stuck PHPUnit PID was stopped; no other process was touched. The
+ignored Task 1 report records this explicitly as a non-terminal, non-passing
+full-suite attempt and does not claim confirmation of the 19-failure baseline.
+Final Task 1 verification is now rerunning the two changed backend test
+classes, scoped Pint, and whitespace/scope checks before staging only the
+listed source, test, frontend, e2e, and documentation files.
+
+The final combined backend rerun exceeded the local 64-second command window
+before returning output, so it is not recorded as passing. Earlier completed
+Task 1 GREEN evidence remains the UserRole unit class (5/14) and complete
+RoleUserSeeder class (12/75). Residual test processes are being checked before
+the non-database scoped Pint/whitespace verification is rerun separately.
+
+Scoped Pint passes. A documentation EOF blank line introduced while undoing an
+accidental formatter-wide expansion was removed; the documentation and e2e
+diffs now contain only the requested IT Control additions. Final scope and
+whitespace checks are running before the Task 1-only commit.
+
+Plan 5 Task 1 committed on `main` as `e122344`
+(`feat(identity): add IT Control role`). The commit contains exactly the seven
+listed backend/frontend/e2e/documentation files. `PROGRESS.md`, the ignored
+Task 1 report, and the pre-existing `grades-com-student1.png` remain unstaged.
+Task-local RED/GREEN evidence is complete; the full backend-suite attempt and
+final combined rerun are both explicitly non-terminal in the report, while
+the Task 3-owned TypeScript map errors remain intentionally deferred.
+
+Plan 5 Task 1 review fix round 1 started. The review correctly identifies that
+the brief's exact focused `UserRole|RoleUserSeeder` GREEN command was not yet
+captured as a terminal result, and that the seeded-identity wording still
+implies the PRD's nine primary roles. The exact Windows command is being run
+first; its direct PHPUnit fallback is authorized only if the `.bat` wrapper
+again parses the literal pipe as a shell operator. The full-suite diagnosis
+remains non-terminal and will not be rewritten as a pass.
+
+The `.bat` wrapper did repeat the expected Windows pipe-parsing failure before
+test collection (`RoleUserSeeder` treated as a shell command). No residual
+PHPUnit worker is running; the equivalent direct PHPUnit filter is now being
+run for a terminal focused GREEN result.
+
+The direct equivalent of the brief's exact focused filter is terminal GREEN:
+17 tests / 89 assertions in 23.136 seconds, with six non-failing PHPUnit
+deprecations. No documentation contract test exists, so the seeded identity
+introduction is minimally corrected to say "One per supported role" rather
+than implying that the additional IT Control role is a PRD primary role. The
+full-suite record remains explicitly non-terminal and non-passing.
+
+Plan 5 Task 1 review fix round 1 committed as `e770482`
+(`docs(testing): clarify supported seeded roles`). It contains only the
+approved wording correction. The ignored Task 1 report contains the terminal
+17-test focused GREEN output, preserves the original narrower RED evidence,
+and retains the accurate non-terminal full-suite diagnosis. `PROGRESS.md` and
+the pre-existing image remain unstaged.
+
+Plan 5 Task 1 review fix round 2 started. No product or test behavior will be
+changed unless a bounded diagnosis identifies a Task 1 regression. The prior
+full-run log contains only progress dots through 976/1247, so PHPUnit's test
+list will be used read-only to locate the order boundary before reproducing
+only the suspected nearby test(s) under a bounded monitored command.
+
+The test-list boundary maps the 976th test to
+`AnalyticsSubstrateMigrationTest::test_analytics_indexes_have_the_approved_ordered_columns_and_uniqueness`;
+the next check-constraint assertion is the first candidate after the buffered
+full-run progress line. The entire pre-existing migration-test class is being
+run alone under the normal bounded command window to distinguish a local class
+hang from a Task 1 regression.
+
+That complete AnalyticsSubstrate migration class is terminal GREEN (20 tests,
+59 assertions, 20.456 seconds), so it is not the source of the monolithic
+stall. Counting the final unnumbered progress line reveals 58 more completed
+tests after 976; the first uncompleted ordered test is the `0006 year 2
+irregular (incomplete)` dataset in the pre-existing `DemoEnrollmentSeederTest`.
+That exact dataset is now being reproduced in an isolated monitored process
+with a three-minute bound. No Task 1 file is implicated or being changed.
+
+The exact suspected DemoEnrollment dataset is terminal GREEN (1 test, 3
+assertions, 2m11.682s), not hung. Its duration explains the monolithic run's
+buffered progress appearance: it is the first test after 1,034 completions,
+and several expensive datasets must finish before PHPUnit emits its next
+61-test progress marker. A bounded terminal Unit partition is running next as
+supplementary suite evidence; no new monolithic run or unrelated repair is
+authorized.
+
+The bounded Unit partition completed terminally in 46.564 seconds (334 tests,
+844 assertions) with two known, unrelated AuditVocabulary expectation failures
+and one PHPUnit deprecation. `DemoEnrollmentSeederTest` alone contains 35
+tests; the representative terminal dataset takes 2m11.682s, so an exhaustive
+Demo shard is conservatively about 77 minutes and is not a safe verification
+command. A separate bounded Feature Policy partition is running instead for
+additional terminal evidence.
+
+The bounded Feature Policy partition is terminal GREEN (53 tests, 149
+assertions, 26.141 seconds). The full-run diagnosis is now concrete: the
+captured final unnumbered segment shows 1,034 completed tests, with the next
+DemoEnrollment dataset completing terminally but taking 2m11.682s; buffered
+progress and expensive seeding, not a Task 1 defect, explain the apparent
+stall. The ignored Task 1 report records the exact commands, results, known
+two-failure Unit outcome, and the realistic partition/shard strategy. No
+source/test file changed, so no commit is created in this diagnostic round.
+
+Task 1 remains open after scoped re-review: the focused direct PHPUnit
+equivalent is terminal green (17 tests / 89 assertions), and the supported-role
+documentation wording is corrected, but the mandated full backend PHPUnit run
+is still non-terminal at 976/1247. The next fix round is limited to diagnosing
+that suite-level hang or obtaining a terminal equivalent; no unrelated
+baseline-failure repair is authorized.
+
+Task 1 full-suite diagnostic is now concrete: the buffered monolithic output
+had 1,034 completed tests, and the next `DemoEnrollmentSeederTest` scenario
+passes alone but takes 2m11.682s. Its 35 scenarios project to roughly 77
+minutes, exceeding the local external-run budget; therefore the apparent
+freeze is neither a Task 1 regression nor a deadlock. Terminal partitions show
+`tests/Unit` at 334 tests/844 assertions with two pre-existing AuditVocabulary
+failures, and `tests/Feature/Policies` green at 53 tests/149 assertions. No
+PHPUnit process remains. This diagnostic and the terminal exact 17-test Task 1
+gate are awaiting final scoped re-review; no unrelated baseline code changed.
+
+Plan 5 Task 1 is independently complete: commits `e122344` and `e770482`
+add the exhaustive `it_admin` enum, deterministic local/test seed identity,
+strict frontend/e2e role contract, and corrected identity documentation. The
+terminal direct role/seeder gate passes 17 tests / 89 assertions. Review also
+accepts the full-suite diagnosis (buffered, expensive seed datasets rather than
+a Task 1 deadlock); the historical baseline is explicitly not claimed green.
+Task 2 may now begin with the IT-admin-only account browser endpoints.
+
+Plan 5 Task 2 is independently complete: commits `8347491` and `f49a16b`
+add paginated, cache-protected IT-admin-only student and faculty account
+browsers with Form Requests, Actions, Resources, Gate defense in depth, and
+exact API-surface coverage. The focused API gate passes 46 tests / 334
+assertions; Pint and whitespace checks pass. The second commit removes the
+scratch TDD report from Git tracking while preserving it locally. Task 3 may
+now own the exhaustive IT-admin frontend maps and browser modules.
+
+Plan 5 Task 3 review fix is awaiting scoped re-review. Systematic diagnosis
+showed Vitest's default parallel file execution exhausted the local runner:
+the affected suites passed alone and the same broad target passed serially with
+the existing 10-second per-test deadline. Commit `76b8ce0` sets only
+`fileParallelism: false`; the required exact broad command now exits 0 with 63
+files / 363 tests in 591.27 seconds. Focused tests, typecheck, ESLint,
+Prettier, and diff checks are green; no product timeout was raised or hidden.
+
+Plan 5 Task 3 is independently complete: commits `417d490`, `1ec2d2d`, and
+`76b8ce0` add the ordered IT Control modules, strict browser contracts,
+TanStack Query service/hooks, secure account browser screens, exhaustive
+capability compatibility, and the root-cause-backed deterministic Vitest file
+scheduling. The exact broad portal gate passes 63 files / 363 tests. Task 4
+may now add durable automation-run tracking.
+
+Plan 5 Task 4 is independently complete: commits `24e7e6e`, `7c864c4`, and
+`948d9e5` add locally guarded durable automation tracking. Invalid production
+writes now return 403 before validation; post-running exceptions persist a
+terminal failure before rethrow, so queue retries cannot strand the dedupe lock.
+Focused endpoints/jobs, API surface, Pint, targeted PHPStan, and testing-DB
+reversibility are green. Task 5 may now connect the real audited actions.
+
+Plan 4 final-fix implementation started directly on the user-authorized
+`main` checkout. Scope is limited to making the shared irregular enrollment
+mock return the complete schedule-preference envelope, proving the preference
+panel loads through a focused RED/GREEN assertion, and correcting the panel's
+stale wiring comment. `PROGRESS.md` remains intentionally unstaged; only the
+task test/component/report files will enter the requested commit.
+
+Plan 4 final-fix RED is confirmed. The new focused irregular-workspace test
+failed because it could not find the real `Monday` preference checkbox (1
+failed, 19 skipped). This reproduces the review finding: the shared irregular
+route mock's catch-all returns `{ data: [] }`, which the strict preference
+envelope rejects, so the panel silently remains in its error boundary while
+the eligible-subject UI continues rendering.
+
+Plan 4 final-fix focused GREEN is confirmed. `mockIrregularRoutes` now returns
+the same complete `defaultSchedulePreference` envelope as the regular helper,
+and the previously failing focused test passes (1 passed, 19 skipped). The
+panel doc-comment now accurately states that it is composed above both the
+regular section table and irregular subject flow. Broader workspace/panel
+tests and scoped static checks are next.
+
+Plan 4 final-fix broader frontend verification passes: the complete enrollment
+workspace and schedule-preference panel suites report 2 files / 24 tests
+passing. Vitest emitted only the repository's known non-failing jsdom canvas
+notices. Scoped ESLint and the strict TypeScript compiler check are next.
+
+Plan 4 final-fix static checks pass: targeted ESLint for the changed test and
+component exits clean with zero warnings, and `npx tsc --noEmit` exits 0 with
+no diagnostics. The final-fix report now records the exact RED/GREEN commands
+and corrects its earlier claim that the shared irregular helper already used
+the valid preference fixture. Final diff/scope review and a fresh verification
+run remain before the scoped commit.
+
+Plan 4 final-fix pre-commit verification is complete on the final code/test
+tree: the two focused frontend files pass 24/24 tests, targeted ESLint remains
+clean, strict TypeScript remains clean, and `git diff --check` reports no
+whitespace errors. Only the workspace test and preference-panel component will
+be staged; this progress ledger, the ignored `.superpowers` report, and the
+pre-existing image remain outside the commit as explicitly required.
+
+Plan 4 final-fix round committed directly to `main` as `3b2f03d`
+(`test(enrollment): validate irregular preference panel loading`). The commit
+contains exactly the two scoped frontend files. No route, API, product UI
+behavior, deferred Plan 4 minor, `PROGRESS.md`, `.superpowers` artifact, or
+image was committed or pushed.
+
 ## 2026-08-07 — Curriculum editor View-tab continuation
 
 Session resumed from Claude's uncommitted frontend refinement for the
@@ -5154,3 +5876,483 @@ completed with only the three existing Fast Refresh warnings. The attempted
 production build exceeded the local 64-second command window, so it is not
 recorded as a build pass. Browser-based visual inspection was unavailable in
 this environment.
+
+## 2026-08-12 — IT Control Enrollment Override workspace
+
+Started Task 6 from the approved IT Control Portal plan at base `aaedfaf`.
+This slice is limited to the IT Administrator Enrollment Override workspace,
+its typed automation client/query hook/schema, access-matrix coverage, and
+verification. Existing user-owned changes (`grades-com-student1.png` and the
+prior progress entry) remain out of scope and will not be staged.
+
+**RED checkpoint:** Added only the new focused frontend test. The required
+`npx vitest run src/features/components/portal/it-control-enrollment-override-workspace.test.tsx`
+command did not reach Vitest diagnostics: it produced no output and exceeded
+the local 64-second command window (exit 124). No production workspace,
+service, schema, hook, registry, or E2E change has started. The local test
+runner must be diagnosed before the red result can be accepted.
+
+**Validated RED:** A diagnostic-only rerun with Vitest constrained to one
+worker completed in 5.2 seconds and failed exactly because Vite cannot resolve
+the new Enrollment Override workspace import from its focused test. The normal
+local runner's startup/worker overhead is the source of its 64-second timeout;
+the missing workspace is the legitimate test failure. No Vitest configuration
+was changed.
+
+**Workspace GREEN checkpoint:** Implemented the typed IT-control automation
+contract/client, a TanStack run mutation and active-only two-second polling
+hook, and the role-guarded six-step Enrollment Override workspace. Every step
+uses AlertDialog confirmation, reports persisted run counts/status/timestamps,
+lists warnings in a native accessible disclosure, surfaces request errors, and
+keeps later steps disabled unless the prior run succeeded or the operator opens
+the scoped Override order escape hatch. The focused component suite passes
+**4 tests** (POST/progress, prerequisite lock, authorization, and axe) under
+the local one-worker diagnostic invocation. Vitest emitted a non-failing jsdom
+canvas notice from axe; it did not affect assertions.
+
+**Portal regression checkpoint:** The exact required command
+`npx vitest run src/features/components/portal --reporter=verbose` completed
+under monitored PID 18804 with **62 test files / 359 tests passed** in 507.33
+seconds. It preserved the known non-failing axe/jsdom canvas notices and one
+pre-existing duplicate-key console warning in `curriculum-view`; no test
+failed.
+
+**Full frontend gate correction:** `npm run lint` initially identified three
+scoped issues in the new slice (unsafe test URL coercion and two unused
+symbols); all were corrected and the exact lint rerun passed. `npx tsc
+--noEmit` also passed with no diagnostics. The first full `npm run test` run
+exposed a stale heading-map expectation in `portal-module-page.test.tsx` for
+the three IT Control connected workspaces. Updating that existing map with the
+already-rendered headings made its focused suite pass **51 tests**. The full
+suite must be rerun from this corrected state before it can be recorded.
+
+**Frontend full-suite checkpoint:** The corrected `npm run test` rerun
+completed green with **109 test files / 680 tests passed** in 552.61 seconds.
+The remaining plan gates are the backend quality suite and the authorization
+E2E run. `e2e/tests/authorization.spec.ts` remains in scope because Task 6
+explicitly requires the IT Administrator access-matrix row; local
+`node_modules/` and all unrelated artifacts will remain unstaged.
+
+**Final-gate result:** Pint completed, but full PHPStan remains blocked by 96
+unrelated baseline findings after the Plan 5 automation error was repaired;
+PHPUnit therefore did not run in the chained command. The exact E2E reset
+completed, but the full Playwright run finished with 5 passed, 17 failed, 1
+skipped, and 3 not run. Failures span existing authentication, accessibility,
+enrollment, dashboard, and scheduling journeys as well as the new IT-control
+authorization row, consistently after portal navigation fails to render the
+expected heading. This is a local E2E runtime blocker rather than an isolated
+Task 6 assertion failure.
+
+**E2E root-cause checkpoint:** The isolated Task 6 IT Administrator
+authorization row fails before browser navigation: the reset local API returns
+401 for `it.control@grc.test` with the documented `password`. Direct checks
+show `student.seed@grc.test` login and its bearer `/auth/me` response both
+return 200. Existing authorization rows then visibly stall at “Restoring your
+session,” confirming a shared seeded-identity/browser-bootstrap runtime issue;
+the workspace module, its role mapping, and its heading are not reached. The
+Task 6 source and test files were committed as `a22cb5b`; this progress log,
+the screenshot, and local `node_modules/` remain unstaged.
+
+**Review fix round 2:** A new focused RED test returned two active history
+runs (queued chair and running dean) but observed only the chair detail GET;
+the single active run ID could not represent concurrent backend work. The
+workspace now derives active IDs per step and creates one two-second
+TanStack Query poller for each, while preserving newest completed history and
+the unauthorized zero-fetch guard. The one-worker focused suite is green at
+**7 tests**, `npx tsc --noEmit` passes, `npm run lint` passes, and
+`git diff --check` is clean. This review-round source/test change is pending
+its scoped commit; `PROGRESS.md` remains intentionally unstaged.
+
+**Review fix round 3:** The terminal-detail transition test first failed with
+six history GETs in 50 ms instead of an initial list request plus one refresh:
+the terminal ID stayed active while an effect was retriggered by a new results
+array. The workspace now records a one-time terminal transition before
+refreshing history, retires the ID after that refresh resolves, and preserves
+the terminal detail result until history catches up. The regression asserts
+exactly two history GETs, one detail GET, and the displayed terminal count.
+The focused workspace suite passes **8 tests**, strict TypeScript and full
+frontend lint pass, and `git diff --check` is clean. The scoped changes are
+pending commit; this log remains intentionally unstaged.
+
+**Review fix round 4 started:** Re-review found that a rejected terminal
+history refresh never enters the promise fulfillment handler, so its terminal
+ID is marked refreshed but never retired and cannot trigger another refresh.
+This round is limited to a rejected-refetch regression and the smallest
+finally-based retirement cleanup, followed by focused frontend verification.
+The existing progress log and unrelated local artifacts remain unstaged.
+
+**Review fix round 4 RED:** The focused rejected-refetch regression failed on
+the intended lifecycle assertion: terminal run 42 retained one query observer
+instead of retiring to zero, and Vitest also reported the rejected history
+refresh as an unhandled promise. The test concurrently keeps run 43 active so
+the green phase must prove its independent two-second poller remains attached.
+No production source was changed before this RED result.
+
+**Review fix round 4 GREEN checkpoint:** The terminal retirement updates now
+run in the refresh promise's `finally` path, with the propagated rejection
+consumed afterward. The rejected-refetch regression passes: terminal run 42
+retires to zero observers, its `10 processed` snapshot remains visible, and
+concurrent run 43 performs another detail poll after two seconds. The complete
+focused workspace suite, strict TypeScript, and frontend lint remain to run.
+
+**Review fix round 4 formatting checkpoint:** The complete focused workspace
+suite passed **9 tests**, strict TypeScript passed, and frontend lint passed.
+The first correctly scoped Prettier check then found style drift in both edited
+files (an earlier root-relative invocation had matched no files). Only the two
+scoped files will receive Prettier's mechanical rewrite before fresh final
+verification.
+
+**Review fix round 4 verification:** From the formatted final state, the
+focused workspace suite passed **1 file / 9 tests**, `npx tsc --noEmit` passed,
+full frontend `npm run lint` passed with zero warnings, and the targeted
+Prettier check passed. Final diff validation and a scoped source/test commit
+remain; this progress log, the task report, and unrelated local artifacts will
+remain outside that commit.
+
+**Review fix round 4 committed:** `git diff --check` and the staged diff check
+were clean, and the staged scope contained only the workspace source and its
+focused test. Commit `7e74668` (`fix(it-control): retire terminal runs after
+refresh errors`) records the fix. The progress log, ignored Task 6 report, grade
+screenshot, and root `node_modules/` remain outside the commit; nothing was
+pushed.
+
+## 2026-08-12 — Plan 5 final review fix wave
+
+Started the final Plan 5 review-fix wave at the requested base `7e74668` on
+the user-authorized `main` checkout. Scope is limited to the five confirmed
+findings: sync-queue failure responses, current-term automation history,
+irregular pairwise section conflicts, transient initial-detail polling,
+Student Information enrollment-status rendering, plus the three named minor
+wording/audit/reset-document corrections. Each behavioral repair will follow
+a focused RED/GREEN regression cycle before broader scoped verification.
+
+The pre-existing modified progress ledger, untracked grade screenshot, and
+root `node_modules/` remain outside the final scoped commit. The ignored final
+fix report will capture exact evidence and known baseline/environment gate
+blockers without claiming unrelated PHPStan, PHPUnit, or E2E failures green.
+
+**Final-fix RED checkpoint:** No production, UI implementation, or reset
+documentation changed before the regressions. Focused frontend tests expose
+off-term success unlocking the current workflow, off-term active polling,
+polling stopping after an initial detail failure, the incorrect Registrar
+actor label, and the missing current enrollment column. Focused backend tests
+expose a sync POST returning HTTP 500 instead of its persisted failed resource,
+history returning both terms, a null regular block code in the submission
+audit, and an irregular COM enrollment containing two mutually conflicting
+sections. The backend RED commands completed at 2/2 failures in 19.875s and
+2/2 failures in 16.553s; the corrected focused frontend REDs also failed on
+the intended assertions after excluding TanStack's built-in one retry.
+
+**Final-fix focused GREEN checkpoint:** The minimal implementation now returns
+the persisted failed resource after a sync-queue job exception, restricts run
+history to the current slot, excludes off-term history from UI state/polling,
+keeps initial detail failures on the two-second interval, forwards the chosen
+regular block code, uses `SectionConflictDetector` while selecting irregular
+sections, renders the current-term enrollment status, identifies Registrar
+Staff correctly, and documents ten reset identities. Fresh focused evidence:
+endpoint regressions 2 tests/11 assertions, automation regressions 2 tests/8
+assertions (through Digital COM), and frontend regressions 2 files/17 tests.
+The frontend run emitted only the repository's known non-failing jsdom canvas
+notice. Formatting, static analysis, broader scoped suites, and final scope
+review remain before the commit.
+
+**Final-fix verification started:** Pint and Prettier completed successfully on
+the ten scoped backend, frontend, and E2E reset-document files. The irregular
+conflict regression was strengthened after the first GREEN to prove that its
+two fixture sections conflict under the real `SectionConflictDetector` before
+automation runs; the focused backend action filter is being rerun before any
+broader verification or commit.
+
+The strengthened automation filter is freshly GREEN at 2 tests/9 assertions
+in 14.413s. Scoped backend endpoint, Pint, PHPStan, and frontend formatting,
+lint, and type checks are the next verification group; the full frontend test
+suite will follow under active monitoring because its established duration can
+exceed a single command yield.
+
+Fresh endpoint verification is GREEN at 2 tests/11 assertions in 15.302s and
+scoped Pint `--test` passes. A combined PHPStan invocation over production and
+the two long feature-test files reported 17 strict test-code findings. Most are
+pre-existing nullable model/facade findings in `AutomationStepsTest`; the new
+conflict regression contributed nullable section lookups and list-shape
+inference, which will be corrected before production-only PHPStan and a
+baseline-differentiated test-file rerun. No production finding was reported.
+
+The new test typing is corrected. Production-only PHPStan is clean; the test
+files now report only ten unchanged baseline findings elsewhere in the existing
+automation class and none in either new regression. Frontend full-project ESLint
+passed in 216.2s, TypeScript passed in 45.9s, and scoped Prettier check passed.
+The full frontend Vitest suite is starting as a hidden monitored process with
+logs outside the repository; its PID and output will be checked at least once
+per minute until terminal.
+
+**Final-fix verification checkpoint:** The monitored full frontend suite is
+terminal GREEN at 109 files/690 tests in 755.45s. It emitted only the known
+non-failing jsdom canvas notices and existing `curriculum-view` duplicate-key
+warning. After strengthening the off-term active test to prove it neither polls
+nor disables the current Generate action, the exact two-file suite passed 17/17
+in 28.00s; strict TypeScript, targeted zero-warning ESLint, targeted Prettier,
+and `node --check` for the reset script all passed on the exact tree. Backend
+endpoint regressions remain 2 tests/11 assertions, action regressions 2 tests/8
+assertions through COM creation, scoped Pint passes, and production PHPStan is
+clean. Final ignored reporting, staged-scope review, and the requested scoped
+commit remain.
+
+**Final-fix handoff:** Commit `23fd2e1` (`fix(it-control): close final review
+findings`) records exactly the ten scoped backend, frontend, and E2E source/test
+files. The staged diff passed `--check` immediately before the commit. The
+modified progress ledger, ignored SDD ledger/report, user-owned grade
+screenshot, and root `node_modules/` stayed outside the commit, and nothing was
+pushed.
+
+## 2026-08-12 — Plan 3 fresh-seed enrollment-category blocker
+
+Started the final cross-plan checklist correction on the user-authorized
+`main` checkout after reading the PRD, the full progress ledger, the approved
+dataset design, and the complete Plan 3 implementation plan. A privileged
+fresh seed has produced 3,220 student profiles with every
+`enrollment_category` null, which blocks the IT Control CCS / Year 3 /
+Irregular account-browser scenario. Diagnosis is proceeding read-only from
+`StudentRosterSeeder` through `ReclassifyStudentEnrollmentCategory` and the
+academic-term/current-slot preconditions. No production source or local data
+has been changed; a focused seed invariant must be observed failing for the
+all-null result before any correction is implemented.
+
+**Root cause confirmed read-only:** The current slot points to 2026-2027 1st
+semester in `semester_closed`, so `StudentRosterSeeder::reclassifyIfTermIsOngoing()`
+returns before invoking the classifier. The seed data itself is complete:
+228 distinct students already carry blocking locked-grade evidence, including
+21 CCS third-year students. `ReclassifyStudentEnrollmentCategory::preview()`
+derives 2,992 Regular and 228 Irregular profiles (with the same 21 CCS /
+Year 3 / Irregular rows) without any write. This is an explicit late checklist
+correction to Plan 3's earlier deferred-classification decision and its
+existing null-category regression, not a classifier or grade-seeding defect.
+
+**RED/GREEN checkpoint:** A dedicated 11-student CCS third-year roster
+regression failed before production changes because all 11 categories stayed
+null (1 test, 3 assertions, expected failure). The minimal seeder correction
+now prefers the real `semester_ongoing` term but falls back to the current-slot
+term when a clean seed is still `semester_closed`; it does not mutate or open
+that term. The focused regression is green at 1 test / 7 assertions and proves
+zero null categories, nonzero Regular rows, nonzero CCS / Year 3 / Irregular
+rows, and blocking locked-grade evidence for each matched irregular student.
+
+**Broader regression checkpoint:** The six category/current-term regressions
+pass at 6 tests / 23 assertions. The first complete
+`StudentRosterSeederTest` run reached all 21 tests and found one superseded
+test expectation: the original account-creation case still required a null
+category even though its clean record is now correctly derived as Regular.
+The other 20 tests passed; that stale expectation is being aligned before the
+complete class is rerun and is not recorded as a passing full-class result.
+
+**Final verification and commit checkpoint:** After aligning that superseded
+expectation, the complete `StudentRosterSeederTest` class passed at 21 tests /
+730 assertions in 41.501s. The adjacent reclassification action, enrollment
+category classifier, and read-only IT Control account-filter contract passed
+at 29 tests / 82 assertions in 23.152s. Scoped Pint passed and scoped PHPStan
+reported no errors; the final staged diff passed `git diff --cached --check`.
+Commit `8e7e06b` (`fix(seed): derive fresh student enrollment categories`)
+contains only the Plan 3 seeder, its feature regression, and the dedicated CCS
+third-year fixture. No IT Control or frontend source was changed, and nothing
+was pushed. A second destructive `migrate:fresh --seed` was deliberately not
+run: the already-successful baseline reseed took 296.289s, only 3.711s below
+the five-minute limit, while the focused integration path verifies the new
+derivation without risking shared development data or making an unsupported
+runtime claim. The shared progress ledger and unrelated screenshot/root
+`node_modules/` remain outside the commit.
+
+**Independent review follow-up:** Read-only review of `8e7e06b` found an
+important empty-candidate control-flow edge case: `seedIrregularStudents()`
+returns before category derivation when a valid roster contains only first-year,
+TCP, or otherwise irregular-ineligible students. Such profiles would remain
+null despite the corrected fresh-seed contract. A second focused regression
+must reproduce that failure before moving the existing reclassification call
+outside the candidate-only branch. The review also identified stale explanatory
+and diagnostic wording, which will be corrected in the same minimal follow-up.
+
+**Review-finding RED:** The focused first-year-only fresh-roster regression
+failed before the follow-up production edit at 1 test / 1 assertion in
+18.724s: one seeded profile still had a null category. This is the expected
+failure from the reviewed early return and validates the new invariant before
+the control-flow correction.
+
+**Review-finding GREEN:** Candidate grade rewriting is now conditional, while
+the existing grade-derived reclassification always runs for a non-empty parsed
+roster. The focused regression passes at 1 test / 3 assertions, and the exact
+complete seeder class passes at 22 tests / 733 assertions in 42.362s. Scoped
+Pint passes, scoped PHPStan reports no errors, and `git diff --check` is clean.
+The same follow-up corrects stale ongoing-term/deferred-classification comments
+and makes the missing-actor diagnostic accurate for either an ongoing term or
+the current-slot fallback. Final scoped staging, follow-up review, and commit
+remain; the progress ledger stays shared scratch.
+
+**Final review handoff:** Follow-up commit `da488f5`
+(`fix(seed): classify rosters without irregular candidates`) records only the
+seeder control-flow correction, its first-year regression, and fixture. A
+strictly read-only re-review found no Critical or Important issues and judged
+the two-commit fix ready to merge: the empty-candidate path, stale helper
+documentation, and current-term diagnostic are resolved. The branch is now 60
+commits ahead of `origin/main`; `PROGRESS.md`, the unrelated grade screenshot,
+and root `node_modules/` remain uncommitted, and nothing was pushed.
+
+## 2026-08-12 — Design-spec end-to-end checklist, continued (Claude,
+## resuming from Codex's claude-handoff.md)
+
+Ran the privileged fresh seed for real: 385.0s (over the plan's <5min
+target; prior baseline was 296.289s — plausibly this machine's heavy
+background load, not re-verified in isolation). `students:generate-roster-
+file --check` passes with no diff (item 2).
+
+Chrome browser automation is unreachable in this background-job session
+(extension not connected), so items 3, 4, and 5's UI legs are unverified
+this session — confirmed via API/backend instead: a real seeded
+professor's availability + subject-preference saves both return 201 (item
+3 backend); the CCS/Year-3/Irregular Student Information filter returns
+21 rows via the real endpoint (item 4 backend); Registrar Head
+archive-and-create-next correctly archives 2026-2027 1st and opens
+2026-2027 2nd as `draft` (item 5 backend).
+
+Attempting the real six-button automation (item 6) against the freshly
+archived term surfaced two genuine, previously-undiscovered defects, both
+fixed via TDD and committed:
+
+- `770096c` — `RunChairGenerateSections` required the term to already be
+  `semester_ongoing`, but a freshly archived term is always `draft`, and
+  opening enrollment itself requires an already-published schedule for
+  that same term. A brand-new term could never produce its first
+  schedule. Broadened the guard to also accept `draft`/`for_dean_approval`.
+- `e7c300a` — `GenerateFacultyAssignmentRecommendations.php:152` read an
+  array offset on a value that's legitimately `null` whenever no faculty
+  candidate could be chosen for a section, without the `??` guard its
+  three neighboring lines already had. Under real request handling this
+  fatally aborted the entire college's section generation. Guarded it the
+  same way.
+
+Both were invisible to every existing test because `AutomationStepsTest`'s
+fixtures hand-set `semester_ongoing` directly, never exercising the real
+archive → create → generate lifecycle end to end.
+
+A third, deeper issue was found and diagnosed but deliberately **not**
+fixed: `FacultyLoadPlanner::choose()` only selects a candidate when both
+`availability_match` and `conflict_free` are true. On the real seeded
+roster, 0 of 636 auto-generated sections across all 4 colleges satisfy
+that bar, so every curriculum's schedule stays incomplete and
+`SaveSectionPlan::submit()` correctly refuses all 39 of them ("Assign a
+professor..." / "Complete the 1st through 4th year section counts
+first."). This is either a real density problem (declared availability
+windows too narrow to ever overlap auto-generated section slots) or a
+completeness bar too strict for unattended automation — resolving it
+changes real chair-facing recommendation behavior, not just automation,
+so it was left for a decision rather than changed unilaterally. Term 8's
+test-polluted data (636 sections, 117 section plans, 9 generation runs,
+etc.) was fully cleaned up afterward; term 8 is back to a clean `draft`
+state.
+
+Checklist items 6, 7, and 8 are **not reached** — item 6 is blocked on the
+`FacultyLoadPlanner` finding (nothing downstream has real published
+sections to act on), and items 7-8 both depend on item 6 completing.
+Full detail, exact repro steps, and the traced root cause are in
+`.superpowers/sdd/2026-08-09-it-control-portal/progress.md`. The
+five-plan program is not yet complete; do not run
+`finishing-a-development-branch` until this is resolved and items 6-8
+(plus the UI leg of 3-5) are verified.
+
+## 2026-08-12 (continued) — Checklist items 6, 7, 8 completed; 9 real
+## defects found and fixed via TDD this session
+
+Kept digging into the `FacultyLoadPlanner` finding by tracing one exact
+match (professor/curriculum/subject) end to end instead of theorizing.
+Found 6 more concrete, previously-undiscovered defects (9 total this
+session, all fixed with a regression test proving the exact failure
+first, zero new Pint/PHPStan findings each time):
+
+- `GenerateSectionDemandForecasts` and `ApplyDemandForecastToDraft` both
+  had no curriculum-status filter, so the automation forecast against
+  *every* curriculum matching semester+college — including retired
+  ones (e.g. a program's 2012-2017 archived catalog) that share subject
+  codes with the active 2024-2029 catalog and have zero real students.
+  Of 39 "curricula" the automation was attempting per run, only 12 were
+  actually active.
+- `AutoAssignSectionScheduleReferences::findOrCreateFaculty()` deduped
+  by name, not the email it actually inserts — two raw reference names
+  for the same person differing only in punctuation ("COACH LORETO" vs
+  "COACH. LORETO", both in the seeded roster) slug to the same email
+  and crashed on the real unique constraint.
+- The IT-control automation job's execution time limit was the
+  interactive web server's short default; processing a full college's
+  cohort synchronously routinely exceeded it with an opaque 500 and no
+  useful log entry.
+- **The dominant blocker once those were fixed:** 0 of 426 subjects had
+  `room_requirement` set, and every seeded room had `capacity`/
+  `room_type` both null, so no room could ever auto-assign to any
+  section. Both defaults previously lived only in
+  `PredictivePlanningInputSeeder`, scoped to CCS and gated on finding a
+  term that's neither archived nor closed — a precondition the real
+  seven-term timeline can never satisfy. Moved both into the core
+  catalog seeders for all 4 colleges.
+- The legacy schedule-reference CSV has no standalone "online" modality
+  (GRC's real taxonomy is only F2F/Hyflex A/Hyflex B) and leaves the
+  modality column entirely blank for every non-CCS college's rows
+  (confirmed in the CSV itself, not a parsing bug). Per explicit user
+  direction: an unmapped legacy value defaults to Hyflex A; a wholly
+  absent value defaults to F2F, only when real day/time data exists for
+  that placement.
+
+**Real end-to-end run against the freshly archived term (not a test
+fixture):** chair-generate-sections went from complete failure through
+36 → 16 → 12 failing curricula as each defect was fixed, then produced
+its first real successes (2 of 12, both CBAE) once the room/modality
+gaps closed. The remaining 10 curricula have two genuine,
+non-code-fixable gaps, both confirmed by inspection rather than
+assumed: 5 programs (including a by-design one-year certificate
+program) don't currently have students in all 4 year levels, and
+`SaveSectionPlan::submit()` hard-requires exactly 4 with no partial
+path — a pre-existing structural mismatch that would block a real
+Program Chair through the manual UI too, not an automation-only issue.
+The other 5 have a handful of sections (2 to 32 of 52-90) missing a
+professor or class time the source CSV genuinely never recorded for
+that exact subject — no reasonable default exists for an invented
+class time.
+
+Ran the rest of the six-step automation on what *did* complete: dean
+approval, executive publish, then Registrar Head opened enrollment on
+the term (now had a published schedule to satisfy that gate), students
+auto-enroll (660 of 3,220 — exactly the students under the 2 completed
+curricula; the other 2,560 correctly failed with "no eligible
+published sections," not a new defect), registrar approval, cashier
+confirmation. Final state verified directly: 660/660 enrollments
+`enrolled`, 660/660 have a COM document — 100% completion for every
+student whose curriculum's schedule actually published, proving the
+six-step pipeline is mechanically correct end to end. Checklist item 7
+(regular table, irregular filters/preference toggle) verified via the
+real endpoints before auto-enroll consumed the picks — both returned
+correct, complete data. Checklist item 8 (predictive counts trace to
+`derived_from_enrollments`) verified: 1,490 observations carry that
+source, feeding 202 real forecasts in this run.
+
+Browser-only verification (the actual UI rendering for items 3-5, 7)
+remains blocked this session — no Chrome extension connection in this
+background job. Everything else was verified against the real running
+servers, not mocked. Full commit chain `770096c..9cbb16c`, all local,
+nothing pushed. Full detail and exact numbers in
+`.superpowers/sdd/2026-08-09-it-control-portal/progress.md`.
+
+## 2026-08-13 — Program Chair Analytics dashboard workspace (frontend)
+
+Following the `a9c76cc` backend aggregate and plumbing commit, built the
+actual `AnalyticsDashboardWorkspace` component and wired it into the
+Program Chair portal. Four tabs read from the existing
+`ProgramChairAnalyticsSummary` aggregate and the latest schedule
+generation run — no new backend calls: Descriptive (enrollment status
+counts, YoY chart), Diagnostic (grade-status × enrollment-status
+crosstab), Predictive (read-only Demand Forecast table, edited from
+Schedule & Faculty Loading instead), and Prescriptive (rule-based
+recommendations from `buildPrescriptiveRecommendations`, explicitly
+labeled as rule-based rather than a new prediction model). Registered
+as the `program-chair-analytics` module in `module-registry.tsx` and
+added as a portal capability entry in `role-capabilities.ts`.
+
+The session that wrote this crashed before verification or a progress
+note. Re-verified cold this session: focused Vitest suite passes 6/6
+(with the existing jsdom canvas notice), `tsc --noEmit` is clean, and
+ESLint reports no findings on all four changed/new files. No other
+uncommitted or half-finished file was found alongside it.
