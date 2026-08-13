@@ -6356,3 +6356,55 @@ note. Re-verified cold this session: focused Vitest suite passes 6/6
 (with the existing jsdom canvas notice), `tsc --noEmit` is clean, and
 ESLint reports no findings on all four changed/new files. No other
 uncommitted or half-finished file was found alongside it.
+
+## 2026-08-13 (continued) — Demand Forecast fix, submit-without-professor, UI cleanup
+
+User reported the Demand Forecast failing again after the PC crash.
+Root cause (found via systematic debugging, confirmed by reproducing
+the exact failure and re-running the action once fixed): the private
+`ml-service` FastAPI prediction microservice on `127.0.0.1:8100` had
+died with the crash and was never restarted, so every
+`SectionDemandPredictionClient::predict()` call threw a connection
+exception, caught by `GenerateSectionDemandForecasts` and surfaced as
+"Review the service connection and retry." Restarting the service and
+re-running the failed run (#51, term 8, CCS) confirmed the fix —
+succeeded with only legitimate `room_metadata_incomplete` and
+`faculty_unavailable` warnings. This service is not yet wired into any
+local startup script, so it must be started manually
+(`.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1
+--port 8100` from `ml-service/`) after every machine restart.
+
+Three product-directed changes followed, each with focused
+TDD-verified coverage:
+
+- **Demand Forecast → Analytics link:** added a "View in Analytics"
+  button to `DemandForecastDialog`'s header, linking to
+  `/portal/program-chair-analytics`.
+- **Submit-for-approval no longer requires a professor:**
+  `SaveSectionPlan::submit()`'s completeness gate dropped
+  `professor_id` from its required-fields check — day, time, room, and
+  modality remain required since those are what the Dean/Executive
+  Director actually review. The Chair can decide who teaches a section
+  after Dean approval. Frontend `incompleteScheduleCount` gate updated
+  to match. New backend test
+  `SaveSectionPlanSubmitTest` (RED confirmed against the old
+  behavior, GREEN after the fix) plus a new frontend test case cover
+  this; this aligns with the existing enrollment-blocks philosophy
+  (`test_a_section_without_an_assigned_professor_remains_selectable`),
+  which already treated a missing professor as non-blocking elsewhere.
+- **Removed redundant manual controls:** deleted the disabled "AI
+  Generate Sections — Coming later" buttons (2 locations) and the
+  "Auto-assign professors & rooms" button plus its now-dead handler,
+  since `Generate Schedule` already performs this automatically. The
+  backend auto-assign action/endpoint itself was left in place —
+  only the redundant manual UI trigger was removed.
+
+Verification: backend (`SaveSectionPlanSubmitTest`,
+`SaveSectionPlanCapacityTest`, `SectionAuditTest`,
+`EnrollmentBlocksEndpointTest`) 23/23 passed; Pint and PHPStan clean on
+touched files (PHPStan's 4 pre-existing findings on unrelated lines of
+`SaveSectionPlan.php` are untouched by this change); frontend
+`program-chair-enrollment-workspace.test.tsx` 22/22 and
+`demand-forecast-dialog.test.tsx` 1/1 passed; `tsc --noEmit` and
+ESLint clean on every changed file. Committed as `cd869e2` and pushed
+to `origin/main`.
