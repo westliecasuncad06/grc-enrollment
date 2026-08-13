@@ -15,15 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/features/components/ui/dialog"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
+import { buildSectionGenerationRationale } from "@/features/lib/section-generation-rationale"
+import type { Section, Subject } from "@/features/schemas/reference-data-schema"
 import type { ScheduleGenerationRun } from "@/features/schemas/schedule-generation-schema"
+import type { SectionPlan } from "@/features/schemas/section-plan-schema"
 
 export function DemandForecastDialog({
   open,
@@ -32,6 +27,9 @@ export function DemandForecastDialog({
   loading = false,
   error = false,
   onRetry,
+  sections = [],
+  plans = [],
+  subjects = [],
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -39,12 +37,20 @@ export function DemandForecastDialog({
   loading?: boolean
   error?: boolean
   onRetry?: () => void
+  sections?: readonly Section[]
+  plans?: readonly SectionPlan[]
+  subjects?: readonly Subject[]
 }) {
   const reducedMotion = useReducedMotion()
   const facultyLoad = run?.faculty_load
-  const forecasts = run?.forecasts ?? []
   const blockRecommendations = run?.section_block_recommendations ?? []
   const running = run?.status === "queued" || run?.status === "running"
+  const rationaleGroups = buildSectionGenerationRationale(
+    sections,
+    plans,
+    subjects,
+    run,
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,81 +182,65 @@ export function DemandForecastDialog({
             </div>
           )}
 
-          <section className="grid gap-3" aria-label="Section demand forecasts">
+          <section
+            className="grid gap-3"
+            aria-label="Why these sections were generated"
+          >
             <div>
               <h3 className="font-heading text-lg">
-                Section Demand Forecasting
+                Why these sections were generated
               </h3>
               <p className="text-sm text-muted-foreground">
-                Recommended sections are calculated from predicted subject
-                demand and planned capacity.
+                Every generated subject block this term, explained — whether it
+                came from this forecast, an earlier one, or was planned by the
+                Program Chair.
               </p>
             </div>
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Year</TableHead>
-                    <TableHead>Predicted students</TableHead>
-                    <TableHead>Sections needed</TableHead>
-                    <TableHead>Historical basis</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {forecasts.length ? (
-                    forecasts.map((forecast) => (
-                      <TableRow
-                        key={`${forecast.subject_id}-${forecast.year_level}`}
-                      >
-                        <TableCell>
-                          <p className="font-medium">{forecast.subject_code}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {forecast.subject_title}
-                          </p>
-                        </TableCell>
-                        <TableCell>{forecast.year_level ?? "—"}</TableCell>
-                        <TableCell>
-                          {forecast.predicted_demand.toFixed(0)}
-                          {forecast.confidence_lower !== null &&
-                          forecast.confidence_upper !== null ? (
-                            <p className="text-xs text-muted-foreground">
-                              {forecast.confidence_lower.toFixed(0)}–
-                              {forecast.confidence_upper.toFixed(0)} range
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {forecast.suggested_section_count}
-                          </Badge>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Demand ÷ capacity
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {forecast.historical_basis.school_year
-                            ? `${forecast.historical_basis.school_year} · ${forecast.historical_basis.semester} · Year ${forecast.historical_basis.year_level}`
-                            : "No usable history"}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="py-9 text-center text-muted-foreground"
-                      >
-                        {loading
-                          ? "Loading the latest forecast…"
-                          : running
-                            ? "Forecasting demand…"
-                            : "No forecast rows are available yet."}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+            <div className="grid gap-2">
+              {rationaleGroups.length ? (
+                rationaleGroups.map((group) => (
+                  <div
+                    key={`${group.subjectId}-${group.yearLevel}`}
+                    className="rounded-lg border p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">
+                          {group.subjectCode}
+                          {group.subjectTitle ? ` · ${group.subjectTitle}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {group.yearLevel
+                            ? `Year ${group.yearLevel}`
+                            : "Year not set"}
+                        </p>
+                      </div>
+                      <Badge variant="secondary">
+                        {group.sectionCount} section
+                        {group.sectionCount === 1 ? "" : "s"}
+                      </Badge>
+                    </div>
+                    <ul className="mt-2 grid gap-1">
+                      {group.reasons.map((reason) => (
+                        <li
+                          key={reason}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              ) : (
+                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  {loading
+                    ? "Loading the latest forecast…"
+                    : running
+                      ? "Forecasting demand…"
+                      : "No generated sections yet for this term."}
+                </p>
+              )}
             </div>
           </section>
 

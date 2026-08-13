@@ -25,6 +25,10 @@ final class AcademicTermSectionPlanResource extends JsonResource
             'status' => $plan->status->value,
             'status_label' => ucfirst($plan->status->value),
             'submitted_at' => $plan->submitted_at?->utc()->format('Y-m-d\\TH:i:s\\Z'),
+            'recommendation_source' => $plan->recommendation_source,
+            'recommended_section_count' => $plan->recommended_section_count,
+            'recommendation_is_overridden' => $plan->recommendation_is_overridden,
+            'recommendation_prediction_run_id' => $plan->recommendation_prediction_run_id,
         ];
     }
 }

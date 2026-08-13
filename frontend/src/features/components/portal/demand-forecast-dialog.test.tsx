@@ -1,8 +1,125 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import { DemandForecastDialog } from "@/features/components/portal/demand-forecast-dialog"
+import type { Section, Subject } from "@/features/schemas/reference-data-schema"
+import type { SectionPlan } from "@/features/schemas/section-plan-schema"
+
+const subjects: Subject[] = [
+  {
+    type: "subject",
+    id: 5,
+    code: "CS101",
+    title: "Introduction to Computing",
+    units: 3,
+    status: "active",
+    status_label: "Active",
+    is_completion_only: false,
+  },
+  {
+    type: "subject",
+    id: 6,
+    code: "IT201",
+    title: "Data Structures",
+    units: 3,
+    status: "active",
+    status_label: "Active",
+    is_completion_only: false,
+  },
+]
+
+const plans: SectionPlan[] = [
+  {
+    type: "academic-term-section-plan",
+    id: 70,
+    academic_term_id: 3,
+    curriculum_id: 10,
+    college: "ccs",
+    year_level: 1,
+    section_count: 1,
+    students_per_block: 40,
+    status: "draft",
+    status_label: "Draft",
+    submitted_at: null,
+    recommendation_source: "predictive",
+    recommended_section_count: 3,
+    recommendation_is_overridden: false,
+    recommendation_prediction_run_id: 7,
+  },
+  {
+    type: "academic-term-section-plan",
+    id: 71,
+    academic_term_id: 3,
+    curriculum_id: 10,
+    college: "ccs",
+    year_level: 2,
+    section_count: 1,
+    students_per_block: 40,
+    status: "draft",
+    status_label: "Draft",
+    submitted_at: null,
+    recommendation_source: null,
+    recommended_section_count: null,
+    recommendation_is_overridden: true,
+    recommendation_prediction_run_id: null,
+  },
+]
+
+const sections: Section[] = [
+  {
+    type: "section",
+    id: 21,
+    academic_term_id: 3,
+    section_plan_id: 70,
+    subject_id: 5,
+    section_code: "1A01",
+    professor_id: null,
+    schedule_days: null,
+    starts_at_time: null,
+    ends_at_time: null,
+    room: null,
+    modality: null,
+    capacity: 40,
+    capacity_source: "plan",
+    recommendation_source: "predictive",
+    recommended_capacity: 40,
+    recommendation_prediction_run_id: 7,
+    manual_override_reason: null,
+    viability_threshold: null,
+    enrolled_count: 0,
+    remaining_seats: 40,
+    is_block_exclusive: true,
+    status: "planned",
+    status_label: "Planned",
+  },
+  {
+    type: "section",
+    id: 22,
+    academic_term_id: 3,
+    section_plan_id: 71,
+    subject_id: 6,
+    section_code: "2A01",
+    professor_id: null,
+    schedule_days: null,
+    starts_at_time: null,
+    ends_at_time: null,
+    room: null,
+    modality: null,
+    capacity: 40,
+    capacity_source: "plan",
+    recommendation_source: null,
+    recommended_capacity: null,
+    recommendation_prediction_run_id: null,
+    manual_override_reason: null,
+    viability_threshold: null,
+    enrolled_count: 0,
+    remaining_seats: 40,
+    is_block_exclusive: true,
+    status: "planned",
+    status_label: "Planned",
+  },
+]
 
 describe("DemandForecastDialog", () => {
   it("shows advisory demand and faculty-load evidence, then closes through its explicit action", async () => {
@@ -63,7 +180,12 @@ describe("DemandForecastDialog", () => {
                 semester: "1st",
                 year_level: 1,
               },
-              rationale: {},
+              rationale: {
+                model_strategy: "random_forest",
+                section_formula:
+                  "ceil(predicted demand / recommended capacity)",
+                recommended_capacity: 40,
+              },
             },
           ],
           faculty_load: {
@@ -80,24 +202,49 @@ describe("DemandForecastDialog", () => {
             unassigned: [],
           },
         }}
+        sections={sections}
+        plans={plans}
+        subjects={subjects}
       />,
     )
 
-    expect(screen.getByRole("dialog")).toHaveTextContent("Demand Forecast")
-    expect(screen.getByRole("dialog")).toHaveTextContent("CS101")
-    expect(screen.getByRole("dialog")).toHaveTextContent("Random Forest")
-    expect(screen.getByRole("dialog")).toHaveTextContent(
-      "Faculty Loading Support",
-    )
-    expect(screen.getByRole("dialog")).toHaveTextContent(
+    const dialog = screen.getByRole("dialog")
+    expect(dialog).toHaveTextContent("Demand Forecast")
+    expect(dialog).toHaveTextContent("Random Forest")
+    expect(dialog).toHaveTextContent("Faculty Loading Support")
+    expect(dialog).toHaveTextContent(
       "No historical data was available for this term.",
     )
-    expect(
-      screen.getByRole("button", { name: "Show 2" }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Show 2" })).toBeInTheDocument()
     expect(
       screen.getByRole("link", { name: /View in Analytics/ }),
     ).toHaveAttribute("href", "/portal/program-chair-analytics")
+
+    // The old sparse "Section Demand Forecasting" table is gone.
+    expect(
+      screen.queryByRole("region", { name: "Section demand forecasts" }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Predicted students")).not.toBeInTheDocument()
+    expect(screen.queryByText("Sections needed")).not.toBeInTheDocument()
+
+    // Replaced by a "why this section exists" explanation per subject/year.
+    const rationale = screen.getByRole("region", {
+      name: "Why these sections were generated",
+    })
+    expect(within(rationale).getByText(/CS101/)).toBeInTheDocument()
+    // Both fixture groups happen to have exactly one section each — assert
+    // the "N section(s)" badge renders correctly for both rather than
+    // picking one arbitrarily.
+    expect(within(rationale).getAllByText("1 section")).toHaveLength(2)
+    expect(
+      within(rationale).getByText(/Predicted demand: 82/),
+    ).toBeInTheDocument()
+    expect(within(rationale).getByText(/IT201/)).toBeInTheDocument()
+    expect(
+      within(rationale).getByText(
+        "Manually planned by the Program Chair — no demand forecast was available for this subject.",
+      ),
+    ).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Close forecast" }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
