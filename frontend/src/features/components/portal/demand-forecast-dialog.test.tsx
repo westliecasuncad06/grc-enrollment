@@ -95,6 +95,9 @@ describe("DemandForecastDialog", () => {
     expect(
       screen.getByRole("button", { name: "Show 2" }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /View in Analytics/ }),
+    ).toHaveAttribute("href", "/portal/program-chair-analytics")
 
     await user.click(screen.getByRole("button", { name: "Close forecast" }))
     expect(onOpenChange).toHaveBeenCalledWith(false)

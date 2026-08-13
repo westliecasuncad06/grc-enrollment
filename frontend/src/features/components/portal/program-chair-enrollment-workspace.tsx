@@ -618,9 +618,13 @@ export function ProgramChairEnrollmentWorkspace({
   const allYearsHaveCurriculum = years.every(
     (year) => curriculumIds[year] !== null,
   )
+  // A missing professor does not block submitting for Dean/Executive
+  // Director approval — the Chair may decide who teaches a section later.
+  // Day, time, room, and modality are what the approvers actually review,
+  // so those remain required here (kept in sync with the backend gate in
+  // `SaveSectionPlan::submit()`).
   const incompleteScheduleCount = visibleSections.filter(
     (section) =>
-      section.professor_id === null ||
       !section.schedule_days ||
       !section.starts_at_time ||
       !section.ends_at_time ||
@@ -754,22 +758,6 @@ export function ProgramChairEnrollmentWorkspace({
     } catch {
       setError(
         `The last ${yearLabel(year)} section could not be removed. Assigned schedules or enrolled students must be cleared first.`,
-      )
-    }
-  }
-  const autoAssignSchedule = async () => {
-    setError("")
-    try {
-      for (const selectedCurriculumId of selectedCurriculumIds) {
-        await planMutations.autoAssign.mutateAsync({
-          curriculumId: selectedCurriculumId,
-          yearLevel: Number(activeYear),
-        })
-      }
-      await sectionsQuery.refetch()
-    } catch {
-      setError(
-        "Auto-assign could not run. Check that generated sections exist for this year level.",
       )
     }
   }
@@ -1168,9 +1156,6 @@ export function ProgramChairEnrollmentWorkspace({
                   >
                     Generate subject list
                   </Button>
-                  <Button type="button" variant="outline" disabled>
-                    AI Generate Sections — Coming later
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1204,17 +1189,6 @@ export function ProgramChairEnrollmentWorkspace({
                   >
                     <MinusIcon data-icon="inline-start" />
                     Remove section
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void autoAssignSchedule()}
-                    disabled={
-                      approvalLocked || planMutations.autoAssign.isPending
-                    }
-                  >
-                    Auto-assign professors & rooms
                   </Button>
                   <Button
                     type="button"
@@ -1476,9 +1450,6 @@ export function ProgramChairEnrollmentWorkspace({
                       Submit for Dean and Executive Director Approval
                     </Button>
                   )}
-                  <Button type="button" variant="outline" disabled>
-                    AI Generate Sections — Coming later
-                  </Button>
                 </div>
               </div>
             </Tabs>

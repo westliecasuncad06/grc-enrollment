@@ -188,6 +188,19 @@ const completedSections = {
     modality: "f2f" as const,
   })),
 }
+// A section with everything except its professor filled in must still be
+// submittable — the Chair can decide who teaches it after Dean approval.
+const sectionsMissingProfessorOnly = {
+  data: sections.data.map((section) => ({
+    ...section,
+    professor_id: null,
+    schedule_days: "M",
+    starts_at_time: "08:00:00",
+    ends_at_time: "09:00:00",
+    room: "LAB 1",
+    modality: "f2f" as const,
+  })),
+}
 
 function url(input: RequestInfo | URL) {
   return typeof input === "string"
@@ -239,6 +252,7 @@ function mockAll({
   holdSectionRefresh = false,
   failScheduleSave = false,
   completeSchedules = false,
+  missingProfessorOnly = false,
   failSubmit = false,
   returnedRemark = "",
   proposal = null as null | Record<string, unknown>,
@@ -382,7 +396,13 @@ function mockAll({
         return new Promise<Response>(() => undefined)
       return Promise.resolve(
         new Response(
-          JSON.stringify(completeSchedules ? completedSections : sections),
+          JSON.stringify(
+            completeSchedules
+              ? completedSections
+              : missingProfessorOnly
+                ? sectionsMissingProfessorOnly
+                : sections,
+          ),
         ),
       )
     }
@@ -553,7 +573,7 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     )
   })
 
-  it("shows review controls and keeps AI generation unavailable", async () => {
+  it("shows review controls before releasing the subject list", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockAll())
     renderWorkspace()
@@ -571,9 +591,6 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Review block sections" }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: /AI Generate Sections/ }),
-    ).toBeDisabled()
     expect(
       screen.getByRole("button", { name: "Generate subject list" }),
     ).toBeInTheDocument()
@@ -841,6 +858,35 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     ).toBeDisabled()
   })
 
+  it("allows approval submission when only the professor is unassigned", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockAll({ missingProfessorOnly: true }))
+    renderWorkspace()
+    for (let year = 1; year <= 4; year++) {
+      await chooseCurriculum(user, year)
+      const input = await screen.findByLabelText("Number of block sections")
+      await user.clear(input)
+      await user.type(input, "1")
+      await user.click(
+        screen.getByRole("button", {
+          name: year === 4 ? "Continue to review" : "Save and continue",
+        }),
+      )
+    }
+    await user.click(
+      screen.getByRole("button", { name: "Generate subject list" }),
+    )
+
+    expect(
+      screen.queryByText(/schedule assignment.*remaining/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", {
+        name: "Submit for Dean and Executive Director Approval",
+      }),
+    ).toBeEnabled()
+  })
+
   it("shows an approval submission API error beside the action", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(
@@ -1043,65 +1089,6 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       await screen.findByRole("button", { name: "Add section" }),
     ).toBeEnabled()
     expect(screen.getByRole("button", { name: "Remove section" })).toBeEnabled()
-  })
-
-  it("auto-assigns professors and rooms from the reference data on button click", async () => {
-    const user = userEvent.setup()
-    const sectionFixture = sections.data[0]
-    const fallback = mockAll()
-    let autoAssigned = false
-    fetchMock.mockImplementation((input, init) => {
-      const target = url(input)
-      if (
-        target.includes("/section-plan/auto-assign") &&
-        init?.method === "POST"
-      ) {
-        autoAssigned = true
-        // Matches the real endpoint's shape: Laravel's `->additional(...)`
-        // adds a sibling `meta` key next to `data` — the only section-plan
-        // response that does, which is exactly what tripped up the
-        // `.strict()` envelope schema this reused before the fix.
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ data: [], meta: { sections_updated: 1 } }),
-          ),
-        )
-      }
-      if (target.includes("/sections"))
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: autoAssigned
-                ? [{ ...sectionFixture, schedule_days: "Tue", professor_id: 9 }]
-                : sections.data,
-            }),
-          ),
-        )
-      return fallback(input, init)
-    })
-
-    renderWorkspace()
-    for (let year = 1; year <= 4; year++) {
-      await chooseCurriculum(user, year)
-      const input = await screen.findByLabelText("Number of block sections")
-      await user.clear(input)
-      await user.type(input, "1")
-      await user.click(
-        screen.getByRole("button", {
-          name: year === 4 ? "Continue to review" : "Save and continue",
-        }),
-      )
-    }
-    await user.click(
-      screen.getByRole("button", { name: "Generate subject list" }),
-    )
-
-    await screen.findByText(sectionFixture.section_code)
-    await user.click(
-      screen.getByRole("button", { name: "Auto-assign professors & rooms" }),
-    )
-
-    expect(await screen.findByText("Tue")).toBeInTheDocument()
   })
 
   it("offers a year-specific subject generation action when a year is empty", async () => {

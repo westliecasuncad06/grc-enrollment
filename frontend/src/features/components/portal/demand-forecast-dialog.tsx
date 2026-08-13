@@ -1,7 +1,8 @@
 "use client"
 
 import { motion, useReducedMotion } from "motion/react"
-import { BrainCircuit, Gauge, UsersRound } from "lucide-react"
+import { BrainCircuit, ChartSpline, Gauge, UsersRound } from "lucide-react"
+import Link from "next/link"
 import type { ReactNode } from "react"
 
 import { GroupedWarningsList } from "@/features/components/portal/grouped-warnings-list"
@@ -76,15 +77,25 @@ export function DemandForecastDialog({
                   every section, faculty, and room recommendation.
                 </DialogDescription>
               </div>
-              <Badge
-                variant={run?.status === "failed" ? "destructive" : "secondary"}
-              >
-                {loading
-                  ? "Loading"
-                  : running
-                    ? "Generating"
-                    : (run?.status ?? "No run")}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <Link href="/portal/program-chair-analytics">
+                    <ChartSpline data-icon="inline-start" aria-hidden="true" />
+                    View in Analytics
+                  </Link>
+                </Button>
+                <Badge
+                  variant={
+                    run?.status === "failed" ? "destructive" : "secondary"
+                  }
+                >
+                  {loading
+                    ? "Loading"
+                    : running
+                      ? "Generating"
+                      : (run?.status ?? "No run")}
+                </Badge>
+              </div>
             </div>
           </DialogHeader>
 
