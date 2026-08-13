@@ -1,17 +1,19 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { PencilLine, SlidersHorizontal, UsersRound } from "lucide-react"
+import { History, PencilLine, SlidersHorizontal } from "lucide-react"
 import { useMemo, useState, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
@@ -32,6 +34,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/features/components/ui/table"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/features/components/ui/tabs"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import {
   useAcademicTermsQuery,
@@ -40,7 +48,10 @@ import {
   sectionsQueryKey,
 } from "@/features/hooks/use-reference-data"
 import { useSectionPlansQuery } from "@/features/hooks/use-section-plans"
-import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
+import {
+  formatAcademicTerm,
+  getActiveAcademicTerm,
+} from "@/features/services/reference-data-service"
 import {
   getFacultyLoadReport,
   saveFacultyLoadThreshold,
@@ -52,6 +63,19 @@ import {
 import { updateFacultyWorkforceProfile } from "@/features/services/faculty-directory-service"
 import type { Section } from "@/features/schemas/reference-data-schema"
 import type { FacultyMember } from "@/features/schemas/scheduling-schema"
+
+const years = [1, 2, 3, 4] as const
+const termStatusLabels: Record<string, string> = {
+  draft: "Draft",
+  for_dean_approval: "For Dean Approval",
+  semester_ongoing: "Current",
+  semester_closed: "Closed",
+  archived: "Archived",
+}
+
+function yearLabel(year: number) {
+  return `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"} Year`
+}
 
 const asTime = (value: string) => (value ? `${value}:00`.slice(0, 8) : "")
 
@@ -73,16 +97,29 @@ export function ScheduleFacultyLoadingWorkspace() {
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
   const workforceQuery = useFacultyDirectoryQuery(true)
-  const term = getActiveAcademicTerm(termsQuery.data)
+  const currentTerm = getActiveAcademicTerm(termsQuery.data)
+  const sortedTerms = useMemo(
+    () =>
+      [...(termsQuery.data ?? [])].sort((left, right) => right.id - left.id),
+    [termsQuery.data],
+  )
+  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
+  const term =
+    sortedTerms.find((candidate) => candidate.id === selectedTermId) ??
+    currentTerm ??
+    sortedTerms[0] ??
+    null
   const termId = term?.id ?? 0
+  const isCurrentTerm =
+    term !== null && currentTerm !== null && term.id === currentTerm.id
   const plansQuery = useSectionPlansQuery(termId, term !== null)
   const reportQuery = useQuery({
     queryKey: ["faculty-load-report", session?.userId ?? null, termId],
     queryFn: () => getFacultyLoadReport(termId),
     enabled: termId > 0,
   })
+  const [activeYear, setActiveYear] = useState("1")
   const [filter, setFilter] = useState({
-    year: "all",
     subject: "",
     professor: "all",
     state: "all",
@@ -91,6 +128,9 @@ export function ScheduleFacultyLoadingWorkspace() {
   const [editing, setEditing] = useState<Section | null>(null)
   const [workforceEditing, setWorkforceEditing] =
     useState<FacultyMember | null>(null)
+  const [topView, setTopView] = useState<
+    "schedule" | "load-report" | "workforce"
+  >("schedule")
   const [draft, setDraft] = useState({
     professor_id: "",
     schedule_days: "",
@@ -110,7 +150,6 @@ export function ScheduleFacultyLoadingWorkspace() {
   const currentSections = (sectionsQuery.data ?? []).filter(
     (section) => section.academic_term_id === termId,
   )
-  const plans = plansQuery.data ?? []
   const planYearById = useMemo(
     () =>
       new Map(
@@ -146,7 +185,6 @@ export function ScheduleFacultyLoadingWorkspace() {
   const visible = useMemo(
     () =>
       currentSections.filter((section) => {
-        const year = planYearById.get(section.section_plan_id ?? -1) ?? ""
         const professorName = section.professor_id
           ? facultyMap.get(section.professor_id)?.name
           : null
@@ -156,7 +194,6 @@ export function ScheduleFacultyLoadingWorkspace() {
           !section.room ||
           !section.modality
         return (
-          (filter.year === "all" || year === filter.year) &&
           (!filter.subject ||
             subjectMap
               .get(section.subject_id)
@@ -174,10 +211,33 @@ export function ScheduleFacultyLoadingWorkspace() {
       facultyMap,
       filter,
       normalizedProfessorSearch,
-      planYearById,
       subjectMap,
     ],
   )
+  const groupedByYear = useMemo(() => {
+    const groups = new Map<string, Section[]>()
+    visible
+      .filter(
+        (section) =>
+          (planYearById.get(section.section_plan_id ?? -1) ?? "") ===
+          activeYear,
+      )
+      .sort(
+        (left, right) =>
+          left.section_code.localeCompare(right.section_code) ||
+          left.id - right.id,
+      )
+      .forEach((section) =>
+        groups.set(section.section_code, [
+          ...(groups.get(section.section_code) ?? []),
+          section,
+        ]),
+      )
+    return [...groups.entries()].map(([blockCode, sections]) => ({
+      blockCode,
+      sections,
+    }))
+  }, [visible, activeYear, planYearById])
   const visibleFaculty = useMemo(
     () =>
       (reportQuery.data?.faculty ?? []).filter((faculty) =>
@@ -363,7 +423,9 @@ export function ScheduleFacultyLoadingWorkspace() {
                 <Button
                   type="button"
                   onClick={() => void saveThreshold.mutateAsync()}
-                  disabled={!threshold || saveThreshold.isPending}
+                  disabled={
+                    !threshold || saveThreshold.isPending || !isCurrentTerm
+                  }
                 >
                   {saveThreshold.isPending
                     ? "Saving threshold…"
@@ -403,360 +465,473 @@ export function ScheduleFacultyLoadingWorkspace() {
               />
             </div>
 
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <CardTitle level={2}>
-                      Generated schedule and assignments
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Faculty matching prioritizes declared subject preference,
-                      availability, no conflict, then lower assigned units.
-                    </p>
-                  </div>
-                  <Badge variant="outline">{visible.length} rows</Badge>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center gap-2">
+                <History className="size-4 text-primary" aria-hidden="true" />
+                <div>
+                  <p className="font-medium">School year and semester</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isCurrentTerm
+                      ? "Viewing the current term. Assignments are editable."
+                      : "Viewing an archived schedule — read-only. Switch back to the current term to make changes."}
+                  </p>
                 </div>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 md:grid-cols-3 xl:grid-cols-5">
-                  <label className="grid gap-1 text-sm font-medium">
-                    Year
-                    <select
-                      value={filter.year}
-                      onChange={(event) =>
-                        setFilter({ ...filter, year: event.target.value })
-                      }
-                      className="h-9 rounded-md border bg-background px-2"
-                    >
-                      <option value="all">All years</option>
-                      {[1, 2, 3, 4].map((year) => (
-                        <option key={year} value={String(year)}>
-                          Year {year}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label
-                    className="grid gap-1 text-sm font-medium"
-                    htmlFor="schedule-subject-filter"
-                  >
-                    Subject
-                    <Input
-                      id="schedule-subject-filter"
-                      value={filter.subject}
-                      onChange={(event) =>
-                        setFilter({ ...filter, subject: event.target.value })
-                      }
-                      placeholder="Search code"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium">
-                    Professor
-                    <select
-                      value={filter.professor}
-                      onChange={(event) =>
-                        setFilter({ ...filter, professor: event.target.value })
-                      }
-                      className="h-9 rounded-md border bg-background px-2"
-                    >
-                      <option value="all">All professors</option>
-                      <option value="none">Unassigned</option>
-                      {matchingFacultyDirectory.map((faculty) => (
-                        <option key={faculty.id} value={String(faculty.id)}>
-                          {faculty.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label
-                    className="grid gap-1 text-sm font-medium"
-                    htmlFor="schedule-professor-search"
-                  >
-                    Find professor
-                    <Input
-                      id="schedule-professor-search"
-                      value={professorSearch}
-                      onChange={(event) =>
-                        setProfessorSearch(event.target.value)
-                      }
-                      placeholder="Search name"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-sm font-medium">
-                    Assignment state
-                    <select
-                      value={filter.state}
-                      onChange={(event) =>
-                        setFilter({ ...filter, state: event.target.value })
-                      }
-                      className="h-9 rounded-md border bg-background px-2"
-                    >
-                      <option value="all">All rows</option>
-                      <option value="complete">Complete</option>
-                      <option value="incomplete">Needs review</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="overflow-x-auto rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Section / Subject</TableHead>
-                        <TableHead>Professor</TableHead>
-                        <TableHead>Schedule</TableHead>
-                        <TableHead>Room / Mode</TableHead>
-                        <TableHead>Recommendation</TableHead>
-                        <TableHead />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {visible.map((section) => {
-                        const subject = subjectMap.get(section.subject_id)
-                        const plan = plans.find(
-                          (item) => item.id === section.section_plan_id,
-                        )
-                        const locked = plan?.status === "submitted"
-                        const incomplete =
-                          section.professor_id === null ||
-                          !section.schedule_days ||
-                          !section.room ||
-                          !section.modality
-                        return (
-                          <TableRow key={section.id}>
-                            <TableCell>
-                              <p className="font-medium">
-                                {section.section_code} ·{" "}
-                                {subject?.code ?? `#${section.subject_id}`}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {subject?.title}
-                              </p>
-                            </TableCell>
-                            <TableCell>
-                              {section.professor_id ? (
-                                (facultyMap.get(section.professor_id)?.name ??
-                                `Faculty #${section.professor_id}`)
-                              ) : (
-                                <Badge variant="destructive">Unassigned</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {section.schedule_days
-                                ? `${section.schedule_days} · ${section.starts_at_time?.slice(0, 5)}–${section.ends_at_time?.slice(0, 5)}`
-                                : "Not scheduled"}
-                            </TableCell>
-                            <TableCell>
-                              {section.room ?? "No room"}
-                              <p className="text-xs text-muted-foreground">
-                                {section.modality
-                                  ?.replace("_", " ")
-                                  .toUpperCase() ?? "No mode"}
-                              </p>
-                            </TableCell>
-                            <TableCell>
-                              {section.recommendation_prediction_run_id ? (
-                                <Badge variant="secondary">AI draft</Badge>
-                              ) : (
-                                <Badge variant="outline">Manual</Badge>
-                              )}
-                              {incomplete && (
-                                <p className="mt-1 text-xs text-destructive">
-                                  Needs review
-                                </p>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => open(section)}
-                                disabled={locked}
-                              >
-                                <PencilLine data-icon="inline-start" />
-                                {locked ? "Submitted" : "Edit"}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                      {visible.length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={6}
-                            className="py-9 text-center text-muted-foreground"
-                          >
-                            No generated schedule rows match the current
-                            filters.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+              <label className="grid gap-1 text-sm font-medium">
+                <span className="sr-only">Academic term</span>
+                <select
+                  value={term?.id ?? ""}
+                  onChange={(event) =>
+                    setSelectedTermId(Number(event.target.value))
+                  }
+                  className="h-9 rounded-md border bg-background px-2"
+                >
+                  {sortedTerms.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {formatAcademicTerm(candidate)}
+                      {candidate.status !== "semester_ongoing"
+                        ? ` (${termStatusLabels[candidate.status] ?? candidate.status})`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             <Card>
               <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <CardTitle level={2}>Faculty Load Report</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Assignment rationale is retained even when the Program
-                      Chair makes an override.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline">
-                      {visibleFaculty.length} professors
-                    </Badge>
-                    <UsersRound className="size-5 text-primary" />
-                  </div>
-                </div>
+                <CardTitle level={2}>Filters</CardTitle>
+                <CardDescription>
+                  Applies across the schedule, load report, and workforce views
+                  below — switching views keeps these filters.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3">
-                {visibleFaculty.length ? (
-                  visibleFaculty.map((faculty) => (
-                    <div
-                      key={faculty.professor_id}
-                      className="rounded-lg border p-4"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="font-medium">
-                            {faculty.professor_name ??
-                              `Faculty #${faculty.professor_id}`}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Assigned subjects:{" "}
-                            {faculty.assignments
-                              .map((assignment) => assignment.subject_code)
-                              .join(", ")}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={
-                              faculty.overloaded ? "destructive" : "secondary"
-                            }
-                          >
-                            {faculty.total_units} units
-                          </Badge>
-                          <Badge variant="outline">
-                            {faculty.assignments.length} assignments
-                          </Badge>
-                        </div>
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label
+                  className="grid gap-1 text-sm font-medium"
+                  htmlFor="schedule-subject-filter"
+                >
+                  Subject
+                  <Input
+                    id="schedule-subject-filter"
+                    value={filter.subject}
+                    onChange={(event) =>
+                      setFilter({
+                        ...filter,
+                        subject: event.target.value,
+                      })
+                    }
+                    placeholder="Search code"
+                  />
+                </label>
+                <label className="grid gap-1 text-sm font-medium">
+                  Professor
+                  <select
+                    value={filter.professor}
+                    onChange={(event) =>
+                      setFilter({
+                        ...filter,
+                        professor: event.target.value,
+                      })
+                    }
+                    className="h-9 rounded-md border bg-background px-2"
+                  >
+                    <option value="all">All professors</option>
+                    <option value="none">Unassigned</option>
+                    {matchingFacultyDirectory.map((faculty) => (
+                      <option key={faculty.id} value={String(faculty.id)}>
+                        {faculty.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label
+                  className="grid gap-1 text-sm font-medium"
+                  htmlFor="schedule-professor-search"
+                >
+                  Find professor
+                  <Input
+                    id="schedule-professor-search"
+                    value={professorSearch}
+                    onChange={(event) => setProfessorSearch(event.target.value)}
+                    placeholder="Search name"
+                  />
+                </label>
+                <label className="grid gap-1 text-sm font-medium">
+                  Assignment state
+                  <select
+                    value={filter.state}
+                    onChange={(event) =>
+                      setFilter({ ...filter, state: event.target.value })
+                    }
+                    className="h-9 rounded-md border bg-background px-2"
+                  >
+                    <option value="all">All rows</option>
+                    <option value="complete">Complete</option>
+                    <option value="incomplete">Needs review</option>
+                  </select>
+                </label>
+              </CardContent>
+            </Card>
+
+            <Tabs
+              value={topView}
+              onValueChange={(value) => setTopView(value as typeof topView)}
+            >
+              <TabsList aria-label="Schedule and faculty loading views">
+                <TabsTrigger value="schedule">
+                  Generated Schedule and Assignments
+                </TabsTrigger>
+                <TabsTrigger value="load-report">
+                  Faculty Load Report
+                </TabsTrigger>
+                <TabsTrigger value="workforce">Faculty Workforce</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="schedule" className="mt-4 grid gap-5">
+                <Card>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <CardTitle level={2}>
+                          Generated schedule and assignments
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Faculty matching prioritizes declared subject
+                          preference, availability, no conflict, then lower
+                          assigned units.
+                        </p>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {faculty.assignments
-                          .flatMap((assignment) => assignment.rationale)
-                          .filter(
-                            (value, index, values) =>
-                              values.indexOf(value) === index,
-                          )
-                          .map((reason) => (
-                            <Badge key={reason} variant="outline">
-                              {reason.replaceAll("_", " ")}
-                            </Badge>
-                          ))}
-                      </div>
+                      <Badge variant="outline">{visible.length} rows</Badge>
                     </div>
-                  ))
-                ) : reportQuery.data?.faculty.length ? (
-                  <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
-                    No professor matches “{professorSearch}”.
-                  </p>
-                ) : (
-                  <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
-                    Generate a schedule to see the load report.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <CardTitle level={2}>Faculty workforce</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Manage the local planning status and employment type for
-                      faculty in your college. Inactive faculty cannot be
-                      recommended or assigned.
-                    </p>
-                  </div>
-                  <Badge variant="outline">
-                    {visibleWorkforce.length} faculty
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Faculty member</TableHead>
-                        <TableHead>Account status</TableHead>
-                        <TableHead>Employment type</TableHead>
-                        <TableHead>Planning reference</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {visibleWorkforce.map((faculty) => (
-                        <TableRow key={faculty.id}>
-                          <TableCell className="font-medium">
-                            {faculty.name}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                faculty.is_assignable
-                                  ? "secondary"
-                                  : "destructive"
-                              }
-                            >
-                              {faculty.status_label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {faculty.employment_type_label ?? "Unspecified"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {faculty.planning_unit_reference
-                              ? `${faculty.planning_unit_reference}-unit reference`
-                              : "No fixed reference"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              aria-label={`Edit workforce profile for ${faculty.name}`}
-                              onClick={() => openWorkforceProfile(faculty)}
-                            >
-                              <PencilLine data-icon="inline-start" />
-                              Edit
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                  </CardHeader>
+                  <CardContent className="grid gap-4">
+                    <Tabs value={activeYear} onValueChange={setActiveYear}>
+                      <TabsList aria-label="Generated section year filter">
+                        {years.map((year) => (
+                          <TabsTrigger key={year} value={String(year)}>
+                            {yearLabel(year)}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {years.map((year) => (
+                        <TabsContent
+                          key={year}
+                          value={String(year)}
+                          className="mt-3"
+                        >
+                          {groupedByYear.length === 0 ? (
+                            <Alert>
+                              <AlertDescription>
+                                No generated schedule rows match the current
+                                filters for {yearLabel(year)}.
+                              </AlertDescription>
+                            </Alert>
+                          ) : (
+                            <div className="grid gap-4">
+                              {groupedByYear.map(({ blockCode, sections }) => (
+                                <Card key={blockCode}>
+                                  <CardHeader className="border-b bg-muted/30">
+                                    <CardTitle className="flex flex-wrap items-center gap-2">
+                                      {blockCode}
+                                      {sections.every(
+                                        (section) =>
+                                          section.capacity ===
+                                          sections[0].capacity,
+                                      ) ? (
+                                        <Badge variant="secondary">
+                                          {sections[0].capacity} seats
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline">
+                                          Mixed seat counts
+                                        </Badge>
+                                      )}
+                                    </CardTitle>
+                                    <CardDescription>
+                                      {yearLabel(year)} block section ·{" "}
+                                      {sections.length} subject
+                                      {sections.length === 1 ? "" : "s"}
+                                    </CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="overflow-x-auto rounded-lg border">
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>Subject code</TableHead>
+                                            <TableHead>Description</TableHead>
+                                            <TableHead>Units</TableHead>
+                                            <TableHead>Sched ID</TableHead>
+                                            <TableHead>Day</TableHead>
+                                            <TableHead>Time</TableHead>
+                                            <TableHead>Room</TableHead>
+                                            <TableHead>Professor</TableHead>
+                                            <TableHead>Modality</TableHead>
+                                            <TableHead className="text-right">
+                                              Action
+                                            </TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {sections.map((section) => {
+                                            const subject = subjectMap.get(
+                                              section.subject_id,
+                                            )
+                                            // A submitted-but-not-yet-published
+                                            // section is still editable — the
+                                            // Program Chair can keep fixing
+                                            // room/professor assignments while
+                                            // waiting for Dean/Executive
+                                            // Director review. Only a
+                                            // published (live) section locks.
+                                            const locked =
+                                              section.status === "published"
+                                            return (
+                                              <TableRow key={section.id}>
+                                                <TableCell className="font-medium">
+                                                  {subject?.code ??
+                                                    `#${section.subject_id}`}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {subject?.title ?? "Subject"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {subject?.units ?? "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {section.id}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {section.schedule_days ?? "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {section.starts_at_time &&
+                                                  section.ends_at_time
+                                                    ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
+                                                    : "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {section.room ?? "—"}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {section.professor_id ? (
+                                                    (facultyMap.get(
+                                                      section.professor_id,
+                                                    )?.name ??
+                                                    `Faculty #${section.professor_id}`)
+                                                  ) : (
+                                                    <Badge variant="destructive">
+                                                      Unassigned
+                                                    </Badge>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell>
+                                                  {section.modality
+                                                    ?.replace("_", " ")
+                                                    .toUpperCase() ?? "—"}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                      open(section)
+                                                    }
+                                                    disabled={
+                                                      locked || !isCurrentTerm
+                                                    }
+                                                  >
+                                                    <PencilLine data-icon="inline-start" />
+                                                    {locked
+                                                      ? "Published"
+                                                      : !isCurrentTerm
+                                                        ? "Archived"
+                                                        : "Edit"}
+                                                  </Button>
+                                                </TableCell>
+                                              </TableRow>
+                                            )
+                                          })}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          )}
+                        </TabsContent>
                       ))}
-                      {visibleWorkforce.length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="py-9 text-center text-muted-foreground"
-                          >
-                            No faculty match the current professor search.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="load-report" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <CardTitle level={2}>Faculty Load Report</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Assignment rationale is retained even when the Program
+                          Chair makes an override.
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {visibleFaculty.length} professors
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-3">
+                    {visibleFaculty.length ? (
+                      visibleFaculty.map((faculty) => (
+                        <div
+                          key={faculty.professor_id}
+                          className="rounded-lg border p-4"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="font-medium">
+                                {faculty.professor_name ??
+                                  `Faculty #${faculty.professor_id}`}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Assigned subjects:{" "}
+                                {faculty.assignments
+                                  .map((assignment) => assignment.subject_code)
+                                  .join(", ")}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant={
+                                  faculty.overloaded
+                                    ? "destructive"
+                                    : "secondary"
+                                }
+                              >
+                                {faculty.total_units} units
+                              </Badge>
+                              <Badge variant="outline">
+                                {faculty.assignments.length} assignments
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {faculty.assignments
+                              .flatMap((assignment) => assignment.rationale)
+                              .filter(
+                                (value, index, values) =>
+                                  values.indexOf(value) === index,
+                              )
+                              .map((reason) => (
+                                <Badge key={reason} variant="outline">
+                                  {reason.replaceAll("_", " ")}
+                                </Badge>
+                              ))}
+                          </div>
+                        </div>
+                      ))
+                    ) : reportQuery.data?.faculty.length ? (
+                      <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                        No professor matches “{professorSearch}”.
+                      </p>
+                    ) : (
+                      <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                        Generate a schedule to see the load report.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="workforce" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <CardTitle level={2}>Faculty workforce</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Manage the local planning status and employment type
+                          for faculty in your college. Inactive faculty cannot
+                          be recommended or assigned.
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {visibleWorkforce.length} faculty
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto rounded-lg border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Faculty member</TableHead>
+                            <TableHead>Account status</TableHead>
+                            <TableHead>Employment type</TableHead>
+                            <TableHead>Planning reference</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {visibleWorkforce.map((faculty) => (
+                            <TableRow key={faculty.id}>
+                              <TableCell className="font-medium">
+                                {faculty.name}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    faculty.is_assignable
+                                      ? "secondary"
+                                      : "destructive"
+                                  }
+                                >
+                                  {faculty.status_label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {faculty.employment_type_label ?? "Unspecified"}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {faculty.planning_unit_reference
+                                  ? `${faculty.planning_unit_reference}-unit reference`
+                                  : "No fixed reference"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`Edit workforce profile for ${faculty.name}`}
+                                  onClick={() => openWorkforceProfile(faculty)}
+                                >
+                                  <PencilLine data-icon="inline-start" />
+                                  Edit
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {visibleWorkforce.length === 0 && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={5}
+                                className="py-9 text-center text-muted-foreground"
+                              >
+                                No faculty match the current professor search.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </AsyncBoundary>

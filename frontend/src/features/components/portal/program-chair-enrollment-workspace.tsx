@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
+  ArrowUpRight,
   CalendarClockIcon,
   LayoutGridIcon,
   ListIcon,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { motion } from "motion/react"
+import Link from "next/link"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
@@ -876,487 +878,558 @@ export function ProgramChairEnrollmentWorkspace({
         </Alert>
       )}
       <ApprovalStatusCard proposal={currentProposal} submitted={submitted} />
-      <Card>
-        <CardHeader>
-          <CardTitle>Predictive schedule planning</CardTitle>
-          <CardDescription>
-            {currentTerm
-              ? `${formatAcademicTerm(currentTerm)} · Generate advisory section demand first, then review and edit the resulting draft.`
-              : "Loading current term…"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
-            <div className="grid gap-1">
-              <p className="font-medium">Section Demand Forecasting</p>
-              <p className="text-sm text-muted-foreground">
-                Uses aggregate historical enrollment, curriculum placement,
-                ranked faculty subject preferences, and declared availability as
-                planning inputs. Recommendations remain editable.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <motion.span layoutId="demand-forecast-surface">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setForecastOpen(true)}
-                  disabled={termId === 0}
-                >
-                  Demand Forecast
-                </Button>
-              </motion.span>
-              <Button
-                type="button"
-                onClick={() => void generationMutation.mutateAsync()}
-                disabled={termId === 0 || generationMutation.isPending}
-              >
-                {generationMutation.isPending
-                  ? "Generating schedule…"
-                  : "Generate Schedule"}
-              </Button>
-            </div>
-          </div>
-          {generationRun && (
-            <Alert>
-              <AlertDescription>
-                {generationRun.status === "queued" ||
-                generationRun.status === "running"
-                  ? "Your predictive schedule is being generated. You can continue reviewing the current editable draft."
-                  : generationRun.status === "failed"
-                    ? (generationRun.error_summary ??
-                      "The forecast could not be generated.")
-                    : `Demand forecast complete${generationRun.warnings.length ? ` with ${generationRun.warnings.length} warning(s)` : ""}. Review and edit sections before approval.`}
-              </AlertDescription>
-            </Alert>
-          )}
-          {step !== "subjects" && (
-            <div
-              className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"
-              aria-label="Enrollment planning progress"
-            >
-              {[
-                "1st Year",
-                "2nd Year",
-                "3rd Year",
-                "4th Year",
-                "Review",
-                "Approval",
-              ].map((label, index) => (
-                <Button
-                  key={label}
-                  type="button"
-                  variant={
-                    index < 4
-                      ? step === "year" && index === yearLevel - 1
-                        ? "destructive"
-                        : "outline"
-                      : step === "review" && index === 4
-                        ? "default"
-                        : "outline"
-                  }
-                  disabled={index > 3 && step === "year"}
-                  onClick={() =>
-                    index < 4
-                      ? (setYearLevel(index + 1), setStep("year"))
-                      : index === 4
-                        ? setStep("review")
-                        : undefined
-                  }
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {step === "year" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{yearLabel(yearLevel)} sections</CardTitle>
-                <CardDescription>
-                  Choose the curriculum version first, then enter the number of
-                  block sections for this year level.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <FieldGroup className="grid gap-4 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor={`curriculum-${yearLevel}`}>
-                      Curriculum for {yearLabel(yearLevel)}
-                    </FieldLabel>
-                    <Select
-                      value={
-                        curriculumIds[yearLevel]
-                          ? String(curriculumIds[yearLevel])
-                          : ""
-                      }
-                      onValueChange={(value) =>
-                        setCurriculumIds({
-                          ...curriculumIds,
-                          [yearLevel]: Number(value),
-                        })
-                      }
-                    >
-                      <SelectTrigger id={`curriculum-${yearLevel}`}>
-                        <SelectValue placeholder="Choose curriculum" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {selectableCurricula.map((curriculum) => (
-                            <SelectItem
-                              key={curriculum.id}
-                              value={String(curriculum.id)}
-                            >
-                              {curriculum.name} ·{" "}
-                              {curriculum.effective_school_year} ·{" "}
-                              {curriculumAgeLabel(
-                                curriculum,
-                                newestCurriculumIdByProgram,
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    {selectedCurriculumForYear(yearLevel) && (
-                      <FieldDescription>
-                        Effectivity:{" "}
-                        {
-                          selectedCurriculumForYear(yearLevel)
-                            ?.effective_school_year
-                        }{" "}
-                        <Badge variant="secondary">
-                          {curriculumAgeLabel(
-                            selectedCurriculumForYear(yearLevel),
-                            newestCurriculumIdByProgram,
-                          )}
-                        </Badge>
-                      </FieldDescription>
-                    )}
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="section-count">
-                      Number of block sections
-                    </FieldLabel>
-                    <Input
-                      id="section-count"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={counts[yearLevel]}
-                      onChange={(event) => {
-                        const digits = event.target.value.replace(/\D/gu, "")
-                        setCounts({
-                          ...counts,
-                          [yearLevel]:
-                            digits === "" ? "" : Math.min(99, Number(digits)),
-                        })
-                      }}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="students-per-block">
-                      Students per block
-                    </FieldLabel>
-                    <Input
-                      id="students-per-block"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={studentsPerBlock[yearLevel]}
-                      onChange={(event) => {
-                        const digits = event.target.value.replace(/\D/gu, "")
-                        setStudentsPerBlock({
-                          ...studentsPerBlock,
-                          [yearLevel]:
-                            digits === "" ? "" : Math.min(300, Number(digits)),
-                        })
-                      }}
-                    />
-                    <FieldDescription>
-                      Seats in every block generated for {yearLabel(yearLevel)}.
-                      You can change a single section later when you assign its
-                      schedule.
-                    </FieldDescription>
-                  </Field>
-                </FieldGroup>
-                <div>
-                  <Button
-                    type="button"
-                    onClick={() => void continueYear()}
-                    disabled={
-                      curriculumIds[yearLevel] === null ||
-                      planMutations.save.isPending
-                    }
-                  >
-                    {yearLevel === 4
-                      ? "Continue to review"
-                      : "Save and continue"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {step === "review" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Review block sections</CardTitle>
-                <CardDescription>
-                  Confirm each year level before releasing the current-semester
-                  subject lists.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                {years.map((year) => (
-                  <div
-                    key={year}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
-                  >
-                    <div className="grid gap-1">
-                      <span className="font-medium">{yearLabel(year)}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {selectedCurriculumForYear(year)
-                          ? `${selectedCurriculumForYear(year)?.name} · ${selectedCurriculumForYear(year)?.effective_school_year}`
-                          : "Curriculum not selected"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">
-                        {toNumber(counts[year])} blocks
-                      </Badge>
-                      {selectedCurriculumForYear(year) && (
-                        <Badge variant="outline">
-                          {curriculumAgeLabel(
-                            selectedCurriculumForYear(year),
-                            newestCurriculumIdByProgram,
-                          )}
-                        </Badge>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setYearLevel(year)
-                          setStep("year")
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => void releaseSubjects()}
-                    disabled={planMutations.release.isPending}
-                  >
-                    Generate subject list
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {step === "subjects" && (
-            <Tabs value={activeYear} onValueChange={setActiveYear}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <TabsList
-                  aria-label="Generated section year filter"
-                  className="w-full sm:w-fit"
-                >
-                  {years.map((year) => (
-                    <TabsTrigger key={year} value={String(year)}>
-                      {yearLabel(year)}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void removeSection()}
-                    disabled={
-                      approvalLocked ||
-                      toNumber(counts[Number(activeYear)]) <= 0 ||
-                      planMutations.save.isPending ||
-                      planMutations.release.isPending
-                    }
-                  >
-                    <MinusIcon data-icon="inline-start" />
-                    Remove section
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void addSection()}
-                    disabled={
-                      approvalLocked ||
-                      planMutations.save.isPending ||
-                      planMutations.release.isPending
-                    }
-                  >
-                    <PlusIcon data-icon="inline-start" />
-                    Add section
-                  </Button>
-                  <ToggleGroup
-                    type="single"
-                    value={view}
-                    onValueChange={(value) => {
-                      if (value === "table" || value === "tiles") setView(value)
-                    }}
-                    variant="outline"
-                    size="sm"
-                    aria-label="Generated section layout"
-                  >
-                    <ToggleGroupItem value="table" aria-label="Table view">
-                      <ListIcon data-icon="inline-start" />
-                      Table
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="tiles" aria-label="Tile view">
-                      <LayoutGridIcon data-icon="inline-start" />
-                      Tiles
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                </div>
+      {approvalLocked && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Still need to fix a room or professor?</CardTitle>
+            <CardDescription>
+              Room and professor assignments stay editable in Schedule &amp;
+              Faculty Loading while this schedule waits for Dean and Executive
+              Director review — only a published section locks.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/portal/schedule-faculty-loading">
+                Open Schedule &amp; Faculty Loading
+                <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {!approvalLocked && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Predictive schedule planning</CardTitle>
+            <CardDescription>
+              {currentTerm
+                ? `${formatAcademicTerm(currentTerm)} · Generate advisory section demand first, then review and edit the resulting draft.`
+                : "Loading current term…"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
+              <div className="grid gap-1">
+                <p className="font-medium">Section Demand Forecasting</p>
+                <p className="text-sm text-muted-foreground">
+                  Uses aggregate historical enrollment, curriculum placement,
+                  ranked faculty subject preferences, and declared availability
+                  as planning inputs. Recommendations remain editable.
+                </p>
               </div>
+              <div className="flex flex-wrap gap-2">
+                <motion.span layoutId="demand-forecast-surface">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setForecastOpen(true)}
+                    disabled={termId === 0}
+                  >
+                    Demand Forecast
+                  </Button>
+                </motion.span>
+                <Button
+                  type="button"
+                  onClick={() => void generationMutation.mutateAsync()}
+                  disabled={termId === 0 || generationMutation.isPending}
+                >
+                  {generationMutation.isPending
+                    ? "Generating schedule…"
+                    : "Generate Schedule"}
+                </Button>
+              </div>
+            </div>
+            {generationRun && (
+              <Alert>
+                <AlertDescription>
+                  {generationRun.status === "queued" ||
+                  generationRun.status === "running"
+                    ? "Your predictive schedule is being generated. You can continue reviewing the current editable draft."
+                    : generationRun.status === "failed"
+                      ? (generationRun.error_summary ??
+                        "The forecast could not be generated.")
+                      : `Demand forecast complete${generationRun.warnings.length ? ` with ${generationRun.warnings.length} warning(s)` : ""}. Review and edit sections before approval.`}
+                </AlertDescription>
+              </Alert>
+            )}
+            {step !== "subjects" && (
+              <div
+                className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"
+                aria-label="Enrollment planning progress"
+              >
+                {[
+                  "1st Year",
+                  "2nd Year",
+                  "3rd Year",
+                  "4th Year",
+                  "Review",
+                  "Approval",
+                ].map((label, index) => (
+                  <Button
+                    key={label}
+                    type="button"
+                    variant={
+                      index < 4
+                        ? step === "year" && index === yearLevel - 1
+                          ? "destructive"
+                          : "outline"
+                        : step === "review" && index === 4
+                          ? "default"
+                          : "outline"
+                    }
+                    disabled={index > 3 && step === "year"}
+                    onClick={() =>
+                      index < 4
+                        ? (setYearLevel(index + 1), setStep("year"))
+                        : index === 4
+                          ? setStep("review")
+                          : undefined
+                    }
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            )}
 
-              {years.map((year) => (
-                <TabsContent key={year} value={String(year)} className="mt-0">
-                  {groupedSections.length === 0 ? (
-                    <Alert>
-                      <AlertDescription>
-                        No generated subject blocks for {yearLabel(year)} yet.
-                        Planned blocks: {toNumber(counts[year])}.
-                      </AlertDescription>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void generateSubjectsForYear(year)}
-                        disabled={
-                          curriculumIds[year] === null ||
-                          planMutations.save.isPending ||
-                          planMutations.release.isPending
+            {step === "year" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{yearLabel(yearLevel)} sections</CardTitle>
+                  <CardDescription>
+                    Choose the curriculum version first, then enter the number
+                    of block sections for this year level.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                    <Field>
+                      <FieldLabel htmlFor={`curriculum-${yearLevel}`}>
+                        Curriculum for {yearLabel(yearLevel)}
+                      </FieldLabel>
+                      <Select
+                        value={
+                          curriculumIds[yearLevel]
+                            ? String(curriculumIds[yearLevel])
+                            : ""
+                        }
+                        onValueChange={(value) =>
+                          setCurriculumIds({
+                            ...curriculumIds,
+                            [yearLevel]: Number(value),
+                          })
                         }
                       >
-                        Generate subjects for {yearLabel(year)}
-                      </Button>
-                    </Alert>
-                  ) : (
-                    <div className="grid gap-4">
-                      {groupedSections.map(({ blockCode, sections }) => (
-                        <Card key={blockCode}>
-                          <CardHeader className="border-b bg-muted/30">
-                            <CardTitle className="flex flex-wrap items-center gap-2">
-                              {blockCode}
-                              {sections.every(
-                                (section) =>
-                                  section.capacity === sections[0].capacity,
-                              ) ? (
-                                <Badge variant="secondary">
-                                  {sections[0].capacity} seats
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">
-                                  Mixed seat counts
-                                </Badge>
-                              )}
-                            </CardTitle>
-                            <CardDescription>
-                              {yearLabel(year)} block section ·{" "}
-                              {sections.length} subject
-                              {sections.length === 1 ? "" : "s"}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            {view === "table" && (
-                              <div className="program-chair-schedule-cards">
-                                {sections.map((section) => (
-                                  <MobileScheduleCard
-                                    key={section.id}
-                                    section={section}
-                                    code={
-                                      subjectFor(section.subject_id)?.code ??
-                                      `Subject #${section.subject_id}`
-                                    }
-                                    title={
-                                      subjectFor(section.subject_id)?.title ??
-                                      "Subject"
-                                    }
-                                    units={unitsFor(section.subject_id)}
-                                    facultyName={facultyNameFor(
-                                      section.professor_id,
-                                    )}
-                                    approvalLocked={approvalLocked}
-                                    onAssign={openEdit}
-                                  />
-                                ))}
-                              </div>
+                        <SelectTrigger id={`curriculum-${yearLevel}`}>
+                          <SelectValue placeholder="Choose curriculum" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {selectableCurricula.map((curriculum) => (
+                              <SelectItem
+                                key={curriculum.id}
+                                value={String(curriculum.id)}
+                              >
+                                {curriculum.name} ·{" "}
+                                {curriculum.effective_school_year} ·{" "}
+                                {curriculumAgeLabel(
+                                  curriculum,
+                                  newestCurriculumIdByProgram,
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      {selectedCurriculumForYear(yearLevel) && (
+                        <FieldDescription>
+                          Effectivity:{" "}
+                          {
+                            selectedCurriculumForYear(yearLevel)
+                              ?.effective_school_year
+                          }{" "}
+                          <Badge variant="secondary">
+                            {curriculumAgeLabel(
+                              selectedCurriculumForYear(yearLevel),
+                              newestCurriculumIdByProgram,
                             )}
-                            {view === "table" ? (
-                              <Table className="program-chair-schedule-table">
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Subject code</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Units</TableHead>
-                                    <TableHead>Sched ID</TableHead>
-                                    <TableHead>Day</TableHead>
-                                    <TableHead>Time</TableHead>
-                                    <TableHead>Room</TableHead>
-                                    <TableHead>Professor</TableHead>
-                                    <TableHead>Modality</TableHead>
-                                    <TableHead className="text-right">
-                                      Action
-                                    </TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
+                          </Badge>
+                        </FieldDescription>
+                      )}
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="section-count">
+                        Number of block sections
+                      </FieldLabel>
+                      <Input
+                        id="section-count"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={counts[yearLevel]}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/gu, "")
+                          setCounts({
+                            ...counts,
+                            [yearLevel]:
+                              digits === "" ? "" : Math.min(99, Number(digits)),
+                          })
+                        }}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="students-per-block">
+                        Students per block
+                      </FieldLabel>
+                      <Input
+                        id="students-per-block"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={studentsPerBlock[yearLevel]}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/gu, "")
+                          setStudentsPerBlock({
+                            ...studentsPerBlock,
+                            [yearLevel]:
+                              digits === ""
+                                ? ""
+                                : Math.min(300, Number(digits)),
+                          })
+                        }}
+                      />
+                      <FieldDescription>
+                        Seats in every block generated for{" "}
+                        {yearLabel(yearLevel)}. You can change a single section
+                        later when you assign its schedule.
+                      </FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                  <div>
+                    <Button
+                      type="button"
+                      onClick={() => void continueYear()}
+                      disabled={
+                        curriculumIds[yearLevel] === null ||
+                        planMutations.save.isPending
+                      }
+                    >
+                      {yearLevel === 4
+                        ? "Continue to review"
+                        : "Save and continue"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {step === "review" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Review block sections</CardTitle>
+                  <CardDescription>
+                    Confirm each year level before releasing the
+                    current-semester subject lists.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  {years.map((year) => (
+                    <div
+                      key={year}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+                    >
+                      <div className="grid gap-1">
+                        <span className="font-medium">{yearLabel(year)}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {selectedCurriculumForYear(year)
+                            ? `${selectedCurriculumForYear(year)?.name} · ${selectedCurriculumForYear(year)?.effective_school_year}`
+                            : "Curriculum not selected"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          {toNumber(counts[year])} blocks
+                        </Badge>
+                        {selectedCurriculumForYear(year) && (
+                          <Badge variant="outline">
+                            {curriculumAgeLabel(
+                              selectedCurriculumForYear(year),
+                              newestCurriculumIdByProgram,
+                            )}
+                          </Badge>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setYearLevel(year)
+                            setStep("year")
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void releaseSubjects()}
+                      disabled={planMutations.release.isPending}
+                    >
+                      Generate subject list
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {step === "subjects" && (
+              <Tabs value={activeYear} onValueChange={setActiveYear}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <TabsList
+                    aria-label="Generated section year filter"
+                    className="w-full sm:w-fit"
+                  >
+                    {years.map((year) => (
+                      <TabsTrigger key={year} value={String(year)}>
+                        {yearLabel(year)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void removeSection()}
+                      disabled={
+                        approvalLocked ||
+                        toNumber(counts[Number(activeYear)]) <= 0 ||
+                        planMutations.save.isPending ||
+                        planMutations.release.isPending
+                      }
+                    >
+                      <MinusIcon data-icon="inline-start" />
+                      Remove section
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void addSection()}
+                      disabled={
+                        approvalLocked ||
+                        planMutations.save.isPending ||
+                        planMutations.release.isPending
+                      }
+                    >
+                      <PlusIcon data-icon="inline-start" />
+                      Add section
+                    </Button>
+                    <ToggleGroup
+                      type="single"
+                      value={view}
+                      onValueChange={(value) => {
+                        if (value === "table" || value === "tiles")
+                          setView(value)
+                      }}
+                      variant="outline"
+                      size="sm"
+                      aria-label="Generated section layout"
+                    >
+                      <ToggleGroupItem value="table" aria-label="Table view">
+                        <ListIcon data-icon="inline-start" />
+                        Table
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="tiles" aria-label="Tile view">
+                        <LayoutGridIcon data-icon="inline-start" />
+                        Tiles
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+                </div>
+
+                {years.map((year) => (
+                  <TabsContent key={year} value={String(year)} className="mt-0">
+                    {groupedSections.length === 0 ? (
+                      <Alert>
+                        <AlertDescription>
+                          No generated subject blocks for {yearLabel(year)} yet.
+                          Planned blocks: {toNumber(counts[year])}.
+                        </AlertDescription>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void generateSubjectsForYear(year)}
+                          disabled={
+                            curriculumIds[year] === null ||
+                            planMutations.save.isPending ||
+                            planMutations.release.isPending
+                          }
+                        >
+                          Generate subjects for {yearLabel(year)}
+                        </Button>
+                      </Alert>
+                    ) : (
+                      <div className="grid gap-4">
+                        {groupedSections.map(({ blockCode, sections }) => (
+                          <Card key={blockCode}>
+                            <CardHeader className="border-b bg-muted/30">
+                              <CardTitle className="flex flex-wrap items-center gap-2">
+                                {blockCode}
+                                {sections.every(
+                                  (section) =>
+                                    section.capacity === sections[0].capacity,
+                                ) ? (
+                                  <Badge variant="secondary">
+                                    {sections[0].capacity} seats
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">
+                                    Mixed seat counts
+                                  </Badge>
+                                )}
+                              </CardTitle>
+                              <CardDescription>
+                                {yearLabel(year)} block section ·{" "}
+                                {sections.length} subject
+                                {sections.length === 1 ? "" : "s"}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              {view === "table" && (
+                                <div className="program-chair-schedule-cards">
                                   {sections.map((section) => (
-                                    <TableRow key={section.id}>
-                                      <TableCell className="font-medium">
-                                        {subjectFor(section.subject_id)?.code ??
-                                          `Subject #${section.subject_id}`}
-                                      </TableCell>
-                                      <TableCell>
-                                        {subjectFor(section.subject_id)
-                                          ?.title ?? "Subject"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {unitsFor(section.subject_id)}
-                                      </TableCell>
-                                      <TableCell>{section.id}</TableCell>
-                                      <TableCell>
-                                        {section.schedule_days ?? "—"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {section.starts_at_time &&
-                                        section.ends_at_time
-                                          ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
-                                          : "—"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {section.room ?? "—"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {facultyNameFor(section.professor_id) ??
-                                          "—"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {section.modality
-                                          ? modalityLabels[section.modality]
-                                          : "—"}
-                                      </TableCell>
-                                      <TableCell className="text-right">
+                                    <MobileScheduleCard
+                                      key={section.id}
+                                      section={section}
+                                      code={
+                                        subjectFor(section.subject_id)?.code ??
+                                        `Subject #${section.subject_id}`
+                                      }
+                                      title={
+                                        subjectFor(section.subject_id)?.title ??
+                                        "Subject"
+                                      }
+                                      units={unitsFor(section.subject_id)}
+                                      facultyName={facultyNameFor(
+                                        section.professor_id,
+                                      )}
+                                      approvalLocked={approvalLocked}
+                                      onAssign={openEdit}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              {view === "table" ? (
+                                <Table className="program-chair-schedule-table">
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Subject code</TableHead>
+                                      <TableHead>Description</TableHead>
+                                      <TableHead>Units</TableHead>
+                                      <TableHead>Sched ID</TableHead>
+                                      <TableHead>Day</TableHead>
+                                      <TableHead>Time</TableHead>
+                                      <TableHead>Room</TableHead>
+                                      <TableHead>Professor</TableHead>
+                                      <TableHead>Modality</TableHead>
+                                      <TableHead className="text-right">
+                                        Action
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {sections.map((section) => (
+                                      <TableRow key={section.id}>
+                                        <TableCell className="font-medium">
+                                          {subjectFor(section.subject_id)
+                                            ?.code ??
+                                            `Subject #${section.subject_id}`}
+                                        </TableCell>
+                                        <TableCell>
+                                          {subjectFor(section.subject_id)
+                                            ?.title ?? "Subject"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {unitsFor(section.subject_id)}
+                                        </TableCell>
+                                        <TableCell>{section.id}</TableCell>
+                                        <TableCell>
+                                          {section.schedule_days ?? "—"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {section.starts_at_time &&
+                                          section.ends_at_time
+                                            ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
+                                            : "—"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {section.room ?? "—"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {facultyNameFor(
+                                            section.professor_id,
+                                          ) ?? "—"}
+                                        </TableCell>
+                                        <TableCell>
+                                          {section.modality
+                                            ? modalityLabels[section.modality]
+                                            : "—"}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={approvalLocked}
+                                            onClick={() => openEdit(section)}
+                                          >
+                                            <CalendarClockIcon data-icon="inline-start" />
+                                            Assign schedule
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              ) : (
+                                <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                                  {sections.map((section) => (
+                                    <Card key={section.id} size="sm">
+                                      <CardHeader>
+                                        <CardTitle>
+                                          {subjectFor(section.subject_id)
+                                            ?.code ??
+                                            `Subject #${section.subject_id}`}
+                                        </CardTitle>
+                                        <CardDescription>
+                                          {subjectFor(section.subject_id)
+                                            ?.title ?? "Subject"}{" "}
+                                          · {unitsFor(section.subject_id)} units
+                                        </CardDescription>
+                                      </CardHeader>
+                                      <CardContent className="grid gap-3">
+                                        <p className="text-sm text-muted-foreground">
+                                          Sched ID {section.id} ·{" "}
+                                          {scheduleSummary(
+                                            section,
+                                            facultyNameFor(
+                                              section.professor_id,
+                                            ),
+                                          )}
+                                        </p>
+                                        <Badge variant="secondary">
+                                          {section.modality
+                                            ? modalityLabels[section.modality]
+                                            : "Modality not set"}
+                                        </Badge>
                                         <Button
                                           type="button"
-                                          size="sm"
                                           variant="outline"
                                           disabled={approvalLocked}
                                           onClick={() => openEdit(section)}
@@ -1364,98 +1437,57 @@ export function ProgramChairEnrollmentWorkspace({
                                           <CalendarClockIcon data-icon="inline-start" />
                                           Assign schedule
                                         </Button>
-                                      </TableCell>
-                                    </TableRow>
+                                      </CardContent>
+                                    </Card>
                                   ))}
-                                </TableBody>
-                              </Table>
-                            ) : (
-                              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                                {sections.map((section) => (
-                                  <Card key={section.id} size="sm">
-                                    <CardHeader>
-                                      <CardTitle>
-                                        {subjectFor(section.subject_id)?.code ??
-                                          `Subject #${section.subject_id}`}
-                                      </CardTitle>
-                                      <CardDescription>
-                                        {subjectFor(section.subject_id)
-                                          ?.title ?? "Subject"}{" "}
-                                        · {unitsFor(section.subject_id)} units
-                                      </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="grid gap-3">
-                                      <p className="text-sm text-muted-foreground">
-                                        Sched ID {section.id} ·{" "}
-                                        {scheduleSummary(
-                                          section,
-                                          facultyNameFor(section.professor_id),
-                                        )}
-                                      </p>
-                                      <Badge variant="secondary">
-                                        {section.modality
-                                          ? modalityLabels[section.modality]
-                                          : "Modality not set"}
-                                      </Badge>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={approvalLocked}
-                                        onClick={() => openEdit(section)}
-                                      >
-                                        <CalendarClockIcon data-icon="inline-start" />
-                                        Assign schedule
-                                      </Button>
-                                    </CardContent>
-                                  </Card>
-                                ))}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                ))}
+                <div className="grid gap-3">
+                  {incompleteScheduleCount > 0 && (
+                    <Alert>
+                      <AlertDescription>
+                        {incompleteScheduleCount} schedule assignment
+                        {incompleteScheduleCount === 1 ? "" : "s"} remaining
+                        before approval submission.
+                      </AlertDescription>
+                    </Alert>
                   )}
-                </TabsContent>
-              ))}
-              <div className="grid gap-3">
-                {incompleteScheduleCount > 0 && (
-                  <Alert>
-                    <AlertDescription>
-                      {incompleteScheduleCount} schedule assignment
-                      {incompleteScheduleCount === 1 ? "" : "s"} remaining
-                      before approval submission.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {submitError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{submitError}</AlertDescription>
-                  </Alert>
-                )}
-                <div className="flex flex-wrap justify-end gap-2">
-                  {!approvalLocked && (
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        setSubmitError("")
-                        setConfirmSubmit(true)
-                      }}
-                      disabled={
-                        visibleSections.length === 0 ||
-                        incompleteScheduleCount > 0 ||
-                        planMutations.submit.isPending
-                      }
-                    >
-                      Submit for Dean and Executive Director Approval
-                    </Button>
+                  {submitError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{submitError}</AlertDescription>
+                    </Alert>
                   )}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {!approvalLocked && (
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setSubmitError("")
+                          setConfirmSubmit(true)
+                        }}
+                        disabled={
+                          visibleSections.length === 0 ||
+                          incompleteScheduleCount > 0 ||
+                          planMutations.submit.isPending
+                        }
+                      >
+                        Submit for Dean and Executive Director Approval
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Tabs>
-          )}
-        </CardContent>
-      </Card>
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <DemandForecastDialog
         open={forecastOpen}
@@ -1464,6 +1496,9 @@ export function ProgramChairEnrollmentWorkspace({
         loading={latestGenerationRunQuery.isPending}
         error={latestGenerationRunQuery.isError}
         onRetry={() => void latestGenerationRunQuery.refetch()}
+        sections={visibleSections}
+        plans={plansQuery.data ?? []}
+        subjects={subjectsQuery.data ?? []}
       />
 
       <Dialog
@@ -1695,7 +1730,9 @@ export function ProgramChairEnrollmentWorkspace({
               onClick={() => void submit()}
               disabled={planMutations.submit.isPending}
             >
-              Confirm submission
+              {planMutations.submit.isPending
+                ? "Submitting…"
+                : "Confirm submission"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

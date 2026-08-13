@@ -1,9 +1,24 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ScheduleFacultyLoadingWorkspace } from "@/features/components/portal/schedule-faculty-loading-workspace"
 import { renderWithSession } from "@/tests/render-app"
+
+const archivedTerm = {
+  type: "academic-term",
+  id: 2,
+  school_year: "2024-2025",
+  semester: "1st",
+  starts_at: null,
+  ends_at: null,
+  enrollment_opens_at: null,
+  enrollment_closes_at: null,
+  add_drop_deadline_at: null,
+  grading_deadline_at: null,
+  status: "archived",
+  status_label: "Archived",
+} as const
 
 const terms = {
   data: [
@@ -21,6 +36,7 @@ const terms = {
       status: "semester_ongoing",
       status_label: "Semester Ongoing",
     },
+    archivedTerm,
   ],
 } as const
 
@@ -41,6 +57,16 @@ const subjects = {
       id: 201,
       code: "IT201",
       title: "Data Structures",
+      units: 3,
+      status: "active",
+      status_label: "Active",
+      is_completion_only: false,
+    },
+    {
+      type: "subject",
+      id: 301,
+      code: "OLD101",
+      title: "Retired Elective",
       units: 3,
       status: "active",
       status_label: "Active",
@@ -95,6 +121,28 @@ const sections = {
       status: "planned",
       status_label: "Planned",
     },
+    {
+      type: "section",
+      id: 13,
+      academic_term_id: 2,
+      section_plan_id: 72,
+      subject_id: 301,
+      section_code: "OLD101",
+      professor_id: 12,
+      schedule_days: "F",
+      starts_at_time: "13:00:00",
+      ends_at_time: "15:00:00",
+      room: "LAB 3",
+      modality: "f2f",
+      capacity: 40,
+      capacity_source: "plan",
+      viability_threshold: null,
+      enrolled_count: 0,
+      remaining_seats: 40,
+      is_block_exclusive: true,
+      status: "planned",
+      status_label: "Planned",
+    },
   ],
 } as const
 
@@ -120,6 +168,22 @@ const plans = {
       curriculum_id: 10,
       college: "ccs",
       year_level: 2,
+      section_count: 1,
+      students_per_block: 40,
+      // Submitted for Dean/Executive Director review — its section (id 12)
+      // must stay editable until it's actually published, not merely
+      // submitted.
+      status: "submitted",
+      status_label: "Submitted",
+      submitted_at: "2026-08-01T00:00:00Z",
+    },
+    {
+      type: "academic-term-section-plan",
+      id: 72,
+      academic_term_id: 2,
+      curriculum_id: 10,
+      college: "ccs",
+      year_level: 1,
       section_count: 1,
       students_per_block: 40,
       status: "draft",
@@ -290,43 +354,103 @@ describe("ScheduleFacultyLoadingWorkspace", () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it("shows an IT101 row when Year 1 is selected from its linked section plan", async () => {
+  it("shows the IT101 block only under its linked year tab, not the long flat list", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    await screen.findByText("IT101 · IT101")
-    await user.selectOptions(screen.getByLabelText("Year"), "1")
+    expect(
+      await screen.findByRole("cell", { name: "IT101" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("cell", { name: "IT201" }),
+    ).not.toBeInTheDocument()
 
-    expect(screen.getByText("IT101 · IT101")).toBeInTheDocument()
-    expect(screen.queryByText("IT201 · IT201")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("tab", { name: "2nd Year" }))
+
+    expect(
+      await screen.findByRole("cell", { name: "IT201" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("cell", { name: "IT101" }),
+    ).not.toBeInTheDocument()
   })
 
-  it("finds a professor by name and shows that professor's assigned subject", async () => {
+  it("keeps a section editable while its plan is submitted and pending Dean/Executive Director review", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    await screen.findByText("Faculty Load Report")
-    await user.type(screen.getByLabelText("Find professor"), "reyes")
+    await user.click(await screen.findByRole("tab", { name: "2nd Year" }))
+    await screen.findByRole("cell", { name: "IT201" })
 
-    expect(screen.getAllByText("Prof. Reyes").length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/IT101/).length).toBeGreaterThan(0)
-    expect(screen.queryByText("Prof. Santos")).not.toBeInTheDocument()
+    const editButton = screen.getByRole("button", { name: "Edit" })
+    expect(editButton).toBeEnabled()
+
+    await user.click(editButton)
+    expect(
+      screen.getByRole("dialog", { name: /Edit section assignment/ }),
+    ).toBeInTheDocument()
   })
 
-  it("lets the Program Chair review and edit each faculty member's active status and employment type", async () => {
+  it("finds a professor by name and narrows the Faculty Load Report view to that professor", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    await screen.findByText("Faculty workforce")
-    expect(screen.getByText("Marian S. Villanueva")).toBeInTheDocument()
+    await user.type(await screen.findByLabelText("Find professor"), "reyes")
+    await user.click(screen.getByRole("tab", { name: "Faculty Load Report" }))
+
+    const reportPanel = await screen.findByRole("tabpanel", {
+      name: "Faculty Load Report",
+    })
+    expect(within(reportPanel).getByText("Prof. Reyes")).toBeInTheDocument()
+    expect(
+      within(reportPanel).queryByText("Prof. Santos"),
+    ).not.toBeInTheDocument()
+  })
+
+  it("switches to the Faculty Workforce view in place, without opening a modal", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(
+      await screen.findByRole("tab", { name: "Faculty Workforce" }),
+    )
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(screen.getByText("Faculty load threshold")).toBeInTheDocument()
+    expect(await screen.findByText("Marian S. Villanueva")).toBeInTheDocument()
     await user.click(
       screen.getByRole("button", {
         name: "Edit workforce profile for Marian S. Villanueva",
       }),
     )
 
-    expect(screen.getByRole("dialog")).toHaveTextContent("Employment type")
+    const editDialog = screen.getByRole("dialog", {
+      name: "Update faculty workforce profile",
+    })
+    expect(editDialog).toHaveTextContent("Employment type")
     expect(screen.getByLabelText("Account status")).toHaveValue("disabled")
     expect(screen.getByLabelText("Employment type")).toHaveValue("part_time")
+  })
+
+  it("lets the Program Chair switch to an archived term and view its schedule read-only", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByRole("cell", { name: "IT101" })
+    expect(
+      screen.getByText("Viewing the current term. Assignments are editable."),
+    ).toBeInTheDocument()
+
+    await user.selectOptions(
+      screen.getByLabelText("Academic term"),
+      String(archivedTerm.id),
+    )
+
+    expect(
+      await screen.findByText(/Viewing an archived schedule/),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("cell", { name: "OLD101" }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Archived" })).toBeDisabled()
   })
 })

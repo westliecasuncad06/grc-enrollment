@@ -6408,3 +6408,107 @@ touched files (PHPStan's 4 pre-existing findings on unrelated lines of
 `demand-forecast-dialog.test.tsx` 1/1 passed; `tsc --noEmit` and
 ESLint clean on every changed file. Committed as `cd869e2` and pushed
 to `origin/main`.
+
+## 2026-08-13 (continued) — Demand Forecast dialog redesign (Phase 1 of a
+## planned Demand Forecast + Analytics rework)
+
+Root-cause investigation (2 parallel Explore agents, then a Plan agent,
+then direct spot-checks against source) found that the Demand Forecast
+dialog's "Section Demand Forecasting" table — sparse compared to the
+real number of generated sections — was not a Random Forest bug: most
+subject/year-level placements simply fail an exact historical-data
+match (`GenerateSectionDemandForecasts.php`) and get silently dropped,
+and most real sections come from the Chair's own manual
+`SaveSectionPlan::release()`, never a forecast at all. Fixing that data
+pipeline was scoped out as a deferred Phase 3 (write-up only, not
+implemented — see `.claude/plans` for the full brief); this session
+implemented Phase 1: replace the misleading table with a truthful "why
+was this section generated" view, using data that already existed but
+was never rendered.
+
+**Checkpoint 1a — frontend schema widening:** `section-plan-schema.ts`
+gained 4 optional fields (`recommendation_source`,
+`recommended_section_count`, `recommendation_is_overridden`,
+`recommendation_prediction_run_id`), landed before the backend emits
+them so no response could ever fail `.strict()` parsing.
+
+**Checkpoint 1b — backend resource fields:** RED test
+(`AcademicTermSectionPlanResourceTest`, 2 cases: predictive plan,
+manually-planned block) proved `AcademicTermSectionPlanResource` didn't
+serialize those 4 columns even though the model already had them;
+GREEN added the 4-line resource change. Full `SaveSectionPlan`/
+`ApplyDemandForecastToDraft` regression (12 tests) confirmed no
+behavior change elsewhere; Pint and PHPStan clean (PHPStan's 4
+pre-existing findings on this resource are unrelated, untouched lines).
+
+**Checkpoint 1c — dialog redesign:** new pure function
+`buildSectionGenerationRationale` (6 RED→GREEN cases: same-subject
+sections collapse into one accurate count; predictive+matched forecast;
+predictive+stale forecast; manually-planned (no forecast ever
+available); predictive-but-overridden; section with no linked plan at
+all) groups every generated section by subject+year and explains it
+truthfully — mirroring the rationale-badge pattern already shipped for
+faculty assignments in the Faculty Load Report tab. `demand-forecast-
+dialog.tsx`'s old sparse table is gone, replaced by this explanation
+list; `program-chair-enrollment-workspace.tsx` wires `sections`/
+`plans`/`subjects` into the dialog (all already in scope — no new
+query). One ESLint `prefer-optional-chain` finding fixed post-Prettier.
+
+Verification: backend 14/14 (2 new + 12 regression), Pint/PHPStan
+clean; frontend 30/30 (6 new pure-function + 1 dialog + 23 workspace),
+`tsc --noEmit`/ESLint/Prettier clean.
+Phase 2 (Analytics dashboard: remove the duplicate Predictive-tab
+table, add a student-count-by-school-year chart filterable by program
+and year level) is the next checkpoint; full plan (including the
+deferred Phase 3 pipeline-fix brief) saved outside the repo at the
+user's Claude Code plans directory, file `frolicking-chasing-river.md`.
+
+## 2026-08-13 (continued) — Submit-for-approval UX fix, room/professor
+## stays editable through Dean/Executive Director review
+
+User live-tested Phase 1 against real term data and reported the
+"Submit this schedule for approval?" confirmation dialog appearing to
+hang. Root-cause investigation (direct `SaveSectionPlan::submit()`
+timing test against real data, `tinker`) found the backend responds in
+under 1 second and correctly rejects with a validation message when
+sections are incomplete — not a hang. While investigating, the user
+independently completed a real archive → create-next-term →
+generate → submit walkthrough in the actual UI (Term 9), successfully
+submitting all 4 colleges to "for_dean_approval" — confirming the
+submit pipeline itself works correctly end to end. Term 9's produced
+data was cleared afterward (289 forecasts, 6 generation runs, 630
+sections, 4 proposals, etc.) and Term 7 (1st sem 2026-2027) reopened to
+`semester_ongoing`, mirroring the same cleanup done earlier this
+session for Term 8 — see the `AcademicTermSectionPlanResourceTest`
+entry above for the reasoning (delete the term row entirely, not just
+its data, so the current-term-slot pointer and `CreateAcademicTerm`'s
+unique constraint stay consistent with the Chair's own manual
+archive/create flow).
+
+Three product-directed changes followed:
+
+- **Submitting feedback**: the "Confirm submission" button now reads
+  "Submitting…" and disables while the mutation is in flight, so a
+  slow response no longer looks identical to a stuck dialog.
+- **Clean submitted view**: `program-chair-enrollment-workspace.tsx`'s
+  entire "Predictive schedule planning" card (generation wizard,
+  editable section table, Submit button) is now hidden once a
+  college's schedule is submitted (`approvalLocked`) — replaced by the
+  existing `ApprovalStatusCard` ("Submitted to Dean — Waiting for Dean
+  review...") plus a new card linking to Schedule & Faculty Loading.
+  Previously the full editable-but-disabled table stayed visible,
+  cluttering the "submitted, waiting" state.
+- **Editable through review, locks only at publish**:
+  `schedule-faculty-loading-workspace.tsx`'s per-row Edit-button lock
+  changed from `plan.status === "submitted"` to
+  `section.status === "published"` (set only by
+  `TransitionScheduleProposal` on the final Executive Director
+  publish). The Program Chair can now keep fixing room/professor
+  assignments while a schedule waits for Dean/Executive Director
+  review — only a genuinely published (live) section locks.
+
+Verification: frontend 28/28 (5 schedule-faculty-loading + 23
+enrollment-workspace), `tsc --noEmit`/ESLint/Prettier clean. No backend
+changes this round. Committed separately from the Phase 1 Demand
+Forecast redesign commit, since this bug-fix/UX work is unplanned and
+unrelated to Phase 2 (still the next checkpoint).

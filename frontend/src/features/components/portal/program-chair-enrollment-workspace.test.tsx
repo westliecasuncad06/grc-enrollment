@@ -520,6 +520,26 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     ).toBeEnabled()
   })
 
+  it("explains a generated section with no matching forecast as manually planned", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(
+      mockAll({ latestGenerationRun: completedGenerationRun }),
+    )
+    renderWorkspace()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Demand Forecast" }),
+    )
+
+    expect(
+      await screen.findByRole("region", {
+        name: "Why these sections were generated",
+      }),
+    ).toHaveTextContent(
+      "Manually planned by the Program Chair — no demand forecast was available for this subject.",
+    )
+  })
+
   it("guides the chair through one year level at a time", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockAll())
@@ -938,7 +958,7 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     expect(screen.getAllByText(/Dean Reyes/)).not.toHaveLength(0)
   })
 
-  it("restores the submitted state and keeps the generated schedule visible after refresh", async () => {
+  it("restores the submitted state and replaces the editable schedule with a clean 'waiting for Dean' view", async () => {
     fetchMock.mockImplementation(
       mockAll({
         completeSchedules: true,
@@ -967,16 +987,26 @@ describe("ProgramChairEnrollmentWorkspace", () => {
 
     expect(await screen.findByText("Submitted to Dean")).toBeInTheDocument()
     expect(screen.getByText(/Waiting for Dean review/)).toBeInTheDocument()
-    expect(await screen.findByText("IT101")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Add section" })).toBeDisabled()
+    // The editable generated-schedule card is gone entirely while pending
+    // review — not shown-but-disabled.
     expect(
-      screen.getAllByRole("button", { name: "Assign schedule" })[0],
-    ).toBeDisabled()
+      screen.queryByText("Predictive schedule planning"),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("IT101")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Add section" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Assign schedule" }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", {
         name: "Submit for Dean and Executive Director Approval",
       }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /Open Schedule & Faculty Loading/ }),
+    ).toHaveAttribute("href", "/portal/schedule-faculty-loading")
   })
 
   it("shows the Dean and Executive Director approval history to the Program Chair", async () => {
