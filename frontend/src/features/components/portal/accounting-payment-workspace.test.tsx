@@ -51,6 +51,8 @@ const pendingPaymentEnrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_name: null,
+  student_year_level: null,
   student_financial_status: null,
   student_financial_status_label: null,
   academic_term_id: 2,
@@ -72,6 +74,56 @@ const pendingPaymentEnrollment = {
   },
 } as const
 
+const studentAccount = {
+  type: "student_account",
+  student_id: 4,
+  student_name: "Maria Santos",
+  student_number: "2026-0001",
+  year_level: 3,
+  currency: "PHP",
+  total_assessed: "9275.00",
+  total_paid: "1000.00",
+  prior_balance: "3500.00",
+  outstanding_balance: "8275.00",
+  has_promissory_note_on_file: true,
+  entries: [
+    {
+      enrollment_id: 3,
+      academic_term_id: 1,
+      academic_term_label: "2025-2026 · 2nd",
+      assessment_amount: "4500.00",
+      confirmed_payment_amount: "1000.00",
+      account_payment_amount: "0.00",
+      outstanding_balance: "3500.00",
+      promissory_note_on_file: true,
+    },
+    {
+      enrollment_id: 9,
+      academic_term_id: 2,
+      academic_term_label: "2026-2027 · 1st",
+      assessment_amount: "5775.00",
+      confirmed_payment_amount: "0.00",
+      account_payment_amount: "0.00",
+      outstanding_balance: "5775.00",
+      promissory_note_on_file: false,
+    },
+  ],
+} as const
+
+const cashierPaymentCandidate = {
+  type: "cashier_payment_candidate",
+  student_id: 5,
+  student_name: "Juan Dela Cruz",
+  student_number: "2026-0002",
+  year_level: 3,
+  enrollment_id: 10,
+  ticket: {
+    id: 2,
+    ticket_number: "Q002",
+    status: "waiting",
+  },
+} as const
+
 const accountingSession = {
   userId: "6",
   displayName: "Accounting Staff",
@@ -88,10 +140,21 @@ function url(input: RequestInfo | URL) {
 }
 
 function mockRoutes(
-  overrides: { tickets?: readonly unknown[] } = {},
+  overrides: {
+    tickets?: readonly unknown[]
+    candidate?: typeof cashierPaymentCandidate
+  } = {},
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const target = url(input)
+    if (target.includes("/cashier-payment-candidates"))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: overrides.candidate ?? cashierPaymentCandidate,
+          }),
+        ),
+      )
     if (target.includes("/queue-tickets"))
       return Promise.resolve(
         new Response(
@@ -102,6 +165,10 @@ function mockRoutes(
           }),
         ),
       )
+    if (target.includes("/students/4/account"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: studentAccount })),
+      )
     if (target.includes("/enrollments") && init?.method === "POST")
       return Promise.resolve(
         new Response(
@@ -111,6 +178,7 @@ function mockRoutes(
               payment: {
                 external_reference: null,
                 amount: "5775.00",
+                promissory_note_on_file: false,
                 confirmed_at: "2026-07-30T00:00:00Z",
               },
               document: {
@@ -179,6 +247,18 @@ describe("AccountingPaymentWorkspace", () => {
 
     const waitingRow = await screen.findByRole("table", { name: "Waiting" })
     expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
+  })
+
+  it("shows a serving student's cross-term balance and promissory-note state", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    expect(await screen.findByText("Maria Santos")).toBeInTheDocument()
+    expect(screen.getByText("Prior balance")).toBeInTheDocument()
+    expect(screen.getByText("₱3,500.00")).toBeInTheDocument()
+    expect(screen.getByText("Promissory note on file")).toBeInTheDocument()
   })
 
   it("refreshes the waiting list when a new ticket appears without a page reload", async () => {
@@ -275,7 +355,16 @@ describe("AccountingPaymentWorkspace", () => {
 
   it("confirms a payment pre-filled with the assessed total and shows the generated Digital COM", async () => {
     const user = userEvent.setup()
-    fetchMock.mockImplementation(mockRoutes())
+    let paymentRequest: RequestInit | undefined
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        url(input).includes("/enrollments/9/payment") &&
+        init?.method === "POST"
+      ) {
+        paymentRequest = init
+      }
+      return mockRoutes()(input, init)
+    })
     renderWithSession(<AccountingPaymentWorkspace />, {
       session: accountingSession,
     })
@@ -285,13 +374,113 @@ describe("AccountingPaymentWorkspace", () => {
     const dialog = screen.getByRole("alertdialog")
     expect(within(dialog).getByLabelText("Amount")).toHaveValue("5775.00")
     await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "Promissory note on file",
+      }),
+    )
+    await user.click(
       within(dialog).getByRole("button", { name: "Confirm payment" }),
     )
 
     expect((await screen.findAllByText(/COM000009/)).length).toBeGreaterThan(0)
+    await vi.waitFor(() => expect(paymentRequest).toBeDefined())
+    expect(JSON.parse(paymentRequest?.body as string)).toEqual({
+      promissory_note_on_file: true,
+      amount: 5775,
+    })
     expect(
       screen.getByRole("button", { name: "Print / download" }),
     ).toBeInTheDocument()
+  })
+
+  it("disables payment confirmation for the enrollment after it succeeds", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.click(
+      await screen.findByRole("button", { name: "Confirm payment" }),
+    )
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Confirm payment",
+      }),
+    )
+
+    expect(
+      await screen.findByRole("button", { name: "Payment processed" }),
+    ).toBeDisabled()
+  })
+
+  it("finds an eligible student but blocks serving them while another ticket is active", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.type(screen.getByLabelText("Find student number"), "2026-0002")
+    await user.click(screen.getByRole("button", { name: "Find student" }))
+
+    expect(await screen.findByText("Juan Dela Cruz")).toBeInTheDocument()
+    expect(
+      screen.getByText("Skip the current ticket before serving this student."),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Serve selected student" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("records a 500 balance payment without confirming the current enrollment or changing its ticket", async () => {
+    const user = userEvent.setup()
+    let accountRequest: RequestInit | undefined
+    let enrollmentRequest: RequestInit | undefined
+    let queueRequest: RequestInit | undefined
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/students/4/account-payments")) {
+        accountRequest = init
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: { ...studentAccount, outstanding_balance: "7775.00" },
+            }),
+            { status: 201 },
+          ),
+        )
+      }
+      if (target.includes("/students/4/account"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: studentAccount })),
+        )
+      if (target.includes("/enrollments") && init?.method === "POST")
+        enrollmentRequest = init
+      if (target.includes("/queue-tickets/") && init?.method === "PATCH")
+        queueRequest = init
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.click(
+      await screen.findByRole("button", { name: "Record balance payment" }),
+    )
+    const dialog = screen.getByRole("alertdialog")
+    await user.type(
+      within(dialog).getByLabelText("Balance payment amount"),
+      "500",
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Record payment" }),
+    )
+
+    await vi.waitFor(() => expect(accountRequest).toBeDefined())
+    expect(JSON.parse(accountRequest?.body as string)).toEqual({ amount: 500 })
+    expect(enrollmentRequest).toBeUndefined()
+    expect(queueRequest).toBeUndefined()
   })
 
   it("requeues the currently serving ticket to the back of the waiting line", async () => {
@@ -315,7 +504,9 @@ describe("AccountingPaymentWorkspace", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: skipped ? [waitingTicket, requeuedTicket] : [servingTicket, waitingTicket],
+              data: skipped
+                ? [waitingTicket, requeuedTicket]
+                : [servingTicket, waitingTicket],
               links: paginationLinks,
               meta: paginationMeta,
             }),
@@ -390,7 +581,9 @@ describe("AccountingPaymentWorkspace", () => {
         priorityRequest = init
         return Promise.resolve(
           new Response(
-            JSON.stringify({ data: { ...waitingTicket, priority: "priority" } }),
+            JSON.stringify({
+              data: { ...waitingTicket, priority: "priority" },
+            }),
           ),
         )
       }

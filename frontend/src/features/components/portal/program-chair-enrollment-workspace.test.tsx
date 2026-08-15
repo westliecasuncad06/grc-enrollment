@@ -530,6 +530,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     await user.click(
       await screen.findByRole("button", { name: "Demand Forecast" }),
     )
+    await user.click(
+      await screen.findByRole("button", { name: "View explanations" }),
+    )
 
     expect(
       await screen.findByRole("region", {
@@ -847,7 +850,7 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     ).toHaveLength(0)
   })
 
-  it("shows how many schedule assignments remain and disables approval submission", async () => {
+  it("allows approval submission while incomplete schedule details remain", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockAll())
     renderWorkspace()
@@ -868,14 +871,25 @@ describe("ProgramChairEnrollmentWorkspace", () => {
 
     expect(
       await screen.findByText(
-        "2 schedule assignments remaining before approval submission.",
+        "2 schedule assignments remaining will be included for Dean and Executive Director review.",
       ),
     ).toBeInTheDocument()
-    expect(
+    await user.click(
       screen.getByRole("button", {
         name: "Submit for Dean and Executive Director Approval",
       }),
-    ).toBeDisabled()
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            url(input).includes("/section-plan/submit") &&
+            init?.method === "POST",
+        ),
+      ).toBe(true),
+    )
   })
 
   it("allows approval submission when only the professor is unassigned", async () => {

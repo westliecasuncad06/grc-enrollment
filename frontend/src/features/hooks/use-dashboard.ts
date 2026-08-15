@@ -75,10 +75,30 @@ export function useStuckEnrollmentsQuery(
 export const programChairAnalyticsSummaryQueryKey = (
   userId: string | null,
   academicTermId?: number,
-) => ["program-chair-analytics-summary", userId, academicTermId ?? null] as const
+  yearLevel?: number,
+  trendSchoolYearFrom?: string,
+  trendSchoolYearTo?: string,
+  trendSemester?: string,
+  department?: string,
+) =>
+  [
+    "program-chair-analytics-summary",
+    userId,
+    academicTermId ?? null,
+    yearLevel ?? null,
+    trendSchoolYearFrom ?? null,
+    trendSchoolYearTo ?? null,
+    trendSemester ?? null,
+    department ?? null,
+  ] as const
 
 export function useProgramChairAnalyticsSummaryQuery(
   academicTermId?: number,
+  yearLevel?: number,
+  trendSchoolYearFrom?: string,
+  trendSchoolYearTo?: string,
+  trendSemester?: string,
+  department?: string,
   enabled = true,
 ) {
   const { session } = useAuth()
@@ -86,9 +106,22 @@ export function useProgramChairAnalyticsSummaryQuery(
     queryKey: programChairAnalyticsSummaryQueryKey(
       session?.userId ?? null,
       academicTermId,
+      yearLevel,
+      trendSchoolYearFrom,
+      trendSchoolYearTo,
+      trendSemester,
+      department,
     ),
     queryFn: ({ signal }) =>
-      getProgramChairAnalyticsSummary(academicTermId, signal),
+      getProgramChairAnalyticsSummary(
+        academicTermId,
+        yearLevel,
+        trendSchoolYearFrom,
+        trendSchoolYearTo,
+        trendSemester,
+        department,
+        signal,
+      ),
     enabled: enabled && session !== null,
   })
 }

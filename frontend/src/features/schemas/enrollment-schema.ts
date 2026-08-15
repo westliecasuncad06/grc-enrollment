@@ -98,6 +98,8 @@ export const enrollmentSchema = z
     id: z.number().int().positive(),
     student_id: z.number().int().positive(),
     student_number: z.string().min(1),
+    student_name: z.string().min(1).nullable(),
+    student_year_level: z.number().int().positive().nullable(),
     student_financial_status: z.enum(["scholar", "payee"]).nullable(),
     student_financial_status_label: z.string().min(1).nullable(),
     academic_term_id: z.number().int().positive(),
@@ -189,7 +191,8 @@ export const updateEnrollmentInputSchema = z
 export const confirmPaymentInputSchema = z
   .object({
     external_reference: z.string().optional(),
-    amount: z.number().nonnegative().optional(),
+    amount: z.number().min(1000).optional(),
+    promissory_note_on_file: z.boolean().optional(),
   })
   .strict()
 
@@ -197,6 +200,7 @@ const paymentConfirmationPaymentSchema = z
   .object({
     external_reference: z.string().nullable(),
     amount: z.string().nullable(),
+    promissory_note_on_file: z.boolean(),
     confirmed_at: z.iso.datetime().nullable(),
   })
   .strict()

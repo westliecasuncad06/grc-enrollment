@@ -97,14 +97,30 @@ export async function getStuckEnrollments(
 
 export async function getProgramChairAnalyticsSummary(
   academicTermId?: number,
+  yearLevel?: number,
+  trendSchoolYearFrom?: string,
+  trendSchoolYearTo?: string,
+  trendSemester?: string,
+  department?: string,
   signal?: AbortSignal,
 ): Promise<ProgramChairAnalyticsSummary> {
+  const parameters = new URLSearchParams()
+  if (academicTermId) parameters.set("academic_term_id", String(academicTermId))
+  if (yearLevel) parameters.set("year_level", String(yearLevel))
+  if (trendSchoolYearFrom)
+    parameters.set("trend_school_year_from", trendSchoolYearFrom)
+  if (trendSchoolYearTo)
+    parameters.set("trend_school_year_to", trendSchoolYearTo)
+  if (trendSemester) parameters.set("trend_semester", trendSemester)
+  if (department) parameters.set("department", department)
+  const path =
+    parameters.size > 0
+      ? `${PROGRAM_CHAIR_ANALYTICS_SUMMARY_PATH}?${parameters.toString()}`
+      : PROGRAM_CHAIR_ANALYTICS_SUMMARY_PATH
+
   const envelope = parse(
     programChairAnalyticsSummaryEnvelopeSchema,
-    await getAuthenticatedJson(
-      withTerm(PROGRAM_CHAIR_ANALYTICS_SUMMARY_PATH, academicTermId),
-      signal,
-    ),
+    await getAuthenticatedJson(path, signal),
     "program chair analytics summary",
   )
   return envelope.data

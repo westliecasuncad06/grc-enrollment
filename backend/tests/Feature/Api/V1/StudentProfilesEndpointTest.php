@@ -43,7 +43,8 @@ final class StudentProfilesEndpointTest extends TestCase
         $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active]);
         $curriculum = Curriculum::create([
             'program_id' => $program->id, 'name' => 'BSCS Curriculum',
-            'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active,
+            'effective_school_year' => '2026-2027', 'effective_start_year' => 2026,
+            'effective_end_year' => 2030, 'status' => CurriculumStatus::Active,
         ]);
 
         return [$program, $curriculum];
@@ -67,6 +68,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'student_number' => '2027-08-10001',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
+            'entry_year' => 2027,
             'year_level' => 1,
         ]);
 
@@ -92,6 +94,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'student_number' => 'STU-2027-0001',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
+            'entry_year' => 2027,
             'year_level' => 1,
         ]);
 
@@ -111,6 +114,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'student_number' => '2027-08-10002',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
+            'entry_year' => 2027,
             'year_level' => 1,
             'financial_status' => 'scholar',
         ]);
@@ -125,6 +129,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'student_number' => '2027-08-10003',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
+            'entry_year' => 2027,
             'year_level' => 1,
         ]);
         $unset->assertCreated();
@@ -152,13 +157,14 @@ final class StudentProfilesEndpointTest extends TestCase
         $this->assertDatabaseCount('audit_logs', 0);
     }
 
-    public function test_a_curriculum_from_a_different_program_is_rejected(): void
+    public function test_a_curriculum_from_a_different_program_cannot_override_automatic_assignment(): void
     {
-        [$program] = $this->makeProgramAndCurriculum();
+        [$program, $programCurriculum] = $this->makeProgramAndCurriculum();
         $otherProgram = Program::create(['code' => 'BSIT', 'name' => 'BS IT', 'status' => ProgramStatus::Active]);
         $otherCurriculum = Curriculum::create([
             'program_id' => $otherProgram->id, 'name' => 'BSIT Curriculum',
-            'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active,
+            'effective_school_year' => '2026-2027', 'effective_start_year' => 2026,
+            'effective_end_year' => 2030, 'status' => CurriculumStatus::Active,
         ]);
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.mismatch@grc.test');
 
@@ -169,11 +175,51 @@ final class StudentProfilesEndpointTest extends TestCase
             'student_number' => '2027-08-10005',
             'program_id' => $program->id,
             'curriculum_id' => $otherCurriculum->id,
+            'entry_year' => 2027,
             'year_level' => 1,
+        ])->assertCreated()
+            ->assertJsonPath('data.curriculum_id', $programCurriculum->id);
+    }
+
+    public function test_provisioning_resolves_the_curriculum_from_entry_year_instead_of_a_request_override(): void
+    {
+        $program = Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active]);
+        $oldCurriculum = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => 'BSIT 2018 Curriculum',
+            'effective_school_year' => '2018-2019',
+            'effective_start_year' => 2018,
+            'effective_end_year' => 2023,
+            'status' => CurriculumStatus::Archived,
+        ]);
+        $currentCurriculum = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => 'BSIT 2024 Curriculum',
+            'effective_school_year' => '2024-2025',
+            'effective_start_year' => 2024,
+            'effective_end_year' => 2029,
+            'status' => CurriculumStatus::Active,
+        ]);
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.automatic-curriculum@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'name' => 'Fourth Year Student',
+            'email' => 'automatic.curriculum@grc.test',
+            'password' => 'a-temporary-password',
+            'student_number' => '2023-08-10007',
+            'program_id' => $program->id,
+            // Kept in the payload to prove that it has no authority to
+            // override entry-year resolution.
+            'curriculum_id' => $currentCurriculum->id,
+            'entry_year' => 2023,
+            'year_level' => 4,
         ]);
 
-        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->assertDatabaseCount('audit_logs', 0);
+        $response->assertCreated()
+            ->assertJsonPath('data.curriculum_id', $oldCurriculum->id)
+            ->assertJsonPath('data.entry_year', 2023)
+            ->assertJsonPath('data.curriculum_name', 'BSIT 2018 Curriculum')
+            ->assertJsonPath('data.curriculum_effective_school_year', '2018-2019');
     }
 
     public function test_duplicate_email_is_rejected(): void
@@ -189,6 +235,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'student_number' => '2027-08-10006',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
+            'entry_year' => 2027,
             'year_level' => 1,
         ]);
 

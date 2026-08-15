@@ -8,12 +8,12 @@ import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
-import { EnrollmentBlockDetailDialog } from "@/features/components/portal/enrollment-block-detail-dialog"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
 import { EnrollmentReviewCard } from "@/features/components/portal/enrollment-review-card"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
 import { EnrollmentSubjectFilterBar } from "@/features/components/portal/enrollment-subject-filter-bar"
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
+import { StudentAccountBalancePanel } from "@/features/components/portal/student-account-balance-panel"
 import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
 import { StudentSchedulePreferencesPanel } from "@/features/components/portal/student-schedule-preferences-panel"
 import {
@@ -59,9 +59,13 @@ import {
   useEnrollmentBlocksQuery,
   useEnrollmentsQuery,
 } from "@/features/hooks/use-enrollment"
+import { useOwnStudentAccountQuery } from "@/features/hooks/use-student-account"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
-import type { Enrollment, EligibleSubject } from "@/features/schemas/enrollment-schema"
+import type {
+  Enrollment,
+  EligibleSubject,
+} from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
 import { createEnrollment } from "@/features/services/enrollment-service"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
@@ -163,12 +167,16 @@ export function EnrollmentWorkspace() {
   const { selectedTermId } = useTermSelection(termsQuery.data)
   const eligibleSubjectsQuery = useEligibleSubjectsQuery(selectedTermId)
   const enrollmentsQuery = useEnrollmentsQuery()
+  const studentAccountQuery = useOwnStudentAccountQuery({
+    enabled: session?.role === "student",
+  })
   const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId)
   const viewer = scheduleQuery.data?.viewer
   // Only a resolved "closed" reads as closed — an unresolved fetch (still
   // loading, or no viewer block for a non-student session) must not block
   // the workspace by default.
-  const enrollmentWindowClosed = viewer !== undefined && viewer !== null && !viewer.is_open
+  const enrollmentWindowClosed =
+    viewer !== undefined && viewer !== null && !viewer.is_open
   // Unresolved audience (still loading, or no viewer block at all) falls
   // back to the per-subject flow — the safer of the two while the real
   // audience is unknown, since it never assumes a single-block commitment.
@@ -177,7 +185,6 @@ export function EnrollmentWorkspace() {
   const [selectedBlockCode, setSelectedBlockCode] = useState<string | null>(
     null,
   )
-  const [viewingBlock, setViewingBlock] = useState<EnrollmentBlock | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [fieldErrors, setFieldErrors] = useState<string[]>([])
@@ -275,7 +282,6 @@ export function EnrollmentWorkspace() {
   const chooseBlock = (blockCode: string) => {
     setReceipt(false)
     setSelectedBlockCode(blockCode)
-    setViewingBlock(null)
   }
 
   const submit = async () => {
@@ -321,8 +327,7 @@ export function EnrollmentWorkspace() {
       <Alert>
         <AlertDescription>
           Enrollment submitted and pending registrar approval. Its status is
-          shown below — you&apos;ll get a queue number once it&apos;s
-          approved.
+          shown below — you&apos;ll get a queue number once it&apos;s approved.
         </AlertDescription>
       </Alert>
     ) : null
@@ -377,7 +382,7 @@ export function EnrollmentWorkspace() {
         !hasActiveEnrollmentThisTerm &&
         (isRegularAudience ? (
           <div className="grid gap-4">
-            <StudentSchedulePreferencesPanel />
+            <StudentSchedulePreferencesPanel compact />
             <AsyncBoundary
               query={{
                 isPending: termsQuery.isPending || blocksQuery.isFetching,
@@ -397,7 +402,13 @@ export function EnrollmentWorkspace() {
               {() => (
                 <EnrollmentSectionTable
                   blocks={blocks}
-                  onView={(block) => setViewingBlock(block)}
+                  selectedBlockCode={selectedBlockCode}
+                  onChoose={chooseBlock}
+                  onChangeSection={() => setSelectedBlockCode(null)}
+                  disabled={enrollmentWindowClosed}
+                  renderSelectedFooter={(block) =>
+                    submitFooter(block.total_units)
+                  }
                 />
               )}
             </AsyncBoundary>
@@ -420,7 +431,8 @@ export function EnrollmentWorkspace() {
               isEmpty={(all) =>
                 all.filter(
                   (subject) =>
-                    subject.is_eligible && subject.available_sections.length > 0,
+                    subject.is_eligible &&
+                    subject.available_sections.length > 0,
                 ).length === 0
               }
               emptyMessage="No subjects currently have open sections available to select."
@@ -444,7 +456,9 @@ export function EnrollmentWorkspace() {
                             <StaggerItem key={subject.subject_id}>
                               <SectionChoice
                                 subject={subject}
-                                selectedSectionId={selections[subject.subject_id]}
+                                selectedSectionId={
+                                  selections[subject.subject_id]
+                                }
                                 onChoose={(sectionId) =>
                                   chooseSection(subject.subject_id, sectionId)
                                 }
@@ -466,18 +480,10 @@ export function EnrollmentWorkspace() {
 
       <EnrollmentReviewCard
         isRegularAudience={isRegularAudience}
-        selectedBlock={selectedBlock}
         selectedEntries={selectedEntries}
         totalUnits={totalUnits}
         hasActiveEnrollmentThisTerm={hasActiveEnrollmentThisTerm}
         submitFooter={submitFooter}
-      />
-
-      <EnrollmentBlockDetailDialog
-        block={viewingBlock}
-        onOpenChange={(open) => open || setViewingBlock(null)}
-        onChoose={chooseBlock}
-        disabled={enrollmentWindowClosed}
       />
 
       <AlertDialog
@@ -527,6 +533,22 @@ export function EnrollmentWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {session?.role === "student" && (
+        <AsyncBoundary
+          query={{
+            isPending: studentAccountQuery.isPending,
+            isError: studentAccountQuery.isError,
+            error: studentAccountQuery.error,
+            data: studentAccountQuery.data,
+            refetch: () => void studentAccountQuery.refetch(),
+          }}
+          loadingLabel="Loading your account balance…"
+          loadingFallback={<Skeleton className="h-40" />}
+        >
+          {(account) => <StudentAccountBalancePanel account={account} />}
+        </AsyncBoundary>
+      )}
 
       {activeEnrollment && (
         <EnrollmentQueuePaymentPanel enrollment={activeEnrollment} />

@@ -23,16 +23,13 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
  * Per product direction, a Program Chair must be able to submit a schedule
- * for Dean/Executive Director approval even while a section still has no
- * assigned professor — the Chair may not have decided who teaches it yet,
- * and that decision can be made later without blocking the rest of the
- * approval pipeline. Day, time, room, and modality remain required: those
- * are what the Dean/Executive Director actually review.
+ * for Dean/Executive Director approval while assignments are still being
+ * completed. The review queue must show those incomplete details instead of
+ * preventing the Chair from submitting the proposal.
  */
 final class SaveSectionPlanSubmitTest extends TestCase
 {
@@ -123,7 +120,7 @@ final class SaveSectionPlanSubmitTest extends TestCase
         );
     }
 
-    public function test_submitting_still_requires_day_time_room_and_modality(): void
+    public function test_submitting_succeeds_when_a_section_has_incomplete_schedule_details(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -138,13 +135,14 @@ final class SaveSectionPlanSubmitTest extends TestCase
             'modality' => null,
         ]);
 
-        try {
-            app(SaveSectionPlan::class)->submit(
-                $term, $curriculum->id, $chair, new AuditRequestContext('submit-test', null),
-            );
-            self::fail('Expected submitting with no day, time, room, or modality to be rejected.');
-        } catch (ValidationException $exception) {
-            self::assertArrayHasKey('sections', $exception->errors());
-        }
+        $proposal = app(SaveSectionPlan::class)->submit(
+            $term, $curriculum->id, $chair, new AuditRequestContext('submit-test', null),
+        );
+
+        self::assertSame('draft', $proposal->status->value);
+        self::assertSame(
+            SectionPlanStatus::Submitted,
+            AcademicTermSectionPlan::query()->where('curriculum_id', $curriculum->id)->where('year_level', 1)->sole()->status,
+        );
     }
 }

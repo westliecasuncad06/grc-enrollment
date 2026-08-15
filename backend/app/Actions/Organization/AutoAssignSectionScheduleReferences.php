@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
@@ -41,7 +42,25 @@ use Illuminate\Validation\ValidationException;
  */
 final class AutoAssignSectionScheduleReferences
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    /**
+     * The legacy reference data's common missing-time fallback is a
+     * three-hour morning meeting. The later candidates retain that duration
+     * and are only used when the common slot collides within the block.
+     *
+     * @var list<array{0: string, 1: string}>
+     */
+    private const FALLBACK_TIME_SLOTS = [
+        ['07:30:00', '10:30:00'],
+        ['10:30:00', '13:30:00'],
+        ['13:30:00', '16:30:00'],
+        ['16:30:00', '19:30:00'],
+        ['18:00:00', '21:00:00'],
+    ];
+
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly SectionConflictDetector $conflictDetector,
+    ) {}
 
     /**
      * @return Collection<int, Section> the sections this call actually touched
@@ -79,6 +98,20 @@ final class AutoAssignSectionScheduleReferences
                 })
                 ->get();
 
+            $placements = CurriculumSubject::query()
+                ->where('curriculum_id', $curriculumId)
+                ->whereIn('subject_id', $sections->pluck('subject_id')->unique())
+                ->get()
+                ->keyBy('subject_id');
+
+            // Source-recorded meetings are authoritative. Fill them first
+            // so a placement with no recorded time chooses around that
+            // concrete slot instead of claiming the shared default ahead of
+            // it (the former ACC301 failure mode).
+            $sections = $sections
+                ->sortBy(fn (Section $section): int => $this->hasReferenceTime($placements->get($section->subject_id)) ? 0 : 1)
+                ->values();
+
             $touched = new Collection;
             // Kept alongside `$touched` purely for the audit payload: PHPStan
             // cannot infer an element type for a Collection filled by push(),
@@ -86,10 +119,7 @@ final class AutoAssignSectionScheduleReferences
             $touchedSectionIds = [];
 
             foreach ($sections as $section) {
-                $placement = CurriculumSubject::query()
-                    ->where('curriculum_id', $curriculumId)
-                    ->where('subject_id', $section->subject_id)
-                    ->first();
+                $placement = $placements->get($section->subject_id);
 
                 if ($placement === null) {
                     continue;
@@ -103,16 +133,20 @@ final class AutoAssignSectionScheduleReferences
                 if ($section->schedule_days === null && $placement->reference_day !== null) {
                     $changes['schedule_days'] = $placement->reference_day;
                 }
-                // A handful of placements have a real reference_day but no
-                // recorded time at all — genuinely missing source data, not
-                // a parsing gap. Per product direction, default to the
-                // most common real time block already present in the
-                // seeded roster rather than staying unresolved.
-                if ($section->starts_at_time === null && $placement->reference_day !== null) {
-                    $changes['starts_at_time'] = $placement->reference_start_time ?? '07:30:00';
-                }
-                if ($section->ends_at_time === null && $placement->reference_day !== null) {
-                    $changes['ends_at_time'] = $placement->reference_end_time ?? '10:30:00';
+                if ($section->starts_at_time === null && $section->ends_at_time === null
+                    && $placement->reference_day !== null
+                    && ! $this->hasReferenceTime($placement)) {
+                    [$changes['starts_at_time'], $changes['ends_at_time']] = $this->availableFallbackTime(
+                        $section,
+                        $changes['schedule_days'] ?? $section->schedule_days,
+                    );
+                } else {
+                    if ($section->starts_at_time === null && $placement->reference_day !== null) {
+                        $changes['starts_at_time'] = $placement->reference_start_time ?? '07:30:00';
+                    }
+                    if ($section->ends_at_time === null && $placement->reference_day !== null) {
+                        $changes['ends_at_time'] = $placement->reference_end_time ?? '10:30:00';
+                    }
                 }
                 if ($section->modality === null) {
                     if ($placement->reference_modality !== null) {
@@ -219,5 +253,49 @@ final class AutoAssignSectionScheduleReferences
                 'status' => UserStatus::Active,
             ],
         );
+    }
+
+    private function hasReferenceTime(?CurriculumSubject $placement): bool
+    {
+        return $placement?->reference_start_time !== null && $placement->reference_end_time !== null;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function availableFallbackTime(Section $section, ?string $scheduleDays): array
+    {
+        if ($section->section_plan_id === null || $scheduleDays === null) {
+            return self::FALLBACK_TIME_SLOTS[0];
+        }
+
+        $existingSlots = array_values(
+            Section::query()
+                ->where('section_plan_id', $section->section_plan_id)
+                ->where('section_code', $section->section_code)
+                ->whereKeyNot($section->id)
+                ->get(['schedule_days', 'starts_at_time', 'ends_at_time'])
+                ->map(fn (Section $other): array => [
+                    'schedule_days' => $other->schedule_days,
+                    'starts_at_time' => $other->starts_at_time,
+                    'ends_at_time' => $other->ends_at_time,
+                ])
+                ->all(),
+        );
+
+        foreach (self::FALLBACK_TIME_SLOTS as [$startsAt, $endsAt]) {
+            if (! $this->conflictDetector->hasConflict([
+                'schedule_days' => $scheduleDays,
+                'starts_at_time' => $startsAt,
+                'ends_at_time' => $endsAt,
+            ], $existingSlots)) {
+                return [$startsAt, $endsAt];
+            }
+        }
+
+        // No available deterministic fallback exists. Keep the documented
+        // common default; schedule review will still surface the genuine
+        // conflict rather than silently altering a recorded day.
+        return self::FALLBACK_TIME_SLOTS[0];
     }
 }

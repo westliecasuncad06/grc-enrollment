@@ -168,7 +168,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "program-chair-analytics",
         "Analytics",
-        "Descriptive, diagnostic, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
+        "Descriptive, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
         BarChart3,
       ),
     ],
@@ -292,6 +292,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         BarChart3,
       ),
       portalModule(
+        "registrar-analytics",
+        "Analytics",
+        "Review official enrollment trends across all departments or focus on one department.",
+        BarChart3,
+      ),
+      portalModule(
         "compliance-reports",
         "Compliance Reports",
         "See where governed compliance exports will be prepared.",
@@ -371,8 +377,8 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       ),
       portalModule(
         "payment-records",
-        "Payment Records",
-        "Look back at every payment you and Registrar Head have confirmed.",
+        "Transaction History",
+        "Review enrollment payments and balance-payment receipts.",
         ScrollText,
       ),
     ],

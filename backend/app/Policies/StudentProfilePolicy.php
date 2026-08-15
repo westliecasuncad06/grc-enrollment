@@ -24,4 +24,21 @@ final class StudentProfilePolicy
     {
         return $user->role === UserRole::AdmissionStaff;
     }
+
+    /**
+     * This narrower account-summary ability does not widen the ordinary
+     * student-profile read endpoint: a Student may read only their own
+     * account, while Accounting Staff may read account context at the
+     * payment desk.
+     */
+    public function viewAccount(User $user, StudentProfile $profile): bool
+    {
+        return ($user->role === UserRole::Student && $user->id === $profile->user_id)
+            || $user->role === UserRole::AccountingStaff;
+    }
+
+    public function recordAccountPayment(User $user, StudentProfile $profile): bool
+    {
+        return $user->role === UserRole::AccountingStaff;
+    }
 }

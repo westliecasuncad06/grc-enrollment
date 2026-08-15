@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
 
 function reviewTimeRange(startsAt: string | null, endsAt: string | null) {
@@ -63,134 +62,84 @@ interface SelectedEntry {
 }
 
 /**
- * The "Review your …" card shown once a student has staged a selection and
- * has no active enrollment this term. Extracted out of `EnrollmentWorkspace`
- * to keep that file under the plan's line-count Global Constraint — pure
- * presentation, unchanged from the inline version: `submitFooter` and the
- * two `selected*` values (`selectedBlock` for the regular-audience section,
- * `selectedEntries`/`totalUnits` for the per-subject one) are its only
- * inputs.
+ * The review card for irregular students' per-subject selections. A regular
+ * student's full block schedule and submit action stay together in the inline
+ * section card, so this component deliberately renders nothing for them.
  */
 export function EnrollmentReviewCard({
   isRegularAudience,
-  selectedBlock,
   selectedEntries,
   totalUnits,
   hasActiveEnrollmentThisTerm,
   submitFooter,
 }: {
   isRegularAudience: boolean
-  selectedBlock: EnrollmentBlock | undefined
   selectedEntries: readonly SelectedEntry[]
   totalUnits: number
   hasActiveEnrollmentThisTerm: boolean
   submitFooter: (totalUnitsValue: number) => ReactNode
 }): ReactNode {
-  return isRegularAudience
-    ? selectedBlock &&
-        !hasActiveEnrollmentThisTerm && (
-          <Card className="portal-workspace-highlight">
-            <CardHeader>
-              <CardTitle level={2}>Review your section</CardTitle>
-              <CardDescription>
-                Confirm section {selectedBlock.block_code} before submitting —
-                every subject below enrolls together.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <DataTable
-                caption="Selected section subjects"
-                rowKey={(subject) => subject.section_id}
-                rows={selectedBlock.subjects}
-                columns={[
+  if (isRegularAudience) return null
+
+  return (
+    selectedEntries.length > 0 &&
+    !hasActiveEnrollmentThisTerm && (
+      <Card className="portal-workspace-highlight">
+        <CardHeader>
+          <CardTitle level={2}>Review your enrollment</CardTitle>
+          <CardDescription>
+            Confirm your selections before submitting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <DataTable
+            caption="Selected subjects"
+            rowKey={(entry) => entry.subject.subject_id}
+            rows={selectedEntries}
+            columns={[
+              {
+                key: "subject",
+                header: "Subject",
+                render: (entry) =>
+                  `${entry.subject.code} — ${entry.subject.title}`,
+              },
+              {
+                key: "section",
+                header: "Section",
+                render: (entry) => entry.section.section_code,
+              },
+              {
+                key: "units",
+                header: "Units",
+                render: (entry) => entry.subject.units,
+              },
+            ]}
+            renderCard={(entry) => (
+              <ReviewSubjectCard
+                code={entry.subject.code}
+                title={entry.subject.title}
+                units={entry.subject.units}
+                details={[
+                  { label: "Section", value: entry.section.section_code },
                   {
-                    key: "subject",
-                    header: "Subject",
-                    render: (subject) => `${subject.code} — ${subject.title}`,
+                    label: "Schedule",
+                    value: `${entry.section.schedule_days ?? "To be confirmed"} · ${reviewTimeRange(entry.section.starts_at_time, entry.section.ends_at_time)}`,
                   },
                   {
-                    key: "units",
-                    header: "Units",
-                    render: (subject) => subject.units,
-                  },
-                ]}
-                renderCard={(subject) => (
-                  <ReviewSubjectCard
-                    code={subject.code}
-                    title={subject.title}
-                    units={subject.units}
-                    details={[
-                      {
-                        label: "Schedule",
-                        value: `${subject.schedule_days ?? "To be confirmed"} · ${reviewTimeRange(subject.starts_at_time, subject.ends_at_time)}`,
-                      },
-                      { label: "Room", value: subject.room ?? "To be confirmed" },
-                      {
-                        label: "Professor",
-                        value: subject.professor_name ?? "To be confirmed",
-                      },
-                    ]}
-                  />
-                )}
-              />
-              {submitFooter(selectedBlock.total_units)}
-            </CardContent>
-          </Card>
-        )
-    : selectedEntries.length > 0 &&
-        !hasActiveEnrollmentThisTerm && (
-          <Card className="portal-workspace-highlight">
-            <CardHeader>
-              <CardTitle level={2}>Review your enrollment</CardTitle>
-              <CardDescription>
-                Confirm your selections before submitting.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <DataTable
-                caption="Selected subjects"
-                rowKey={(entry) => entry.subject.subject_id}
-                rows={selectedEntries}
-                columns={[
-                  {
-                    key: "subject",
-                    header: "Subject",
-                    render: (entry) =>
-                      `${entry.subject.code} — ${entry.subject.title}`,
+                    label: "Room",
+                    value: entry.section.room ?? "To be confirmed",
                   },
                   {
-                    key: "section",
-                    header: "Section",
-                    render: (entry) => entry.section.section_code,
-                  },
-                  {
-                    key: "units",
-                    header: "Units",
-                    render: (entry) => entry.subject.units,
+                    label: "Seats available",
+                    value: entry.section.remaining_seats,
                   },
                 ]}
-                renderCard={(entry) => (
-                  <ReviewSubjectCard
-                    code={entry.subject.code}
-                    title={entry.subject.title}
-                    units={entry.subject.units}
-                    details={[
-                      { label: "Section", value: entry.section.section_code },
-                      {
-                        label: "Schedule",
-                        value: `${entry.section.schedule_days ?? "To be confirmed"} · ${reviewTimeRange(entry.section.starts_at_time, entry.section.ends_at_time)}`,
-                      },
-                      { label: "Room", value: entry.section.room ?? "To be confirmed" },
-                      {
-                        label: "Seats available",
-                        value: entry.section.remaining_seats,
-                      },
-                    ]}
-                  />
-                )}
               />
-              {submitFooter(totalUnits)}
-            </CardContent>
-          </Card>
-        )
+            )}
+          />
+          {submitFooter(totalUnits)}
+        </CardContent>
+      </Card>
+    )
+  )
 }

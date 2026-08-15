@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read Collection<int, EnrollmentSubject> $enrollmentSubjects
  * @property-read ?QueueTicket $queueTicket
  * @property-read ?Payment $payment
+ * @property-read Collection<int, AccountPayment> $accountPayments
  * @property-read ?Assessment $assessment
  * @property-read Collection<int, EnrollmentDocument> $documents
  */
@@ -147,6 +148,14 @@ final class Enrollment extends Model
     public function payment(): HasOne
     {
         return $this->hasOne(Payment::class);
+    }
+
+    /**
+     * @return HasMany<AccountPayment, $this>
+     */
+    public function accountPayments(): HasMany
+    {
+        return $this->hasMany(AccountPayment::class);
     }
 
     /**

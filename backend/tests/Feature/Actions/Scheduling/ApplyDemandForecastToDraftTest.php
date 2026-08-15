@@ -134,6 +134,62 @@ final class ApplyDemandForecastToDraftTest extends TestCase
         $this->assertSame(SectionModality::FaceToFace, $section->modality);
     }
 
+    public function test_it_honors_curriculum_specific_cohort_recommendations_for_an_old_curriculum(): void
+    {
+        [$term, $currentCurriculum, $firstSubject, , $generationRun, $predictionRun] = $this->createForecastContext();
+        $oldCurriculum = Curriculum::create([
+            'program_id' => $currentCurriculum->program_id,
+            'name' => 'BSIT 2018 Curriculum',
+            'effective_school_year' => '2018-2019',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        CurriculumSubject::create([
+            'curriculum_id' => $oldCurriculum->id,
+            'subject_id' => $firstSubject->id,
+            'year_level' => 4,
+            'semester' => '2nd',
+            'is_required' => true,
+        ]);
+
+        SectionDemandForecast::create([
+            'prediction_run_id' => $predictionRun->id,
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $currentCurriculum->id,
+            'subject_id' => $firstSubject->id,
+            'year_level' => 2,
+            'predicted_demand' => 180,
+            'suggested_section_count' => 5,
+            'confidence_lower' => 170,
+            'confidence_upper' => 185,
+        ]);
+        SectionDemandForecast::create([
+            'prediction_run_id' => $predictionRun->id,
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $oldCurriculum->id,
+            'subject_id' => $firstSubject->id,
+            'year_level' => 4,
+            'predicted_demand' => 72,
+            'suggested_section_count' => 2,
+            'confidence_lower' => 65,
+            'confidence_upper' => 75,
+        ]);
+
+        app(ApplyDemandForecastToDraft::class)->execute($generationRun, $predictionRun);
+
+        $this->assertDatabaseHas('academic_term_section_plans', [
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $currentCurriculum->id,
+            'year_level' => 2,
+            'section_count' => 5,
+        ]);
+        $this->assertDatabaseHas('academic_term_section_plans', [
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $oldCurriculum->id,
+            'year_level' => 4,
+            'section_count' => 2,
+        ]);
+    }
+
     /** @return array{AcademicTerm, Curriculum, Subject, Subject, ScheduleGenerationRun, PredictionRun} */
     /**
      * A retired curriculum version can legitimately share the same subject

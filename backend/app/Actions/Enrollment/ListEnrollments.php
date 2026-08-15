@@ -27,7 +27,7 @@ final readonly class ListEnrollments
 
         return Enrollment::query()
             ->visibleTo($actor)
-            ->with(['student', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items'])
+            ->with(['student.user', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items'])
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
             ->orderByDesc('submitted_at')

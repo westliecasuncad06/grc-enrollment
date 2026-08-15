@@ -15,8 +15,8 @@ final class SectionDemandPredictionClientTest extends TestCase
         Http::fake([
             'http://127.0.0.1:8100/internal/v1/section-demand/predict' => Http::response([
                 'data' => [
-                    'model_version' => 'section-demand-rf-v1',
-                    'feature_schema_version' => 'v1',
+                    'model_version' => 'section-demand-rf-v2',
+                    'feature_schema_version' => 'v2',
                     'strategy' => 'historical_baseline',
                     'forecasts' => [[
                         'key' => 'forecast-row-1',
@@ -54,7 +54,7 @@ final class SectionDemandPredictionClientTest extends TestCase
         Http::assertSent(function (Request $request): bool {
             return $request->url() === 'http://127.0.0.1:8100/internal/v1/section-demand/predict'
                 && $request->method() === 'POST'
-                && $request['data']['feature_schema_version'] === 'v1'
+                && $request['data']['feature_schema_version'] === 'v2'
                 && ! isset($request['data']['student_id']);
         });
     }

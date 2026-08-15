@@ -36,6 +36,11 @@ final class ScheduleDayParserTest extends TestCase
         self::assertSame([6], $this->parser->parse('Sat'));
     }
 
+    public function test_uppercase_source_day_tokens_parse_case_insensitively(): void
+    {
+        self::assertSame([6], $this->parser->parse('SAT'));
+    }
+
     public function test_sun_parses_to_sunday(): void
     {
         self::assertSame([7], $this->parser->parse('Sun'));

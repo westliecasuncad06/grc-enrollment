@@ -2,9 +2,11 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domain\Identity\UserRole;
 use App\Models\AssessmentItem;
 use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,12 +17,12 @@ final class EnrollmentResource extends JsonResource
 {
     /**
      * Exact key set. No attribute is passed through implicitly.
-     * `student_number` (never email or name) is exposed so the Registrar
-     * Head and Accounting Staff can identify whose enrollment they are
-     * processing — the same non-sensitive identifier `StudentProfileResource`
-     * already exposes. `student_financial_status` is the same
-     * pass-through: informational only (`App\Domain\Identity\FinancialStatus`),
-     * never read by fee computation.
+     * `student_number` is exposed to every permitted enrollment viewer.
+     * `student_name` and `student_year_level` are a narrower Registrar-only
+     * exception needed to review an enrollment: Registrar Staff and Registrar
+     * Head receive them, while a Student and Accounting Staff receive null.
+     * `student_financial_status` is informational only
+     * (`App\Domain\Identity\FinancialStatus`), never read by fee computation.
      *
      * `assessment` is nullable: every enrollment created before this slice,
      * and any created directly (not through `registrar_approve`) — as most
@@ -35,6 +37,8 @@ final class EnrollmentResource extends JsonResource
      *     id: int,
      *     student_id: int,
      *     student_number: string,
+     *     student_name: ?string,
+     *     student_year_level: ?int,
      *     student_financial_status: ?string,
      *     student_financial_status_label: ?string,
      *     academic_term_id: int,
@@ -60,14 +64,22 @@ final class EnrollmentResource extends JsonResource
     {
         $queueTicket = $this->resource->queueTicket;
         $assessment = $this->resource->assessment;
+        $actor = $request->user();
+        $mayViewStudentContext = $actor instanceof User && in_array($actor->role, [
+            UserRole::RegistrarHead,
+            UserRole::RegistrarStaff,
+        ], true);
+        $student = $this->resource->student;
 
         return [
             'type' => 'enrollment',
             'id' => $this->resource->id,
             'student_id' => $this->resource->student_id,
-            'student_number' => $this->resource->student->student_number,
-            'student_financial_status' => $this->resource->student->financial_status?->value,
-            'student_financial_status_label' => $this->resource->student->financial_status?->label(),
+            'student_number' => $student->student_number,
+            'student_name' => $mayViewStudentContext ? $student->user->name : null,
+            'student_year_level' => $mayViewStudentContext ? $student->year_level : null,
+            'student_financial_status' => $student->financial_status?->value,
+            'student_financial_status_label' => $student->financial_status?->label(),
             'academic_term_id' => $this->resource->academic_term_id,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),

@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useState } from "react"
 
 import { ApplyPreferencesSwitch } from "@/features/components/portal/apply-preferences-switch"
@@ -7,60 +8,162 @@ import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/features/components/ui/card"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
-/** Every distinct value across a block's subjects, joined for one table cell. */
-function summarize(
-  block: EnrollmentBlock,
-  pick: (subject: EnrollmentBlock["subjects"][number]) => string | null,
-): string {
-  const values = [
-    ...new Set(
-      block.subjects
-        .map(pick)
-        .filter((value): value is string => value !== null),
-    ),
-  ]
-  return values.length > 0 ? values.join(", ") : "Not yet scheduled"
+function displayTimeRange(startsAt: string | null, endsAt: string | null) {
+  return startsAt && endsAt
+    ? `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
+    : "To be confirmed"
 }
 
-function PreferenceMatchCell({ block }: { block: EnrollmentBlock }) {
-  if (block.preference_score === null) return <span>—</span>
+function scheduleColumns(): DataTableColumn<
+  EnrollmentBlock["subjects"][number]
+>[] {
+  return [
+    { key: "code", header: "Subject code", render: (subject) => subject.code },
+    {
+      key: "description",
+      header: "Description",
+      render: (subject) => subject.title,
+    },
+    { key: "units", header: "Units", render: (subject) => subject.units },
+    {
+      key: "section-id",
+      header: "Section ID",
+      render: (subject) => subject.section_id,
+    },
+    {
+      key: "day",
+      header: "Day",
+      render: (subject) => subject.schedule_days ?? "To be confirmed",
+    },
+    {
+      key: "time",
+      header: "Time",
+      render: (subject) =>
+        displayTimeRange(subject.starts_at_time, subject.ends_at_time),
+    },
+    {
+      key: "room",
+      header: "Room",
+      render: (subject) => subject.room ?? "To be confirmed",
+    },
+  ]
+}
 
+function SectionSchedule({ block }: { block: EnrollmentBlock }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Badge variant="secondary">{block.preference_score}</Badge>
-      {block.preference_reasons[0] && (
-        <span className="text-sm text-muted-foreground">
-          {block.preference_reasons[0]}
-        </span>
-      )}
-    </div>
+    <DataTable
+      caption={`${block.block_code} schedule`}
+      rowKey={(subject) => subject.section_id}
+      rows={block.subjects}
+      columns={scheduleColumns()}
+    />
+  )
+}
+
+function seatLabel(block: EnrollmentBlock) {
+  return block.capacity === null
+    ? `${block.seats_remaining} seat${block.seats_remaining === 1 ? "" : "s"} available`
+    : `${block.capacity} seats`
+}
+
+function SectionCard({
+  block,
+  selected,
+  onChoose,
+  onChangeSection,
+  disabled,
+  renderSelectedFooter,
+}: {
+  block: EnrollmentBlock
+  selected: boolean
+  onChoose: (blockCode: string) => void
+  onChangeSection: () => void
+  disabled: boolean
+  renderSelectedFooter: (block: EnrollmentBlock) => ReactNode
+}) {
+  return (
+    <Card role="article" aria-label={`${block.block_code} section`}>
+      <CardHeader className="gap-3 border-b">
+        <div className="flex flex-wrap items-center gap-3">
+          <CardTitle level={2}>{block.block_code}</CardTitle>
+          <Badge variant="secondary">{seatLabel(block)}</Badge>
+        </div>
+        <CardDescription>
+          Year {block.year_level} block section · {block.subjects.length}{" "}
+          subject
+          {block.subjects.length === 1 ? "" : "s"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 pt-4">
+        <SectionSchedule block={block} />
+
+        {selected ? (
+          <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">
+            <Button type="button" variant="outline" onClick={onChangeSection}>
+              Change section
+            </Button>
+            {renderSelectedFooter(block)}
+          </div>
+        ) : block.is_selectable ? (
+          <div className="flex justify-end border-t pt-4">
+            <Button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChoose(block.block_code)}
+            >
+              Choose {block.block_code}
+            </Button>
+          </div>
+        ) : (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {block.reasons[0]?.message ??
+                "This section is not currently available for selection."}
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
 /**
- * The table of sections a regular student may enroll into — replaces the
- * former vertical list of radio `Card`s (`EnrollmentBlockChoice`, deleted).
- * Selection itself now happens in `EnrollmentBlockDetailDialog`, opened by
- * a row's "View" action, so this component only lists and ranks.
- *
- * "Apply my preferences" is a client-side sort over the already-fetched
- * block pool — it never removes a row. Preferences rank sections, they
- * never gate them (Task 2 already enforces that at the data layer; this is
- * the same invariant held at the UI layer).
+ * Regular-student block selection. Every available block now exposes its full
+ * subject schedule inline, so choosing a section never requires a picker
+ * modal. Preferences can still rank the visible pool but never remove a
+ * section from it.
  */
 export function EnrollmentSectionTable({
   blocks,
-  onView,
+  selectedBlockCode,
+  onChoose,
+  onChangeSection,
+  disabled = false,
+  renderSelectedFooter,
 }: {
   blocks: readonly EnrollmentBlock[]
-  onView: (block: EnrollmentBlock) => void
+  selectedBlockCode: string | null
+  onChoose: (blockCode: string) => void
+  onChangeSection: () => void
+  disabled?: boolean
+  renderSelectedFooter: (block: EnrollmentBlock) => ReactNode
 }) {
   const [applyPreferences, setApplyPreferences] = useState(false)
-
+  const selectedBlock = blocks.find(
+    (block) => block.block_code === selectedBlockCode,
+  )
   const rows = applyPreferences
     ? [...blocks].sort(
         (a, b) =>
@@ -69,75 +172,37 @@ export function EnrollmentSectionTable({
       )
     : blocks
 
-  const columns: DataTableColumn<EnrollmentBlock>[] = [
-    {
-      key: "section",
-      header: "Section",
-      render: (block) => block.block_code,
-    },
-    {
-      key: "subjects",
-      header: "Subjects",
-      render: (block) =>
-        block.subjects.map((subject) => subject.code).join(", "),
-    },
-    { key: "units", header: "Units", render: (block) => block.total_units },
-    {
-      key: "days",
-      header: "Days",
-      render: (block) => summarize(block, (subject) => subject.schedule_days),
-    },
-    {
-      key: "time",
-      header: "Time",
-      render: (block) =>
-        summarize(block, (subject) =>
-          subject.starts_at_time && subject.ends_at_time
-            ? `${subject.starts_at_time.slice(0, 5)}–${subject.ends_at_time.slice(0, 5)}`
-            : null,
-        ),
-    },
-    {
-      key: "seats",
-      header: "Seats",
-      render: (block) =>
-        `${block.seats_remaining} seat${block.seats_remaining === 1 ? "" : "s"} left`,
-    },
-    {
-      key: "preference",
-      header: "Preference match",
-      render: (block) => <PreferenceMatchCell block={block} />,
-    },
-    {
-      key: "action",
-      header: "Action",
-      render: (block) => (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={`View ${block.block_code}`}
-          onClick={() => onView(block)}
-        >
-          View
-        </Button>
-      ),
-    },
-  ]
+  if (selectedBlock) {
+    return (
+      <SectionCard
+        block={selectedBlock}
+        selected
+        onChoose={onChoose}
+        onChangeSection={onChangeSection}
+        disabled={disabled}
+        renderSelectedFooter={renderSelectedFooter}
+      />
+    )
+  }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-4">
       <ApplyPreferencesSwitch
         id="enrollment-section-table-apply-preferences"
         checked={applyPreferences}
         onCheckedChange={setApplyPreferences}
       />
-      <DataTable
-        caption="Available sections"
-        rowKey={(block) => block.block_code}
-        rows={rows}
-        columns={columns}
-      />
+      {rows.map((block) => (
+        <SectionCard
+          key={block.block_code}
+          block={block}
+          selected={false}
+          onChoose={onChoose}
+          onChangeSection={onChangeSection}
+          disabled={disabled}
+          renderSelectedFooter={renderSelectedFooter}
+        />
+      ))}
     </div>
   )
 }

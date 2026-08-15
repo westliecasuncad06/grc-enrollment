@@ -39,6 +39,7 @@ final class ProvisionStudentAuditTest extends TestCase
                 'student_number' => '2027-08-30001',
                 'program_id' => $program->id,
                 'curriculum_id' => $curriculum->id,
+                'entry_year' => 2027,
                 'year_level' => 2,
             ]);
 
@@ -58,6 +59,7 @@ final class ProvisionStudentAuditTest extends TestCase
             'role' => 'student',
             'program_id' => $program->id,
             'curriculum_id' => $curriculum->id,
+            'entry_year' => 2027,
             'year_level' => 2,
             // The request omitted it, so ProvisionStudent defaults it —
             // every provisioned student has an explicit category.
@@ -144,6 +146,7 @@ final class ProvisionStudentAuditTest extends TestCase
                     'student_number' => '2027-08-30002',
                     'program_id' => $program->id,
                     'curriculum_id' => $curriculum->id,
+                    'entry_year' => 2027,
                     'year_level' => 3,
                 ]);
         } catch (RuntimeException $exception) {
@@ -190,6 +193,8 @@ final class ProvisionStudentAuditTest extends TestCase
             'program_id' => $program->id,
             'name' => 'BSCS Curriculum',
             'effective_school_year' => '2026-2027',
+            'effective_start_year' => 2026,
+            'effective_end_year' => 2030,
             'status' => CurriculumStatus::Active,
         ]);
 

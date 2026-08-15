@@ -52,6 +52,9 @@ const forecastSchema = z
     subject_id: z.number().int().positive(),
     subject_code: z.string().min(1),
     subject_title: z.string().min(1),
+    curriculum_id: z.number().int().positive().nullable().optional(),
+    curriculum_name: z.string().min(1).nullable().optional(),
+    curriculum_effective_school_year: z.string().min(1).nullable().optional(),
     year_level: z.number().int().positive().nullable(),
     predicted_demand: z.number().nonnegative(),
     suggested_section_count: z.number().int().nonnegative(),
@@ -91,7 +94,7 @@ export const scheduleGenerationRunSchema = z
     created_at: z.string().nullable(),
     model: z
       .object({
-        strategy: z.enum(["random_forest", "historical_baseline"]).nullable(),
+        strategy: z.string().min(1).nullable(),
         model_version: z.string().nullable(),
         training_observation_count: z.number().int().nonnegative(),
         mae: z.number().nonnegative().nullable(),
@@ -106,6 +109,9 @@ export const scheduleGenerationRunSchema = z
           .object({
             program_code: z.string().min(1),
             program_name: z.string().min(1),
+            curriculum_id: z.number().int().positive().optional(),
+            curriculum_name: z.string().min(1).optional(),
+            curriculum_effective_school_year: z.string().min(1).optional(),
             year_level: z.number().int().positive(),
             recommended_block_sections: z.number().int().nonnegative(),
             students_per_block: z.number().int().positive(),

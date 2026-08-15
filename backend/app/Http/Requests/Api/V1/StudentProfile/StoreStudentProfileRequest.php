@@ -4,8 +4,6 @@ namespace App\Http\Requests\Api\V1\StudentProfile;
 
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\FinancialStatus;
-use App\Models\Curriculum;
-use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -37,33 +35,16 @@ final class StoreStudentProfileRequest extends FormRequest
             // enforcement boundary for anyone calling the API directly.
             'student_number' => ['required', 'string', 'max:255', 'regex:/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/', 'unique:student_profiles,student_number'],
             'program_id' => ['required', 'integer', 'exists:programs,id'],
-            'curriculum_id' => ['required', 'integer', 'exists:curricula,id'],
+            // Kept nullable only for backwards-compatible clients. It is
+            // deliberately ignored: curriculum assignment is automatic from
+            // program + entry year and cannot be overridden in this request.
+            'curriculum_id' => ['sometimes', 'nullable', 'integer', 'exists:curricula,id'],
+            'entry_year' => ['required', 'integer', 'digits:4'],
             // `EnrollmentAudience::fromYearLevel()` only knows 1–4, and a
             // year level outside that range has no enrollment window at all.
             'year_level' => ['required', 'integer', 'between:1,4'],
             'enrollment_category' => ['sometimes', 'nullable', Rule::enum(EnrollmentCategory::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
         ];
-    }
-
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator): void {
-            $programId = $this->input('program_id');
-            $curriculumId = $this->input('curriculum_id');
-
-            if (! is_numeric($programId) || ! is_numeric($curriculumId)) {
-                return;
-            }
-
-            $curriculum = Curriculum::query()->find($curriculumId);
-
-            if ($curriculum instanceof Curriculum && $curriculum->program_id !== (int) $programId) {
-                $validator->errors()->add(
-                    'curriculum_id',
-                    'The selected curriculum does not belong to the selected program.',
-                );
-            }
-        });
     }
 }

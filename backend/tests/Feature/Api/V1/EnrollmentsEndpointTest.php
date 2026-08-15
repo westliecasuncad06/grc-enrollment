@@ -282,7 +282,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertCreated();
         self::assertSame(
             [
-                'type', 'id', 'student_id', 'student_number',
+                'type', 'id', 'student_id', 'student_number', 'student_name', 'student_year_level',
                 'student_financial_status', 'student_financial_status_label', 'academic_term_id',
                 'status', 'status_label', 'total_units', 'requires_overload_approval',
                 'submitted_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
@@ -290,6 +290,8 @@ final class EnrollmentsEndpointTest extends TestCase
             ],
             array_keys($response->json('data')),
         );
+        $response->assertJsonPath('data.student_name', null);
+        $response->assertJsonPath('data.student_year_level', null);
         self::assertSame(
             ['section_id', 'subject_code', 'subject_title', 'status', 'status_label'],
             array_keys($response->json('data.subjects.0')),
@@ -318,6 +320,27 @@ final class EnrollmentsEndpointTest extends TestCase
         foreach ($sections as $section) {
             self::assertSame(1, $section->refresh()->enrolled_count);
         }
+    }
+
+    public function test_a_server_resolved_block_submission_is_not_rejected_for_a_schedule_conflict_between_its_own_subjects(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        [, $sections] = $this->makeBlock($term, $curriculum, 'IT101', ['CS101', 'GE101']);
+        $sections[1]->update([
+            'schedule_days' => 'MWF',
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '09:00:00',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'IT101',
+        ]);
+
+        $response->assertCreated()->assertJsonCount(2, 'data.subjects');
     }
 
     public function test_sections_and_block_code_together_are_rejected(): void
@@ -841,6 +864,21 @@ final class EnrollmentsEndpointTest extends TestCase
         $filtered->assertOk()->assertJsonCount(2, 'data');
     }
 
+    public function test_registrar_staff_receives_the_student_name_and_year_for_an_enrollment_review(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makeEnrollment($student, $term);
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.context@grc.test');
+
+        $response = $this->withToken($staffToken)->getJson('/api/v1/enrollments');
+
+        $response->assertOk();
+        $response->assertJsonPath('data.0.student_name', 'Test Student');
+        $response->assertJsonPath('data.0.student_year_level', 1);
+    }
+
     public function test_accounting_staff_sees_only_pending_payment_enrollments_regardless_of_status_filter(): void
     {
         $term = $this->makeTerm();
@@ -857,6 +895,8 @@ final class EnrollmentsEndpointTest extends TestCase
         $response = $this->withToken($accountingToken)->getJson('/api/v1/enrollments');
         $response->assertOk()->assertJsonCount(1, 'data');
         $response->assertJsonPath('data.0.student_number', $paidStudent->student_number);
+        $response->assertJsonPath('data.0.student_name', null);
+        $response->assertJsonPath('data.0.student_year_level', null);
 
         $stillFiltered = $this->withToken($accountingToken)
             ->getJson('/api/v1/enrollments?status=pending_registrar_approval');

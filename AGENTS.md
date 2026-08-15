@@ -10,6 +10,7 @@
 - Keep payment confirmation, withdrawal side effects, queue tickets, seat reservations, and COM generation idempotent.
 - Never commit secrets, `.env` files, tokens, production credentials, personal student data, or production datasets.
 - Update `PROGRESS.md` at session start, before a substantial task or long command, after every meaningful milestone or failure, and before ending.
+- Work directly on the `main` branch unless the user explicitly directs otherwise. When the user requests a saving point, create an intentional scoped commit and push it to GitHub (`origin/main`); do not use local-only worktrees as the saving point.
 - Run the narrowest relevant checks after each change and the full applicable suite before marking a phase complete. Never record a check as passed unless it actually ran successfully.
 - Do not modify unrelated files or dependencies without recording the reason in `PROGRESS.md`.
-- Do not commit or push unless the user explicitly requests it.
+- Do not commit or push unless the user explicitly requests a GitHub saving point.

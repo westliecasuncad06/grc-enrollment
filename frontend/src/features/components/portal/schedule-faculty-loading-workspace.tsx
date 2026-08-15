@@ -61,6 +61,7 @@ import {
   toSectionReplacement,
 } from "@/features/services/scheduling-service"
 import { updateFacultyWorkforceProfile } from "@/features/services/faculty-directory-service"
+import { isApiClientError } from "@/features/services/api-client"
 import type { Section } from "@/features/schemas/reference-data-schema"
 import type { FacultyMember } from "@/features/schemas/scheduling-schema"
 
@@ -87,6 +88,18 @@ function matchesProfessorSearch(
     !normalizedSearch ||
     (name ?? "").toLocaleLowerCase().includes(normalizedSearch)
   )
+}
+
+function sectionSaveErrorMessages(error: unknown): readonly string[] {
+  if (isApiClientError(error)) {
+    const fieldErrors = Object.values(error.fieldErrors ?? {}).flat()
+    if (fieldErrors.length > 0) return fieldErrors
+    return [error.message]
+  }
+
+  if (error instanceof Error) return [error.message]
+
+  return ["The section assignment could not be saved. Try again."]
 }
 
 export function ScheduleFacultyLoadingWorkspace() {
@@ -1032,10 +1045,16 @@ export function ScheduleFacultyLoadingWorkspace() {
               />
             </Field>
           </div>
-          {saveSection.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {saveSection.error.message}
-            </p>
+          {saveSection.error !== null && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {sectionSaveErrorMessages(saveSection.error).map(
+                  (message, index) => (
+                    <p key={`${message}-${index}`}>{message}</p>
+                  ),
+                )}
+              </AlertDescription>
+            </Alert>
           )}
           <DialogFooter>
             <Button
@@ -1047,7 +1066,7 @@ export function ScheduleFacultyLoadingWorkspace() {
             </Button>
             <Button
               type="button"
-              onClick={() => void saveSection.mutateAsync()}
+              onClick={() => saveSection.mutate()}
               disabled={saveSection.isPending}
             >
               {saveSection.isPending ? "Saving…" : "Save changes"}

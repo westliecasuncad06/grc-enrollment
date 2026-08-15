@@ -35,15 +35,21 @@ final class ApplyDemandForecastToDraft
         $term = $generationRun->academicTerm;
 
         return DB::transaction(function () use ($generationRun, $predictionRun, $term): array {
-            $forecasts = SectionDemandForecast::query()
+            $forecastRows = SectionDemandForecast::query()
                 ->where('prediction_run_id', $predictionRun->id)
                 ->where('academic_term_id', $term->id)
-                ->get()
-                ->keyBy('subject_id');
+                ->get();
 
-            if ($forecasts->isEmpty()) {
+            if ($forecastRows->isEmpty()) {
                 return [];
             }
+
+            $forecasts = $forecastRows
+                ->filter(fn (SectionDemandForecast $forecast): bool => $forecast->curriculum_id !== null && $forecast->year_level !== null)
+                ->keyBy(fn (SectionDemandForecast $forecast): string => $forecast->curriculum_id.':'.$forecast->subject_id.':'.$forecast->year_level);
+            $legacyForecasts = $forecastRows
+                ->filter(fn (SectionDemandForecast $forecast): bool => $forecast->curriculum_id === null || $forecast->year_level === null)
+                ->keyBy('subject_id');
 
             $placements = CurriculumSubject::query()
                 ->with('curriculum.program')
@@ -51,7 +57,6 @@ final class ApplyDemandForecastToDraft
                     $query->where('semester', $term->semester)
                         ->orWhere('semester', 'like', '%'.$term->semester.'%');
                 })
-                ->whereHas('curriculum', fn ($curricula) => $curricula->where('status', CurriculumStatus::Active))
                 ->whereHas('curriculum.program', fn ($programs) => $programs
                     ->where('college', $generationRun->college)
                     // The Teacher Certificate Program is a one-year intake,
@@ -59,7 +64,12 @@ final class ApplyDemandForecastToDraft
                     // documented 1st-4th year scope.
                     ->where('code', '!=', 'TCP'))
                 ->get()
-                ->filter(fn (CurriculumSubject $placement): bool => $forecasts->has($placement->subject_id))
+                ->filter(function (CurriculumSubject $placement) use ($forecasts, $legacyForecasts): bool {
+                    $cohortKey = $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->year_level;
+
+                    return $forecasts->has($cohortKey)
+                        || ($placement->curriculum->status === CurriculumStatus::Active && $legacyForecasts->has($placement->subject_id));
+                })
                 ->groupBy(fn (CurriculumSubject $placement): string => $placement->curriculum_id.':'.$placement->year_level);
 
             $warnings = [];
@@ -67,7 +77,13 @@ final class ApplyDemandForecastToDraft
                 /** @var CurriculumSubject $firstPlacement */
                 $firstPlacement = $group->first();
                 $recommendedSectionCount = (int) $group
-                    ->map(fn (CurriculumSubject $placement): int => (int) $forecasts->get($placement->subject_id)->suggested_section_count)
+                    ->map(function (CurriculumSubject $placement) use ($forecasts, $legacyForecasts): int {
+                        $cohortKey = $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->year_level;
+                        /** @var SectionDemandForecast $forecast */
+                        $forecast = $forecasts->get($cohortKey) ?? $legacyForecasts->get($placement->subject_id);
+
+                        return (int) $forecast->suggested_section_count;
+                    })
                     ->max();
 
                 $plan = AcademicTermSectionPlan::query()

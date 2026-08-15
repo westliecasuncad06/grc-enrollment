@@ -6,6 +6,7 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Organization\CapacitySource;
+use App\Domain\Scheduling\CanonicalScheduleDays;
 use App\Models\Section;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -13,7 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 final class CreateSection
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly CanonicalScheduleDays $canonicalScheduleDays,
+    ) {}
 
     /**
      * @param  array{
@@ -39,7 +43,7 @@ final class CreateSection
                 'subject_id' => $validatedData['subject_id'],
                 'section_code' => $validatedData['section_code'],
                 'professor_id' => $validatedData['professor_id'],
-                'schedule_days' => $validatedData['schedule_days'],
+                'schedule_days' => $this->canonicalScheduleDays->normalize($validatedData['schedule_days']),
                 'starts_at_time' => $validatedData['starts_at_time'],
                 'ends_at_time' => $validatedData['ends_at_time'],
                 'room' => $validatedData['room'],

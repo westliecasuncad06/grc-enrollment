@@ -31,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Curriculum $curriculum
  * @property-read Collection<int, Enrollment> $enrollments
  * @property-read Collection<int, AcademicGrade> $grades
+ * @property-read Collection<int, AccountPayment> $accountPayments
  */
 final class StudentProfile extends Model
 {
@@ -102,5 +103,13 @@ final class StudentProfile extends Model
     public function grades(): HasMany
     {
         return $this->hasMany(AcademicGrade::class, 'student_id');
+    }
+
+    /**
+     * @return HasMany<AccountPayment, $this>
+     */
+    public function accountPayments(): HasMany
+    {
+        return $this->hasMany(AccountPayment::class, 'student_id');
     }
 }

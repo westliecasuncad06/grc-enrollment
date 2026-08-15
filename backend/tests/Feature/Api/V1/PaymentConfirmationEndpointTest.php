@@ -192,20 +192,24 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
         $first = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
             'external_reference' => 'OR-000123',
+            'promissory_note_on_file' => true,
         ]);
         $first->assertCreated();
 
         $second = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
             'external_reference' => 'OR-999999',
+            'promissory_note_on_file' => false,
         ]);
 
         $second->assertOk();
         $second->assertJsonPath('data.payment.external_reference', 'OR-000123');
+        $second->assertJsonPath('data.payment.promissory_note_on_file', true);
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('enrollment_documents', 1);
         $this->assertDatabaseCount('audit_logs', 1);
         $this->assertDatabaseCount('notifications', 1);
         self::assertSame(Payment::query()->sole()->external_reference, 'OR-000123');
+        self::assertTrue(Payment::query()->sole()->promissory_note_on_file);
         self::assertSame(EnrollmentDocument::query()->count(), 1);
     }
 
@@ -245,6 +249,55 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
         $response->assertCreated();
         self::assertSame('2000.00', Payment::query()->sole()->amount);
+    }
+
+    public function test_an_explicit_enrollment_payment_below_1000_is_rejected_without_side_effects(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.belowminimum@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'amount' => 999.99,
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath(
+            'error.errors.amount.0',
+            'The amount field must be at least 1000.',
+        );
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('enrollment_documents', 0);
+        self::assertSame(EnrollmentStatus::PendingPayment, $enrollment->refresh()->status);
+    }
+
+    public function test_a_1000_enrollment_payment_with_a_promissory_note_finalizes_and_generates_com(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.promissory@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'amount' => 1000,
+            'promissory_note_on_file' => true,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.enrollment.status', 'enrolled')
+            ->assertJsonPath('data.payment.amount', '1000.00')
+            ->assertJsonPath('data.payment.promissory_note_on_file', true)
+            ->assertJsonPath('data.document.document_type', 'com');
+        $this->assertDatabaseHas('payments', [
+            'enrollment_id' => $enrollment->id,
+            'amount' => '1000.00',
+            'promissory_note_on_file' => true,
+        ]);
+        $this->assertDatabaseCount('enrollment_documents', 1);
     }
 
     public function test_an_omitted_amount_with_no_assessment_stays_null(): void

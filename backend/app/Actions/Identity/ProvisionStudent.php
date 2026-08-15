@@ -5,15 +5,18 @@ namespace App\Actions\Identity;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Curriculum\CurriculumVersion;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Models\Curriculum;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Creates the User account and StudentProfile together (PRD §3.2: "Create
@@ -26,7 +29,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, curriculum_id: int, year_level: int, enrollment_category?: ?string, financial_status?: ?string}  $data
+     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, entry_year: int, year_level: int, enrollment_category?: ?string, financial_status?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -34,6 +37,19 @@ final class ProvisionStudent
         AuditRequestContext $context,
     ): StudentProfile {
         return DB::transaction(function () use ($data, $actor, $context): StudentProfile {
+            $curriculum = CurriculumVersion::resolveForEntryYear(
+                Curriculum::query()
+                    ->where('program_id', $data['program_id'])
+                    ->orderByDesc('effective_start_year')
+                    ->get(),
+                $data['entry_year'],
+            );
+            if ($curriculum === null) {
+                throw ValidationException::withMessages([
+                    'entry_year' => 'No curriculum version is configured for this program and entry year.',
+                ]);
+            }
+
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -46,7 +62,8 @@ final class ProvisionStudent
                 'user_id' => $user->id,
                 'student_number' => $data['student_number'],
                 'program_id' => $data['program_id'],
-                'curriculum_id' => $data['curriculum_id'],
+                'curriculum_id' => $curriculum->id,
+                'entry_year' => $data['entry_year'],
                 'year_level' => $data['year_level'],
                 // Defaults to regular so a provisioned student always has an
                 // explicit category; only an irregular one takes the
@@ -70,6 +87,7 @@ final class ProvisionStudent
                     'role' => $user->role->value,
                     'program_id' => $profile->program_id,
                     'curriculum_id' => $profile->curriculum_id,
+                    'entry_year' => $profile->entry_year,
                     'year_level' => $profile->year_level,
                     'enrollment_category' => $profile->enrollment_category,
                     'admission_status' => $profile->admission_status->value,

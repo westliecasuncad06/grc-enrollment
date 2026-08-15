@@ -2,7 +2,10 @@
 
 Private FastAPI service for versioned prediction contracts. It is reachable by the Laravel backend only; the browser must never call this service directly.
 
-Phase 0A exposes a database-independent health contract at `GET /internal/v1/health`. No model, student data, training data, or prediction endpoint is included yet.
+The service exposes a database-independent health contract at
+`GET /internal/v1/health` and the aggregate-only demand-prediction contract at
+`POST /internal/v1/section-demand/predict`. It never accepts student-level
+records.
 
 ## Local setup
 
@@ -18,6 +21,21 @@ artifact hashes, so installers may select different platform wheels. Regenerate
 it only after changing a direct dependency and rerunning every check.
 
 ## Run
+
+For integrated local development, run the repository launcher from the project
+root after completing the setup above:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+It verifies this service's private health endpoint before starting the Laravel
+API and Next.js frontend. It reuses a healthy service instead of starting a
+duplicate and writes child-process logs under `artifacts/local-dev/`. Use
+`-PredictionOnly` to restore only this service for an already-running API and
+frontend stack.
+
+For direct diagnostics, this service remains independently runnable:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8100

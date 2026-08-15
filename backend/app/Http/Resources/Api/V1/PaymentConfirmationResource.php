@@ -19,7 +19,7 @@ final class PaymentConfirmationResource extends JsonResource
      *
      * @return array{
      *     enrollment: array<string, mixed>,
-     *     payment: array{external_reference: ?string, amount: ?string, confirmed_at: ?string},
+     *     payment: array{external_reference: ?string, amount: ?string, promissory_note_on_file: bool, confirmed_at: ?string},
      *     document: array{document_type: ?string, document_number: ?string, generated_at: ?string}
      * }
      */
@@ -33,6 +33,7 @@ final class PaymentConfirmationResource extends JsonResource
             'payment' => [
                 'external_reference' => $payment?->external_reference,
                 'amount' => $payment?->amount,
+                'promissory_note_on_file' => $payment->promissory_note_on_file ?? false,
                 'confirmed_at' => $payment?->confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             ],
             'document' => [

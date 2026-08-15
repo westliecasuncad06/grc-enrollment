@@ -15,7 +15,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $enrollment_id
  * @property int $confirmed_by
  * @property ?string $external_reference
- * @property ?string $amount
+ * @property ?numeric-string $amount
+ * @property bool $promissory_note_on_file
  * @property CarbonImmutable $confirmed_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -30,6 +31,7 @@ final class Payment extends Model
         'confirmed_by',
         'external_reference',
         'amount',
+        'promissory_note_on_file',
         'confirmed_at',
     ];
 
@@ -44,6 +46,7 @@ final class Payment extends Model
     protected function casts(): array
     {
         return [
+            'promissory_note_on_file' => 'boolean',
             'confirmed_at' => 'immutable_datetime',
         ];
     }

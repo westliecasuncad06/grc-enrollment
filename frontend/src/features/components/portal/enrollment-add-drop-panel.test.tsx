@@ -30,6 +30,8 @@ const enrolledEnrollment: Enrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_name: null,
+  student_year_level: null,
   student_financial_status: null,
   student_financial_status_label: null,
   academic_term_id: 2,
@@ -93,8 +95,26 @@ const addableSection = {
 }
 
 const subjects = [
-  { type: "subject", id: 7, code: "CS101", title: "Programming 1", units: 3, status: "active", status_label: "Active", is_completion_only: false },
-  { type: "subject", id: 8, code: "CS102", title: "Data Structures", units: 3, status: "active", status_label: "Active", is_completion_only: false },
+  {
+    type: "subject",
+    id: 7,
+    code: "CS101",
+    title: "Programming 1",
+    units: 3,
+    status: "active",
+    status_label: "Active",
+    is_completion_only: false,
+  },
+  {
+    type: "subject",
+    id: 8,
+    code: "CS102",
+    title: "Data Structures",
+    units: 3,
+    status: "active",
+    status_label: "Active",
+    is_completion_only: false,
+  },
 ] as const
 
 const changeRequest = {
@@ -127,14 +147,21 @@ function mockRoutes(overrides: { onPost?: () => unknown } = {}) {
     const target = url(input)
     if (target.includes("/change-requests") && init?.method === "POST")
       return Promise.resolve(
-        new Response(JSON.stringify(overrides.onPost?.() ?? { data: changeRequest }), {
-          status: 201,
-        }),
+        new Response(
+          JSON.stringify(overrides.onPost?.() ?? { data: changeRequest }),
+          {
+            status: 201,
+          },
+        ),
       )
     if (target.includes("/enrollment-change-requests"))
       return Promise.resolve(
         new Response(
-          JSON.stringify({ data: [changeRequest], links: paginationLinks, meta: paginationMeta }),
+          JSON.stringify({
+            data: [changeRequest],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
         ),
       )
     if (target.includes("/subjects"))
@@ -169,7 +196,9 @@ describe("EnrollmentAddDropPanel", () => {
         "The add/drop window opens once enrollment closes for this term.",
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByRole("table", { name: "Your subjects" })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("table", { name: "Your subjects" }),
+    ).not.toBeInTheDocument()
   })
 
   it("lists current subjects and submits a drop request with a reason when the window is open", async () => {
@@ -179,16 +208,28 @@ describe("EnrollmentAddDropPanel", () => {
       const target = url(input)
       if (target.includes("/change-requests") && init?.method === "POST") {
         postBody = init.body ? JSON.parse(init.body as string) : null
-        return Promise.resolve(new Response(JSON.stringify({ data: changeRequest }), { status: 201 }))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: changeRequest }), {
+            status: 201,
+          }),
+        )
       }
       if (target.includes("/enrollment-change-requests"))
         return Promise.resolve(
-          new Response(JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta })),
+          new Response(
+            JSON.stringify({
+              data: [],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
         )
       if (target.includes("/subjects"))
         return Promise.resolve(new Response(JSON.stringify({ data: subjects })))
       if (target.includes("/sections"))
-        return Promise.resolve(new Response(JSON.stringify({ data: [heldSection, addableSection] })))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [heldSection, addableSection] })),
+        )
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
 
@@ -207,8 +248,13 @@ describe("EnrollmentAddDropPanel", () => {
 
     await user.click(within(table).getByRole("button", { name: "Drop" }))
     const dialog = await screen.findByRole("alertdialog")
-    await user.type(within(dialog).getByLabelText("Reason"), "Overloaded this term.")
-    await user.click(within(dialog).getByRole("button", { name: "Submit request" }))
+    await user.type(
+      within(dialog).getByLabelText("Reason"),
+      "Overloaded this term.",
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Submit request" }),
+    )
 
     await vi.waitFor(() =>
       expect(postBody).toEqual({
@@ -231,9 +277,7 @@ describe("EnrollmentAddDropPanel", () => {
       { session: studentSession },
     )
 
-    expect(
-      screen.getByText(/The add\/drop window closes/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/The add\/drop window closes/)).toBeInTheDocument()
   })
 
   it("shows the student's own request history", async () => {

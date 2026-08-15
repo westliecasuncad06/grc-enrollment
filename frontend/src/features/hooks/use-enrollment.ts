@@ -164,14 +164,17 @@ export function useConfirmPaymentMutation() {
       id,
       externalReference,
       amount,
+      promissoryNoteOnFile,
     }: {
       id: number
       externalReference?: string
       amount?: number
+      promissoryNoteOnFile?: boolean
     }) =>
       confirmPayment(id, {
         external_reference: externalReference,
         amount,
+        promissory_note_on_file: promissoryNoteOnFile,
       }),
     onSuccess: () => invalidate(),
   })

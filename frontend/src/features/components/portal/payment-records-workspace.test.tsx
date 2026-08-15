@@ -7,8 +7,8 @@ import { PaymentRecordsWorkspace } from "@/features/components/portal/payment-re
 import { renderWithSession } from "@/tests/render-app"
 
 const paginationLinks = {
-  first: "https://api.test/payments?page=1",
-  last: "https://api.test/payments?page=1",
+  first: "https://api.test/cashier-transactions?page=1",
+  last: "https://api.test/cashier-transactions?page=1",
   prev: null,
   next: null,
 }
@@ -19,14 +19,28 @@ const paginationMeta = {
   total: 1,
 }
 
-const payment = {
-  type: "payment",
-  id: 1,
+const enrollmentTransaction = {
+  type: "cashier_transaction",
+  id: "enrollment_payment:19",
+  transaction_type: "enrollment_payment",
+  student_id: 4,
+  student_name: "Maria Santos",
   enrollment_id: 9,
   student_number: "2026-0001",
-  external_reference: "OR-000123",
   amount: "5775.00",
-  confirmed_at: "2026-07-30T00:00:00Z",
+  processed_at: "2026-07-30T00:00:00Z",
+} as const
+
+const accountTransaction = {
+  type: "cashier_transaction",
+  id: "account_payment:20",
+  transaction_type: "account_payment",
+  student_id: 4,
+  student_name: "Maria Santos",
+  enrollment_id: 7,
+  student_number: "2026-0001",
+  amount: "500.00",
+  processed_at: "2026-07-29T00:00:00Z",
 } as const
 
 const accountingSession = {
@@ -52,7 +66,11 @@ describe("PaymentRecordsWorkspace", () => {
   it("does not render payment history for an unauthorized role", () => {
     fetchMock.mockResolvedValue(
       new Response(
-        JSON.stringify({ data: [], links: paginationLinks, meta: paginationMeta }),
+        JSON.stringify({
+          data: [],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
       ),
     )
     renderWithSession(<PaymentRecordsWorkspace />, {
@@ -68,11 +86,11 @@ describe("PaymentRecordsWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("lists confirmed payments", async () => {
+  it("lists enrollment and balance receipts in one transaction history", async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: [payment],
+          data: [enrollmentTransaction, accountTransaction],
           links: paginationLinks,
           meta: paginationMeta,
         }),
@@ -82,21 +100,24 @@ describe("PaymentRecordsWorkspace", () => {
       session: accountingSession,
     })
 
-    const table = await screen.findByRole("table", { name: "Payment history" })
-    expect(within(table).getByText("2026-0001")).toBeInTheDocument()
+    const table = await screen.findByRole("table", {
+      name: "Transaction history",
+    })
+    expect(within(table).getAllByText("Maria Santos")).toHaveLength(2)
+    expect(within(table).getAllByText("2026-0001")).toHaveLength(2)
     expect(within(table).getByText("#9")).toBeInTheDocument()
     expect(within(table).getByText("₱5775.00")).toBeInTheDocument()
-    // Manual payments only — no external reference column is shown.
-    expect(within(table).queryByText("Reference")).not.toBeInTheDocument()
+    expect(within(table).getByText("Enrollment payment")).toBeInTheDocument()
+    expect(within(table).getByText("Balance payment")).toBeInTheDocument()
   })
 
-  it("filters by confirmed date", async () => {
+  it("filters by exact student number and processed date only after Search", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input) =>
       Promise.resolve(
         new Response(
           JSON.stringify({
-            data: [payment],
+            data: [enrollmentTransaction],
             links: paginationLinks,
             meta: paginationMeta,
           }),
@@ -110,23 +131,27 @@ describe("PaymentRecordsWorkspace", () => {
       session: accountingSession,
     })
 
-    await screen.findByRole("table", { name: "Payment history" })
-    await user.type(screen.getByLabelText("Confirmed on"), "2026-08-01")
+    await screen.findByRole("table", { name: "Transaction history" })
+    await user.type(screen.getByLabelText("Student number"), "2026-0001")
+    await user.type(screen.getByLabelText("Processed on"), "2026-08-01")
+    await user.click(screen.getByRole("button", { name: "Search" }))
 
     await vi.waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([input]) =>
-          url(input).includes("confirmed_on=2026-08-01"),
+          url(input).includes(
+            "student_number=2026-0001&processed_on=2026-08-01",
+          ),
         ),
       ).toBe(true),
     )
   })
 
-  it("allows Registrar Head to view payment history too", async () => {
+  it("allows Registrar Head to view transaction history too", async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: [payment],
+          data: [enrollmentTransaction],
           links: paginationLinks,
           meta: paginationMeta,
         }),
@@ -142,7 +167,7 @@ describe("PaymentRecordsWorkspace", () => {
     })
 
     expect(
-      await screen.findByRole("table", { name: "Payment history" }),
+      await screen.findByRole("table", { name: "Transaction history" }),
     ).toBeInTheDocument()
   })
 
@@ -150,7 +175,7 @@ describe("PaymentRecordsWorkspace", () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: [payment],
+          data: [enrollmentTransaction],
           links: paginationLinks,
           meta: paginationMeta,
         }),
@@ -160,7 +185,7 @@ describe("PaymentRecordsWorkspace", () => {
       session: accountingSession,
     })
 
-    await screen.findByRole("table", { name: "Payment history" })
+    await screen.findByRole("table", { name: "Transaction history" })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

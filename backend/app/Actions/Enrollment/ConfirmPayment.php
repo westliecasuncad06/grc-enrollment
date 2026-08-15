@@ -79,12 +79,12 @@ final readonly class ConfirmPayment
 
             $confirmedAt = now();
 
-            // An explicitly supplied amount is always trusted as-is — §17
-            // has no partial-payment or mismatch policy, so a value that
-            // differs from the assessment is recorded, not rejected. Only a
-            // fully-omitted amount falls back to what was assessed; an
-            // enrollment with no assessment (created directly, as most test
-            // fixtures still do) keeps today's behavior of staying null.
+            // An explicit enrollment payment has already passed the PHP
+            // 1,000.00 minimum in ConfirmPaymentRequest. A partial payment
+            // therefore still finalizes enrollment and generates the COM;
+            // only an omitted amount falls back to what was assessed. An
+            // enrollment with no assessment (created directly by legacy test
+            // fixtures) keeps the established behavior of staying null.
             $assessment = Assessment::query()->where('enrollment_id', $lockedEnrollment->id)->first();
             $amount = $validated['amount'] ?? $assessment?->total_amount;
 
@@ -93,6 +93,7 @@ final readonly class ConfirmPayment
                 'confirmed_by' => $actor->id,
                 'external_reference' => $validated['external_reference'] ?? null,
                 'amount' => $amount,
+                'promissory_note_on_file' => $validated['promissory_note_on_file'] ?? false,
                 'confirmed_at' => $confirmedAt,
             ]);
 

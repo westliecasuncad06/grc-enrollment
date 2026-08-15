@@ -14,6 +14,7 @@ use App\Domain\Organization\CapacitySource;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Organization\SectionPlanStatus;
+use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
@@ -186,6 +187,39 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
         $section->refresh();
         $this->assertSame('07:30:00', $section->starts_at_time);
         $this->assertSame('10:30:00', $section->ends_at_time);
+    }
+
+    public function test_a_missing_reference_time_uses_an_open_slot_in_its_generated_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $referencedPlacement = $this->makePlacement($curriculum, 'ITREF', [
+            'reference_day' => 'Sat', 'reference_start_time' => '07:30:00', 'reference_end_time' => '10:30:00',
+        ]);
+        $missingTimePlacement = $this->makePlacement($curriculum, 'ITMISSING', ['reference_day' => 'Sat']);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $referencedSection = $this->makeSection($term, $plan, $referencedPlacement->subject_id);
+        $missingTimeSection = $this->makeSection($term, $plan, $missingTimePlacement->subject_id);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $referencedSection->refresh();
+        $missingTimeSection->refresh();
+
+        self::assertSame('07:30:00', $referencedSection->starts_at_time);
+        self::assertSame('10:30:00', $referencedSection->ends_at_time);
+        self::assertFalse(app(SectionConflictDetector::class)->hasConflict(
+            [
+                'schedule_days' => $missingTimeSection->schedule_days,
+                'starts_at_time' => $missingTimeSection->starts_at_time,
+                'ends_at_time' => $missingTimeSection->ends_at_time,
+            ],
+            [[
+                'schedule_days' => $referencedSection->schedule_days,
+                'starts_at_time' => $referencedSection->starts_at_time,
+                'ends_at_time' => $referencedSection->ends_at_time,
+            ]],
+        ));
     }
 
     /**

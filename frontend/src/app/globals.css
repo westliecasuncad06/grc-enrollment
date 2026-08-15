@@ -2276,8 +2276,10 @@
   gap: 0.65rem;
 }
 
-.portal-sidebar {
+.portal-sidebar,
+.portal-mobile-sheet {
   color: var(--primary-foreground);
+  background-color: var(--primary);
   background:
     radial-gradient(
       circle at 110% 5%,
@@ -2286,6 +2288,15 @@
     ),
     linear-gradient(180deg, #6f000b, var(--primary) 56%, #870615);
   border-right: 0;
+}
+
+.portal-mobile-sheet [data-slot="sheet-title"],
+.portal-mobile-sheet [data-slot="sheet-close"] {
+  color: var(--primary-foreground);
+}
+
+.portal-mobile-sheet [data-slot="sheet-description"] {
+  color: rgb(255 255 255 / 76%);
 }
 
 .portal-brand {
@@ -2300,7 +2311,8 @@
   width: 11rem;
 }
 
-.portal-sidebar [data-slot="badge"] {
+.portal-sidebar [data-slot="badge"],
+.portal-mobile-sheet [data-slot="badge"] {
   color: var(--primary-foreground);
   background: rgb(255 255 255 / 12%);
   border-color: rgb(255 255 255 / 20%);
@@ -2584,4 +2596,27 @@
   justify-content: space-between;
   white-space: normal;
   text-align: left;
+}
+/* Native range controls keep the year window usable by mouse, touch, and keyboard. */
+.school-year-range-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+  appearance: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--card);
+  border-radius: 9999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 55%, transparent);
+  cursor: grab;
+}
+
+.school-year-range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--card);
+  border-radius: 9999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 55%, transparent);
+  cursor: grab;
 }

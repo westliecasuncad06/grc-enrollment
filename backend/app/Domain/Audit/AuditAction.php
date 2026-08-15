@@ -100,6 +100,8 @@ final class AuditAction
 
     public const ENROLLMENT_PAYMENT_CONFIRMED = 'enrollment.payment_confirmed';
 
+    public const ACCOUNT_PAYMENT_RECORDED = 'account_payment.recorded';
+
     public const WITHDRAWAL_REQUEST_CREATED = 'withdrawal_request.created';
 
     public const WITHDRAWAL_REQUEST_APPROVED = 'withdrawal_request.approved';
@@ -198,6 +200,7 @@ final class AuditAction
             self::QUEUE_TICKET_SKIPPED,
             self::QUEUE_TICKET_MARKED_PRIORITY,
             self::ENROLLMENT_PAYMENT_CONFIRMED,
+            self::ACCOUNT_PAYMENT_RECORDED,
             self::WITHDRAWAL_REQUEST_CREATED,
             self::WITHDRAWAL_REQUEST_APPROVED,
             self::WITHDRAWAL_REQUEST_REJECTED,

@@ -119,3 +119,64 @@ def test_section_demand_prediction_falls_back_to_source_demand_when_history_is_s
         "rmse": None,
     }
     assert body["forecasts"][0]["predicted_demand"] == 38.0
+
+
+def test_section_demand_prediction_uses_the_forest_section_recommendation() -> None:
+    response = client.post(
+        "/internal/v1/section-demand/predict",
+        json={
+            "data": {
+                "feature_schema_version": "v2",
+                "observations": [
+                    {
+                        "cohort_size": 268,
+                        "enrolled_count": 264,
+                        "section_count": 9,
+                        "offered_capacity": 360,
+                        "year_level": 1,
+                        "semester": "1st",
+                    },
+                    {
+                        "cohort_size": 271,
+                        "enrolled_count": 268,
+                        "section_count": 9,
+                        "offered_capacity": 360,
+                        "year_level": 1,
+                        "semester": "1st",
+                    },
+                    {
+                        "cohort_size": 274,
+                        "enrolled_count": 270,
+                        "section_count": 9,
+                        "offered_capacity": 360,
+                        "year_level": 1,
+                        "semester": "1st",
+                    },
+                    {
+                        "cohort_size": 276,
+                        "enrolled_count": 272,
+                        "section_count": 9,
+                        "offered_capacity": 360,
+                        "year_level": 1,
+                        "semester": "1st",
+                    },
+                ],
+                "targets": [
+                    {
+                        "key": "bsit-current-1",
+                        "cohort_size": 275,
+                        "section_count": 9,
+                        "recommended_capacity": 40,
+                        "year_level": 1,
+                        "semester": "1st",
+                    }
+                ],
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["feature_schema_version"] == "v2"
+    assert body["model_version"] == "section-demand-rf-v2"
+    assert body["forecasts"][0]["suggested_section_count"] == 9

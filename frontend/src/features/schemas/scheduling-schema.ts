@@ -5,6 +5,8 @@ const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/, {
 })
 const nullableText = z.string().trim().max(255).nullable()
 const nullableTime = timeSchema.nullable()
+const scheduleDaysPattern =
+  /^(?:(?:MON|TUE|WED|THU|FRI|SAT|SUN|TH|M|T|W|F)(?:[/\s,;&|])?)+$/iu
 
 const sectionShape = {
   academic_term_id: z.number().int().positive("Select an academic term."),
@@ -33,14 +35,11 @@ function validateSchedule(
   const hasDays = value.schedule_days !== null
   const hasStart = value.starts_at_time !== null
   const hasEnd = value.ends_at_time !== null
-  if (
-    hasDays &&
-    !/^(?:(?:M|T|W|Th|F|Sat|Sun))+$/u.test(value.schedule_days ?? "")
-  )
+  if (hasDays && !scheduleDaysPattern.test(value.schedule_days ?? ""))
     context.addIssue({
       code: "custom",
       path: ["schedule_days"],
-      message: "Use schedule days such as MWF, TTh, Sat, or Sun.",
+      message: "Use schedule days such as MWF, TTh, MON, TUE, or THU.",
     })
   if (hasStart !== hasEnd)
     context.addIssue({

@@ -15,4 +15,5 @@ enum ScheduleGenerationWarningType: string
     case NoForecastReturned = 'no_forecast_returned';
     case NoCurriculumSubjects = 'no_curriculum_subjects';
     case InsufficientHistory = 'insufficient_history';
+    case PredictionServiceUnavailable = 'prediction_service_unavailable';
 }

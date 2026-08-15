@@ -306,17 +306,12 @@ final class SaveSectionPlan
                 ->get();
             $sectionIds = $plans->flatMap(fn (AcademicTermSectionPlan $plan) => $plan->sections()->pluck('id'));
 
-            // A missing professor does not block Dean/Executive Director
-            // approval — the Chair may not have decided who teaches a
-            // section yet, and that decision can be made later without
-            // holding up the rest of the schedule. Day, time, room, and
-            // modality are what the approvers actually review, so those
-            // remain required.
-            if ($sectionIds->isEmpty() || Section::query()->whereIn('id', $sectionIds)->where(function ($query): void {
-                $query->whereNull('schedule_days')->orWhereNull('starts_at_time')
-                    ->orWhereNull('ends_at_time')->orWhereNull('room')->orWhereNull('modality');
-            })->exists()) {
-                throw ValidationException::withMessages(['sections' => 'Assign a day, time, room, and modality before submitting for approval.']);
+            // Incomplete assignments are review information, not a
+            // submission blocker. The Program Chair can submit the proposal
+            // so the Dean and Executive Director can review its current
+            // state, then return it for corrections if needed.
+            if ($sectionIds->isEmpty()) {
+                throw ValidationException::withMessages(['sections' => 'Generate at least one section before submitting for approval.']);
             }
 
             $proposal = ScheduleProposal::query()

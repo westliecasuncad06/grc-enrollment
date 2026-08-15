@@ -25,6 +25,7 @@ const expectedModuleIds = {
     "schedule-faculty-loading",
     "rooms",
     "schedule-proposals",
+    "program-chair-analytics",
   ],
   dean: [
     "schedule-approvals",
@@ -48,6 +49,7 @@ const expectedModuleIds = {
     "overrides-voids",
     "enrollment-change-requests",
     "attrition-analytics",
+    "registrar-analytics",
     "compliance-reports",
     "audit-logs",
     "policy-settings",
@@ -108,6 +110,12 @@ describe("rolePortalDefinitions", () => {
 })
 
 describe("getRoleModule", () => {
+  it("names the Cashier payment-record destination Transaction History", () => {
+    expect(getRoleModule("accounting_staff", "payment-records")?.label).toBe(
+      "Transaction History",
+    )
+  })
+
   it("returns only modules assigned to the active role", () => {
     expect(getRoleModule("student", "enrollment")?.label).toBe("Enrollment")
     expect(getRoleModule("student", "payment-queue")).toBeNull()

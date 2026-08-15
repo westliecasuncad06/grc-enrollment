@@ -21,7 +21,7 @@ final class GrcCurriculumScheduleReferenceSeederTest extends TestCase
 
     private const FIXTURE_CSV = <<<'CSV'
         college,program_code,year_level,semester,subject_code,day,start_time,end_time,room,modality,professor_name,sched_id,notes
-        ccs,BSIT,1,1st,ITC,Tue,07:30,09:30,ONLINE,ONLINE,MR. MACINAS,39633,
+        ccs,BSIT,1,1st,ITC,THIRS,07:30,09:30,ONLINE,ONLINE,MR. MACINAS,39633,
         ccs,BSIT,1,1st,MATHWRLD,Fri,07:30,10:30,3A,HYFLEX A,,39883,
 
         CSV;
@@ -76,7 +76,7 @@ final class GrcCurriculumScheduleReferenceSeederTest extends TestCase
             $itc = Subject::where('code', 'ITC')->sole();
             $placement = CurriculumSubject::where('curriculum_id', $curriculum->id)->where('subject_id', $itc->id)->sole();
 
-            $this->assertSame('Tue', $placement->reference_day);
+            $this->assertSame('THU', $placement->reference_day);
             $this->assertSame('07:30:00', $placement->reference_start_time);
             $this->assertSame('09:30:00', $placement->reference_end_time);
             $this->assertSame('ONLINE', $placement->reference_room);

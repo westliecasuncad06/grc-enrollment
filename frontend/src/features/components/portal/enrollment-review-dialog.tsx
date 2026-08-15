@@ -2,7 +2,10 @@
 
 import { useMemo } from "react"
 
-import { Badge } from "@/features/components/ui/badge"
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/features/components/portal/data-table"
 import {
   Dialog,
   DialogContent,
@@ -17,14 +20,57 @@ import {
 } from "@/features/hooks/use-reference-data"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 
-function formatMeeting(
-  days: string | null,
+type EnrollmentReviewRow = Enrollment["subjects"][number] & {
+  units: number | null
+  schedule_days: string | null
+  starts_at_time: string | null
+  ends_at_time: string | null
+  room: string | null
+}
+
+function formatTimeRange(
   startsAt: string | null,
   endsAt: string | null,
 ): string {
-  if (!days || !startsAt || !endsAt) return "Not assigned"
+  if (!startsAt || !endsAt) return "Not assigned"
 
-  return `${days} · ${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
+  return `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
+}
+
+function scheduleColumns(): DataTableColumn<EnrollmentReviewRow>[] {
+  return [
+    {
+      key: "subject-code",
+      header: "Subject code",
+      render: (row) => row.subject_code,
+    },
+    {
+      key: "description",
+      header: "Description",
+      render: (row) => row.subject_title,
+    },
+    { key: "units", header: "Units", render: (row) => row.units ?? "—" },
+    {
+      key: "section-id",
+      header: "Section ID",
+      render: (row) => row.section_id,
+    },
+    {
+      key: "day",
+      header: "Day",
+      render: (row) => row.schedule_days ?? "Not assigned",
+    },
+    {
+      key: "time",
+      header: "Time",
+      render: (row) => formatTimeRange(row.starts_at_time, row.ends_at_time),
+    },
+    {
+      key: "room",
+      header: "Room",
+      render: (row) => row.room ?? "Not assigned",
+    },
+  ]
 }
 
 /**
@@ -53,9 +99,7 @@ export function EnrollmentReviewDialog({
     const subjects = subjectsQuery.data ?? []
 
     return enrollment.subjects.map((enrolled) => {
-      const section = sections.find(
-        (item) => item.id === enrolled.section_id,
-      )
+      const section = sections.find((item) => item.id === enrolled.section_id)
       const subject = section
         ? subjects.find((item) => item.id === section.subject_id)
         : undefined
@@ -63,7 +107,6 @@ export function EnrollmentReviewDialog({
       return {
         ...enrolled,
         units: subject?.units ?? null,
-        section_code: section?.section_code ?? null,
         schedule_days: section?.schedule_days ?? null,
         starts_at_time: section?.starts_at_time ?? null,
         ends_at_time: section?.ends_at_time ?? null,
@@ -76,18 +119,39 @@ export function EnrollmentReviewDialog({
 
   return (
     <Dialog open={enrollment !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>
             Review enrollment{enrollment ? ` #${enrollment.id}` : ""}
           </DialogTitle>
           <DialogDescription>
-            {enrollment?.student_number}
-            {enrollment ? ` · ${enrollment.total_units} total units` : ""}
+            {enrollment ? `${enrollment.total_units} total units` : ""}
           </DialogDescription>
         </DialogHeader>
+        <dl className="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-3">
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Name</dt>
+            <dd className="font-medium">{enrollment?.student_name ?? "—"}</dd>
+          </div>
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Year</dt>
+            <dd className="font-medium">
+              {enrollment?.student_year_level
+                ? `Year ${enrollment.student_year_level}`
+                : "—"}
+            </dd>
+          </div>
+          <div className="grid gap-1">
+            <dt className="text-muted-foreground">Student number</dt>
+            <dd className="font-medium">{enrollment?.student_number ?? "—"}</dd>
+          </div>
+        </dl>
         {isLoading ? (
-          <div className="grid gap-3" role="status" aria-label="Loading subjects and schedule">
+          <div
+            className="grid gap-3"
+            role="status"
+            aria-label="Loading subjects and schedule"
+          >
             <Skeleton className="h-20" />
             <Skeleton className="h-20" />
           </div>
@@ -97,46 +161,15 @@ export function EnrollmentReviewDialog({
           </p>
         ) : (
           <>
-            <ul className="grid gap-3">
-              {rows.map((row) => (
-                <li key={row.section_id} className="rounded-lg border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">
-                      {row.subject_code} — {row.subject_title}
-                    </p>
-                    <Badge variant="outline">
-                      {row.units ?? "—"} unit{row.units === 1 ? "" : "s"}
-                    </Badge>
-                  </div>
-                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <div>
-                      <dt className="inline">Section: </dt>
-                      <dd className="inline font-medium text-foreground">
-                        {row.section_code ?? "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="inline">Schedule: </dt>
-                      <dd className="inline font-medium text-foreground">
-                        {formatMeeting(
-                          row.schedule_days,
-                          row.starts_at_time,
-                          row.ends_at_time,
-                        )}
-                      </dd>
-                    </div>
-                    <div className="col-span-2">
-                      <dt className="inline">Room: </dt>
-                      <dd className="inline font-medium text-foreground">
-                        {row.room ?? "Not assigned"}
-                      </dd>
-                    </div>
-                  </dl>
-                </li>
-              ))}
-            </ul>
+            <DataTable
+              caption={`Enrollment #${enrollment?.id ?? "—"} schedule`}
+              columns={scheduleColumns()}
+              rowKey={(row) => row.section_id}
+              rows={rows}
+            />
             <p className="text-sm text-muted-foreground">
-              {rows.length} subject{rows.length === 1 ? "" : "s"} · {totalUnits} unit
+              {rows.length} subject{rows.length === 1 ? "" : "s"} · {totalUnits}{" "}
+              unit
               {totalUnits === 1 ? "" : "s"} total
             </p>
           </>

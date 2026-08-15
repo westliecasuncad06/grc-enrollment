@@ -32,6 +32,8 @@ final class AuditableType
 
     public const ENROLLMENT = 'enrollment';
 
+    public const ACCOUNT_PAYMENT = 'account_payment';
+
     public const ACADEMIC_GRADE = 'academic_grade';
 
     public const QUEUE_TICKET = 'queue_ticket';
@@ -74,6 +76,7 @@ final class AuditableType
             self::FACULTY_DIRECTORY,
             self::FACULTY_WORKFORCE_PROFILE,
             self::ENROLLMENT,
+            self::ACCOUNT_PAYMENT,
             self::ACADEMIC_GRADE,
             self::QUEUE_TICKET,
             self::WITHDRAWAL_REQUEST,

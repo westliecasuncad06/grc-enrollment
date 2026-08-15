@@ -620,11 +620,8 @@ export function ProgramChairEnrollmentWorkspace({
   const allYearsHaveCurriculum = years.every(
     (year) => curriculumIds[year] !== null,
   )
-  // A missing professor does not block submitting for Dean/Executive
-  // Director approval — the Chair may decide who teaches a section later.
-  // Day, time, room, and modality are what the approvers actually review,
-  // so those remain required here (kept in sync with the backend gate in
-  // `SaveSectionPlan::submit()`).
+  // Incomplete schedule details remain visible to reviewers, but they do
+  // not block the Program Chair from submitting a proposal for approval.
   const incompleteScheduleCount = visibleSections.filter(
     (section) =>
       !section.schedule_days ||
@@ -1453,9 +1450,7 @@ export function ProgramChairEnrollmentWorkspace({
                   {incompleteScheduleCount > 0 && (
                     <Alert>
                       <AlertDescription>
-                        {incompleteScheduleCount} schedule assignment
-                        {incompleteScheduleCount === 1 ? "" : "s"} remaining
-                        before approval submission.
+                        {`${incompleteScheduleCount} schedule assignment${incompleteScheduleCount === 1 ? "" : "s"} remaining will be included for Dean and Executive Director review.`}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -1474,7 +1469,6 @@ export function ProgramChairEnrollmentWorkspace({
                         }}
                         disabled={
                           visibleSections.length === 0 ||
-                          incompleteScheduleCount > 0 ||
                           planMutations.submit.isPending
                         }
                       >
@@ -1719,8 +1713,11 @@ export function ProgramChairEnrollmentWorkspace({
               Submit this schedule for approval?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Your completed section plans and faculty schedules will go to the
-              Dean review queue, then the Executive Director checkpoint.
+              Your section plans and faculty schedules will go to the Dean
+              review queue, then the Executive Director checkpoint.
+              {incompleteScheduleCount > 0
+                ? ` ${incompleteScheduleCount} incomplete schedule assignment${incompleteScheduleCount === 1 ? "" : "s"} will remain visible for review.`
+                : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

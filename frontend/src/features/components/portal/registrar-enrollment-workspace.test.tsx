@@ -29,6 +29,8 @@ const pendingApprovalEnrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_name: "Test Student",
+  student_year_level: 1,
   student_financial_status: null,
   student_financial_status_label: null,
   academic_term_id: 2,
@@ -156,7 +158,7 @@ describe("RegistrarEnrollmentWorkspace", () => {
           }),
         ),
       ).then((response) => {
-        expect(url(input)).toContain('status=pending_registrar_approval')
+        expect(url(input)).toContain("status=pending_registrar_approval")
         return response
       }),
     )
@@ -203,7 +205,7 @@ describe("RegistrarEnrollmentWorkspace", () => {
     expect(within(table).getByText("Payee")).toBeInTheDocument()
   })
 
-  it("reviews a student's chosen subjects, schedule, and units", async () => {
+  it("reviews a student's chosen subjects in the student-style schedule table", async () => {
     const user = userEvent.setup()
     const enrollmentWithSubjects = {
       ...pendingApprovalEnrollment,
@@ -286,10 +288,35 @@ describe("RegistrarEnrollmentWorkspace", () => {
     const table = await screen.findByRole("table", { name: "Enrollment queue" })
     await user.click(within(table).getByRole("button", { name: "Review" }))
     const dialog = await screen.findByRole("dialog")
-    expect(within(dialog).getByText(/CS101/)).toBeInTheDocument()
-    expect(within(dialog).getByText("3 units")).toBeInTheDocument()
-    expect(within(dialog).getByText(/MWF · 08:00–09:00/)).toBeInTheDocument()
-    expect(within(dialog).getByText(/RM-101/)).toBeInTheDocument()
+    const scheduleTable = within(dialog).getByRole("table", {
+      name: "Enrollment #9 schedule",
+    })
+    expect(within(dialog).getByText("Name")).toBeInTheDocument()
+    expect(within(dialog).getByText("Test Student")).toBeInTheDocument()
+    expect(within(dialog).getByText("Year")).toBeInTheDocument()
+    expect(within(dialog).getByText("Year 1")).toBeInTheDocument()
+    expect(within(dialog).getByText("Student number")).toBeInTheDocument()
+    expect(within(dialog).getByText("2026-0001")).toBeInTheDocument()
+    expect(
+      within(scheduleTable)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual([
+      "Subject code",
+      "Description",
+      "Units",
+      "Section ID",
+      "Day",
+      "Time",
+      "Room",
+    ])
+    expect(within(scheduleTable).getByText("CS101")).toBeInTheDocument()
+    expect(within(scheduleTable).getByText("Programming 1")).toBeInTheDocument()
+    expect(within(scheduleTable).getByText("3")).toBeInTheDocument()
+    expect(within(scheduleTable).getByText("55")).toBeInTheDocument()
+    expect(within(scheduleTable).getByText("MWF")).toBeInTheDocument()
+    expect(within(scheduleTable).getByText("08:00–09:00")).toBeInTheDocument()
+    expect(within(scheduleTable).getByText("RM-101")).toBeInTheDocument()
   })
 
   it("refreshes the approvals queue when a student submits without a page reload", async () => {
@@ -336,7 +363,7 @@ describe("RegistrarEnrollmentWorkspace", () => {
           }),
         ),
       ).then((response) => {
-        expect(url(input)).toContain('status=pending_payment')
+        expect(url(input)).toContain("status=pending_payment")
         return response
       }),
     )
@@ -521,9 +548,15 @@ describe("RegistrarEnrollmentWorkspace", () => {
     expect(within(card).getByText("Scholar")).toBeInTheDocument()
     expect(within(card).getByText("24 units")).toBeInTheDocument()
     expect(within(card).getByText("Overload")).toBeInTheDocument()
-    expect(within(card).getByRole("button", { name: "Review" })).toBeInTheDocument()
-    expect(within(card).getByRole("button", { name: "Approve" })).toBeInTheDocument()
-    expect(within(card).getByRole("button", { name: "Reject" })).toBeInTheDocument()
+    expect(
+      within(card).getByRole("button", { name: "Review" }),
+    ).toBeInTheDocument()
+    expect(
+      within(card).getByRole("button", { name: "Approve" }),
+    ).toBeInTheDocument()
+    expect(
+      within(card).getByRole("button", { name: "Reject" }),
+    ).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

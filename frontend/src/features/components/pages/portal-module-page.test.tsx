@@ -43,7 +43,7 @@ const allowedModuleCases = userRoles.flatMap((role) =>
 // is not always identical to the module registry's label (e.g.
 // "Enrollment" vs. "Enrollment planning review" for `master-schedule`).
 // Kept in sync with `module-registry.test.tsx`'s identical
-// `migratedRegionNames` map, which covers the same 35 connected module IDs.
+// `migratedRegionNames` map, which covers the same 36 connected module IDs.
 const workspaceHeadings: Record<string, string> = {
   "class-rosters": "Class rosters",
   "grade-submission": "Grade submission",
@@ -60,6 +60,8 @@ const workspaceHeadings: Record<string, string> = {
   "curriculum-approvals": "Curriculum Approvals",
   "schedule-proposals": "Schedule proposals",
   "schedule-faculty-loading": "Schedule & Faculty Loading",
+  "program-chair-analytics": "Analytics",
+  "registrar-analytics": "Analytics",
   rooms: "Rooms operations",
   enrollment: "Select your subjects",
   "enrollment-approvals": "Enrollment approvals",
@@ -69,7 +71,7 @@ const workspaceHeadings: Record<string, string> = {
   "academic-terms": "Enrollment",
   "availability-preferences": "Availability and preferences",
   "payment-queue": "Payment queue",
-  "payment-records": "Payment records",
+  "payment-records": "Transaction history",
   "student-accounts": "Student accounts",
   "admission-status": "Admission status",
   "credential-issuance": "Credential issuance",

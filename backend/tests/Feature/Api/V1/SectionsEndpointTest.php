@@ -71,6 +71,24 @@ final class SectionsEndpointTest extends TestCase
         self::assertCount(1, $response->json('data'));
     }
 
+    public function test_section_responses_use_canonical_three_letter_day_codes(): void
+    {
+        $term = $this->makeTerm();
+        Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $this->makeSubject('DAY-CODES')->id,
+            'section_code' => 'A',
+            'schedule_days' => 'TUES/THURS',
+            'capacity' => 40,
+            'status' => SectionStatus::Published,
+        ]);
+
+        $response = $this->withToken($this->tokenFor(UserRole::Student, 'student.day-codes@grc.test'))
+            ->getJson('/api/v1/sections');
+
+        $response->assertOk()->assertJsonPath('data.0.schedule_days', 'TUE/THU');
+    }
+
     public function test_a_faculty_member_sees_only_their_own_published_or_closed_sections(): void
     {
         $term = $this->makeTerm();
@@ -173,6 +191,36 @@ final class SectionsEndpointTest extends TestCase
             AuditAction::SECTION_CREATED,
             AuditLog::query()->sole()->action,
         );
+    }
+
+    public function test_section_writes_store_canonical_three_letter_day_codes(): void
+    {
+        $term = $this->makeTerm();
+        $subject = $this->makeSubject('CANONICAL-DAYS');
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.canonical-days@grc.test');
+
+        $created = $this->withToken($token)->postJson('/api/v1/sections', [
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject->id,
+            'section_code' => 'A',
+            'schedule_days' => 'THIRS',
+            'capacity' => 40,
+            'status' => 'planned',
+        ])->assertCreated();
+
+        $sectionId = $created->json('data.id');
+        $this->assertDatabaseHas('sections', ['id' => $sectionId, 'schedule_days' => 'THU']);
+
+        $this->withToken($token)->patchJson("/api/v1/sections/{$sectionId}", [
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject->id,
+            'section_code' => 'A',
+            'schedule_days' => 'TUES/THURS',
+            'capacity' => 40,
+            'status' => 'planned',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('sections', ['id' => $sectionId, 'schedule_days' => 'TUE/THU']);
     }
 
     public function test_a_non_program_chair_role_cannot_create_a_section(): void

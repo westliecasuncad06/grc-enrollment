@@ -76,77 +76,109 @@ const blocks: EnrollmentBlock[] = [
   }),
 ]
 
+function renderTable({
+  selectedBlockCode = null,
+  onChoose = vi.fn(),
+  onChangeSection = vi.fn(),
+  disabled = false,
+}: {
+  selectedBlockCode?: string | null
+  onChoose?: (blockCode: string) => void
+  onChangeSection?: () => void
+  disabled?: boolean
+} = {}) {
+  return render(
+    <EnrollmentSectionTable
+      blocks={blocks}
+      selectedBlockCode={selectedBlockCode}
+      onChoose={onChoose}
+      onChangeSection={onChangeSection}
+      disabled={disabled}
+      renderSelectedFooter={() => <span>Selected section actions</span>}
+    />,
+  )
+}
+
 describe("EnrollmentSectionTable", () => {
-  it("lists every section with a uniquely named View action", () => {
-    render(<EnrollmentSectionTable blocks={blocks} onView={vi.fn()} />)
+  it("lists every section as an inline schedule card", () => {
+    renderTable()
 
-    const table = screen.getByRole("table", { name: /available sections/i })
-    expect(within(table).getByText("IT301")).toBeInTheDocument()
-    expect(within(table).getByText("IT302")).toBeInTheDocument()
-    expect(within(table).getByText("IT303")).toBeInTheDocument()
+    const section = screen.getByRole("article", { name: "IT301 section" })
     expect(
-      within(table).getByRole("button", { name: "View IT301" }),
+      screen.getByRole("article", { name: "IT302 section" }),
     ).toBeInTheDocument()
     expect(
-      within(table).getByRole("button", { name: "View IT303" }),
+      screen.getByRole("article", { name: "IT303 section" }),
+    ).toBeInTheDocument()
+    expect(within(section).getByText("40 seats")).toBeInTheDocument()
+    expect(
+      within(section).getByRole("table", { name: "IT301 schedule" }),
+    ).toBeInTheDocument()
+    expect(within(section).getByText("Subject code")).toBeInTheDocument()
+    expect(within(section).getAllByText("Section ID")).not.toHaveLength(0)
+    expect(within(section).getAllByText("Data Structures")).not.toHaveLength(0)
+    expect(
+      within(section).getByRole("button", { name: "Choose IT301" }),
     ).toBeInTheDocument()
   })
 
-  it("calls onView with the chosen block", async () => {
+  it("calls onChoose with the inline section code", async () => {
     const user = userEvent.setup()
-    const onView = vi.fn()
-    render(<EnrollmentSectionTable blocks={blocks} onView={onView} />)
+    const onChoose = vi.fn()
+    renderTable({ onChoose })
 
-    const table = screen.getByRole("table", { name: /available sections/i })
-    await user.click(within(table).getByRole("button", { name: "View IT303" }))
+    await user.click(screen.getByRole("button", { name: "Choose IT303" }))
 
-    expect(onView).toHaveBeenCalledWith(
-      expect.objectContaining({ block_code: "IT303" }),
-    )
+    expect(onChoose).toHaveBeenCalledWith("IT303")
   })
 
-  it("shows a preference score badge and top reason, or an em dash when unscored", () => {
-    render(<EnrollmentSectionTable blocks={blocks} onView={vi.fn()} />)
-
-    const table = screen.getByRole("table", { name: /available sections/i })
-    expect(within(table).getByText("40")).toBeInTheDocument()
-    expect(
-      within(table).getByText("Matches your preferred time block"),
-    ).toBeInTheDocument()
-    expect(within(table).getByText("—")).toBeInTheDocument()
-  })
-
-  it("sorts by preference match when preferences are applied, without removing any row", async () => {
+  it("sorts by preference match when preferences are applied without removing a section", async () => {
     const user = userEvent.setup()
-    render(<EnrollmentSectionTable blocks={blocks} onView={vi.fn()} />)
+    renderTable()
 
     await user.click(
       screen.getByRole("switch", { name: "Apply my preferences" }),
     )
 
-    const rows = within(
-      screen.getByRole("table", { name: /available sections/i }),
-    ).getAllByRole("row")
-    // rows[0] is the header row; the highest preference_score sorts first.
-    expect(within(rows[1]).getByText("IT303")).toBeInTheDocument()
-    // Every section is still present — the switch ranks, it never filters.
-    expect(within(rows[2]).getByText(/IT301|IT302/)).toBeInTheDocument()
-    expect(within(rows[3]).getByText(/IT301|IT302/)).toBeInTheDocument()
+    const sections = screen.getAllByRole("article")
+    expect(sections[0]).toHaveAccessibleName("IT303 section")
+    expect(
+      screen.getByRole("article", { name: "IT301 section" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("article", { name: "IT302 section" }),
+    ).toBeInTheDocument()
   })
 
-  it("keeps a low-scoring section's View action enabled", () => {
-    render(<EnrollmentSectionTable blocks={blocks} onView={vi.fn()} />)
+  it("keeps a low-scoring section selectable", () => {
+    renderTable()
 
-    const table = screen.getByRole("table", { name: /available sections/i })
+    expect(screen.getByRole("button", { name: "Choose IT302" })).toBeEnabled()
+  })
+
+  it("shows only the selected section and changes back to the full list", async () => {
+    const user = userEvent.setup()
+    const onChangeSection = vi.fn()
+    renderTable({ selectedBlockCode: "IT302", onChangeSection })
+
     expect(
-      within(table).getByRole("button", { name: "View IT302" }),
-    ).toBeEnabled()
+      screen.getByRole("article", { name: "IT302 section" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("article", { name: "IT301 section" }),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Change section" }))
+    expect(onChangeSection).toHaveBeenCalledOnce()
+  })
+
+  it("disables an inline choice when the enrollment window is closed", () => {
+    renderTable({ disabled: true })
+
+    expect(screen.getByRole("button", { name: "Choose IT301" })).toBeDisabled()
   })
 
   it("has no detectable accessibility violations", async () => {
-    const { container } = render(
-      <EnrollmentSectionTable blocks={blocks} onView={vi.fn()} />,
-    )
+    const { container } = renderTable()
 
     expect(await axe(container)).toHaveNoViolations()
   })

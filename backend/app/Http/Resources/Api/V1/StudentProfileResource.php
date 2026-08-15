@@ -22,6 +22,9 @@ final class StudentProfileResource extends JsonResource
      *     student_number: string,
      *     program_id: int,
      *     curriculum_id: int,
+     *     entry_year: ?int,
+     *     curriculum_name: string,
+     *     curriculum_effective_school_year: string,
      *     year_level: int,
      *     enrollment_category: ?string,
      *     admission_status: string,
@@ -34,6 +37,8 @@ final class StudentProfileResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $curriculum = $this->resource->curriculum;
+
         return [
             'type' => 'student_profile',
             'id' => $this->resource->id,
@@ -41,6 +46,9 @@ final class StudentProfileResource extends JsonResource
             'student_number' => $this->resource->student_number,
             'program_id' => $this->resource->program_id,
             'curriculum_id' => $this->resource->curriculum_id,
+            'entry_year' => $this->resource->entry_year,
+            'curriculum_name' => $curriculum->name,
+            'curriculum_effective_school_year' => $curriculum->effective_school_year,
             'year_level' => $this->resource->year_level,
             'enrollment_category' => $this->resource->enrollment_category,
             'admission_status' => $this->resource->admission_status->value,

@@ -74,4 +74,16 @@ describe("scheduling-service", () => {
     )
     expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("POST")
   })
+
+  it("keeps a canonical THU schedule when assigning a professor to an unassigned section", () => {
+    const input = toSectionReplacement(
+      { ...section, professor_id: null, schedule_days: "THU" },
+      { professor_id: 12 },
+    )
+
+    expect(input).toMatchObject({
+      professor_id: 12,
+      schedule_days: "THU",
+    })
+  })
 })

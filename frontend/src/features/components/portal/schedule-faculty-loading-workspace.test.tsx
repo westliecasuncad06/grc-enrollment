@@ -328,11 +328,21 @@ function renderWorkspace() {
 
 describe("ScheduleFacultyLoadingWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
+  let sectionSaveError: unknown = null
 
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
-    fetchMock.mockImplementation((input) => {
+    sectionSaveError = null
+    fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
+      if (
+        url.endsWith("/sections/11") &&
+        init?.method === "PATCH" &&
+        sectionSaveError !== null
+      )
+        return Promise.resolve(
+          new Response(JSON.stringify(sectionSaveError), { status: 422 }),
+        )
       const body = url.endsWith("/academic-terms")
         ? terms
         : url.endsWith("/sections")
@@ -389,6 +399,40 @@ describe("ScheduleFacultyLoadingWorkspace", () => {
     expect(
       screen.getByRole("dialog", { name: /Edit section assignment/ }),
     ).toBeInTheDocument()
+  })
+
+  it("shows the room conflict returned when saving a section assignment", async () => {
+    sectionSaveError = {
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "The submitted data is invalid.",
+        errors: {
+          room: [
+            "This room is already physically occupied by another section at the proposed time.",
+          ],
+        },
+        request_id: "test-room-conflict",
+      },
+    }
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }))
+    const dialog = screen.getByRole("dialog", {
+      name: "Edit section assignment",
+    })
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    )
+
+    expect(
+      await screen.findByText(
+        "This room is already physically occupied by another section at the proposed time.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("The submitted data is invalid."),
+    ).not.toBeInTheDocument()
   })
 
   it("finds a professor by name and narrows the Faculty Load Report view to that professor", async () => {

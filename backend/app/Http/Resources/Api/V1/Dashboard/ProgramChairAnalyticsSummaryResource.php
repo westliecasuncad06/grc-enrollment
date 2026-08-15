@@ -18,6 +18,8 @@ final class ProgramChairAnalyticsSummaryResource extends JsonResource
      *     type: string,
      *     academic_term_id: int,
      *     college: string,
+     *     official_enrolled_count: int,
+     *     year_level: ?int,
      *     enrollment_status_counts: array<string, int>,
      *     grade_status_counts: array<string, int>,
      *     retention_breakdown: list<array{grade_status: string, enrollment_status: string, count: int}>,
@@ -30,6 +32,8 @@ final class ProgramChairAnalyticsSummaryResource extends JsonResource
             'type' => 'program_chair_analytics_summary',
             'academic_term_id' => $this->resource->academicTermId,
             'college' => $this->resource->college,
+            'official_enrolled_count' => $this->resource->officialEnrolledCount,
+            'year_level' => $this->resource->yearLevel,
             'enrollment_status_counts' => $this->resource->enrollmentStatusCounts,
             'grade_status_counts' => $this->resource->gradeStatusCounts,
             'retention_breakdown' => array_map(

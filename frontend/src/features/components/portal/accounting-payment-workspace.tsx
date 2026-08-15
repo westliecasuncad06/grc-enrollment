@@ -5,7 +5,10 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
-import { PrintButton, PrintDocument } from "@/features/components/portal/print-document"
+import {
+  PrintButton,
+  PrintDocument,
+} from "@/features/components/portal/print-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
@@ -29,14 +32,20 @@ import {
 } from "@/features/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { Checkbox } from "@/features/components/ui/checkbox"
 import {
   useConfirmPaymentMutation,
   useEnrollmentsListQuery,
 } from "@/features/hooks/use-enrollment"
 import {
+  useRecordStudentAccountPaymentMutation,
+  useStudentAccountQuery,
+} from "@/features/hooks/use-student-account"
+import {
   useQueueTicketsQuery,
   useUpdateQueueTicketMutation,
 } from "@/features/hooks/use-queue-tickets"
+import { useCashierPaymentCandidateQuery } from "@/features/hooks/use-cashier-transactions"
 import type {
   Enrollment,
   PaymentConfirmation,
@@ -80,6 +89,13 @@ function byQueueOrder(a: QueueTicket, b: QueueTicket): number {
 function formatAmountDue(enrollment: Enrollment | undefined) {
   const total = enrollment?.assessment?.total_amount
   return total ? `₱${total}` : "—"
+}
+
+function formatPhp(amount: string): string {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+  }).format(Number(amount))
 }
 
 function WaitingTicketCard({
@@ -170,8 +186,18 @@ export function AccountingPaymentWorkspace() {
   const authorized = session?.role === "accounting_staff"
   const [confirming, setConfirming] = useState(false)
   const [amount, setAmount] = useState("")
+  const [promissoryNoteOnFile, setPromissoryNoteOnFile] = useState(false)
+  const [recordingBalance, setRecordingBalance] = useState(false)
+  const [balancePaymentAmount, setBalancePaymentAmount] = useState("")
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
+  const [processedEnrollmentId, setProcessedEnrollmentId] = useState<
+    number | null
+  >(null)
+  const [studentNumberInput, setStudentNumberInput] = useState("")
+  const [submittedStudentNumber, setSubmittedStudentNumber] = useState<
+    string | null
+  >(null)
   const [error, setError] = useState("")
 
   const ticketsQuery = useQueueTicketsQuery(
@@ -184,6 +210,7 @@ export function AccountingPaymentWorkspace() {
     { enabled: authorized },
   )
   const paymentMutation = useConfirmPaymentMutation()
+  const accountPaymentMutation = useRecordStudentAccountPaymentMutation()
 
   const tickets = ticketsQuery.data?.data ?? []
   const enrollments = pendingPaymentQuery.data?.data ?? []
@@ -198,6 +225,20 @@ export function AccountingPaymentWorkspace() {
   const nowServingEnrollment = nowServing
     ? enrollmentFor(nowServing)
     : undefined
+  const accountQuery = useStudentAccountQuery(
+    nowServingEnrollment?.student_id ?? null,
+    { enabled: authorized && nowServingEnrollment !== undefined },
+  )
+  const candidateQuery = useCashierPaymentCandidateQuery(
+    submittedStudentNumber,
+    { enabled: authorized },
+  )
+  const isCurrentEnrollmentProcessed =
+    processedEnrollmentId === nowServingEnrollment?.id
+  const confirmDisabled =
+    paymentMutation.isPending ||
+    nowServingEnrollment === undefined ||
+    isCurrentEnrollmentProcessed
 
   const callNext = () => {
     const next = waiting[0]
@@ -215,27 +256,62 @@ export function AccountingPaymentWorkspace() {
   }
 
   const openConfirm = () => {
+    if (confirmDisabled) return
     setAmount(nowServingEnrollment?.assessment?.total_amount ?? "")
+    setPromissoryNoteOnFile(false)
     setError("")
     setConfirming(true)
   }
 
   const confirmPayment = async () => {
-    if (!nowServing) return
+    if (!nowServing || confirmDisabled) return
     setError("")
     try {
       const result = await paymentMutation.mutateAsync({
         id: nowServing.enrollment_id,
         amount: amount.trim() ? Number(amount) : undefined,
+        promissoryNoteOnFile,
       })
       setLastConfirmation(result)
+      setProcessedEnrollmentId(result.enrollment.id)
       setConfirming(false)
       setAmount("")
+      void accountQuery.refetch()
     } catch {
       setError(
         "The payment could not be confirmed. Check the connection and try again.",
       )
     }
+  }
+
+  const openBalancePayment = () => {
+    setBalancePaymentAmount("")
+    setError("")
+    setRecordingBalance(true)
+  }
+
+  const recordBalancePayment = async () => {
+    if (!nowServingEnrollment) return
+    setError("")
+    try {
+      await accountPaymentMutation.mutateAsync({
+        studentId: nowServingEnrollment.student_id,
+        amount: Number(balancePaymentAmount),
+      })
+      setRecordingBalance(false)
+      setBalancePaymentAmount("")
+    } catch {
+      setError(
+        "The balance payment could not be recorded. Check the amount and try again.",
+      )
+    }
+  }
+
+  const serveSelectedStudent = () => {
+    const candidate = candidateQuery.data
+    if (!candidate || nowServing) return
+
+    ticketMutation.mutate({ id: candidate.ticket.id, action: "serve" })
   }
 
   return (
@@ -246,6 +322,7 @@ export function AccountingPaymentWorkspace() {
       lastUpdated={Math.max(
         ticketsQuery.dataUpdatedAt,
         pendingPaymentQuery.dataUpdatedAt,
+        accountQuery.dataUpdatedAt,
       )}
     >
       {error && (
@@ -257,12 +334,15 @@ export function AccountingPaymentWorkspace() {
         <Alert>
           <AlertDescription className="grid gap-3">
             <p>
-              Payment confirmed for enrollment #{lastConfirmation.enrollment.id}.
-              Digital COM {lastConfirmation.document.document_number ?? "pending"}{" "}
-              is ready.
+              Payment confirmed for enrollment #{lastConfirmation.enrollment.id}
+              . Digital COM{" "}
+              {lastConfirmation.document.document_number ?? "pending"} is ready.
             </p>
             {lastConfirmation.document.document_number && (
-              <PrintDocument title="Digital Certificate of Matriculation" actions={<PrintButton />}>
+              <PrintDocument
+                title="Digital Certificate of Matriculation"
+                actions={<PrintButton />}
+              >
                 <div className="grid gap-1 rounded-lg border p-4">
                   <p className="font-medium">
                     Digital Certificate of Matriculation
@@ -290,6 +370,76 @@ export function AccountingPaymentWorkspace() {
           </AlertDescription>
         </Alert>
       )}
+      <Card>
+        <CardHeader>
+          <CardTitle level={2}>Find student</CardTitle>
+          <CardDescription>
+            Search a student number before serving an eligible payment ticket.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <form
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={(event) => {
+              event.preventDefault()
+              setSubmittedStudentNumber(studentNumberInput.trim() || null)
+            }}
+          >
+            <Field className="min-w-52 flex-1">
+              <FieldLabel htmlFor="cashier-student-number">
+                Find student number
+              </FieldLabel>
+              <Input
+                id="cashier-student-number"
+                value={studentNumberInput}
+                onChange={(event) => setStudentNumberInput(event.target.value)}
+              />
+            </Field>
+            <Button type="submit" disabled={!studentNumberInput.trim()}>
+              Find student
+            </Button>
+          </form>
+          {candidateQuery.isPending && (
+            <p className="text-sm text-muted-foreground">
+              Finding eligible payment ticket…
+            </p>
+          )}
+          {candidateQuery.isError && submittedStudentNumber && (
+            <p className="text-sm text-destructive">
+              No eligible payment ticket was found for this student number.
+            </p>
+          )}
+          {candidateQuery.data && (
+            <div className="grid gap-3 rounded-lg border p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="grid gap-1">
+                <p className="font-medium">
+                  {candidateQuery.data.student_name}
+                </p>
+                <p className="text-muted-foreground">
+                  {candidateQuery.data.student_number} · Year{" "}
+                  {candidateQuery.data.year_level} ·{" "}
+                  {candidateQuery.data.ticket.ticket_number}
+                </p>
+              </div>
+              {candidateQuery.data.ticket.status === "serving" ? (
+                <p className="font-medium">This student is now serving.</p>
+              ) : nowServing ? (
+                <p className="text-muted-foreground">
+                  Skip the current ticket before serving this student.
+                </p>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={ticketMutation.isPending}
+                  onClick={serveSelectedStudent}
+                >
+                  Serve selected student
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <AsyncBoundary
         query={{
           isPending: ticketsQuery.isPending || pendingPaymentQuery.isPending,
@@ -340,13 +490,79 @@ export function AccountingPaymentWorkspace() {
                         ? `₱${nowServingEnrollment.assessment.total_amount}`
                         : "—"}
                     </p>
+                    {accountQuery.isPending && (
+                      <p className="text-sm text-muted-foreground">
+                        Loading student account…
+                      </p>
+                    )}
+                    {accountQuery.isError && (
+                      <p className="text-sm text-destructive">
+                        Student account details are unavailable right now.
+                      </p>
+                    )}
+                    {accountQuery.data && (
+                      <dl className="grid gap-3 rounded-lg border p-3 text-sm sm:grid-cols-2">
+                        <div className="grid gap-1">
+                          <dt className="text-muted-foreground">Student</dt>
+                          <dd className="font-medium">
+                            {accountQuery.data.student_name}
+                          </dd>
+                        </div>
+                        <div className="grid gap-1">
+                          <dt className="text-muted-foreground">
+                            Student details
+                          </dt>
+                          <dd>
+                            {accountQuery.data.student_number} · Year{" "}
+                            {accountQuery.data.year_level}
+                          </dd>
+                        </div>
+                        <div className="grid gap-1">
+                          <dt className="text-muted-foreground">
+                            Prior balance
+                          </dt>
+                          <dd className="font-medium">
+                            {formatPhp(accountQuery.data.prior_balance)}
+                          </dd>
+                        </div>
+                        <div className="grid gap-1">
+                          <dt className="text-muted-foreground">
+                            Total outstanding
+                          </dt>
+                          <dd className="font-medium">
+                            {formatPhp(accountQuery.data.outstanding_balance)}
+                          </dd>
+                        </div>
+                        {accountQuery.data.has_promissory_note_on_file && (
+                          <div className="sm:col-span-2">
+                            <Badge variant="outline">
+                              Promissory note on file
+                            </Badge>
+                          </div>
+                        )}
+                      </dl>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
-                        disabled={ticketMutation.isPending}
+                        disabled={confirmDisabled}
                         onClick={openConfirm}
                       >
-                        Confirm payment
+                        {isCurrentEnrollmentProcessed
+                          ? "Payment processed"
+                          : "Confirm payment"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          accountPaymentMutation.isPending ||
+                          accountQuery.data === undefined ||
+                          accountQuery.data.outstanding_balance === "0.00"
+                        }
+                        onClick={openBalancePayment}
+                      >
+                        Record balance payment
                       </Button>
                       <Button
                         type="button"
@@ -359,7 +575,9 @@ export function AccountingPaymentWorkspace() {
                       <Button
                         type="button"
                         variant="secondary"
-                        disabled={ticketMutation.isPending || waiting.length === 0}
+                        disabled={
+                          ticketMutation.isPending || waiting.length === 0
+                        }
                         onClick={callNext}
                       >
                         Call next →
@@ -373,7 +591,9 @@ export function AccountingPaymentWorkspace() {
                     </p>
                     <Button
                       type="button"
-                      disabled={ticketMutation.isPending || waiting.length === 0}
+                      disabled={
+                        ticketMutation.isPending || waiting.length === 0
+                      }
                       onClick={callNext}
                       className="w-fit"
                     >
@@ -410,8 +630,8 @@ export function AccountingPaymentWorkspace() {
                       key: "student",
                       header: "Student",
                       render: (ticket) => {
-                        const financialStatusLabel = enrollmentFor(ticket)
-                          ?.student_financial_status_label
+                        const financialStatusLabel =
+                          enrollmentFor(ticket)?.student_financial_status_label
                         return (
                           <span className="flex items-center gap-2">
                             {ticket.student_number}
@@ -427,7 +647,8 @@ export function AccountingPaymentWorkspace() {
                     {
                       key: "amount",
                       header: "Amount due",
-                      render: (ticket) => formatAmountDue(enrollmentFor(ticket)),
+                      render: (ticket) =>
+                        formatAmountDue(enrollmentFor(ticket)),
                     },
                     {
                       key: "actions",
@@ -460,7 +681,9 @@ export function AccountingPaymentWorkspace() {
 
             <Card>
               <CardHeader>
-                <CardTitle level={2}>Served today ({servedToday.length})</CardTitle>
+                <CardTitle level={2}>
+                  Served today ({servedToday.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <DataTable
@@ -506,8 +729,7 @@ export function AccountingPaymentWorkspace() {
             <AlertDialogDescription>
               This is a manual payment — no external reference is collected.
               Confirming generates the Digital COM and is recorded in the
-              operational audit log. Confirming twice has no additional
-              effect.
+              operational audit log. Confirming twice has no additional effect.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
@@ -521,6 +743,21 @@ export function AccountingPaymentWorkspace() {
                 disabled={paymentMutation.isPending}
               />
             </Field>
+            <Field>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="promissory-note-on-file"
+                  checked={promissoryNoteOnFile}
+                  onCheckedChange={(checked) =>
+                    setPromissoryNoteOnFile(checked === true)
+                  }
+                  disabled={paymentMutation.isPending}
+                />
+                <FieldLabel htmlFor="promissory-note-on-file">
+                  Promissory note on file
+                </FieldLabel>
+              </div>
+            </Field>
           </FieldGroup>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={paymentMutation.isPending}>
@@ -528,12 +765,61 @@ export function AccountingPaymentWorkspace() {
             </AlertDialogCancel>
             <Button
               type="button"
-              disabled={paymentMutation.isPending}
+              disabled={confirmDisabled}
               onClick={() => void confirmPayment()}
             >
               {paymentMutation.isPending
                 ? "Confirming payment"
-                : "Confirm payment"}
+                : isCurrentEnrollmentProcessed
+                  ? "Payment processed"
+                  : "Confirm payment"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={recordingBalance}
+        onOpenChange={(open) => {
+          if (!open && !accountPaymentMutation.isPending)
+            setRecordingBalance(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Record balance payment</AlertDialogTitle>
+            <AlertDialogDescription>
+              This is applied to the oldest outstanding enrollment and does not
+              confirm the current enrollment or change the queue ticket.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="balance-payment-amount">
+                Balance payment amount
+              </FieldLabel>
+              <Input
+                id="balance-payment-amount"
+                inputMode="decimal"
+                value={balancePaymentAmount}
+                onChange={(event) =>
+                  setBalancePaymentAmount(event.target.value)
+                }
+                disabled={accountPaymentMutation.isPending}
+              />
+            </Field>
+          </FieldGroup>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={accountPaymentMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={accountPaymentMutation.isPending}
+              onClick={() => void recordBalancePayment()}
+            >
+              {accountPaymentMutation.isPending
+                ? "Recording payment"
+                : "Record payment"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

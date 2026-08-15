@@ -45,6 +45,7 @@ export type ConnectedModuleId =
   | "rooms"
   | "schedule-proposals"
   | "program-chair-analytics"
+  | "registrar-analytics"
   | "schedule-approvals"
   | "curriculum-approvals"
   | "master-schedule"
@@ -88,6 +89,7 @@ export const connectedModuleIds = [
   "rooms",
   "schedule-proposals",
   "program-chair-analytics",
+  "registrar-analytics",
   "schedule-approvals",
   "curriculum-approvals",
   "master-schedule",
@@ -199,6 +201,7 @@ export const connectedModuleRegistry: Readonly<
   rooms: roomsOperationsWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "program-chair-analytics": AnalyticsDashboardWorkspace,
+  "registrar-analytics": AnalyticsDashboardWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,
   "curriculum-approvals": CurriculumApprovalsWorkspace,
   "master-schedule": MasterScheduleWorkspace,

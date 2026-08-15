@@ -82,4 +82,10 @@ final class SectionDemandForecast extends Model
     {
         return $this->belongsTo(Subject::class);
     }
+
+    /** @return BelongsTo<Curriculum, $this> */
+    public function curriculum(): BelongsTo
+    {
+        return $this->belongsTo(Curriculum::class);
+    }
 }

@@ -4,10 +4,11 @@ namespace App\Actions\Analytics;
 
 use App\Actions\Scheduling\ApplyDemandForecastToDraft;
 use App\Actions\Scheduling\GenerateFacultyAssignmentRecommendations;
+use App\Domain\Analytics\HistoricalCohortReference;
 use App\Domain\Analytics\HistoricalCohortResolver;
 use App\Domain\Analytics\PredictionRunStatus;
 use App\Domain\Analytics\PredictionType;
-use App\Domain\Curriculum\CurriculumStatus;
+use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Scheduling\ScheduleGenerationStatus;
 use App\Domain\Scheduling\ScheduleGenerationWarningType;
 use App\Models\CurriculumSubject;
@@ -15,14 +16,16 @@ use App\Models\PredictionRun;
 use App\Models\ScheduleGenerationRun;
 use App\Models\SectionDemandForecast;
 use App\Models\SectionDemandObservation;
+use App\Models\StudentProfile;
 use App\Services\Analytics\SectionDemandPredictionClient;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Produces advisory, aggregate-only section demand forecasts. It deliberately
- * does not enroll a student or publish a schedule; Program Chairs retain the
- * final section and capacity decisions in the existing draft workflow.
+ * Produces advisory, aggregate-only section demand forecasts. Forecasts are
+ * calculated at program/curriculum/year cohort grain and copied to that
+ * cohort's current-term subjects, so one recommendation controls all blocks.
  */
 final class GenerateSectionDemandForecasts
 {
@@ -47,154 +50,148 @@ final class GenerateSectionDemandForecasts
         $predictionRun = PredictionRun::create([
             'type' => PredictionType::SectionDemand,
             'academic_term_id' => $term->id,
-            'model_version' => 'section-demand-rf-v1',
-            'feature_schema_version' => 'v1',
+            'model_version' => 'section-demand-rf-v2',
+            'feature_schema_version' => 'v2',
             'status' => PredictionRunStatus::Running,
             'started_at' => now(),
         ]);
         $generationRun->update(['prediction_run_id' => $predictionRun->id]);
 
         try {
-            $placements = CurriculumSubject::query()
-                ->with('curriculum.program')
-                ->where(function ($query) use ($term): void {
-                    $query->where('semester', $term->semester)
-                        ->orWhere('semester', 'like', '%'.$term->semester.'%');
-                })
-                ->whereHas('curriculum', fn ($curricula) => $curricula->where('status', CurriculumStatus::Active))
-                ->whereHas('curriculum.program', fn ($programs) => $programs
-                    ->where('college', $generationRun->college)
-                    // The Teacher Certificate Program is a one-year intake,
-                    // not a 4-year degree — the automation's documented
-                    // scope is the 1st-4th year degree-program process
-                    // only, so TCP's placements never reach the predictor.
-                    ->where('code', '!=', 'TCP'))
-                ->get();
+            $placements = $this->currentTermPlacements($generationRun);
+            $cohorts = $this->eligibleCohorts($placements);
 
-            if ($placements->isEmpty()) {
+            if ($cohorts->isEmpty()) {
                 $this->completeWithoutPlacements($generationRun, $predictionRun);
 
                 return;
             }
 
-            $observations = [];
-            $targets = [];
-            foreach ($placements as $placement) {
+            /** @var array<string, array{forecast: array<string, mixed>, history: HistoricalCohortReference, observation_count: int, strategy: string}> $forecastByCohort */
+            $forecastByCohort = [];
+            $warnings = [];
+            $totalObservationCount = 0;
+            $serviceFallbackCount = 0;
+
+            foreach ($cohorts as $cohort) {
                 $history = $this->historicalCohortResolver->resolve(
                     $term->school_year,
                     $term->semester,
-                    $placement->year_level,
+                    $cohort['year_level'],
                 );
-                $targetKey = $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->year_level;
+                $observations = $this->realHistoricalObservations($cohort, $history);
 
-                $rows = SectionDemandObservation::query()
-                    ->where('program_id', $placement->curriculum->program_id)
-                    ->where('curriculum_id', $placement->curriculum_id)
-                    ->where('subject_id', $placement->subject_id)
-                    ->where('year_level', $history->yearLevel)
-                    ->whereHas('academicTerm', fn ($terms) => $terms
-                        ->where('school_year', $history->schoolYear)
-                        ->where('semester', $history->semester))
-                    ->orderBy('id')
-                    ->get();
-
-                if ($rows->isEmpty()) {
+                if ($observations === []) {
                     continue;
                 }
 
-                foreach ($rows as $row) {
-                    $observations[] = [
-                        'cohort_size' => $row->cohort_size,
-                        'enrolled_count' => $row->enrolled_count,
-                        'section_count' => $row->section_count,
-                        'offered_capacity' => $row->offered_capacity,
-                        'year_level' => $row->year_level,
-                        'semester' => $history->semester,
+                $target = [[
+                    'key' => $cohort['key'],
+                    'cohort_size' => $cohort['cohort_size'],
+                    'section_count' => $observations[array_key_last($observations)]['section_count'],
+                    'recommended_capacity' => 40,
+                    'year_level' => $cohort['year_level'],
+                    'semester' => $term->semester,
+                ]];
+
+                try {
+                    $response = $this->predictionClient->predict($observations, $target);
+                    $strategy = (string) ($response['strategy'] ?? 'unknown');
+                } catch (Throwable $exception) {
+                    report($exception);
+                    $response = $this->localBaselineResponse($observations, $target);
+                    $strategy = 'service_unavailable_historical_baseline';
+                    $serviceFallbackCount++;
+                    $warnings[] = [
+                        'type' => ScheduleGenerationWarningType::PredictionServiceUnavailable->value,
+                        'message' => 'Prediction service was unavailable; generated an editable draft from validated historical cohort data.',
+                        'entity_id' => $cohort['curriculum_id'],
                     ];
                 }
 
-                /** @var SectionDemandObservation $latestObservation */
-                $latestObservation = $rows->last();
-                $targets[] = [
-                    'key' => $targetKey,
-                    'cohort_size' => $latestObservation->cohort_size,
-                    'section_count' => $latestObservation->section_count,
-                    'recommended_capacity' => 40,
-                    'year_level' => $placement->year_level,
-                    'semester' => $term->semester,
+                $forecast = collect($response['forecasts'] ?? [])->firstWhere('key', $cohort['key']);
+                if (! is_array($forecast)) {
+                    $warnings[] = [
+                        'type' => ScheduleGenerationWarningType::NoForecastReturned->value,
+                        'message' => "No demand forecast returned for {$cohort['key']}.",
+                        'entity_id' => $cohort['curriculum_id'],
+                    ];
+
+                    continue;
+                }
+
+                $forecastByCohort[$cohort['key']] = [
+                    'forecast' => $forecast,
+                    'history' => $history,
+                    'observation_count' => count($observations),
+                    'strategy' => $strategy,
                 ];
+                $totalObservationCount += count($observations);
             }
 
-            if ($observations === [] || $targets === []) {
+            if ($forecastByCohort === []) {
                 $this->completeWithoutHistory($generationRun, $predictionRun);
 
                 return;
             }
 
-            $response = $this->predictionClient->predict($observations, $targets);
-            $forecastByKey = collect($response['forecasts'] ?? [])->keyBy('key');
-            $warnings = [];
-
-            DB::transaction(function () use ($placements, $forecastByKey, $predictionRun, $term, &$warnings): void {
-                foreach ($placements as $placement) {
-                    $key = $placement->curriculum_id.':'.$placement->subject_id.':'.$placement->year_level;
-                    $forecast = $forecastByKey->get($key);
-                    if (! is_array($forecast)) {
-                        $warnings[] = [
-                            'type' => ScheduleGenerationWarningType::NoForecastReturned->value,
-                            'message' => "No demand forecast returned for subject {$placement->subject_id}.",
-                            'entity_id' => $placement->subject_id,
-                        ];
-
+            DB::transaction(function () use ($cohorts, $forecastByCohort, $predictionRun, $term): void {
+                foreach ($cohorts as $cohort) {
+                    $result = $forecastByCohort[$cohort['key']] ?? null;
+                    if ($result === null) {
                         continue;
                     }
 
-                    // A forecast is term/subject advisory evidence. Multiple
-                    // curriculum placements of the same subject share that
-                    // aggregate output rather than duplicating student data.
-                    SectionDemandForecast::updateOrCreate(
-                        [
-                            'prediction_run_id' => $predictionRun->id,
-                            'academic_term_id' => $term->id,
-                            'subject_id' => $placement->subject_id,
-                        ],
-                        [
-                            'program_id' => $placement->curriculum->program_id,
-                            'curriculum_id' => $placement->curriculum_id,
-                            'year_level' => $placement->year_level,
-                            'historical_school_year' => $this->historicalCohortResolver->resolve($term->school_year, $term->semester, $placement->year_level)->schoolYear,
-                            'historical_semester' => $this->historicalCohortResolver->resolve($term->school_year, $term->semester, $placement->year_level)->semester,
-                            'historical_year_level' => $this->historicalCohortResolver->resolve($term->school_year, $term->semester, $placement->year_level)->yearLevel,
-                            'predicted_demand' => $forecast['predicted_demand'],
-                            'suggested_section_count' => $forecast['suggested_section_count'],
-                            'confidence_lower' => $forecast['confidence_lower'],
-                            'confidence_upper' => $forecast['confidence_upper'],
-                            'rationale' => [
-                                'model_strategy' => $response['strategy'] ?? 'unknown',
-                                'section_formula' => 'ceil(predicted demand / recommended capacity)',
-                                'recommended_capacity' => 40,
+                    foreach ($cohort['placements'] as $placement) {
+                        SectionDemandForecast::updateOrCreate(
+                            [
+                                'prediction_run_id' => $predictionRun->id,
+                                'academic_term_id' => $term->id,
+                                'curriculum_id' => $placement->curriculum_id,
+                                'subject_id' => $placement->subject_id,
+                                'year_level' => $placement->year_level,
                             ],
-                        ],
-                    );
+                            [
+                                'program_id' => $placement->curriculum->program_id,
+                                'historical_school_year' => $result['history']->schoolYear,
+                                'historical_semester' => $result['history']->semester,
+                                'historical_year_level' => $result['history']->yearLevel,
+                                'predicted_demand' => $result['forecast']['predicted_demand'],
+                                'suggested_section_count' => $result['forecast']['suggested_section_count'],
+                                'confidence_lower' => $result['forecast']['confidence_lower'],
+                                'confidence_upper' => $result['forecast']['confidence_upper'],
+                                'rationale' => [
+                                    'model_strategy' => $result['strategy'],
+                                    'forecast_grain' => 'program_curriculum_year_cohort',
+                                    'history_observation_count' => $result['observation_count'],
+                                    'recommended_capacity' => 40,
+                                ],
+                            ],
+                        );
+                    }
                 }
             });
 
+            $firstResult = reset($forecastByCohort);
             $predictionRun->update([
                 'status' => PredictionRunStatus::Succeeded,
-                'model_version' => $response['model_version'] ?? 'section-demand-rf-v1',
-                'feature_schema_version' => $response['feature_schema_version'] ?? 'v1',
-                'metrics' => array_merge([
-                    'forecast_count' => $forecastByKey->count(),
-                    'observation_count' => count($observations),
-                    'strategy' => $response['strategy'] ?? 'unknown',
-                ], is_array($response['metrics'] ?? null) ? $response['metrics'] : []),
+                'model_version' => $serviceFallbackCount === count($forecastByCohort)
+                    ? 'section-demand-local-baseline-v1'
+                    : 'section-demand-rf-v2',
+                'feature_schema_version' => 'v2',
+                'metrics' => [
+                    'forecast_count' => count($forecastByCohort),
+                    'observation_count' => $totalObservationCount,
+                    'strategy' => $firstResult['strategy'],
+                    'service_fallback_count' => $serviceFallbackCount,
+                ],
                 'completed_at' => now(),
             ]);
             $warnings = array_merge($warnings, $this->applyDemandForecastToDraft->execute($generationRun, $predictionRun));
             $warnings = array_merge($warnings, $this->facultyRecommendations->execute($generationRun));
             $generationRun->update([
                 'status' => ScheduleGenerationStatus::Succeeded,
-                'warnings' => $warnings,
+                'warnings' => array_values(array_unique($warnings, SORT_REGULAR)),
                 'completed_at' => now(),
             ]);
         } catch (Throwable $exception) {
@@ -206,10 +203,131 @@ final class GenerateSectionDemandForecasts
             ]);
             $generationRun->update([
                 'status' => ScheduleGenerationStatus::Failed,
-                'error_summary' => 'Demand forecast generation failed. Review the service connection and retry.',
+                'error_summary' => 'Demand forecast generation failed. Review the generation data and retry.',
                 'completed_at' => now(),
             ]);
         }
+    }
+
+    /** @return Collection<int, CurriculumSubject> */
+    private function currentTermPlacements(ScheduleGenerationRun $generationRun): Collection
+    {
+        return CurriculumSubject::query()
+            ->with('curriculum.program')
+            ->where(function ($query) use ($generationRun): void {
+                $query->where('semester', $generationRun->academicTerm->semester)
+                    ->orWhere('semester', 'like', '%'.$generationRun->academicTerm->semester.'%');
+            })
+            ->whereHas('curriculum.program', fn ($programs) => $programs
+                ->where('college', $generationRun->college)
+                ->where('code', '!=', 'TCP'))
+            ->get();
+    }
+
+    /**
+     * @param  Collection<int, CurriculumSubject>  $placements
+     * @return Collection<int, array{key: string, curriculum_id: int, program_id: int, year_level: int, cohort_size: int, placements: Collection<int, CurriculumSubject>}>
+     */
+    private function eligibleCohorts(Collection $placements): Collection
+    {
+        return $placements
+            ->groupBy(fn (CurriculumSubject $placement): string => $placement->curriculum_id.':'.$placement->year_level)
+            ->map(function (Collection $cohortPlacements, string $key): array {
+                /** @var CurriculumSubject $firstPlacement */
+                $firstPlacement = $cohortPlacements->first();
+
+                return [
+                    'key' => $key,
+                    'curriculum_id' => $firstPlacement->curriculum_id,
+                    'program_id' => $firstPlacement->curriculum->program_id,
+                    'year_level' => $firstPlacement->year_level,
+                    'cohort_size' => StudentProfile::query()
+                        ->where('curriculum_id', $firstPlacement->curriculum_id)
+                        ->where('year_level', $firstPlacement->year_level)
+                        ->whereIn('admission_status', [AdmissionStatus::Admitted->value, AdmissionStatus::Enrolled->value])
+                        ->count(),
+                    'placements' => $cohortPlacements,
+                ];
+            })
+            ->filter(fn (array $cohort): bool => $cohort['cohort_size'] > 0)
+            ->values();
+    }
+
+    /**
+     * @param  array{program_id: int, curriculum_id: int, year_level: int}  $cohort
+     * @return list<array{cohort_size: int, enrolled_count: int, section_count: int, offered_capacity: int, year_level: int, semester: string}>
+     */
+    private function realHistoricalObservations(array $cohort, HistoricalCohortReference $history): array
+    {
+        $rows = SectionDemandObservation::query()
+            ->with('academicTerm')
+            ->where('program_id', $cohort['program_id'])
+            ->where('curriculum_id', $cohort['curriculum_id'])
+            ->where('year_level', $history->yearLevel)
+            ->where('source', 'derived_from_enrollments')
+            ->whereHas('academicTerm', fn ($terms) => $terms
+                ->where('semester', $history->semester)
+                ->where('school_year', '<=', $history->schoolYear))
+            ->get();
+
+        if ($rows->isEmpty()) {
+            $rows = SectionDemandObservation::query()
+                ->with('academicTerm')
+                ->where('program_id', $cohort['program_id'])
+                ->where('year_level', $history->yearLevel)
+                ->where('source', 'derived_from_enrollments')
+                ->whereHas('academicTerm', fn ($terms) => $terms
+                    ->where('semester', $history->semester)
+                    ->where('school_year', '<=', $history->schoolYear))
+                ->get();
+        }
+
+        return $rows
+            ->sortBy(fn (SectionDemandObservation $row): string => $row->academicTerm->school_year)
+            ->groupBy('academic_term_id')
+            ->map(function (Collection $termRows): array {
+                /** @var SectionDemandObservation $first */
+                $first = $termRows->first();
+
+                return [
+                    'cohort_size' => (int) $termRows->max('cohort_size'),
+                    'enrolled_count' => (int) $termRows->max('enrolled_count'),
+                    'section_count' => (int) $termRows->max('section_count'),
+                    'offered_capacity' => (int) $termRows->max('offered_capacity'),
+                    'year_level' => $first->year_level,
+                    'semester' => $first->academicTerm->semester,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<array{cohort_size: int, enrolled_count: int, section_count: int, offered_capacity: int, year_level: int, semester: string}>  $observations
+     * @param  list<array{key: string, cohort_size: int, section_count: int, recommended_capacity: int, year_level: int, semester: string}>  $targets
+     * @return array{model_version: string, feature_schema_version: string, strategy: string, forecasts: list<array{key: string, predicted_demand: float, confidence_lower: float, confidence_upper: float, suggested_section_count: int}>}
+     */
+    private function localBaselineResponse(array $observations, array $targets): array
+    {
+        $latest = $observations[array_key_last($observations)];
+
+        return [
+            'model_version' => 'section-demand-local-baseline-v1',
+            'feature_schema_version' => 'v2',
+            'strategy' => 'service_unavailable_historical_baseline',
+            'forecasts' => array_map(function (array $target) use ($latest): array {
+                $enrollmentRate = $latest['enrolled_count'] / max($latest['cohort_size'], 1);
+                $predictedDemand = round(max(0, $target['cohort_size'] * $enrollmentRate), 2);
+
+                return [
+                    'key' => $target['key'],
+                    'predicted_demand' => $predictedDemand,
+                    'confidence_lower' => $predictedDemand,
+                    'confidence_upper' => $predictedDemand,
+                    'suggested_section_count' => max(1, $latest['section_count']),
+                ];
+            }, $targets),
+        ];
     }
 
     private function completeWithoutPlacements(ScheduleGenerationRun $generationRun, PredictionRun $predictionRun): void
@@ -223,7 +341,7 @@ final class GenerateSectionDemandForecasts
             'status' => ScheduleGenerationStatus::Succeeded,
             'warnings' => [[
                 'type' => ScheduleGenerationWarningType::NoCurriculumSubjects->value,
-                'message' => 'No current-term curriculum subjects were found for this college.',
+                'message' => 'No current-term student cohorts were found for this college.',
                 'entity_id' => null,
             ]],
             'completed_at' => now(),
@@ -245,7 +363,7 @@ final class GenerateSectionDemandForecasts
             'status' => ScheduleGenerationStatus::Succeeded,
             'warnings' => [[
                 'type' => ScheduleGenerationWarningType::InsufficientHistory->value,
-                'message' => 'Insufficient historical demand data for this college and term.',
+                'message' => 'Insufficient validated historical demand data for this college and term.',
                 'entity_id' => null,
             ]],
             'completed_at' => now(),

@@ -30,6 +30,8 @@ const enrolledEnrollment: Enrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_name: null,
+  student_year_level: null,
   student_financial_status: null,
   student_financial_status_label: null,
   academic_term_id: 2,
@@ -86,7 +88,9 @@ function mockRoutes(overrides: { requests?: readonly unknown[] } = {}) {
     const target = url(input)
     if (target.includes("/withdraw") && init?.method === "POST")
       return Promise.resolve(
-        new Response(JSON.stringify({ data: withdrawalRequest }), { status: 201 }),
+        new Response(JSON.stringify({ data: withdrawalRequest }), {
+          status: 201,
+        }),
       )
     if (target.includes("/withdrawal-requests"))
       return Promise.resolve(
@@ -115,7 +119,9 @@ describe("EnrollmentWithdrawPanel", () => {
       if (target.includes("/withdraw") && init?.method === "POST") {
         postBody = init.body ? JSON.parse(init.body as string) : null
         return Promise.resolve(
-          new Response(JSON.stringify({ data: withdrawalRequest }), { status: 201 }),
+          new Response(JSON.stringify({ data: withdrawalRequest }), {
+            status: 201,
+          }),
         )
       }
       return mockRoutes()(input, init)
@@ -159,9 +165,7 @@ describe("EnrollmentWithdrawPanel", () => {
   })
 
   it("shows a pending-request message instead of the withdraw button when one already exists", async () => {
-    fetchMock.mockImplementation(
-      mockRoutes({ requests: [withdrawalRequest] }),
-    )
+    fetchMock.mockImplementation(mockRoutes({ requests: [withdrawalRequest] }))
     renderWithSession(
       <EnrollmentWithdrawPanel enrollment={enrolledEnrollment} />,
       { session: studentSession },

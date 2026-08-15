@@ -28,7 +28,7 @@ class DemandTarget(BaseModel):
 class SectionDemandPredictionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    feature_schema_version: Literal["v1"]
+    feature_schema_version: Literal["v1", "v2"]
     observations: list[DemandObservation] = Field(min_length=1)
     targets: list[DemandTarget] = Field(min_length=1)
 
@@ -63,8 +63,8 @@ class DemandModelMetrics(BaseModel):
 class SectionDemandPredictionData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_version: Literal["section-demand-rf-v1"]
-    feature_schema_version: Literal["v1"]
+    model_version: Literal["section-demand-rf-v1", "section-demand-rf-v2"]
+    feature_schema_version: Literal["v1", "v2"]
     strategy: Literal["random_forest", "historical_baseline"]
     metrics: DemandModelMetrics
     forecasts: list[DemandForecast]

@@ -87,6 +87,7 @@ async def predict_section_demand(
         data=SectionDemandPredictor().predict(
             request.data.observations,
             request.data.targets,
+            request.data.feature_schema_version,
         )
     )
 

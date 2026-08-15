@@ -8,10 +8,11 @@ use App\Models\User;
 /**
  * Computed views, not stored resources — the same shape as
  * EligibleSubjectPolicy and FacultyMemberPolicy. Each dashboard method is
- * role-exclusive by design: Enrollment Summary is shared between Dean and
+ * role-scoped by design: Enrollment Summary is shared between Dean and
  * Executive Director (both are authorized to see enrollment-level activity
- * per PRD §3.5/§3.6), but Institution Summary and Policy Settings are each
- * scoped to exactly one role.
+ * per PRD §3.5/§3.6); Analytics is shared by Program Chair and Registrar
+ * Head with a narrower scope enforced by its controller; Institution Summary
+ * and Policy Settings are each scoped to exactly one role.
  */
 final class DashboardPolicy
 {
@@ -32,6 +33,10 @@ final class DashboardPolicy
 
     public function viewAnalytics(User $user): bool
     {
-        return $user->role === UserRole::ProgramChair;
+        return in_array(
+            $user->role,
+            [UserRole::ProgramChair, UserRole::RegistrarHead],
+            true,
+        );
     }
 }

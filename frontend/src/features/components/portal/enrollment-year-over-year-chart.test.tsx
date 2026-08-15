@@ -47,12 +47,12 @@ describe("EnrollmentYearOverYearChart", () => {
     const { container } = render(<EnrollmentYearOverYearChart points={[]} />)
 
     expect(
-      screen.getByText("No year-over-year enrollment data is available yet."),
+      screen.getByText("No official enrollment trend data is available yet."),
     ).toBeInTheDocument()
     expect(container.querySelector(".recharts-wrapper")).not.toBeInTheDocument()
   })
 
-  it("pivots multiple school years into one line per year and a legend", () => {
+  it("keeps multiple school years in one chronological line", () => {
     const { container } = render(
       <EnrollmentYearOverYearChart
         points={[
@@ -64,14 +64,27 @@ describe("EnrollmentYearOverYearChart", () => {
       />,
     )
 
-    expect(container.querySelectorAll(".recharts-line")).toHaveLength(2)
-    expect(screen.getAllByText("2023-2024").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("2024-2025").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("1st").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("2nd").length).toBeGreaterThan(0)
+    expect(container.querySelectorAll(".recharts-line")).toHaveLength(1)
+    expect(container.querySelector(".recharts-legend-wrapper")).not.toBeInTheDocument()
   })
 
-  it("generalizes past two school years without hardcoding a count", () => {
+  it("renders one chronological official-enrollment trend across school years", () => {
+    const { container } = render(
+      <EnrollmentYearOverYearChart
+        points={[
+          { school_year: "2024-2025", semester: "1st", enrollee_count: 100 },
+          { school_year: "2024-2025", semester: "2nd", enrollee_count: 108 },
+          { school_year: "2025-2026", semester: "1st", enrollee_count: 92 },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText("Official Enrollment Trend")).toBeInTheDocument()
+    expect(container.querySelectorAll(".recharts-line")).toHaveLength(1)
+    expect(container.querySelector(".recharts-legend-wrapper")).not.toBeInTheDocument()
+  })
+
+  it("generalizes across many school years without creating duplicate series", () => {
     const { container } = render(
       <EnrollmentYearOverYearChart
         points={[
@@ -83,7 +96,7 @@ describe("EnrollmentYearOverYearChart", () => {
       />,
     )
 
-    expect(container.querySelectorAll(".recharts-line")).toHaveLength(4)
+    expect(container.querySelectorAll(".recharts-line")).toHaveLength(1)
   })
 
   it("renders a single line and no legend box for a single school year", () => {

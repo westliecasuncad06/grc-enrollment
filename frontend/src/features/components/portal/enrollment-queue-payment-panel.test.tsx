@@ -10,6 +10,8 @@ const baseEnrollment: Enrollment = {
   id: 9,
   student_id: 4,
   student_number: "2026-0001",
+  student_name: null,
+  student_year_level: null,
   student_financial_status: null,
   student_financial_status_label: null,
   academic_term_id: 2,
@@ -86,9 +88,7 @@ describe("EnrollmentQueuePaymentPanel", () => {
       />,
     )
 
-    expect(
-      screen.getByText("3 students are ahead of you."),
-    ).toBeInTheDocument()
+    expect(screen.getByText("3 students are ahead of you.")).toBeInTheDocument()
   })
 
   it("shows a next-in-line message when nobody is ahead", () => {

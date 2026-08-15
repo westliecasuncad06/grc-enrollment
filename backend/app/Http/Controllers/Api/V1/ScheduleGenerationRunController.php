@@ -98,7 +98,7 @@ final class ScheduleGenerationRunController extends Controller
     private function result(ScheduleGenerationRun $run, BuildFacultyLoadReport $facultyLoadReport): array
     {
         $forecasts = $run->prediction_run_id === null ? collect() : SectionDemandForecast::query()
-            ->with('subject')
+            ->with(['subject', 'curriculum'])
             ->where('prediction_run_id', $run->prediction_run_id)
             ->orderBy('year_level')
             ->orderBy('subject_id')
@@ -107,6 +107,9 @@ final class ScheduleGenerationRunController extends Controller
                 'subject_id' => $forecast->subject_id,
                 'subject_code' => $forecast->subject->code,
                 'subject_title' => $forecast->subject->title,
+                'curriculum_id' => $forecast->curriculum_id,
+                'curriculum_name' => $forecast->curriculum?->name,
+                'curriculum_effective_school_year' => $forecast->curriculum?->effective_school_year,
                 'year_level' => $forecast->year_level,
                 'predicted_demand' => (float) $forecast->predicted_demand,
                 'suggested_section_count' => $forecast->suggested_section_count,
@@ -139,6 +142,9 @@ final class ScheduleGenerationRunController extends Controller
                 ->map(fn (AcademicTermSectionPlan $plan): array => [
                     'program_code' => $plan->curriculum->program->code,
                     'program_name' => $plan->curriculum->program->name,
+                    'curriculum_id' => $plan->curriculum_id,
+                    'curriculum_name' => $plan->curriculum->name,
+                    'curriculum_effective_school_year' => $plan->curriculum->effective_school_year,
                     'year_level' => $plan->year_level,
                     'recommended_block_sections' => $plan->recommended_section_count ?? $plan->section_count,
                     'students_per_block' => $plan->students_per_block,

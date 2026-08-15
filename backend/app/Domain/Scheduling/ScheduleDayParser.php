@@ -22,9 +22,9 @@ final class ScheduleDayParser
      * @var array<string, int>
      */
     private const TOKENS = [
-        'Th' => 4,
-        'Sat' => 6,
-        'Sun' => 7,
+        'TH' => 4,
+        'SAT' => 6,
+        'SUN' => 7,
         'M' => 1,
         'T' => 2,
         'W' => 3,
@@ -41,7 +41,7 @@ final class ScheduleDayParser
         }
 
         $days = [];
-        $remaining = $scheduleDays;
+        $remaining = strtoupper($scheduleDays);
 
         while ($remaining !== '') {
             $matchedToken = null;

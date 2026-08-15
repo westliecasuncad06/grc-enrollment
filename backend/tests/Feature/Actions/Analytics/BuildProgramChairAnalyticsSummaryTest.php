@@ -112,6 +112,17 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
         ]);
     }
 
+    private function makeRegistrarHead(string $emailPrefix): User
+    {
+        return User::create([
+            'name' => 'Registrar Head '.$emailPrefix,
+            'email' => $emailPrefix.'.registrar@grc.test',
+            'password' => self::PASSWORD,
+            'role' => UserRole::RegistrarHead,
+            'status' => UserStatus::Active,
+        ]);
+    }
+
     private function tokenFor(User $user): string
     {
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -251,7 +262,79 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
 
         self::assertSame('2026-2027', $summary->yearOverYear[2]->schoolYear);
         self::assertSame('1st', $summary->yearOverYear[2]->semester);
-        self::assertSame(1, $summary->yearOverYear[2]->enrolleeCount);
+        // The activity row remains visible, but Draft is not official
+        // enrollment and therefore contributes zero to the trend.
+        self::assertSame(0, $summary->yearOverYear[2]->enrolleeCount);
+
+        $filteredSummary = app(BuildProgramChairAnalyticsSummary::class)->execute(
+            $termCurrent,
+            CollegeCode::Ccs,
+            trendSchoolYear: '2024-2025',
+            trendSemester: '2nd',
+        );
+
+        self::assertCount(1, $filteredSummary->yearOverYear);
+        self::assertSame('2024-2025', $filteredSummary->yearOverYear[0]->schoolYear);
+        self::assertSame('2nd', $filteredSummary->yearOverYear[0]->semester);
+        self::assertSame(2, $filteredSummary->yearOverYear[0]->enrolleeCount);
+    }
+
+    public function test_official_enrollment_trend_uses_enrolled_students_only_and_honors_year_level(): void
+    {
+        $termOld = AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        $termCurrent = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
+        $program = $this->makeProgram(CollegeCode::Ccs, 'BSIT');
+        $curriculum = $this->makeCurriculum($program);
+
+        $firstYear = $this->makeStudent($curriculum);
+        $fourthYear = $this->makeStudent($curriculum);
+        $fourthYear->update(['year_level' => 4]);
+
+        $this->makeEnrollment($firstYear, $termOld, EnrollmentStatus::Enrolled);
+        $this->makeEnrollment($firstYear, $termCurrent, EnrollmentStatus::Enrolled);
+        $this->makeEnrollment($fourthYear, $termOld, EnrollmentStatus::Enrolled);
+        $this->makeEnrollment($fourthYear, $termCurrent, EnrollmentStatus::Draft);
+
+        $summary = app(BuildProgramChairAnalyticsSummary::class)->execute(
+            $termCurrent,
+            CollegeCode::Ccs,
+            yearLevel: 1,
+        );
+
+        self::assertSame(1, $summary->officialEnrolledCount);
+        self::assertSame(1, $summary->yearLevel);
+        self::assertSame(2, count($summary->yearOverYear));
+        self::assertSame(1, $summary->yearOverYear[0]->enrolleeCount);
+        self::assertSame(1, $summary->yearOverYear[1]->enrolleeCount);
+        self::assertSame(1, $summary->enrollmentStatusCounts['enrolled']);
+        self::assertSame(0, $summary->enrollmentStatusCounts['draft']);
+    }
+
+    public function test_school_year_range_scopes_the_descriptive_details_and_trend(): void
+    {
+        $termEarly = AcademicTerm::create(['school_year' => '2024-2025', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        $termMiddle = AcademicTerm::create(['school_year' => '2025-2026', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        $termCurrent = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing]);
+        $program = $this->makeProgram(CollegeCode::Ccs, 'BSIT');
+        $curriculum = $this->makeCurriculum($program);
+
+        $this->makeEnrollment($this->makeStudent($curriculum), $termEarly, EnrollmentStatus::Enrolled);
+        $this->makeEnrollment($this->makeStudent($curriculum), $termMiddle, EnrollmentStatus::Draft);
+        $this->makeEnrollment($this->makeStudent($curriculum), $termCurrent, EnrollmentStatus::Enrolled);
+
+        $summary = app(BuildProgramChairAnalyticsSummary::class)->execute(
+            $termCurrent,
+            CollegeCode::Ccs,
+            trendSchoolYearFrom: '2024-2025',
+            trendSchoolYearTo: '2025-2026',
+        );
+
+        self::assertSame(1, $summary->officialEnrolledCount);
+        self::assertSame(1, $summary->enrollmentStatusCounts['enrolled']);
+        self::assertSame(1, $summary->enrollmentStatusCounts['draft']);
+        self::assertCount(2, $summary->yearOverYear);
+        self::assertSame('2024-2025', $summary->yearOverYear[0]->schoolYear);
+        self::assertSame('2025-2026', $summary->yearOverYear[1]->schoolYear);
     }
 
     // --- Route + policy: only program_chair, 403 with no college ---
@@ -282,6 +365,61 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
         $this->withToken($this->tokenFor($chair))
             ->getJson('/api/v1/dashboards/program-chair-analytics-summary')
             ->assertOk();
+    }
+
+    public function test_registrar_head_can_view_all_departments_or_filter_one_department(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $ccsCurriculum = $this->makeCurriculum(
+            $this->makeProgram(CollegeCode::Ccs, 'BSCS'),
+        );
+        $coeCurriculum = $this->makeCurriculum(
+            $this->makeProgram(CollegeCode::Coe, 'BEED'),
+        );
+        $this->makeEnrollment(
+            $this->makeStudent($ccsCurriculum),
+            $term,
+            EnrollmentStatus::Enrolled,
+        );
+        $this->makeEnrollment(
+            $this->makeStudent($coeCurriculum),
+            $term,
+            EnrollmentStatus::Enrolled,
+        );
+
+        $registrarHead = $this->makeRegistrarHead('all-departments');
+        $token = $this->tokenFor($registrarHead);
+
+        $this->withToken($token)
+            ->getJson('/api/v1/dashboards/program-chair-analytics-summary')
+            ->assertOk()
+            ->assertJsonPath('data.college', 'all')
+            ->assertJsonPath('data.official_enrolled_count', 2);
+
+        $this->withToken($token)
+            ->getJson('/api/v1/dashboards/program-chair-analytics-summary?department=ccs')
+            ->assertOk()
+            ->assertJsonPath('data.college', 'ccs')
+            ->assertJsonPath('data.official_enrolled_count', 1);
+    }
+
+    public function test_program_chair_cannot_request_another_department_analytics(): void
+    {
+        AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+
+        $chair = $this->makeChair(CollegeCode::Ccs, 'college-guard');
+
+        $this->withToken($this->tokenFor($chair))
+            ->getJson('/api/v1/dashboards/program-chair-analytics-summary?department=coe')
+            ->assertForbidden();
     }
 
     public function test_a_program_chair_with_no_college_gets_forbidden(): void

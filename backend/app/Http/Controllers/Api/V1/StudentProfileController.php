@@ -32,7 +32,7 @@ final class StudentProfileController extends Controller
             'password' => $request->validated('password'),
             'student_number' => $request->validated('student_number'),
             'program_id' => $request->validated('program_id'),
-            'curriculum_id' => $request->validated('curriculum_id'),
+            'entry_year' => $request->validated('entry_year'),
             'year_level' => $request->validated('year_level'),
             'enrollment_category' => $request->validated('enrollment_category'),
             'financial_status' => $request->validated('financial_status'),

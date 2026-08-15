@@ -253,9 +253,7 @@ function mockIrregularSchedule(input: RequestInfo | URL) {
   return null
 }
 
-function mockIrregularRoutes(
-  overrides: { subjects?: unknown } = {},
-) {
+function mockIrregularRoutes(overrides: { subjects?: unknown } = {}) {
   return (input: RequestInfo | URL) => {
     const scheduleResponse = mockIrregularSchedule(input)
     if (scheduleResponse) return scheduleResponse
@@ -407,6 +405,8 @@ const createdEnrollment = {
     id: 9,
     student_id: 4,
     student_number: "2026-0001",
+    student_name: null,
+    student_year_level: null,
     student_financial_status: null,
     student_financial_status_label: null,
     academic_term_id: 2,
@@ -434,6 +434,32 @@ const createdEnrollment = {
   },
 }
 
+const studentAccount = {
+  type: "student_account",
+  student_id: 4,
+  student_name: "Maria Santos",
+  student_number: "2026-0001",
+  year_level: 3,
+  currency: "PHP",
+  total_assessed: "6000.00",
+  total_paid: "1000.00",
+  prior_balance: "3500.00",
+  outstanding_balance: "5000.00",
+  has_promissory_note_on_file: true,
+  entries: [
+    {
+      enrollment_id: 9,
+      academic_term_id: 2,
+      academic_term_label: "2025-2026 · 2nd",
+      assessment_amount: "4500.00",
+      confirmed_payment_amount: "1000.00",
+      account_payment_amount: "0.00",
+      outstanding_balance: "3500.00",
+      promissory_note_on_file: true,
+    },
+  ],
+} as const
+
 function url(input: RequestInfo | URL) {
   return typeof input === "string"
     ? input
@@ -460,6 +486,10 @@ function mockRoutes(
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const target = url(input)
+    if (target.endsWith("/student-account"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: studentAccount })),
+      )
     if (target.includes("/academic-terms"))
       return Promise.resolve(new Response(JSON.stringify(terms)))
     if (target.includes("/eligible-subjects"))
@@ -702,6 +732,10 @@ describe("EnrollmentWorkspace", () => {
   it("shows a clear message when the eligible-subject pool cannot be reached", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)
+      if (target.endsWith("/student-account"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: studentAccount })),
+        )
       if (target.includes("/academic-terms"))
         return Promise.resolve(new Response(JSON.stringify(terms)))
       if (target.endsWith("/student-schedule-preferences"))
@@ -812,6 +846,42 @@ describe("EnrollmentWorkspace", () => {
     expect(
       screen.queryByRole("heading", { name: "Add/Drop requests" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("shows the student's own account balance as read-only information", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    expect(
+      await screen.findByRole("heading", { name: "Account balance" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("₱5,000.00")).toBeInTheDocument()
+    expect(screen.getByText("2025-2026 · 2nd")).toBeInTheDocument()
+    expect(screen.getByText("Promissory note on file")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /record.*payment/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("does not request a student account for a non-student session", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "7",
+        displayName: "Registrar Staff",
+        role: "registrar_staff",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await screen.findByLabelText("Section")
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        url(input).endsWith("/student-account"),
+      ),
+    ).toBe(false)
   })
 
   it("embeds the Add/Drop panel once the enrollment is enrolled", async () => {
@@ -949,7 +1019,7 @@ describe("EnrollmentWorkspace", () => {
     expect(await screen.findByLabelText("Section")).toBeDisabled()
   })
 
-  it("a regular student selects a section, reviews, confirms, and submits", async () => {
+  it("a regular student selects an inline section, confirms, and submits", async () => {
     const user = userEvent.setup()
     let submitCall: [RequestInfo | URL, RequestInit | undefined] | null = null
     fetchMock.mockImplementation((input, init) => {
@@ -967,25 +1037,31 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    expect(await screen.findByText("Select your section")).toBeInTheDocument()
-    const table = await screen.findByRole("table", {
-      name: /available sections/i,
-    })
-    await user.click(within(table).getByRole("button", { name: /view IT201/i }))
-    const dialog = await screen.findByRole("dialog", { name: /IT201/ })
+    expect(await screen.findByText("Preferred days")).toBeInTheDocument()
+    expect(screen.getByLabelText("Maximum days on campus")).toBeInTheDocument()
     expect(
-      within(dialog).getByRole("table", { name: /weekly schedule/i }),
-    ).toBeInTheDocument()
-    await user.click(
-      within(dialog).getByRole("button", { name: "Choose this section" }),
-    )
-    expect(await screen.findByText("Review your section")).toBeInTheDocument()
-    const subjectCard = await screen.findByRole("article", {
-      name: "CS201 section review",
+      screen.queryByLabelText("Preferred time block"),
+    ).not.toBeInTheDocument()
+
+    const section = await screen.findByRole("article", {
+      name: "IT201 section",
     })
-    expect(subjectCard).toHaveTextContent("Data Structures")
-    expect(subjectCard).toHaveTextContent("MWF")
-    expect(within(subjectCard).getByText("LAB-1")).toBeInTheDocument()
+    expect(
+      within(section).getByRole("table", { name: "IT201 schedule" }),
+    ).toBeInTheDocument()
+    expect(within(section).getAllByText("Section ID")).not.toHaveLength(0)
+    expect(within(section).getAllByText("Data Structures")).not.toHaveLength(0)
+    expect(within(section).getAllByText("LAB-1")).not.toHaveLength(0)
+    await user.click(
+      within(section).getByRole("button", { name: "Choose IT201" }),
+    )
+    expect(
+      screen.queryByRole("dialog", { name: /IT201/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Change section" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Review your section")).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     expect(
       screen.getByText(/enrolls you in all 2 subjects of section IT201/),
@@ -1003,64 +1079,53 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("lists sections in a table and opens the picker modal on view", async () => {
+  it("shows only the chosen section and returns to all sections when changed", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
     renderWithSession(<EnrollmentWorkspace />, {
       session: regularStudentSession,
     })
 
-    const table = await screen.findByRole("table", {
-      name: /available sections/i,
+    const section = await screen.findByRole("article", {
+      name: "IT301 section",
     })
-    expect(within(table).getByText("IT301")).toBeInTheDocument()
-
-    await user.click(within(table).getByRole("button", { name: /view IT301/i }))
-
-    const dialog = await screen.findByRole("dialog", { name: /IT301/ })
     expect(
-      within(dialog).getByRole("table", { name: /weekly schedule/i }),
+      screen.getByRole("article", { name: "IT302 section" }),
     ).toBeInTheDocument()
     await user.click(
-      within(dialog).getByRole("button", { name: "Choose this section" }),
+      within(section).getByRole("button", { name: "Choose IT301" }),
     )
-  })
+    expect(
+      screen.getByRole("article", { name: "IT301 section" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("article", { name: "IT302 section" }),
+    ).not.toBeInTheDocument()
 
-  it("sorts by preference match when preferences are applied", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
-    renderWithSession(<EnrollmentWorkspace />, {
-      session: regularStudentSession,
-    })
+    await user.click(screen.getByRole("button", { name: "Change section" }))
 
-    await screen.findByRole("table", { name: /available sections/i })
-    await user.click(
-      screen.getByRole("switch", { name: "Apply my preferences" }),
-    )
-    const rows = within(
-      await screen.findByRole("table", { name: /available sections/i }),
-    ).getAllByRole("row")
-    expect(within(rows[1]).getByText("IT303")).toBeInTheDocument() // highest preference_score first
+    expect(
+      screen.getByRole("article", { name: "IT301 section" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("article", { name: "IT302 section" }),
+    ).toBeInTheDocument()
   })
 
   it("keeps a low-scoring section selectable", async () => {
-    const user = userEvent.setup()
     fetchMock.mockImplementation(mockRegularRoutes({ blocks: scoredBlocks }))
     renderWithSession(<EnrollmentWorkspace />, {
       session: regularStudentSession,
     })
 
-    const table = await screen.findByRole("table", {
-      name: /available sections/i,
-    })
     // IT302 has no preference_score at all — it must still be listed and
     // choosable, since preferences rank sections but never gate them.
-    expect(within(table).getByText("IT302")).toBeInTheDocument()
+    const section = await screen.findByRole("article", {
+      name: "IT302 section",
+    })
 
-    await user.click(within(table).getByRole("button", { name: /view IT302/i }))
-    const dialog = await screen.findByRole("dialog", { name: /IT302/ })
     expect(
-      within(dialog).getByRole("button", { name: "Choose this section" }),
+      within(section).getByRole("button", { name: "Choose IT302" }),
     ).toBeEnabled()
   })
 
@@ -1120,14 +1185,11 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    const user = userEvent.setup()
-    const table = await screen.findByRole("table", {
-      name: /available sections/i,
+    const section = await screen.findByRole("article", {
+      name: "IT201 section",
     })
-    await user.click(within(table).getByRole("button", { name: /view IT201/i }))
-    const dialog = await screen.findByRole("dialog", { name: /IT201/ })
     expect(
-      within(dialog).getByRole("button", { name: "Choose this section" }),
+      within(section).getByRole("button", { name: "Choose IT201" }),
     ).toBeDisabled()
   })
 

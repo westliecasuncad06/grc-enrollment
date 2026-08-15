@@ -15,13 +15,16 @@ export const latestScheduleGenerationRunQueryKey = (
  * Program Chair can leave Enrollment and return without losing the ready
  * Demand Forecast action while a background refresh is happening.
  */
-export function useLatestScheduleGenerationRunQuery(academicTermId: number) {
+export function useLatestScheduleGenerationRunQuery(
+  academicTermId: number,
+  enabled = true,
+) {
   const { session } = useAuth()
   const userId = session?.userId ?? null
 
   return useQuery({
     queryKey: latestScheduleGenerationRunQueryKey(userId, academicTermId),
     queryFn: () => getLatestScheduleGenerationRun(academicTermId),
-    enabled: session !== null && academicTermId > 0,
+    enabled: enabled && session !== null && academicTermId > 0,
   })
 }

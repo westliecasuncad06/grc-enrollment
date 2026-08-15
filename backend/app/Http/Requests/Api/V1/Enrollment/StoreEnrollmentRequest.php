@@ -124,9 +124,11 @@ final class StoreEnrollmentRequest extends FormRequest
      * authoritative check here instead, via `is_selectable`: it already
      * withholds a block once any subject in it is already passed, since a
      * repeater no longer advances in lockstep with a single block and needs
-     * the Registrar to reclassify them as irregular first. Conflict and
-     * overload checks still apply — a block generated without conflicts
-     * should pass them trivially, but nothing here assumes that.
+     * the Registrar to reclassify them as irregular first. Its fixed subject
+     * list is server-resolved as one Program Chair-authored choice, so it is
+     * not rechecked as though the student had assembled those individual
+     * sections: schedule validation belongs to generation and publication.
+     * Overload checks still apply here.
      */
     private function validateBlockSubmission(Validator $validator, StudentProfile $student, AcademicTerm $term, string $blockCode): void
     {
@@ -149,7 +151,6 @@ final class StoreEnrollmentRequest extends FormRequest
         $this->resolvedBlockSectionIds = $sectionIds;
 
         $sections = Section::query()->whereIn('id', $sectionIds)->with('subject')->get()->keyBy('id');
-        $this->rejectScheduleConflicts($validator, $sectionIds, $sections);
         $this->rejectOverload($validator, $sections);
     }
 

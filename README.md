@@ -68,8 +68,28 @@ updated to a current security patch before production-like use.
 
 ## Setup
 
-Use three terminals from the repository root. Safe examples may be copied to
-local `.env` files, but local environment files must never be committed.
+Complete the one-time setup for each service below. Safe examples may be copied
+to local `.env` files, but local environment files must never be committed.
+
+For integrated local work, including schedule generation, use the recommended
+launcher from the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+It reuses a healthy private prediction service or starts it on loopback, then
+starts the API at `http://127.0.0.1:8000` and frontend at
+`http://127.0.0.1:3000`. It never replaces an existing process: an occupied API
+or frontend port stops the launcher with its owning process ID. Child-process
+output is written under ignored `artifacts/local-dev/`. To repair only the ML
+service when the API and frontend are already running, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -PredictionOnly
+```
+
+For manual diagnosis, the three services remain independently runnable:
 
 Laravel API:
 

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -8,6 +8,34 @@ import { renderWithSession } from "@/tests/render-app"
 
 const terms = {
   data: [
+    {
+      type: "academic-term",
+      id: 2,
+      school_year: "2025-2026",
+      semester: "1st",
+      starts_at: null,
+      ends_at: null,
+      enrollment_opens_at: null,
+      enrollment_closes_at: null,
+      add_drop_deadline_at: null,
+      grading_deadline_at: null,
+      status: "semester_closed",
+      status_label: "Semester Closed",
+    },
+    {
+      type: "academic-term",
+      id: 3,
+      school_year: "2024-2025",
+      semester: "1st",
+      starts_at: null,
+      ends_at: null,
+      enrollment_opens_at: null,
+      enrollment_closes_at: null,
+      add_drop_deadline_at: null,
+      grading_deadline_at: null,
+      status: "semester_closed",
+      status_label: "Semester Closed",
+    },
     {
       type: "academic-term",
       id: 1,
@@ -30,6 +58,8 @@ const summary = {
     type: "program_chair_analytics_summary",
     academic_term_id: 1,
     college: "ccs",
+    official_enrolled_count: 22,
+    year_level: null,
     enrollment_status_counts: { draft: 3, enrolled: 22, withdrawn: 1 },
     grade_status_counts: { pending: 10, passed: 12, failed: 1 },
     retention_breakdown: [
@@ -63,6 +93,9 @@ const run = {
         subject_id: 101,
         subject_code: "IT101",
         subject_title: "Introduction to Computing",
+        curriculum_id: 13,
+        curriculum_name: "BSIT Curriculum 2024-2029",
+        curriculum_effective_school_year: "2024-2029",
         year_level: 1,
         predicted_demand: 42,
         suggested_section_count: 2,
@@ -99,6 +132,17 @@ function renderWorkspace() {
       displayName: "Program Chair",
       role: "program_chair",
       college: "ccs",
+      signedInAt: "2026-08-12T00:00:00Z",
+    },
+  })
+}
+
+function renderRegistrarWorkspace() {
+  return renderWithSession(<AnalyticsDashboardWorkspace />, {
+    session: {
+      userId: "registrar-head-1",
+      displayName: "Registrar Head",
+      role: "registrar_head",
       signedInAt: "2026-08-12T00:00:00Z",
     },
   })
@@ -160,30 +204,68 @@ describe("AnalyticsDashboardWorkspace", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("shows enrollment status counts and the year-over-year chart on the Descriptive tab", async () => {
+  it("shows official enrollment status counts, filters, and the trend chart on the Descriptive tab", async () => {
     renderWorkspace()
 
     expect(await screen.findByText(/Enrolled: 22/)).toBeInTheDocument()
     expect(screen.getByText(/Draft: 3/)).toBeInTheDocument()
-    expect(screen.getByText("Enrollment Year-over-Year")).toBeInTheDocument()
+    expect(screen.getByText("Official Enrollment Trend")).toBeInTheDocument()
+    expect(screen.getByText("Analytics filters")).toBeInTheDocument()
+    expect(screen.getByText("Officially enrolled")).toBeInTheDocument()
   })
 
-  it("shows a readable grade-status by enrollment-status crosstab on the Diagnostic tab", async () => {
+  it("lets the Registrar Head view all departments or filter the analytics by department", async () => {
     const user = userEvent.setup()
+    renderRegistrarWorkspace()
+
+    expect(await screen.findByText(/Enrolled: 22/)).toBeInTheDocument()
+    expect(
+      screen.getByRole("combobox", { name: "Department" }),
+    ).toHaveTextContent("All departments")
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        requestUrl(input).includes("/schedule-generation-runs/latest"),
+      ),
+    ).toBe(false)
+
+    await user.click(screen.getByRole("combobox", { name: "Department" }))
+    await user.click(
+      await screen.findByRole("option", {
+        name: "College of Education",
+      }),
+    )
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          requestUrl(input).includes("department=coe"),
+        ),
+      ).toBe(true),
+    )
+  })
+
+  it("uses the school-year range slider to filter the analytics details", async () => {
     renderWorkspace()
     await screen.findByText(/Enrolled: 22/)
 
-    await user.click(screen.getByRole("tab", { name: "Diagnostic" }))
+    fireEvent.change(
+      screen.getByRole("slider", { name: "Start school year" }),
+      {
+        target: { value: "1" },
+      },
+    )
 
-    const table = await screen.findByRole("table")
-    expect(
-      screen.getByRole("columnheader", { name: "Enrolled" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole("columnheader", { name: "Withdrawn" }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole("row", { name: /Passed 12/ })).toBeInTheDocument()
-    expect(table).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const url = requestUrl(input)
+          return (
+            url.includes("trend_school_year_from=2025-2026") &&
+            url.includes("trend_school_year_to=2026-2027")
+          )
+        }),
+      ).toBe(true),
+    )
   })
 
   it("shows a read-only forecast table on the Predictive tab", async () => {
@@ -192,6 +274,18 @@ describe("AnalyticsDashboardWorkspace", () => {
     await screen.findByText(/Enrolled: 22/)
 
     await user.click(screen.getByRole("tab", { name: "Predictive" }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          requestUrl(input).includes("/schedule-generation-runs/latest"),
+        ),
+      ).toBe(true),
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "View 1 forecast rows" }),
+    )
 
     expect(await screen.findByText("IT101")).toBeInTheDocument()
     expect(screen.getByText("42")).toBeInTheDocument()
@@ -203,6 +297,18 @@ describe("AnalyticsDashboardWorkspace", () => {
     await screen.findByText(/Enrolled: 22/)
 
     await user.click(screen.getByRole("tab", { name: "Prescriptive" }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          requestUrl(input).includes("/schedule-generation-runs/latest"),
+        ),
+      ).toBe(true),
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "View 1 action details" }),
+    )
 
     expect(
       await screen.findByText(/Expected 42 IT101 students/),

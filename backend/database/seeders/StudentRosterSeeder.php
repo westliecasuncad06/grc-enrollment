@@ -7,6 +7,7 @@ use App\Actions\Analytics\DeriveSectionDemandObservations;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Curriculum\CurriculumVersion;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Faculty\SpecializationProficiency;
@@ -59,10 +60,8 @@ use RuntimeException;
  * uses — until a real classifier run derives it.
  *
  * Depends on `ProgramSeeder` and `GrcCurriculumSeeder` having already run —
- * every program code in the roster must resolve to a seeded `Program`, and
- * that program must have exactly one `active` curriculum (the 2024-2029
- * version; `GrcCurriculumSeeder` only ever marks one version per program as
- * `active`, the two older versions are `archived`).
+ * every program code in the roster must resolve to a seeded `Program` with
+ * curriculum versions effective for the cohort entry years it contains.
  */
 final class StudentRosterSeeder extends Seeder
 {
@@ -139,6 +138,16 @@ final class StudentRosterSeeder extends Seeder
      */
     private array $bookedSlots = [];
 
+    /**
+     * Meeting slots already used by subjects in one student block, keyed by
+     * "{term_id}:{section_code}:{day}:{start}". Faculty availability alone
+     * cannot guard this: two different professors may be free at the same
+     * time, while the student enrolled in both subjects would not be.
+     *
+     * @var array<string, true>
+     */
+    private array $blockBookedSlots = [];
+
     /** @var array<string, list<int>> */
     private array $professorCandidateCache = [];
 
@@ -173,12 +182,12 @@ final class StudentRosterSeeder extends Seeder
         }
 
         $programIdByCode = $this->programIdsByCode($rows);
-        $curriculumIdByProgramId = $this->activeCurriculumIdsByProgramId($programIdByCode);
+        $curriculaByProgramId = $this->curriculaByProgramId($programIdByCode);
         $passwordHash = Hash::make(self::PASSWORD);
         $now = now();
 
         foreach (array_chunk($rows, self::CHUNK_SIZE) as $chunk) {
-            $this->upsertChunk($chunk, $programIdByCode, $curriculumIdByProgramId, $passwordHash, $now);
+            $this->upsertChunk($chunk, $programIdByCode, $curriculaByProgramId, $passwordHash, $now);
         }
 
         $this->seedSectionHistory();
@@ -195,12 +204,12 @@ final class StudentRosterSeeder extends Seeder
     /**
      * @param  list<array{student_number: string, name: string, email: string, program_code: string, year_level: int}>  $chunk
      * @param  array<string, int>  $programIdByCode
-     * @param  array<int, int>  $curriculumIdByProgramId
+     * @param  array<int, Collection<int, Curriculum>>  $curriculaByProgramId
      */
     private function upsertChunk(
         array $chunk,
         array $programIdByCode,
-        array $curriculumIdByProgramId,
+        array $curriculaByProgramId,
         string $passwordHash,
         Carbon $now,
     ): void {
@@ -230,8 +239,9 @@ final class StudentRosterSeeder extends Seeder
         foreach ($chunk as $row) {
             $programId = $programIdByCode[$row['program_code']]
                 ?? throw new RuntimeException("StudentRosterSeeder found no seeded program for code '{$row['program_code']}'. Run ProgramSeeder first.");
-            $curriculumId = $curriculumIdByProgramId[$programId]
-                ?? throw new RuntimeException("StudentRosterSeeder found no active curriculum for program '{$row['program_code']}'. Run GrcCurriculumSeeder first.");
+            $entryYear = StudentRosterMap::entryYearFor($row['year_level']);
+            $curriculumId = $this->curriculumIdForEntryYear($curriculaByProgramId, $programId, $entryYear)
+                ?? throw new RuntimeException("StudentRosterSeeder found no curriculum version for program '{$row['program_code']}' and entry year '{$entryYear}'. Run GrcCurriculumSeeder first.");
             $userId = $userIdByEmail[$row['email']]
                 ?? throw new RuntimeException("StudentRosterSeeder could not resolve the user just upserted for '{$row['email']}'.");
 
@@ -240,7 +250,7 @@ final class StudentRosterSeeder extends Seeder
                 'student_number' => $row['student_number'],
                 'program_id' => $programId,
                 'curriculum_id' => $curriculumId,
-                'entry_year' => StudentRosterMap::entryYearFor($row['year_level']),
+                'entry_year' => $entryYear,
                 'year_level' => $row['year_level'],
                 'admission_status' => AdmissionStatus::Admitted->value,
                 'academic_standing' => AcademicStanding::Good->value,
@@ -312,7 +322,7 @@ final class StudentRosterSeeder extends Seeder
 
         $programCodes = array_values(array_unique(array_column($cohorts, 'program_code')));
         $programIdByCode = Program::query()->whereIn('code', $programCodes)->pluck('id', 'code')->all();
-        $curriculumIdByProgramId = $this->activeCurriculumIdsByProgramId($programIdByCode);
+        $curriculaByProgramId = $this->curriculaByProgramId($programIdByCode);
 
         $roomsByCollege = $this->roomsByCollege();
         $this->preloadProfessorCandidates();
@@ -332,7 +342,13 @@ final class StudentRosterSeeder extends Seeder
         $contributions = [];
         foreach ($cohorts as $cohort) {
             $programId = $programIdByCode[$cohort['program_code']] ?? null;
-            $curriculumId = $programId !== null ? ($curriculumIdByProgramId[$programId] ?? null) : null;
+            $curriculumId = $programId !== null
+                ? $this->curriculumIdForEntryYear(
+                    $curriculaByProgramId,
+                    $programId,
+                    StudentRosterMap::entryYearFor($cohort['year_level']),
+                )
+                : null;
             if ($curriculumId === null) {
                 // Program not seeded in this environment/test — StudentRosterMap
                 // is a static catalog of the *real* production block shape and
@@ -1223,10 +1239,11 @@ final class StudentRosterSeeder extends Seeder
      * Round-robins through the ordered candidate list for this
      * (subject, college) so the load spreads across every eligible
      * professor instead of always picking the first. Starts at the
-     * deterministic base slot (`deterministicSlotIndex()`) and, if every
-     * candidate is already booked there, cycles forward through the
-     * remaining `SLOT_COUNT` (24) day/time combinations looking for one
-     * where some eligible candidate is free — the section's own
+     * deterministic base slot (`deterministicSlotIndex()`) and, if the
+     * block already has a subject there or every candidate is already
+     * booked there, cycles forward through the remaining `SLOT_COUNT` (24)
+     * day/time combinations looking for one where both the student block
+     * and an eligible candidate are free — the section's own
      * schedule_days/starts_at_time/ends_at_time move to whichever slot the
      * professor was actually booked at, so the two are never
      * inconsistent. Only double-books (last resort) if every
@@ -1262,12 +1279,18 @@ final class StudentRosterSeeder extends Seeder
         for ($slotOffset = 0; $slotOffset < self::SLOT_COUNT; $slotOffset++) {
             [$day, $starts, $ends] = $this->slotAt(($baseSlotIndex + $slotOffset) % self::SLOT_COUNT);
             $slotKey = $termId.':'.$day.':'.$starts;
+            $blockSlotKey = $termId.':'.$blockCode.':'.$day.':'.$starts;
+
+            if (isset($this->blockBookedSlots[$blockSlotKey])) {
+                continue;
+            }
 
             for ($i = 0; $i < $count; $i++) {
                 $index = ($startIndex + $i) % $count;
                 $professorId = $candidates[$index];
                 if (! isset($this->bookedSlots[$slotKey][$professorId])) {
                     $this->bookedSlots[$slotKey][$professorId] = true;
+                    $this->blockBookedSlots[$blockSlotKey] = true;
                     $this->professorCursor[$cursorKey] = ($index + 1) % $count;
 
                     return [$professorId, $day, $starts, $ends];
@@ -1296,20 +1319,37 @@ final class StudentRosterSeeder extends Seeder
     }
 
     /**
-     * Assumes exactly one `active` curriculum per program — true by
-     * construction of `GrcCurriculumSeeder`, which marks only the
-     * 2024-2029 version `active` and both older versions `archived`.
-     *
      * @param  array<string, int>  $programIdByCode
-     * @return array<int, int>
+     * @return array<int, Collection<int, Curriculum>>
      */
-    private function activeCurriculumIdsByProgramId(array $programIdByCode): array
+    private function curriculaByProgramId(array $programIdByCode): array
     {
         return Curriculum::query()
             ->whereIn('program_id', array_values($programIdByCode))
-            ->where('status', 'active')
-            ->pluck('id', 'program_id')
+            ->orderByDesc('effective_start_year')
+            ->get()
+            ->groupBy('program_id')
             ->all();
+    }
+
+    /**
+     * @param  array<int, Collection<int, Curriculum>>  $curriculaByProgramId
+     */
+    private function curriculumIdForEntryYear(array $curriculaByProgramId, int $programId, int $entryYear): ?int
+    {
+        $versions = $curriculaByProgramId[$programId] ?? collect();
+        $resolved = CurriculumVersion::resolveForEntryYear($versions, $entryYear);
+        if ($resolved !== null) {
+            return $resolved->id;
+        }
+
+        // A small test fixture can intentionally contain only a current
+        // curriculum. Production curriculum seed data carries entry-year
+        // ranges for every live cohort; this fallback keeps such reduced
+        // fixtures runnable without giving a request caller any override.
+        return $versions
+            ->first(fn (Curriculum $curriculum): bool => $curriculum->status->value === 'active')
+            ?->id;
     }
 
     /**

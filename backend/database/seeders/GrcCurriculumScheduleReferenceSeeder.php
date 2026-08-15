@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Scheduling\CanonicalScheduleDays;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Subject;
@@ -117,7 +118,7 @@ final class GrcCurriculumScheduleReferenceSeeder extends Seeder
         $blank = static fn (string $value): ?string => $value === '' ? null : $value;
 
         $placement->update([
-            'reference_day' => $blank($row['day']),
+            'reference_day' => (new CanonicalScheduleDays)->normalize($blank($row['day'])),
             'reference_start_time' => $this->normalizeTime($row['start_time']),
             'reference_end_time' => $this->normalizeTime($row['end_time']),
             'reference_room' => $blank($row['room']),
@@ -149,13 +150,13 @@ final class GrcCurriculumScheduleReferenceSeeder extends Seeder
         }
 
         // Excel-artifact leading "=" / "-" seen in the source spreadsheets.
-        $value = preg_replace('/^[=\-]+/', '', $value);
+        $value = preg_replace('/^[=\-]+/', '', $value) ?? '';
         // A stray double/curly quote or doubled colon standing in for ':'.
-        $value = preg_replace('/(?<=\d)["\x{201d}\x{201c}](?=\d)/u', ':', $value);
-        $value = preg_replace('/:{2,}/', ':', $value);
+        $value = preg_replace('/(?<=\d)["\x{201d}\x{201c}](?=\d)/u', ':', $value) ?? '';
+        $value = preg_replace('/:{2,}/', ':', $value) ?? '';
         // "A.M"/"P.M"/"am"/"pm" (with or without periods/space) -> "AM"/"PM".
-        $value = preg_replace('/([AaPp])\.?\s*[Mm]\.?/', '$1M', $value);
-        $value = strtoupper(preg_replace('/\s+/', '', $value));
+        $value = preg_replace('/([AaPp])\.?\s*[Mm]\.?/', '$1M', $value) ?? '';
+        $value = strtoupper(preg_replace('/\s+/', '', $value) ?? '');
 
         // Composite/garbled cells (multiple ranges crammed into one, stray
         // punctuation) are not a single parseable time -- bail rather than

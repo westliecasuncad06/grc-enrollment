@@ -102,7 +102,11 @@ function toFormValues(
  * enrollment-option queries, so their preference scores reflect the new
  * preference on the very next render.
  */
-export function StudentSchedulePreferencesPanel() {
+export function StudentSchedulePreferencesPanel({
+  compact = false,
+}: {
+  compact?: boolean
+}) {
   const { session } = useAuth()
   const authorized = session?.role === "student"
 
@@ -111,13 +115,14 @@ export function StudentSchedulePreferencesPanel() {
       <CardHeader>
         <CardTitle level={2}>Schedule preference</CardTitle>
         <CardDescription>
-          Tell us your preferred days, time block, and modality — we use this
-          to rank block and subject choices when you enroll.
+          {compact
+            ? "Tell us your preferred days and campus days — we use them to rank your available sections."
+            : "Tell us your preferred days, time block, and modality — we use this to rank block and subject choices when you enroll."}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {authorized ? (
-          <StudentSchedulePreferencesForm />
+          <StudentSchedulePreferencesForm compact={compact} />
         ) : (
           <p>This panel is not available for your role.</p>
         )}
@@ -126,7 +131,7 @@ export function StudentSchedulePreferencesPanel() {
   )
 }
 
-function StudentSchedulePreferencesForm() {
+function StudentSchedulePreferencesForm({ compact }: { compact: boolean }) {
   const preferenceQuery = useStudentSchedulePreferenceQuery()
   const saveMutation = useSaveStudentSchedulePreferenceMutation()
   const [requestError, setRequestError] = useState("")
@@ -218,88 +223,93 @@ function StudentSchedulePreferencesForm() {
                 </FieldError>
               </Field>
 
-              <Field
-                data-invalid={Boolean(
-                  form.formState.errors.preferred_time_block,
-                )}
-              >
-                <FieldLabel htmlFor="student-schedule-preference-time-block">
-                  Preferred time block
-                </FieldLabel>
-                <Controller
-                  control={form.control}
-                  name="preferred_time_block"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger
-                        id="student-schedule-preference-time-block"
-                        className="w-full"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {timeBlocks.map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError>
-                  {form.formState.errors.preferred_time_block?.message}
-                </FieldError>
-              </Field>
+              {!compact && (
+                <>
+                  <Field
+                    data-invalid={Boolean(
+                      form.formState.errors.preferred_time_block,
+                    )}
+                  >
+                    <FieldLabel htmlFor="student-schedule-preference-time-block">
+                      Preferred time block
+                    </FieldLabel>
+                    <Controller
+                      control={form.control}
+                      name="preferred_time_block"
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger
+                            id="student-schedule-preference-time-block"
+                            className="w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timeBlocks.map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    <FieldError>
+                      {form.formState.errors.preferred_time_block?.message}
+                    </FieldError>
+                  </Field>
+
+                  <Field
+                    data-invalid={Boolean(
+                      form.formState.errors.preferred_modality,
+                    )}
+                  >
+                    <FieldLabel htmlFor="student-schedule-preference-modality">
+                      Preferred modality
+                    </FieldLabel>
+                    <Controller
+                      control={form.control}
+                      name="preferred_modality"
+                      render={({ field }) => (
+                        <Select
+                          value={field.value ?? NO_MODALITY_VALUE}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === NO_MODALITY_VALUE ? null : value,
+                            )
+                          }
+                        >
+                          <SelectTrigger
+                            id="student-schedule-preference-modality"
+                            className="w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NO_MODALITY_VALUE}>
+                              No preference
+                            </SelectItem>
+                            {modalities.map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    <FieldError>
+                      {form.formState.errors.preferred_modality?.message}
+                    </FieldError>
+                  </Field>
+                </>
+              )}
 
               <Field
-                data-invalid={Boolean(
-                  form.formState.errors.preferred_modality,
-                )}
-              >
-                <FieldLabel htmlFor="student-schedule-preference-modality">
-                  Preferred modality
-                </FieldLabel>
-                <Controller
-                  control={form.control}
-                  name="preferred_modality"
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ?? NO_MODALITY_VALUE}
-                      onValueChange={(value) =>
-                        field.onChange(
-                          value === NO_MODALITY_VALUE ? null : value,
-                        )
-                      }
-                    >
-                      <SelectTrigger
-                        id="student-schedule-preference-modality"
-                        className="w-full"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_MODALITY_VALUE}>
-                          No preference
-                        </SelectItem>
-                        {modalities.map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError>
-                  {form.formState.errors.preferred_modality?.message}
-                </FieldError>
-              </Field>
-
-              <Field
-                data-invalid={Boolean(
-                  form.formState.errors.max_days_on_campus,
-                )}
+                data-invalid={Boolean(form.formState.errors.max_days_on_campus)}
               >
                 <FieldLabel htmlFor="student-schedule-preference-max-days">
                   Maximum days on campus
@@ -330,34 +340,40 @@ function StudentSchedulePreferencesForm() {
                 </FieldError>
               </Field>
 
-              <Field orientation="horizontal">
-                <Controller
-                  control={form.control}
-                  name="avoid_early_first_class"
-                  render={({ field }) => (
-                    <Switch
-                      id="student-schedule-preference-avoid-early"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
+              {!compact && (
+                <>
+                  <Field orientation="horizontal">
+                    <Controller
+                      control={form.control}
+                      name="avoid_early_first_class"
+                      render={({ field }) => (
+                        <Switch
+                          id="student-schedule-preference-avoid-early"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
                     />
-                  )}
-                />
-                <FieldLabel htmlFor="student-schedule-preference-avoid-early">
-                  Avoid an early first class
-                </FieldLabel>
-              </Field>
+                    <FieldLabel htmlFor="student-schedule-preference-avoid-early">
+                      Avoid an early first class
+                    </FieldLabel>
+                  </Field>
 
-              <Field data-invalid={Boolean(form.formState.errors.notes)}>
-                <FieldLabel htmlFor="student-schedule-preference-notes">
-                  Notes
-                </FieldLabel>
-                <Textarea
-                  id="student-schedule-preference-notes"
-                  disabled={saveMutation.isPending}
-                  {...form.register("notes")}
-                />
-                <FieldError>{form.formState.errors.notes?.message}</FieldError>
-              </Field>
+                  <Field data-invalid={Boolean(form.formState.errors.notes)}>
+                    <FieldLabel htmlFor="student-schedule-preference-notes">
+                      Notes
+                    </FieldLabel>
+                    <Textarea
+                      id="student-schedule-preference-notes"
+                      disabled={saveMutation.isPending}
+                      {...form.register("notes")}
+                    />
+                    <FieldError>
+                      {form.formState.errors.notes?.message}
+                    </FieldError>
+                  </Field>
+                </>
+              )}
 
               <div>
                 <Button type="submit" disabled={saveMutation.isPending}>

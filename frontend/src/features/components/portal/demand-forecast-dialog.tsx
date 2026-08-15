@@ -9,6 +9,11 @@ import { GroupedWarningsList } from "@/features/components/portal/grouped-warnin
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/features/components/ui/collapsible"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -150,7 +155,10 @@ export function DemandForecastDialog({
                     ? "Random Forest"
                     : run.model.strategy === "historical_baseline"
                       ? "Historical baseline"
-                      : "Waiting"
+                      : run.model.strategy ===
+                          "service_unavailable_historical_baseline"
+                        ? "Historical fallback"
+                        : "Waiting"
                 }
                 detail={run.model.model_version ?? ""}
               />
@@ -186,62 +194,78 @@ export function DemandForecastDialog({
             className="grid gap-3"
             aria-label="Why these sections were generated"
           >
-            <div>
-              <h3 className="font-heading text-lg">
-                Why these sections were generated
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Every generated subject block this term, explained — whether it
-                came from this forecast, an earlier one, or was planned by the
-                Program Chair.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              {rationaleGroups.length ? (
-                rationaleGroups.map((group) => (
-                  <div
-                    key={`${group.subjectId}-${group.yearLevel}`}
-                    className="rounded-lg border p-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium">
-                          {group.subjectCode}
-                          {group.subjectTitle ? ` · ${group.subjectTitle}` : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {group.yearLevel
-                            ? `Year ${group.yearLevel}`
-                            : "Year not set"}
-                        </p>
-                      </div>
-                      <Badge variant="secondary">
-                        {group.sectionCount} section
-                        {group.sectionCount === 1 ? "" : "s"}
-                      </Badge>
-                    </div>
-                    <ul className="mt-2 grid gap-1">
-                      {group.reasons.map((reason) => (
-                        <li
-                          key={reason}
-                          className="text-sm text-muted-foreground"
-                        >
-                          {reason}
-                        </li>
-                      ))}
-                    </ul>
+            {rationaleGroups.length ? (
+              <Collapsible>
+                <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border bg-muted/20 p-3">
+                  <div>
+                    <h3 className="font-heading text-lg">
+                      Why these sections were generated
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {rationaleGroups.length} subject explanations are ready.
+                    </p>
                   </div>
-                ))
-              ) : (
-                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  <CollapsibleTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      View explanations
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+                <CollapsibleContent className="pt-3">
+                  <div className="grid max-h-96 gap-2 overflow-y-auto pr-1">
+                    {rationaleGroups.map((group) => (
+                      <div
+                        key={`${group.subjectId}-${group.yearLevel}`}
+                        className="rounded-lg border p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium">
+                              {group.subjectCode}
+                              {group.subjectTitle
+                                ? ` · ${group.subjectTitle}`
+                                : ""}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {group.yearLevel
+                                ? `Year ${group.yearLevel}`
+                                : "Year not set"}
+                            </p>
+                          </div>
+                          <Badge variant="secondary">
+                            {group.sectionCount} section
+                            {group.sectionCount === 1 ? "" : "s"}
+                          </Badge>
+                        </div>
+                        <ul className="mt-2 grid gap-1">
+                          {group.reasons.map((reason) => (
+                            <li
+                              key={reason}
+                              className="text-sm text-muted-foreground"
+                            >
+                              {reason}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ) : (
+              <div>
+                <h3 className="font-heading text-lg">
+                  Why these sections were generated
+                </h3>
+                <p className="mt-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                   {loading
                     ? "Loading the latest forecast…"
                     : running
                       ? "Forecasting demand…"
                       : "No generated sections yet for this term."}
                 </p>
-              )}
-            </div>
+              </div>
+            )}
           </section>
 
           <section
@@ -268,6 +292,14 @@ export function DemandForecastDialog({
                       {recommendation.program_code} · Year{" "}
                       {recommendation.year_level}
                     </p>
+                    {recommendation.curriculum_name && (
+                      <p className="text-xs text-muted-foreground">
+                        {recommendation.curriculum_name}
+                        {recommendation.curriculum_effective_school_year
+                          ? ` · ${recommendation.curriculum_effective_school_year}`
+                          : ""}
+                      </p>
+                    )}
                     <p className="text-sm text-muted-foreground">
                       {recommendation.recommended_block_sections} blocks ·{" "}
                       {recommendation.students_per_block} seats each

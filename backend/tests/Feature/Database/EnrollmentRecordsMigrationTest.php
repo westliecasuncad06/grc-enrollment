@@ -57,7 +57,12 @@ final class EnrollmentRecordsMigrationTest extends TestCase
 
         $this->assertTrue(Schema::hasColumns('payments', [
             'id', 'enrollment_id', 'confirmed_by', 'external_reference',
-            'amount', 'confirmed_at',
+            'amount', 'promissory_note_on_file', 'confirmed_at',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('account_payments', [
+            'id', 'student_id', 'enrollment_id', 'received_by', 'amount',
+            'received_at', 'created_at', 'updated_at',
         ]));
 
         $this->assertTrue(Schema::hasColumns('assessments', [

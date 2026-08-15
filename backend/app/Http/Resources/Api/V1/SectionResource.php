@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domain\Scheduling\CanonicalScheduleDays;
 use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -47,7 +48,7 @@ final class SectionResource extends JsonResource
             'subject_id' => $this->resource->subject_id,
             'section_code' => $this->resource->section_code,
             'professor_id' => $this->resource->professor_id,
-            'schedule_days' => $this->resource->schedule_days,
+            'schedule_days' => (new CanonicalScheduleDays)->normalize($this->resource->schedule_days),
             'starts_at_time' => $this->resource->starts_at_time,
             'ends_at_time' => $this->resource->ends_at_time,
             'room' => $this->resource->room,

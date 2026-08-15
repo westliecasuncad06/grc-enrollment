@@ -231,6 +231,9 @@ describe("DemandForecastDialog", () => {
     const rationale = screen.getByRole("region", {
       name: "Why these sections were generated",
     })
+    await user.click(
+      within(rationale).getByRole("button", { name: "View explanations" }),
+    )
     expect(within(rationale).getByText(/CS101/)).toBeInTheDocument()
     // Both fixture groups happen to have exactly one section each — assert
     // the "N section(s)" badge renders correctly for both rather than

@@ -64,6 +64,8 @@ const enrollment = {
   id: 9,
   student_id: 3,
   student_number: "2026-0001",
+  student_name: null,
+  student_year_level: null,
   student_financial_status: null,
   student_financial_status_label: null,
   academic_term_id: 2,
@@ -186,6 +188,7 @@ describe("enrollment-service", () => {
             payment: {
               external_reference: "OR-000123",
               amount: "1500.00",
+              promissory_note_on_file: false,
               confirmed_at: "2026-07-30T00:00:00Z",
             },
             document: {

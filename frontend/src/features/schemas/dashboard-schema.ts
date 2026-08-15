@@ -120,6 +120,8 @@ export const programChairAnalyticsSummarySchema = z
     type: z.literal("program_chair_analytics_summary"),
     academic_term_id: z.number().int().positive(),
     college: z.string().min(1),
+    official_enrolled_count: z.number().int().nonnegative(),
+    year_level: z.number().int().min(1).max(4).nullable(),
     enrollment_status_counts: z.record(z.string(), z.number().int().nonnegative()),
     grade_status_counts: z.record(z.string(), z.number().int().nonnegative()),
     retention_breakdown: z.array(retentionBreakdownRowSchema),

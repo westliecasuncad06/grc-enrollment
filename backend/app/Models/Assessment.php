@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * @property int $id
  * @property int $enrollment_id
- * @property ?string $total_amount
+ * @property ?numeric-string $total_amount
  * @property string $currency
  * @property CarbonImmutable $assessed_at
  * @property ?CarbonImmutable $created_at

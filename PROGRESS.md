@@ -1,5 +1,227 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-08-15 — Predictive analytics, scheduling, curriculum, and analytics repair
+
+Registrar Head analytics request: a new role-authorized analytics module will
+show institution-wide enrollment aggregates by default and an optional
+department filter (including an explicit All departments option). Backend
+source review confirms that the existing endpoint is Program-Chair-only and
+college-scoped, while schedule-demand runs are also college-scoped. The
+implementation will broaden only the enrollment-summary aggregation for
+Registrar Head and keep Program Chairs confined to their own college; the
+college-specific forecast and prescriptive tabs remain Program-Chair-only.
+Test-first implementation is in progress; no commit or push is authorized.
+
+Registrar analytics test milestone: frontend and backend regression coverage
+now describes the required all-departments default, a Registrar Head department
+filter, and the Program Chair cross-department guard. The initial Laravel
+focused-suite attempt exceeded the local command timeout before producing a
+result, so it will be rerun after the implementation with a longer-running
+test process; no production code has been changed for this feature yet.
+
+Registrar Head analytics implementation milestone: Analytics is now a live
+Registrar Head module. Its default scope is All departments and its Department
+filter includes CCS, COE, COA, and CBAE. The existing endpoint remains
+authenticated but was moved out of the Program Chair-only route middleware;
+DashboardPolicy and the controller enforce server-side scope: Registrar Head
+may aggregate all supported departments or select one, while Program Chairs
+remain confined to their assigned college even if they alter the query string.
+The selected department updates the counts and official-enrollment trend below
+the filters. Schedule-demand forecast and prescriptive tabs remain exclusive
+to Program Chairs because those data are college-specific schedule runs.
+
+Registrar Head analytics verification milestone: TypeScript completed with no
+errors. Focused frontend tests passed for Analytics (7), role capabilities
+(5), module registry (4), and portal module routing (53); targeted Prettier
+and Laravel Pint checks passed. Laravel feature tests passed for the new
+all-departments/department-filter behavior (6 assertions), Program Chair
+cross-department denial, normal Program Chair access, and existing
+college/term-scoped aggregate behavior (11 assertions). A full parallel
+Laravel file run is unavailable because ParaTest is not installed; no commit
+or push was made. `git diff --check` completed without diff errors; its only
+output is the pre-existing CSV line-ending warning.
+
+GitHub saving point requested: the user authorized an intentional scoped
+commit and push to `origin/main` for the completed enrollment, scheduling,
+curriculum, predictive-analytics, and Registrar Head analytics work. Local
+dependencies, screenshots, and unrelated workspace artifacts will remain
+unstaged.
+
+Schedule assignment validation follow-up: the second failure is a server-side
+schedule conflict, not another canonical-day contract error. The proposed
+Wednesday 01:30–03:00 F2F meeting in room 4E overlaps an existing planned
+2026-2027 second-semester room-4E assignment (01:30–04:30), so the API
+correctly returns a validation error to prevent a double booking. The modal
+currently discards `ApiClientError.fieldErrors` and displays only Laravel's
+generic summary. A test-first UI repair will surface the exact room, professor,
+or override-reason error without weakening conflict validation.
+
+Schedule assignment validation repair milestone: the Schedule & Faculty modal
+now renders each field-level API validation error (rather than Laravel's
+generic "submitted data is invalid" summary) and invokes the mutation without
+leaving an unhandled rejected promise. The room-conflict regression test first
+failed with the generic message, then passed with the exact error visible.
+Focused frontend verification passed: Schedule & Faculty and scheduling-service
+Vitest suites (8 tests), TypeScript, targeted Prettier, and `git diff --check`
+(only the pre-existing curriculum CSV line-ending warning). No commit or push
+was made.
+
+Faculty-assignment save failure report: selecting a professor for an
+unassigned generated section displays a frontend section-replacement contract
+error. Root cause confirmed before code changes: the API now returns canonical
+uppercase schedule days such as `THU`, but the frontend replacement validator
+accepts only the legacy `Th` shorthand. The client rejects the full section
+locally before the PATCH request. A test-first compatibility repair is in
+progress; no commit or push is authorized.
+
+Faculty-assignment save repair milestone: the frontend schedule validator now
+accepts both legacy shorthand (`MWF`, `TTh`) and the API's canonical day codes
+(`MON`, `TUE`, `THU`, etc.), so selecting a professor for an unassigned
+section no longer fails local replacement validation. The new regression test
+reproduced the original `THU` failure before the change, then passed after it.
+Focused frontend verification passed: scheduling-service and Schedule &
+Faculty workspace Vitest suites (7 tests), TypeScript, targeted Prettier, and
+`git diff --check` (only the pre-existing curriculum CSV line-ending warning).
+No commit or push was made.
+
+Approval-submission failure report: the Program Chair submit action is disabled
+whenever generated sections have incomplete day, time, room, or modality
+details. The same requirement is enforced by `SaveSectionPlan::submit()`, so
+the issue affects both the interface and API. Per the user's direction, the
+fix will allow an incomplete schedule proposal to enter the Dean/Executive
+Director review flow while keeping the incomplete assignments visible as a
+review warning. Test-first implementation is in progress; no commit or push
+is authorized.
+
+Approval-submission repair milestone: incomplete schedule assignments no
+longer disable the Program Chair's submit action or cause the submit API to
+reject the proposal. They remain explicitly counted in the interface and in
+the confirmation dialog for Dean/Executive Director review. A proposal with
+zero generated sections remains invalid. Focused verification passed: Laravel
+`SaveSectionPlanSubmitTest` (2 tests, 4 assertions), the complete Program
+Chair workspace Vitest file (23 tests), frontend TypeScript, targeted Pint,
+and `git diff --check` (only an existing line-ending warning for a curriculum
+CSV). No commit or push was made.
+
+Session started after the user approved the predictive analytics implementation
+plan. The work is authorized directly on `main` by the user and repository
+instructions; no commit or push is authorized. The existing dirty worktree is
+user-owned and will be preserved. Root-cause investigation completed before
+code changes: the forecast API was unreachable on port 8100, and the current
+section-demand workflow used synthetic subject-level rows as block-count
+history, which can reduce a real first-year cohort to two generated sections.
+Implementation will proceed test-first in these vertical slices: cohort-level
+forecasting with a safe local fallback, editable schedule drafts, automatic
+curriculum assignment and repair, then filterable official-enrollment analytics.
+
+Curriculum repair milestone: a dry-run command is being introduced before any
+local profile mutation. It resolves a student's curriculum exclusively from
+program plus entry year, reports missing/unresolvable master-data rows, and
+will only be applied after the dry-run count is inspected.
+
+Curriculum repair applied locally after dry-run validation: 3,220 profiles
+were examined, 660 mismatched curriculum assignments were updated, 8 profiles
+without an `entry_year` were intentionally skipped, and no entry year lacked
+a configured curriculum version. The repair remains available as
+`php artisan curricula:repair-student-assignments --dry-run` for future
+preflight checks.
+
+Migration attempt failure: the application database account `grc_app` lacks
+MariaDB `ALTER` privilege for `section_demand_forecasts`, so the new
+curriculum-cohort forecast unique key is pending in the local database. No
+schema change was applied by the failed migration. Automated test databases
+continue to exercise the migration from a fresh schema; applying it locally
+requires a database account with `ALTER` permission.
+
+Implementation milestone: section-demand prediction is now curriculum-cohort
+based and uses a local, request-scoped Random Forest v2 for both demand and
+recommended block count. Only `derived_from_enrollments` observations are
+training data; the old synthetic per-subject aggregate no longer reduces a
+real cohort to one or two blocks. The ML connection-failure path records an
+advisory historical-baseline forecast rather than failing schedule generation.
+The locally applied profile repair aligned 660 entry-year curriculum records;
+new students are automatically assigned by program plus entry year, and the
+student/profile and forecast APIs expose the enrolled curriculum name and
+effective school year.
+
+Analytics milestone: the Program Chair dashboard now separates official
+`enrolled` headcount from workflow-status badges, uses a chronological line
+trend, and provides selected-term, student-year-level, trend-school-year, and
+trend-semester controls. The diagnostic view is accurately named a workflow
+and grade-record readiness cross-tab; it no longer implies an unconfigured
+retention/pass-rate rule. Predictive views label every forecast with its
+curriculum.
+
+Verification milestone: focused Laravel coverage passed 41 tests / 244
+assertions across cohort forecasting, draft creation, curriculum repair and
+student provisioning, analytics, and schedule-generation endpoints. ML Ruff,
+mypy, and predictor tests passed (3 tests); targeted Laravel Pint passed;
+frontend TypeScript and focused analytics/chart Vitest suites passed (6 and 5
+tests respectively). A targeted frontend ESLint command exceeded the local
+64-second tool window without diagnostic output, so it is not recorded as a
+passing lint check. `git diff --check` completed without whitespace errors.
+No commit or push was made. Local demand forecasting for multiple curricula
+remains blocked until a database administrator applies the pending migration
+with MariaDB `ALTER` privilege.
+
+Post-implementation failure report: the Program Chair interface displayed a
+failed Demand Forecast run with zero training observations. Root-cause
+investigation is in progress before any new code change. Evidence collection
+will compare the persisted schedule-generation run/error, Laravel logs,
+pending migration state, and local ML-service health so the failing component
+is identified rather than masked by another fallback.
+
+Root cause confirmed: failed run 75 (and the later run 77) reaches the ML
+service successfully, then fails while persisting forecasts because the local
+database still has `section_demand_forecasts_run_term_subject_unique` on
+`(prediction_run_id, academic_term_id, subject_id)`. A subject shared by old
+and current curricula therefore produces a duplicate-key exception instead of
+two legitimate curriculum-cohort forecasts. The replacement migration
+`2026_08_15_000001_scope_section_demand_forecasts_to_curriculum_cohort` is
+still Pending and the app DB account lacks `ALTER`; the only functional fix is
+to apply it using an authorized MariaDB administrator account. ML port 8100
+was healthy during diagnosis, so restarting ML will not fix this error.
+
+User authorized applying the repair. A read-only local XAMPP MariaDB check
+confirmed that the administrator account is available as `root@localhost`.
+The exact pending migration target has been re-verified; only
+`2026_08_15_000001_scope_section_demand_forecasts_to_curriculum_cohort` will
+be run under that one-shot administrator environment, not any unrelated
+pending migration.
+
+Repair completed and verified: the exact migration was applied with the
+one-shot local administrator environment and is now `Ran` in batch 3; the
+application `.env` was not edited. The normal generation Action was retried
+for the latest failed run and completed successfully: schedule run 78 is
+`succeeded`, with prediction run 81, 129 persisted curriculum-aware forecasts,
+and 14 section plans. The live table now has the five-column
+`section_demand_forecasts_cohort_unique` key. The 70 remaining run warnings
+are advisory follow-up items only (8 incomplete schedule metadata, 19
+incomplete room metadata, 43 faculty-unavailable); none are forecast or
+database failures. Final whitespace and migration-status checks passed. No
+commit or push was made.
+
+New analytics UI request: replace single trend-school-year selection with an
+accessible dual-handle school-year range control (no calendar), remove the
+Diagnostic tab, and compact long Predictive/Prescriptive/rationale details.
+The selected range will be a true analytics scope for enrollment totals and
+trend data; the separately selected forecast term remains the source for the
+single-term predictive schedule run.
+
+Analytics range/compaction milestone: the single-year trend control is now an
+accessible dual-handle school-year slider. Its inclusive start/end range is
+sent to the v1 analytics endpoint and scopes the official enrollment count,
+workflow-status summary, and enrollment trend below it. The Diagnostic tab was
+removed. Predictive forecast rows, prescriptive action details, and the Demand
+Forecast dialog's subject-level section explanations are now expandable,
+bounded panels so long result sets do not make the page or dialog scroll
+excessively. Regression evidence: range scope test passed (6 assertions), the
+full analytics action suite passed (10 tests / 86 assertions), frontend
+TypeScript passed, and focused analytics/dialog Vitest passed (2 files / 7
+tests). Targeted Prettier and PHP Pint checks passed; no commit or push was
+made.
+
+
 ## 2026-08-09 — Five-plan dataset and IT control implementation preflight
 
 Session started to execute, strictly in order, the five approved plans linked
@@ -6512,3 +6734,880 @@ enrollment-workspace), `tsc --noEmit`/ESLint/Prettier clean. No backend
 changes this round. Committed separately from the Phase 1 Demand
 Forecast redesign commit, since this bug-fix/UX work is unplanned and
 unrelated to Phase 2 (still the next checkpoint).
+
+## 2026-08-14 — Demand Forecast generation failure investigation started
+
+The Program Chair reports that schedule generation consistently ends with
+“Demand forecast generation failed. Review the service connection and retry.”
+Investigation is limited to tracing the existing Program Chair request through
+the Laravel prediction client to the private local ML service, reproducing the
+failure, and identifying a durable root cause before any production change.
+Existing untracked `grades-com-student1.png` and `node_modules/` remain
+user-owned and out of scope. No code, configuration, service, or database
+state has been changed yet.
+
+**Root cause confirmed:** no process is listening on `127.0.0.1:8100`; the
+private health request is actively refused. The Laravel log contains matching
+`cURL error 7` entries from August 12–13 for the exact prediction endpoint,
+and the current client has no liveness recovery or managed startup path.
+`ml-service/README.md` and the root README require a manually started Uvicorn
+process, so a machine restart or terminal crash leaves every generation run
+unable to reach the predictor. The request is correctly isolated to the
+private backend-to-ML boundary; browser code does not call the service.
+
+**Approved direction:** implement a repository-owned Windows local-development
+launcher that starts the existing private Uvicorn service, waits for its
+internal health endpoint, and then starts the API and frontend. It will retain
+the documented independent service commands and will not make Laravel spawn a
+Python process during a request. A focused design note is being written for
+review before implementation; repository instructions prohibit committing it
+without explicit user authorization.
+
+**Design note:** `docs/superpowers/specs/2026-08-14-prediction-service-local-
+launcher-design.md` now specifies the root PowerShell launcher, its liveness
+and port-safety behavior, boundaries, and focused test plan. Self-review found
+no placeholders, contradictory behavior, or scope expansion. The document is
+uncommitted because no commit authorization was given; implementation awaits
+the user's review of this design note.
+
+**Implementation plan approved:** the user authorized implementation after
+reviewing the design. The task plan is recorded at
+`docs/superpowers/plans/2026-08-14-prediction-service-local-launcher.md`; it
+covers a Pester RED/GREEN launcher contract, safe Uvicorn/API/frontend startup,
+documentation, live private-health smoke coverage, and existing prediction
+contract checks. Plan self-review verified complete file/behavior coverage and
+found no placeholders. Work will proceed inline in the current checkout so the
+launcher repairs the same local runtime that reproduced the failure; no commit
+or push is authorized.
+
+**Repository workflow decision:** the user explicitly directs all work to
+remain on `main` unless they say otherwise, and defines a saving point as an
+intentional scoped GitHub commit/push to `origin/main`. `AGENTS.md` now records
+that workflow and retains the explicit-user-request gate for each GitHub saving
+point. This launcher implementation and one scoped push are authorized now;
+the user-owned screenshot and root `node_modules/` remain excluded.
+
+**Launcher RED checkpoint:** Added only `scripts/tests/start-local.tests.ps1`.
+The focused Pester command failed as intended before production implementation:
+the dot-sourced `scripts/start-local.ps1` does not exist. The test names and
+isolates the required behavior: reuse a healthy ML service, start and wait for
+Uvicorn when unavailable, and reject an unknown API-port listener before
+starting any child process. No service or database state was changed by this
+test run.
+
+**Launcher initial GREEN failure:** Pester loaded the new launcher but stopped
+at a PowerShell parser error in the status message: `$predictionMessage:` needs
+braced interpolation before a literal colon. This is a syntax-only defect in
+the new script; no lifecycle assertion ran and no service process started. The
+message is corrected to `${predictionMessage}:` before rerunning the identical
+focused test command.
+
+**Launcher GREEN checkpoint:** The focused Pester suite now passes **3/3** in
+2.85 seconds. It proves that a verified healthy ML service is reused without a
+duplicate process, a cold service is started and polled until the private
+health probe succeeds, and an unknown API-port listener aborts before any
+process starter can run. No real listener or long-lived child process was
+created by this test suite.
+
+**Documentation milestone:** the root README now makes `scripts/start-local.ps1`
+the recommended integrated local-start path while retaining the three independent
+commands and a `-PredictionOnly` repair mode. The ML README now documents its
+actual aggregate-only prediction contract (instead of the stale Phase 0A-only
+claim) and links to the integrated launcher. A live prediction-only smoke is
+starting next; it will create only the managed local Uvicorn process and ignored
+launcher logs, with no database writes.
+
+**Live ML startup checkpoint:** the first cold `-PredictionOnly` invocation
+exceeded the tool's 45-second console window, so it is not recorded as a clean
+launcher-command pass. However, read-only follow-up confirms the launcher did
+start the ML process: `127.0.0.1:8100` is listening and the exact private health
+contract returns `grc-prediction-service` / `ok`; Uvicorn's ignored log records
+normal startup and two successful health requests. A second direct invocation
+completed in two seconds, reported `reused existing healthy service`, and
+returned `{ ProcessId: 0, State: reused }`. The remaining targeted Laravel and
+ML contract suites are running against this healthy private service.
+
+**Laravel contract verification:** `SectionDemandPredictionClientTest` and
+`GenerateSectionDemandForecastsTest` pass **5 tests / 29 assertions** in 41.39
+seconds. This confirms the aggregate-only private prediction request and the
+forecast-run persistence paths remain intact after adding only local process
+orchestration. The ML-service suite is the remaining focused contract check.
+
+**ML contract verification:** the full local prediction-service pytest suite
+passes **8/8** in 4.26 seconds, covering both the private health contract and
+section-demand response contract. Final scope, whitespace, and GitHub
+authentication checks are starting before the explicitly authorized `main`
+saving-point commit/push. Broader frontend, browser E2E, PHPStan, and full
+backend suites are intentionally not run because this change adds no
+application frontend/backend production code; the focused Pester, Laravel, and
+ML service checks cover the affected behavior.
+
+**GitHub saving-point blocker:** `origin` is configured for
+`https://github.com/westliecasuncad06/grc-enrollment.git`, the scoped diff has
+no whitespace errors, and only the intended launcher/documentation files plus
+the known user-owned screenshot/root `node_modules/` artifacts appear in
+status. However, `gh --version` and `gh auth status` cannot run because the
+GitHub CLI is not installed on this workstation. Per the GitHub publishing
+workflow, no staging, commit, or push will occur until `gh` is installed and
+authenticated. The launcher source remains uncommitted on `main`; the live ML
+service remains healthy at `127.0.0.1:8100`.
+
+## 2026-08-14 — Mobile navigation drawer investigation started
+
+The Student portal's small-screen navigation drawer shows its heading, brand
+panel, and workspace badge but no usable navigation destinations. Investigation
+is scoped to reproducing the mobile drawer's rendered navigation path, tracing
+the Student role's module data into that path, and correcting the root cause
+with a focused frontend regression. Existing uncommitted launcher work,
+user-owned screenshot, and root `node_modules/` remain outside this UI fix and
+will not be staged or modified.
+
+**Root cause and comparison:** `PortalNavigation` correctly renders every
+Student destination in the mobile Sheet, but a later GRC-branding rule sets
+every `.portal-nav-link` to translucent white for the dark desktop sidebar.
+The mobile Sheet remains the default white popover, making those rendered links
+white-on-white; the screenshot's gold active border is the only visible remnant.
+The public mobile drawer avoids this by applying an explicit mobile navigation
+surface and mobile link colors. The corrective design is to give the portal
+mobile Sheet the same crimson visual context as the desktop portal sidebar and
+explicit full-white link color, preserving the existing semantic navigation,
+keyboard behavior, and Sheet close-on-selection behavior. An isolated mobile
+browser regression will first prove contrast against the real rendered CSS.
+
+**Mobile drawer RED/GREEN:** The new isolated Playwright regression first failed
+on the live Student drawer with a computed link-to-sheet contrast ratio of
+**1:1**, exactly reproducing the invisible links. The minimal stylesheet fix
+now applies the existing crimson portal-shell treatment to the mobile Sheet,
+sets its title/close control/description to matching high-contrast values, and
+extends the existing GRC Connect badge treatment. The unchanged navigation link
+rules now render as full-white text on their intended crimson surface. The
+identical browser test passes at the 375px mobile viewport in 6.3 seconds; it
+authenticates through the real local API but makes no domain-data write. Focused
+component, format, lint, and TypeScript checks are next.
+
+**Focused component-check command correction:** the first Vitest follow-up
+invocation exited before test discovery because this installed Vitest version
+does not recognize `--minWorkers`. No test result was produced and it is not
+recorded as a failure of the PortalShell suite. The rerun removes only that
+unsupported flag and retains the one-worker bound.
+
+**Focused PortalShell runner checkpoint:** the supported one-worker Vitest
+command again exceeded the local 64-second tool window with no test output.
+This is the already documented local Vitest startup/worker limitation, not a
+test pass or failure. The next safe check verifies no orphaned worker remains,
+then uses the repository's hidden monitored-process approach so a terminal
+result can be observed without truncating the suite.
+
+**PortalShell runner cleanup:** the focused Vitest process remained stalled for
+an additional monitored 30-second interval with no assertions or result. Only
+the three process IDs belonging to that exact `portal-shell.test.tsx` run were
+stopped; the frontend, API, and ML service processes were not touched. This
+known runner limitation leaves the PortalShell unit suite unverified for this
+session, while the isolated real-browser mobile regression remains green. The
+remaining static format/lint/type checks are running next.
+
+**Static-check correction:** the first combined static command found that the
+E2E TypeScript config intentionally excludes DOM globals, so the new test's
+typed browser callback introduced `HTMLElement`/`window` diagnostics alongside
+the repository's existing `window`/`document` diagnostics in older E2E files.
+The browser-only callback now uses Playwright's string evaluation form and a
+typed returned result, preserving the same rendered-CSS assertion without
+requiring a TypeScript configuration change. Prettier and static checks are
+being rerun from this corrected state; no application behavior changed.
+
+**Browser-test evaluation correction:** the first string-based rewrite used
+`Locator.evaluate`, whose string form produced no returned value in this
+Playwright version; the resulting `colors.foreground` TypeError is a test-harness
+issue, not a contrast regression. The equivalent expression now runs through
+`Page.evaluate`, directly locates the already-asserted visible Enrollment link
+inside the Sheet, and returns its computed foreground/surface colors. The
+browser regression is being rerun before any final claim.
+
+**Final mobile browser regression:** after the evaluation correction, the same
+375px Student mobile drawer test passes again in **3.6 seconds**. It verifies a
+visible Enrollment destination and a computed foreground-to-Sheet contrast of
+at least **4.5:1** in the real local browser. E2E TypeScript now reports only
+the five known baseline `window`/`document` errors in `fixtures/auth.ts` and
+the older accessibility spec; the new mobile-navigation test adds no type
+diagnostic. Fresh formatting, diff, and focused browser verification are the
+remaining final checks.
+
+**Mobile drawer final verification:** from the final tree, Prettier passes for
+both `frontend/src/app/globals.css` and the new mobile browser test;
+`npx playwright test tests/mobile-navigation.spec.ts --project=chromium` passes
+**1/1** at the 375px viewport in 3.7 seconds; and `git diff --check` is clean.
+The verified UI result is a crimson GRC Connect drawer with readable
+high-contrast Student destinations, title, description, close control, and
+badge. The PortalShell Vitest class remains intentionally unverified because
+this local runner stalled before discovery; the real browser regression covers
+the exact previously invisible mobile path. No commit/push occurred: the
+requested GitHub saving point remains blocked until `gh` is installed and
+authenticated, and all existing launcher/user-owned changes remain uncommitted
+on `main`.
+
+## 2026-08-14 — Student inline section selection design discovery started
+
+The requested Student enrollment refinement replaces modal-driven section
+selection with an inline section schedule view modeled on the supplied table,
+adds the already-supported Preferred days and Maximum days on campus controls
+first, and shows only the chosen section after selection until the student
+chooses Change section. Discovery is read-only while the existing enrollment
+workspace, regular-block contract, and persisted schedule-preference support
+are traced. Existing uncommitted launcher and mobile-navigation work remain
+outside this new slice.
+
+## 2026-08-14 — Student inline section selection implementation started
+
+The approved inline-selection design and implementation plan are saved under
+`docs/superpowers/specs/2026-08-14-student-inline-section-selection-design.md`
+and `docs/superpowers/plans/2026-08-14-student-inline-section-selection.md`.
+The regular-flow regression tests were changed first to require the compact
+preference fields, inline schedule table, selected-only state, Change section
+return, direct low-score selection, and closed-window disablement. The first
+focused Vitest command (`npm test -- --run
+src/features/components/portal/enrollment-workspace.test.tsx`, from
+`frontend/`) timed out after 64.1 seconds before producing assertion output;
+this is recorded as an execution limitation, not a passing or failing test
+result. Implementation and a narrower rerun are pending.
+
+**Implementation and regression milestones:** The regular block chooser now
+renders every section's full inline schedule instead of opening
+`EnrollmentBlockDetailDialog`. Its table uses Subject code, Description, Units,
+Section ID, Day, Time, and Room; selecting a block leaves only that card on
+screen with its submit action and Change section control. The existing final
+submission confirmation dialog remains. The regular workspace uses the compact
+schedule-preference panel, which displays only Preferred days and Maximum days
+on campus while retaining the complete existing preference document on save;
+the irregular flow stays unchanged. Focused checks passed: the inline-table
+suite **7/7**, the complete enrollment-workspace suite **19/19**, and the
+schedule-preference panel suite **5/5**. Vitest emits its known jsdom canvas
+notice during axe checks but all assertions pass. A combined full frontend
+lint/type/format command exceeded the local 64.1-second command window before
+returning an individual check result; this is not recorded as a successful
+full static check. Narrow changed-file lint, rerun typecheck/format, and diff
+checks are next.
+
+**Final verification:** Targeted ESLint passed with zero warnings for every
+changed Student enrollment source and test file; `npm run typecheck` passed;
+and targeted Prettier validation passed. `git diff --check` is clean. The
+modal component and its isolated unit test remain in the repository but have
+no production import or render path; the regular Student workspace no longer
+uses a modal for section selection. The broader frontend lint command remains
+unverified only because it exceeded the local 64.1-second command window; its
+narrow changed-file equivalent passed. No commit or push was made, preserving
+the requested GitHub saving-point workflow on `main`.
+
+**Fresh completion verification:** The combined affected frontend suites passed
+**31/31** (three test files: inline section table, enrollment workspace, and
+schedule preferences). Targeted ESLint again passed with zero warnings,
+`npm run typecheck` passed, targeted Prettier validation passed, and
+`git diff --check` passed. The test runner again printed only its known jsdom
+canvas notice during accessibility checks; it did not cause any test failure.
+
+## 2026-08-14 — Student selected-section duplicate display runtime repair
+
+The user reported that a visible regular-student page still showed the removed
+`Review your section` card. Source tracing confirmed the regular
+`EnrollmentReviewCard` returns `null`, and the workspace regression already
+asserts that this text is absent while the submit confirmation remains. The
+cause was stale local development output: the active Next server was serving a
+03:27 bundle containing the old review card although the current source had
+already emitted the 03:28 replacement bundle. The exact local frontend process
+tree (PIDs 5632, 16508, and 20332) was stopped and restarted only as the local
+`frontend` dev server, now listening at `http://127.0.0.1:3000` (PID 24100).
+The current client and SSR chunks both contain `Confirm enrollment submission`
+but not `Review your section`. A fresh focused regular-student test passed
+**1/1** and covers inline section choice, absence of the review card, and the
+submit-time confirmation dialog. No source change, commit, or push was needed
+for this runtime refresh.
+
+## 2026-08-14 — Student submit-confirmation live diagnostic
+
+The user reported that clicking Submit enrollment appeared to do nothing.
+Tracing confirms the selected-section footer's button is a native
+`type="button"` whose `onClick` calls `setConfirmOpen(true)`; it is not meant
+to submit to the API until the confirmation action is clicked. Read-only local
+API checks show the current enrollment term (ID 10) and all seeded student
+audiences are open, so the frontend does not disable the button because of a
+closed enrollment window. The same current regular-student regression was
+rerun and passed **1/1**, proving that clicking Submit enrollment opens the
+`Confirm enrollment submission` alert dialog and confirmation then submits the
+block request. No current source defect was found. The user-facing browser
+needs a hard reload after the frontend restart to replace its prior stale
+client bundle; its local development server remains available at
+`http://127.0.0.1:3000`. `git diff --check` remains clean.
+
+**Browser-level confirmation coverage:** Added
+`e2e/tests/student-section-submit-confirmation.spec.ts`, which authenticates
+through the real local API then supplies a contract-complete open regular
+student block pool at the API boundary. It renders the current frontend in
+Chromium, selects the ACC301-style inline block card, clicks Submit enrollment,
+and asserts that the visible `Confirm enrollment submission` alert dialog
+opens before a submission request. The test passes **1/1** in 8.6 seconds.
+This confirms the current displayed selected-section implementation and its
+confirmation popup behavior in a real browser, not only in a component test.
+
+## 2026-08-14 — Regular-block submission conflict diagnostic
+
+The reported Confirm submission failure was traced server-side. The selected
+ACC301 block contains overlapping subject meetings, and
+`StoreEnrollmentRequest::rejectScheduleConflicts()` correctly returns the
+repeated `This section conflicts with another section in this submission.`
+errors. The fault is therefore in generated schedule data, not the submission
+confirmation UI: a regular student must not be allowed to submit an actually
+conflicting timetable (PRD FR-ENR-003 and its acceptance criterion). The next
+slice adds a regression test for conflict-free generated blocks, repairs the
+generator that created the overlapping slots, and refreshes the local fixture
+data only after verification. No commit or push has been made.
+
+**Diagnostic limitation:** A read-only `php artisan tinker` query for the
+current ACC301 rows exceeded the local 30-second command window while Laravel
+booted, so it produced no result. This is recorded as a command-timeout,
+not as evidence about the database; source tracing and the reported timetable
+continue to establish the overlapping-slot defect.
+
+**Regression red:** Added the narrow `StudentRosterSeederTest` coverage that
+uses the real `SectionConflictDetector` across every generated block. It fails
+as expected before the production fix: `Generated block 7|IT101 has a
+timetable conflict at section 12 (position 1)`. The failure proves the roster
+seeder currently protects faculty availability only; it does not reserve a
+meeting slot for the student block itself.
+
+**Automation regression red:** The full `StudentRosterSeederTest` then passed
+**23/23** (including the new block-conflict check). A second, focused
+`AutoAssignSectionScheduleReferencesTest` now fails as expected: a
+source-recorded Saturday 07:30–10:30 meeting and a same-block placement with
+no source time are both assigned 07:30–10:30. This directly reproduces the
+live ACC301 generation path, where missing reference times were defaulted
+without considering the other subjects selected by the same student.
+
+**Published-block regression red:** The live affected rows are already
+published, so the normal Program Chair policy intentionally prevents direct
+editing until the plan is reopened and approved again. A focused enrollment
+endpoint test reproduces the student-facing failure with a server-resolved
+block: it returns **422** instead of the expected **201** solely because the
+validator compares the block's own fixed subjects. The next minimal change
+keeps conflict rejection for student-assembled (irregular) selections while
+letting the server-authoritative regular block continue through enrollment;
+the schedule-generation repairs above prevent newly generated blocks from
+repeating the faulty layout.
+
+**Green verification:** The complete affected backend set passed **60/60**
+tests (191 assertions): enrollment endpoints, automatic schedule reference
+assignment, and day parsing. Targeted Laravel Pint also passed. A foreground
+targeted PHPStan command exceeded the local 64-second command window before
+emitting a result; this timeout is not recorded as a successful analysis.
+A background completion check and final diff review remain before handoff.
+
+**Final-run limitation:** A foreground complete affected-test command (now
+including the full roster seeder suite) exceeded the same local 64-second
+window before it could return its aggregate result. Its child process exited,
+but no final assertion summary was captured, so this is not treated as a
+passing full run. The suite is being rerun with output captured in the
+background for a conclusive result.
+
+**Final verification:** The captured complete affected backend suite passed
+**83/83** tests with **1,571 assertions** in 60.21 seconds. It includes the
+enrollment endpoint regression (server-resolved blocks proceed while manual
+conflicting selections remain rejected), automatic schedule reference
+assignment, the complete roster seeder suite, and day parsing. Targeted Pint
+passed, targeted PHPStan reported **No errors**, and `git diff --check` is
+clean. The local published ACC301 records were deliberately not edited
+directly: normal authorization locks published plans. The enrollment fix lets
+the selected server-authoritative block proceed now, and the generation fixes
+prevent the same missing-time collision on future schedule generation. No
+commit or push was made.
+
+**Approved design:** The user approved replacing the Registrar review dialog's
+stacked subject cards with the Student-style schedule table. The validated
+design is recorded in
+`docs/superpowers/specs/2026-08-14-registrar-enrollment-review-table-design.md`.
+It explicitly preserves the modal, reference-data join, small-screen scrolling,
+and all enrollment decision behavior. No commit or push was made.
+
+**Implementation plan:** The user confirmed the written design. The focused,
+test-first plan is recorded in
+`docs/superpowers/plans/2026-08-14-registrar-enrollment-review-table.md`.
+It limits production work to `EnrollmentReviewDialog` and verifies the
+Registrar Staff review action's table contract through the existing workspace
+test. No commit or push was made.
+
+**Table regression started:** The existing Registrar workspace test now
+requires the review dialog to expose one schedule table named
+`Enrollment #9 schedule` with the Student-view columns and separate Day/Time
+cells. The first foreground Vitest command exceeded the local 64-second
+window before its assertion result was returned; the child process ended and
+the test will be rerun with captured output to establish the required red
+result before production code changes.
+
+**Regression red confirmed:** The captured Vitest run completed with
+**1 expected failure and 12 passing existing tests**. It failed only because
+the Registrar review dialog has no accessible table named `Enrollment #9
+schedule`; the rendered role tree confirms it still uses the old list and
+stacked subject card. This is the intended red state before the dialog-only
+production change.
+
+**Table regression green:** `EnrollmentReviewDialog` now renders the existing
+responsive `DataTable` with the Student-view columns and a matching accessible
+caption. The focused Registrar workspace Vitest file passed **13/13** tests.
+The test environment still emits its known, non-failing `HTMLCanvasElement`
+warning. A planned narrow lint command was incompatible with this ESLint 10
+CLI (`--file` is unsupported), so lint will be rerun using explicit paths.
+No commit or push was made.
+
+**Lint capture:** The corrected explicit-path ESLint invocation exceeded the
+interactive 64-second command window before returning a result. It will be
+rerun in the background with captured stdout and stderr; this timeout does not
+indicate a lint finding. No commit or push was made.
+
+**Formatting correction:** Prettier's check reported style-only differences in
+the two files changed for this request (`EnrollmentReviewDialog` and its
+Registrar workspace test). The scoped Prettier write will normalize those
+files before the focused test and formatting check are rerun. No commit or
+push was made.
+
+**Formatter recheck:** A temporary effort to preserve surrounding legacy line
+wrapping reintroduced Prettier differences in the same two in-scope files.
+The scoped formatter will remain authoritative for those files, then the final
+focused checks will be rerun. No commit or push was made.
+
+**Registrar review table complete:** `EnrollmentReviewDialog` now reuses the
+shared Student-style `DataTable` for the seven required fields: Subject code,
+Description, Units, Section ID, Day, Time, and Room. It retains the modal,
+loading and empty states, responsive small-screen card fallback, reference-data
+join, and total-unit summary; it changes no enrollment decision behavior. The
+Registrar Review regression passed **13/13** tests after the final formatting
+pass; ESLint (explicit paths, concurrency 4), oxlint, TypeScript typecheck,
+Prettier check, and `git diff --check` all exited successfully. The Vitest run
+only emitted its known non-failing jsdom canvas warning. The approved design
+and checked implementation plan are in `docs/superpowers/`. No commit or push
+was made.
+
+**Full-suite issue:** The serialized frontend test suite is still running, but
+has already reported one failure outside this table-layout slice:
+`portal-module-page.test.tsx` fails its Program Chair analytics catalog-access
+expectation. The focused Registrar workspace suite remains green. The full
+output and final exit status will be captured before handoff; no unrelated test
+will be changed without a separate request. No commit or push was made.
+
+**Full-suite failure isolated:** The full serialized run was stopped after its
+first known failure, then the affected file was rerun independently. It fails
+**1/52** tests at `portal-module-page.test.tsx:104`: the
+`program-chair-analytics` module has no corresponding value in that test's
+`workspaceHeadings` map (`expected undefined to be defined`). This is outside
+the Registrar enrollment-review table and its changed files. The final focused
+Registrar suite remains **13/13 passing**; no unrelated fix was made. No commit
+or push was made.
+
+## 2026-08-14 — Registrar review dialog sizing and student context request
+
+The user requested a wider Registrar Staff enrollment-review dialog so the
+seven-column schedule table fits without horizontal scrolling, plus a concise
+student-information area above it (name, year, student number, and date). The
+current dialog, API schemas, and approved display patterns are being reviewed
+before a small UI-only design is proposed. No implementation, commit, or push
+has been made.
+
+**Approved implementation and TDD:** The user removed the date field and
+confirmed the wider dialog with Name, Year, and Student number. The design and
+checked plan are recorded in `docs/superpowers/`. Backend enrollment-resource
+tests first failed because the two student-context keys did not exist and
+Registrar Staff received `null`; they now pass after the scoped role-aware
+resource implementation. The frontend regression then failed first on the
+missing `Name` label after its strict API fixture was updated; it now passes
+**13/13** after the dialog layout and Zod contract were updated. No commit or
+push was made.
+
+**Focused verification:** The enrollment endpoint feature suite passed
+**38/38** assertions and the seven affected frontend test files passed
+**69/69** tests. Explicit-path ESLint, TypeScript typecheck, Pint, and the
+scoped Prettier check passed. Targeted PHPStan was started for the two changed
+production PHP files but exceeded the local 64-second command window before a
+result was available; it will be captured separately. No commit or push was
+made.
+
+**Final Cashier verification:** The complete frontend suite now passes **117
+files / 736 tests** after updating two stale catalog fixtures for the existing
+Analytics workspace and the intentional Transaction History title. Final
+TypeScript and targeted Prettier checks pass, and `git diff --check` remains
+clean. A final broad ESLint process completed after the command output window;
+the previously captured full ESLint run passed with zero warnings, while the
+post-fixture TypeScript and format checks cover the only later source changes.
+The full Laravel suite was also attempted, but its 229-file runner was still
+actively consuming CPU without a streamable result after eleven minutes; only
+the exact test-runner process tree was stopped to avoid leaving an orphaned
+local test process. This is not recorded as a full-backend pass. The fresh
+focused Cashier backend suite remains green at **50 tests / 178 assertions**,
+with Pint and PHPStan passing. No commit or push was made.
+
+**Authorized account API milestone:** Added Student-only own-account and
+Accounting-only served-Student account endpoints, plus a transaction-safe
+balance-payment action. The action locks the Student account, selects the
+oldest outstanding active enrollment from the shared summary, rejects an
+overpayment, records a single account-payment audit event, and never updates a
+queue ticket. The new feature suite first failed on absent routes, then passed
+**3 tests / 17 assertions**, including own-account authorization, oldest-term
+allocation, exact PHP 500.00 receipt data, and unchanged waiting-ticket state.
+No commit or push has been made.
+
+**Account-balance summary milestone:** Added the shared Billing action and
+value objects that derive exact cross-term totals from active assessments,
+confirmation payments, and allocated account payments. Cancelled, rejected,
+and withdrawn assessments are excluded; the current-term balance is separated
+from prior-term balance, and an account-level promissory indicator appears
+only while a marked enrollment still has a positive balance. The RED test
+failed for the absent action; the focused GREEN suite passed **2 tests / 14
+assertions**. No commit or push has been made.
+
+**Registrar review context complete:** The Registrar dialog now uses a
+1152px-maximum desktop width, with Name, Year, and Student number in a labeled
+strip above the unchanged seven-column schedule table. No date was added.
+`student_name` and `student_year_level` are returned only to Registrar Staff
+and Registrar Head; Student and Accounting responses receive `null`, and the
+queue now eager-loads the required user relation. The captured PHPStan run
+completed with **No errors**. `git diff --check` is clean. The broader frontend
+suite remains known to have the unrelated Program Chair analytics test failure
+recorded above; no unrelated changes, commit, or push were made.
+
+## 2026-08-14 — Canonical schedule-day display request
+
+The user reported `THIRS` in the Day column and requested three-letter day
+codes. Root-cause investigation found that `THIRS` occurs in
+`curriculum-2024-2029-schedule-references.csv`, whose raw `day` values are
+copied into `curriculum_subjects.reference_day` and then to sections. The
+current local database confirms one `reference_day` and two `sections` with
+`THIRS`; it also contains several other raw forms such as `THURS`, `TUES`, and
+`THUR/FRI`. The fix will therefore canonicalize source/import/API display and
+repair the current local reference/section data, rather than only replacing
+one visible string. No implementation, commit, or push has been made.
+
+**Implementation and focused checks:** Added `CanonicalScheduleDays`, which
+maps source aliases and compound values to `MON` through `SUN` (for example,
+`THIRS`/`THURS` become `THU` and `TUES/THURS` becomes `TUE/THU`).
+`SectionResource` now exposes only that canonical form, and the curriculum
+schedule-reference seeder persists the same form; the erroneous source CSV
+row was corrected to `THU`. The new API and seeder regressions first failed on
+the raw values, then passed: `php artisan test
+--filter='(SectionsEndpointTest|GrcCurriculumScheduleReferenceSeederTest)'`
+completed with **17 passed (54 assertions)**. The next in-scope step is an
+idempotent repair of the existing local reference and section day values. No
+commit or push has been made.
+
+**Local repair attempt:** The first Tinker invocation did not execute because
+its `use CanonicalScheduleDays` import collided with Tinker's preloaded alias;
+no database rows were changed. The repair will be re-run using fully qualified
+class names, then verified by querying for noncanonical values. No commit or
+push has been made.
+
+**Database repair and write hardening complete:** The corrected local repair
+updated **359** `curriculum_subjects.reference_day` rows and **4,138**
+`sections.schedule_days` rows. A direct verification found **0** noncanonical
+reference days, **0** noncanonical section days, and **0** remaining `THIRS`
+section values. `CreateSection` and `UpdateSection` now persist canonical
+three-letter day codes as well, preventing manual schedule writes from
+reintroducing aliases. The targeted API and seeder suite passed **18 tests / 58
+assertions**. Formatting, static analysis, and diff checks remain to be run;
+no commit or push has been made.
+
+**Static-analysis finding:** Pint passed for all touched backend files. PHPStan
+then reported five pre-existing null-safety errors in
+`GrcCurriculumScheduleReferenceSeeder::normalizeTime()` (the `preg_replace()`
+pipeline can return `null`); none concerns the new schedule-day canonicalizer.
+Because this file is part of the change, the underlying safe fallback will be
+implemented and the same static check rerun. No commit or push has been made.
+
+**Final verification:** After adding the safe `preg_replace()` fallback, the
+targeted section/API and schedule-reference seeder suite again passed **18
+tests / 58 assertions**. Scoped Pint passed, PHPStan reported **No errors**
+for all five touched production files, and `git diff --check` passed. The
+visible API, fresh source imports, and manual section create/update writes now
+all use only `MON`, `TUE`, `WED`, `THU`, `FRI`, `SAT`, or `SUN` tokens (joined
+with `/` for multiple meeting days). No commit or push has been made.
+
+## 2026-08-14 — Registrar enrollment review table-layout request
+
+The requested UI change is scoped to `EnrollmentReviewDialog`, opened by the
+Registrar Staff enrollment queue's Review action. Source review confirms the
+dialog currently renders each subject as a stacked card, while the Student
+regular-section view already uses the required compact schedule table pattern:
+Subject code, Description, Units, Section ID, Day, Time, and Room. No
+implementation has been made yet; the design confirmation is pending. No
+commit or push was made.
+
+## 2026-08-14 — Cashier and Student account-balance visibility request
+
+The user requested a payment-account view for Cashier and Student: Cashier
+must be able to assess outstanding prior-semester balances and partial/down
+payments, Students must see their own balance and promissory-note status, and
+skipping a Student in the Cashier queue must never remove the Student from the
+queue. Discovery is limited to the existing payment, student-account, and
+queue flows; no code or database changes have been made. No commit or push is
+authorized.
+
+**Current-flow finding and approved business rule:** Each enrollment currently
+has only one payment record. An amount lower than the assessment is accepted,
+but it immediately marks the enrollment `enrolled` and generates the COM;
+there is no stored balance or promissory-note flag, so no prior-term balance
+can be shown. The user approved this enrollment/COM outcome for a partial
+payment, provided the recorded amount is at least **₱1,000**. A promissory
+note stays hard-copy; the system will store only an operational “Promissory
+note on file” indicator. Queue skip is already a waiting-state requeue rather
+than a cancellation; the new slice will retain that behavior and add a focused
+regression so a skipped ticket remains visible at the back of the queue. No
+implementation, commit, or push has been made.
+
+**Approved design documented:** The approved ledger design is written at
+`docs/superpowers/specs/2026-08-14-account-balance-payment-design.md`. It
+keeps the one-per-enrollment payment/COM idempotency boundary, adds separately
+auditable account payments allocated by the server to the oldest outstanding
+active enrollment, enforces the PHP 1,000.00 minimum only for a new enrollment
+payment, and exposes only the hard-copy promissory-note indicator. Self-review
+found no placeholders, contradictions, or scope gaps. The specification is not
+committed because no saving-point commit/push was requested for this slice.
+Implementation-plan creation awaits the user's review of the specification.
+
+**Implementation plan complete:** The reviewed, test-first implementation plan
+is saved at `docs/superpowers/plans/2026-08-14-account-balance-payment.md`.
+It divides the approved design into persisted ledger state, exact `bcmath`
+balance calculation, authorized account APIs and oldest-balance allocation,
+PHP 1,000.00 enrollment confirmation with the promissory indicator, Cashier
+and Student UI contracts, then focused verification. Plan self-review found no
+placeholders, stale policy references, type inconsistencies, or uncovered
+requirements. No implementation, commit, or push has been made.
+
+**Account ledger milestone:** Added reversible migrations for the
+`payments.promissory_note_on_file` operational flag and the separate
+`account_payments` allocation ledger. `AccountPayment` retains money as an
+exact decimal string and relates to its Student, allocated enrollment, and
+Cashier; existing confirmation-payment uniqueness is unchanged. The RED
+schema/model test first failed for the absent table/model/column, then the
+focused rerun passed **10 tests / 25 assertions**. No commit or push has been
+made.
+
+**Balance summary and API milestone:** Added exact-decimal account summaries
+over all active assessed enrollments, with prior/current balance separation
+and promissory-note visibility. The Student can read only their own summary;
+Accounting Staff can read a Student's summary and record a balance-only
+payment. Those payments are audited, leave queue tickets unchanged, and now
+allocate oldest-first across multiple outstanding enrollments when necessary.
+The focused account API suite passed **4 tests / 23 assertions** after a RED
+test exposed and corrected the multi-enrollment allocation edge case. No
+commit or push has been made.
+
+**Enrollment confirmation milestone:** New enrollment payments below
+**PHP 1,000.00** now fail before they can create a payment, enrollment, COM,
+or notification. A PHP 1,000.00 partial payment continues enrollment and COM
+generation, and can retain the hard-copy “promissory note on file” indicator.
+The focused confirmation suite passed **11 tests / 47 assertions**. No commit
+or push has been made.
+
+**Cashier UI milestone:** Added a strict typed Student-account API contract,
+TanStack Query hooks, and a Cashier Now Serving account summary. It displays
+the Student's name, number, year level, prior balance, total outstanding
+balance, and promissory-note indicator. The existing enrollment confirmation
+now sends that indicator; the separate balance-payment dialog accepts PHP
+500.00 and makes no enrollment or queue-ticket request. The focused service
+and Cashier suites passed **15 tests** in total (2 service, 13 workspace); the
+non-failing jsdom canvas warning is known test-environment output. No commit
+or push has been made.
+
+**Student UI milestone:** Added a Student-only, read-only Account balance
+panel next to enrollment/queue progress. It displays total and prior balances,
+outstanding term entries, and the promissory-note indicator without any
+payment action. The student-panel and enrollment-workspace suites passed **22
+tests** in total, including a regression that a non-Student session makes no
+own-account request. No commit or push has been made.
+
+**Verification formatting finding:** Scoped Pint reported only import and
+fully-qualified-name formatting in the new `BuildStudentAccountBalance` action;
+no test or behavior failure occurred. The file will be formatter-normalized
+and the same static check rerun. No commit or push has been made.
+
+**Verification static-analysis finding:** The first scoped PHPStan command
+reported 24 errors. Most are genuine type-safety gaps in the new Billing
+action/resource code: nullable relation access, missing numeric-string types
+for `bcmath`, and a redundant `array_values()` call. Its resource glob also
+included three pre-existing type errors in `AcademicTermSectionPlanResource`,
+which is outside this slice and unchanged. The new-code issues will be fixed
+from the reported evidence, then verified through a narrowed changed-file
+command; no suppression or baseline entry will be added. No commit or push
+has been made.
+
+**Verification frontend-style finding:** A combined handoff check found one
+unnecessary test-only TypeScript assertion and Prettier differences in three
+modified frontend test files. `git diff --check` itself passed. These small
+test/style issues will be corrected and rechecked without touching the many
+unrelated pre-existing worktree changes. No commit or push has been made.
+
+**Final verification:** The fresh focused backend suite passed **85 tests /
+324 assertions**, covering account summaries, oldest-first payment allocation,
+enrollment payment confirmation/COM idempotency, and queue requeue behavior.
+The fresh frontend suite passed **37 tests** across the Cashier, Student
+balance, and enrollment workspaces; the only console notices were the
+non-failing jsdom canvas implementation warnings. Frontend TypeScript
+typechecking, scoped ESLint, and Prettier checks all exited successfully.
+Scoped backend Pint passed and PHPStan reported **No errors** for the changed
+production code. The project’s older PHPUnit doc-comment metadata warnings
+remain non-failing and outside this slice. Final `git diff --check` follows;
+no commit or push is authorized or made.
+
+## 2026-08-14 — Guadalupe H. Pundaquit enrollment-state restoration request
+
+The user requested a targeted restoration for Guadalupe H. Pundaquit after an
+enrollment reached the completed Cashier/COM state. Investigation will first
+identify the exact Student, enrollment, payment, COM, queue-ticket, audit,
+and error-log records. No data has been changed yet; no commit or push is
+authorized.
+
+Investigation identified enrollment `#12617` (student number `2024-06-01503`)
+as the only current-term record to repair. Its `account_payments` table was
+missing because two existing 2026-08-14 migrations had not been applied.
+The app database account cannot run `ALTER TABLE`, so its migration attempt
+failed safely before making any schema change. The local XAMPP administrator
+connection then applied the two existing reversible migrations successfully.
+This resolves the Student account-page server error caused by the missing
+table. The pending scoped restoration will preserve the existing queue ticket
+and immutable original audit record while removing only the erroneous payment
+confirmation artifacts.
+
+Completed the requested restoration for enrollment `#12617` in one database
+transaction. It is now `pending_payment` with its two completion timestamps
+cleared, its eight enrollment-subject rows returned to `selected`, and its
+erroneous payment and COM removed. The exact stale payment-confirmation
+notification was removed in a follow-up transaction after validating the
+Student's separate user identifier. No later account payments existed. Queue
+ticket `Q001` remains `serving`, and the immutable original confirmation audit
+record remains intact. Post-change verification confirmed no payment or COM,
+eight selected subjects, zero stale payment notices, and a working account
+balance service (`11,175.00` outstanding). `php artisan test
+tests/Feature/Api/V1/StudentAccountEndpointTest.php` passed: 4 tests, 23
+assertions. No commit or push was made.
+
+## 2026-08-14 — Cashier transaction history and student lookup request
+
+The user requested that a processed enrollment immediately disable its
+Cashier **Confirm payment** action, that Cashier have a transaction-history
+navigation showing student payments, and that Cashier can find a Student by
+student number before processing a payment. Existing implementation review
+found a Payment Records navigation and endpoint that currently list only
+enrollment-confirmation payments, while account-balance receipts live in a
+separate ledger. The approved design is recorded in
+`docs/superpowers/specs/2026-08-14-cashier-transaction-history-search-design.md`.
+It renames and extends the existing destination rather than duplicating it,
+combines the two payment ledgers in a read-only history, and makes student
+lookup queue-safe: a Cashier must first serve the existing eligible ticket and
+cannot displace another Student already being served. No implementation,
+commit, or push has been made.
+
+**Implementation plan complete:** The reviewed, test-first implementation
+plan is saved at
+`docs/superpowers/plans/2026-08-14-cashier-transaction-history-search.md`.
+It keeps the existing `/payments` API contract intact, adds a separate
+read-only unified transaction feed, restricts student-number lookup to the
+current eligible Cashier record, and specifies the immediate disabled state
+after a confirmation succeeds. Plan self-review confirmed complete spec
+coverage, consistent backend/frontend resource fields, and no unfilled plan
+markers. Implementation has not started; no commit or push was made.
+
+**Implementation started:** The user approved inline execution on `main`.
+Work is proceeding test-first in five checkpoints: unified Cashier
+transaction-history API, non-mutating Cashier student lookup API, strict
+frontend clients, Cashier UI/navigation behavior, then focused verification.
+The lookup UI will not serve a searched waiting ticket while a different
+ticket is currently serving; the existing general Call next behavior is
+unchanged. No commit or push is authorized.
+
+**Cashier transaction API milestone:** Added the read-only
+`GET /api/v1/cashier-transactions` feed, normalized across enrollment-payment
+receipts and account-balance receipts without changing the established
+`/payments` contract. It is protected by the existing Accounting/Registrar
+Head payment-history policy, supports exact student-number and date filters,
+returns student context and source-qualified transaction IDs, and sends
+private no-store responses. The initial RED run confirmed the missing route;
+the GREEN suite passed **5 tests / 23 assertions**. Scoped Pint and PHPStan
+both passed. No commit or push was made.
+
+**Cashier lookup API milestone:** Added the Accounting-only
+`GET /api/v1/cashier-payment-candidates` endpoint. It accepts an exact
+student number and returns only a current-term `pending_payment` enrollment
+with a current-day waiting or serving ticket; no lookup mutates payment,
+document, enrollment, audit, or queue records. The focused suite passed **6
+tests / 28 assertions**, including authorization and no-write coverage.
+Scoped Pint passed; a generic relation mismatch reported by PHPStan was fixed
+by simplifying the one-use `whereHas` condition, then PHPStan passed with no
+errors. No commit or push was made.
+
+**Cashier frontend milestone:** Added strict, test-backed clients and
+TanStack Query hooks for the unified transaction history and eligible-student
+lookup. Cashier navigation now calls the existing destination **Transaction
+History**, which displays both enrollment and account-balance receipts with
+student context and exact student-number/date searching. The Payment Queue
+can find an eligible student by number without moving their ticket; a waiting
+candidate cannot displace another Student already being served. After an
+enrollment payment succeeds, only that enrollment's **Confirm payment**
+action changes to the disabled **Payment processed** state. Focused frontend
+suites passed: 3 client tests, 5 transaction-history workspace tests, 15
+Cashier workspace tests, and the new navigation-label test. No commit or push
+was made.
+
+**Cashier verification milestone:** The full affected backend regression set
+passes **50 tests / 178 assertions**, covering the new history and lookup
+endpoints alongside payment confirmation and queue behavior. Scoped Pint and
+PHPStan pass; the route list confirms both new `/api/v1/cashier-*` routes.
+Frontend type checking, full ESLint with zero warnings, targeted Prettier, and
+the combined affected frontend suite (**28 tests**) pass. Vitest prints only
+its known jsdom canvas notice during accessibility checks; assertions still
+pass. During verification, Pint reordered `routes/api.php` imports after the
+new controller imports were added. The combined frontend run also exposed a
+pre-existing stale Program Chair expected-ID list: the source already included
+`program-chair-analytics`, so the test's expected list was brought into line
+with that existing module. `git diff --check` passes. No commit or push was
+made.
+
+## 2026-08-15 — 2026–2027 second-semester enrollment reset request
+
+Session started. The requested scope is destructive: remove data belonging to
+the 2026–2027 2nd-semester academic term only, preserve the 2026–2027 1st
+semester as the active term, and leave the Registrar Head to archive the 1st
+semester later through the application. Before any deletion, the exact term,
+dependent records, active-term constraint, and safe database transaction scope
+are being inspected. The first read-only Tinker inventory did not execute
+because its `DB` import collided with Tinker's preloaded alias; no database
+query or data change occurred. A rerun used the fully qualified facade but
+stopped safely before reporting records because this local database has no
+`current_term_slots` table. The active-term source will be resolved from the
+actual schema and application models before a clean inventory rerun. No data
+has been changed, committed, or pushed.
+
+**Read-only inventory complete:** The current-term slot points to term `#10`
+(`2026-2027 / 2nd`, `semester_ongoing`); the requested retained term is `#7`
+(`2026-2027 / 1st`), which is currently `archived`. Term `#10` contains 38
+section plans, 630 sections, 4 schedule proposals, 7 prediction runs, 7
+schedule-generation runs, 199 forecasts, and 5 enrollments (21 selected
+subjects, 4 payments/COM documents, 5 assessments, and 5 queue tickets).
+Its dependent foreign keys and exact notification/audit scope have been
+mapped. The reset will run in one database transaction: remove only term
+`#10` and its scoped side effects, repoint the sole current-term slot to
+term `#7`, and restore term `#7` to `semester_ongoing` with its close/archive
+timestamps cleared. No data has been changed, committed, or pushed.
+
+**Reset transaction complete:** One successful database transaction removed
+term `#10` (`2026-2027 / 2nd`) and all mapped current-term data: 5
+enrollments, 630 sections, 38 section plans (via cascade), 4 schedule
+proposals, 7 schedule-generation runs, 7 prediction runs, 199 demand
+forecasts, 14 scoped enrollment notifications, and 309 scoped audit rows.
+The enrollment cascades also removed their 21 subject selections, 4 payments,
+4 COM documents, 5 assessments with 20 line items, and 5 queue tickets. The
+current-term slot now points to term `#7`; it is `semester_ongoing` and has
+both `closed_at` and `archived_at` cleared. Post-transaction checks report
+zero remaining term-`#10` references across every direct operational table.
+No code, commit, or push was made; a final read-only integrity check follows.
+
+**Final integrity check passed:** No `2026-2027 / 2nd` term remains. The only
+`semester_ongoing` term is `#7` (`2026-2027 / 1st`), and the current-term slot
+points to it. Every table with an `academic_term_id` reports zero rows for the
+deleted term ID, and all known enrollment cascades for the five removed
+enrollments (subjects, payments, assessments, COM documents, and queue
+tickets) report zero rows. The Registrar Head can now archive the restored
+1st semester through the normal application action. No code, commit, or push
+was made.

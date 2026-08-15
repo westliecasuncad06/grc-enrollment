@@ -13,6 +13,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
+use App\Domain\Scheduling\SectionConflictDetector;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
@@ -224,6 +225,26 @@ final class StudentRosterSeederTest extends TestCase
         $this->assertSame(UserStatus::Active, $user->status);
     }
 
+    public function test_it_assigns_the_fourth_year_roster_cohort_to_its_entry_year_curriculum(): void
+    {
+        $program = Program::query()->where('code', 'BSIT')->sole();
+        $oldCurriculum = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => 'BSIT Curriculum 2018-2023',
+            'effective_school_year' => '2018-2023',
+            'effective_start_year' => 2018,
+            'effective_end_year' => 2023,
+            'status' => CurriculumStatus::Archived,
+        ]);
+
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+
+        $profile = StudentProfile::query()->where('student_number', '2023-06-01455')->sole();
+        $this->assertSame(2023, $profile->entry_year);
+        $this->assertSame(4, $profile->year_level);
+        $this->assertSame($oldCurriculum->id, $profile->curriculum_id);
+    }
+
     public function test_running_twice_does_not_duplicate_accounts(): void
     {
         (new StudentRosterSeeder($this->fixturePath()))->run();
@@ -294,6 +315,40 @@ final class StudentRosterSeederTest extends TestCase
             ->get();
 
         $this->assertCount(0, $collisions);
+    }
+
+    public function test_no_subjects_in_a_generated_block_overlap_for_a_student(): void
+    {
+        (new StudentRosterSeeder($this->fixturePath()))->run();
+
+        $detector = app(SectionConflictDetector::class);
+
+        Section::query()
+            ->where('status', 'closed')
+            ->get()
+            ->groupBy(fn (Section $section): string => $section->academic_term_id.'|'.$section->section_code)
+            ->each(function ($blockSections, string $blockKey) use ($detector): void {
+                foreach ($blockSections->values() as $index => $section) {
+                    $otherSlots = $blockSections
+                        ->reject(fn (Section $other): bool => $other->is($section))
+                        ->map(fn (Section $other): array => [
+                            'schedule_days' => $other->schedule_days,
+                            'starts_at_time' => $other->starts_at_time,
+                            'ends_at_time' => $other->ends_at_time,
+                        ])
+                        ->values()
+                        ->all();
+
+                    self::assertFalse(
+                        $detector->hasConflict([
+                            'schedule_days' => $section->schedule_days,
+                            'starts_at_time' => $section->starts_at_time,
+                            'ends_at_time' => $section->ends_at_time,
+                        ], $otherSlots),
+                        "Generated block {$blockKey} has a timetable conflict at section {$section->id} (position {$index}).",
+                    );
+                }
+            });
     }
 
     public function test_it_throws_when_a_college_has_no_eligible_professor(): void

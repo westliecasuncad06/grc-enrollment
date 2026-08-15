@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
+use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
+use App\Http\Controllers\Api\V1\CashierTransactionController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurrentCurriculumSubjectController;
 use App\Http\Controllers\Api\V1\CurriculumController;
@@ -36,7 +38,7 @@ use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\ItControl\AutomationRunController;
 use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
-use App\Http\Controllers\Api\V1\ItControl\StudentAccountController;
+use App\Http\Controllers\Api\V1\ItControl\StudentAccountController as ItControlStudentAccountController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
@@ -46,6 +48,7 @@ use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
+use App\Http\Controllers\Api\V1\StudentAccountController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
 use App\Http\Controllers\Api\V1\SubjectController;
@@ -121,6 +124,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Policy resolves "whose profile is this" the same way auth/me does.
         Route::get('/student-profile', [StudentProfileController::class, 'show'])->name('student-profile.show');
 
+        // Student owns their account summary; Accounting Staff may look up
+        // the served Student's account and record a balance-only receipt.
+        // StudentProfilePolicy applies the narrower account-specific gate.
+        Route::get('/student-account', [StudentAccountController::class, 'showOwn'])->name('student-account.show-own');
+        Route::get('/students/{student}/account', [StudentAccountController::class, 'show'])->name('students.account.show');
+        Route::post('/students/{student}/account-payments', [StudentAccountController::class, 'store'])->name('students.account-payments.store');
+
         // Own-record only, same shape as student-profile.show — no role
         // gate beyond authentication; StudentSchedulePreferencePolicy
         // resolves "student role only, and only their own row" for both
@@ -168,6 +178,16 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // middleware — PaymentPolicy::viewAny resolves both roles; no
         // per-row scoping distinguishes them further.
         Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+
+        // A normalized, read-only Cashier history over enrollment-confirmation
+        // and balance-payment receipts. `PaymentPolicy::viewAny` keeps this
+        // to Accounting Staff and Registrar Head without changing /payments.
+        Route::get('/cashier-transactions', [CashierTransactionController::class, 'index'])->name('cashier-transactions.index');
+
+        // Exact, non-mutating candidate lookup for the Cashier workflow.
+        // QueueTicketPolicy limits it to Accounting Staff; the UI separately
+        // delegates any actual serving transition to the existing endpoint.
+        Route::get('/cashier-payment-candidates', [CashierPaymentCandidateController::class, 'show'])->name('cashier-payment-candidates.show');
 
         // FR-FIN-004 / PRD §4.2 rule 7: Student-only, own `enrolled`
         // enrollment. No `role:` middleware — EnrollmentPolicy::withdraw
@@ -262,8 +282,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/schedule-generation-runs/{scheduleGenerationRun}', [ScheduleGenerationRunController::class, 'show'])->name('schedule-generation-runs.show');
             Route::get('/academic-terms/{academicTerm}/faculty-load-report', [FacultyLoadReportController::class, 'show'])->name('faculty-load-report.show');
             Route::put('/academic-terms/{academicTerm}/faculty-load-threshold', [FacultyLoadReportController::class, 'updateThreshold'])->name('faculty-load-threshold.update');
-            Route::get('/dashboards/program-chair-analytics-summary', ProgramChairAnalyticsSummaryController::class)->name('dashboards.program-chair-analytics-summary');
         });
+
+        // Enrollment analytics are role-scoped by DashboardPolicy: Program
+        // Chairs receive only their assigned college, while Registrar Head can
+        // review all supported departments or a selected one. It must not live
+        // in the Program Chair-only middleware group.
+        Route::get('/dashboards/program-chair-analytics-summary', ProgramChairAnalyticsSummaryController::class)->name('dashboards.program-chair-analytics-summary');
 
         // A Faculty member writes only their own availability/preferences —
         // an own-record scope, not a role-exclusive resource like curricula.
@@ -313,7 +338,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         });
 
         Route::prefix('it-control')->name('it-control.')->middleware('role:it_admin')->group(function (): void {
-            Route::get('/students', StudentAccountController::class)->name('students.index');
+            Route::get('/students', ItControlStudentAccountController::class)->name('students.index');
             Route::get('/faculty', FacultyAccountController::class)->name('faculty.index');
             Route::get('/automation-runs', [AutomationRunController::class, 'index'])->name('automation-runs.index');
             Route::post('/automation-runs', [AutomationRunController::class, 'store'])->name('automation-runs.store');

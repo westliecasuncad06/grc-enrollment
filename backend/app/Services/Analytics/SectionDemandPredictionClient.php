@@ -25,7 +25,10 @@ final class SectionDemandPredictionClient
             ->timeout($timeout)
             ->post('/internal/v1/section-demand/predict', [
                 'data' => [
-                    'feature_schema_version' => 'v1',
+                    // v2 predicts an advisory section count independently
+                    // from headcount, instead of deriving it from a fixed
+                    // capacity formula.
+                    'feature_schema_version' => 'v2',
                     'observations' => $observations,
                     'targets' => $targets,
                 ],
