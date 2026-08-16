@@ -50,6 +50,21 @@ final class SynchronizeCurriculumSubjects
             ->map(fn (CurriculumSubject $placement): array => $placement->only(self::REFERENCE_COLUMNS))
             ->all();
 
+        // Equivalencies are keyed by the stable subject IDs rather than this
+        // table's transient placement primary keys. Keep mappings for rows
+        // the editor re-submits, but discard one as soon as its target is
+        // truly removed from the Draft curriculum.
+        $submittedSubjectIds = array_map(
+            static fn (array $subject): int => $subject['subject_id'],
+            $subjects,
+        );
+        $equivalencies = $curriculum->targetEquivalencies();
+        if ($submittedSubjectIds === []) {
+            $equivalencies->delete();
+        } else {
+            $equivalencies->whereNotIn('target_subject_id', $submittedSubjectIds)->delete();
+        }
+
         // The transaction-owning curriculum use case calls this method.
         // Cascading the placement deletion also removes its prerequisites.
         $curriculum->subjectPlacements()->delete();

@@ -27,7 +27,12 @@ const takenEntry = {
   term_label: "2025-2026 · 1st",
   attempt_count: 1,
   prerequisites: [
-    { subject_id: 6, code: "CS100", title: "Intro to Programming", minimum_grade: "75" },
+    {
+      subject_id: 6,
+      code: "CS100",
+      title: "Intro to Programming",
+      minimum_grade: "75",
+    },
   ],
 } as const
 
@@ -68,6 +73,7 @@ function prospectusFixture(
   overrides: Partial<{
     semesters: unknown[]
     unplaced_entries: unknown[]
+    curriculum_transition: unknown
   }> = {},
 ) {
   return {
@@ -84,16 +90,16 @@ function prospectusFixture(
       enrollment_category: "regular",
       enrollment_category_label: "Regular",
       enrollment_category_derived_at: "2026-07-30T00:00:00Z",
-      semesters:
-        overrides.semesters ?? [
-          {
-            year_level: 1,
-            semester: "1st",
-            semester_label: "1st Semester",
-            entries: [takenEntry, untakenEntry],
-          },
-        ],
+      semesters: overrides.semesters ?? [
+        {
+          year_level: 1,
+          semester: "1st",
+          semester_label: "1st Semester",
+          entries: [takenEntry, untakenEntry],
+        },
+      ],
       unplaced_entries: overrides.unplaced_entries ?? [],
+      curriculum_transition: overrides.curriculum_transition ?? null,
     },
   }
 }
@@ -110,7 +116,9 @@ describe("ProspectusDocument", () => {
 
     renderWithSession(<ProspectusDocument />)
 
-    expect(await screen.findByText(/BS Information Technology/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/BS Information Technology/),
+    ).toBeInTheDocument()
     expect(screen.getByText(/Year 1 · 1st Semester/)).toBeInTheDocument()
     // The Grade column shows the mark itself (numeric/C/NC), never the
     // "Good"/"Very Good" label -- that label only appears in the Status badge.
@@ -184,7 +192,9 @@ describe("ProspectusDocument", () => {
   it("shows unplaced entries in their own table when present", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
-        JSON.stringify(prospectusFixture({ unplaced_entries: [unplacedEntry] })),
+        JSON.stringify(
+          prospectusFixture({ unplaced_entries: [unplacedEntry] }),
+        ),
       ),
     )
 
@@ -194,7 +204,42 @@ describe("ProspectusDocument", () => {
     const additionalSubjectsTable = table.closest("table")
     if (!additionalSubjectsTable)
       throw new Error("Additional subjects caption is not in a table.")
-    expect(within(additionalSubjectsTable).getByText("ELEC1")).toBeInTheDocument()
+    expect(
+      within(additionalSubjectsTable).getByText("ELEC1"),
+    ).toBeInTheDocument()
+  })
+
+  it("shows read-only credited old-to-new curriculum subjects", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            curriculum_transition: {
+              source_curriculum_name: "BSIT 2021 Curriculum",
+              target_curriculum_name: "BSIT 2026 Curriculum",
+              migrated_at: "2026-08-16T00:00:00Z",
+              credits: [
+                {
+                  source_code: "IT-OLD",
+                  source_title: "Old Programming",
+                  target_code: "IT-NEW",
+                  target_title: "Foundations of Programming",
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    expect(await screen.findByText(/Curriculum transition/)).toBeInTheDocument()
+    expect(screen.getByText(/IT-OLD — Old Programming/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/IT-NEW — Foundations of Programming/),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Credited")).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

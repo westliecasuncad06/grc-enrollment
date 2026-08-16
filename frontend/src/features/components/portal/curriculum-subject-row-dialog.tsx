@@ -48,6 +48,7 @@ export interface CurriculumSubjectRowDialogProps {
   onOpenChange: (open: boolean) => void
   yearLevel: number
   candidateQuery: CurriculumSubjectCandidateQueryState
+  equivalencyCandidates?: readonly Subject[]
   isSubmitting: boolean
   onSubmit: (input: CurriculumSubjectPlacementInput) => Promise<void>
 }
@@ -81,12 +82,14 @@ export function CurriculumSubjectRowDialog({
   onOpenChange,
   yearLevel,
   candidateQuery,
+  equivalencyCandidates = [],
   isSubmitting,
   onSubmit,
 }: CurriculumSubjectRowDialogProps) {
   const [mode, setMode] = useState<SourceMode>(null)
   const [selectedId, setSelectedId] = useState("")
   const [existingSemester, setExistingSemester] = useState<"1st" | "2nd">("1st")
+  const [equivalentSourceSubjectId, setEquivalentSourceSubjectId] = useState("")
   const [requestError, setRequestError] = useState("")
   const [isAwaiting, setIsAwaiting] = useState(false)
   const form = useForm<NewSubjectValues>({
@@ -106,6 +109,7 @@ export function CurriculumSubjectRowDialog({
     setMode(null)
     setSelectedId("")
     setExistingSemester("1st")
+    setEquivalentSourceSubjectId("")
     setRequestError("")
     setIsAwaiting(false)
     form.reset(newSubjectDefaults)
@@ -296,6 +300,13 @@ export function CurriculumSubjectRowDialog({
                   units: values.units,
                   year_level: yearLevel,
                   semester: values.semester,
+                  ...(equivalentSourceSubjectId
+                    ? {
+                        equivalent_source_subject_id: Number(
+                          equivalentSourceSubjectId,
+                        ),
+                      }
+                    : {}),
                 }),
               )(event)
             }
@@ -364,6 +375,26 @@ export function CurriculumSubjectRowDialog({
                   </Select>
                 </Field>
               </div>
+              {equivalencyCandidates.length > 0 && (
+                <Field>
+                  <FieldLabel htmlFor="equivalent-source-subject">
+                    Equivalent old-curriculum subject
+                  </FieldLabel>
+                  <SearchableCombobox
+                    id="equivalent-source-subject"
+                    label="Equivalent old-curriculum subject"
+                    options={equivalencyCandidates.map((subject) => ({
+                      value: String(subject.id),
+                      label: `${subject.code} — ${subject.title}`,
+                    }))}
+                    value={equivalentSourceSubjectId}
+                    onValueChange={setEquivalentSourceSubjectId}
+                    placeholder="Optional: search old curriculum subjects"
+                    emptyMessage="No matching old-curriculum subject."
+                    disabled={busy}
+                  />
+                </Field>
+              )}
             </FieldGroup>
           </form>
         )}

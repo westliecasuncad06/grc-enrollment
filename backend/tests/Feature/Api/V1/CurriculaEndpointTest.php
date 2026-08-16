@@ -14,6 +14,7 @@ use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
+use App\Models\CurriculumSubjectEquivalency;
 use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
@@ -182,6 +183,60 @@ final class CurriculaEndpointTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('data.effective_school_year', '2026-2027');
+    }
+
+    public function test_a_program_chair_selects_an_approved_same_program_curriculum_as_the_equivalency_source(): void
+    {
+        $this->setCurrentAcademicTerm();
+        $program = $this->makeProgram();
+        $source = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => 'BSCS 2021 Curriculum',
+            'effective_school_year' => '2021-2022',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.equivalency-source@grc.test', CollegeCode::Ccs);
+
+        $this->withToken($token)
+            ->postJson('/api/v1/curricula', [
+                'program_id' => $program->id,
+                'name' => 'BSCS 2026 Curriculum',
+                'equivalency_source_curriculum_id' => $source->id,
+                'subjects' => [],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.equivalency_source_curriculum_id', $source->id)
+            ->assertJsonPath('data.equivalency_source_curriculum_name', 'BSCS 2021 Curriculum');
+    }
+
+    public function test_a_program_chair_cannot_select_a_source_curriculum_from_another_program(): void
+    {
+        $this->setCurrentAcademicTerm();
+        $program = $this->makeProgram();
+        $otherProgram = Program::create([
+            'code' => 'BSIT', 'name' => 'BS Information Technology',
+            'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active,
+        ]);
+        $otherSource = Curriculum::create([
+            'program_id' => $otherProgram->id,
+            'name' => 'BSIT 2021 Curriculum',
+            'effective_school_year' => '2021-2022',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.invalid-equivalency-source@grc.test', CollegeCode::Ccs);
+
+        $this->withToken($token)
+            ->postJson('/api/v1/curricula', [
+                'program_id' => $program->id,
+                'name' => 'Invalid Source Curriculum',
+                'equivalency_source_curriculum_id' => $otherSource->id,
+                'subjects' => [],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'error.errors.equivalency_source_curriculum_id.0',
+                'Select an active or archived curriculum from the same program.',
+            );
     }
 
     public function test_a_program_chair_cannot_create_a_curriculum_for_another_colleges_program(): void
@@ -449,6 +504,54 @@ final class CurriculaEndpointTest extends TestCase
             'subject_id' => $dataStructures->id,
             'reference_day' => null,
             'reference_professor_name' => null,
+        ]);
+    }
+
+    public function test_replacing_a_draft_curriculum_removes_only_equivalencies_whose_target_subject_was_removed(): void
+    {
+        $program = $this->makeProgram();
+        [$oldSubject, $keptTarget, $removedTarget] = [
+            Subject::create(['code' => 'CS-OLD', 'title' => 'Old Subject', 'units' => 3, 'status' => SubjectStatus::Active]),
+            Subject::create(['code' => 'CS-KEEP', 'title' => 'Kept Subject', 'units' => 3, 'status' => SubjectStatus::Active]),
+            Subject::create(['code' => 'CS-REMOVE', 'title' => 'Removed Subject', 'units' => 3, 'status' => SubjectStatus::Active]),
+        ];
+        $source = Curriculum::create([
+            'program_id' => $program->id,
+            'name' => 'BSCS 2021 Curriculum',
+            'effective_school_year' => '2021-2022',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        CurriculumSubject::create(['curriculum_id' => $source->id, 'subject_id' => $oldSubject->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true]);
+        $draft = Curriculum::create([
+            'program_id' => $program->id,
+            'equivalency_source_curriculum_id' => $source->id,
+            'name' => 'BSCS 2026 Curriculum',
+            'effective_school_year' => '2026-2027',
+            'status' => CurriculumStatus::Draft,
+        ]);
+        foreach ([$keptTarget, $removedTarget] as $target) {
+            CurriculumSubject::create(['curriculum_id' => $draft->id, 'subject_id' => $target->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true]);
+        }
+        CurriculumSubjectEquivalency::create([
+            'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $draft->id,
+            'source_subject_id' => $oldSubject->id,
+            'target_subject_id' => $removedTarget->id,
+        ]);
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.mapping-sync@grc.test', CollegeCode::Ccs);
+
+        $this->withToken($token)
+            ->patchJson("/api/v1/curricula/{$draft->id}", [
+                'name' => 'BSCS 2026 Curriculum',
+                'subjects' => [
+                    ['subject_id' => $keptTarget->id, 'year_level' => 1, 'semester' => '1st', 'is_required' => true],
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseMissing('curriculum_subject_equivalencies', [
+            'target_curriculum_id' => $draft->id,
+            'target_subject_id' => $removedTarget->id,
         ]);
     }
 

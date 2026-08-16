@@ -27,6 +27,7 @@ final class StoreCurriculumSubjectPlacementRequest extends FormRequest
             'year_level' => ['required', 'integer', 'min:1', 'max:4'],
             'semester' => ['required', Rule::enum(SemesterSlot::class)],
             'subject_id' => ['required_if:source,existing', 'integer', 'exists:subjects,id'],
+            'equivalent_source_subject_id' => ['nullable', 'integer', 'exists:subjects,id', 'prohibited_unless:source,new'],
             'code' => [
                 'required_if:source,new',
                 'string',

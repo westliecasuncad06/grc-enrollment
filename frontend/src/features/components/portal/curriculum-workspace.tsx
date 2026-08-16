@@ -78,11 +78,13 @@ import { CurriculumView } from "@/features/components/portal/curriculum-view"
 import { CurriculumCreationWizard } from "@/features/components/portal/curriculum-creation-wizard"
 import { CurriculumSubjectSpreadsheet } from "@/features/components/portal/curriculum-subject-spreadsheet"
 import { CurriculumSubjectRowDialog } from "@/features/components/portal/curriculum-subject-row-dialog"
+import { CurriculumMigrationPanel } from "@/features/components/portal/curriculum-migration-panel"
 
 type CurriculumWorkspaceValues = StoreCurriculumInput
 
 const fresh: CurriculumWorkspaceValues = {
   program_id: 0,
+  equivalency_source_curriculum_id: 0,
   name: "",
   subjects: [],
 }
@@ -92,6 +94,8 @@ function valuesFromCurriculum(
 ): CurriculumWorkspaceValues {
   return {
     program_id: curriculum.program_id,
+    equivalency_source_curriculum_id:
+      curriculum.equivalency_source_curriculum_id ?? 0,
     name: curriculum.name,
     subjects: curriculum.subjects.map(
       ({ subject_id, year_level, semester, is_required, prerequisites }) => ({
@@ -563,6 +567,7 @@ export function CurriculumWorkspace() {
                 <div className="grid gap-3">
                   <CurriculumCreationWizard
                     programs={programsQuery.data ?? []}
+                    curricula={curriculaQuery.data ?? []}
                     college={session.college}
                     disabled={createMutation.isPending}
                     onProceed={createFromWizard}
@@ -657,6 +662,13 @@ export function CurriculumWorkspace() {
                 programs={programsQuery.data ?? []}
                 curricula={curriculaQuery.data ?? []}
               />
+              {session?.role === "program_chair" && (
+                <div className="mt-4">
+                  <CurriculumMigrationPanel
+                    curricula={curriculaQuery.data ?? []}
+                  />
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         )}
@@ -677,6 +689,23 @@ export function CurriculumWorkspace() {
           error: candidateSubjectsQuery.error,
           refetch: candidateSubjectsQuery.refetch,
         }}
+        equivalencyCandidates={(() => {
+          const source = (curriculaQuery.data ?? []).find(
+            (curriculum) =>
+              curriculum.id ===
+              selectedCurriculum?.equivalency_source_curriculum_id,
+          )
+          return (source?.subjects ?? []).map((subject) => ({
+            type: "subject" as const,
+            id: subject.subject_id,
+            code: subject.code,
+            title: subject.title,
+            units: subject.units ?? 0,
+            status: "active" as const,
+            status_label: "Active",
+            is_completion_only: false,
+          }))
+        })()}
         isSubmitting={placementMutation.isPending}
         onSubmit={addSubjectRow}
       />

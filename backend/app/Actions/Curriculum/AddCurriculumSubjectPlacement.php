@@ -9,6 +9,7 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
+use App\Models\CurriculumSubjectEquivalency;
 use App\Models\Subject;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -20,6 +21,8 @@ use Illuminate\Validation\ValidationException;
 final class AddCurriculumSubjectPlacement
 {
     private const RESOURCE_RELATIONS = [
+        'equivalencySourceCurriculum',
+        'targetEquivalencies.sourceSubject',
         'subjectPlacements.subject',
         'subjectPlacements.prerequisites.prerequisiteSubject',
     ];
@@ -31,7 +34,7 @@ final class AddCurriculumSubjectPlacement
     ) {}
 
     /**
-     * @param  array{source: 'new'|'existing', year_level: int, semester: string, subject_id?: int, code?: string, title?: string, units?: float}  $validatedData
+     * @param  array{source: 'new'|'existing', year_level: int, semester: string, subject_id?: int, equivalent_source_subject_id?: int, code?: string, title?: string, units?: float}  $validatedData
      */
     public function execute(User $actor, Curriculum $curriculum, array $validatedData, AuditRequestContext $context): Curriculum
     {
@@ -56,6 +59,7 @@ final class AddCurriculumSubjectPlacement
             $subject = $validatedData['source'] === 'new'
                 ? $this->createSubject($actor, $validatedData, $context)
                 : $this->eligibleExistingSubject($curriculum, $validatedData);
+            $equivalentSourceSubjectId = $this->equivalentSourceSubjectId($curriculum, $validatedData);
 
             if (CurriculumSubject::query()
                 ->where('curriculum_id', $curriculum->id)
@@ -73,6 +77,15 @@ final class AddCurriculumSubjectPlacement
                 'semester' => $validatedData['semester'],
                 'is_required' => true,
             ]);
+
+            if ($equivalentSourceSubjectId !== null) {
+                CurriculumSubjectEquivalency::create([
+                    'source_curriculum_id' => $curriculum->equivalency_source_curriculum_id,
+                    'target_curriculum_id' => $curriculum->id,
+                    'source_subject_id' => $equivalentSourceSubjectId,
+                    'target_subject_id' => $subject->id,
+                ]);
+            }
 
             $curriculum->refresh();
             $afterValues = $this->snapshot->capture($curriculum);
@@ -96,6 +109,12 @@ final class AddCurriculumSubjectPlacement
      */
     private function createSubject(User $actor, array $validatedData, AuditRequestContext $context): Subject
     {
+        if (! isset($validatedData['code'], $validatedData['title'], $validatedData['units'])) {
+            throw ValidationException::withMessages([
+                'source' => 'New subjects require a code, title, and units.',
+            ]);
+        }
+
         $subject = Subject::create([
             'college' => $actor->college,
             'code' => $validatedData['code'],
@@ -130,6 +149,12 @@ final class AddCurriculumSubjectPlacement
      */
     private function eligibleExistingSubject(Curriculum $curriculum, array $validatedData): Subject
     {
+        if (! isset($validatedData['subject_id'])) {
+            throw ValidationException::withMessages([
+                'subject_id' => 'Select an existing subject.',
+            ]);
+        }
+
         $source = $this->sourceResolver->execute($curriculum->program);
         $subject = $source?->subjectPlacements
             ->pluck('subject')
@@ -142,5 +167,39 @@ final class AddCurriculumSubjectPlacement
         }
 
         return $subject;
+    }
+
+    /**
+     * @param  array{source: 'new'|'existing', equivalent_source_subject_id?: int}  $validatedData
+     */
+    private function equivalentSourceSubjectId(Curriculum $curriculum, array $validatedData): ?int
+    {
+        if ($validatedData['source'] !== 'new' || ! isset($validatedData['equivalent_source_subject_id'])) {
+            return null;
+        }
+
+        $sourceCurriculumId = $curriculum->equivalency_source_curriculum_id;
+        $sourceSubjectId = $validatedData['equivalent_source_subject_id'];
+
+        if ($sourceCurriculumId === null || ! CurriculumSubject::query()
+            ->where('curriculum_id', $sourceCurriculumId)
+            ->where('subject_id', $sourceSubjectId)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'equivalent_source_subject_id' => 'Select a subject from this curriculum\'s configured equivalency source.',
+            ]);
+        }
+
+        if (CurriculumSubjectEquivalency::query()
+            ->where('source_curriculum_id', $sourceCurriculumId)
+            ->where('target_curriculum_id', $curriculum->id)
+            ->where('source_subject_id', $sourceSubjectId)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'equivalent_source_subject_id' => 'This old-curriculum subject is already mapped to another new subject.',
+            ]);
+        }
+
+        return $sourceSubjectId;
     }
 }

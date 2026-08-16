@@ -74,6 +74,24 @@ export const prospectusSchema = z
     enrollment_category: z.string().nullable(),
     enrollment_category_label: z.string().nullable(),
     enrollment_category_derived_at: z.iso.datetime().nullable(),
+    curriculum_transition: z
+      .object({
+        source_curriculum_name: z.string().min(1),
+        target_curriculum_name: z.string().min(1),
+        migrated_at: z.iso.datetime(),
+        credits: z.array(
+          z
+            .object({
+              source_code: z.string().min(1),
+              source_title: z.string().min(1),
+              target_code: z.string().min(1),
+              target_title: z.string().min(1),
+            })
+            .strict(),
+        ),
+      })
+      .nullable()
+      .optional(),
     semesters: z.array(prospectusSemesterSchema),
     unplaced_entries: z.array(prospectusUnplacedEntrySchema),
   })

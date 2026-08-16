@@ -16,6 +16,7 @@ use App\Domain\Enrollment\EnrollmentCategoryClassifier;
 use App\Domain\Notifications\NotificationType;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
+use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubject;
 use App\Models\Notification;
 use App\Models\StudentProfile;
@@ -145,6 +146,11 @@ final readonly class ReclassifyStudentEnrollmentCategory
             ->map(static fn (StudentProfile $student): int => $student->curriculum_id)
             ->unique()
             ->all());
+        $marksByStudent = $this->withMigrationCredits(
+            $marksByStudent,
+            $students,
+            $studentIds,
+        );
         $placementsByCurriculum = $this->placementSlotsByCurriculum($curriculumIds);
 
         $currentOrdinalByYearLevel = [];
@@ -242,6 +248,45 @@ final readonly class ReclassifyStudentEnrollmentCategory
             if (! array_key_exists($grade->subject_id, $marksByStudent[$grade->student_id])) {
                 $marksByStudent[$grade->student_id][$grade->subject_id] = $grade->mark;
             }
+        }
+
+        return $marksByStudent;
+    }
+
+    /**
+     * Migration credits are deliberately not copied into academic_grades: the
+     * original grade remains part of the old curriculum's permanent record.
+     * For standing, though, a credited target subject is completed exactly as
+     * a passing locked mark would be. Only credits for the student's current
+     * target curriculum qualify, which keeps this first direct-migration slice
+     * from accidentally chaining a previous transition into a later one.
+     *
+     * @param  array<int, array<int, GradeMark>>  $marksByStudent
+     * @param  Collection<int, StudentProfile>  $students
+     * @param  list<int>  $studentIds
+     * @return array<int, array<int, GradeMark>>
+     */
+    private function withMigrationCredits(array $marksByStudent, Collection $students, array $studentIds): array
+    {
+        $currentCurriculumByStudent = $students
+            ->mapWithKeys(static fn (StudentProfile $student): array => [$student->id => $student->curriculum_id])
+            ->all();
+
+        $credits = CurriculumMigrationCredit::query()
+            ->whereHas('migration', static fn ($query) => $query->whereIn('student_id', $studentIds))
+            ->with('migration:id,student_id,target_curriculum_id')
+            ->get(['id', 'curriculum_migration_id', 'target_subject_id']);
+
+        foreach ($credits as $credit) {
+            $migration = $credit->migration;
+
+            if ($migration === null || ($currentCurriculumByStudent[$migration->student_id] ?? null) !== $migration->target_curriculum_id) {
+                continue;
+            }
+
+            $marksByStudent[$migration->student_id] ??= [];
+            // A true locked grade is still authoritative if one exists.
+            $marksByStudent[$migration->student_id][$credit->target_subject_id] ??= GradeMark::Passed;
         }
 
         return $marksByStudent;

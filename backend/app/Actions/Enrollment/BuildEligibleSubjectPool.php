@@ -15,6 +15,7 @@ use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\CurriculumSubject;
+use App\Models\CurriculumMigrationCredit;
 use App\Models\EnrollmentSubject;
 use App\Models\Section;
 use App\Models\StudentProfile;
@@ -60,9 +61,16 @@ final readonly class BuildEligibleSubjectPool
         // Loaded once for the whole pool, not per placement — one row per
         // student, and every entry is scored against the same preference.
         $preference = StudentSchedulePreference::query()->where('student_id', $student->id)->first();
+        $creditedSubjectIds = CurriculumMigrationCredit::query()
+            ->whereHas('migration', fn ($query) => $query
+                ->where('student_id', $student->id)
+                ->where('target_curriculum_id', $student->curriculum_id))
+            ->pluck('target_subject_id')
+            ->flip()
+            ->all();
 
         return array_values(array_map(
-            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference),
+            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference, $creditedSubjectIds),
             $placements->all(),
         ));
     }
@@ -73,13 +81,17 @@ final readonly class BuildEligibleSubjectPool
         CurriculumSubject $placement,
         EnrollmentAccessContext $context,
         ?StudentSchedulePreference $preference,
+        array $creditedSubjectIds,
     ): EligibleSubjectEntry {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
         $excluded = false;
 
         $ownGrade = $this->latestLockedGrade($student->id, $placement->subject_id);
-        if ($this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
+        if (isset($creditedSubjectIds[$placement->subject_id])) {
+            $reasons[] = ['code' => 'completed', 'message' => 'This subject was credited from the student\'s prior curriculum.'];
+            $excluded = true;
+        } elseif ($this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
             $reasons[] = ['code' => 'completed', 'message' => 'This subject has already been completed with a passing grade.'];
             $excluded = true;
         }
@@ -90,6 +102,9 @@ final readonly class BuildEligibleSubjectPool
         }
 
         foreach ($placement->prerequisites as $edge) {
+            if (isset($creditedSubjectIds[$edge->prerequisite_subject_id])) {
+                continue;
+            }
             $prerequisiteGrade = $this->latestLockedGrade($student->id, $edge->prerequisite_subject_id);
             $verdict = $this->verdictFor($prerequisiteGrade, $edge->minimum_grade);
 

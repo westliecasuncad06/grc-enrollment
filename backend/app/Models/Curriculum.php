@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property int $id
  * @property int $program_id
+ * @property ?int $equivalency_source_curriculum_id
  * @property string $name
  * @property string $effective_school_year
  * @property ?int $effective_start_year
@@ -24,13 +25,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Program $program
+ * @property-read ?Curriculum $equivalencySourceCurriculum
  * @property-read Collection<int, CurriculumSubject> $subjectPlacements
+ * @property-read Collection<int, CurriculumSubjectEquivalency> $targetEquivalencies
  */
 final class Curriculum extends Model
 {
     /** @var list<string> */
     protected $fillable = [
         'program_id',
+        'equivalency_source_curriculum_id',
         'name',
         'effective_school_year',
         'effective_start_year',
@@ -61,11 +65,30 @@ final class Curriculum extends Model
     }
 
     /**
+     * The single approved/archived curriculum whose subjects can be mapped
+     * as equivalents while this newer curriculum is authored.
+     *
+     * @return BelongsTo<Curriculum, $this>
+     */
+    public function equivalencySourceCurriculum(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'equivalency_source_curriculum_id');
+    }
+
+    /**
      * @return HasMany<CurriculumSubject, $this>
      */
     public function subjectPlacements(): HasMany
     {
         return $this->hasMany(CurriculumSubject::class);
+    }
+
+    /**
+     * @return HasMany<CurriculumSubjectEquivalency, $this>
+     */
+    public function targetEquivalencies(): HasMany
+    {
+        return $this->hasMany(CurriculumSubjectEquivalency::class, 'target_curriculum_id');
     }
 
     /**

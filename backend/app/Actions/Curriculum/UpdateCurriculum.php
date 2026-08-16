@@ -16,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 final class UpdateCurriculum
 {
     private const RESOURCE_RELATIONS = [
+        'equivalencySourceCurriculum',
+        'targetEquivalencies.sourceSubject',
         'subjectPlacements.subject',
         'subjectPlacements.prerequisites.prerequisiteSubject',
     ];

@@ -20,6 +20,9 @@ use App\Models\AcademicTerm;
 use App\Models\AcademicTermEnrollmentWindow;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
+use App\Models\CurriculumMigration;
+use App\Models\CurriculumMigrationCredit;
+use App\Models\CurriculumSubjectEquivalency;
 use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
 use App\Models\Program;
@@ -223,6 +226,49 @@ final class EligibleSubjectsEndpointTest extends TestCase
 
         $response->assertJsonPath('data.0.is_eligible', false);
         $response->assertJsonPath('data.0.reasons.0.code', 'completed');
+    }
+
+    public function test_a_subject_credited_during_a_curriculum_migration_is_excluded_as_completed(): void
+    {
+        $term = $this->makeTerm();
+        $target = $this->makeCurriculum();
+        $source = Curriculum::create([
+            'program_id' => $target->program_id, 'name' => 'BSCS Old Curriculum',
+            'effective_school_year' => '2021-2022', 'status' => CurriculumStatus::Archived,
+        ]);
+        $oldSubject = $this->makeSubject('CS-OLD');
+        $targetSubject = $this->makeSubject('CS-NEW');
+        $this->placeSubject($source, $oldSubject);
+        $this->placeSubject($target, $targetSubject);
+        $this->makeSection($term, $targetSubject);
+        $student = $this->makeStudent($target);
+        $oldGrade = AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $oldSubject->id,
+            'academic_term_id' => $term->id, 'final_grade' => '1.75',
+            'status' => GradeStatus::Locked, 'encoded_by' => $student->user_id,
+        ]);
+        $equivalency = CurriculumSubjectEquivalency::create([
+            'source_curriculum_id' => $source->id, 'target_curriculum_id' => $target->id,
+            'source_subject_id' => $oldSubject->id, 'target_subject_id' => $targetSubject->id,
+        ]);
+        $migration = CurriculumMigration::create([
+            'student_id' => $student->id, 'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $target->id, 'processed_by' => $student->user_id,
+            'migrated_at' => now(),
+        ]);
+        CurriculumMigrationCredit::create([
+            'curriculum_migration_id' => $migration->id,
+            'curriculum_subject_equivalency_id' => $equivalency->id,
+            'source_academic_grade_id' => $oldGrade->id,
+            'target_subject_id' => $targetSubject->id,
+        ]);
+
+        $response = $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.is_eligible', false)
+            ->assertJsonPath('data.0.reasons.0.code', 'completed');
     }
 
     public function test_an_unmet_prerequisite_excludes_the_subject(): void

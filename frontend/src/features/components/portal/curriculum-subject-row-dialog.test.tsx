@@ -36,6 +36,7 @@ type OpenChangeMock = Mock<CurriculumSubjectRowDialogProps["onOpenChange"]>
 function renderDialog(
   options: {
     candidateQuery?: typeof readyCandidates
+    equivalencyCandidates?: readonly Subject[]
     onSubmit?: SubmitMock
     onOpenChange?: OpenChangeMock
   } = {},
@@ -55,6 +56,7 @@ function renderDialog(
       onOpenChange={onOpenChange}
       yearLevel={2}
       candidateQuery={options.candidateQuery ?? readyCandidates}
+      {...{ equivalencyCandidates: options.equivalencyCandidates ?? [] }}
       isSubmitting={false}
       onSubmit={onSubmit}
     />,
@@ -120,6 +122,31 @@ describe("CurriculumSubjectRowDialog", () => {
       units: 3,
       year_level: 2,
       semester: "1st",
+    })
+  })
+
+  it("lets a newly created target subject select one old-curriculum equivalent", async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderDialog({ equivalencyCandidates: candidates })
+
+    await user.click(screen.getByRole("button", { name: "Create new subject" }))
+    await user.type(screen.getByLabelText("Subject code"), "CS205")
+    await user.type(screen.getByLabelText("Description"), "Web Systems")
+    await user.type(screen.getByLabelText("Units"), "3")
+    await user.click(screen.getByLabelText("Equivalent old-curriculum subject"))
+    await user.click(
+      await screen.findByRole("option", { name: "CS102 — Data Structures" }),
+    )
+    await user.click(screen.getByRole("button", { name: "Add subject" }))
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      source: "new",
+      code: "CS205",
+      title: "Web Systems",
+      units: 3,
+      year_level: 2,
+      semester: "1st",
+      equivalent_source_subject_id: 12,
     })
   })
 

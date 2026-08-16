@@ -68,6 +68,8 @@ final class AuditAction
 
     public const STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED = 'student_profile.enrollment_category_reclassified';
 
+    public const STUDENT_CURRICULUM_MIGRATED = 'student_profile.curriculum_migrated';
+
     public const AUDIT_LOG_LIST_VIEWED = 'audit_log.list_viewed';
 
     public const FACULTY_DIRECTORY_LIST_VIEWED = 'faculty_directory.list_viewed';
@@ -184,6 +186,7 @@ final class AuditAction
             self::SCHEDULE_PROPOSAL_CLOSED,
             self::STUDENT_PROFILE_PROVISIONED,
             self::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED,
+            self::STUDENT_CURRICULUM_MIGRATED,
             self::AUDIT_LOG_LIST_VIEWED,
             self::FACULTY_DIRECTORY_LIST_VIEWED,
             self::FACULTY_WORKFORCE_PROFILE_UPDATED,

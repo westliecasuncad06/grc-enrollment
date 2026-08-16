@@ -14,6 +14,15 @@ const programs = [
     status_label: "Active",
   },
 ]
+const curricula = [
+  {
+    type: "curriculum" as const, id: 11, program_id: 1,
+    equivalency_source_curriculum_id: null, equivalency_source_curriculum_name: null,
+    name: "BSCS 2021 Curriculum", effective_school_year: "2021-2022",
+    status: "archived" as const, status_label: "Archived", decided_at: null,
+    last_decision_reason: null, subjects: [],
+  },
+]
 
 describe("CurriculumCreationWizard", () => {
   it("collects the chair's scoped program before the curriculum name and retains it on Back", async () => {
@@ -21,6 +30,7 @@ describe("CurriculumCreationWizard", () => {
     render(
       <CurriculumCreationWizard
         programs={programs}
+        curricula={curricula}
         college="ccs"
         onProceed={vi.fn().mockResolvedValue(undefined)}
       />,
@@ -41,6 +51,8 @@ describe("CurriculumCreationWizard", () => {
     await user.click(screen.getByRole("button", { name: "Next" }))
 
     expect(screen.getByLabelText("Curriculum name")).toBeInTheDocument()
+    await user.click(screen.getByLabelText("Old curriculum source"))
+    await user.click(await screen.findByRole("option", { name: "BSCS 2021 Curriculum" }))
     await user.click(screen.getByRole("button", { name: "Back" }))
     expect(screen.getByLabelText("Program")).toHaveTextContent(
       "BSCS — Computer Science",
@@ -53,6 +65,7 @@ describe("CurriculumCreationWizard", () => {
     render(
       <CurriculumCreationWizard
         programs={programs}
+        curricula={curricula}
         college="ccs"
         onProceed={onProceed}
       />,
@@ -74,6 +87,8 @@ describe("CurriculumCreationWizard", () => {
       }),
     )
     await user.click(screen.getByRole("button", { name: "Next" }))
+    await user.click(screen.getByLabelText("Old curriculum source"))
+    await user.click(await screen.findByRole("option", { name: "BSCS 2021 Curriculum" }))
     await user.type(
       screen.getByLabelText("Curriculum name"),
       "BSCS 2026 Curriculum",
@@ -82,6 +97,7 @@ describe("CurriculumCreationWizard", () => {
 
     expect(onProceed).toHaveBeenCalledWith({
       program_id: 1,
+      equivalency_source_curriculum_id: 11,
       name: "BSCS 2026 Curriculum",
       subjects: [],
     })

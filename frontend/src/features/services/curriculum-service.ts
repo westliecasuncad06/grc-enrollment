@@ -17,6 +17,12 @@ import {
   type Subject,
 } from "@/features/schemas/reference-data-schema"
 import {
+  curriculumMigrationPreviewEnvelopeSchema,
+  curriculumMigrationResultEnvelopeSchema,
+  type CurriculumMigrationPreview,
+  type CurriculumMigrationResult,
+} from "@/features/schemas/curriculum-migration-schema"
+import {
   ApiClientError,
   getAuthenticatedJson,
   patchAuthenticatedJson,
@@ -92,7 +98,11 @@ export async function transitionCurriculum(
 ): Promise<Curriculum> {
   const payload = await patchAuthenticatedJson(
     `${CURRICULA_PATH}/${id}/transition`,
-    parse(curriculumTransitionSchema, transition, "curriculum transition request"),
+    parse(
+      curriculumTransitionSchema,
+      transition,
+      "curriculum transition request",
+    ),
   )
   return parse(zEnvelope, payload, "transitioned curriculum").data
 }
@@ -105,7 +115,8 @@ export async function getCurrentCurriculumSubjects(
     `/api/v1/programs/${programId}/current-curriculum-subjects`,
     signal,
   )
-  return parse(subjectsEnvelopeSchema, payload, "current curriculum subjects").data
+  return parse(subjectsEnvelopeSchema, payload, "current curriculum subjects")
+    .data
 }
 
 export async function addCurriculumSubjectPlacement(
@@ -121,6 +132,38 @@ export async function addCurriculumSubjectPlacement(
     ),
   )
   return parse(zEnvelope, payload, "updated curriculum").data
+}
+
+export async function previewCurriculumMigration(
+  curriculumId: number,
+  studentNumber: string,
+  signal?: AbortSignal,
+): Promise<CurriculumMigrationPreview> {
+  const query = new URLSearchParams({ student_number: studentNumber })
+  const payload = await getAuthenticatedJson(
+    `${CURRICULA_PATH}/${curriculumId}/migration-preview?${query.toString()}`,
+    signal,
+  )
+  return parse(
+    curriculumMigrationPreviewEnvelopeSchema,
+    payload,
+    "curriculum migration preview",
+  ).data
+}
+
+export async function applyCurriculumMigration(
+  curriculumId: number,
+  input: { student_id: number; equivalency_ids: readonly number[] },
+): Promise<CurriculumMigrationResult> {
+  const payload = await postAuthenticatedJson(
+    `${CURRICULA_PATH}/${curriculumId}/migrations`,
+    { student_id: input.student_id, equivalency_ids: input.equivalency_ids },
+  )
+  return parse(
+    curriculumMigrationResultEnvelopeSchema,
+    payload,
+    "curriculum migration result",
+  ).data
 }
 
 const curriculumEnvelopeSchema = z.object({ data: curriculumSchema }).strict()

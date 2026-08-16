@@ -24,6 +24,8 @@ final class CurriculumResource extends JsonResource
      *     type: string,
      *     id: int,
      *     program_id: int,
+     *     equivalency_source_curriculum_id: ?int,
+     *     equivalency_source_curriculum_name: ?string,
      *     name: string,
      *     effective_school_year: string,
      *     status: string,
@@ -39,6 +41,8 @@ final class CurriculumResource extends JsonResource
             'type' => 'curriculum',
             'id' => $this->resource->id,
             'program_id' => $this->resource->program_id,
+            'equivalency_source_curriculum_id' => $this->resource->equivalency_source_curriculum_id,
+            'equivalency_source_curriculum_name' => $this->resource->equivalencySourceCurriculum?->name,
             'name' => $this->resource->name,
             'effective_school_year' => $this->resource->effective_school_year,
             'status' => $this->resource->status->value,
@@ -60,11 +64,17 @@ final class CurriculumResource extends JsonResource
      *     year_level: int,
      *     semester: string,
      *     is_required: bool,
+     *     equivalent_source_subject_id: ?int,
+     *     equivalent_source_subject_code: ?string,
+     *     equivalent_source_subject_title: ?string,
      *     prerequisites: list<array{prerequisite_subject_id: int, code: string, minimum_grade: string}>
      * }
      */
     private function placementToArray(CurriculumSubject $placement): array
     {
+        $equivalency = $this->resource->targetEquivalencies
+            ->firstWhere('target_subject_id', $placement->subject_id);
+
         return [
             'subject_id' => $placement->subject_id,
             'code' => $placement->subject->code,
@@ -73,6 +83,9 @@ final class CurriculumResource extends JsonResource
             'year_level' => $placement->year_level,
             'semester' => $placement->semester,
             'is_required' => $placement->is_required,
+            'equivalent_source_subject_id' => $equivalency?->source_subject_id,
+            'equivalent_source_subject_code' => $equivalency?->sourceSubject?->code,
+            'equivalent_source_subject_title' => $equivalency?->sourceSubject?->title,
             'prerequisites' => array_values($placement->prerequisites
                 ->map(fn (SubjectPrerequisite $prerequisite): array => [
                     'prerequisite_subject_id' => $prerequisite->prerequisite_subject_id,

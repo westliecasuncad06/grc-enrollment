@@ -77,7 +77,11 @@ describe("curriculum-service", () => {
       )
       .mockResolvedValueOnce(new Response(JSON.stringify(response)))
 
-    await createCurriculum({ program_id: 1, ...replacement })
+    await createCurriculum({
+      program_id: 1,
+      equivalency_source_curriculum_id: 2,
+      ...replacement,
+    })
     await replaceCurriculum(9, replacement)
 
     const createRequest = fetchMock.mock.calls[0]?.[1]
@@ -88,6 +92,7 @@ describe("curriculum-service", () => {
     expect(createRequest.method).toBe("POST")
     expect(JSON.parse(createRequest.body as string)).toEqual({
       program_id: 1,
+      equivalency_source_curriculum_id: 2,
       ...replacement,
     })
     expect(replaceRequest.method).toBe("PATCH")
@@ -114,7 +119,11 @@ describe("curriculum-service", () => {
     )
 
     await expect(
-      createCurriculum({ program_id: 1, ...replacement }),
+      createCurriculum({
+        program_id: 1,
+        equivalency_source_curriculum_id: 2,
+        ...replacement,
+      }),
     ).rejects.toMatchObject({ kind: "contract" })
   })
 

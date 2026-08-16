@@ -116,6 +116,14 @@ const curriculumSubjectSchema = z
     year_level: z.number().int().positive(),
     semester: z.string().min(1),
     is_required: z.boolean(),
+    equivalent_source_subject_id: z
+      .number()
+      .int()
+      .positive()
+      .nullable()
+      .optional(),
+    equivalent_source_subject_code: z.string().min(1).nullable().optional(),
+    equivalent_source_subject_title: z.string().min(1).nullable().optional(),
     prerequisites: z.array(
       z
         .object({
@@ -133,6 +141,13 @@ export const curriculumSchema = z
     type: z.literal("curriculum"),
     id: z.number().int().positive(),
     program_id: z.number().int().positive(),
+    equivalency_source_curriculum_id: z
+      .number()
+      .int()
+      .positive()
+      .nullable()
+      .optional(),
+    equivalency_source_curriculum_name: z.string().min(1).nullable().optional(),
     name: z.string().min(1),
     effective_school_year: z.string().min(1),
     status: z.enum([

@@ -52,16 +52,54 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
               {prospectus.program_name} ({prospectus.program_code})
             </p>
             <p>
-              {prospectus.curriculum_name} ·{" "}
-              {prospectus.effective_school_year}
+              {prospectus.curriculum_name} · {prospectus.effective_school_year}
               {prospectus.enrollment_category_label
                 ? ` · ${prospectus.enrollment_category_label}`
                 : ""}
             </p>
           </div>
 
+          {prospectus.curriculum_transition && (
+            <div className="mb-4">
+              <Table>
+                <TableCaption>
+                  Curriculum transition ·{" "}
+                  {prospectus.curriculum_transition.source_curriculum_name} →{" "}
+                  {prospectus.curriculum_transition.target_curriculum_name}
+                </TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">Old subject</TableHead>
+                    <TableHead scope="col">New credited subject</TableHead>
+                    <TableHead scope="col">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {prospectus.curriculum_transition.credits.map((credit) => (
+                    <TableRow
+                      key={`${credit.source_code}-${credit.target_code}`}
+                    >
+                      <TableCell>
+                        {credit.source_code} — {credit.source_title}
+                      </TableCell>
+                      <TableCell>
+                        {credit.target_code} — {credit.target_title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge>Credited</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
           {prospectus.semesters.map((semester) => (
-            <SemesterTable key={`${semester.year_level}-${semester.semester}`} semester={semester} />
+            <SemesterTable
+              key={`${semester.year_level}-${semester.semester}`}
+              semester={semester}
+            />
           ))}
 
           {prospectus.unplaced_entries.length > 0 && (

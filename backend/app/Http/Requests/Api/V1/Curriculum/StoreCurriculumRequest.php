@@ -26,6 +26,9 @@ final class StoreCurriculumRequest extends FormRequest
     {
         return [
             'program_id' => ['required', 'integer', 'exists:programs,id'],
+            // Legacy API clients may still create a curriculum without a
+            // mapping source; the Program Chair wizard always requires one.
+            'equivalency_source_curriculum_id' => ['sometimes', 'nullable', 'integer', 'exists:curricula,id'],
             'name' => ['required', 'string', 'max:255'],
             'subjects' => ['present', 'array'],
             'subjects.*.subject_id' => ['required', 'integer', 'exists:subjects,id', 'distinct'],

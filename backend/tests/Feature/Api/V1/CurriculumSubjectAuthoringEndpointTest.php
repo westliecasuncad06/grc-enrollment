@@ -158,6 +158,35 @@ final class CurriculumSubjectAuthoringEndpointTest extends TestCase
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::CURRICULUM_UPDATED)->where('auditable_type', AuditableType::CURRICULUM)->count());
     }
 
+    public function test_a_new_subject_can_map_one_old_subject_from_its_curriculums_configured_equivalency_source(): void
+    {
+        $token = $this->chairToken(CollegeCode::Ccs);
+        $program = $this->program('BSCS', CollegeCode::Ccs);
+        $source = $this->curriculum($program, '2021-2022', CurriculumStatus::Archived, 'BSCS 2021 Curriculum');
+        $oldSubject = $this->subject('CS-OLD', CollegeCode::Ccs);
+        $this->place($source, $oldSubject);
+        $draft = $this->curriculum($program, '2026-2027', CurriculumStatus::Draft, 'BSCS 2026 Curriculum');
+        $draft->update(['equivalency_source_curriculum_id' => $source->id]);
+        $this->setCurrentTerm('2026-2027');
+
+        $this->withToken($token)
+            ->postJson("/api/v1/curricula/{$draft->id}/subject-placements", [
+                ...$this->newPayload('CS-NEW'),
+                'equivalent_source_subject_id' => $oldSubject->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.subjects.0.equivalent_source_subject_id', $oldSubject->id)
+            ->assertJsonPath('data.subjects.0.equivalent_source_subject_code', 'CS-OLD');
+
+        $newSubject = Subject::query()->where('code', 'CS-NEW')->sole();
+        $this->assertDatabaseHas('curriculum_subject_equivalencies', [
+            'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $draft->id,
+            'source_subject_id' => $oldSubject->id,
+            'target_subject_id' => $newSubject->id,
+        ]);
+    }
+
     public function test_duplicate_subject_code_or_duplicate_draft_placement_is_invalid_without_an_extra_placement(): void
     {
         $token = $this->chairToken(CollegeCode::Ccs);

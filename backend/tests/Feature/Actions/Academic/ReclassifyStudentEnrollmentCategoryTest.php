@@ -20,7 +20,10 @@ use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
+use App\Models\CurriculumMigration;
+use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubject;
+use App\Models\CurriculumSubjectEquivalency;
 use App\Models\Notification;
 use App\Models\Program;
 use App\Models\StudentProfile;
@@ -174,6 +177,54 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
             $term,
             $registrar,
             new AuditRequestContext('test-reclassify', null),
+        );
+
+        self::assertTrue($verdict->isRegular());
+        self::assertSame('regular', $student->fresh()->enrollment_category);
+    }
+
+    public function test_a_migration_credit_counts_as_a_completed_target_subject_for_standing(): void
+    {
+        $term = $this->makeTerm();
+        $target = $this->makeCurriculum();
+        $source = Curriculum::create([
+            'program_id' => $target->program_id,
+            'name' => 'BSCS Previous Curriculum',
+            'effective_school_year' => '2023-2024',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        $oldSubject = $this->makeSubject('CS-OLD');
+        $newSubject = $this->makeSubject('CS-NEW');
+        $this->placeSubject($source, $oldSubject, 1);
+        $this->placeSubject($target, $newSubject, 1);
+        $student = $this->makeStudent($target, 'credited@grc.test', yearLevel: 2, category: 'irregular');
+        $registrar = $this->makeRegistrarHead();
+        $grade = $this->lockGrade($student, $oldSubject, $term, '2.00', $registrar);
+        $equivalency = CurriculumSubjectEquivalency::create([
+            'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $target->id,
+            'source_subject_id' => $oldSubject->id,
+            'target_subject_id' => $newSubject->id,
+        ]);
+        $migration = CurriculumMigration::create([
+            'student_id' => $student->id,
+            'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $target->id,
+            'processed_by' => $registrar->id,
+            'migrated_at' => now(),
+        ]);
+        CurriculumMigrationCredit::create([
+            'curriculum_migration_id' => $migration->id,
+            'curriculum_subject_equivalency_id' => $equivalency->id,
+            'source_academic_grade_id' => $grade->id,
+            'target_subject_id' => $newSubject->id,
+        ]);
+
+        $verdict = app(ReclassifyStudentEnrollmentCategory::class)->execute(
+            $student,
+            $term,
+            $registrar,
+            new AuditRequestContext('test-reclassify-credit', null),
         );
 
         self::assertTrue($verdict->isRegular());

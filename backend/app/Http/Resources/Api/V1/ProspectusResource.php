@@ -6,6 +6,9 @@ use App\Domain\Academic\Prospectus;
 use App\Domain\Academic\ProspectusEntry;
 use App\Domain\Academic\ProspectusSemester;
 use App\Models\AcademicGrade;
+use App\Models\CurriculumMigration;
+use App\Models\CurriculumMigrationCredit;
+use App\Models\CurriculumSubjectEquivalency;
 use App\Models\SubjectPrerequisite;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -31,6 +34,7 @@ final class ProspectusResource extends JsonResource
      *     enrollment_category: ?string,
      *     enrollment_category_label: ?string,
      *     enrollment_category_derived_at: ?string,
+     *     curriculum_transition: ?array<string, mixed>,
      *     semesters: list<mixed>,
      *     unplaced_entries: list<mixed>
      * }
@@ -39,6 +43,12 @@ final class ProspectusResource extends JsonResource
     {
         $student = $this->resource->student;
         $curriculum = $student->curriculum;
+        $migration = CurriculumMigration::query()
+            ->where('student_id', $student->id)
+            ->where('target_curriculum_id', $curriculum->id)
+            ->with(['sourceCurriculum', 'targetCurriculum', 'credits.equivalency.sourceSubject', 'credits.equivalency.targetSubject'])
+            ->latest('migrated_at')
+            ->first();
 
         return [
             'type' => 'prospectus',
@@ -55,6 +65,30 @@ final class ProspectusResource extends JsonResource
                 ? ucfirst($student->enrollment_category)
                 : null,
             'enrollment_category_derived_at' => $student->enrollment_category_derived_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'curriculum_transition' => $migration === null ? null : [
+                'source_curriculum_name' => $migration->sourceCurriculum->name,
+                'target_curriculum_name' => $migration->targetCurriculum->name,
+                'migrated_at' => $migration->migrated_at->utc()->format('Y-m-d\TH:i:s\Z'),
+                'credits' => $migration->credits
+                    ->map(static function (CurriculumMigrationCredit $credit): ?array {
+                        $equivalency = $credit->equivalency;
+                        if (! $equivalency instanceof CurriculumSubjectEquivalency) {
+                            return null;
+                        }
+                        $sourceSubject = $equivalency->sourceSubject;
+                        $targetSubject = $equivalency->targetSubject;
+
+                        return [
+                            'source_code' => $sourceSubject->code,
+                            'source_title' => $sourceSubject->title,
+                            'target_code' => $targetSubject->code,
+                            'target_title' => $targetSubject->title,
+                        ];
+                    })
+                    ->filter()
+                    ->values()
+                    ->all(),
+            ],
             'semesters' => array_map(
                 fn (ProspectusSemester $semester): array => $this->semesterToArray($semester),
                 $this->resource->semesters,

@@ -14,7 +14,10 @@ use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\Curriculum;
+use App\Models\CurriculumMigration;
+use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubject;
+use App\Models\CurriculumSubjectEquivalency;
 use App\Models\Program;
 use App\Models\StudentProfile;
 use App\Models\Subject;
@@ -174,6 +177,56 @@ final class ProspectusEndpointTest extends TestCase
         $firstSemEntries = collect($semesters)->firstWhere('semester', '1st')['entries'];
         $prerequisiteEntry = collect($firstSemEntries)->firstWhere('code', 'CS100');
         self::assertSame([], $prerequisiteEntry['prerequisites']);
+    }
+
+    public function test_a_migrated_student_sees_read_only_old_to_new_credited_subjects(): void
+    {
+        $term = $this->makeTerm();
+        $target = $this->makeCurriculum();
+        $source = Curriculum::create([
+            'program_id' => $target->program_id,
+            'name' => 'BSCS 2021 Curriculum',
+            'effective_school_year' => '2021-2022',
+            'status' => CurriculumStatus::Archived,
+        ]);
+        $oldSubject = $this->makeSubject('CS-OLD');
+        $newSubject = $this->makeSubject('CS-NEW');
+        $this->placeSubject($source, $oldSubject, 1);
+        $this->placeSubject($target, $newSubject, 1);
+        $student = $this->makeStudent($target, 'migrated.prospectus@grc.test');
+        $chair = User::create([
+            'name' => 'Chair', 'email' => 'chair.migrated.prospectus@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+        ]);
+        $grade = AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $oldSubject->id, 'academic_term_id' => $term->id,
+            'mark' => '1.75', 'status' => GradeStatus::Locked, 'encoded_by' => $chair->id,
+        ]);
+        $equivalency = CurriculumSubjectEquivalency::create([
+            'source_curriculum_id' => $source->id, 'target_curriculum_id' => $target->id,
+            'source_subject_id' => $oldSubject->id, 'target_subject_id' => $newSubject->id,
+        ]);
+        $migration = CurriculumMigration::create([
+            'student_id' => $student->id, 'source_curriculum_id' => $source->id,
+            'target_curriculum_id' => $target->id, 'processed_by' => $chair->id,
+            'migrated_at' => now(),
+        ]);
+        CurriculumMigrationCredit::create([
+            'curriculum_migration_id' => $migration->id,
+            'curriculum_subject_equivalency_id' => $equivalency->id,
+            'source_academic_grade_id' => $grade->id,
+            'target_subject_id' => $newSubject->id,
+        ]);
+
+        $response = $this->withToken($this->tokenFor($student->user))
+            ->getJson('/api/v1/prospectus');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.curriculum_transition.source_curriculum_name', 'BSCS 2021 Curriculum')
+            ->assertJsonPath('data.curriculum_transition.target_curriculum_name', 'BSCS Curriculum')
+            ->assertJsonPath('data.curriculum_transition.credits.0.source_code', 'CS-OLD')
+            ->assertJsonPath('data.curriculum_transition.credits.0.target_code', 'CS-NEW');
     }
 
     public function test_a_student_cannot_view_another_students_prospectus(): void

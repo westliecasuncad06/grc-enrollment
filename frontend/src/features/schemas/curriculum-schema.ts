@@ -84,6 +84,10 @@ export const curriculumReplacementSchema = z
 export const storeCurriculumInputSchema = z
   .object({
     program_id: z.number().int().positive("Select a program."),
+    equivalency_source_curriculum_id: z
+      .number()
+      .int()
+      .positive("Select the old curriculum source."),
     ...replacementShape,
   })
   .strict()
@@ -120,6 +124,7 @@ export const curriculumSubjectPlacementInputSchema = z.discriminatedUnion(
         code: z.string().trim().min(1, "Enter a subject code."),
         title: z.string().trim().min(1, "Enter a subject description."),
         units: z.number().positive("Enter the subject units."),
+        equivalent_source_subject_id: z.number().int().positive().optional(),
         year_level: z.number().int().min(1).max(4),
         semester: z.enum(["1st", "2nd"]),
       })

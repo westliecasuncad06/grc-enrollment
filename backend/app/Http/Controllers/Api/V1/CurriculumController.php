@@ -21,7 +21,12 @@ use Illuminate\Validation\Rule;
 
 final class CurriculumController extends Controller
 {
-    private const EAGER_LOAD = ['subjectPlacements.subject', 'subjectPlacements.prerequisites.prerequisiteSubject'];
+    private const EAGER_LOAD = [
+        'equivalencySourceCurriculum',
+        'targetEquivalencies.sourceSubject',
+        'subjectPlacements.subject',
+        'subjectPlacements.prerequisites.prerequisiteSubject',
+    ];
 
     /**
      * @throws AuthenticationException
@@ -66,6 +71,7 @@ final class CurriculumController extends Controller
 
         $curriculum = $action->execute($user, [
             'program_id' => $request->validated('program_id'),
+            'equivalency_source_curriculum_id' => $request->validated('equivalency_source_curriculum_id'),
             'name' => $request->validated('name'),
         ], $request->subjects(), $contextFactory->fromRequest($request));
 
