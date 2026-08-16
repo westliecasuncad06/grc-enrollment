@@ -110,7 +110,12 @@ final class TransitionCurriculum
                 default => null,
             };
 
-            return $lockedCurriculum->load(['subjectPlacements.subject', 'subjectPlacements.prerequisites.prerequisiteSubject']);
+            return $lockedCurriculum->load([
+                'subjectPlacements.subject',
+                'subjectPlacements.prerequisites.prerequisiteSubject',
+                'equivalencySourceCurriculum',
+                'targetEquivalencies.sourceSubject',
+            ]);
         });
     }
 }

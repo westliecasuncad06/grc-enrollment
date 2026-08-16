@@ -47,7 +47,7 @@ final class CurriculumMigrationController extends Controller
             'source_curriculum_id' => $saved->source_curriculum_id,
             'target_curriculum_id' => $saved->target_curriculum_id,
             'credited_subject_ids' => $saved->credits->pluck('target_subject_id')->values()->all(),
-            'migrated_at' => $saved->migrated_at->toIso8601String(),
+            'migrated_at' => $saved->migrated_at->utc()->format('Y-m-d\TH:i:s\Z'),
         ]], 201);
         $response->headers->set('Cache-Control', 'no-store, private');
 

@@ -143,7 +143,10 @@ export function CurriculumCreationWizard({
                   <FieldLabel htmlFor="creation-program">Program</FieldLabel>
                   <Select
                     value={programId > 0 ? String(programId) : ""}
-                    onValueChange={(value) => setProgramId(Number(value))}
+                    onValueChange={(value) => {
+                      setProgramId(Number(value))
+                      setEquivalencySourceCurriculumId(0)
+                    }}
                     disabled={isPending}
                   >
                     <SelectTrigger

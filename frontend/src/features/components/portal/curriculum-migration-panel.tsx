@@ -50,7 +50,17 @@ export function CurriculumMigrationPanel({
       curriculum.equivalency_source_curriculum_id !== null &&
       curriculum.equivalency_source_curriculum_id !== undefined,
   )
-  const [targetId, setTargetId] = useState(targets[0]?.id ?? 0)
+  // `targets` depends on a query that can still be loading when this panel
+  // first mounts, so picking targets[0] once via useState can freeze at 0 (or
+  // a since-removed id) forever. Track only the Chair's explicit choice here
+  // and fall back to the current list's first entry at render time instead —
+  // that follows a list that arrives late without a synchronizing effect.
+  const [selectedTargetId, setSelectedTargetId] = useState<number | null>(null)
+  const targetId =
+    selectedTargetId !== null &&
+    targets.some((target) => target.id === selectedTargetId)
+      ? selectedTargetId
+      : (targets[0]?.id ?? 0)
   const [selectedIds, setSelectedIds] = useState<readonly number[]>([])
   const form = useForm<InputValues>({
     resolver: zodResolver(inputSchema),
@@ -68,12 +78,16 @@ export function CurriculumMigrationPanel({
 
   if (targets.length === 0) return null
 
-  const requestPreview = form.handleSubmit(({ student_number }) => {
+  const requestPreview = form.handleSubmit(async ({ student_number }) => {
     preview.reset()
-    void preview.mutateAsync({
-      curriculumId: targetId,
-      studentNumber: student_number,
-    })
+    try {
+      await preview.mutateAsync({
+        curriculumId: targetId,
+        studentNumber: student_number,
+      })
+    } catch {
+      // Surfaced via preview.isError below.
+    }
   })
   const toggle = (id: number, checked: boolean) => {
     setSelectedIds((current) =>
@@ -82,19 +96,20 @@ export function CurriculumMigrationPanel({
         : current.filter((selectedId) => selectedId !== id),
     )
   }
-  const confirm = () => {
+  const confirm = async () => {
     if (!previewData) return
-    void apply
-      .mutateAsync({
+    try {
+      await apply.mutateAsync({
         curriculumId: targetId,
         studentId: previewData.student.id,
         equivalencyIds: selectedIds,
       })
-      .then(() => {
-        form.reset()
-        preview.reset()
-        setSelectedIds([])
-      })
+      form.reset()
+      preview.reset()
+      setSelectedIds([])
+    } catch {
+      // Surfaced via apply.isError below.
+    }
   }
 
   return (
@@ -118,7 +133,7 @@ export function CurriculumMigrationPanel({
         <Select
           value={String(targetId)}
           onValueChange={(value) => {
-            setTargetId(Number(value))
+            setSelectedTargetId(Number(value))
             preview.reset()
             setSelectedIds([])
           }}
@@ -216,7 +231,11 @@ export function CurriculumMigrationPanel({
             </Alert>
           )}
           <div>
-            <Button type="button" onClick={confirm} disabled={apply.isPending}>
+            <Button
+              type="button"
+              onClick={() => void confirm()}
+              disabled={apply.isPending}
+            >
               {apply.isPending
                 ? "Migrating…"
                 : "Confirm selected credits and migrate"}
