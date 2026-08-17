@@ -126,26 +126,6 @@ describe("EnrollmentSubjectFilterBar", () => {
     expect(screen.getByText("GE201")).toBeInTheDocument()
   })
 
-  it("sorts by preference score when applied, without hiding a low- or unscored subject", async () => {
-    const user = userEvent.setup()
-    const low = subject({ subject_id: 1, code: "IT100", preference_score: 10 })
-    const unscored = subject({ subject_id: 2, code: "IT200", preference_score: null })
-    const high = subject({ subject_id: 3, code: "IT300", preference_score: 90 })
-    renderBar([low, unscored, high])
-
-    await user.click(
-      screen.getByRole("switch", { name: "Apply my preferences" }),
-    )
-
-    const items = screen.getAllByRole("listitem")
-    expect(items.map((item) => item.textContent)).toEqual([
-      "IT300",
-      "IT100",
-      "IT200",
-    ])
-    expect(screen.getByText("IT200")).toBeInTheDocument()
-  })
-
   it("announces the visible count through the status region", async () => {
     const user = userEvent.setup()
     const keep = subject({ subject_id: 1, code: "IT100" })

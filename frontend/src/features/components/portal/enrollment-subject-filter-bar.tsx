@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react"
 
-import { ApplyPreferencesSwitch } from "@/features/components/portal/apply-preferences-switch"
 import { StatusRegion } from "@/features/components/portal/status-region"
 import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
@@ -132,17 +131,11 @@ function professorOptions(subjects: readonly EligibleSubject[]): number[] {
 }
 
 /**
- * Client-side filters (Day, Time block, Professor, Subject search) plus the
- * "Apply my preferences" sort, over an already-fetched eligible-subject
- * pool — the irregular-student per-subject flow in `enrollment-workspace.tsx`.
- * Everything here operates on the `subjects` prop already sitting in the
- * parent's query cache; no filter or sort ever issues a new request.
- *
- * "Apply my preferences" sorts the subject list by its own `preference_score`
- * (the pool only scores a subject as a whole against its available sections,
- * not per individual section — see `BuildEligibleSubjectPool`). Like the
- * regular-student table, this only reorders: a subject with no score, or a
- * low one, is never removed (preferences rank, they never gate).
+ * Client-side filters (Day, Time block, Professor, Subject search) over an
+ * already-fetched eligible-subject pool — the irregular-student per-subject
+ * flow in `enrollment-workspace.tsx`. Everything here operates on the
+ * `subjects` prop already sitting in the parent's query cache; no filter
+ * ever issues a new request.
  */
 export function EnrollmentSubjectFilterBar({
   subjects,
@@ -155,23 +148,14 @@ export function EnrollmentSubjectFilterBar({
   const [day, setDay] = useState(ALL_FILTER_VALUE)
   const [timeBlock, setTimeBlock] = useState(ALL_FILTER_VALUE)
   const [professorId, setProfessorId] = useState(ALL_FILTER_VALUE)
-  const [applyPreferences, setApplyPreferences] = useState(false)
 
-  const filtered = subjects.filter(
+  const visible = subjects.filter(
     (subject) =>
       matchesSearch(subject, search) &&
       matchesDay(subject, day) &&
       matchesTimeBlock(subject, timeBlock) &&
       matchesProfessor(subject, professorId),
   )
-
-  const visible = applyPreferences
-    ? [...filtered].sort(
-        (a, b) =>
-          (b.preference_score ?? Number.NEGATIVE_INFINITY) -
-          (a.preference_score ?? Number.NEGATIVE_INFINITY),
-      )
-    : filtered
 
   return (
     <div className="grid gap-4">
@@ -240,12 +224,6 @@ export function EnrollmentSubjectFilterBar({
           </select>
         </Field>
       </div>
-
-      <ApplyPreferencesSwitch
-        id="eligible-subject-apply-preferences"
-        checked={applyPreferences}
-        onCheckedChange={setApplyPreferences}
-      />
 
       <StatusRegion
         message={

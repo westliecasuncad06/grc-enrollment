@@ -261,10 +261,6 @@ function mockIrregularRoutes(overrides: { subjects?: unknown } = {}) {
     const target = url(input)
     if (target.includes("/academic-terms"))
       return Promise.resolve(new Response(JSON.stringify(terms)))
-    if (target.endsWith("/student-schedule-preferences"))
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: defaultSchedulePreference })),
-      )
     if (target.includes("/eligible-subjects"))
       return Promise.resolve(
         new Response(
@@ -283,19 +279,6 @@ function mockIrregularRoutes(overrides: { subjects?: unknown } = {}) {
       )
     return Promise.resolve(new Response(JSON.stringify({ data: [] })))
   }
-}
-
-const defaultSchedulePreference = {
-  type: "student-schedule-preference",
-  id: null,
-  student_id: 1,
-  preferred_days: null,
-  preferred_time_block: "any",
-  preferred_time_block_label: "No Preference",
-  preferred_modality: null,
-  max_days_on_campus: null,
-  avoid_early_first_class: false,
-  notes: null,
 }
 
 function scoredBlock(overrides: {
@@ -532,10 +515,6 @@ function mockRegularRoutes(
     const target = url(input)
     if (target.includes("/academic-terms"))
       return Promise.resolve(new Response(JSON.stringify(terms)))
-    if (target.endsWith("/student-schedule-preferences"))
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: defaultSchedulePreference })),
-      )
     if (target.includes("/enrollment-blocks"))
       return Promise.resolve(
         new Response(
@@ -1037,15 +1016,10 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    expect(await screen.findByText("Preferred days")).toBeInTheDocument()
-    expect(screen.getByLabelText("Maximum days on campus")).toBeInTheDocument()
-    expect(
-      screen.queryByLabelText("Preferred time block"),
-    ).not.toBeInTheDocument()
-
     const section = await screen.findByRole("article", {
       name: "IT201 section",
     })
+    expect(screen.queryByText("Schedule preference")).not.toBeInTheDocument()
     expect(
       within(section).getByRole("table", { name: "IT201 schedule" }),
     ).toBeInTheDocument()
@@ -1264,15 +1238,14 @@ describe("EnrollmentWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("loads the schedule preference panel for an irregular student", async () => {
+  it("does not render schedule preference for an irregular student", async () => {
     fetchMock.mockImplementation(mockIrregularRoutes())
     renderWithSession(<EnrollmentWorkspace />, {
       session: irregularStudentSession,
     })
 
-    expect(
-      await screen.findByRole("checkbox", { name: "Monday" }),
-    ).toBeInTheDocument()
+    await screen.findByRole("heading", { name: /eligible subjects/i })
+    expect(screen.queryByText("Schedule preference")).not.toBeInTheDocument()
   })
 
   it("filters the irregular subject pool by day without refetching", async () => {
@@ -1292,25 +1265,4 @@ describe("EnrollmentWorkspace", () => {
     expect(screen.getByText(/IT 205/)).toBeInTheDocument()
   })
 
-  it("sorts the irregular subject pool by preference score when applied, keeping every subject selectable", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation(mockIrregularRoutes())
-    renderWithSession(<EnrollmentWorkspace />, {
-      session: irregularStudentSession,
-    })
-
-    await screen.findByRole("heading", { name: /eligible subjects/i })
-    await user.click(
-      screen.getByRole("switch", { name: "Apply my preferences" }),
-    )
-
-    const articles = screen.getAllByRole("article")
-    // IT 205 scores 90, IT 305 scores 40 -- highest preference_score first,
-    // but both remain present and their Section selects stay enabled.
-    expect(articles[0]).toHaveAccessibleName(/IT 205/)
-    expect(articles[1]).toHaveAccessibleName(/IT 305/)
-    for (const article of articles) {
-      expect(within(article).getByLabelText("Section")).toBeEnabled()
-    }
-  })
 })

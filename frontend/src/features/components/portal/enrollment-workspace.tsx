@@ -15,7 +15,6 @@ import { EnrollmentSubjectFilterBar } from "@/features/components/portal/enrollm
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StudentAccountBalancePanel } from "@/features/components/portal/student-account-balance-panel"
 import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
-import { StudentSchedulePreferencesPanel } from "@/features/components/portal/student-schedule-preferences-panel"
 import {
   StatusStepper,
   type StatusStepperStage,
@@ -382,7 +381,6 @@ export function EnrollmentWorkspace() {
         !hasActiveEnrollmentThisTerm &&
         (isRegularAudience ? (
           <div className="grid gap-4">
-            <StudentSchedulePreferencesPanel compact />
             <AsyncBoundary
               query={{
                 isPending: termsQuery.isPending || blocksQuery.isFetching,
@@ -415,7 +413,6 @@ export function EnrollmentWorkspace() {
           </div>
         ) : (
           <div className="grid gap-4">
-            <StudentSchedulePreferencesPanel />
             <AsyncBoundary
               query={{
                 isPending:

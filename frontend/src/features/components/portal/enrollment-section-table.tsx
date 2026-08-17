@@ -1,9 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useState } from "react"
 
-import { ApplyPreferencesSwitch } from "@/features/components/portal/apply-preferences-switch"
 import {
   DataTable,
   type DataTableColumn,
@@ -142,8 +140,7 @@ function SectionCard({
 /**
  * Regular-student block selection. Every available block now exposes its full
  * subject schedule inline, so choosing a section never requires a picker
- * modal. Preferences can still rank the visible pool but never remove a
- * section from it.
+ * modal.
  */
 export function EnrollmentSectionTable({
   blocks,
@@ -160,17 +157,9 @@ export function EnrollmentSectionTable({
   disabled?: boolean
   renderSelectedFooter: (block: EnrollmentBlock) => ReactNode
 }) {
-  const [applyPreferences, setApplyPreferences] = useState(false)
   const selectedBlock = blocks.find(
     (block) => block.block_code === selectedBlockCode,
   )
-  const rows = applyPreferences
-    ? [...blocks].sort(
-        (a, b) =>
-          (b.preference_score ?? Number.NEGATIVE_INFINITY) -
-          (a.preference_score ?? Number.NEGATIVE_INFINITY),
-      )
-    : blocks
 
   if (selectedBlock) {
     return (
@@ -187,12 +176,7 @@ export function EnrollmentSectionTable({
 
   return (
     <div className="grid gap-4">
-      <ApplyPreferencesSwitch
-        id="enrollment-section-table-apply-preferences"
-        checked={applyPreferences}
-        onCheckedChange={setApplyPreferences}
-      />
-      {rows.map((block) => (
+      {blocks.map((block) => (
         <SectionCard
           key={block.block_code}
           block={block}

@@ -132,24 +132,6 @@ describe("EnrollmentSectionTable", () => {
     expect(onChoose).toHaveBeenCalledWith("IT303")
   })
 
-  it("sorts by preference match when preferences are applied without removing a section", async () => {
-    const user = userEvent.setup()
-    renderTable()
-
-    await user.click(
-      screen.getByRole("switch", { name: "Apply my preferences" }),
-    )
-
-    const sections = screen.getAllByRole("article")
-    expect(sections[0]).toHaveAccessibleName("IT303 section")
-    expect(
-      screen.getByRole("article", { name: "IT301 section" }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole("article", { name: "IT302 section" }),
-    ).toBeInTheDocument()
-  })
-
   it("keeps a low-scoring section selectable", () => {
     renderTable()
 
