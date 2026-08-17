@@ -463,7 +463,8 @@ async function selectOption(
   labelText: string,
   optionName: string | RegExp,
 ) {
-  await user.click(await screen.findByLabelText(labelText))
+  const triggers = await screen.findAllByLabelText(labelText)
+  await user.click(triggers[0])
   await user.click(await screen.findByRole("option", { name: optionName }))
 }
 
@@ -568,7 +569,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await selectOption(user, "Section", /Section A/)
+    await selectOption(user, "CS101 section", /Section A/)
     expect(
       await screen.findByText("Review your enrollment"),
     ).toBeInTheDocument()
@@ -644,7 +645,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await selectOption(user, "Section", /Section A/)
+    await selectOption(user, "CS101 section", /Section A/)
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
 
@@ -653,7 +654,9 @@ describe("EnrollmentWorkspace", () => {
         "This section is not currently eligible for selection.",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText("Section")).toHaveTextContent("Section A")
+    expect(screen.getAllByLabelText("CS101 section")[0]).toHaveTextContent(
+      "Section A",
+    )
   })
 
   it("shows a clear message and preserves the selection when submission conflicts", async () => {
@@ -702,7 +705,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await selectOption(user, "Section", /Section A/)
+    await selectOption(user, "CS101 section", /Section A/)
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
 
@@ -711,7 +714,9 @@ describe("EnrollmentWorkspace", () => {
         "Your enrollment could not be submitted. Check the connection and try again.",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText("Section")).toHaveTextContent("Section A")
+    expect(screen.getAllByLabelText("CS101 section")[0]).toHaveTextContent(
+      "Section A",
+    )
   })
 
   it("shows a clear message when the eligible-subject pool cannot be reached", async () => {
@@ -857,7 +862,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await screen.findByLabelText("Section")
+    await screen.findAllByLabelText("CS101 section")
     expect(
       fetchMock.mock.calls.some(([input]) =>
         url(input).endsWith("/student-account"),
@@ -997,7 +1002,10 @@ describe("EnrollmentWorkspace", () => {
     expect(
       await screen.findByText("Enrollment has not opened yet"),
     ).toBeInTheDocument()
-    expect(await screen.findByLabelText("Section")).toBeDisabled()
+    const sectionTriggers = await screen.findAllByLabelText("CS101 section")
+    for (const trigger of sectionTriggers) {
+      expect(trigger).toBeDisabled()
+    }
   })
 
   it("a regular student selects an inline section, confirms, and submits", async () => {
@@ -1180,7 +1188,7 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
-    await screen.findByLabelText("Section")
+    await screen.findAllByLabelText("CS101 section")
     expect(await axe(container)).toHaveNoViolations()
   })
 
@@ -1264,7 +1272,45 @@ describe("EnrollmentWorkspace", () => {
 
     expect(fetchMock.mock.calls).toHaveLength(callsBefore)
     expect(screen.queryByText("IT 305")).not.toBeInTheDocument()
-    expect(screen.getByText(/IT 205/)).toBeInTheDocument()
+    expect(screen.getAllByText(/IT 205/).length).toBeGreaterThan(0)
   })
 
+  it("lets an irregular student choose a cross-department section for a shared subject", async () => {
+    const user = userEvent.setup()
+    const sharedSubject = {
+      ...eligibleSubject,
+      available_sections: [
+        {
+          ...eligibleSubject.available_sections[0],
+          id: 55,
+          college: "coe",
+          is_own_department: false,
+        },
+      ],
+    }
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [sharedSubject] })),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    const triggers = await screen.findAllByLabelText("CS101 section")
+    await user.click(triggers[0])
+    await user.click(
+      await screen.findByRole("option", { name: /Section A.*COE/ }),
+    )
+
+    expect(screen.getAllByText("COE section").length).toBeGreaterThan(0)
+  })
 })

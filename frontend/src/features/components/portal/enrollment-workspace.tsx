@@ -6,6 +6,7 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { EligibleSubjectTable } from "@/features/components/portal/eligible-subject-table"
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
@@ -14,7 +15,6 @@ import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-
 import { EnrollmentSubjectFilterBar } from "@/features/components/portal/enrollment-subject-filter-bar"
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StudentAccountBalancePanel } from "@/features/components/portal/student-account-balance-panel"
-import { StaggerItem, StaggerList } from "@/features/components/portal/motion"
 import {
   StatusStepper,
   type StatusStepperStage,
@@ -39,14 +39,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Field, FieldLabel } from "@/features/components/ui/field"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/features/components/ui/select"
 import { Skeleton } from "@/features/components/ui/skeleton"
 import { useEnrollmentScheduleQuery } from "@/features/hooks/use-enrollment-windows"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
@@ -98,65 +90,6 @@ function overallStages(
     { label: "Payment confirmed", done: paid, current: paid && !enrolled },
     { label: "Enrolled", done: enrolled, current: false },
   ]
-}
-
-function SectionChoice({
-  subject,
-  selectedSectionId,
-  onChoose,
-  onClear,
-  disabled = false,
-}: {
-  subject: EligibleSubject
-  selectedSectionId: number | undefined
-  onChoose: (sectionId: number) => void
-  onClear: () => void
-  disabled?: boolean
-}) {
-  return (
-    <Card role="article" aria-label={`${subject.code} ${subject.title}`}>
-      <CardHeader>
-        <CardTitle level={2}>
-          {subject.code} — {subject.title} ({subject.units} units)
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Field>
-          <FieldLabel htmlFor={`section-choice-${subject.subject_id}`}>
-            Section
-          </FieldLabel>
-          <Select
-            value={selectedSectionId ? String(selectedSectionId) : ""}
-            onValueChange={(value) => {
-              const sectionId = Number(value)
-              if (sectionId) onChoose(sectionId)
-              else onClear()
-            }}
-            disabled={disabled}
-          >
-            <SelectTrigger
-              id={`section-choice-${subject.subject_id}`}
-              className="w-full"
-            >
-              <SelectValue placeholder="Not selected" />
-            </SelectTrigger>
-            <SelectContent>
-              {subject.available_sections.map((section) => (
-                <SelectItem key={section.id} value={String(section.id)}>
-                  Section {section.section_code}
-                  {section.schedule_days
-                    ? ` · ${section.schedule_days} ${section.starts_at_time}–${section.ends_at_time}`
-                    : ""}{" "}
-                  · {section.remaining_seats} seat
-                  {section.remaining_seats === 1 ? "" : "s"} open
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </CardContent>
-    </Card>
-  )
 }
 
 export function EnrollmentWorkspace() {
@@ -441,30 +374,20 @@ export function EnrollmentWorkspace() {
                   <CardHeader>
                     <CardTitle level={2}>Eligible subjects</CardTitle>
                     <CardDescription>
-                      Filter the pool and, optionally, sort it by how well each
-                      subject fits your saved schedule preferences.
+                      Filter the pool, then pick a section for each subject you
+                      want to enrol in.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <EnrollmentSubjectFilterBar subjects={selectableSubjects}>
                       {(subjectsToShow) => (
-                        <StaggerList className="grid gap-3">
-                          {subjectsToShow.map((subject) => (
-                            <StaggerItem key={subject.subject_id}>
-                              <SectionChoice
-                                subject={subject}
-                                selectedSectionId={
-                                  selections[subject.subject_id]
-                                }
-                                onChoose={(sectionId) =>
-                                  chooseSection(subject.subject_id, sectionId)
-                                }
-                                onClear={() => clearSection(subject.subject_id)}
-                                disabled={enrollmentWindowClosed}
-                              />
-                            </StaggerItem>
-                          ))}
-                        </StaggerList>
+                        <EligibleSubjectTable
+                          subjects={subjectsToShow}
+                          selections={selections}
+                          onChoose={chooseSection}
+                          onClear={clearSection}
+                          disabled={enrollmentWindowClosed}
+                        />
                       )}
                     </EnrollmentSubjectFilterBar>
                   </CardContent>
