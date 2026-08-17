@@ -49,9 +49,9 @@ final class EligibleSubjectsEndpointTest extends TestCase
         ]);
     }
 
-    private function makeSubject(string $code, float $units = 3.0): Subject
+    private function makeSubject(string $code, float $units = 3.0, ?string $college = null): Subject
     {
-        return Subject::create(['code' => $code, 'title' => $code.' Title', 'units' => $units, 'status' => SubjectStatus::Active]);
+        return Subject::create(['code' => $code, 'college' => $college, 'title' => $code.' Title', 'units' => $units, 'status' => SubjectStatus::Active]);
     }
 
     private function makeStudent(Curriculum $curriculum): StudentProfile
@@ -557,6 +557,89 @@ final class EligibleSubjectsEndpointTest extends TestCase
         ]);
         EnrollmentSubject::create([
             'enrollment_id' => $enrollment->id, 'section_id' => $section->id, 'status' => EnrollmentSubjectStatus::Selected,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', false);
+        $response->assertJsonPath('data.0.reasons.0.code', 'already_selected');
+    }
+
+    public function test_a_shared_subject_pulls_in_another_colleges_open_section(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownSubject = $this->makeSubject('RIZAL', 3.0, 'ccs');
+        $this->placeSubject($curriculum, $ownSubject);
+        // The student's own college has no open section for RIZAL, but
+        // another college's identical (same code + units) RIZAL row does.
+        $otherSubject = $this->makeSubject('RIZAL', 3.0, 'coe');
+        $otherSection = $this->makeSection($term, $otherSubject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', true);
+        $response->assertJsonCount(1, 'data.0.available_sections');
+        $response->assertJsonPath('data.0.available_sections.0.id', $otherSection->id);
+        $response->assertJsonPath('data.0.available_sections.0.is_own_department', false);
+        $response->assertJsonPath('data.0.available_sections.0.college', 'coe');
+    }
+
+    public function test_a_subject_with_a_different_code_in_another_college_is_not_pulled_in(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownSubject = $this->makeSubject('CS101', 3.0, 'ccs');
+        $this->placeSubject($curriculum, $ownSubject);
+        // A different code entirely -- never a sibling, no matter the units.
+        $unrelatedSubject = $this->makeSubject('CS999', 3.0, 'coe');
+        $this->makeSection($term, $unrelatedSubject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', false);
+        $response->assertJsonPath('data.0.reasons.0.code', 'no_sections_available');
+    }
+
+    public function test_a_same_code_subject_with_different_units_is_not_treated_as_the_same_subject(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownSubject = $this->makeSubject('RIZAL', 3.0, 'ccs');
+        $this->placeSubject($curriculum, $ownSubject);
+        // Same code, but a different unit count -- a coincidence, not the
+        // same course, so it must not be pulled in.
+        $mismatchedSubject = $this->makeSubject('RIZAL', 5.0, 'coe');
+        $this->makeSection($term, $mismatchedSubject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', false);
+        $response->assertJsonPath('data.0.reasons.0.code', 'no_sections_available');
+    }
+
+    public function test_already_selected_via_a_sibling_departments_section_excludes_the_subject(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownSubject = $this->makeSubject('RIZAL', 3.0, 'ccs');
+        $this->placeSubject($curriculum, $ownSubject);
+        $otherSubject = $this->makeSubject('RIZAL', 3.0, 'coe');
+        $otherSection = $this->makeSection($term, $otherSubject);
+        $student = $this->makeStudent($curriculum);
+
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id, 'academic_term_id' => $term->id, 'status' => EnrollmentStatus::Draft,
+        ]);
+        EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id, 'section_id' => $otherSection->id, 'status' => EnrollmentSubjectStatus::Selected,
         ]);
         $token = $this->tokenFor($student);
 

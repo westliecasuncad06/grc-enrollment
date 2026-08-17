@@ -14,12 +14,13 @@ use App\Domain\Enrollment\SchedulePreferenceScorer;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
-use App\Models\CurriculumSubject;
 use App\Models\CurriculumMigrationCredit;
+use App\Models\CurriculumSubject;
 use App\Models\EnrollmentSubject;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedulePreference;
+use App\Models\Subject;
 
 /**
  * DFD 2.2 "Validate Capacities and Prerequisites": cross-references
@@ -87,6 +88,20 @@ final readonly class BuildEligibleSubjectPool
         $reasons = [];
         $excluded = false;
 
+        // Every `subjects` row sharing this subject's code and units is the
+        // same course offered under a different college -- general-education
+        // subjects (RIZAL, NSTP, PATHFIT, ...) are duplicated one row per
+        // college, while a major subject has no such sibling. Sourcing
+        // sections from the whole sibling set is what lets a student fill a
+        // shared subject from another department's open section.
+        $siblingSubjectIds = Subject::query()
+            ->where('code', $placement->subject->code)
+            ->where('units', $placement->subject->units)
+            ->pluck('id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->all();
+        $siblingSubjectIds = array_values($siblingSubjectIds);
+
         $ownGrade = $this->latestLockedGrade($student->id, $placement->subject_id);
         if (isset($creditedSubjectIds[$placement->subject_id])) {
             $reasons[] = ['code' => 'completed', 'message' => 'This subject was credited from the student\'s prior curriculum.'];
@@ -96,7 +111,7 @@ final readonly class BuildEligibleSubjectPool
             $excluded = true;
         }
 
-        if ($this->isAlreadySelectedThisTerm($student->id, $term->id, $placement->subject_id)) {
+        if ($this->isAlreadySelectedThisTerm($student->id, $term->id, $siblingSubjectIds)) {
             $reasons[] = ['code' => 'already_selected', 'message' => 'This subject is already part of your current enrollment for this term.'];
             $excluded = true;
         }
@@ -127,8 +142,8 @@ final readonly class BuildEligibleSubjectPool
         if (! $excluded) {
             $sectionsThisTerm = Section::query()
                 ->where('academic_term_id', $term->id)
-                ->where('subject_id', $placement->subject_id)
-                ->with('sectionPlan')
+                ->whereIn('subject_id', $siblingSubjectIds)
+                ->with(['sectionPlan', 'subject'])
                 ->get();
 
             $openSections = $sectionsThisTerm
@@ -254,7 +269,10 @@ final readonly class BuildEligibleSubjectPool
         return $this->evaluator->evaluate($rawGrade, $required);
     }
 
-    private function isAlreadySelectedThisTerm(int $studentId, int $academicTermId, int $subjectId): bool
+    /**
+     * @param  list<int>  $subjectIds
+     */
+    private function isAlreadySelectedThisTerm(int $studentId, int $academicTermId, array $subjectIds): bool
     {
         return EnrollmentSubject::query()
             ->whereHas(
@@ -264,7 +282,7 @@ final readonly class BuildEligibleSubjectPool
                     ->where('academic_term_id', $academicTermId)
                     ->whereNotIn('status', EnrollmentStatus::terminalValues()),
             )
-            ->whereHas('section', fn ($query) => $query->where('subject_id', $subjectId))
+            ->whereHas('section', fn ($query) => $query->whereIn('subject_id', $subjectIds))
             ->where('status', '!=', EnrollmentSubjectStatus::Dropped->value)
             ->exists();
     }

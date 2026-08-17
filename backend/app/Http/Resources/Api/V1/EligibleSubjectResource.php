@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Domain\Enrollment\EligibleSubjectEntry;
+use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -45,7 +46,14 @@ final class EligibleSubjectResource extends JsonResource
             'reasons' => $this->resource->reasons,
             'preference_score' => $this->resource->preferenceScore,
             'preference_reasons' => $this->resource->preferenceReasons,
-            'available_sections' => SectionResource::collection($this->resource->availableSections),
+            'available_sections' => array_map(
+                fn (Section $section): array => [
+                    ...(new SectionResource($section))->resolve($request),
+                    'college' => $section->subject->college?->value,
+                    'is_own_department' => $section->subject_id === $this->resource->subject->id,
+                ],
+                $this->resource->availableSections,
+            ),
         ];
     }
 }
