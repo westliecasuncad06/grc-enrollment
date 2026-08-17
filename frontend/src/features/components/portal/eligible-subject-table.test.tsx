@@ -30,6 +30,8 @@ function section(
     status_label: "Published",
     college: "ccs",
     is_own_department: true,
+    subject_code: "CS101",
+    subject_title: "Programming 1",
     ...overrides,
   }
 }
@@ -100,7 +102,13 @@ describe("EligibleSubjectTable", () => {
     const user = userEvent.setup()
     const otherCollege = subject({
       available_sections: [
-        section({ id: 2, college: "coe", is_own_department: false }),
+        section({
+          id: 2,
+          college: "coe",
+          is_own_department: false,
+          subject_code: "RIZAL",
+          subject_title: "Life and Works of Rizal",
+        }),
       ],
     })
     renderTable({ subjects: [otherCollege] })
@@ -108,19 +116,29 @@ describe("EligibleSubjectTable", () => {
     await user.click(screen.getAllByLabelText("CS101 section")[0])
 
     expect(
-      await screen.findByRole("option", { name: /Section A.*COE/ }),
+      await screen.findByRole("option", {
+        name: /Section A.*COE.*Life and Works of Rizal/,
+      }),
     ).toBeInTheDocument()
   })
 
-  it("shows a College badge for a cross-department section once selected", () => {
+  it("shows a College badge naming the section's own course once selected", () => {
     const otherCollege = subject({
       available_sections: [
-        section({ id: 2, college: "coe", is_own_department: false }),
+        section({
+          id: 2,
+          college: "coe",
+          is_own_department: false,
+          subject_code: "RIZAL",
+          subject_title: "Life and Works of Rizal",
+        }),
       ],
     })
     renderTable({ subjects: [otherCollege], selections: { 1: 2 } })
 
-    expect(screen.getAllByText("COE section").length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText("COE section — Life and Works of Rizal").length,
+    ).toBeGreaterThan(0)
   })
 
   it("removes a subject from view and clears its selection", async () => {

@@ -648,4 +648,79 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.is_eligible', false);
         $response->assertJsonPath('data.0.reasons.0.code', 'already_selected');
     }
+
+    public function test_a_subject_completed_via_a_sibling_departments_section_is_excluded_as_completed(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownSubject = $this->makeSubject('RIZAL', 3.0, 'ccs');
+        $this->placeSubject($curriculum, $ownSubject);
+        // The student sat the course in another college's identical RIZAL
+        // section last term, so the locked grade is filed against THAT
+        // subject row -- it must still count as completing their own.
+        $otherSubject = $this->makeSubject('RIZAL', 3.0, 'coe');
+        $this->makeSection($term, $otherSubject);
+        $student = $this->makeStudent($curriculum);
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $otherSubject->id, 'academic_term_id' => $term->id,
+            'final_grade' => '1.75', 'status' => GradeStatus::Locked, 'encoded_by' => $student->user_id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_eligible', false);
+        $response->assertJsonPath('data.0.reasons.0.code', 'completed');
+    }
+
+    public function test_a_prerequisite_satisfied_via_a_sibling_departments_sections_grade_satisfies_the_edge(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $intro = $this->makeSubject('RIZAL', 3.0, 'ccs');
+        $advanced = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $intro);
+        $placement = $this->placeSubject($curriculum, $advanced, 2);
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $intro->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeSection($term, $advanced);
+        $student = $this->makeStudent($curriculum);
+        // The satisfying grade is filed against another college's identical
+        // RIZAL row, not the curriculum's own prerequisite subject.
+        $siblingIntro = $this->makeSubject('RIZAL', 3.0, 'coe');
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $siblingIntro->id, 'academic_term_id' => $term->id,
+            'final_grade' => '2.00', 'status' => GradeStatus::Locked, 'encoded_by' => $student->user_id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $advancedEntry = collect($response->json('data'))->firstWhere('code', 'CS201');
+        self::assertTrue($advancedEntry['is_eligible']);
+        self::assertSame(
+            [],
+            array_values(array_filter(
+                $advancedEntry['reasons'],
+                static fn (array $reason): bool => in_array($reason['code'], ['prerequisite', 'prerequisite_advisory'], true),
+            )),
+        );
+    }
+
+    public function test_a_cross_department_section_carries_its_own_subject_code_and_title(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ownSubject = $this->makeSubject('RIZAL', 3.0, 'ccs');
+        $this->placeSubject($curriculum, $ownSubject);
+        $otherSubject = $this->makeSubject('RIZAL', 3.0, 'coe');
+        $this->makeSection($term, $otherSubject);
+        $token = $this->tokenFor($this->makeStudent($curriculum));
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.available_sections.0.subject_code', 'RIZAL');
+        $response->assertJsonPath('data.0.available_sections.0.subject_title', $otherSubject->title);
+    }
 }

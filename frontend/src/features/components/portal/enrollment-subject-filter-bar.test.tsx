@@ -30,6 +30,8 @@ function section(
     status_label: "Published",
     college: "ccs",
     is_own_department: true,
+    subject_code: "IT305",
+    subject_title: "Systems Integration",
     ...overrides,
   }
 }
@@ -134,11 +136,15 @@ describe("EnrollmentSubjectFilterBar", () => {
     const drop = subject({ subject_id: 2, code: "IT200" })
     renderBar([keep, drop])
 
-    expect(screen.getByRole("status")).toHaveTextContent("2 of 2 subjects shown.")
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "2 of 2 subjects shown.",
+    )
 
     await user.type(screen.getByLabelText("Subject search"), "IT100")
 
-    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 subjects shown.")
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "1 of 2 subjects shown.",
+    )
   })
 
   it("shows an explicit message when filters leave no subject visible", async () => {

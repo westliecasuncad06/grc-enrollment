@@ -57,6 +57,8 @@ const eligibleSubject = {
       status_label: "Published",
       college: "ccs",
       is_own_department: true,
+      subject_code: "CS101",
+      subject_title: "Programming 1",
     },
   ],
 } as const

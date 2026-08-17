@@ -4562,7 +4562,102 @@ components:
         available_sections:
           type: array
           items:
-            $ref: "#/components/schemas/SectionResource"
+            $ref: "#/components/schemas/EligibleSectionResource"
+    EligibleSectionResource:
+      type: object
+      additionalProperties: false
+      description: >
+        A SectionResource payload plus the department fields the eligible-subject
+        pool computes per section. `is_own_department` is false when the section
+        was sourced from another college's identical (same code + units) subject
+        row; `subject_code`/`subject_title` are that section's OWN subject, so a
+        student can see the real course name before choosing it.
+      required:
+        - type
+        - id
+        - academic_term_id
+        - subject_id
+        - section_code
+        - professor_id
+        - schedule_days
+        - starts_at_time
+        - ends_at_time
+        - room
+        - capacity
+        - viability_threshold
+        - enrolled_count
+        - remaining_seats
+        - status
+        - status_label
+        - college
+        - is_own_department
+        - subject_code
+        - subject_title
+      properties:
+        type:
+          type: string
+          const: section
+        id:
+          type: integer
+        academic_term_id:
+          type: integer
+        subject_id:
+          type: integer
+        section_code:
+          type: string
+        professor_id:
+          type: ["integer", "null"]
+        schedule_days:
+          type: ["string", "null"]
+          description: >
+            Shorthand such as "MWF" or "TTh" — see
+            App\Domain\Scheduling\ScheduleDayParser.
+        starts_at_time:
+          type: ["string", "null"]
+          format: time
+        ends_at_time:
+          type: ["string", "null"]
+          format: time
+        room:
+          type: ["string", "null"]
+        modality:
+          type: ["string", "null"]
+          enum: [online, hyflex_a, hyflex_b, f2f, null]
+          description: Manual delivery modality; Google Classroom is intentionally excluded.
+        capacity:
+          type: integer
+        viability_threshold:
+          type: ["integer", "null"]
+          description: >
+            Informational only — PRD §17 leaves the actual threshold value
+            unconfirmed.
+        enrolled_count:
+          type: integer
+          description: Maintained counter, not writable via this API.
+        remaining_seats:
+          type: integer
+          description: capacity minus enrolled_count, floored at zero. Display only.
+        status:
+          type: string
+          description: >
+            PROVISIONAL vocabulary pending PRD §17 approval — see
+            App\Domain\Scheduling\SectionStatus.
+          enum:
+            - planned
+            - published
+            - closed
+            - cancelled
+        status_label:
+          type: string
+        college:
+          type: ["string", "null"]
+          enum: [ccs, coe, coa, cbae, null]
+        is_own_department:
+          type: boolean
+        subject_code:
+          type: string
+        subject_title:
+          type: string
     EligibleSubjectReason:
       type: object
       additionalProperties: false

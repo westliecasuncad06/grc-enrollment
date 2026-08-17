@@ -7,10 +7,17 @@ import { sectionSchema } from "@/features/schemas/reference-data-schema"
  * department it belongs to — `is_own_department` is false when the section
  * was sourced from another college's identical (same code + units) subject
  * row, per `BuildEligibleSubjectPool`'s cross-department sourcing.
+ *
+ * `subject_code`/`subject_title` are the section's OWN subject, which differs
+ * from the placement's subject exactly when `is_own_department` is false —
+ * surfaced so a student can see the real course name before picking a
+ * cross-department section.
  */
 export const eligibleSectionSchema = sectionSchema.extend({
-  college: z.string().nullable(),
+  college: z.enum(["ccs", "coe", "coa", "cbae"]).nullable(),
   is_own_department: z.boolean(),
+  subject_code: z.string(),
+  subject_title: z.string(),
 })
 
 export const eligibleSubjectReasonSchema = z

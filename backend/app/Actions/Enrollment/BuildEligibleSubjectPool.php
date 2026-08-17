@@ -88,21 +88,9 @@ final readonly class BuildEligibleSubjectPool
         $reasons = [];
         $excluded = false;
 
-        // Every `subjects` row sharing this subject's code and units is the
-        // same course offered under a different college -- general-education
-        // subjects (RIZAL, NSTP, PATHFIT, ...) are duplicated one row per
-        // college, while a major subject has no such sibling. Sourcing
-        // sections from the whole sibling set is what lets a student fill a
-        // shared subject from another department's open section.
-        $siblingSubjectIds = Subject::query()
-            ->where('code', $placement->subject->code)
-            ->where('units', $placement->subject->units)
-            ->pluck('id')
-            ->map(static fn (mixed $id): int => (int) $id)
-            ->all();
-        $siblingSubjectIds = array_values($siblingSubjectIds);
+        $siblingSubjectIds = $this->siblingSubjectIds($placement->subject);
 
-        $ownGrade = $this->latestLockedGrade($student->id, $placement->subject_id);
+        $ownGrade = $this->latestLockedGrade($student->id, $siblingSubjectIds);
         if (isset($creditedSubjectIds[$placement->subject_id])) {
             $reasons[] = ['code' => 'completed', 'message' => 'This subject was credited from the student\'s prior curriculum.'];
             $excluded = true;
@@ -120,7 +108,10 @@ final readonly class BuildEligibleSubjectPool
             if (isset($creditedSubjectIds[$edge->prerequisite_subject_id])) {
                 continue;
             }
-            $prerequisiteGrade = $this->latestLockedGrade($student->id, $edge->prerequisite_subject_id);
+            $prerequisiteGrade = $this->latestLockedGrade(
+                $student->id,
+                $this->siblingSubjectIds($edge->prerequisiteSubject),
+            );
             $verdict = $this->verdictFor($prerequisiteGrade, $edge->minimum_grade);
 
             if ($verdict->status->value === 'not_satisfied') {
@@ -218,11 +209,41 @@ final readonly class BuildEligibleSubjectPool
         );
     }
 
-    private function latestLockedGrade(int $studentId, int $subjectId): ?AcademicGrade
+    /**
+     * Every `subjects` row sharing this subject's code and units is the same
+     * course offered under a different college -- general-education subjects
+     * (RIZAL, NSTP, PATHFIT, ...) are duplicated one row per college, while a
+     * major subject has no such sibling. The whole sibling set is what a
+     * student may be offered sections from, what counts as already selected,
+     * and what a locked grade may have been filed against — so completion and
+     * every prerequisite edge are evaluated over the set, not one row.
+     *
+     * `array_values()` is not decorative: `Collection::all()` is typed
+     * `array<int, int>`, which static analysis cannot narrow to a `list<int>`
+     * on its own.
+     *
+     * @return list<int>
+     */
+    private function siblingSubjectIds(Subject $subject): array
+    {
+        return array_values(
+            Subject::query()
+                ->where('code', $subject->code)
+                ->where('units', $subject->units)
+                ->pluck('id')
+                ->map(static fn (mixed $id): int => (int) $id)
+                ->all(),
+        );
+    }
+
+    /**
+     * @param  list<int>  $subjectIds
+     */
+    private function latestLockedGrade(int $studentId, array $subjectIds): ?AcademicGrade
     {
         return AcademicGrade::query()
             ->where('student_id', $studentId)
-            ->where('subject_id', $subjectId)
+            ->whereIn('subject_id', $subjectIds)
             ->where('status', GradeStatus::Locked)
             ->orderByDesc('academic_term_id')
             ->orderByDesc('id')

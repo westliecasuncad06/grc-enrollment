@@ -15,6 +15,13 @@ final class EligibleSubjectResource extends JsonResource
     /**
      * Exact key set. No attribute is passed through implicitly.
      *
+     * Each `available_sections` entry is a `SectionResource` payload plus the
+     * computed keys `college`, `is_own_department`, `subject_code` and
+     * `subject_title` — the section's OWN subject, which differs from the
+     * placement's subject whenever the section was sourced from a sibling
+     * college's identical (same code + units) row. The `mixed` below predates
+     * these keys and is left imprecise deliberately.
+     *
      * @return array{
      *     type: string,
      *     subject_id: int,
@@ -51,6 +58,8 @@ final class EligibleSubjectResource extends JsonResource
                     ...(new SectionResource($section))->resolve($request),
                     'college' => $section->subject->college?->value,
                     'is_own_department' => $section->subject_id === $this->resource->subject->id,
+                    'subject_code' => $section->subject->code,
+                    'subject_title' => $section->subject->title,
                 ],
                 $this->resource->availableSections,
             ),

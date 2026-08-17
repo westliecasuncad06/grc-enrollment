@@ -19,16 +19,8 @@ import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
 
 type EligibleSection = EligibleSubject["available_sections"][number]
 
-const COLLEGE_LABELS: Record<string, string> = {
-  ccs: "CCS",
-  coe: "COE",
-  coa: "COA",
-  cbae: "CBAE",
-}
-
 function collegeLabel(college: string | null): string {
-  if (college === null) return "Other department"
-  return COLLEGE_LABELS[college] ?? college.toUpperCase()
+  return college === null ? "Other department" : college.toUpperCase()
 }
 
 function scheduleLabel(section: EligibleSection | undefined): string {
@@ -102,20 +94,20 @@ function columns(
                   <SelectItem key={option.id} value={String(option.id)}>
                     Section {option.section_code}
                     {option.schedule_days
-                      ? ` · ${option.schedule_days} ${option.starts_at_time}–${option.ends_at_time}`
+                      ? ` · ${scheduleLabel(option)}`
                       : ""}{" "}
                     · {option.remaining_seats} seat
                     {option.remaining_seats === 1 ? "" : "s"} open
                     {option.is_own_department
                       ? ""
-                      : ` · ${collegeLabel(option.college)}`}
+                      : ` · ${collegeLabel(option.college)} · ${option.subject_title}`}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {selectedSection && !selectedSection.is_own_department && (
               <Badge variant="outline" className="w-fit">
-                {collegeLabel(selectedSection.college)} section
+                {`${collegeLabel(selectedSection.college)} section — ${selectedSection.subject_title}`}
               </Badge>
             )}
           </div>

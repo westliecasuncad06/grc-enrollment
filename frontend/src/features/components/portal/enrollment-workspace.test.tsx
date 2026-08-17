@@ -60,6 +60,8 @@ const eligibleSubject = {
       status_label: "Published",
       college: "ccs",
       is_own_department: true,
+      subject_code: "CS101",
+      subject_title: "Programming 1",
     },
   ],
 }
@@ -191,6 +193,8 @@ const filterableSubjects = [
         status_label: "Published",
         college: "ccs",
         is_own_department: true,
+        subject_code: "IT 305",
+        subject_title: "Systems Integration",
       },
     ],
   },
@@ -229,6 +233,8 @@ const filterableSubjects = [
         status_label: "Published",
         college: "ccs",
         is_own_department: true,
+        subject_code: "IT 205",
+        subject_title: "Web Development",
       },
     ],
   },
@@ -1271,7 +1277,7 @@ describe("EnrollmentWorkspace", () => {
     await user.selectOptions(screen.getByLabelText("Day"), "2")
 
     expect(fetchMock.mock.calls).toHaveLength(callsBefore)
-    expect(screen.queryByText("IT 305")).not.toBeInTheDocument()
+    expect(screen.queryAllByText("IT 305")).toHaveLength(0)
     expect(screen.getAllByText(/IT 205/).length).toBeGreaterThan(0)
   })
 
@@ -1311,6 +1317,8 @@ describe("EnrollmentWorkspace", () => {
       await screen.findByRole("option", { name: /Section A.*COE/ }),
     )
 
-    expect(screen.getAllByText("COE section").length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText("COE section — Programming 1").length,
+    ).toBeGreaterThan(0)
   })
 })
