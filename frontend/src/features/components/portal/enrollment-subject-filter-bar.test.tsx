@@ -28,6 +28,8 @@ function section(
     is_block_exclusive: null,
     status: "published",
     status_label: "Published",
+    college: "ccs",
+    is_own_department: true,
     ...overrides,
   }
 }

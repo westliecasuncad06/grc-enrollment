@@ -2,6 +2,17 @@ import { z } from "zod"
 
 import { sectionSchema } from "@/features/schemas/reference-data-schema"
 
+/**
+ * A section available to an eligible subject, extended with which
+ * department it belongs to — `is_own_department` is false when the section
+ * was sourced from another college's identical (same code + units) subject
+ * row, per `BuildEligibleSubjectPool`'s cross-department sourcing.
+ */
+export const eligibleSectionSchema = sectionSchema.extend({
+  college: z.string().nullable(),
+  is_own_department: z.boolean(),
+})
+
 export const eligibleSubjectReasonSchema = z
   .object({
     code: z.enum([
@@ -32,7 +43,7 @@ export const eligibleSubjectSchema = z
     reasons: z.array(eligibleSubjectReasonSchema),
     preference_score: z.number().int().nullable(),
     preference_reasons: z.array(z.string()),
-    available_sections: z.array(sectionSchema),
+    available_sections: z.array(eligibleSectionSchema),
   })
   .strict()
 
