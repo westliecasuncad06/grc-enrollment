@@ -211,7 +211,7 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $plan = $this->makePlan($term, $curriculum);
-        $this->makeBlockSection($term, $plan, 'IT101', 'CS101', ['room' => null]);
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101', ['schedule_days' => null]);
         $student = $this->makeStudent($curriculum);
         $token = $this->tokenFor($student);
 
@@ -222,6 +222,20 @@ final class EnrollmentBlocksEndpointTest extends TestCase
             'incomplete_schedule',
             array_column($response->json('data.0.reasons'), 'code'),
         );
+    }
+
+    public function test_a_section_without_an_assigned_room_remains_selectable(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        $this->makeBlockSection($term, $plan, 'IT101', 'CS101', ['room' => null]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_selectable', true);
     }
 
     public function test_a_section_without_an_assigned_professor_remains_selectable(): void

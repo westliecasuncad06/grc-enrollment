@@ -100,20 +100,20 @@ final readonly class BuildEnrollmentBlockPool
             $reasons[] = ['code' => 'window_closed', 'message' => 'Enrollment for your year level is not currently open.'];
         }
 
-        // A missing professor never withholds a section — assignment can
-        // trail behind publication, and a student choosing among sections
-        // shouldn't be blocked waiting for that to happen. Day, time, and
-        // room are the actual commitment a student makes by choosing a
-        // section, so those still have to be set.
+        // A missing professor or room never withholds a section —
+        // assignment and room booking can both trail behind publication (the
+        // Program Chair fills these in after release), and a student
+        // choosing among sections shouldn't be blocked waiting for that to
+        // happen. Day and time are the actual commitment a student makes by
+        // choosing a section, so those still have to be set.
         $incomplete = array_filter(
             $sections,
             fn (Section $section): bool => $section->schedule_days === null
                 || $section->starts_at_time === null
-                || $section->ends_at_time === null
-                || $section->room === null,
+                || $section->ends_at_time === null,
         );
         if ($incomplete !== []) {
-            $reasons[] = ['code' => 'incomplete_schedule', 'message' => 'This section is not fully scheduled yet — check back once every subject has a day, time, and room.'];
+            $reasons[] = ['code' => 'incomplete_schedule', 'message' => 'This section is not fully scheduled yet — check back once every subject has a day and time.'];
         }
 
         $placements = CurriculumSubject::query()
