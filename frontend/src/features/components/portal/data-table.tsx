@@ -61,7 +61,7 @@ export function DataTable<Row>({
 
   return (
     <>
-      <div className="hidden md:block">
+      <div className="hidden min-w-0 md:block">
         <Table>
           <TableCaption className="sr-only">{caption}</TableCaption>
           <TableHeader>

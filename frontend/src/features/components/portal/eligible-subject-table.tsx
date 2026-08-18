@@ -178,12 +178,6 @@ function columns(
         scheduleLabel(selectedSectionOf(subject, selections)),
     },
     {
-      key: "room",
-      header: "Room",
-      render: (subject) =>
-        selectedSectionOf(subject, selections)?.room ?? "Not selected",
-    },
-    {
       key: "remove",
       header: "Remove",
       render: (subject) => (
@@ -264,7 +258,7 @@ export function EligibleSubjectTable({
     : visibleSubjects
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
           type="button"

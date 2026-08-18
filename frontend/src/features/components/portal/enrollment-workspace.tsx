@@ -375,7 +375,7 @@ export function EnrollmentWorkspace() {
                       Pick a section for each subject you want to enrol in.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="grid gap-4">
+                  <CardContent className="grid min-w-0 gap-4">
                     <EligibleSubjectTable
                       subjects={selectableSubjects}
                       selections={selections}
