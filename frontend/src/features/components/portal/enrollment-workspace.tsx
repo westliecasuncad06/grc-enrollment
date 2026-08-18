@@ -10,9 +10,7 @@ import { EligibleSubjectTable } from "@/features/components/portal/eligible-subj
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
-import { EnrollmentReviewCard } from "@/features/components/portal/enrollment-review-card"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
-import { EnrollmentSubjectFilterBar } from "@/features/components/portal/enrollment-subject-filter-bar"
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StudentAccountBalancePanel } from "@/features/components/portal/student-account-balance-panel"
 import {
@@ -374,22 +372,22 @@ export function EnrollmentWorkspace() {
                   <CardHeader>
                     <CardTitle level={2}>Eligible subjects</CardTitle>
                     <CardDescription>
-                      Filter the pool, then pick a section for each subject you
-                      want to enrol in.
+                      Pick a section for each subject you want to enrol in.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <EnrollmentSubjectFilterBar subjects={selectableSubjects}>
-                      {(subjectsToShow) => (
-                        <EligibleSubjectTable
-                          subjects={subjectsToShow}
-                          selections={selections}
-                          onChoose={chooseSection}
-                          onClear={clearSection}
-                          disabled={enrollmentWindowClosed}
-                        />
-                      )}
-                    </EnrollmentSubjectFilterBar>
+                  <CardContent className="grid gap-4">
+                    <EligibleSubjectTable
+                      subjects={selectableSubjects}
+                      selections={selections}
+                      onChoose={chooseSection}
+                      onClear={clearSection}
+                      disabled={enrollmentWindowClosed}
+                    />
+                    {selectedEntries.length > 0 && (
+                      <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">
+                        {submitFooter(totalUnits)}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -397,14 +395,6 @@ export function EnrollmentWorkspace() {
           </div>
         ))
       )}
-
-      <EnrollmentReviewCard
-        isRegularAudience={isRegularAudience}
-        selectedEntries={selectedEntries}
-        totalUnits={totalUnits}
-        hasActiveEnrollmentThisTerm={hasActiveEnrollmentThisTerm}
-        submitFooter={submitFooter}
-      />
 
       <AlertDialog
         open={confirmOpen}

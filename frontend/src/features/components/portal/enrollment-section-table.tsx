@@ -97,6 +97,7 @@ function SectionCard({
         <div className="flex flex-wrap items-center gap-3">
           <CardTitle level={2}>{block.block_code}</CardTitle>
           <Badge variant="secondary">{seatLabel(block)}</Badge>
+          <Badge variant="outline">{block.total_units} units</Badge>
         </div>
         <CardDescription>
           Year {block.year_level} block section · {block.subjects.length}{" "}

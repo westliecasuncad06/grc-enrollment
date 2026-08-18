@@ -576,9 +576,7 @@ describe("EnrollmentWorkspace", () => {
     })
 
     await selectOption(user, "CS101 section", /Section A/)
-    expect(
-      await screen.findByText("Review your enrollment"),
-    ).toBeInTheDocument()
+    expect(await screen.findByText("Total units")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     expect(screen.getByRole("alertdialog")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
@@ -1262,23 +1260,6 @@ describe("EnrollmentWorkspace", () => {
 
     await screen.findByRole("heading", { name: /eligible subjects/i })
     expect(screen.queryByText("Schedule preference")).not.toBeInTheDocument()
-  })
-
-  it("filters the irregular subject pool by day without refetching", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation(mockIrregularRoutes())
-    renderWithSession(<EnrollmentWorkspace />, {
-      session: irregularStudentSession,
-    })
-
-    await screen.findByRole("heading", { name: /eligible subjects/i })
-    const callsBefore = fetchMock.mock.calls.length
-
-    await user.selectOptions(screen.getByLabelText("Day"), "2")
-
-    expect(fetchMock.mock.calls).toHaveLength(callsBefore)
-    expect(screen.queryAllByText("IT 305")).toHaveLength(0)
-    expect(screen.getAllByText(/IT 205/).length).toBeGreaterThan(0)
   })
 
   it("lets an irregular student choose a cross-department section for a shared subject", async () => {

@@ -111,6 +111,7 @@ describe("EnrollmentSectionTable", () => {
       screen.getByRole("article", { name: "IT303 section" }),
     ).toBeInTheDocument()
     expect(within(section).getByText("40 seats")).toBeInTheDocument()
+    expect(within(section).getByText("6 units")).toBeInTheDocument()
     expect(
       within(section).getByRole("table", { name: "IT301 schedule" }),
     ).toBeInTheDocument()
