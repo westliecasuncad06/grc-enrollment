@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
 function displayTimeRange(startsAt: string | null, endsAt: string | null) {
@@ -59,12 +60,15 @@ function scheduleColumns(): DataTableColumn<
   ]
 }
 
+/** Monday's earliest class first, then Tuesday, … through Saturday — always sorted, no toggle needed since a block's own schedule never changes underneath the student. */
 function SectionSchedule({ block }: { block: EnrollmentBlock }) {
+  const subjects = [...block.subjects].sort(compareBySchedule)
+
   return (
     <DataTable
       caption={`${block.block_code} schedule`}
       rowKey={(subject) => subject.section_id}
-      rows={block.subjects}
+      rows={subjects}
       columns={scheduleColumns()}
     />
   )

@@ -160,6 +160,58 @@ describe("EnrollmentSectionTable", () => {
     expect(screen.getByRole("button", { name: "Choose IT301" })).toBeDisabled()
   })
 
+  it("orders a block's schedule Monday-to-Saturday automatically, regardless of input order", () => {
+    const outOfOrder = block({
+      block_code: "IT304",
+      subjects: [
+        {
+          section_id: 20,
+          subject_id: 20,
+          code: "FRISUBJ",
+          title: "Friday Subject",
+          units: 3,
+          schedule_days: "F",
+          starts_at_time: "13:00:00",
+          ends_at_time: "14:00:00",
+          room: "R101",
+          modality: "f2f",
+          professor_name: "Dr. Cruz",
+          capacity: 40,
+          enrolled_count: 0,
+          remaining_seats: 40,
+        },
+        {
+          section_id: 21,
+          subject_id: 21,
+          code: "MONSUBJ",
+          title: "Monday Subject",
+          units: 3,
+          schedule_days: "M",
+          starts_at_time: "07:30:00",
+          ends_at_time: "08:30:00",
+          room: "R102",
+          modality: "f2f",
+          professor_name: "Dr. Reyes",
+          capacity: 40,
+          enrolled_count: 0,
+          remaining_seats: 40,
+        },
+      ],
+    })
+    const { container } = render(
+      <EnrollmentSectionTable
+        blocks={[outOfOrder]}
+        selectedBlockCode={null}
+        onChoose={vi.fn()}
+        onChangeSection={vi.fn()}
+        renderSelectedFooter={() => <span>Selected section actions</span>}
+      />,
+    )
+
+    const text = container.textContent ?? ""
+    expect(text.indexOf("MONSUBJ")).toBeLessThan(text.indexOf("FRISUBJ"))
+  })
+
   it("has no detectable accessibility violations", async () => {
     const { container } = renderTable()
 

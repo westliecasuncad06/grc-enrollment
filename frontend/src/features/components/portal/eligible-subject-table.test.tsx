@@ -178,6 +178,125 @@ describe("EligibleSubjectTable", () => {
     }
   })
 
+  it("disables a section that would overlap another subject's picked schedule, and explains why", async () => {
+    const user = userEvent.setup()
+    const cs101 = subject({
+      subject_id: 1,
+      code: "CS101",
+      available_sections: [section({ id: 1 })], // MWF 08:00-09:00
+    })
+    const math101 = subject({
+      subject_id: 2,
+      code: "MATH101",
+      available_sections: [
+        section({
+          id: 10,
+          subject_id: 2,
+          section_code: "B",
+          schedule_days: "MWF",
+          starts_at_time: "08:30:00",
+          ends_at_time: "09:30:00",
+        }),
+        section({
+          id: 11,
+          subject_id: 2,
+          section_code: "C",
+          schedule_days: "TTh",
+          starts_at_time: "10:00:00",
+          ends_at_time: "11:00:00",
+        }),
+      ],
+    })
+    renderTable({ subjects: [cs101, math101], selections: { 1: 1 } })
+
+    await user.click(screen.getAllByLabelText("MATH101 section")[0])
+
+    const conflicting = await screen.findByRole("option", {
+      name: /Section B.*Conflicts with CS101/,
+    })
+    expect(conflicting).toHaveAttribute("aria-disabled", "true")
+    expect(
+      screen.getByRole("option", { name: /Section C/ }),
+    ).not.toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("does not disable a section on a day that doesn't overlap another pick", async () => {
+    const user = userEvent.setup()
+    const cs101 = subject({
+      subject_id: 1,
+      code: "CS101",
+      available_sections: [section({ id: 1 })], // MWF 08:00-09:00
+    })
+    const math101 = subject({
+      subject_id: 2,
+      code: "MATH101",
+      available_sections: [
+        section({
+          id: 11,
+          subject_id: 2,
+          section_code: "C",
+          schedule_days: "TTh",
+          starts_at_time: "10:00:00",
+          ends_at_time: "11:00:00",
+        }),
+      ],
+    })
+    renderTable({ subjects: [cs101, math101], selections: { 1: 1 } })
+
+    await user.click(screen.getAllByLabelText("MATH101 section")[0])
+
+    expect(
+      await screen.findByRole("option", { name: /Section C/ }),
+    ).not.toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("arranges rows by schedule, sinking not-yet-picked subjects to the bottom", async () => {
+    const user = userEvent.setup()
+    const afternoon = subject({
+      subject_id: 1,
+      code: "AFTERNOON",
+      available_sections: [
+        section({
+          id: 1,
+          subject_id: 1,
+          schedule_days: "MWF",
+          starts_at_time: "13:00:00",
+          ends_at_time: "14:00:00",
+        }),
+      ],
+    })
+    const morning = subject({
+      subject_id: 2,
+      code: "MORNING",
+      available_sections: [
+        section({
+          id: 2,
+          subject_id: 2,
+          schedule_days: "M",
+          starts_at_time: "07:30:00",
+          ends_at_time: "08:30:00",
+        }),
+      ],
+    })
+    const unpicked = subject({
+      subject_id: 3,
+      code: "UNPICKED",
+      available_sections: [section({ id: 3, subject_id: 3 })],
+    })
+    const { container } = renderTable({
+      subjects: [afternoon, morning, unpicked],
+      selections: { 1: 1, 2: 2 },
+    })
+
+    await user.click(
+      screen.getByRole("button", { name: "Arrange by schedule" }),
+    )
+
+    const text = container.textContent ?? ""
+    expect(text.indexOf("MORNING")).toBeLessThan(text.indexOf("AFTERNOON"))
+    expect(text.indexOf("AFTERNOON")).toBeLessThan(text.indexOf("UNPICKED"))
+  })
+
   it("has no detectable accessibility violations", async () => {
     const { container } = renderTable()
 
