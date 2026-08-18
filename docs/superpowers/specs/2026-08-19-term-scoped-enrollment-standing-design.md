@@ -70,9 +70,17 @@ For a given `(student, term)`:
    (reusing the existing `{code, message}` shape).
 
 If no standard-set block exists yet for the student's year level this
-term (Program Chair hasn't published one), standing cannot be
-confirmed Regular — default to Irregular, the same "safer of the two"
-default the codebase already uses when an audience can't be resolved.
+term (Program Chair hasn't published one), standing **cannot be
+determined at all this term** — this is not the same as "needs
+adding/removing." Forcing Irregular here would eagerly flip every
+student in that year level to Irregular the instant they open their
+enrollment page, purely because setup isn't finished yet, which is a
+worse surprise than the staleness bug this design fixes. Instead this
+case is `undetermined`: the caller leaves `enrollment_category`
+exactly as it already is (same "skip rather than guess" precedent
+`UpdateAcademicGrade::transition()` already uses when no term is
+`semester_ongoing`) — no write, no audit, no notification. Once a
+block is published, the next read resolves it normally.
 
 ## Components
 
@@ -81,10 +89,15 @@ default the codebase already uses when an audience can't be resolved.
   injectable Action (constructor-injects `PrerequisiteEvaluator`, same
   pattern as `BuildEnrollmentBlockPool`), because the rule now needs
   live section/section-plan data and real prerequisite evaluation —
-  it can no longer be a pure, DB-free static function. One method,
-  `classify(StudentProfile $student, AcademicTerm $term): ClassificationVerdict`.
-  `ClassificationVerdict`/`EnrollmentCategory` (existing value objects)
-  are unchanged. Prerequisite edges come from the student's own
+  it can no longer be a pure, DB-free static function.
+  `classify(StudentProfile $student, AcademicTerm $term): ?ClassificationVerdict`
+  and the batch form `classifyMany(Collection $students, AcademicTerm $term): array<int, ?ClassificationVerdict>`
+  (every student in one `classifyMany()` call must share the same
+  `curriculum_id`/`year_level` — the caller groups by that pair) —
+  **`null` means undetermined** (no block published yet), distinct from
+  a real Regular/Irregular verdict. `ClassificationVerdict`/
+  `EnrollmentCategory` (existing value objects) are otherwise
+  unchanged. Prerequisite edges come from the student's own
   curriculum's `CurriculumSubject->prerequisites()`, evaluated the same
   way `BuildEnrollmentBlockPool`/`BuildEligibleSubjectPool` already do;
   "already passed" folds in `CurriculumMigrationCredit` the same way
@@ -93,22 +106,43 @@ default the codebase already uses when an audience can't be resolved.
   `App\Domain\Enrollment\CurriculumPlacementSlot` (no longer used by
   anything else — verified by grep).
 - **Changed: `App\Actions\Academic\ReclassifyStudentEnrollmentCategory`**
-  — `computeVerdicts()` now delegates per student to
-  `ClassifyEnrollmentStanding::classify()` instead of the old
-  grades+placements+ordinal pipeline. `execute()`/`executeMany()`/
-  `preview()` keep their existing signatures and existing
-  audit/notify/guard-against-no-op-write behavior unchanged.
+  — `computeVerdicts()` groups its input students by
+  `(curriculum_id, year_level)` and delegates each group to
+  `ClassifyEnrollmentStanding::classifyMany()` instead of the old
+  grades+placements+ordinal pipeline. A `null` (undetermined) result
+  is never written/audited/notified — that student's
+  `enrollment_category` stays exactly as it was, and the value
+  `execute()`/`preview()` return for them falls back to a
+  `ClassificationVerdict` mirroring their current stored category (so
+  the public return type stays non-null and every existing caller
+  keeps working). `execute()`/`executeMany()`/`preview()` keep their
+  existing signatures and existing audit/notify/guard-against-no-op-write
+  behavior unchanged.
 - **Changed: `App\Actions\Enrollment\BuildEnrollmentAccessContext::execute()`**
-  — before reading `$student->enrollment_category`, self-heals it:
-  when `$term->status === AcademicTermStatus::SemesterOngoing`, calls
-  the reclassifier for `($student, $term)` and persists if the
-  category actually changed (existing no-op-if-unchanged guard means
-  this is a cheap, silent read in the common case). Only the live term
-  ever triggers a write — browsing an archived/closed term never
-  mutates standing. This is the authoritative correctness path: both
-  `BuildEligibleSubjectPool` and `BuildEnrollmentBlockPool` already
-  call `execute($term, $student)` first, so every enrollment-facing
-  read self-heals automatically regardless of entry point.
+  — when `$term->status === AcademicTermStatus::SemesterOngoing`,
+  computes the live verdict via `ClassifyEnrollmentStanding::classify()`
+  and uses **that** (falling back to `$student->enrollment_category`
+  only when the verdict is `null`/undetermined) for
+  `EnrollmentAudience::forStudent()` — so routing is correct for this
+  request regardless of whether the stored column is stale. Browsing
+  an archived/closed term always uses the stored column as-is, never
+  the live computation.
+  Persisting the fresh value is a secondary, best-effort step (keeps
+  reports/notifications accurate without waiting for the next grade
+  lock): `BuildEnrollmentAccessContext` gets
+  `ReclassifyStudentEnrollmentCategory` injected and, only when the
+  live verdict differs from the stored value, calls `execute()` with a
+  synthetic system actor — the same "first `registrar_head` user" +
+  `AuditRequestContext('enrollment-access-self-heal', null)` pattern
+  `students:reclassify` already uses for its own non-request-bound
+  writes. If no `registrar_head` user exists to attribute the audit
+  to, the write is skipped (never thrown) — this is a best-effort
+  cache refresh, not a correctness requirement, since routing already
+  used the live value regardless. This is the authoritative
+  correctness path: both `BuildEligibleSubjectPool` and
+  `BuildEnrollmentBlockPool` already call `execute($term, $student)`
+  first, so every enrollment-facing read self-heals automatically
+  regardless of entry point.
 - **Unchanged (still correct as-is):** `EnrollmentAudience::forStudent()`,
   `UpdateAcademicGrade::transition()`'s grade-lock hook (still fires
   reclassification eagerly so a student gets notified promptly,
@@ -137,7 +171,9 @@ Student opens Eligible Subjects / Block Pool page for term T
   offered this term → Regular (the Socorro case); standard-set subject
   already passed early → Irregular ("needs removing"); standard-set
   subject blocked by an unmet prerequisite → Irregular; no block
-  published yet for the year level → Irregular (default).
+  published yet for the year level → `undetermined` (verified via
+  `ReclassifyStudentEnrollmentCategory`: no write, no audit, no
+  notification, `enrollment_category` unchanged either direction).
 - `BuildEnrollmentAccessContext` test: viewing an archived/closed term
   never mutates `enrollment_category` even when the computed verdict
   would differ.
