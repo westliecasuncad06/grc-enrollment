@@ -112,6 +112,18 @@ npm run dev
 
 `next dev` serves on port 3000 by default, matching `CORS_ALLOWED_ORIGINS` above — do not pass `--port=5173`, a leftover from the pre-Next.js Vite SPA (ADR 0013).
 
+**LAN access (e.g. testing from a phone on the same Wi-Fi):** `127.0.0.1` only
+accepts connections from the same machine, so a phone hitting it would be
+talking to itself. Instead:
+
+1. Find this PC's Wi-Fi IPv4 with `ipconfig` (e.g. `192.168.100.18`).
+2. Start both servers bound to all interfaces: `php artisan serve --host=0.0.0.0 --port=8000` and `npm run dev -- --hostname 0.0.0.0`.
+3. Set `frontend/.env.local`'s `NEXT_PUBLIC_API_BASE_URL` to `http://<that-IP>:8000` — it defaults to `127.0.0.1`, which is baked into the browser bundle and would make the phone try to reach itself.
+4. Add `http://<that-IP>:3000` to `backend/.env`'s `CORS_ALLOWED_ORIGINS`.
+5. Open `http://<that-IP>:3000` on the phone. `scripts/start-local.ps1` already does steps 2 and prints this URL.
+
+The IP changes if you reconnect to a different network, so repeat steps 1–4 when that happens.
+
 Private prediction service:
 
 ```powershell

@@ -1,6 +1,84 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-08-16 — Old-to-new curriculum subject crediting
+
+Implementation authorized for the approved old-to-new curriculum-crediting
+slice. It will add an explicit single source curriculum per new curriculum,
+one-to-one mappings only for newly created target subjects, Program-Chair-only
+student migration with individually selected passing-subject credits, and a
+read-only Student prospectus transition view. Existing grades remain
+unchanged; no commit or push is authorized. Pre-existing loading-logo work and
+other untracked local artifacts remain outside this slice.
+
+Implementation milestone: source-curriculum selection, one-to-one subject
+equivalencies, Program-Chair-only preview/confirmation APIs, separately
+audited migration credits, prospectus transition visibility, and migration
+credit treatment for eligibility, prerequisites, and standing are now wired.
+The Curriculum View tab now lets a Program Chair preview a student by number,
+choose individual passing credits, and confirm the migration. Focused Laravel
+curriculum/authoring/migration/eligibility tests passed (51 tests, 178
+assertions) and focused standing tests passed (6 tests, 21 assertions);
+frontend integration checks remain in progress.
+
+Final verification: focused Laravel coverage passed with 67 tests and 226
+assertions (creation/source validation, subject authoring, migration preview
+and confirmation, eligibility/prerequisites, prospectus visibility, and
+standing classification). Targeted PHPStan reported no errors; targeted Pint,
+frontend Vitest (24 tests), TypeScript, Prettier, and `git diff --check` also
+passed. A full-repository PHPStan invocation exceeded the local 120-second
+command limit before reporting a result, so only the targeted PHPStan result
+is recorded as passed. No local database migration, commit, or push was run.
+
+Saving point requested: the curriculum-crediting slice was staged separately
+from the pre-existing loading-logo work, documentation drafts, local
+dependencies, and screenshot. Fresh pre-commit checks passed: 67 Laravel
+tests/226 assertions, 24 frontend Vitest tests, TypeScript, and staged-diff
+whitespace validation. The requested commit and push follow.
+
 ## 2026-08-15 — Predictive analytics, scheduling, curriculum, and analytics repair
+
+Page loading-logo request: the approved direction is a reusable, accessible
+GRC monogram loader for both App Router transitions and default query-pending
+states. It will retain caller-provided skeleton fallbacks, respect
+`prefers-reduced-motion`, and require no new runtime dependency. The design
+spec is being prepared before test-first implementation; no commit or push is
+authorized for this new change.
+
+Page loading-logo implementation milestone: the planned test first failed
+because `GrcLoadingLogo` did not exist, then passed after the reusable
+component was added. Next.js now has a root `loading.tsx` route fallback, and
+`AsyncBoundary` uses the compact logo only when a caller has no custom
+fallback. Focused Vitest verification passed: loader component (1) and
+AsyncBoundary (7), including the single-status and custom-fallback regressions.
+The first combined Prettier/typecheck command exceeded the local command time
+limit without a failure result; rerunning the checks separately confirmed the
+formatting issue in `AsyncBoundary`, applied the formatter's change, and
+completed TypeScript successfully.
+Final focused verification passed after formatting: loader component (1) and
+AsyncBoundary (7) Vitest suites, targeted Prettier, TypeScript, and
+`git diff --check`. One root-level Prettier invocation failed only because the
+binary belongs under `frontend/node_modules`; it was rerun successfully from
+the frontend directory. No commit or push was made.
+
+Local XAMPP MariaDB repair: the generic XAMPP shutdown was traced to a corrupt
+`C:\xampp\mysql\data\mysql\db.MAI` privilege-table index, not port 3306.
+The full `mysql` system-table directory was backed up to
+`C:\xampp\mysql\system-tables-backup-20260816-0937`, then only the damaged
+index was restored from XAMPP's bundled backup and rebuilt with `aria_chk`.
+The rebuilt table passed integrity checking. MariaDB is listening on port 3306
+and the Laravel application's read-only `SELECT 1` database check succeeded.
+
+Login follow-up after the MariaDB recovery: the API's `500` was traced to the
+same `mysql.db` privilege table, whose data file then returned Aria error 176
+(wrong page checksum) when Laravel attempted to connect as
+`grc_app@127.0.0.1`. With MariaDB stopped, the original `db.frm`, `db.MAI`,
+and `db.MAD` files were preserved in
+`C:\xampp\mysql\mysql-db-corrupt-backup-20260816-0947`. The validated
+August 12 `db.MAD` backup was restored and its index rebuilt with `aria_chk`;
+the repaired table passed its integrity check. MariaDB now accepts port 3306
+connections, `grc_app@127.0.0.1` again has CRUD access to
+`grc_enrollment`, Laravel's database and seeded-password checks pass, and
+the real `POST /api/v1/auth/login` response is HTTP 200 with a bearer token.
 
 Registrar Head analytics request: a new role-authorized analytics module will
 show institution-wide enrollment aggregates by default and an optional

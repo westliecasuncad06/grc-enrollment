@@ -183,7 +183,7 @@ function Start-LocalStack {
         $npmCommand = Get-Command 'npm.cmd' -ErrorAction Stop
 
         $api = Start-Process -FilePath $phpCommand.Source `
-            -ArgumentList 'artisan', 'serve', '--host=127.0.0.1', '--port=8000' `
+            -ArgumentList 'artisan', 'serve', '--host=0.0.0.0', '--port=8000' `
             -WorkingDirectory $paths.BackendPath `
             -WindowStyle Hidden `
             -PassThru `
@@ -191,7 +191,7 @@ function Start-LocalStack {
             -RedirectStandardError $paths.ApiErrorLog
 
         $frontend = Start-Process -FilePath $npmCommand.Source `
-            -ArgumentList 'run', 'dev', '--', '--hostname', '127.0.0.1' `
+            -ArgumentList 'run', 'dev', '--', '--hostname', '0.0.0.0' `
             -WorkingDirectory $paths.FrontendPath `
             -WindowStyle Hidden `
             -PassThru `
@@ -200,6 +200,7 @@ function Start-LocalStack {
 
         Write-Host "API started (PID $($api.Id)): http://127.0.0.1:8000/api/v1/health"
         Write-Host "Frontend started (PID $($frontend.Id)): http://127.0.0.1:3000"
+        Write-Host "LAN access (same Wi-Fi, e.g. phone): http://192.168.100.18:3000 -- run ipconfig if this IP changes"
     }
 
     $predictionMessage = if ($prediction.State -eq 'reused') {
