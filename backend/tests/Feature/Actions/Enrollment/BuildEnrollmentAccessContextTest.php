@@ -148,4 +148,53 @@ final class BuildEnrollmentAccessContextTest extends TestCase
         self::assertNotSame(EnrollmentAudience::Irregular, $context->viewerAudience);
         self::assertSame('regular', $student->fresh()->enrollment_category);
     }
+
+    /**
+     * `ReclassifyStudentEnrollmentCategory` and its own collaborators
+     * (`AuditRecorder`, `ClassifyEnrollmentStanding`) are all `final
+     * readonly` classes, so Mockery cannot generate a subclass double for
+     * any of them (verified directly: `Mockery::mock()` on a final class
+     * throws its own "is marked final" exception before this test even
+     * runs). Rather than mock, this forces the REAL `execute()` call to
+     * fail for a genuine reason: it corrupts the in-memory (never
+     * persisted) `user_id` on the exact `StudentProfile` instance passed
+     * through to `persistBestEffort()`, so `Notification::create()` — the
+     * last write inside `executeMany()`'s DB transaction — hits a real
+     * foreign key violation. That's a faithful stand-in for "any other
+     * failure" (a DB error, etc.) the class's docblock promises to
+     * swallow, without touching any other row or requiring a mock.
+     */
+    public function test_a_persist_failure_during_self_heal_is_swallowed_and_routing_still_uses_the_live_verdict(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $this->makeBlock($term, $curriculum);
+        // Stored as irregular from a stale prior computation; she fits the
+        // block exactly now, so the live verdict is Regular and a persist
+        // will be attempted — and fail, per the corrupted user_id below.
+        $student = $this->makeStudent($curriculum, 'persist-failure@grc.test', 'irregular');
+        User::create([
+            'name' => 'Registrar', 'email' => 'registrar.persistfailure@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+        ]);
+
+        // Never saved — only this in-memory attribute is wrong, so the
+        // student_profiles row on disk is untouched. persistBestEffort()
+        // is handed this exact object, so the Notification insert deep
+        // inside its write transaction fails on a real FK constraint.
+        $student->user_id = 999999999;
+
+        $context = app(BuildEnrollmentAccessContext::class)->execute($term, $student);
+
+        // Routing used the live-computed verdict and is correct regardless
+        // of the swallowed persist failure.
+        self::assertNotSame(EnrollmentAudience::Irregular, $context->viewerAudience);
+
+        // The forced failure happened inside executeMany()'s own
+        // DB::transaction(), so nothing it attempted to write survives —
+        // the stored category is untouched.
+        self::assertSame('irregular', StudentProfile::query()->find($student->id)->enrollment_category);
+    }
 }

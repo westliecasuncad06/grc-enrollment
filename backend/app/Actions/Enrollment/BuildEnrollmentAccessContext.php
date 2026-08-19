@@ -113,11 +113,15 @@ final class BuildEnrollmentAccessContext
             return;
         }
 
-        $this->reclassifier->execute(
-            $student,
-            $term,
-            $systemActor,
-            new AuditRequestContext('enrollment-access-self-heal', null),
-        );
+        try {
+            $this->reclassifier->execute(
+                $student,
+                $term,
+                $systemActor,
+                new AuditRequestContext('enrollment-access-self-heal', null),
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
