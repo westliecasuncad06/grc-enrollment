@@ -60,7 +60,11 @@ final readonly class ClassifyEnrollmentStanding
         $first = $students->first();
         $curriculumId = $first->curriculum_id;
         $yearLevel = $first->year_level;
-        $studentIds = $students->map(fn (StudentProfile $s): int => $s->id)->all();
+        // array_values(), not Collection::values(): PHPStan/Larastan's
+        // Collection stubs type ->values() as merely int-keyed, not
+        // provably sequential from 0 -- array_values() is a plain PHP
+        // function PHPStan always recognizes as producing a list<T>.
+        $studentIds = array_values($students->map(fn (StudentProfile $s): int => $s->id)->all());
 
         $standardSubjectIds = $this->standardBlockSubjectIds($term, $curriculumId, $yearLevel);
 
@@ -74,7 +78,10 @@ final readonly class ClassifyEnrollmentStanding
             ->get()
             ->keyBy('subject_id');
 
-        $backlogSubjectIds = $placements->keys()->diff($standardSubjectIds)->values()->all();
+        $backlogSubjectIds = array_values(array_map(
+            static fn (int|string $id): int => (int) $id,
+            $placements->keys()->diff($standardSubjectIds)->all(),
+        ));
         $openBacklogSubjectIds = $this->openNonBlockSectionSubjectIds($term, $backlogSubjectIds);
 
         $marksByStudent = $this->latestLockedMarksByStudent($studentIds);
@@ -138,16 +145,19 @@ final readonly class ClassifyEnrollmentStanding
      */
     private function standardBlockSubjectIds(AcademicTerm $term, int $curriculumId, int $yearLevel): array
     {
-        return Section::query()
-            ->where('academic_term_id', $term->id)
-            ->where('status', SectionStatus::Published)
-            ->where('is_block_exclusive', true)
-            ->whereHas('sectionPlan', fn ($query) => $query
-                ->where('year_level', $yearLevel)
-                ->where('curriculum_id', $curriculumId))
-            ->distinct()
-            ->pluck('subject_id')
-            ->all();
+        return array_values(array_map(
+            static fn (mixed $id): int => (int) $id,
+            Section::query()
+                ->where('academic_term_id', $term->id)
+                ->where('status', SectionStatus::Published)
+                ->where('is_block_exclusive', true)
+                ->whereHas('sectionPlan', fn ($query) => $query
+                    ->where('year_level', $yearLevel)
+                    ->where('curriculum_id', $curriculumId))
+                ->distinct()
+                ->pluck('subject_id')
+                ->all(),
+        ));
     }
 
     /**
@@ -160,17 +170,19 @@ final readonly class ClassifyEnrollmentStanding
             return [];
         }
 
-        return Section::query()
-            ->where('academic_term_id', $term->id)
-            ->where('status', SectionStatus::Published)
-            ->where(fn ($query) => $query->where('is_block_exclusive', false)->orWhereNull('is_block_exclusive'))
-            ->whereIn('subject_id', $candidateSubjectIds)
-            ->get(['id', 'subject_id', 'capacity', 'enrolled_count'])
-            ->filter(fn (Section $section): bool => $section->remainingSeats() > 0)
-            ->pluck('subject_id')
-            ->unique()
-            ->values()
-            ->all();
+        return array_values(array_map(
+            static fn (mixed $id): int => (int) $id,
+            Section::query()
+                ->where('academic_term_id', $term->id)
+                ->where('status', SectionStatus::Published)
+                ->where(fn ($query) => $query->where('is_block_exclusive', false)->orWhereNull('is_block_exclusive'))
+                ->whereIn('subject_id', $candidateSubjectIds)
+                ->get(['id', 'subject_id', 'capacity', 'enrolled_count'])
+                ->filter(fn (Section $section): bool => $section->remainingSeats() > 0)
+                ->pluck('subject_id')
+                ->unique()
+                ->all(),
+        ));
     }
 
     /**
@@ -216,6 +228,13 @@ final readonly class ClassifyEnrollmentStanding
 
         $byStudent = [];
         foreach ($credits as $credit) {
+            // whereHas('migration', ...) above already guarantees a match
+            // exists at the DB level, but the eager-loaded relation is
+            // still nullable to PHPStan's static analysis.
+            if ($credit->migration === null) {
+                continue;
+            }
+
             $studentId = $credit->migration->student_id;
             $byStudent[$studentId] ??= [];
             $byStudent[$studentId][$credit->target_subject_id] = true;
