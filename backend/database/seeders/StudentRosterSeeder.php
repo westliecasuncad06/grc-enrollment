@@ -110,8 +110,8 @@ final class StudentRosterSeeder extends Seeder
     private const IRREGULAR_MIN_YEAR_LEVEL = 2;
 
     /**
-     * The four `GradeMark` cases `EnrollmentCategoryClassifier::classify()`
-     * treats as blocking Regular standing (see `GradeMark::blocksRegularStanding()`)
+     * The four `GradeMark` cases `ClassifyEnrollmentStanding` checks
+     * as blocking Regular standing (see `GradeMark::blocksRegularStanding()`)
      * — `rewriteGradesToFailing()` cycles a candidate's rewritten rows
      * through all four so every one of the classifier's match arms gets
      * real seeded evidence, not just `Failed`.
@@ -725,10 +725,9 @@ final class StudentRosterSeeder extends Seeder
      * **Clean baseline only — no failing marks here.** This originally had
      * a fourth ~10% "marginal" bucket (Failed/Incomplete/Dropped), but that
      * gave *every* graded subject-instance for *every* student an
-     * independent 10% chance of a blocking mark. Composed with
-     * `EnrollmentCategoryClassifier::classify()`'s zero-threshold "any
-     * single blocking mark in any completed term makes the student
-     * irregular" rule, that made ~96% of the real 3,210-student roster's
+     * independent 10% chance of a blocking mark. Under the old cumulative-lifetime
+     * classifier, any single blocking mark in any completed term made a student
+     * permanently irregular, which would make ~96% of the real 3,210-student roster's
      * eligible (year 2-4) population organically "irregular" — an upper-year
      * student accumulates 40-70+ graded subject-instances, so the odds of
      * *zero* failures across that many independent 10%-chance draws
@@ -739,7 +738,7 @@ final class StudentRosterSeeder extends Seeder
      * The removed 10% is redistributed across the three passing buckets
      * (15 / 45 / 40, instead of the original 15 / 45 / 30 / 10) so the
      * distribution still covers 100% of cases while remaining entirely
-     * passing. `EnrollmentCategoryClassifier` now only ever sees a blocking
+     * passing. `ClassifyEnrollmentStanding` now only ever sees a blocking
      * mark where Task 4's `rewriteGradesToFailing()` deliberately put one —
      * the sole place a failing mark is written anywhere in this seeder.
      */
@@ -843,7 +842,7 @@ final class StudentRosterSeeder extends Seeder
      * more than one available row gets a genuine multi-term backlog, not
      * just one bad grade in isolation — and cycling the mark type through
      * all of `FAILING_MARKS` so every branch of
-     * `EnrollmentCategoryClassifier::classify()`'s match arm gets exercised
+     * `ClassifyEnrollmentStanding`'s classification logic gets exercised
      * across the full candidate population.
      *
      * Both "how many rows" and "which mark" are `crc32()`-hash-derived from
