@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -108,7 +108,7 @@ describe("EnrollmentScheduleCard", () => {
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
   afterEach(() => vi.unstubAllGlobals())
 
-  it("shows which colleges have published and disables Open enrollment until one has", async () => {
+  it("shows which colleges have published and explains enrollment will not open yet", async () => {
     fetchMock.mockImplementation((input) => {
       if (url(input).includes("/schedule-proposals"))
         return Promise.resolve(
@@ -122,10 +122,15 @@ describe("EnrollmentScheduleCard", () => {
     })
 
     expect(await screen.findByText(/CCS not published/)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Open enrollment" })).toBeDisabled()
+    expect(
+      screen.getByText(/Enrollment will open automatically when you save/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Open enrollment" }),
+    ).not.toBeInTheDocument()
   })
 
-  it("enables Open enrollment once at least one college has published and confirms before opening", async () => {
+  it("opens enrollment automatically when saving the schedule once a college has published", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input, init) => {
       if (init?.method === "PATCH" && url(input).includes("/academic-terms/5") && !url(input).includes("enrollment-schedule"))
@@ -150,13 +155,9 @@ describe("EnrollmentScheduleCard", () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Open enrollment" })).toBeEnabled(),
+      expect(screen.getByText(/CCS published/)).toBeInTheDocument(),
     )
-    await user.click(screen.getByRole("button", { name: "Open enrollment" }))
-
-    const dialog = await screen.findByRole("alertdialog")
-    expect(within(dialog).getByText(/COE, COA, CBAE/)).toBeInTheDocument()
-    await user.click(within(dialog).getByRole("button", { name: "Open enrollment" }))
+    await user.click(await screen.findByRole("button", { name: "Save enrollment schedule" }))
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -166,6 +167,9 @@ describe("EnrollmentScheduleCard", () => {
           body: JSON.stringify({ action: "open_enrollment" }),
         }),
       ),
+    )
+    expect(toast.success).toHaveBeenCalledWith(
+      "Enrollment schedule saved. Enrollment is now open.",
     )
   })
 

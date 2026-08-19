@@ -123,6 +123,18 @@ describe("EnrollmentSectionTable", () => {
     ).toBeInTheDocument()
   })
 
+  it("shows each subject's schedule in 12-hour clock time, not military time", () => {
+    renderTable()
+
+    const section = screen.getByRole("article", { name: "IT301 section" })
+    expect(
+      within(section).getAllByText("8:00 AM–9:00 AM").length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(section).getAllByText("10:00 AM–11:30 AM").length,
+    ).toBeGreaterThan(0)
+  })
+
   it("calls onChoose with the inline section code", async () => {
     const user = userEvent.setup()
     const onChoose = vi.fn()

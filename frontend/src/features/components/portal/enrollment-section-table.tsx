@@ -16,12 +16,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { formatTimeRange } from "@/features/lib/format-time"
 import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
 function displayTimeRange(startsAt: string | null, endsAt: string | null) {
   return startsAt && endsAt
-    ? `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
+    ? formatTimeRange(startsAt, endsAt)
     : "To be confirmed"
 }
 

@@ -4,17 +4,6 @@ import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/features/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -164,22 +153,9 @@ export function EnrollmentScheduleCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when fresh server data arrives, not on every render
   }, [scheduleQuery.data])
 
-  async function openEnrollment() {
-    setOpenError("")
-    try {
-      await openMutation.mutateAsync({
-        academicTermId: currentTerm.id,
-        action: "open_enrollment",
-      })
-    } catch {
-      setOpenError(
-        "Enrollment could not be opened. Confirm at least one college has published its schedule, then try again.",
-      )
-    }
-  }
-
   async function saveSchedule(values: AudienceFormValues) {
     setSaveError("")
+    setOpenError("")
     setSaveReceipt(false)
     try {
       await saveMutation.mutateAsync({
@@ -192,7 +168,29 @@ export function EnrollmentScheduleCard({
         })),
       })
       setSaveReceipt(true)
-      toast.success("Enrollment schedule saved.")
+
+      // The schedule save always succeeds independently of the term's
+      // lifecycle status — a Registrar Head may adjust dates before any
+      // college has published. Opening is only attempted once that guard
+      // (see `TransitionAcademicTerm`'s `open_enrollment` action) can pass,
+      // so this single click both saves the dates and starts enrollment in
+      // one step instead of requiring a second manual "Open enrollment"
+      // click.
+      if (canOpenEnrollment && publishedColleges.size > 0) {
+        try {
+          await openMutation.mutateAsync({
+            academicTermId: currentTerm.id,
+            action: "open_enrollment",
+          })
+          toast.success("Enrollment schedule saved. Enrollment is now open.")
+        } catch {
+          setOpenError(
+            "The schedule was saved, but enrollment could not be opened automatically. Confirm at least one college has published its schedule, then save again.",
+          )
+        }
+      } else {
+        toast.success("Enrollment schedule saved.")
+      }
     } catch {
       setSaveError(
         "The enrollment schedule could not be saved. Check the dates and try again.",
@@ -210,8 +208,9 @@ export function EnrollmentScheduleCard({
       <CardHeader>
         <CardTitle>Enrollment schedule</CardTitle>
         <CardDescription>
-          Open enrollment once a college has published its schedule, then
-          stagger which year level may enroll and when.
+          Saving the schedule below opens enrollment automatically once a
+          college has published its schedule, and lets you stagger which
+          year level may enroll and when.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
@@ -236,37 +235,16 @@ export function EnrollmentScheduleCard({
                 <AlertDescription>{openError}</AlertDescription>
               </Alert>
             )}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  disabled={publishedColleges.size === 0 || openMutation.isPending}
-                >
-                  Open enrollment
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Open enrollment for this term?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Students in an open year level will be able to submit an
-                    enrollment as soon as this is confirmed.
-                    {unpublishedColleges.length > 0 && (
-                      <>
-                        {" "}The following colleges have not published a
-                        schedule yet: {unpublishedColleges.map((college) => college.label).join(", ")}.
-                      </>
-                    )}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void openEnrollment()}>
-                    Open enrollment
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            {publishedColleges.size === 0 && (
+              <Alert>
+                <AlertDescription>
+                  Enrollment will open automatically when you save the
+                  schedule below, once at least one college has published its
+                  schedule. Not yet published:{" "}
+                  {unpublishedColleges.map((college) => college.label).join(", ")}.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
@@ -391,8 +369,15 @@ export function EnrollmentScheduleCard({
               ))}
             </div>
 
-            <Button type="submit" disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving schedule" : "Save enrollment schedule"}
+            <Button
+              type="submit"
+              disabled={saveMutation.isPending || openMutation.isPending}
+            >
+              {saveMutation.isPending
+                ? "Saving schedule"
+                : openMutation.isPending
+                  ? "Opening enrollment"
+                  : "Save enrollment schedule"}
             </Button>
           </FieldGroup>
         </form>
