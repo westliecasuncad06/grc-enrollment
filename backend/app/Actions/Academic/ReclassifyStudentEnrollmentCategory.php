@@ -69,7 +69,7 @@ final readonly class ReclassifyStudentEnrollmentCategory
         }
 
         return DB::transaction(function () use ($students, $currentTerm, $actor, $context): array {
-            [$verdicts, $toRegularIds, $toIrregularIds] = $this->computeVerdicts($students, $currentTerm);
+            [$verdicts, $toRegularIds, $toIrregularIds, ] = $this->computeVerdicts($students, $currentTerm);
 
             $changedIds = [...$toRegularIds, ...$toIrregularIds];
 
@@ -121,18 +121,54 @@ final readonly class ReclassifyStudentEnrollmentCategory
     }
 
     /**
+     * Same as preview(), but also returns which student ids were undetermined
+     * (no block published yet) — needed by `students:reclassify` so it can
+     * avoid reporting a "no write, category left untouched" outcome as a
+     * category change. Not used by any other caller.
+     *
      * @param  Collection<int, StudentProfile>  $students
-     * @return array{0: array<int, ClassificationVerdict>, 1: list<int>, 2: list<int>}
+     * @return array{0: array<int, ClassificationVerdict>, 1: list<int>}
+     */
+    public function previewWithUndetermined(Collection $students, AcademicTerm $currentTerm): array
+    {
+        [$verdicts, , , $undeterminedIds] = $this->computeVerdicts($students, $currentTerm);
+
+        return [$verdicts, $undeterminedIds];
+    }
+
+    /**
+     * Same as executeMany(), but also returns which student ids were
+     * undetermined — see previewWithUndetermined()'s docblock for why.
+     *
+     * @param  Collection<int, StudentProfile>  $students
+     * @return array{0: array<int, ClassificationVerdict>, 1: list<int>}
+     */
+    public function executeManyWithUndetermined(
+        Collection $students,
+        AcademicTerm $currentTerm,
+        User $actor,
+        AuditRequestContext $context,
+    ): array {
+        [, , , $undeterminedIds] = $this->computeVerdicts($students, $currentTerm);
+        $verdicts = $this->executeMany($students, $currentTerm, $actor, $context);
+
+        return [$verdicts, $undeterminedIds];
+    }
+
+    /**
+     * @param  Collection<int, StudentProfile>  $students
+     * @return array{0: array<int, ClassificationVerdict>, 1: list<int>, 2: list<int>, 3: list<int>}
      */
     private function computeVerdicts(Collection $students, AcademicTerm $currentTerm): array
     {
         if ($students->isEmpty()) {
-            return [[], [], []];
+            return [[], [], [], []];
         }
 
         $verdicts = [];
         $toRegularIds = [];
         $toIrregularIds = [];
+        $undeterminedIds = [];
 
         $groups = $students->groupBy(
             static fn (StudentProfile $student): string => $student->curriculum_id.':'.$student->year_level,
@@ -151,6 +187,7 @@ final readonly class ReclassifyStudentEnrollmentCategory
                     $verdicts[$student->id] = $student->enrollment_category === EnrollmentCategory::Irregular->value
                         ? ClassificationVerdict::irregular([])
                         : ClassificationVerdict::regular();
+                    $undeterminedIds[] = $student->id;
 
                     continue;
                 }
@@ -169,7 +206,7 @@ final readonly class ReclassifyStudentEnrollmentCategory
             }
         }
 
-        return [$verdicts, $toRegularIds, $toIrregularIds];
+        return [$verdicts, $toRegularIds, $toIrregularIds, $undeterminedIds];
     }
 
     private function auditAndNotify(

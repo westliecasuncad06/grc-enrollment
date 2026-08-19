@@ -60,8 +60,8 @@ final class ReclassifyStudentEnrollmentCategories extends Command
         $before = $students->pluck('enrollment_category', 'id');
 
         if ($this->option('dry-run')) {
-            $verdicts = $reclassifier->preview($students, $currentTerm);
-            $this->reportChanges($before, $verdicts);
+            [$verdicts, $undeterminedIds] = $reclassifier->previewWithUndetermined($students, $currentTerm);
+            $this->reportChanges($before, $verdicts, $undeterminedIds);
             $this->comment('Dry run only — no changes were written.');
 
             return self::SUCCESS;
@@ -76,8 +76,8 @@ final class ReclassifyStudentEnrollmentCategories extends Command
         }
 
         $context = new AuditRequestContext('students-reclassify-command', null);
-        $verdicts = $reclassifier->executeMany($students, $currentTerm, $actor, $context);
-        $this->reportChanges($before, $verdicts);
+        [$verdicts, $undeterminedIds] = $reclassifier->executeManyWithUndetermined($students, $currentTerm, $actor, $context);
+        $this->reportChanges($before, $verdicts, $undeterminedIds);
 
         return self::SUCCESS;
     }
@@ -85,12 +85,17 @@ final class ReclassifyStudentEnrollmentCategories extends Command
     /**
      * @param  Collection<int, ?string>  $before
      * @param  array<int, ClassificationVerdict>  $verdicts
+     * @param  list<int>  $undeterminedIds
      */
-    private function reportChanges(Collection $before, array $verdicts): void
+    private function reportChanges(Collection $before, array $verdicts, array $undeterminedIds): void
     {
         $changed = 0;
 
         foreach ($verdicts as $studentId => $verdict) {
+            if (in_array($studentId, $undeterminedIds, true)) {
+                continue;
+            }
+
             $previousCategory = $before->get($studentId);
 
             if ($previousCategory === $verdict->category->value) {
