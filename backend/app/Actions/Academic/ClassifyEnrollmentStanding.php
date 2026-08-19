@@ -5,6 +5,8 @@ namespace App\Actions\Academic;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
+use App\Domain\Curriculum\SemesterCoverage;
+use App\Domain\Curriculum\SemesterSlot;
 use App\Domain\Enrollment\ClassificationVerdict;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
@@ -84,6 +86,14 @@ final readonly class ClassifyEnrollmentStanding
         ));
         $openBacklogSubjectIds = $this->openNonBlockSectionSubjectIds($term, $backlogSubjectIds);
 
+        // A backlog subject only counts if the student should already have
+        // reached it by now — a subject placed at a LATER point in the
+        // curriculum than the student's own standard block this term is
+        // still ahead of them, not something they need to add. Bounding by
+        // ordinal keeps a non-block-exclusive section for a future
+        // year/semester from ever being misread as "needs adding."
+        $currentOrdinal = (SemesterSlot::tryFrom($term->semester) ?? SemesterSlot::First)->ordinal($yearLevel);
+
         $marksByStudent = $this->latestLockedMarksByStudent($studentIds);
         $creditedByStudent = $this->creditedSubjectIdsByStudent($studentIds, $curriculumId);
 
@@ -123,6 +133,13 @@ final readonly class ClassifyEnrollmentStanding
                     continue;
                 }
                 if (! $this->prerequisitesSatisfied($placement, $marks, $credited)) {
+                    continue;
+                }
+
+                $placementOrdinal = SemesterCoverage::primary($placement->semester)->ordinal($placement->year_level);
+                if ($placementOrdinal > $currentOrdinal) {
+                    // Ahead of the student's current position — not a
+                    // backlog item yet.
                     continue;
                 }
 

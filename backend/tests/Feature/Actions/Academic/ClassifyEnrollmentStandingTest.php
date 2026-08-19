@@ -163,6 +163,31 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertStringContainsString('ITC', $verdict->reasons[0]['message']);
     }
 
+    public function test_a_future_subject_with_an_open_section_this_term_does_not_affect_standing(): void
+    {
+        // The inverse of the "open backlog subject" case above: SPI is
+        // placed at year 4, well ahead of this year-2 student's own
+        // current position. Even though it has an open, non-block-exclusive
+        // section this term and no unmet prerequisite blocks it, a subject
+        // the student hasn't reached yet must never be flagged as
+        // needs_adding_backlog.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $standard = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $standard, 2);
+        $this->makeBlockSection($term, $plan, $standard);
+        $future = $this->makeSubject('SPI');
+        $this->placeSubject($curriculum, $future, 4, '2nd');
+        $this->makePlainSection($term, $future);
+        $student = $this->makeStudent($curriculum, 'future-subject@grc.test');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular());
+    }
+
     public function test_a_backlog_subject_with_no_section_this_term_does_not_affect_standing(): void
     {
         // The exact Socorro Y. Amurao case: a backlog subject exists, but
