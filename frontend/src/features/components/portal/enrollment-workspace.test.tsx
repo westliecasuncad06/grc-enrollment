@@ -600,6 +600,166 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
+  it("keeps the selected section after navigating away and back", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    const session = {
+      userId: "1",
+      displayName: "Student",
+      role: "student",
+      signedInAt: "2026-07-30T00:00:00Z",
+    } as const
+    const first = renderWithSession(<EnrollmentWorkspace />, { session })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    first.unmount()
+
+    // A fresh render with its own QueryClient — nothing about this second
+    // mount can read the first mount's React state or React Query cache, so
+    // a restored selection here proves it came from durable storage, not an
+    // in-memory artifact of the same page instance.
+    renderWithSession(<EnrollmentWorkspace />, { session })
+
+    const restoredTrigger = (
+      await screen.findAllByLabelText("CS101 section")
+    )[0]
+    expect(restoredTrigger).toHaveTextContent(/Section A/)
+  })
+
+  it("keeps the selected block after navigating away and back", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRegularRoutes())
+    const first = renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    const section = await screen.findByRole("article", {
+      name: "IT201 section",
+    })
+    await user.click(
+      within(section).getByRole("button", { name: "Choose IT201" }),
+    )
+    first.unmount()
+
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: regularStudentSession,
+    })
+
+    expect(
+      await screen.findByRole("button", { name: "Change section" }),
+    ).toBeInTheDocument()
+  })
+
+  it("refetches the eligible-subject pool immediately before submitting", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+    await screen.findByText(/pending registrar approval/)
+
+    // Isolates the refetch this test cares about from the *separate*,
+    // already-existing post-success `invalidateQueries` refetch (see
+    // `mutation.onSuccess`) by only counting calls up to and including the
+    // POST — a naive before/after count around the whole submit would pass
+    // even without a pre-submit refetch, since the post-success one alone
+    // would already grow the total.
+    const postIndex = fetchMock.mock.calls.findIndex(
+      ([request, init]) =>
+        url(request).includes("/enrollments") && init?.method === "POST",
+    )
+    expect(postIndex).toBeGreaterThan(-1)
+    const eligibleSubjectFetchesBeforePost = fetchMock.mock.calls
+      .slice(0, postIndex)
+      .filter(([request]) => url(request).includes("/eligible-subjects"))
+      .length
+    expect(eligibleSubjectFetchesBeforePost).toBeGreaterThan(1)
+  })
+
+  it("explains a stale-pool conflict instead of just echoing the raw field error", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/enrollments") && init?.method === "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "Validation failed.",
+                errors: {
+                  "sections.0.section_id": [
+                    "This section conflicts with another section in this submission.",
+                  ],
+                },
+                request_id: "req-1",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+
+    expect(
+      await screen.findByText(
+        /This section conflicts with another section in this submission\./,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/just refreshed against the current schedule/),
+    ).toBeInTheDocument()
+  })
+
+  it("clears the persisted draft once the enrollment is submitted", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    const session = {
+      userId: "1",
+      displayName: "Student",
+      role: "student",
+      signedInAt: "2026-07-30T00:00:00Z",
+    } as const
+    const first = renderWithSession(<EnrollmentWorkspace />, { session })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+    await screen.findByText(/pending registrar approval/)
+    first.unmount()
+
+    fetchMock.mockImplementation(
+      mockRoutes({ enrollments: { data: [createdEnrollment.data] } }),
+    )
+    renderWithSession(<EnrollmentWorkspace />, { session })
+
+    // The subject picker only renders pre-submission, so its absence here
+    // (replaced by the submitted-status view) is what proves there is no
+    // stale draft still selecting a section behind the scenes.
+    expect(screen.queryByLabelText("CS101 section")).not.toBeInTheDocument()
+  })
+
   it("preserves the selected section when submission fails", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input, init) => {

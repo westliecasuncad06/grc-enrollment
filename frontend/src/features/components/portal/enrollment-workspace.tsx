@@ -1,7 +1,7 @@
 "use client"
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -9,6 +9,7 @@ import { DataTable } from "@/features/components/portal/data-table"
 import { EligibleSubjectTable } from "@/features/components/portal/eligible-subject-table"
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
+import { EnrollmentCategoryExplanation } from "@/features/components/portal/enrollment-category-explanation"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
 import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
@@ -56,10 +57,79 @@ import type {
   EligibleSubject,
 } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
+import { createBrowserEnrollmentDraftStore } from "@/features/services/enrollment-draft-store"
 import { createEnrollment } from "@/features/services/enrollment-service"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
 const TERMINAL_STATUSES = new Set(["rejected", "cancelled", "withdrawn"])
+
+/**
+ * The exact substring `StoreEnrollmentRequest::rejectScheduleConflicts()`
+ * uses for every conflict field error — matched so a stale-pick submission
+ * failure gets a clearer explanation than the raw backend message.
+ */
+const CONFLICT_ERROR_SUBSTRING = "conflicts with another section"
+
+/**
+ * Subject/section picks the current eligible-subject pool no longer backs —
+ * a section removed, or the subject no longer eligible — dropped from the
+ * view. Pure so it can run both at render time (`effectiveSelections`) and
+ * again, synchronously, against a just-refetched pool right before submit
+ * (see `submit()`), without the two ever drifting out of sync.
+ */
+function pruneSelections(
+  selections: Record<number, number>,
+  subjects: readonly EligibleSubject[],
+): Record<number, number> {
+  const next: Record<number, number> = {}
+  for (const [subjectIdKey, sectionId] of Object.entries(selections)) {
+    const subjectId = Number(subjectIdKey)
+    const subject = subjects.find((s) => s.subject_id === subjectId)
+    if (
+      subject?.available_sections.some((section) => section.id === sectionId)
+    ) {
+      next[subjectId] = sectionId
+    }
+  }
+  return next
+}
+
+/** Same idea as `pruneSelections`, for the single block-code pick. */
+function pruneBlockCode(
+  blockCode: string | null,
+  blocks: readonly EnrollmentBlock[],
+): string | null {
+  if (blockCode === null) return null
+  return blocks.some((block) => block.block_code === blockCode)
+    ? blockCode
+    : null
+}
+
+/** Expands a pruned selections map into full (subject, section) pairs. */
+function buildSelectedEntries(
+  selections: Record<number, number>,
+  subjects: readonly EligibleSubject[],
+): {
+  subject: EligibleSubject
+  section: EligibleSubject["available_sections"][number]
+}[] {
+  return Object.entries(selections)
+    .map(([subjectId, sectionId]) => {
+      const subject = subjects.find((s) => s.subject_id === Number(subjectId))
+      const section = subject?.available_sections.find(
+        (candidate) => candidate.id === sectionId,
+      )
+      return subject && section ? { subject, section } : null
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        subject: EligibleSubject
+        section: NonNullable<typeof entry>["section"]
+      } => entry !== null,
+    )
+}
 
 /**
  * The single progress indicator for the whole enrollment process — from
@@ -102,6 +172,11 @@ export function EnrollmentWorkspace() {
   })
   const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId)
   const viewer = scheduleQuery.data?.viewer
+  const selectedTerm = termsQuery.data?.find(
+    (term) => term.id === selectedTermId,
+  )
+  const currentYearLevel = studentAccountQuery.data?.year_level ?? null
+  const currentSemester = selectedTerm?.semester ?? null
   // Only a resolved "closed" reads as closed — an unresolved fetch (still
   // loading, or no viewer block for a non-student session) must not block
   // the workspace by default.
@@ -121,17 +196,90 @@ export function EnrollmentWorkspace() {
   const [receipt, setReceipt] = useState(false)
 
   const userId = session?.userId ?? null
-  const subjects = eligibleSubjectsQuery.data ?? []
+  // Stable empty-array fallbacks (`useMemo`, not `?? []` inline) so the
+  // `effectiveSelections`/`effectiveSelectedBlockCode` memos below don't see
+  // a new dependency reference — and re-derive for no reason — on every
+  // render while a query is still loading.
+  const subjects = useMemo(
+    () => eligibleSubjectsQuery.data ?? [],
+    [eligibleSubjectsQuery.data],
+  )
   const selectableSubjects = subjects.filter(
     (subject) => subject.is_eligible && subject.available_sections.length > 0,
   )
   const blocksQuery = useEnrollmentBlocksQuery(
     isRegularAudience ? selectedTermId : null,
   )
-  const blocks = blocksQuery.data ?? []
-  const selectedBlock: EnrollmentBlock | undefined = blocks.find(
-    (block) => block.block_code === selectedBlockCode,
+  const blocks = useMemo(() => blocksQuery.data ?? [], [blocksQuery.data])
+
+  // `selections`/`selectedBlockCode` can carry entries restored from a
+  // persisted draft (see below) that the live data no longer backs — a
+  // section removed, or a block no longer offered. Rather than reconciling
+  // that with its own effect + setState (an extra render for something
+  // already derivable), every consumer below reads the pruned view instead;
+  // the raw state is never rendered, submitted, or persisted directly.
+  const effectiveSelections = useMemo(
+    () =>
+      eligibleSubjectsQuery.isSuccess
+        ? pruneSelections(selections, subjects)
+        : selections,
+    [selections, subjects, eligibleSubjectsQuery.isSuccess],
   )
+
+  const effectiveSelectedBlockCode = useMemo(
+    () =>
+      isRegularAudience && blocksQuery.isSuccess
+        ? pruneBlockCode(selectedBlockCode, blocks)
+        : selectedBlockCode,
+    [selectedBlockCode, blocks, isRegularAudience, blocksQuery.isSuccess],
+  )
+
+  const selectedBlock: EnrollmentBlock | undefined = blocks.find(
+    (block) => block.block_code === effectiveSelectedBlockCode,
+  )
+
+  // Persists in-progress picks (subject sections, or the chosen block)
+  // across navigation — see `enrollment-draft-store.ts`. `restoredDraftKeyRef`
+  // marks which (user, term) has already had its stored draft read into
+  // state, so the effect below restores exactly once per term and never
+  // overwrites a live edit with a stale re-read.
+  const draftStore = useMemo(() => createBrowserEnrollmentDraftStore(), [])
+  const restoredDraftKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (userId === null || selectedTermId === null) return
+    const draftKey = `${userId}|${selectedTermId}`
+
+    if (restoredDraftKeyRef.current !== draftKey) {
+      restoredDraftKeyRef.current = draftKey
+      const draft = draftStore.read(userId, selectedTermId)
+      if (draft) {
+        // Synchronizing local state from an external system (localStorage)
+        // on (user, term) change — the sanctioned use of an effect, not
+        // state derivable from props/state already in this render.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelections(draft.selections)
+        setSelectedBlockCode(draft.selectedBlockCode)
+      }
+
+      // The restore above (if any) hasn't rendered into `selections`/
+      // `selectedBlockCode` yet on this pass — persisting now would write
+      // back this render's pre-restore values. The next effect run (once
+      // the restored state actually renders) takes the write branch below.
+      return
+    }
+
+    draftStore.write(userId, selectedTermId, {
+      selections: effectiveSelections,
+      selectedBlockCode: effectiveSelectedBlockCode,
+    })
+  }, [
+    userId,
+    selectedTermId,
+    effectiveSelections,
+    effectiveSelectedBlockCode,
+    draftStore,
+  ])
 
   const activeEnrollment = (enrollmentsQuery.data ?? []).find(
     (enrollment) =>
@@ -141,22 +289,7 @@ export function EnrollmentWorkspace() {
   const hasActiveEnrollmentThisTerm = activeEnrollment !== undefined
   const addDrop = scheduleQuery.data?.add_drop
 
-  const selectedEntries = Object.entries(selections)
-    .map(([subjectId, sectionId]) => {
-      const subject = subjects.find((s) => s.subject_id === Number(subjectId))
-      const section = subject?.available_sections.find(
-        (candidate) => candidate.id === sectionId,
-      )
-      return subject && section ? { subject, section } : null
-    })
-    .filter(
-      (
-        entry,
-      ): entry is {
-        subject: EligibleSubject
-        section: NonNullable<typeof entry>["section"]
-      } => entry !== null,
-    )
+  const selectedEntries = buildSelectedEntries(effectiveSelections, subjects)
 
   const totalUnits = selectedEntries.reduce(
     (sum, entry) => sum + entry.subject.units,
@@ -164,16 +297,19 @@ export function EnrollmentWorkspace() {
   )
 
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (payload: {
+      blockCode: string | null
+      sectionIds: readonly number[]
+    }) =>
       isRegularAudience
         ? createEnrollment({
             academic_term_id: selectedTermId!,
-            block_code: selectedBlockCode!,
+            block_code: payload.blockCode!,
           })
         : createEnrollment({
             academic_term_id: selectedTermId!,
-            sections: selectedEntries.map((entry) => ({
-              section_id: entry.section.id,
+            sections: payload.sectionIds.map((sectionId) => ({
+              section_id: sectionId,
             })),
           }),
     onSuccess: async () => {
@@ -191,6 +327,9 @@ export function EnrollmentWorkspace() {
           exact: true,
         }),
       ])
+      if (userId !== null && selectedTermId !== null) {
+        draftStore.clear(userId, selectedTermId)
+      }
       setSelections({})
       setSelectedBlockCode(null)
       setConfirmOpen(false)
@@ -214,19 +353,64 @@ export function EnrollmentWorkspace() {
     setSelectedBlockCode(blockCode)
   }
 
+  /**
+   * The eligible-subject/block pool shown while picking can be several
+   * minutes stale by submit time — nothing forces a refetch just from the
+   * picker staying mounted (`staleTime` alone doesn't trigger one). Since
+   * the server re-validates every submission from scratch regardless
+   * (`StoreEnrollmentRequest`'s own docblock: "the client's view is
+   * advisory only"), a pick that was valid when chosen but has since gone
+   * stale (a section's schedule changed, a block was withdrawn, ...) would
+   * otherwise fail with a confusing error the student has no way to
+   * connect to "this page has been open a while." Refetching immediately
+   * before building the payload — and building it from that fresh result,
+   * not from render state — closes that gap.
+   */
   const submit = async () => {
     setReceipt(false)
     setSubmitError("")
     setFieldErrors([])
     try {
-      await mutation.mutateAsync()
+      let payload: { blockCode: string | null; sectionIds: readonly number[] }
+
+      if (isRegularAudience) {
+        const freshBlocks = (await blocksQuery.refetch()).data ?? blocks
+        payload = {
+          blockCode: pruneBlockCode(selectedBlockCode, freshBlocks),
+          sectionIds: [],
+        }
+      } else {
+        const freshSubjects =
+          (await eligibleSubjectsQuery.refetch()).data ?? subjects
+        const freshEntries = buildSelectedEntries(
+          pruneSelections(selections, freshSubjects),
+          freshSubjects,
+        )
+        payload = {
+          blockCode: null,
+          sectionIds: freshEntries.map((entry) => entry.section.id),
+        }
+      }
+
+      await mutation.mutateAsync(payload)
     } catch (error) {
       if (
         isApiClientError(error) &&
         error.status === 422 &&
         error.fieldErrors
       ) {
-        setFieldErrors(Object.values(error.fieldErrors).flat())
+        const messages = Object.values(error.fieldErrors).flat()
+        const hasStaleConflict = messages.some((message) =>
+          message.includes(CONFLICT_ERROR_SUBSTRING),
+        )
+        setFieldErrors(
+          hasStaleConflict
+            ? [
+                ...messages,
+                "Your selections were just refreshed against the current schedule — please review the sections above and submit again.",
+              ]
+            : messages,
+        )
       } else {
         setSubmitError(
           "Your enrollment could not be submitted. Check the connection and try again.",
@@ -303,6 +487,7 @@ export function EnrollmentWorkspace() {
       )}
 
       <EnrollmentAvailabilityBanner viewer={viewer} />
+      <EnrollmentCategoryExplanation viewer={viewer} />
 
       {banner}
 
@@ -331,7 +516,7 @@ export function EnrollmentWorkspace() {
               {() => (
                 <EnrollmentSectionTable
                   blocks={blocks}
-                  selectedBlockCode={selectedBlockCode}
+                  selectedBlockCode={effectiveSelectedBlockCode}
                   onChoose={chooseBlock}
                   onChangeSection={() => setSelectedBlockCode(null)}
                   disabled={enrollmentWindowClosed}
@@ -378,10 +563,12 @@ export function EnrollmentWorkspace() {
                   <CardContent className="grid min-w-0 gap-4">
                     <EligibleSubjectTable
                       subjects={selectableSubjects}
-                      selections={selections}
+                      selections={effectiveSelections}
                       onChoose={chooseSection}
                       onClear={clearSection}
                       disabled={enrollmentWindowClosed}
+                      currentYearLevel={currentYearLevel}
+                      currentSemester={currentSemester}
                     />
                     {selectedEntries.length > 0 && (
                       <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">

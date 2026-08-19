@@ -1,0 +1,34 @@
+/**
+ * Curriculum-slot ordinal — the same "which semester, counting from the
+ * start of the curriculum" numbering the backend's
+ * `ClassifyEnrollmentStanding`/`SemesterSlot::ordinal()` uses (a year-Y
+ * student has `(Y-1)*2 + 1` completed ordinals). Recomputed here rather than
+ * fetched, since every input (a subject's own placement, and the student's
+ * own year level + the term being enrolled into) is already on hand
+ * client-side.
+ */
+export function semesterOrdinal(
+  yearLevel: number,
+  semester: string,
+): number {
+  return (yearLevel - 1) * 2 + (semester === "1st" ? 1 : 2)
+}
+
+/**
+ * A subject is "backlog" — still owed from an already-passed semester —
+ * when its own curriculum placement ordinal is strictly earlier than the
+ * student's current standing. Only meaningful for a subject already known
+ * to be eligible (not yet passed, prerequisites met); this function doesn't
+ * check that on its own.
+ */
+export function isBacklogSubject(
+  subjectYearLevel: number,
+  subjectSemester: string,
+  currentYearLevel: number,
+  currentSemester: string,
+): boolean {
+  return (
+    semesterOrdinal(subjectYearLevel, subjectSemester) <
+    semesterOrdinal(currentYearLevel, currentSemester)
+  )
+}

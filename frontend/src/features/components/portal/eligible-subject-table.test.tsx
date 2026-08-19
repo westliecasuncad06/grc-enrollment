@@ -61,12 +61,16 @@ function renderTable({
   onChoose = vi.fn(),
   onClear = vi.fn(),
   disabled = false,
+  currentYearLevel = null,
+  currentSemester = null,
 }: {
   subjects?: readonly EligibleSubject[]
   selections?: Record<number, number>
   onChoose?: (subjectId: number, sectionId: number) => void
   onClear?: (subjectId: number) => void
   disabled?: boolean
+  currentYearLevel?: number | null
+  currentSemester?: string | null
 } = {}) {
   return render(
     <EligibleSubjectTable
@@ -75,6 +79,8 @@ function renderTable({
       onChoose={onChoose}
       onClear={onClear}
       disabled={disabled}
+      currentYearLevel={currentYearLevel}
+      currentSemester={currentSemester}
     />,
   )
 }
@@ -85,6 +91,30 @@ describe("EligibleSubjectTable", () => {
 
     expect(screen.getAllByText("CS101").length).toBeGreaterThan(0)
     expect(screen.getAllByLabelText("CS101 section").length).toBeGreaterThan(0)
+  })
+
+  it("shows the schedule column in 12-hour clock time, not military time", () => {
+    renderTable({ selections: { 1: 1 } })
+
+    expect(
+      screen.getAllByText("MWF · 8:00 AM–9:00 AM").length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("shows the picker option's own time in 12-hour clock time", async () => {
+    const user = userEvent.setup()
+    const afternoon = subject({
+      available_sections: [
+        section({ starts_at_time: "13:00:00", ends_at_time: "14:00:00" }),
+      ],
+    })
+    renderTable({ subjects: [afternoon] })
+
+    await user.click(screen.getAllByLabelText("CS101 section")[0])
+
+    expect(
+      await screen.findByRole("option", { name: /1:00 PM–2:00 PM/ }),
+    ).toBeInTheDocument()
   })
 
   it("calls onChoose when a section is picked", async () => {
@@ -122,6 +152,26 @@ describe("EligibleSubjectTable", () => {
     ).toBeInTheDocument()
   })
 
+  it("shows only the section code and seat count once chosen — the Schedule column already has the time", () => {
+    renderTable({ selections: { 1: 1 } })
+
+    const trigger = screen.getAllByLabelText("CS101 section")[0]
+    expect(trigger).toHaveTextContent("Section A · 30 seats open")
+    expect(trigger).not.toHaveTextContent("MWF")
+    expect(trigger).not.toHaveTextContent("8:00 AM")
+  })
+
+  it("still shows each option's own schedule while the picker is open, to tell sections apart", async () => {
+    const user = userEvent.setup()
+    renderTable()
+
+    await user.click(screen.getAllByLabelText("CS101 section")[0])
+
+    expect(
+      await screen.findByRole("option", { name: /MWF.*8:00 AM–9:00 AM/ }),
+    ).toBeInTheDocument()
+  })
+
   it("shows a College badge naming the section's own course once selected", () => {
     const otherCollege = subject({
       available_sections: [
@@ -153,16 +203,75 @@ describe("EligibleSubjectTable", () => {
     expect(screen.getByText("1 subject removed")).toBeInTheDocument()
   })
 
-  it("brings a removed subject back into view via Show", async () => {
+  it("brings every removed subject back into view via Show all", async () => {
     const user = userEvent.setup()
     renderTable()
 
     await user.click(screen.getAllByRole("button", { name: "Remove CS101" })[0])
     expect(screen.queryByText("CS101")).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole("button", { name: "Show" }))
+    await user.click(screen.getByRole("button", { name: "Show all" }))
 
     expect(screen.getAllByText("CS101").length).toBeGreaterThan(0)
+  })
+
+  it("tags a subject from an earlier semester than the student's standing as Backlog", () => {
+    const backlog = subject({ year_level: 2, semester: "1st" })
+    renderTable({
+      subjects: [backlog],
+      currentYearLevel: 3,
+      currentSemester: "1st",
+    })
+
+    expect(screen.getAllByText("Backlog").length).toBeGreaterThan(0)
+  })
+
+  it("does not tag the student's current-semester subject as Backlog", () => {
+    const current = subject({ year_level: 3, semester: "1st" })
+    renderTable({
+      subjects: [current],
+      currentYearLevel: 3,
+      currentSemester: "1st",
+    })
+
+    expect(screen.queryByText("Backlog")).not.toBeInTheDocument()
+  })
+
+  it("does not tag anything Backlog when the student's standing is unknown", () => {
+    const earlier = subject({ year_level: 1, semester: "1st" })
+    renderTable({ subjects: [earlier] })
+
+    expect(screen.queryByText("Backlog")).not.toBeInTheDocument()
+  })
+
+  it("lets you add back one specific removed subject via the Add subject picker", async () => {
+    const user = userEvent.setup()
+    const another = subject({
+      subject_id: 2,
+      code: "CS102",
+      title: "Programming 2",
+      available_sections: [section({ id: 2, subject_id: 2 })],
+    })
+    renderTable({ subjects: [subject(), another] })
+
+    await user.click(screen.getAllByRole("button", { name: "Remove CS101" })[0])
+    expect(screen.queryByText("CS101")).not.toBeInTheDocument()
+    expect(screen.getAllByText("CS102").length).toBeGreaterThan(0)
+
+    const addInput = screen.getByLabelText("Add subject")
+    await user.click(addInput)
+    await user.click(await screen.findByRole("option", { name: /CS101/ }))
+
+    expect(screen.getAllByText("CS101").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("CS102").length).toBeGreaterThan(0)
+  })
+
+  it("does not render a Recommend subjects button — the table already shows every recommended subject", () => {
+    renderTable({ currentYearLevel: 3, currentSemester: "1st" })
+
+    expect(
+      screen.queryByRole("button", { name: "Recommend subjects" }),
+    ).not.toBeInTheDocument()
   })
 
   it("disables the picker and Remove when the enrollment window is closed", () => {
@@ -295,6 +404,65 @@ describe("EligibleSubjectTable", () => {
     const text = container.textContent ?? ""
     expect(text.indexOf("MORNING")).toBeLessThan(text.indexOf("AFTERNOON"))
     expect(text.indexOf("AFTERNOON")).toBeLessThan(text.indexOf("UNPICKED"))
+  })
+
+  it("stays arranged by schedule after a second click, it never un-arranges", async () => {
+    const user = userEvent.setup()
+    const afternoon = subject({
+      subject_id: 1,
+      code: "AFTERNOON",
+      available_sections: [
+        section({
+          id: 1,
+          subject_id: 1,
+          schedule_days: "MWF",
+          starts_at_time: "13:00:00",
+          ends_at_time: "14:00:00",
+        }),
+      ],
+    })
+    const morning = subject({
+      subject_id: 2,
+      code: "MORNING",
+      available_sections: [
+        section({
+          id: 2,
+          subject_id: 2,
+          schedule_days: "M",
+          starts_at_time: "07:30:00",
+          ends_at_time: "08:30:00",
+        }),
+      ],
+    })
+    const { container } = renderTable({
+      subjects: [afternoon, morning],
+      selections: { 1: 1, 2: 2 },
+    })
+
+    const arrangeButton = screen.getByRole("button", {
+      name: "Arrange by schedule",
+    })
+    await user.click(arrangeButton)
+    await user.click(arrangeButton)
+
+    const text = container.textContent ?? ""
+    expect(text.indexOf("MORNING")).toBeLessThan(text.indexOf("AFTERNOON"))
+  })
+
+  it("keeps Arrange by schedule clickable and red, never grayed out, after it's applied", async () => {
+    const user = userEvent.setup()
+    renderTable()
+
+    const arrangeButton = screen.getByRole("button", {
+      name: "Arrange by schedule",
+    })
+    expect(arrangeButton).not.toBeDisabled()
+    expect(arrangeButton).toHaveAttribute("data-variant", "default")
+
+    await user.click(arrangeButton)
+
+    expect(arrangeButton).not.toBeDisabled()
+    expect(arrangeButton).toHaveAttribute("data-variant", "default")
   })
 
   it("has no detectable accessibility violations", async () => {
