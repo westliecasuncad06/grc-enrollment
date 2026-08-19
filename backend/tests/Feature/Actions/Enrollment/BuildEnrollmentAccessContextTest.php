@@ -97,6 +97,28 @@ final class BuildEnrollmentAccessContextTest extends TestCase
         self::assertSame('regular', $student->fresh()->enrollment_category);
     }
 
+    public function test_no_registrar_head_user_skips_the_persist_without_throwing(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $this->makeBlock($term, $curriculum);
+        // Stored as irregular from a stale prior computation; she fits the
+        // block exactly now, so the live verdict is Regular and a persist
+        // will be attempted — but deliberately no RegistrarHead user exists
+        // to attribute the audit to, so the persist must silently no-op
+        // rather than throw. This is the highest-stakes guarantee here:
+        // an ordinary student loading their own enrollment page must never
+        // hit an exception because no registrar exists yet.
+        $student = $this->makeStudent($curriculum, 'no-registrar@grc.test', 'irregular');
+
+        $context = app(BuildEnrollmentAccessContext::class)->execute($term, $student);
+
+        self::assertNotSame(EnrollmentAudience::Irregular, $context->viewerAudience);
+        self::assertSame('irregular', $student->fresh()->enrollment_category);
+    }
+
     public function test_browsing_an_archived_term_never_mutates_stored_standing(): void
     {
         $term = AcademicTerm::create([
