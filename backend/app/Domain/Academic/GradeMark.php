@@ -98,8 +98,12 @@ enum GradeMark: string
     }
 
     /**
-     * Any of these on a required subject in a completed semester makes a
-     * student Irregular — see EnrollmentCategoryClassifier.
+     * The same four marks `ClassifyEnrollmentStanding` treats as neither
+     * passing (`isPassing()`) nor completion (`isCompletion()`) when it
+     * derives a student's term-scoped Regular/Irregular standing: a
+     * required subject carrying one of these isn't actually done, whether
+     * that shows up as a still-open standard-block subject or an open
+     * backlog subject that needs adding.
      */
     public function blocksRegularStanding(): bool
     {

@@ -17,7 +17,7 @@ use RuntimeException;
 /**
  * One-time backfill for every locked grade recorded before automatic
  * Regular/Irregular classification existed (see ADR 0021,
- * `App\Domain\Enrollment\EnrollmentCategoryClassifier`).
+ * `App\Actions\Academic\ClassifyEnrollmentStanding`).
  * `UpdateAcademicGrade::transition()` reclassifies going forward on every
  * new `lock`; this command catches up students whose grades were already
  * locked before that hook existed.

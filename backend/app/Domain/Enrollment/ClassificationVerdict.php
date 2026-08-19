@@ -3,9 +3,9 @@
 namespace App\Domain\Enrollment;
 
 /**
- * The outcome of `EnrollmentCategoryClassifier::classify()` — mirrors the
- * shape of `App\Domain\Academic\PrerequisiteVerdict`: a category plus the
- * explainable reasons behind it, never a silent flag flip.
+ * The outcome of `App\Actions\Academic\ClassifyEnrollmentStanding::classify()`
+ * — mirrors the shape of `App\Domain\Academic\PrerequisiteVerdict`: a
+ * category plus the explainable reasons behind it, never a silent flag flip.
  */
 final readonly class ClassificationVerdict
 {

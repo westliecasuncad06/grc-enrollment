@@ -41,12 +41,17 @@ before `PrerequisiteEvaluator` ever runs, so the eight-subject Leadership
 chain can never be blocked by a numeric-comparison edge case.
 `PrerequisiteEvaluator` itself is untouched.
 
-**`EnrollmentCategoryClassifier` is pure and re-derives on every lock.**
+**The Regular/Irregular classifier is pure and re-derives on every lock.**
 `ReclassifyStudentEnrollmentCategory` runs inside the same transaction as a
 `lock` transition, writes `enrollment_category` + `enrollment_category_derived_at`
 on `student_profiles`, and always audits + notifies the student — because
 `enrollment_category` feeds `EnrollmentAudience::forStudent()`, so locking a
-`5.00` can silently move a student's own enrollment window.
+`5.00` can silently move a student's own enrollment window. (The classifier
+itself was `App\Domain\Enrollment\EnrollmentCategoryClassifier` at the time
+of this ADR; it was later replaced by the term-scoped
+`App\Actions\Academic\ClassifyEnrollmentStanding` — see
+`docs/superpowers/specs/2026-08-19-term-scoped-enrollment-standing-design.md`
+— without changing the shape of this decision.)
 
 **Print is a stylesheet, not a library.** `body[data-printing]` + CSS
 `visibility` (not `:has()`, so Vitest can assert `document.body.dataset.printing`

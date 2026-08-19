@@ -295,7 +295,7 @@ OpenAPI tag `Withdrawals`.
 `database/seeders/DemoEnrollmentSeeder.php` seeds eight students with real
 locked grade history spanning year 1 semester 1 through year 4 semester 2
 (four Regular, four Irregular — see `docs/testing/SEEDED_IDENTITIES.md`),
-proving `EnrollmentCategoryClassifier`'s derivation rather than hard-coding a
+proving `ClassifyEnrollmentStanding`'s derivation rather than hard-coding a
 category. None of the eight carries an `enrollment` row of its own — every
 one is left free to submit a real, fresh enrollment through the UI/API
 against the current `semester_ongoing` term, at which point the tables on

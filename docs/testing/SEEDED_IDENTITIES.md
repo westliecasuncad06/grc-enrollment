@@ -76,7 +76,7 @@ student logins with real locked grade history spanning year 1 semester 1
 through year 4 semester 2, on the real BSIT program's active (2024-2029)
 curriculum. `enrollment_category`
 (Regular/Irregular) is **never hard-coded** here — every seed run writes the
-locked grades, then runs the real `EnrollmentCategoryClassifier` against
+locked grades, then runs the real `ClassifyEnrollmentStanding` against
 them, so the category shown below is the classifier's own verdict, not an
 assumption. None of the eight carry an enrollment for the current term —
 every one is free to submit a real, fresh enrollment through the UI/API.

@@ -34,7 +34,7 @@ use RuntimeException;
 
 /**
  * Seeds eight student logins with real locked grade history, so
- * `EnrollmentCategoryClassifier` can derive each one's Regular/Irregular
+ * `ClassifyEnrollmentStanding` can derive each one's Regular/Irregular
  * standing for real — never hard-coded — and every year level (plus the
  * irregular audience) is immediately testable end to end: log in, browse
  * the derived prospectus/grade slip, and submit a fresh enrollment against
@@ -669,8 +669,10 @@ final class DemoEnrollmentSeeder extends Seeder
      * that placement — or a student's grade history and the curriculum's
      * required-subject list would silently disagree on which subject_id a
      * shared code even is, which is exactly what makes
-     * `EnrollmentCategoryClassifier` see a "missing required subject" and
-     * misclassify an otherwise-Regular student as Irregular.
+     * `ClassifyEnrollmentStanding` misread a passed grade against the wrong
+     * subject_id and misclassify an otherwise-Regular student as Irregular
+     * (a bogus `needs_adding_backlog` or `needs_removing_prerequisite`
+     * reason).
      */
     private function subject(string $code): Subject
     {
