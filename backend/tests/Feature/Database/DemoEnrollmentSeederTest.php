@@ -4,6 +4,8 @@ namespace Tests\Feature\Database;
 
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
+use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
@@ -15,6 +17,7 @@ use App\Models\FacultySubjectPreference;
 use App\Models\Program;
 use App\Models\Section;
 use App\Models\StudentProfile;
+use App\Models\Subject;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoEnrollmentSeeder;
@@ -57,6 +60,77 @@ final class DemoEnrollmentSeederTest extends TestCase
     }
 
     /**
+     * Which real BSIT subject `studentRosterProvider()`'s own Irregular
+     * rows need an open backlog section for this term, keyed by student
+     * number — see `publishBacklogSections()`'s own docblock for why.
+     *
+     * @var array<string, list<string>>
+     */
+    private const IRREGULAR_BACKLOG_SUBJECTS = [
+        '2023-06-00005' => ['MATHWRLD'],
+        '2023-06-00006' => ['PROG1'],
+        '2023-06-00008' => ['SPI'],
+    ];
+
+    /**
+     * Publishes an open (non-block-exclusive) `Published` section this term
+     * for the given REAL BSIT subject codes — the same `makePlainSection()`
+     * pattern `ClassifyEnrollmentStandingTest`/`ReclassifyStudentEnrollmentCategoryTest`
+     * already established. Under the term-scoped `ClassifyEnrollmentStanding`
+     * rule (Task 2), a backlog subject only makes a student Irregular if it
+     * is BOTH not completed AND has its own open section this term.
+     * `DemoEnrollmentSeeder::seedRegularBlocks()` only ever publishes the
+     * regular-path `BLOCK_SUBJECTS_BY_YEAR` sections — it never opens a
+     * backlog section for the specific subjects `STUDENTS`' 0005/0006/0008
+     * rows document as their own Irregular-making evidence (MATHWRLD/PROG1/
+     * SPI respectively, via `$definition['overrides']`/`['omit']`). Without
+     * one, the new rule reads that subject as simply not offered this term
+     * and clears the student back to Regular, which is not this fixture's
+     * documented intent.
+     *
+     * Deliberately scoped to only the codes the calling test actually
+     * needs (never all three unconditionally): MATHWRLD/PROG1/SPI sit at
+     * different curriculum ordinals (1, 2, and 7), and every one of
+     * `STUDENTS`' OTHER rows has a shorter grade history that simply
+     * hasn't reached some of them yet (e.g. 0001 has only 1 completed
+     * ordinal, so it has no grade at all for ordinal-2 PROG1) — an
+     * unconditional publish would misread "never had the chance to take
+     * this yet" as "failed to remove an open backlog subject" for those
+     * other students and wrongly flip them Irregular too.
+     *
+     * @param  list<string>  $subjectCodes
+     */
+    private function publishBacklogSections(array $subjectCodes): void
+    {
+        if ($subjectCodes === []) {
+            return;
+        }
+
+        $term = AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->sole();
+
+        foreach ($subjectCodes as $code) {
+            $subject = Subject::query()->where('college', CollegeCode::Ccs)->where('code', $code)->sole();
+
+            Section::firstOrCreate(
+                [
+                    'academic_term_id' => $term->id,
+                    'subject_id' => $subject->id,
+                    'section_code' => 'ZZ-BACKLOG',
+                ],
+                [
+                    'schedule_days' => 'Sun',
+                    'starts_at_time' => '06:00:00',
+                    'ends_at_time' => '07:00:00',
+                    'capacity' => 999,
+                    'enrolled_count' => 0,
+                    'is_block_exclusive' => false,
+                    'status' => SectionStatus::Published,
+                ],
+            );
+        }
+    }
+
+    /**
      * Eight student profiles, all with real locked grade history, but no
      * Enrollment row of their own yet — every one is left free to submit a
      * fresh enrollment against the current `semester_ongoing` term through
@@ -90,6 +164,23 @@ final class DemoEnrollmentSeederTest extends TestCase
         ];
     }
 
+    /**
+     * `DemoEnrollmentSeeder::run()` calls `reclassify()` BEFORE
+     * `seedRegularBlocks()` — harmless under the old cumulative-lifetime
+     * classifier (which never looked at `sections` at all), but under the
+     * term-scoped `ClassifyEnrollmentStanding` rule (Task 2) it means the
+     * FIRST seed pass always classifies every one of the 8 students as
+     * undetermined (no block published for their year level yet) and
+     * leaves `enrollment_category` at its starting `null` — see
+     * `ReclassifyStudentEnrollmentCategory::computeVerdicts()`'s own
+     * "carry forward unchanged, never write" handling of an undetermined
+     * verdict. `DemoEnrollmentSeeder` is documented and separately tested
+     * as idempotent (`test_reseeding_creates_no_duplicates`), so re-seeding
+     * it a second time — now that the first pass's own `seedRegularBlocks()`
+     * call already published this term's blocks — lets its SECOND
+     * `reclassify()` call see them and derive the real category, without
+     * touching `DemoEnrollmentSeeder.php` itself.
+     */
     #[DataProvider('studentRosterProvider')]
     public function test_each_seeded_student_has_the_expected_year_level_and_derived_category(
         string $studentNumber,
@@ -99,13 +190,15 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
         $this->seedOngoingTerm();
         $this->seed(DemoEnrollmentSeeder::class);
+        $this->publishBacklogSections(self::IRREGULAR_BACKLOG_SUBJECTS[$studentNumber] ?? []);
+        $this->seed(DemoEnrollmentSeeder::class);
 
         $profile = StudentProfile::query()->where('student_number', $studentNumber)->firstOrFail();
 
         $this->assertSame($yearLevel, $profile->year_level);
-        // Never hard-coded: this is the real EnrollmentCategoryClassifier's
-        // verdict against the grade history seeded just above it, proving
-        // the seeder's own correctness.
+        // Never hard-coded: this is the real term-scoped
+        // ClassifyEnrollmentStanding's verdict against the grade history
+        // seeded just above it, proving the seeder's own correctness.
         $this->assertSame($category, $profile->enrollment_category);
         $this->assertNotNull($profile->enrollment_category_derived_at);
     }
@@ -144,10 +237,22 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->assertTrue($grades->every(fn (AcademicGrade $grade): bool => $grade->status === GradeStatus::Locked));
     }
 
+    /**
+     * The old cumulative-lifetime classifier's `missing_required_subject`
+     * reason code no longer exists under the term-scoped
+     * `ClassifyEnrollmentStanding` rule (Task 2) — a subject the student
+     * never got graded for only matters if it is also this term's own
+     * open backlog subject, in which case the real code is
+     * `needs_adding_backlog` (see `publishBacklogSections()`'s own
+     * docblock for why 0008 needs one for SPI specifically, and why the
+     * seed must run twice).
+     */
     public function test_the_missing_subject_irregular_student_carries_the_expected_classification_reason(): void
     {
         $this->seed(DatabaseSeeder::class);
         $this->seedOngoingTerm();
+        $this->seed(DemoEnrollmentSeeder::class);
+        $this->publishBacklogSections(self::IRREGULAR_BACKLOG_SUBJECTS['2023-06-00008']);
         $this->seed(DemoEnrollmentSeeder::class);
 
         $profile = StudentProfile::query()->where('student_number', '2023-06-00008')->firstOrFail();
@@ -158,7 +263,7 @@ final class DemoEnrollmentSeederTest extends TestCase
 
         $reasons = $log->after_values['reasons'] ?? [];
         $this->assertNotEmpty($reasons);
-        $this->assertSame('missing_required_subject', $reasons[0]['code'] ?? null);
+        $this->assertSame('needs_adding_backlog', $reasons[0]['code'] ?? null);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Database;
 
+use App\Actions\Academic\ClassifyEnrollmentStanding;
 use App\Actions\Academic\ReclassifyStudentEnrollmentCategory;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumStatus;
@@ -14,6 +15,7 @@ use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionConflictDetector;
+use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
@@ -204,7 +206,10 @@ final class StudentRosterSeederTest extends TestCase
 
     public function test_it_creates_accounts_from_the_roster_file(): void
     {
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->fixturePath()))->run();
+        $this->publishReachedBacklogSections();
+        $this->reclassifyCurrentTermInPlace();
 
         $this->assertDatabaseHas('users', ['email' => 's2401455@grc.test', 'role' => 'student', 'status' => 'active']);
         $this->assertDatabaseHas('student_profiles', [
@@ -506,7 +511,9 @@ final class StudentRosterSeederTest extends TestCase
 
     public function test_roughly_a_tenth_of_students_are_derived_as_irregular(): void
     {
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->publishReachedBacklogSections();
         $this->reclassifyAllStudents();
 
         $total = StudentProfile::count();
@@ -518,20 +525,51 @@ final class StudentRosterSeederTest extends TestCase
 
     public function test_no_first_year_student_is_irregular(): void
     {
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->publishReachedBacklogSections();
         $this->reclassifyAllStudents();
 
         $this->assertSame(0, StudentProfile::where('year_level', 1)->where('enrollment_category', 'irregular')->count());
     }
 
+    /**
+     * Rewritten for the term-scoped rule (Task 5): "irregular" no longer
+     * means "has some locked failing grade anywhere in history" — a student
+     * can be Irregular purely from an unmet prerequisite with no such mark
+     * at all, or stay Regular despite carrying one if the affected subject
+     * isn't offered this term. Asserting directly against
+     * `ClassifyEnrollmentStanding`'s own `reasons` (rather than
+     * re-deriving the grade-mark check by hand) keeps this test from
+     * silently drifting out of sync with the real rule again.
+     */
     public function test_every_irregular_student_has_grade_evidence(): void
     {
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->publishReachedBacklogSections();
         $this->reclassifyAllStudents();
 
-        foreach (StudentProfile::where('enrollment_category', 'irregular')->get() as $student) {
-            $this->assertTrue(AcademicGrade::where('student_id', $student->id)
-                ->whereIn('mark', ['5.00', 'INC', 'NC', 'DRP'])->exists());
+        $currentTerm = AcademicTerm::where('school_year', '2026-2027')->where('semester', '1st')->sole();
+        $classifier = app(ClassifyEnrollmentStanding::class);
+
+        $irregularStudents = StudentProfile::where('enrollment_category', 'irregular')->get();
+        $this->assertNotEmpty($irregularStudents);
+
+        foreach ($irregularStudents as $student) {
+            $verdict = $classifier->classify($student, $currentTerm);
+
+            $this->assertNotNull($verdict, "Student {$student->student_number} has no determinate standing.");
+            $this->assertFalse($verdict->isRegular());
+            $this->assertNotEmpty($verdict->reasons, "Student {$student->student_number} is irregular with no reasons.");
+
+            foreach ($verdict->reasons as $reason) {
+                $this->assertContains(
+                    $reason['code'],
+                    ['needs_adding_backlog', 'needs_removing_completed', 'needs_removing_prerequisite'],
+                    "Student {$student->student_number} carries an unrecognized reason code '{$reason['code']}'.",
+                );
+            }
         }
     }
 
@@ -588,7 +626,9 @@ final class StudentRosterSeederTest extends TestCase
             'locked_at' => now(),
         ]);
 
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->publishReachedBacklogSections();
         $this->reclassifyAllStudents();
 
         $this->assertDatabaseHas('academic_grades', [
@@ -653,8 +693,10 @@ final class StudentRosterSeederTest extends TestCase
 
     public function test_running_the_seeder_twice_does_not_change_the_derived_categories(): void
     {
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->irregularFixturePath()))->run();
         (new StudentRosterSeeder($this->irregularFixturePath()))->run();
+        $this->publishReachedBacklogSections();
         $this->reclassifyAllStudents();
 
         $before = StudentProfile::query()->orderBy('id')->pluck('enrollment_category', 'id');
@@ -672,7 +714,10 @@ final class StudentRosterSeederTest extends TestCase
         self::assertSame(0, AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->count());
         self::assertSame(1, AcademicTerm::where('status', AcademicTermStatus::SemesterClosed)->count());
 
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->ccsThirdYearFixturePath()))->run();
+        $this->publishReachedBacklogSections();
+        $this->reclassifyCurrentTermInPlace();
 
         $this->assertSame(0, StudentProfile::whereNull('enrollment_category')->count());
         $this->assertGreaterThan(0, StudentProfile::where('enrollment_category', 'regular')->count());
@@ -696,7 +741,10 @@ final class StudentRosterSeederTest extends TestCase
     {
         $termStatuses = AcademicTerm::query()->orderBy('id')->pluck('status', 'id');
 
+        $this->publishStandardBlockPlaceholders();
         (new StudentRosterSeeder($this->firstYearFixturePath()))->run();
+        $this->publishReachedBacklogSections();
+        $this->reclassifyCurrentTermInPlace();
 
         $this->assertSame(0, StudentProfile::whereNull('enrollment_category')->count());
         $this->assertSame(1, StudentProfile::where('enrollment_category', 'regular')->count());
@@ -725,6 +773,140 @@ final class StudentRosterSeederTest extends TestCase
                 'role' => UserRole::RegistrarHead,
                 'status' => UserStatus::Active,
             ]);
+
+        app(ReclassifyStudentEnrollmentCategory::class)->executeMany(
+            StudentProfile::query()->get(),
+            $currentTerm,
+            $registrarHead,
+            new AuditRequestContext('student-roster-seeder-test', null),
+        );
+    }
+
+    /**
+     * Publishes the `Published`/`is_block_exclusive` "standard block"
+     * section `ClassifyEnrollmentStanding` (Task 2) needs to consider a
+     * student's standing determinate at all — `StudentRosterSeeder`'s own
+     * generated sections are always `SectionStatus::Closed` (real
+     * completed-term history, per its own class docblock); in real
+     * production the current term's live, enrollable blocks come from a
+     * separate seeder (`ProgramChairScheduleSampleSeeder`), never from
+     * `StudentRosterSeeder` itself. Must run BEFORE `StudentRosterSeeder::run()`
+     * so its own internal `reclassifyAgainstCurrentTerm()` call already
+     * finds it in place.
+     *
+     * One throwaway subject per (program, year level 1-4) — deliberately
+     * NEVER registered as a `CurriculumSubject` placement, so
+     * `ClassifyEnrollmentStanding` silently skips it in its own
+     * completion/prerequisite loop (`$placements->get($id) === null`
+     * there). Its only job is to make `standardSubjectIds` non-empty. This
+     * can't reuse one of this file's REAL registered subjects instead:
+     * those sit at exactly a cohort's own (year_level, '1st') slot, which
+     * `seedSectionHistory()` also treats as "today" and therefore already
+     * grades as history — reusing one as this term's "still to take" block
+     * would make every already-passing student wrongly trip
+     * `needs_removing_completed`.
+     */
+    private function publishStandardBlockPlaceholders(): void
+    {
+        $current = AcademicTerm::where('school_year', '2026-2027')->where('semester', '1st')->sole();
+
+        foreach (self::PROGRAMS as $programCode => $definition) {
+            $program = Program::query()->where('code', $programCode)->sole();
+            $curriculum = Curriculum::query()->where('program_id', $program->id)->sole();
+
+            $dummySubject = Subject::firstOrCreate(
+                ['code' => 'ZZDUMMY-'.$programCode, 'college' => $definition['college']],
+                ['title' => 'Classification placeholder', 'units' => 3, 'status' => SubjectStatus::Active],
+            );
+
+            for ($yearLevel = 1; $yearLevel <= 4; $yearLevel++) {
+                $plan = AcademicTermSectionPlan::create([
+                    'academic_term_id' => $current->id,
+                    'curriculum_id' => $curriculum->id,
+                    'college' => 'test-block',
+                    'year_level' => $yearLevel,
+                    'section_count' => 1,
+                    'students_per_block' => 40,
+                    'status' => 'submitted',
+                ]);
+
+                Section::create([
+                    'academic_term_id' => $current->id,
+                    'section_plan_id' => $plan->id,
+                    'subject_id' => $dummySubject->id,
+                    'section_code' => 'ZZ-BLOCK-'.$yearLevel,
+                    'schedule_days' => 'Sun',
+                    'starts_at_time' => '06:00:00',
+                    'ends_at_time' => '07:00:00',
+                    'capacity' => 40,
+                    'enrolled_count' => 0,
+                    'is_block_exclusive' => true,
+                    'status' => SectionStatus::Published,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Publishes an open (non-block-exclusive) backlog section this term for
+     * every subject that some student was ACTUALLY graded on by
+     * `StudentRosterSeeder::run()` — so a candidate
+     * `StudentRosterSeeder::seedIrregularStudents()` rewrote a failing mark
+     * onto reads as `needs_adding_backlog` (Irregular), the same
+     * `makePlainSection()` pattern `ClassifyEnrollmentStandingTest`/
+     * `ReclassifyStudentEnrollmentCategoryTest` already established, while
+     * every other (passing-mark) student on that same subject is already
+     * completed and is skipped — never a false Irregular.
+     *
+     * Deliberately scoped to subjects with real grade evidence rather than
+     * every subject `CURRICULUM_SUBJECTS`/`bsitCurriculumSubjects()`
+     * registers: this fixture has no `SubjectPrerequisite` rows at all, so
+     * nothing would otherwise stop a subject a cohort hasn't reached yet
+     * (e.g. year-1-second-semester for a student still in their first
+     * semester) from being wrongly read as an open, actionable, never-taken
+     * backlog subject the instant it has a `Published` section. Must run
+     * AFTER `StudentRosterSeeder::run()` has written its grade history, and
+     * BEFORE whichever classification pass this test relies on next
+     * (`reclassifyAllStudents()` or `reclassifyCurrentTermInPlace()`).
+     */
+    private function publishReachedBacklogSections(): void
+    {
+        $current = AcademicTerm::where('school_year', '2026-2027')->where('semester', '1st')->sole();
+        $reachedSubjectIds = AcademicGrade::query()->distinct()->pluck('subject_id');
+
+        foreach ($reachedSubjectIds as $subjectId) {
+            Section::firstOrCreate(
+                [
+                    'academic_term_id' => $current->id,
+                    'subject_id' => $subjectId,
+                    'section_code' => 'ZZ-BACKLOG',
+                ],
+                [
+                    'schedule_days' => 'Sun',
+                    'starts_at_time' => '07:00:00',
+                    'ends_at_time' => '08:00:00',
+                    'capacity' => 999,
+                    'enrolled_count' => 0,
+                    'is_block_exclusive' => false,
+                    'status' => SectionStatus::Published,
+                ],
+            );
+        }
+    }
+
+    /**
+     * Like `reclassifyAllStudents()`, but leaves the current term's own
+     * status untouched — for tests that assert a fresh seed's term
+     * lifecycle is undisturbed while still needing a classification pass
+     * that sees sections `publishReachedBacklogSections()` only adds AFTER
+     * `StudentRosterSeeder::run()`'s own internal
+     * `reclassifyAgainstCurrentTerm()` call already ran once.
+     */
+    private function reclassifyCurrentTermInPlace(): void
+    {
+        $currentTerm = AcademicTerm::where('school_year', '2026-2027')->where('semester', '1st')->sole();
+
+        $registrarHead = User::query()->where('role', UserRole::RegistrarHead)->firstOrFail();
 
         app(ReclassifyStudentEnrollmentCategory::class)->executeMany(
             StudentProfile::query()->get(),
