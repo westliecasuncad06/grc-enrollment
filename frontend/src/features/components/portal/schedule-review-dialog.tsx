@@ -8,13 +8,6 @@ import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/features/components/ui/card"
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -37,8 +30,17 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/features/components/ui/tabs"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/features/components/ui/table"
 import { useScheduleReviewSectionsQuery } from "@/features/hooks/use-scheduling"
 import { scheduleProposalPresentation } from "@/features/lib/schedule-status"
+import { programCodeFromSection } from "@/features/lib/section-program-code"
 import type {
   ScheduleAction,
   ScheduleProposal,
@@ -95,46 +97,45 @@ function modalityLabel(modality: ScheduleReviewSection["modality"]) {
   return modality.replaceAll("_", " ").toUpperCase()
 }
 
-function ScheduleSubjectCard({ section }: { section: ScheduleReviewSection }) {
+function ScheduleSubjectsTable({
+  subjects,
+}: {
+  subjects: readonly ScheduleReviewSection[]
+}) {
   return (
-    <Card
-      role="article"
-      aria-label={`${section.subject_code} schedule review`}
-      size="sm"
-      className="h-full"
-    >
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle level={3}>{section.subject_code}</CardTitle>
-            <CardDescription>{section.subject_title}</CardDescription>
-          </div>
-          <Badge variant={section.modality ? "secondary" : "outline"}>
-            {modalityLabel(section.modality)}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <div>
-            <dt className="text-muted-foreground">Professor</dt>
-            <dd className="font-medium">{valueOrNotAssigned(section.professor_name)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Units</dt>
-            <dd className="font-medium">{section.units}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Schedule</dt>
-            <dd className="font-medium">{formatMeeting(section)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Room</dt>
-            <dd className="font-medium">{valueOrNotAssigned(section.room)}</dd>
-          </div>
-        </dl>
-      </CardContent>
-    </Card>
+    <div className="overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Subject</TableHead>
+            <TableHead>Modality</TableHead>
+            <TableHead>Professor</TableHead>
+            <TableHead>Units</TableHead>
+            <TableHead>Schedule</TableHead>
+            <TableHead>Room</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {subjects.map((section) => (
+            <TableRow key={section.id}>
+              <TableCell>
+                <div className="font-medium">{section.subject_code}</div>
+                <div className="text-muted-foreground">{section.subject_title}</div>
+              </TableCell>
+              <TableCell>
+                <Badge variant={section.modality ? "secondary" : "outline"}>
+                  {modalityLabel(section.modality)}
+                </Badge>
+              </TableCell>
+              <TableCell>{valueOrNotAssigned(section.professor_name)}</TableCell>
+              <TableCell>{section.units}</TableCell>
+              <TableCell>{formatMeeting(section)}</TableCell>
+              <TableCell>{valueOrNotAssigned(section.room)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
@@ -142,9 +143,11 @@ function ScheduleReviewLoading() {
   return (
     <div className="grid gap-3" role="status" aria-label="Loading submitted schedule">
       <Skeleton className="h-8 w-72 max-w-full" />
-      <div className="grid gap-3 md:grid-cols-2">
-        <Skeleton className="h-44" />
-        <Skeleton className="h-44" />
+      <div className="grid gap-2">
+        <Skeleton className="h-10" />
+        <Skeleton className="h-10" />
+        <Skeleton className="h-10" />
+        <Skeleton className="h-10" />
       </div>
     </div>
   )
@@ -157,24 +160,38 @@ function ScheduleSectionTabs({
   proposalId: number
   sections: readonly ScheduleReviewSection[]
 }) {
-  const groupedSections = useMemo(() => {
-    const groups = new Map<string, ScheduleReviewSection[]>()
+  const groupedPrograms = useMemo(() => {
+    const bySection = new Map<string, ScheduleReviewSection[]>()
 
     for (const section of sections)
-      groups.set(section.section_code, [
-        ...(groups.get(section.section_code) ?? []),
+      bySection.set(section.section_code, [
+        ...(bySection.get(section.section_code) ?? []),
         section,
       ])
 
-    return [...groups.entries()]
+    const sectionGroups = [...bySection.entries()]
       .sort(([left], [right]) => collator.compare(left, right))
       .map(([sectionCode, subjects]) => ({ sectionCode, subjects }))
+
+    const byProgram = new Map<string, typeof sectionGroups>()
+    for (const group of sectionGroups)
+      byProgram.set(programCodeFromSection(group.sectionCode), [
+        ...(byProgram.get(programCodeFromSection(group.sectionCode)) ?? []),
+        group,
+      ])
+
+    return [...byProgram.entries()]
+      .sort(([left], [right]) => collator.compare(left, right))
+      .map(([program, sectionGroups]) => ({ program, sectionGroups }))
   }, [sections])
+  const [activeProgram, setActiveProgram] = useState(
+    groupedPrograms[0]?.program ?? "",
+  )
   const [activeSection, setActiveSection] = useState(
-    groupedSections[0]?.sectionCode ?? "",
+    groupedPrograms[0]?.sectionGroups[0]?.sectionCode ?? "",
   )
 
-  if (groupedSections.length === 0)
+  if (groupedPrograms.length === 0)
     return (
       <Empty>
         <EmptyHeader>
@@ -195,35 +212,55 @@ function ScheduleSectionTabs({
   return (
     <Tabs
       key={proposalId}
-      value={activeSection}
-      onValueChange={setActiveSection}
+      value={activeProgram}
+      onValueChange={(program) => {
+        setActiveProgram(program)
+        setActiveSection(
+          groupedPrograms.find((group) => group.program === program)
+            ?.sectionGroups[0]?.sectionCode ?? "",
+        )
+      }}
       className="min-w-0 gap-4"
     >
       <div className="overflow-x-auto pb-1">
-        <TabsList aria-label="Submitted block sections" className="min-w-max">
-          {groupedSections.map(({ sectionCode, subjects }) => (
-            <TabsTrigger key={sectionCode} value={sectionCode}>
-              {sectionCode}
+        <TabsList aria-label="Programs" className="min-w-max">
+          {groupedPrograms.map(({ program, sectionGroups }) => (
+            <TabsTrigger key={program} value={program}>
+              {program}
               <Badge variant="outline" aria-hidden="true">
-                {subjects.length}
+                {sectionGroups.length}
               </Badge>
             </TabsTrigger>
           ))}
         </TabsList>
       </div>
-      {groupedSections.map(({ sectionCode, subjects }) => (
-        <TabsContent key={sectionCode} value={sectionCode}>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-heading text-xl font-medium">{sectionCode}</h3>
-            <p className="text-sm text-muted-foreground">
-              {subjects.length} subject{subjects.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {subjects.map((section) => (
-              <ScheduleSubjectCard key={section.id} section={section} />
+      {groupedPrograms.map(({ program, sectionGroups }) => (
+        <TabsContent key={program} value={program}>
+          <Tabs value={activeSection} onValueChange={setActiveSection} className="min-w-0 gap-4">
+            <div className="overflow-x-auto pb-1">
+              <TabsList aria-label={`${program} block sections`} className="min-w-max">
+                {sectionGroups.map(({ sectionCode, subjects }) => (
+                  <TabsTrigger key={sectionCode} value={sectionCode}>
+                    {sectionCode}
+                    <Badge variant="outline" aria-hidden="true">
+                      {subjects.length}
+                    </Badge>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+            {sectionGroups.map(({ sectionCode, subjects }) => (
+              <TabsContent key={sectionCode} value={sectionCode}>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-heading text-xl font-medium">{sectionCode}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {subjects.length} subject{subjects.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <ScheduleSubjectsTable subjects={subjects} />
+              </TabsContent>
             ))}
-          </div>
+          </Tabs>
         </TabsContent>
       ))}
     </Tabs>
@@ -253,7 +290,7 @@ export function ScheduleReviewDialog({
 
   return (
     <Dialog open={proposal !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="grid max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90dvh] sm:max-w-5xl sm:rounded-xl">
+      <DialogContent className="grid max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90dvh] sm:max-w-6xl sm:rounded-xl">
         <DialogHeader className="px-4 pt-4 pr-12 sm:px-6 sm:pt-6 sm:pr-14">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="grid gap-1">

@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { PublishedSectionsPanel } from "@/features/components/portal/published-sections-panel"
 import { ScheduleDecisionControls } from "@/features/components/portal/schedule-decision-workspace"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
@@ -19,11 +20,14 @@ import {
 } from "@/features/components/ui/tabs"
 import {
   useAcademicTermsQuery,
+  useProgramsQuery,
   useSectionsQuery,
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
+import { useCurriculaQuery } from "@/features/hooks/use-curricula"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
-import { formatAcademicTerm } from "@/features/services/reference-data-service"
+import { useSectionPlansQuery } from "@/features/hooks/use-section-plans"
+import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
 
 export function MasterScheduleWorkspace() {
   const { session } = useAuth()
@@ -32,6 +36,18 @@ export function MasterScheduleWorkspace() {
   const subjectsQuery = useSubjectsQuery({ enabled: authorized })
   const sectionsQuery = useSectionsQuery({ enabled: authorized })
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
+  const curriculaQuery = useCurriculaQuery()
+  const programsQuery = useProgramsQuery({ enabled: authorized })
+  const activeTerm = getActiveAcademicTerm(termsQuery.data)
+  // College and year level live on the section plan a published section was
+  // generated from, not on the section itself — joined below by
+  // `section_plan_id`. This deliberately isn't folded into `sectionsListQuery`:
+  // it only powers the College/Year filter buttons, so a slow or failed plan
+  // fetch should never block the published-sections list from rendering.
+  const sectionPlansQuery = useSectionPlansQuery(
+    activeTerm?.id ?? 0,
+    authorized && activeTerm !== null,
+  )
   const published = (sectionsQuery.data ?? []).filter(
     (section) => section.status === "published",
   )
@@ -112,50 +128,13 @@ export function MasterScheduleWorkspace() {
                 loadingLabel="Loading the master schedule…"
               >
                 {(sections) => (
-                  <ul className="grid gap-3 md:grid-cols-2">
-                    {sections.map((section) => {
-                      const subject = (subjectsQuery.data ?? []).find(
-                        (item) => item.id === section.subject_id,
-                      )
-                      const term = (termsQuery.data ?? []).find(
-                        (item) => item.id === section.academic_term_id,
-                      )
-                      return (
-                        <li key={section.id}>
-                          <Card size="sm" className="h-full">
-                            <CardHeader>
-                              <CardTitle level={3}>
-                                {subject
-                                  ? `${subject.code} · ${subject.title}`
-                                  : `Section #${section.id}`}
-                              </CardTitle>
-                              <CardDescription>
-                                {term
-                                  ? formatAcademicTerm(term)
-                                  : "Academic term unavailable"}
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-                                <div>
-                                  <dt className="text-muted-foreground">Section</dt>
-                                  <dd className="font-medium">{section.section_code}</dd>
-                                </div>
-                                <div>
-                                  <dt className="text-muted-foreground">Meeting</dt>
-                                  <dd className="font-medium">{section.schedule_days ?? "Not assigned"}</dd>
-                                </div>
-                                <div className="col-span-2">
-                                  <dt className="text-muted-foreground">Room</dt>
-                                  <dd className="font-medium">{section.room ?? "Not assigned"}</dd>
-                                </div>
-                              </dl>
-                            </CardContent>
-                          </Card>
-                        </li>
-                      )
-                    })}
-                  </ul>
+                  <PublishedSectionsPanel
+                    sections={sections}
+                    subjects={subjectsQuery.data ?? []}
+                    sectionPlans={sectionPlansQuery.data ?? []}
+                    curricula={curriculaQuery.data ?? []}
+                    programs={programsQuery.data ?? []}
+                  />
                 )}
               </AsyncBoundary>
             </CardContent>
