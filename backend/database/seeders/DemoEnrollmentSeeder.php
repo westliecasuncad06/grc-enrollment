@@ -317,8 +317,8 @@ final class DemoEnrollmentSeeder extends Seeder
                 $profiles->push($profile);
             }
 
-            $this->reclassify($profiles);
             $this->seedRegularBlocks($curriculum, $encoder);
+            $this->reclassify($profiles);
             $this->seedCurriculumVersionDemoStudents();
         });
     }

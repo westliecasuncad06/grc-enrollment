@@ -63,8 +63,8 @@ final class DatabaseSeeder extends Seeder
         }
 
         $this->call([
-            StudentRosterSeeder::class,
             ProgramChairScheduleSampleSeeder::class,
+            StudentRosterSeeder::class,
         ]);
     }
 }
