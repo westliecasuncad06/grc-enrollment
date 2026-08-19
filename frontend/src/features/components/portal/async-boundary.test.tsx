@@ -25,6 +25,45 @@ describe("AsyncBoundary", () => {
     expect(screen.queryByText("data")).not.toBeInTheDocument()
   })
 
+  it("shows the branded fallback when pending without a custom fallback", () => {
+    render(
+      <AsyncBoundary
+        query={{
+          isPending: true,
+          isError: false,
+          error: null,
+          data: undefined,
+          refetch: () => undefined,
+        }}
+      >
+        {() => <p>data</p>}
+      </AsyncBoundary>,
+    )
+
+    expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument()
+    expect(screen.getByText("GRC")).toBeInTheDocument()
+  })
+
+  it("preserves a caller-provided loading fallback", () => {
+    render(
+      <AsyncBoundary
+        query={{
+          isPending: true,
+          isError: false,
+          error: null,
+          data: undefined,
+          refetch: () => undefined,
+        }}
+        loadingFallback={<p>Loading roster layout</p>}
+      >
+        {() => <p>data</p>}
+      </AsyncBoundary>,
+    )
+
+    expect(screen.getByText("Loading roster layout")).toBeInTheDocument()
+    expect(screen.queryByText("GRC")).not.toBeInTheDocument()
+  })
+
   it("renders a status-aware error, omitting retry for a non-retryable status", () => {
     const refetch = vi.fn()
     render(

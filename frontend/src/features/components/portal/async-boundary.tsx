@@ -9,7 +9,7 @@ import {
 } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import { Empty, EmptyDescription } from "@/features/components/ui/empty"
-import { Skeleton } from "@/features/components/ui/skeleton"
+import { GrcLoadingLogo } from "@/features/components/portal/grc-loading-logo"
 import { getStatePresentation } from "@/features/lib/api-error-presentation"
 
 export interface AsyncBoundaryQuery<T> {
@@ -53,12 +53,16 @@ export function AsyncBoundary<T>({
   children,
 }: AsyncBoundaryProps<T>) {
   if (query.isPending) {
-    return (
-      <div role="status" aria-live="polite" className="flex flex-col gap-2">
-        <span className="sr-only">{loadingLabel}</span>
-        {loadingFallback ?? <Skeleton className="h-32" />}
-      </div>
-    )
+    if (loadingFallback) {
+      return (
+        <div role="status" aria-live="polite" className="flex flex-col gap-2">
+          <span className="sr-only">{loadingLabel}</span>
+          {loadingFallback}
+        </div>
+      )
+    }
+
+    return <GrcLoadingLogo label={loadingLabel} />
   }
 
   if (query.isError) {
