@@ -111,10 +111,20 @@ final readonly class ClassifyEnrollmentStanding
                 }
 
                 if ($this->isCompleted($subjectId, $marks, $credited)) {
-                    $reasons[] = [
-                        'code' => 'needs_removing_completed',
-                        'message' => "{$placement->subject->code} has already been completed and is no longer part of this term's standard load.",
-                    ];
+                    // A subject offered either semester (SemesterCoverage::
+                    // coversBoth() — the composite '1st|2nd' placement) is
+                    // designed to be taken in whichever term suits the
+                    // student. Already having passed it is the normal,
+                    // expected outcome of that flexibility, not an anomaly
+                    // -- flagging it for removal would misclassify every
+                    // student who simply took a flexible subject a term
+                    // early.
+                    if (! SemesterCoverage::coversBoth($placement->semester)) {
+                        $reasons[] = [
+                            'code' => 'needs_removing_completed',
+                            'message' => "{$placement->subject->code} has already been completed and is no longer part of this term's standard load.",
+                        ];
+                    }
 
                     continue;
                 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Academic\GradeStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -11,6 +12,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
+use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermSectionPlan;
 use App\Models\Curriculum;
@@ -139,6 +141,34 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         $response->assertJsonPath('data.0.seats_remaining', 40);
         self::assertSame(6.0, (float) $response->json('data.0.total_units'));
         self::assertCount(2, $response->json('data.0.subjects'));
+    }
+
+    public function test_a_dual_semester_subject_already_passed_does_not_block_selecting_the_block(): void
+    {
+        // Real-data regression: a subject placed '1st|2nd' (offered either
+        // semester by curriculum design) that a student already passed in
+        // an earlier semester must not disqualify them from their current
+        // block — see ClassifyEnrollmentStandingTest's matching case for
+        // the classification side of the same bug (E-COMM,
+        // curriculum_id=10, blocked most of the term's Irregular
+        // population including a student with no genuine backlog).
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum);
+        [$subject, ] = $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
+        CurriculumSubject::where('curriculum_id', $curriculum->id)->where('subject_id', $subject->id)->update(['semester' => '1st|2nd']);
+        $student = $this->makeStudent($curriculum);
+        $registrar = User::create(['name' => 'Registrar', 'email' => 'registrar.dualsem@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $subject->id, 'academic_term_id' => $term->id,
+            'mark' => '2.00', 'status' => GradeStatus::Locked, 'encoded_by' => $registrar->id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id);
+
+        $response->assertJsonPath('data.0.is_selectable', true);
+        self::assertSame([], $response->json('data.0.reasons'));
     }
 
     public function test_seats_remaining_is_the_minimum_across_every_section_in_the_block(): void

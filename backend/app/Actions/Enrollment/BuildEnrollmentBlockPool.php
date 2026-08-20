@@ -5,6 +5,7 @@ namespace App\Actions\Enrollment;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Domain\Academic\PrerequisiteVerdict;
+use App\Domain\Curriculum\SemesterCoverage;
 use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentBlock;
 use App\Domain\Enrollment\EnrollmentStatus;
@@ -124,15 +125,23 @@ final readonly class BuildEnrollmentBlockPool
             ->keyBy('subject_id');
 
         foreach ($sections as $section) {
-            $ownGrade = $this->latestLockedGrade($student->id, $section->subject_id);
-            if ($this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
-                $reasons[] = ['code' => 'partially_completed', 'message' => "{$section->subject->code} has already been completed with a passing grade. See the Registrar about enrolling as an irregular student."];
-            }
-
             // Prerequisites are scoped per curriculum placement (Subject
             // itself carries no prerequisite relation) — a subject absent
             // from this curriculum's placements simply has none to check.
             $placement = $placements->get($section->subject_id);
+
+            $ownGrade = $this->latestLockedGrade($student->id, $section->subject_id);
+            $alreadyPassed = $this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied();
+            // A subject offered either semester (SemesterCoverage::
+            // coversBoth() — the composite '1st|2nd' placement) is designed
+            // to be taken in whichever term suits the student; already
+            // having passed it is the normal, expected outcome of that
+            // flexibility, not grounds to withhold the block.
+            $offeredEitherSemester = $placement !== null && SemesterCoverage::coversBoth($placement->semester);
+            if ($alreadyPassed && ! $offeredEitherSemester) {
+                $reasons[] = ['code' => 'partially_completed', 'message' => "{$section->subject->code} has already been completed with a passing grade. See the Registrar about enrolling as an irregular student."];
+            }
+
             $prerequisites = $placement !== null ? $placement->prerequisites : [];
             foreach ($prerequisites as $edge) {
                 $prerequisiteGrade = $this->latestLockedGrade($student->id, $edge->prerequisite_subject_id);

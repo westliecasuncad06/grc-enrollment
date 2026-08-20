@@ -228,6 +228,34 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertSame('needs_removing_completed', $verdict->reasons[0]['code']);
     }
 
+    public function test_a_dual_semester_standard_subject_already_passed_does_not_affect_standing(): void
+    {
+        // A subject placed '1st|2nd' (SemesterCoverage::coversBoth()) is
+        // offered either semester by design (App\Domain\Curriculum\
+        // SemesterCoverage's own docblock: written by
+        // CatalogSectionMetadata::semester() for exactly this case).
+        // Having already passed it in an earlier semester is the NORMAL,
+        // expected outcome of that flexibility -- not an anomaly worth
+        // flagging for removal. Real-data regression: this exact pattern
+        // (E-COMM, curriculum_id=10) misclassified the large majority of
+        // this term's Irregular population after the population-wide
+        // reclassify, including a student with no genuine backlog subject
+        // at all (Ernesto F. Ward).
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $subject = $this->makeSubject('E-COMM');
+        $this->placeSubject($curriculum, $subject, 2, '1st|2nd');
+        $this->makeBlockSection($term, $plan, $subject);
+        $student = $this->makeStudent($curriculum, 'flexible-early-pass@grc.test');
+        $this->lockGrade($student, $subject, $term, '2.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular());
+    }
+
     public function test_a_standard_subject_blocked_by_an_unmet_prerequisite_makes_the_student_irregular(): void
     {
         $term = $this->makeTerm();
