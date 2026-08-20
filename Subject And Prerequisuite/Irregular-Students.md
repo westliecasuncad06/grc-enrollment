@@ -6,7 +6,7 @@ in the local database, derived by the real `ClassifyEnrollmentStanding` from act
 (`Database\Seeders\StudentRosterSeeder`). A student appears here only when the database itself derived them
 as Irregular — never a guess.
 
-**Total irregular students:** 129
+**Total irregular students:** 39
 
 | Student No. | Name | Email | Program | Section | Year |
 |---|---|---|---|---|---|
@@ -22,102 +22,12 @@ as Irregular — never a guess.
 | 2024-06-01181 | Gerald M. Sagun | s2401181@grc.test | BSED-VAL | VAL301 | 3 |
 | 2024-06-01191 | Romeo W. Sagum | s2401191@grc.test | BSED-VAL | VAL301 | 3 |
 | 2024-06-01201 | Virginia S. Katindig | s2401201@grc.test | BSED-VAL | VAL301 | 3 |
-| 2024-06-01211 | Santiago L. Sabado | s2401211@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01212 | Ernesto F. Ward | s2401212@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01213 | Concepcion K. Bagsic | s2401213@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01214 | Oscar X. Lacsamana | s2401214@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01215 | Julieta B. Mariano | s2401215@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01216 | Quirino V. Quimpo | s2401216@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01217 | Wilfredo C. Padua | s2401217@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01218 | Efren I. Guerrero | s2401218@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01219 | Irene C. Palad | s2401219@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01220 | Elena O. Taylor | s2401220@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01221 | Celia A. Chua | s2401221@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01222 | Rey P. Sanchez | s2401222@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01223 | Trinidad N. Fajardo | s2401223@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01224 | Roberto Q. Lacson | s2401224@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01225 | Kaye Q. Mercado | s2401225@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01226 | Salome E. De Leon | s2401226@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01227 | Marlon T. Velasco | s2401227@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01228 | Rosario K. Foster | s2401228@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01229 | Benilda U. Del Mundo | s2401229@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01230 | Arturo C. Dizon | s2401230@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01231 | Elizabeth F. Robles | s2401231@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01232 | Yolanda J. Lopez | s2401232@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01233 | Wesley V. De Vera | s2401233@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01234 | Ivan F. Orlanes | s2401234@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01235 | Ignacio S. Hall | s2401235@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01236 | Cesar C. Manalo | s2401236@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01237 | Elmo B. Arceo | s2401237@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01238 | Rogelio S. Bernardo | s2401238@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01239 | Minerva U. Manlangit | s2401239@grc.test | BSENTREP | EN301 | 3 |
-| 2024-06-01240 | Purita X. Umali | s2401240@grc.test | BSENTREP | EN301 | 3 |
 | 2024-06-01241 | Christopher G. Umali | s2401241@grc.test | BSBA-FM | FM301 | 3 |
 | 2024-06-01251 | Cecilia Y. Dimaculangan | s2401251@grc.test | BSBA-FM | FM301 | 3 |
 | 2024-06-01261 | Herminia R. Marshall | s2401261@grc.test | BSBA-FM | FM301 | 3 |
 | 2024-06-01271 | Bernadette V. Villaruel | s2401271@grc.test | BSBA-FM | FM302 | 3 |
 | 2024-06-01281 | Federico S. Sarmiento | s2401281@grc.test | BSBA-FM | FM302 | 3 |
 | 2024-06-01291 | Rica B. Ronquillo | s2401291@grc.test | BSBA-FM | FM302 | 3 |
-| 2024-06-01301 | Vincent J. Kalaw | s2401301@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01302 | Milagros V. Evangelista | s2401302@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01303 | Angel Z. Torres | s2401303@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01304 | Christian X. Macaspac | s2401304@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01305 | Jocelyn A. Uy | s2401305@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01306 | Luz R. Parker | s2401306@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01307 | Leandro Y. Lim | s2401307@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01308 | Rogelio B. Dimalanta | s2401308@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01309 | Irene U. Bautista | s2401309@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01310 | John Q. Pundaquit | s2401310@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01311 | Bayani O. Velasco | s2401311@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01312 | Sixto U. Malvar | s2401312@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01313 | Christian I. Batungbakal | s2401313@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01314 | Ysabel M. Walker | s2401314@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01315 | Reynaldo H. Buenavista | s2401315@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01316 | Paolo O. Talens | s2401316@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01317 | Florencio K. Bartolome | s2401317@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01318 | Luz I. Ganding | s2401318@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01319 | Antonieta P. Ordonez | s2401319@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01320 | Bonifacio M. Jackson | s2401320@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01321 | Mark P. De Guzman | s2401321@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01322 | Mark R. Dungog | s2401322@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01323 | Michael E. Herrera | s2401323@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01324 | Imelda Y. Navarro | s2401324@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01325 | Marco K. Ko | s2401325@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01326 | Oscar K. Macatangay | s2401326@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01327 | Joy I. Dumlao | s2401327@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01328 | Concepcion R. Mendoza | s2401328@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01329 | Ramon T. Dee | s2401329@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01330 | Rosario R. Cabanting | s2401330@grc.test | BSBA-HRM | HR301 | 3 |
-| 2024-06-01331 | Natividad D. Mercado | s2401331@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01332 | Melchor A. Morales | s2401332@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01333 | Benilda Y. Tagumpay | s2401333@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01334 | Guadalupe Z. Magsino | s2401334@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01335 | Irene Z. Macatangay | s2401335@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01336 | Ella R. Robles | s2401336@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01337 | Gerald G. Uy | s2401337@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01338 | Luz R. Manansala | s2401338@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01339 | Luz B. Lopez | s2401339@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01340 | Aida N. Gaw | s2401340@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01341 | Lourdes K. Malabanan | s2401341@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01342 | Kaye Z. Lumbera | s2401342@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01343 | Vicente Q. Manlangit | s2401343@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01344 | Wilfredo M. Robles | s2401344@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01345 | Jocelyn V. Quilang | s2401345@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01346 | Lucio L. Pascual | s2401346@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01347 | Jocelyn K. Batac | s2401347@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01348 | Jasmine I. Rodriguez | s2401348@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01349 | Melinda G. Valdez | s2401349@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01350 | Dominic E. Villanueva | s2401350@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01351 | Noel O. Ganding | s2401351@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01352 | Mercedes Z. Watson | s2401352@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01353 | Gracia A. Torres | s2401353@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01354 | Erlinda B. Valdez | s2401354@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01355 | Manuel D. Baltazar | s2401355@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01356 | Ella G. Tuazon | s2401356@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01357 | Victoria V. Sanchez | s2401357@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01358 | Lucio Q. Santiago | s2401358@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01359 | Alicia D. Palad | s2401359@grc.test | BSBA-HRM | HR302 | 3 |
-| 2024-06-01360 | Pio I. Corpuz | s2401360@grc.test | BSBA-HRM | HR302 | 3 |
 | 2023-06-01451 | Rogelio C. Ortega | s2301451@grc.test | BSIT | IT401 | 4 |
 | 2023-06-01461 | Fernando H. Chua | s2301461@grc.test | BSIT | IT401 | 4 |
 | 2023-06-01471 | Amparo Q. Villaflor | s2301471@grc.test | BSIT | IT401 | 4 |
