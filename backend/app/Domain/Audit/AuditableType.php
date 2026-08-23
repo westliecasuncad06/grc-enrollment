@@ -56,6 +56,8 @@ final class AuditableType
 
     public const STUDENT_SCHEDULE_PREFERENCE = 'student_schedule_preference';
 
+    public const QUEUE_CYCLE = 'queue_cycle';
+
     /**
      * @return list<string>
      */
@@ -88,6 +90,7 @@ final class AuditableType
             self::ACADEMIC_TERM_YEAR_LEVEL_WINDOW,
             self::ENROLLMENT_CHANGE_REQUEST,
             self::STUDENT_SCHEDULE_PREFERENCE,
+            self::QUEUE_CYCLE,
         ];
     }
 }

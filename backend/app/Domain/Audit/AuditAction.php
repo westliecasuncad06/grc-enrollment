@@ -148,6 +148,14 @@ final class AuditAction
 
     public const STUDENT_SCHEDULE_PREFERENCE_SAVED = 'student_schedule_preference.saved';
 
+    public const QUEUE_TICKET_CLAIMED = 'queue_ticket.claimed';
+
+    public const QUEUE_CYCLE_CUT_OFF = 'queue_cycle.cut_off';
+
+    public const QUEUE_CYCLE_RESUMED = 'queue_cycle.resumed';
+
+    public const QUEUE_CYCLE_CLOSED = 'queue_cycle.closed';
+
     /**
      * @return list<string>
      */
@@ -226,6 +234,10 @@ final class AuditAction
             self::ENROLLMENT_CHANGE_REQUEST_APPROVED,
             self::ENROLLMENT_CHANGE_REQUEST_REJECTED,
             self::STUDENT_SCHEDULE_PREFERENCE_SAVED,
+            self::QUEUE_TICKET_CLAIMED,
+            self::QUEUE_CYCLE_CUT_OFF,
+            self::QUEUE_CYCLE_RESUMED,
+            self::QUEUE_CYCLE_CLOSED,
         ];
     }
 }

@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\QueueCycleStatus;
+use App\Domain\Enrollment\QueueServiceDate;
+use App\Domain\Enrollment\QueueTicketStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -59,5 +63,36 @@ final class QueueCycle extends Model
     public function tickets(): HasMany
     {
         return $this->hasMany(QueueTicket::class);
+    }
+
+    /**
+     * No `waiting`/`serving` ticket remains whose enrollment is still
+     * `pending_payment` — the read-only half of the reset rule (see
+     * `App\Actions\Enrollment\ClaimQueueTicket`). Scoped to `pending_payment`
+     * so a ticket left behind by a payment `ConfirmPayment` confirmed but
+     * never marked `complete` on the ticket does not block the cycle from
+     * ever draining — a known, documented gap this method deliberately
+     * routes around rather than silently inheriting.
+     */
+    public function isDrained(): bool
+    {
+        return ! $this->tickets()
+            ->whereIn('status', [QueueTicketStatus::Waiting->value, QueueTicketStatus::Serving->value])
+            ->whereHas('enrollment', fn ($query) => $query->where('status', EnrollmentStatus::PendingPayment->value))
+            ->exists();
+    }
+
+    public function status(): QueueCycleStatus
+    {
+        if ($this->closed_at !== null) {
+            return QueueCycleStatus::Closed;
+        }
+
+        if ($this->cut_off_service_date !== null
+            && $this->cut_off_service_date->toDateString() === QueueServiceDate::today()) {
+            return QueueCycleStatus::CutOff;
+        }
+
+        return QueueCycleStatus::Open;
     }
 }
