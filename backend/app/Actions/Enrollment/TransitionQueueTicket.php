@@ -5,8 +5,10 @@ namespace App\Actions\Enrollment;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\QueueCycleStatus;
 use App\Domain\Enrollment\QueueTicketPriority;
 use App\Domain\Enrollment\QueueTicketStatus;
+use App\Models\QueueCycle;
 use App\Models\QueueTicket;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -26,6 +28,11 @@ use InvalidArgumentException;
  * to push the ticket to the back of its own priority tier, see
  * `QueueTicket::position()` — from either `waiting` or `serving`) and a
  * single-active-serving rule, never any numbering or eligibility policy.
+ * The single-active-serving rule (and `serve`'s cut-off guard below) is
+ * scoped to the ticket's `queue_cycle_id`, not `queue_date` — a cycle can
+ * span multiple Manila service days once a cut-off carries tickets
+ * forward, and a stale `queue_date` scope would leave a carry-over ticket
+ * `serving` forever once a later-dated ticket in the same cycle is served.
  * No skip-count limit is enforced: PRD §17 leaves this whole area
  * provisional, and a cap would be inventing policy, not implementing an
  * approved one. No notification is sent: calling, completing, or skipping
@@ -94,18 +101,30 @@ final readonly class TransitionQueueTicket
                 ]);
             }
 
+            if ($action === 'serve') {
+                $cycle = QueueCycle::query()->whereKey($lockedTicket->queue_cycle_id)->first();
+
+                if ($cycle !== null && $cycle->status() === QueueCycleStatus::CutOff) {
+                    throw ValidationException::withMessages([
+                        'action' => 'The queue is cut off for today. Resume it before serving another ticket.',
+                    ]);
+                }
+            }
+
             $beforeValues = self::snapshot($lockedTicket);
             $targetStatus = self::TARGET_STATUS[$action];
 
             if ($action === 'serve') {
                 // Single-active-serving: calling a new number implicitly
-                // completes whatever was already being served today, rather
-                // than requiring the cashier to complete it first. Not
-                // separately audited — the same bulk-update-without-per-row
-                // -audit precedent ConfirmPayment already uses for
-                // EnrollmentSubject transitions.
+                // completes whatever was already being served in this
+                // cycle, rather than requiring the cashier to complete it
+                // first. Scoped to queue_cycle_id, not queue_date -- see
+                // this class's docblock. Not separately audited -- the
+                // same bulk-update-without-per-row-audit precedent
+                // ConfirmPayment already uses for EnrollmentSubject
+                // transitions.
                 QueueTicket::query()
-                    ->where('queue_date', $lockedTicket->queue_date)
+                    ->where('queue_cycle_id', $lockedTicket->queue_cycle_id)
                     ->where('status', QueueTicketStatus::Serving)
                     ->whereKeyNot($lockedTicket->id)
                     ->update(['status' => QueueTicketStatus::Served, 'served_at' => now()]);

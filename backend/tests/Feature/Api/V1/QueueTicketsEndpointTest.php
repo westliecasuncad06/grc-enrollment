@@ -5,6 +5,7 @@ namespace Tests\Feature\Api\V1;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\QueueServiceDate;
 use App\Domain\Enrollment\QueueTicketPriority;
 use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -378,6 +379,39 @@ final class QueueTicketsEndpointTest extends TestCase
         $response->assertOk()->assertJsonPath('data.status', 'serving');
         self::assertSame('served', $alreadyServing->refresh()->status->value);
         self::assertNotNull($alreadyServing->refresh()->served_at);
+    }
+
+    public function test_serving_a_new_ticket_completes_a_carry_over_still_serving_from_an_earlier_date(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'a.carryserve@grc.test', '2026-1001');
+        $studentB = $this->makeStudent($curriculum, 'b.carryserve@grc.test', '2026-1002');
+        $carryOver = $this->makeTicket($studentA, $term, 'Q000048', '2026-08-22', QueueTicketStatus::Serving);
+        $today = $this->makeTicket($studentB, $term, 'Q000050', '2026-08-23');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.carryserve@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$today->id}", ['action' => 'serve'])->assertOk();
+
+        // Before this fix, the bulk-complete was scoped to queue_date, so a
+        // carry-over `serving` ticket from an earlier date was left
+        // serving forever -- two simultaneous "now serving" tickets.
+        self::assertSame('served', $carryOver->refresh()->status->value);
+        self::assertSame('serving', $today->refresh()->status->value);
+    }
+
+    public function test_serve_is_blocked_while_the_cycle_is_cut_off_for_today(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'a.cutoffserve@grc.test', '2026-1001');
+        $ticket = $this->makeTicket($student, $term, 'Q000001');
+        $ticket->cycle->update(['cut_off_at' => now(), 'cut_off_service_date' => QueueServiceDate::today()]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.cutoffserve@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'serve'])
+            ->assertUnprocessable()
+            ->assertJsonPath('error.errors.action.0', 'The queue is cut off for today. Resume it before serving another ticket.');
     }
 
     public function test_serving_a_ticket_records_who_served_it(): void

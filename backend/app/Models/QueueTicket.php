@@ -65,6 +65,14 @@ final class QueueTicket extends Model
     }
 
     /**
+     * @return BelongsTo<QueueCycle, $this>
+     */
+    public function cycle(): BelongsTo
+    {
+        return $this->belongsTo(QueueCycle::class, 'queue_cycle_id');
+    }
+
+    /**
      * The Accounting Staff member who called this ticket. Deliberately
      * never exposed via `QueueTicketResource` — actor identity is never
      * rendered to students, the same privacy convention every audited
