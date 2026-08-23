@@ -101,4 +101,19 @@ final class EnrollmentPolicy
         return $user->role === UserRole::Student
             && $enrollment->student->user_id === $user->id;
     }
+
+    /**
+     * The queue kiosk claim (a later slice adds the kiosk's own
+     * authentication on top of this — this ability is the permanent
+     * "who may ever produce this enrollment's one queue ticket" rule):
+     * the owning Student, or any Accounting Staff member issuing on a
+     * student's behalf at the front desk. Same ownership shape as
+     * `withdraw`/`requestChange`, plus the front-desk override — see
+     * `App\Actions\Enrollment\ClaimQueueTicket`.
+     */
+    public function claimQueueTicket(User $user, Enrollment $enrollment): bool
+    {
+        return ($user->role === UserRole::Student && $enrollment->student->user_id === $user->id)
+            || $user->role === UserRole::AccountingStaff;
+    }
 }

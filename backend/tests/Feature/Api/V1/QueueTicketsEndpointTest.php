@@ -18,6 +18,7 @@ use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
 use App\Models\Program;
+use App\Models\QueueCycle;
 use App\Models\QueueTicket;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -87,9 +88,15 @@ final class QueueTicketsEndpointTest extends TestCase
             'total_units' => 3,
             'submitted_at' => now(),
         ]);
+        $cycle = QueueCycle::query()->whereNull('closed_at')->first()
+            ?? QueueCycle::create(['opened_on' => $queueDate, 'last_ticket_sequence' => 0]);
+        $sequence = $cycle->last_ticket_sequence + 1;
+        $cycle->update(['last_ticket_sequence' => $sequence, 'last_claimed_on' => $queueDate]);
 
         return QueueTicket::create([
             'enrollment_id' => $enrollment->id,
+            'queue_cycle_id' => $cycle->id,
+            'ticket_sequence' => $sequence,
             'ticket_number' => $ticketNumber,
             'queue_date' => $queueDate,
             'status' => $status,
@@ -308,6 +315,39 @@ final class QueueTicketsEndpointTest extends TestCase
         // precedes every Regular ticket, including A which never left waiting.
         self::assertSame(0, $ticketB->refresh()->position());
         self::assertSame(1, $ticketA->refresh()->position());
+    }
+
+    public function test_a_carry_over_ticket_from_an_earlier_date_stays_ahead_of_todays_new_tickets(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'a.carry@grc.test', '2026-1001');
+        $studentB = $this->makeStudent($curriculum, 'b.carry@grc.test', '2026-1002');
+        $carryOver = $this->makeTicket($studentA, $term, 'Q000048', '2026-08-22');
+        $today = $this->makeTicket($studentB, $term, 'Q000050', '2026-08-23');
+
+        self::assertSame($carryOver->queue_cycle_id, $today->queue_cycle_id);
+        self::assertSame(0, $carryOver->position());
+        self::assertSame(1, $today->position());
+    }
+
+    public function test_a_carry_over_ticket_re_skipped_today_stays_ahead_of_todays_new_tickets_only(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'a.reskip@grc.test', '2026-1001');
+        $studentB = $this->makeStudent($curriculum, 'b.reskip@grc.test', '2026-1002');
+        $carryOver = $this->makeTicket($studentA, $term, 'Q000048', '2026-08-22', QueueTicketStatus::Serving);
+        $today = $this->makeTicket($studentB, $term, 'Q000050', '2026-08-23');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.reskip@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$carryOver->id}", ['action' => 'skip'])->assertOk();
+
+        // Skipped again today, but it still belongs to Friday's group --
+        // it goes to the back of ITS OWN queue_date, not behind Saturday's
+        // walk-ins.
+        self::assertSame(0, $carryOver->refresh()->position());
+        self::assertSame(1, $today->refresh()->position());
     }
 
     public function test_skip_cannot_be_performed_from_served(): void

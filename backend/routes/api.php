@@ -208,6 +208,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // ownership check, the same shape as `enrollments/{enrollment}/withdraw`.
         Route::post('/enrollments/{enrollment}/change-requests', [EnrollmentChangeRequestController::class, 'store'])->name('enrollments.change-requests.store');
 
+        // FR-FIN-006 (queue kiosk claim): Student claims their own ticket,
+        // or Accounting Staff issues one on a student's behalf at the
+        // front desk. No `role:` middleware — EnrollmentPolicy::
+        // claimQueueTicket resolves both cases; see ClaimQueueTicket. Sits
+        // outside the accounting-only queue-tickets group below since a
+        // Student must also reach it.
+        Route::post('/queue-tickets', [QueueTicketController::class, 'store'])->name('queue-tickets.store');
+
         // Role-scoped read (Student own, Registrar Head and Registrar Staff
         // all — EnrollmentChangeRequest::scopeVisibleTo); `decide`
         // (approve/reject) is Registrar Head only — the opposite role

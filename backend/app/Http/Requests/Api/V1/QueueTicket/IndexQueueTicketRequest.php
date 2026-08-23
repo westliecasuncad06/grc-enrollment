@@ -24,6 +24,7 @@ final class IndexQueueTicketRequest extends FormRequest
                 fn (QueueTicketStatus $status): string => $status->value,
                 QueueTicketStatus::cases(),
             ))],
+            'cycle' => ['sometimes', Rule::in(['open'])],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];

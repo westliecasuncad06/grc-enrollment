@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * @property int $id
  * @property int $enrollment_id
+ * @property ?int $queue_cycle_id
+ * @property ?int $ticket_sequence
  * @property string $ticket_number
  * @property CarbonImmutable $queue_date
  * @property QueueTicketStatus $status
@@ -29,7 +31,9 @@ final class QueueTicket extends Model
     /** @var list<string> */
     protected $fillable = [
         'enrollment_id',
+        'queue_cycle_id',
         'ticket_number',
+        'ticket_sequence',
         'queue_date',
         'status',
         'priority',
@@ -91,27 +95,20 @@ final class QueueTicket extends Model
     }
 
     /**
-     * How many other `waiting` tickets stand ahead of this one today — the
-     * whole queue is never exposed to a student (privacy), only their own
-     * count. `null` once this ticket has left `waiting` (position no
-     * longer means anything for a ticket already being served or done).
-     * Priority tickets always precede regular ones within the same day;
-     * within a tier, ordered by `effectiveOrder()` -- arrival order for a
-     * never-skipped ticket, or the moment it was last requeued for one
-     * that was.
-     *
-     * `created_at`/`requeued_at` are whole-second `timestamp` columns
-     * (Eloquent truncates any sub-second precision on write regardless of
-     * column precision, so widening them buys nothing), which means two
-     * events landing in the same wall-clock second -- routine under a fast
-     * test suite, and not impossible at a real front desk -- tie on
-     * `COALESCE(...)` alone. `id` can't be the *whole* tiebreak for that
-     * tie: a low-id ticket requeued after a higher-id ticket already
-     * exists must now sort *after* it, which a plain `id` comparison gets
-     * backwards. So a tie first splits on `requeued_at IS NOT NULL` --
-     * never-requeued (arrival order) always precedes requeued (skip
-     * moment) -- and only falls back to `id` once both candidates agree on
-     * that split, i.e. a true same-instant tie within one regime.
+     * How many other `waiting` tickets stand ahead of this one in the
+     * current open cycle — the whole queue is never exposed to a student
+     * (privacy), only their own count. `null` once this ticket has left
+     * `waiting`. Priority tickets always precede regular ones within the
+     * same cycle; within a tier, ordered by `queue_date` (a cycle can span
+     * multiple Manila service days once a cut-off carries tickets forward
+     * — a carry-over always sorts ahead of a same-cycle ticket claimed on a
+     * later date), then `COALESCE(requeued_at, created_at)` — arrival
+     * order for a never-skipped ticket, or the moment it was last requeued
+     * for one that was — with `id` as the final tiebreaker for a true
+     * timestamp tie. Mirrors `App\Actions\Enrollment\ListQueueTickets`'s
+     * ordering exactly; see docs/superpowers/specs/
+     * 2026-08-23-queue-kiosk-claim-carryover-cutoff-design.md for why the
+     * `queue_date` term is required once a cycle spans multiple dates.
      */
     public function position(): ?int
     {
@@ -119,23 +116,30 @@ final class QueueTicket extends Model
             return null;
         }
 
-        $waitingOnSameDay = self::query()
-            ->where('queue_date', $this->queue_date)
+        $waitingInCycle = self::query()
+            ->where('queue_cycle_id', $this->queue_cycle_id)
             ->where('status', QueueTicketStatus::Waiting);
 
         $applyOrderedBefore = function ($query): void {
+            $selfDate = $this->queue_date->toDateString();
             $effectiveOrder = $this->effectiveOrder()->format('Y-m-d H:i:s');
             $selfWasRequeued = (int) ($this->requeued_at !== null);
 
-            $query->where(function ($query) use ($effectiveOrder, $selfWasRequeued) {
-                $query->whereRaw('COALESCE(requeued_at, created_at) < ?', [$effectiveOrder])
-                    ->orWhere(function ($query) use ($effectiveOrder, $selfWasRequeued) {
-                        $query->whereRaw('COALESCE(requeued_at, created_at) = ?', [$effectiveOrder])
-                            ->where(function ($query) use ($selfWasRequeued) {
-                                $query->whereRaw('(requeued_at IS NOT NULL) < ?', [$selfWasRequeued])
-                                    ->orWhere(function ($query) use ($selfWasRequeued) {
-                                        $query->whereRaw('(requeued_at IS NOT NULL) = ?', [$selfWasRequeued])
-                                            ->where('id', '<', $this->id);
+            $query->where(function ($query) use ($selfDate, $effectiveOrder, $selfWasRequeued) {
+                $query->where('queue_date', '<', $selfDate)
+                    ->orWhere(function ($query) use ($selfDate, $effectiveOrder, $selfWasRequeued) {
+                        $query->where('queue_date', $selfDate)
+                            ->where(function ($query) use ($effectiveOrder, $selfWasRequeued) {
+                                $query->whereRaw('COALESCE(requeued_at, created_at) < ?', [$effectiveOrder])
+                                    ->orWhere(function ($query) use ($effectiveOrder, $selfWasRequeued) {
+                                        $query->whereRaw('COALESCE(requeued_at, created_at) = ?', [$effectiveOrder])
+                                            ->where(function ($query) use ($selfWasRequeued) {
+                                                $query->whereRaw('(requeued_at IS NOT NULL) < ?', [$selfWasRequeued])
+                                                    ->orWhere(function ($query) use ($selfWasRequeued) {
+                                                        $query->whereRaw('(requeued_at IS NOT NULL) = ?', [$selfWasRequeued])
+                                                            ->where('id', '<', $this->id);
+                                                    });
+                                            });
                                     });
                             });
                     });
@@ -143,17 +147,17 @@ final class QueueTicket extends Model
         };
 
         if ($this->priority === QueueTicketPriority::Priority) {
-            $priorityQuery = (clone $waitingOnSameDay)->where('priority', QueueTicketPriority::Priority);
+            $priorityQuery = (clone $waitingInCycle)->where('priority', QueueTicketPriority::Priority);
             $applyOrderedBefore($priorityQuery);
 
             return $priorityQuery->count();
         }
 
-        $priorityAhead = (clone $waitingOnSameDay)
+        $priorityAhead = (clone $waitingInCycle)
             ->where('priority', QueueTicketPriority::Priority)
             ->count();
 
-        $regularQuery = (clone $waitingOnSameDay)->where('priority', QueueTicketPriority::Regular);
+        $regularQuery = (clone $waitingInCycle)->where('priority', QueueTicketPriority::Regular);
         $applyOrderedBefore($regularQuery);
         $regularAhead = $regularQuery->count();
 
