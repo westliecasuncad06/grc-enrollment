@@ -8,14 +8,21 @@ use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
-use App\Models\QueueTicket;
 use Illuminate\Database\Eloquent\Builder;
-use LogicException;
 
 /**
  * Restricts lookup to a Student who is actionable in the Cashier's current
  * queue. Keeping this a read-only query ensures finding a student can never
  * silently alter ticket order or enrollment/payment state.
+ *
+ * A candidate's ticket may be from any `queue_date`, not just today's —
+ * once a cut-off carries an unserved ticket forward (see `QueueCycle`), the
+ * ticket's original claim date no longer means "not currently in the
+ * line"; its `status` (`waiting`/`serving`) is what does. A candidate may
+ * also have no ticket at all: any `pending_payment` enrollment is a valid
+ * lookup result, so Accounting Staff can issue a first ticket on a
+ * student's behalf (`App\Actions\Enrollment\ClaimQueueTicket`) instead of
+ * only ever serving an existing one.
  */
 final readonly class FindCashierPaymentCandidate
 {
@@ -24,27 +31,21 @@ final readonly class FindCashierPaymentCandidate
         $term = AcademicTerm::query()
             ->where('status', AcademicTermStatus::SemesterOngoing)
             ->firstOrFail();
-        $queueDate = now()->toDateString();
 
         $enrollment = Enrollment::query()
             ->with(['student.user', 'queueTicket'])
             ->where('academic_term_id', $term->id)
             ->where('status', EnrollmentStatus::PendingPayment)
             ->whereHas('student', fn (Builder $query) => $query->where('student_number', $studentNumber))
-            ->whereHas('queueTicket', fn (Builder $query) => $query
-                ->whereDate('queue_date', $queueDate)
-                ->whereIn('status', [
-                    QueueTicketStatus::Waiting->value,
-                    QueueTicketStatus::Serving->value,
-                ]))
+            ->where(function (Builder $query) {
+                $query->whereDoesntHave('queueTicket')
+                    ->orWhereHas('queueTicket', fn (Builder $query) => $query->whereIn('status', [
+                        QueueTicketStatus::Waiting->value,
+                        QueueTicketStatus::Serving->value,
+                    ]));
+            })
             ->firstOrFail();
 
-        $ticket = $enrollment->queueTicket;
-
-        if (! $ticket instanceof QueueTicket) {
-            throw new LogicException('The eligible Cashier payment candidate must include its queue ticket.');
-        }
-
-        return new CashierPaymentCandidate($enrollment->student, $enrollment, $ticket);
+        return new CashierPaymentCandidate($enrollment->student, $enrollment, $enrollment->queueTicket);
     }
 }

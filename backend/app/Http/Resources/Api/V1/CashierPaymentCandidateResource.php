@@ -12,10 +12,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
 final class CashierPaymentCandidateResource extends JsonResource
 {
     /**
-     * @return array{type: string, student_id: int, student_name: string, student_number: string, year_level: int, enrollment_id: int, ticket: array{id: int, ticket_number: string, status: string}}
+     * @return array{type: string, student_id: int, student_name: string, student_number: string, year_level: int, enrollment_id: int, ticket: ?array{id: int, ticket_number: string, status: string}}
      */
     public function toArray(Request $request): array
     {
+        $ticket = $this->resource->ticket;
+
         return [
             'type' => 'cashier_payment_candidate',
             'student_id' => $this->resource->student->id,
@@ -23,10 +25,10 @@ final class CashierPaymentCandidateResource extends JsonResource
             'student_number' => $this->resource->student->student_number,
             'year_level' => $this->resource->student->year_level,
             'enrollment_id' => $this->resource->enrollment->id,
-            'ticket' => [
-                'id' => $this->resource->ticket->id,
-                'ticket_number' => $this->resource->ticket->ticket_number,
-                'status' => $this->resource->ticket->status->value,
+            'ticket' => $ticket === null ? null : [
+                'id' => $ticket->id,
+                'ticket_number' => $ticket->ticket_number,
+                'status' => $ticket->status->value,
             ],
         ];
     }

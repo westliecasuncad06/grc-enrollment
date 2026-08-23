@@ -19,6 +19,7 @@ use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
 use App\Models\Payment;
 use App\Models\Program;
+use App\Models\QueueCycle;
 use App\Models\QueueTicket;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -91,7 +92,7 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
             ->assertJsonPath('data.ticket.status', QueueTicketStatus::Serving->value);
     }
 
-    public function test_lookup_hides_missing_non_pending_completed_and_other_day_records(): void
+    public function test_lookup_hides_missing_non_pending_and_completed_records(): void
     {
         $missingToken = $this->tokenFor(UserRole::AccountingStaff, 'accounting.missing.lookup@grc.test');
         $this->withToken($missingToken)
@@ -106,16 +107,39 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
             studentNumber: '2026-06-01003',
             status: QueueTicketStatus::Served,
         );
-        [$otherDayStudent] = $this->makeCandidate(
-            studentNumber: '2026-06-01004',
-            queueDate: '2026-08-13',
-        );
 
-        foreach ([$completedStudent, $servedStudent, $otherDayStudent] as $student) {
+        foreach ([$completedStudent, $servedStudent] as $student) {
             $this->withToken($missingToken)
                 ->getJson('/api/v1/cashier-payment-candidates?student_number='.$student->student_number)
                 ->assertNotFound();
         }
+    }
+
+    public function test_lookup_finds_a_carried_over_ticket_from_an_earlier_date(): void
+    {
+        [$student, $enrollment, $ticket] = $this->makeCandidate(
+            studentNumber: '2026-06-01005',
+            queueDate: '2026-08-12', // three days before the frozen "today" (2026-08-14)
+        );
+        $token = $this->tokenFor(UserRole::AccountingStaff, 'accounting.carrylookup@grc.test');
+
+        $this->withToken($token)
+            ->getJson('/api/v1/cashier-payment-candidates?student_number='.$student->student_number)
+            ->assertOk()
+            ->assertJsonPath('data.enrollment_id', $enrollment->id)
+            ->assertJsonPath('data.ticket.id', $ticket->id);
+    }
+
+    public function test_lookup_finds_a_pending_payment_student_with_no_ticket_yet(): void
+    {
+        [$student, $enrollment] = $this->makeCandidate(studentNumber: '2026-06-01006', withTicket: false);
+        $token = $this->tokenFor(UserRole::AccountingStaff, 'accounting.noticketlookup@grc.test');
+
+        $this->withToken($token)
+            ->getJson('/api/v1/cashier-payment-candidates?student_number='.$student->student_number)
+            ->assertOk()
+            ->assertJsonPath('data.enrollment_id', $enrollment->id)
+            ->assertJsonPath('data.ticket', null);
     }
 
     public function test_lookup_requires_a_student_number(): void
@@ -152,13 +176,14 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
     }
 
     /**
-     * @return array{StudentProfile, Enrollment, QueueTicket}
+     * @return array{StudentProfile, Enrollment, ?QueueTicket}
      */
     private function makeCandidate(
         string $studentNumber = '2026-06-01001',
         EnrollmentStatus $enrollmentStatus = EnrollmentStatus::PendingPayment,
         QueueTicketStatus $status = QueueTicketStatus::Waiting,
         string $queueDate = '2026-08-14',
+        bool $withTicket = true,
     ): array {
         $term = AcademicTerm::query()->firstOrCreate([
             'school_year' => '2026-2027',
@@ -199,14 +224,24 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
             'status' => $enrollmentStatus,
             'total_units' => 6,
         ]);
-        $ticket = QueueTicket::create([
-            'enrollment_id' => $enrollment->id,
-            'ticket_number' => 'Q'.str_pad((string) $student->id, 3, '0', STR_PAD_LEFT),
-            'queue_date' => $queueDate,
-            'status' => $status,
-            'priority' => QueueTicketPriority::Regular,
-            'served_at' => $status === QueueTicketStatus::Served ? now() : null,
-        ]);
+
+        $ticket = null;
+        if ($withTicket) {
+            $cycle = QueueCycle::query()->whereNull('closed_at')->first()
+                ?? QueueCycle::create(['opened_on' => $queueDate, 'last_ticket_sequence' => 0]);
+            $sequence = $cycle->last_ticket_sequence + 1;
+            $cycle->update(['last_ticket_sequence' => $sequence, 'last_claimed_on' => $queueDate]);
+            $ticket = QueueTicket::create([
+                'enrollment_id' => $enrollment->id,
+                'queue_cycle_id' => $cycle->id,
+                'ticket_sequence' => $sequence,
+                'ticket_number' => 'Q'.str_pad((string) $student->id, 3, '0', STR_PAD_LEFT),
+                'queue_date' => $queueDate,
+                'status' => $status,
+                'priority' => QueueTicketPriority::Regular,
+                'served_at' => $status === QueueTicketStatus::Served ? now() : null,
+            ]);
+        }
 
         return [$student->load('user'), $enrollment, $ticket];
     }
