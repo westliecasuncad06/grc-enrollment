@@ -363,6 +363,51 @@ describe("AccountingPaymentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
+  it("shows an error and keeps the dialog open when cutting off the queue fails", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-cycle/cut-off"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "Invalid",
+                errors: { cycle: ["No queue is currently open."] },
+                request_id: "request-cutoff-fail",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      if (target.includes("/queue-cycle") && !target.includes("resume"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: openCycle })),
+        )
+      return mockRoutes()(input, init)
+    })
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.click(
+      await screen.findByRole("button", { name: "Cut off for today" }),
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm cut-off" }))
+
+    expect(
+      await screen.findByText(
+        "The queue could not be cut off. Check the connection and try again.",
+      ),
+    ).toBeInTheDocument()
+    // The dialog stays open on failure, matching every other write path in
+    // this file (e.g. "Confirm payment"), so the cashier can retry.
+    expect(
+      screen.getByRole("button", { name: "Confirm cut-off" }),
+    ).toBeInTheDocument()
+  })
+
   it("shows an Issue queue ticket button when the candidate has no ticket yet", async () => {
     fetchMock.mockImplementation(
       mockRoutes({ candidate: cashierPaymentCandidateNoTicket }),

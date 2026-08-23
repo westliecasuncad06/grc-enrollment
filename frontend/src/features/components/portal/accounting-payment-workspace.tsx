@@ -324,15 +324,40 @@ export function AccountingPaymentWorkspace() {
     ticketMutation.mutate({ id: candidate.ticket.id, action: "serve" })
   }
 
-  const issueTicketForCandidate = () => {
+  const issueTicketForCandidate = async () => {
     const candidate = candidateQuery.data
     if (!candidate) return
-    claimMutation.mutate(candidate.student_number)
+    setError("")
+    try {
+      await claimMutation.mutateAsync(candidate.student_number)
+    } catch {
+      setError(
+        "The queue ticket could not be issued. Check the connection and try again.",
+      )
+    }
   }
 
   const confirmCutOff = async () => {
-    await cutOffMutation.mutateAsync()
-    setCuttingOff(false)
+    setError("")
+    try {
+      await cutOffMutation.mutateAsync()
+      setCuttingOff(false)
+    } catch {
+      setError(
+        "The queue could not be cut off. Check the connection and try again.",
+      )
+    }
+  }
+
+  const resumeQueue = async () => {
+    setError("")
+    try {
+      await resumeMutation.mutateAsync()
+    } catch {
+      setError(
+        "The queue could not be resumed. Check the connection and try again.",
+      )
+    }
   }
 
   return (
@@ -449,7 +474,7 @@ export function AccountingPaymentWorkspace() {
                 <Button
                   type="button"
                   disabled={claimMutation.isPending}
-                  onClick={issueTicketForCandidate}
+                  onClick={() => void issueTicketForCandidate()}
                 >
                   Issue queue ticket
                 </Button>
@@ -476,9 +501,11 @@ export function AccountingPaymentWorkspace() {
         <CardHeader>
           <CardTitle level={2}>Queue status</CardTitle>
           <CardDescription>
-            {cycleQuery.data?.status === "cut_off"
-              ? "The queue is cut off for today. Waiting tickets are saved and the queue resumes automatically on the next service day."
-              : "The queue is open."}
+            {cycleQuery.data == null
+              ? "No queue is open yet."
+              : cycleQuery.data.status === "cut_off"
+                ? "The queue is cut off for today. Waiting tickets are saved and the queue resumes automatically on the next service day."
+                : "The queue is open."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -487,7 +514,7 @@ export function AccountingPaymentWorkspace() {
               type="button"
               variant="outline"
               disabled={resumeMutation.isPending}
-              onClick={() => resumeMutation.mutate()}
+              onClick={() => void resumeQueue()}
             >
               Resume queue
             </Button>
