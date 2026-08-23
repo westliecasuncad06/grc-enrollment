@@ -12,8 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * @property int $id
  * @property int $enrollment_id
- * @property ?int $queue_cycle_id
- * @property ?int $ticket_sequence
+ * @property int $queue_cycle_id
+ * @property int $ticket_sequence
  * @property string $ticket_number
  * @property CarbonImmutable $queue_date
  * @property QueueTicketStatus $status

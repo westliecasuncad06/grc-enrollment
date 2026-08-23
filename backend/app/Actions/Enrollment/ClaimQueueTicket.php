@@ -5,6 +5,7 @@ namespace App\Actions\Enrollment;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\QueueServiceDate;
 use App\Domain\Enrollment\QueueTicketPriority;
 use App\Domain\Enrollment\QueueTicketStatus;
@@ -18,6 +19,7 @@ use App\Support\Audit\AuditRecorder;
 use App\Support\Notifications\NotificationRecorder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Issues the one queue ticket an approved (`pending_payment`) enrollment
@@ -34,6 +36,14 @@ use Illuminate\Support\Facades\DB;
  * that one row (`lockForUpdate`), never `queue_tickets`, so concurrent
  * claims serialize on a single integer bump rather than a table scan. See
  * docs/superpowers/specs/2026-08-23-queue-kiosk-claim-carryover-cutoff-design.md.
+ *
+ * `allocate()` self-guards the `pending_payment` status (ADR 0011), the
+ * same convention `TransitionEnrollment`/`TransitionQueueTicket`/
+ * `TransitionQueueCycle` follow — even though today's only caller
+ * (`QueueTicketController::resolveEnrollment()`) already filters to
+ * `pending_payment` before ever reaching `execute()`, so this Action stays
+ * safe against a future caller (a kiosk-claim slice is expected to call
+ * `execute()` directly) that might not.
  */
 final readonly class ClaimQueueTicket
 {
@@ -80,6 +90,12 @@ final readonly class ClaimQueueTicket
 
         if ($existing !== null) {
             return $existing;
+        }
+
+        if ($enrollment->status !== EnrollmentStatus::PendingPayment) {
+            throw ValidationException::withMessages([
+                'enrollment' => "This enrollment is not pending payment; it is currently '{$enrollment->status->value}'.",
+            ]);
         }
 
         $today = QueueServiceDate::today();

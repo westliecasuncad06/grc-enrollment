@@ -18,6 +18,7 @@ use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
 use App\Models\Program;
+use App\Models\QueueCycle;
 use App\Models\QueueTicket;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -155,8 +156,11 @@ final class StudentAccountEndpointTest extends TestCase
             $this->makeTerm('2026-2027', '1st', '2026-08-05 00:00:00'),
             '2000.00',
         );
+        $cycle = QueueCycle::create(['opened_on' => '2026-08-14', 'last_ticket_sequence' => 1]);
         $ticket = QueueTicket::create([
             'enrollment_id' => $newer->id,
+            'queue_cycle_id' => $cycle->id,
+            'ticket_sequence' => 1,
             'ticket_number' => 'Q001',
             'queue_date' => '2026-08-14',
             'status' => QueueTicketStatus::Waiting,

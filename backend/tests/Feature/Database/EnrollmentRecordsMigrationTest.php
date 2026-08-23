@@ -23,6 +23,7 @@ use App\Models\EnrollmentDocument;
 use App\Models\EnrollmentSubject;
 use App\Models\Payment;
 use App\Models\Program;
+use App\Models\QueueCycle;
 use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
@@ -172,15 +173,19 @@ final class EnrollmentRecordsMigrationTest extends TestCase
             'school_year' => '2025-2026', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
         ]), EnrollmentStatus::PendingPayment);
 
+        // All three tickets in this test are created in one run without any
+        // cut-off/close between them, so they can all share one cycle.
+        $cycle = QueueCycle::create(['opened_on' => '2026-08-01', 'last_ticket_sequence' => 0]);
+
         QueueTicket::create([
-            'enrollment_id' => $enrollmentA->id, 'ticket_number' => 'Q001',
-            'queue_date' => '2026-08-01', 'status' => 'waiting',
+            'enrollment_id' => $enrollmentA->id, 'queue_cycle_id' => $cycle->id, 'ticket_sequence' => 1,
+            'ticket_number' => 'Q001', 'queue_date' => '2026-08-01', 'status' => 'waiting',
         ]);
 
         // Same ticket number, a different day — allowed.
         QueueTicket::create([
-            'enrollment_id' => $enrollmentB->id, 'ticket_number' => 'Q001',
-            'queue_date' => '2026-08-02', 'status' => 'waiting',
+            'enrollment_id' => $enrollmentB->id, 'queue_cycle_id' => $cycle->id, 'ticket_sequence' => 2,
+            'ticket_number' => 'Q001', 'queue_date' => '2026-08-02', 'status' => 'waiting',
         ]);
         $this->assertDatabaseCount('queue_tickets', 2);
 
@@ -190,8 +195,8 @@ final class EnrollmentRecordsMigrationTest extends TestCase
         ]), EnrollmentStatus::PendingPayment);
         $this->expectException(QueryException::class);
         QueueTicket::create([
-            'enrollment_id' => $enrollmentC->id, 'ticket_number' => 'Q001',
-            'queue_date' => '2026-08-01', 'status' => 'waiting',
+            'enrollment_id' => $enrollmentC->id, 'queue_cycle_id' => $cycle->id, 'ticket_sequence' => 3,
+            'ticket_number' => 'Q001', 'queue_date' => '2026-08-01', 'status' => 'waiting',
         ]);
     }
 

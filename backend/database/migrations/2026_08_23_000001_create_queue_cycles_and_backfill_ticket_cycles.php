@@ -67,18 +67,30 @@ return new class extends Migration
     }
 
     /**
-     * One cycle per distinct existing `queue_date`, in arrival order. Every
-     * cycle is closed except the single most recent date that still has an
-     * outstanding `waiting`/`serving` ticket — closing that one too would
-     * strand a live line across the deploy. If no date has outstanding
-     * tickets, every backfilled cycle closes and the next claim opens a
-     * fresh one at Q001. `ticket_number` is left exactly as-is on every
-     * historical row; only the new internal-only `ticket_sequence` is
-     * assigned, by row order within each date — it need not equal the
-     * digits inside the old `ticket_number` string (fixture data uses both
-     * `Q001` and `Q000001` forms), only be unique per cycle.
+     * Every fully-completed `queue_date` (no `waiting`/`serving` ticket)
+     * becomes its own closed cycle, in arrival order. Every date that DOES
+     * have an outstanding ticket is merged into a single open cycle instead
+     * of one cycle per date — there can only ever be one open cycle
+     * system-wide (`queue_cycles_single_open_cycle_unique`), and an
+     * outstanding ticket from ANY such date is still "in the line", so none
+     * of them may end up in a closed cycle (closing one would strand a live
+     * ticket across the deploy). If no date has outstanding tickets, every
+     * backfilled cycle closes and the next claim opens a fresh one at Q001.
+     * `ticket_number` is left exactly as-is on every historical row; only
+     * the new internal-only `ticket_sequence` is assigned, by row order
+     * within each cycle — it need not equal the digits inside the old
+     * `ticket_number` string (fixture data uses both `Q001` and `Q000001`
+     * forms), only be unique per cycle.
+     *
+     * `public` (not `private`): lets
+     * tests\Feature\Database\QueueCycleMigrationTest exercise this method's
+     * real logic directly (requiring this file returns a fresh instance —
+     * the same anonymous-class pattern Laravel's own Migrator uses to
+     * resolve a migration) rather than relying on a fragile full
+     * migration-replay. Nothing outside a test ever calls this once `up()`
+     * has run.
      */
-    private function backfillCycles(): void
+    public function backfillCycles(): void
     {
         $dates = DB::table('queue_tickets')->select('queue_date')->distinct()->orderBy('queue_date')->pluck('queue_date');
 
@@ -86,35 +98,69 @@ return new class extends Migration
             return;
         }
 
-        $lastDateWithOutstandingTickets = DB::table('queue_tickets')
+        $outstandingDates = DB::table('queue_tickets')
             ->whereIn('status', ['waiting', 'serving'])
-            ->max('queue_date');
+            ->select('queue_date')
+            ->distinct()
+            ->orderBy('queue_date')
+            ->pluck('queue_date');
 
-        foreach ($dates as $date) {
-            $ticketsForDate = DB::table('queue_tickets')
-                ->where('queue_date', $date)
-                ->orderByRaw('COALESCE(requeued_at, created_at)')
-                ->orderByRaw('requeued_at IS NOT NULL')
-                ->orderBy('id')
-                ->get(['id']);
+        $historicalDates = $dates->diff($outstandingDates)->values();
 
-            $cycleId = DB::table('queue_cycles')->insertGetId([
-                'opened_on' => $date,
-                'last_claimed_on' => $date,
-                'last_ticket_sequence' => $ticketsForDate->count(),
-                'closed_at' => $date === $lastDateWithOutstandingTickets ? null : now(),
-                'created_at' => now(),
-                'updated_at' => now(),
+        // Every fully-completed date becomes its own closed cycle -- none of
+        // these hold a waiting/serving ticket, so closing them is safe.
+        foreach ($historicalDates as $date) {
+            $this->backfillOneCycle([$date], closed: true);
+        }
+
+        // Every date that has an outstanding ticket merges into ONE open
+        // cycle -- there can only ever be one open cycle system-wide (the
+        // queue_cycles_single_open_cycle_unique index enforces it), and an
+        // outstanding ticket from ANY of these dates is still "in the line",
+        // so none of them may end up in a closed cycle.
+        if ($outstandingDates->isNotEmpty()) {
+            /** @var list<string> $outstandingDateList */
+            $outstandingDateList = $outstandingDates->all();
+            $this->backfillOneCycle($outstandingDateList, closed: false);
+        }
+    }
+
+    /**
+     * @param  list<string>  $dates
+     */
+    public function backfillOneCycle(array $dates, bool $closed): void
+    {
+        if ($dates === []) {
+            // Unreachable given both call sites above always pass at least
+            // one date -- guards min()/max() below, which require a
+            // non-empty array.
+            return;
+        }
+
+        $ticketsForDates = DB::table('queue_tickets')
+            ->whereIn('queue_date', $dates)
+            ->orderBy('queue_date')
+            ->orderByRaw('COALESCE(requeued_at, created_at)')
+            ->orderByRaw('requeued_at IS NOT NULL')
+            ->orderBy('id')
+            ->get(['id']);
+
+        $cycleId = DB::table('queue_cycles')->insertGetId([
+            'opened_on' => min($dates),
+            'last_claimed_on' => max($dates),
+            'last_ticket_sequence' => $ticketsForDates->count(),
+            'closed_at' => $closed ? now() : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $sequence = 0;
+        foreach ($ticketsForDates as $ticket) {
+            $sequence++;
+            DB::table('queue_tickets')->where('id', $ticket->id)->update([
+                'queue_cycle_id' => $cycleId,
+                'ticket_sequence' => $sequence,
             ]);
-
-            $sequence = 0;
-            foreach ($ticketsForDate as $ticket) {
-                $sequence++;
-                DB::table('queue_tickets')->where('id', $ticket->id)->update([
-                    'queue_cycle_id' => $cycleId,
-                    'ticket_sequence' => $sequence,
-                ]);
-            }
         }
     }
 };
