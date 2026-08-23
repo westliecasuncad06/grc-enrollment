@@ -80,4 +80,13 @@ return [
     'dashboard' => [
         'stuck_threshold_days' => env('DASHBOARD_STUCK_THRESHOLD_DAYS'),
     ],
+
+    // Phase: queue kiosk claim/carry-over/cut-off. The physical
+    // front-desk's "today" for queue_tickets.queue_date and the cycle
+    // drain/reset rule only — deliberately NOT config('app.timezone')
+    // (stays UTC everywhere else). See ADR: docs/superpowers/specs/
+    // 2026-08-23-queue-kiosk-claim-carryover-cutoff-design.md.
+    'queue' => [
+        'timezone' => env('ENROLLMENT_QUEUE_TIMEZONE', 'Asia/Manila'),
+    ],
 ];
