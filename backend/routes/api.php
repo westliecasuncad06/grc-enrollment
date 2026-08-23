@@ -52,6 +52,7 @@ use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\StudentAccountController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
+use App\Http\Controllers\Api\V1\StudentQueueViewController;
 use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectOfferingController;
@@ -216,6 +217,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // outside the accounting-only queue-tickets group below since a
         // Student must also reach it.
         Route::post('/queue-tickets', [QueueTicketController::class, 'store'])->name('queue-tickets.store');
+
+        // PRD §5.3 FR-FIN-006: the student's own read-only queue status —
+        // stage, own ticket + position, and the board (now serving, next
+        // up). No per-record ownership dimension beyond "you are the
+        // signed-in student", so the route-level role gate is enough.
+        Route::middleware('role:student')->group(function (): void {
+            Route::get('/queue-status', [StudentQueueViewController::class, 'show'])->name('queue-status.show');
+        });
 
         // Role-scoped read (Student own, Registrar Head and Registrar Staff
         // all — EnrollmentChangeRequest::scopeVisibleTo); `decide`
