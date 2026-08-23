@@ -12,6 +12,7 @@ import {
   ApiClientError,
   getAuthenticatedJson,
   patchAuthenticatedJson,
+  postAuthenticatedJson,
 } from "@/features/services/api-client"
 
 export const QUEUE_TICKETS_PATH = "/api/v1/queue-tickets"
@@ -62,4 +63,15 @@ export async function updateQueueTicket(
     parse(updateQueueTicketInputSchema, input, "queue ticket transition"),
   )
   return parse(queueTicketEnvelopeSchema, payload, "updated queue ticket").data
+}
+
+export async function claimQueueTicket(
+  studentNumber?: string,
+): Promise<QueueTicket> {
+  const payload = await postAuthenticatedJson(
+    QUEUE_TICKETS_PATH,
+    studentNumber ? { student_number: studentNumber } : undefined,
+  )
+  return parse(queueTicketEnvelopeSchema, payload, "claimed queue ticket")
+    .data
 }

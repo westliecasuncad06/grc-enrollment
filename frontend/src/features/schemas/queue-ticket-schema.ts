@@ -60,6 +60,7 @@ export const queueTicketFiltersSchema = z
   .object({
     queue_date: z.iso.date().optional(),
     status: z.enum(queueTicketStatusValues).optional(),
+    cycle: z.literal("open").optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })

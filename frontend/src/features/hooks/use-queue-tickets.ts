@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/features/auth/use-auth"
 import type { QueueTicketFilters } from "@/features/schemas/queue-ticket-schema"
 import {
+  claimQueueTicket,
   listQueueTickets,
   updateQueueTicket,
 } from "@/features/services/queue-ticket-service"
@@ -58,5 +59,22 @@ export function useUpdateQueueTicketMutation() {
       queryClient.invalidateQueries({
         queryKey: ["queue-tickets", session?.userId ?? null],
       }),
+  })
+}
+
+export function useClaimQueueTicketMutation() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (studentNumber?: string) => claimQueueTicket(studentNumber),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["queue-tickets", session?.userId ?? null],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ["cashier-payment-candidate", session?.userId ?? null],
+      })
+    },
   })
 }

@@ -42,9 +42,15 @@ import {
   useStudentAccountQuery,
 } from "@/features/hooks/use-student-account"
 import {
+  useClaimQueueTicketMutation,
   useQueueTicketsQuery,
   useUpdateQueueTicketMutation,
 } from "@/features/hooks/use-queue-tickets"
+import {
+  useCutOffQueueMutation,
+  useQueueCycleQuery,
+  useResumeQueueMutation,
+} from "@/features/hooks/use-queue-cycle"
 import { useCashierPaymentCandidateQuery } from "@/features/hooks/use-cashier-transactions"
 import type {
   Enrollment,
@@ -52,16 +58,14 @@ import type {
 } from "@/features/schemas/enrollment-schema"
 import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
 
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 /**
  * Priority tickets always precede regular ones; within a tier, ordered by
- * effective order — `requeued_at` if the ticket was ever skipped,
- * otherwise `created_at`. A skipped ticket's `requeued_at` is stamped at
- * the moment it was skipped, so it naturally sorts after every ticket that
- * already existed then, landing at the back of its own tier.
+ * `queue_date` (the Cashier's queue can span multiple Manila service days
+ * once a cut-off carries tickets forward — a carry-over always sorts ahead
+ * of a ticket claimed on a later date, even if the carry-over's own
+ * `requeued_at` is a later raw timestamp than the newer ticket's
+ * `created_at`), then effective order — `requeued_at` if the ticket was
+ * ever skipped, otherwise `created_at`.
  *
  * `created_at`/`requeued_at` are whole-second timestamps, so an exact tie
  * on that effective order is routine, not a rare edge case. `id` can't be
@@ -72,11 +76,12 @@ function todayIsoDate(): string {
  * precedes requeued (skip moment) — and only falls back to `id` once both
  * candidates agree on that split, i.e. a true same-instant tie within one
  * regime. Mirrors `QueueTicket::position()`/`ListQueueTickets` server-side
- * exactly (effective order, then the `requeued_at IS NOT NULL` regime
- * split, then `id`).
+ * exactly (`queue_date`, then effective order, then the `requeued_at IS
+ * NOT NULL` regime split, then `id`).
  */
 function byQueueOrder(a: QueueTicket, b: QueueTicket): number {
   if (a.priority !== b.priority) return a.priority === "priority" ? -1 : 1
+  if (a.queue_date !== b.queue_date) return a.queue_date < b.queue_date ? -1 : 1
   const aOrder = a.requeued_at ?? a.created_at
   const bOrder = b.requeued_at ?? b.created_at
   if (aOrder !== bOrder) return aOrder < bOrder ? -1 : 1
@@ -201,7 +206,7 @@ export function AccountingPaymentWorkspace() {
   const [error, setError] = useState("")
 
   const ticketsQuery = useQueueTicketsQuery(
-    { queue_date: todayIsoDate(), page: 1, per_page: 100 },
+    { cycle: "open", page: 1, per_page: 100 },
     { enabled: authorized },
   )
   const ticketMutation = useUpdateQueueTicketMutation()
@@ -211,6 +216,11 @@ export function AccountingPaymentWorkspace() {
   )
   const paymentMutation = useConfirmPaymentMutation()
   const accountPaymentMutation = useRecordStudentAccountPaymentMutation()
+  const cycleQuery = useQueueCycleQuery({ enabled: authorized })
+  const cutOffMutation = useCutOffQueueMutation()
+  const resumeMutation = useResumeQueueMutation()
+  const claimMutation = useClaimQueueTicketMutation()
+  const [cuttingOff, setCuttingOff] = useState(false)
 
   const tickets = ticketsQuery.data?.data ?? []
   const enrollments = pendingPaymentQuery.data?.data ?? []
@@ -309,9 +319,20 @@ export function AccountingPaymentWorkspace() {
 
   const serveSelectedStudent = () => {
     const candidate = candidateQuery.data
-    if (!candidate || nowServing) return
+    if (!candidate || !candidate.ticket || nowServing) return
 
     ticketMutation.mutate({ id: candidate.ticket.id, action: "serve" })
+  }
+
+  const issueTicketForCandidate = () => {
+    const candidate = candidateQuery.data
+    if (!candidate) return
+    claimMutation.mutate(candidate.student_number)
+  }
+
+  const confirmCutOff = async () => {
+    await cutOffMutation.mutateAsync()
+    setCuttingOff(false)
   }
 
   return (
@@ -323,6 +344,7 @@ export function AccountingPaymentWorkspace() {
         ticketsQuery.dataUpdatedAt,
         pendingPaymentQuery.dataUpdatedAt,
         accountQuery.dataUpdatedAt,
+        cycleQuery.dataUpdatedAt,
       )}
     >
       {error && (
@@ -417,11 +439,21 @@ export function AccountingPaymentWorkspace() {
                 </p>
                 <p className="text-muted-foreground">
                   {candidateQuery.data.student_number} · Year{" "}
-                  {candidateQuery.data.year_level} ·{" "}
-                  {candidateQuery.data.ticket.ticket_number}
+                  {candidateQuery.data.year_level}
+                  {candidateQuery.data.ticket
+                    ? ` · ${candidateQuery.data.ticket.ticket_number}`
+                    : ""}
                 </p>
               </div>
-              {candidateQuery.data.ticket.status === "serving" ? (
+              {candidateQuery.data.ticket === null ? (
+                <Button
+                  type="button"
+                  disabled={claimMutation.isPending}
+                  onClick={issueTicketForCandidate}
+                >
+                  Issue queue ticket
+                </Button>
+              ) : candidateQuery.data.ticket.status === "serving" ? (
                 <p className="font-medium">This student is now serving.</p>
               ) : nowServing ? (
                 <p className="text-muted-foreground">
@@ -437,6 +469,37 @@ export function AccountingPaymentWorkspace() {
                 </Button>
               )}
             </div>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle level={2}>Queue status</CardTitle>
+          <CardDescription>
+            {cycleQuery.data?.status === "cut_off"
+              ? "The queue is cut off for today. Waiting tickets are saved and the queue resumes automatically on the next service day."
+              : "The queue is open."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cycleQuery.data?.status === "cut_off" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={resumeMutation.isPending}
+              onClick={() => resumeMutation.mutate()}
+            >
+              Resume queue
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cutOffMutation.isPending}
+              onClick={() => setCuttingOff(true)}
+            >
+              Cut off for today
+            </Button>
           )}
         </CardContent>
       </Card>
@@ -820,6 +883,35 @@ export function AccountingPaymentWorkspace() {
               {accountPaymentMutation.isPending
                 ? "Recording payment"
                 : "Record payment"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={cuttingOff}
+        onOpenChange={(open) => {
+          if (!open && !cutOffMutation.isPending) setCuttingOff(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cut off the queue for today?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {waiting.length > 0
+                ? `${waiting.length} student${waiting.length === 1 ? "" : "s"} still waiting will keep their place and are carried forward automatically — they do not need a new ticket.`
+                : "The queue will resume automatically on the next service day."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cutOffMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={cutOffMutation.isPending}
+              onClick={() => void confirmCutOff()}
+            >
+              Confirm cut-off
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

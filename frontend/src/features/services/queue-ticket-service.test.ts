@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  claimQueueTicket,
   listQueueTickets,
   updateQueueTicket,
 } from "@/features/services/queue-ticket-service"
@@ -67,5 +68,30 @@ describe("queue-ticket-service", () => {
     expect(result.status).toBe("serving")
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/queue-tickets/1")
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH")
+  })
+
+  it("claims a queue ticket for the signed-in student", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: ticket }), { status: 201 }),
+    )
+
+    await expect(claimQueueTicket()).resolves.toEqual(ticket)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/queue-tickets"),
+      expect.objectContaining({ method: "POST" }),
+    )
+  })
+
+  it("claims a queue ticket for a student by number", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: ticket }), { status: 201 }),
+    )
+
+    await claimQueueTicket("2026-08-00001")
+
+    const [, init] = fetchMock.mock.calls[0] ?? []
+    expect(JSON.parse(init?.body as string)).toEqual({
+      student_number: "2026-08-00001",
+    })
   })
 })

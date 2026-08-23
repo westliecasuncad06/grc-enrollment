@@ -30,7 +30,8 @@ export const cashierPaymentCandidateSchema = z
         ticket_number: z.string().min(1),
         status: z.enum(["waiting", "serving"]),
       })
-      .strict(),
+      .strict()
+      .nullable(),
   })
   .strict()
 

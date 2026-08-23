@@ -124,6 +124,29 @@ const cashierPaymentCandidate = {
   },
 } as const
 
+const cashierPaymentCandidateNoTicket = {
+  ...cashierPaymentCandidate,
+  ticket: null,
+} as const
+
+const openCycle = {
+  type: "queue_cycle",
+  id: 1,
+  opened_on: "2026-07-30",
+  status: "open",
+  status_label: "Open",
+  cut_off_at: null,
+  cut_off_service_date: null,
+} as const
+
+const cutOffCycle = {
+  ...openCycle,
+  status: "cut_off",
+  status_label: "Cut off for today",
+  cut_off_at: "2026-07-30T09:00:00Z",
+  cut_off_service_date: "2026-07-30",
+} as const
+
 const accountingSession = {
   userId: "6",
   displayName: "Accounting Staff",
@@ -142,7 +165,8 @@ function url(input: RequestInfo | URL) {
 function mockRoutes(
   overrides: {
     tickets?: readonly unknown[]
-    candidate?: typeof cashierPaymentCandidate
+    candidate?: typeof cashierPaymentCandidate | typeof cashierPaymentCandidateNoTicket
+    cycle?: typeof openCycle | typeof cutOffCycle | null
   } = {},
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
@@ -154,6 +178,22 @@ function mockRoutes(
             data: overrides.candidate ?? cashierPaymentCandidate,
           }),
         ),
+      )
+    if (target.includes("/queue-cycle/cut-off"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: overrides.cycle ?? cutOffCycle })),
+      )
+    if (target.includes("/queue-cycle/resume"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: overrides.cycle ?? openCycle })),
+      )
+    if (target.includes("/queue-cycle"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: overrides.cycle ?? null })),
+      )
+    if (target.includes("/queue-tickets") && init?.method === "POST")
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: waitingTicket }), { status: 201 }),
       )
     if (target.includes("/queue-tickets"))
       return Promise.resolve(
@@ -247,6 +287,124 @@ describe("AccountingPaymentWorkspace", () => {
 
     const waitingRow = await screen.findByRole("table", { name: "Waiting" })
     expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
+  })
+
+  it("shows a cut-off banner and lets the cashier resume the queue", async () => {
+    // A static `mockRoutes({ cycle })` override applies to every
+    // /queue-cycle route uniformly (GET, /cut-off, /resume alike), so it
+    // cannot represent a real state transition -- the polled GET refetch
+    // after "Resume queue" would keep echoing the same cutOffCycle value
+    // forever. Track the transition locally instead, same pattern as
+    // "refreshes the waiting list..." above.
+    let resumed = false
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-cycle/resume")) {
+        resumed = true
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: openCycle })),
+        )
+      }
+      if (target.includes("/queue-cycle") && !target.includes("cut-off"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: resumed ? openCycle : cutOffCycle }),
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    expect(
+      await screen.findByText(/the queue is cut off for today/i),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Resume queue" }))
+
+    expect(
+      await screen.findByRole("button", { name: "Cut off for today" }),
+    ).toBeInTheDocument()
+  })
+
+  it("lets the cashier cut off the queue for today", async () => {
+    // Same reasoning as above, mirrored for the open -> cut-off transition.
+    let cutOff = false
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/queue-cycle/cut-off")) {
+        cutOff = true
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: cutOffCycle })),
+        )
+      }
+      if (target.includes("/queue-cycle") && !target.includes("resume"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: cutOff ? cutOffCycle : openCycle }),
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.click(
+      await screen.findByRole("button", { name: "Cut off for today" }),
+    )
+    await user.click(screen.getByRole("button", { name: "Confirm cut-off" }))
+
+    expect(
+      await screen.findByText(/the queue is cut off for today/i),
+    ).toBeInTheDocument()
+  })
+
+  it("shows an Issue queue ticket button when the candidate has no ticket yet", async () => {
+    fetchMock.mockImplementation(
+      mockRoutes({ candidate: cashierPaymentCandidateNoTicket }),
+    )
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.type(
+      screen.getByLabelText("Find student number"),
+      "2026-0002",
+    )
+    await user.click(screen.getByRole("button", { name: "Find student" }))
+
+    const issueButton = await screen.findByRole("button", {
+      name: "Issue queue ticket",
+    })
+    await user.click(issueButton)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/queue-tickets"),
+      expect.objectContaining({ method: "POST" }),
+    )
+  })
+
+  it("sorts a carry-over ticket from an earlier date ahead of a later one", async () => {
+    const carryOver = { ...waitingTicket, id: 3, ticket_number: "Q000", queue_date: "2026-07-29", created_at: "2026-07-30T23:00:00Z" }
+    fetchMock.mockImplementation(
+      mockRoutes({ tickets: [servingTicket, carryOver, waitingTicket] }),
+    )
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    const table = await screen.findByRole("table", { name: "Waiting" })
+    const rows = await within(table).findAllByRole("row")
+    // Q000's queue_date (07-29) is earlier than Q002's (07-30) despite a
+    // LATER created_at timestamp -- proving queue_date, not just the
+    // COALESCE effective-order, decides the tiebreak.
+    expect(within(rows[1]).getByText("Q000")).toBeInTheDocument()
+    expect(within(rows[2]).getByText("Q002")).toBeInTheDocument()
   })
 
   it("shows a serving student's cross-term balance and promissory-note state", async () => {
