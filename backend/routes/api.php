@@ -44,6 +44,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ProspectusController;
+use App\Http\Controllers\Api\V1\QueueCycleController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
 use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
@@ -382,6 +383,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::middleware('role:accounting_staff')->group(function (): void {
             Route::get('/queue-tickets', [QueueTicketController::class, 'index'])->name('queue-tickets.index');
             Route::patch('/queue-tickets/{queueTicket}', [QueueTicketController::class, 'update'])->name('queue-tickets.update');
+            Route::get('/queue-cycle', [QueueCycleController::class, 'show'])->name('queue-cycle.show');
+            Route::post('/queue-cycle/cut-off', [QueueCycleController::class, 'cutOff'])->name('queue-cycle.cut-off');
+            Route::post('/queue-cycle/resume', [QueueCycleController::class, 'resume'])->name('queue-cycle.resume');
         });
     });
 });
