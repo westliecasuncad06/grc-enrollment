@@ -925,10 +925,10 @@ final class EnrollmentsEndpointTest extends TestCase
             Notification::query()->sole()->type,
         );
 
-        // The Cashier queue ticket is issued exactly at this checkpoint —
-        // not at submission (Phase 6).
-        $response->assertJsonPath('data.queue_ticket.status', 'waiting');
-        $this->assertDatabaseCount('queue_tickets', 1);
+        // The Cashier queue ticket is no longer issued at this checkpoint
+        // -- only at claim (App\Actions\Enrollment\ClaimQueueTicket).
+        $response->assertJsonPath('data.queue_ticket', null);
+        $this->assertDatabaseCount('queue_tickets', 0);
 
         // PRD §5.3 process 3.3 "computes the approved assessment" — computed
         // in the same step, folded into the same single audit row (see

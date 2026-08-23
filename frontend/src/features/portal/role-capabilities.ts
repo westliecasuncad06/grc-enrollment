@@ -330,7 +330,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "enrollment-approvals",
         "Enrollment Approvals",
-        "Approve or reject enrollment submissions pending registrar review. Approving issues the Cashier queue number.",
+        "Approve or reject enrollment submissions pending registrar review. Approved students claim their Cashier queue number at the front desk.",
         ClipboardCheck,
       ),
       portalModule(

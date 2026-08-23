@@ -7,17 +7,12 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentStatus;
-use App\Domain\Enrollment\QueueTicketPriority;
-use App\Domain\Enrollment\QueueTicketStatus;
-use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Assessment;
 use App\Models\Enrollment;
 use App\Models\Notification;
-use App\Models\QueueTicket;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
-use App\Support\Notifications\NotificationRecorder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -34,10 +29,17 @@ use InvalidArgumentException;
  * reason required for `registrar_reject`/`void` (FR-FIN-002) is recorded
  * solely in the audit row's `reason` column, never on the enrollment itself.
  *
- * `registrar_approve` also issues the one Cashier queue ticket (moved here
- * from `SubmitEnrollment` in Phase 6): a student has no queue number until
- * Registrar Staff approves, matching the real front-desk process where the
- * queue only exists for enrollments the registrar has already cleared.
+ * `registrar_approve` no longer issues a Cashier queue ticket — that moved
+ * to `App\Actions\Enrollment\ClaimQueueTicket`, triggered by the student's
+ * own claim (or Accounting Staff issuing one on their behalf) once they
+ * are physically at the Cashier, matching the real front-desk process
+ * (see docs/superpowers/specs/
+ * 2026-08-23-queue-kiosk-claim-carryover-cutoff-design.md). This action
+ * only opens the door: `pending_payment` plus an `Assessment`. The
+ * Accounting-Staff-facing notification that used to fire here on approval
+ * moved with it — `ClaimQueueTicket` fires it at the moment a student
+ * actually joins the line, a more useful trigger than the moment they
+ * merely become eligible to.
  */
 final class TransitionEnrollment
 {
@@ -81,7 +83,6 @@ final class TransitionEnrollment
 
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
-        private readonly NotificationRecorder $notificationRecorder,
         private readonly AssessEnrollment $assessEnrollment,
     ) {}
 
@@ -130,29 +131,11 @@ final class TransitionEnrollment
             $afterValues = self::snapshot($lockedEnrollment);
             $auditReason = in_array($action, self::REASON_REQUIRED_ACTIONS, true) ? $reason : null;
 
-            // Per the queue_tickets migration's own docblock: PRD §17 leaves
-            // the numbering scheme and priority policy unconfirmed. The
-            // ticket resets daily — a simple per-day count is enough to
-            // guarantee the (queue_date, ticket_number) uniqueness this
-            // needs; every ticket starts Regular, since no eligibility rule
-            // is encoded anywhere (Accounting marks priority afterward, an
-            // audited action — see TransitionQueueTicket).
-            $queueDate = now()->toDateString();
-            $queueTicket = $action === 'registrar_approve'
-                ? QueueTicket::create([
-                    'enrollment_id' => $lockedEnrollment->id,
-                    'ticket_number' => sprintf('Q%03d', QueueTicket::query()->where('queue_date', $queueDate)->count() + 1),
-                    'queue_date' => $queueDate,
-                    'status' => QueueTicketStatus::Waiting,
-                    'priority' => QueueTicketPriority::Regular,
-                ])
-                : null;
-
-            // PRD §5.3 process 3.3 "computes the approved assessment" — done
-            // here, in the same transaction as the queue ticket above, so
+            // PRD §5.3 process 3.3 "computes the approved assessment" --
+            // done in the same transaction as the status change above, so
             // nothing may reach `pending_payment` without one. Folded into
-            // this same audit row's after_values below, not a second row —
-            // see AssessEnrollment's own docblock for why.
+            // this same audit row's after_values below, not a second row
+            // -- see AssessEnrollment's own docblock for why.
             $assessment = $action === 'registrar_approve'
                 ? $this->assessEnrollment->execute($lockedEnrollment)
                 : null;
@@ -163,7 +146,7 @@ final class TransitionEnrollment
                 AuditableType::ENROLLMENT,
                 $lockedEnrollment->id,
                 $beforeValues,
-                self::auditAfterValues($afterValues, $queueTicket, $assessment),
+                self::auditAfterValues($afterValues, $assessment),
                 $auditReason,
                 $context,
             );
@@ -171,16 +154,8 @@ final class TransitionEnrollment
             Notification::create([
                 'user_id' => $lockedEnrollment->student->user_id,
                 'type' => self::NOTIFICATION_TYPE[$action],
-                'message' => self::notificationMessage($action, $lockedEnrollment, $reason, $queueTicket),
+                'message' => self::notificationMessage($action, $lockedEnrollment, $reason),
             ]);
-
-            if ($action === 'registrar_approve' && $queueTicket !== null) {
-                $this->notificationRecorder->recordManyForRole(
-                    UserRole::AccountingStaff,
-                    NotificationType::EnrollmentRegistrarApproved,
-                    "Enrollment #{$lockedEnrollment->id} ({$lockedEnrollment->student->student_number}) was approved and is now in the payment queue. Queue ticket: {$queueTicket->ticket_number}.",
-                );
-            }
 
             return $lockedEnrollment->refresh()->load([
                 'student', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items',
@@ -192,12 +167,8 @@ final class TransitionEnrollment
      * @param  array{student_id: int, academic_term_id: int, status: string, registrar_decided_at: ?string}  $afterValues
      * @return array<string, mixed>
      */
-    private static function auditAfterValues(array $afterValues, ?QueueTicket $queueTicket, ?Assessment $assessment): array
+    private static function auditAfterValues(array $afterValues, ?Assessment $assessment): array
     {
-        if ($queueTicket !== null) {
-            $afterValues = [...$afterValues, 'queue_ticket_number' => $queueTicket->ticket_number];
-        }
-
         if ($assessment !== null) {
             $afterValues = [...$afterValues, 'assessment_total_amount' => $assessment->total_amount, 'assessment_item_count' => $assessment->items->count()];
         }
@@ -205,12 +176,10 @@ final class TransitionEnrollment
         return $afterValues;
     }
 
-    private static function notificationMessage(string $action, Enrollment $enrollment, ?string $reason, ?QueueTicket $queueTicket): string
+    private static function notificationMessage(string $action, Enrollment $enrollment, ?string $reason): string
     {
         return match ($action) {
-            'registrar_approve' => $queueTicket === null
-                ? 'Your enrollment has been approved by the Registrar and is now pending payment.'
-                : "Your enrollment has been approved by the Registrar and is now pending payment. Queue ticket: {$queueTicket->ticket_number}.",
+            'registrar_approve' => 'Your enrollment has been approved by the Registrar and is now pending payment. Visit the Cashier to claim your queue ticket.',
             'registrar_reject' => "Your enrollment was rejected by the Registrar. Reason: {$reason}",
             'void' => "Your enrollment has been voided by the Registrar. Reason: {$reason}",
             default => 'Your enrollment status has changed.',

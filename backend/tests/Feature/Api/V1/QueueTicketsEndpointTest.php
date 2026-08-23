@@ -481,21 +481,4 @@ final class QueueTicketsEndpointTest extends TestCase
         self::assertSame(1, $firstRegular->position(), 'One priority ticket stands ahead of the first regular one.');
         self::assertSame(2, $secondRegular->position(), 'The priority ticket plus the earlier regular one stand ahead.');
     }
-
-    public function test_ticket_numbers_reset_per_day(): void
-    {
-        $term = $this->makeTerm();
-        $curriculum = $this->makeCurriculum();
-        $student = $this->makeStudent($curriculum);
-        $enrollment = Enrollment::create([
-            'student_id' => $student->id, 'academic_term_id' => $term->id,
-            'status' => EnrollmentStatus::PendingRegistrarApproval, 'total_units' => 3, 'submitted_at' => now(),
-        ]);
-        $staffToken = $this->tokenForNewUser(UserRole::RegistrarStaff, 'registrar.staff.dailyreset@grc.test');
-
-        $response = $this->withToken($staffToken)
-            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
-
-        $response->assertOk()->assertJsonPath('data.queue_ticket.ticket_number', 'Q001');
-    }
 }
