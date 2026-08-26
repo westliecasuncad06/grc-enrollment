@@ -18,6 +18,7 @@ export const userRoles = [
   "registrar_staff",
   "accounting_staff",
   "it_admin",
+  "queue_kiosk",
 ] as const
 
 export type UserRole = (typeof userRoles)[number]

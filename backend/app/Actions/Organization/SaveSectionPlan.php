@@ -50,23 +50,55 @@ final class SaveSectionPlan
         $this->assertCurriculumBelongsToCollege($curriculumId, $actor, $college);
 
         return DB::transaction(function () use ($term, $curriculumId, $counts, $studentsPerBlock, $college): array {
-            if (AcademicTermSectionPlan::query()
+            $existingPlans = AcademicTermSectionPlan::query()
                 ->where('academic_term_id', $term->id)
                 ->where('curriculum_id', $curriculumId)
                 ->where('college', $college)
-                ->where('status', SectionPlanStatus::Submitted)
-                ->exists()) {
-                throw ValidationException::withMessages(['status' => 'This section plan has already been submitted and is locked for editing.']);
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('year_level');
+
+            foreach (range(1, 4) as $yearLevel) {
+                $existing = $existingPlans->get($yearLevel);
+                $hasRequestedCount = array_key_exists($yearLevel, $counts)
+                    || array_key_exists((string) $yearLevel, $counts);
+                $requestedCount = (int) ($counts[$yearLevel] ?? $counts[(string) $yearLevel] ?? 0);
+
+                if ($existing?->status === SectionPlanStatus::Submitted) {
+                    if ($hasRequestedCount && $requestedCount !== $existing->section_count) {
+                        throw ValidationException::withMessages(['status' => 'This section plan has already been submitted and is locked for editing.']);
+                    }
+
+                    continue;
+                }
+
+                if ($existing === null) {
+                    continue;
+                }
+
+                $protectedBlock = $this->highestProtectedBlock($existing, $yearLevel);
+                if ($protectedBlock !== null && $requestedCount < $protectedBlock['number']) {
+                    throw ValidationException::withMessages([
+                        'counts' => "Cannot reduce {$yearLevel}th-year sections below {$protectedBlock['number']} while {$protectedBlock['section']->section_code} has assigned schedule or enrollment data.",
+                    ]);
+                }
             }
 
             $plans = [];
             foreach (range(1, 4) as $yearLevel) {
-                $existing = AcademicTermSectionPlan::query()
-                    ->where('academic_term_id', $term->id)
-                    ->where('curriculum_id', $curriculumId)
-                    ->where('college', $college)
-                    ->where('year_level', $yearLevel)
-                    ->first();
+                $existing = $existingPlans->get($yearLevel);
+
+                if ($existing?->status === SectionPlanStatus::Submitted) {
+                    $plans[] = $existing;
+
+                    continue;
+                }
+
+                $hasRequestedCount = array_key_exists($yearLevel, $counts)
+                    || array_key_exists((string) $yearLevel, $counts);
+                if ($existing === null && ! $hasRequestedCount) {
+                    continue;
+                }
 
                 // Omitting a year level leaves its stored capacity alone
                 // rather than silently resetting it to the column default.
@@ -174,6 +206,7 @@ final class SaveSectionPlan
                 ->delete();
 
             foreach ($plans as $yearLevel => $plan) {
+                $this->restoreProtectedBlockCount($plan, (int) $yearLevel);
                 $this->removeReducedGeneratedSections($plan, (int) $yearLevel);
             }
 
@@ -273,9 +306,7 @@ final class SaveSectionPlan
                 continue;
             }
 
-            if ($section->enrolled_count > 0 || $section->professor_id !== null || $section->schedule_days !== null
-                || $section->starts_at_time !== null || $section->ends_at_time !== null || $section->room !== null
-                || $section->status !== SectionStatus::Planned) {
+            if ($this->hasProtectedAssignmentData($section)) {
                 throw ValidationException::withMessages([
                     'counts' => "Cannot reduce {$yearLevel}th-year sections while {$section->section_code} has assigned schedule or enrollment data.",
                 ]);
@@ -283,6 +314,50 @@ final class SaveSectionPlan
 
             $section->delete();
         }
+    }
+
+    /**
+     * A failed remove attempt used to write its reduced plan count before
+     * release discovered a scheduled/enrolled block that could not safely be
+     * deleted. Reconcile that stale count to the highest protected ordinal
+     * before release considers any deletion, so submit remains non-destructive.
+     */
+    private function restoreProtectedBlockCount(AcademicTermSectionPlan $plan, int $yearLevel): void
+    {
+        $protectedBlock = $this->highestProtectedBlock($plan, $yearLevel);
+        if ($protectedBlock !== null && $protectedBlock['number'] > $plan->section_count) {
+            $plan->update(['section_count' => $protectedBlock['number']]);
+        }
+    }
+
+    /** @return ?array{section: Section, number: int} */
+    private function highestProtectedBlock(AcademicTermSectionPlan $plan, int $yearLevel): ?array
+    {
+        $highest = null;
+
+        $sections = Section::query()
+            ->where('section_plan_id', $plan->id)
+            ->lockForUpdate()
+            ->get();
+        foreach ($sections as $section) {
+            if (! preg_match('/'.$yearLevel.'(\d{2})$/u', $section->section_code, $matches)) {
+                continue;
+            }
+
+            $blockNumber = (int) $matches[1];
+            if ($this->hasProtectedAssignmentData($section) && ($highest === null || $blockNumber > $highest['number'])) {
+                $highest = ['section' => $section, 'number' => $blockNumber];
+            }
+        }
+
+        return $highest;
+    }
+
+    private function hasProtectedAssignmentData(Section $section): bool
+    {
+        return $section->enrolled_count > 0 || $section->professor_id !== null || $section->schedule_days !== null
+            || $section->starts_at_time !== null || $section->ends_at_time !== null || $section->room !== null
+            || $section->status !== SectionStatus::Planned;
     }
 
     public function submit(

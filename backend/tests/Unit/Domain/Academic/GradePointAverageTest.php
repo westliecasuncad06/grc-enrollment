@@ -62,6 +62,18 @@ final class GradePointAverageTest extends TestCase
         self::assertSame(3.0, GradePointAverage::gpaUnits($rows));
     }
 
+    public function test_an_explicitly_excluded_numeric_subject_keeps_academic_units_but_not_gpa_units(): void
+    {
+        $rows = [
+            ['mark' => GradeMark::Excellent, 'units' => 3.0, 'counts_toward_gpa' => true],
+            ['mark' => GradeMark::Failed, 'units' => 2.0, 'counts_toward_gpa' => false],
+        ];
+
+        self::assertSame(5.0, GradePointAverage::academicUnits($rows));
+        self::assertSame(3.0, GradePointAverage::gpaUnits($rows));
+        self::assertSame('1.00', GradePointAverage::compute($rows));
+    }
+
     public function test_null_mark_rows_are_excluded_from_both_totals(): void
     {
         $rows = [
@@ -83,5 +95,16 @@ final class GradePointAverageTest extends TestCase
         ];
 
         self::assertSame('1.13', GradePointAverage::compute($rows));
+    }
+
+    public function test_unrounded_average_keeps_precision_for_honors_boundaries(): void
+    {
+        $rows = [
+            ['mark' => GradeMark::WithDistinction, 'units' => 61.0],
+            ['mark' => GradeMark::VeryGood, 'units' => 1.0],
+        ];
+
+        self::assertSame('1.50', GradePointAverage::compute($rows));
+        self::assertGreaterThan(1.50, GradePointAverage::unrounded($rows));
     }
 }

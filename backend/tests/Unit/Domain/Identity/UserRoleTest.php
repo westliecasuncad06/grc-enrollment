@@ -20,6 +20,7 @@ final class UserRoleTest extends TestCase
             'registrar_staff',
             'accounting_staff',
             'it_admin',
+            'queue_kiosk',
         ], array_column(UserRole::cases(), 'value'));
     }
 
@@ -28,7 +29,18 @@ final class UserRoleTest extends TestCase
         $this->assertContains('it_admin', array_column(UserRole::cases(), 'value'));
         $this->assertSame('IT Control', UserRole::ItAdmin->label());
         $this->assertFalse(UserRole::ItAdmin->isLearnerScoped());
-        $this->assertCount(10, UserRole::cases());
+        $this->assertCount(11, UserRole::cases());
+    }
+
+    public function test_queue_kiosk_is_a_device_role_outside_the_human_role_catalog(): void
+    {
+        self::assertSame('queue_kiosk', UserRole::QueueKiosk->value);
+        self::assertSame('Queue Kiosk', UserRole::QueueKiosk->label());
+        self::assertTrue(UserRole::QueueKiosk->isDevice());
+        self::assertFalse(UserRole::QueueKiosk->isLearnerScoped());
+        self::assertCount(11, UserRole::cases());
+        self::assertCount(10, UserRole::humanCases());
+        self::assertNotContains(UserRole::QueueKiosk, UserRole::humanCases());
     }
 
     public function test_role_labels_are_stable_and_human_readable(): void

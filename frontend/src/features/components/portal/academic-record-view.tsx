@@ -51,7 +51,10 @@ import type {
  * `generated_at` has no per-term source here; it isn't rendered by
  * `GradeSlipDocument`, so a fresh timestamp is a harmless placeholder.
  */
-function toGradeSlip(record: AcademicRecord, term: AcademicRecordTerm): GradeSlip {
+function toGradeSlip(
+  record: AcademicRecord,
+  term: AcademicRecordTerm,
+): GradeSlip {
   return {
     type: "grade_slip",
     student_id: record.student_id,
@@ -312,7 +315,7 @@ function GradeTiles({ slip }: { slip: GradeSlip }) {
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
         <span>Total academic units: {slip.total_academic_units}</span>
-        <span>GPA: {slip.gpa ?? "—"}</span>
+        <span>GWA: {slip.gpa ?? "—"}</span>
       </div>
     </PrintDocument>
   )

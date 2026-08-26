@@ -45,6 +45,7 @@ const legalActions: Record<
   registrar_staff: {},
   accounting_staff: {},
   it_admin: {},
+  queue_kiosk: {},
 }
 
 export function availableScheduleActions(

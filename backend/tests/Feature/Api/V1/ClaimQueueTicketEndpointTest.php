@@ -8,6 +8,7 @@ use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Identity\QueueKioskAccess;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
@@ -23,6 +24,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
 final class ClaimQueueTicketEndpointTest extends TestCase
@@ -37,25 +39,101 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_a_student_can_claim_their_own_ticket(): void
+    public function test_a_student_cannot_claim_their_own_ticket_without_a_kiosk_token(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00001');
+
+        $this->withToken($studentToken)->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
+    public function test_a_student_can_claim_their_own_ticket_with_an_active_kiosk_token(): void
     {
         [$studentToken, $enrollment] = $this->makeApprovedStudent('2026-08-00001');
 
-        $response = $this->withToken($studentToken)->postJson('/api/v1/queue-tickets');
-
-        $response->assertCreated()
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken())
+            ->postJson('/api/v1/queue-tickets')
+            ->assertCreated()
             ->assertJsonPath('data.ticket_number', 'Q001')
             ->assertJsonPath('data.status', 'waiting')
             ->assertJsonPath('data.enrollment_id', $enrollment->id);
         self::assertSame(AuditAction::QUEUE_TICKET_CLAIMED, AuditLog::query()->sole()->action);
     }
 
+    public function test_a_student_cannot_claim_with_a_fabricated_kiosk_token(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00008');
+
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, 'fabricated-kiosk-token')
+            ->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
+    public function test_a_student_cannot_claim_with_a_revoked_kiosk_token(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00009');
+        $kioskToken = $this->kioskToken();
+        PersonalAccessToken::findToken($kioskToken)?->delete();
+
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $kioskToken)
+            ->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
+    public function test_a_student_cannot_claim_with_an_expired_kiosk_token(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00010');
+
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken(expiresAt: CarbonImmutable::now()->subSecond()))
+            ->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
+    public function test_a_student_cannot_claim_with_a_disabled_kiosk_owner(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00011');
+
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken(status: UserStatus::Disabled))
+            ->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
+    public function test_a_student_cannot_claim_with_a_student_owned_kiosk_ability_token(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00012');
+
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken(role: UserRole::Student))
+            ->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
+    public function test_a_student_cannot_claim_with_a_kiosk_token_without_the_required_ability(): void
+    {
+        [$studentToken] = $this->makeApprovedStudent('2026-08-00013');
+
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken(abilities: []))
+            ->postJson('/api/v1/queue-tickets')
+            ->assertForbidden();
+    }
+
     public function test_claiming_twice_returns_the_same_ticket(): void
     {
         [$studentToken] = $this->makeApprovedStudent('2026-08-00002');
+        $kioskToken = $this->kioskToken();
 
-        $first = $this->withToken($studentToken)->postJson('/api/v1/queue-tickets');
-        $second = $this->withToken($studentToken)->postJson('/api/v1/queue-tickets');
+        $first = $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $kioskToken)
+            ->postJson('/api/v1/queue-tickets');
+        $second = $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $kioskToken)
+            ->postJson('/api/v1/queue-tickets');
 
         self::assertSame($first->json('data.id'), $second->json('data.id'));
         self::assertSame(1, QueueTicket::query()->count());
@@ -65,7 +143,9 @@ final class ClaimQueueTicketEndpointTest extends TestCase
     {
         $token = $this->tokenForNewUser(UserRole::Student, 'no.enrollment@grc.test');
 
-        $this->withToken($token)->postJson('/api/v1/queue-tickets')
+        $this->withToken($token)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken())
+            ->postJson('/api/v1/queue-tickets')
             ->assertUnprocessable()
             ->assertJsonPath('error.errors.student_number.0', 'No enrollment pending payment was found for this student.');
     }
@@ -76,6 +156,18 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'issuer@grc.test');
 
         $this->withToken($token)->postJson('/api/v1/queue-tickets', ['student_number' => '2026-08-00003'])
+            ->assertCreated()
+            ->assertJsonPath('data.enrollment_id', $enrollment->id);
+    }
+
+    public function test_accounting_staff_can_issue_a_ticket_with_a_junk_kiosk_header(): void
+    {
+        [, $enrollment] = $this->makeApprovedStudent('2026-08-00014');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'junk-header-issuer@grc.test');
+
+        $this->withToken($token)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, 'junk')
+            ->postJson('/api/v1/queue-tickets', ['student_number' => '2026-08-00014'])
             ->assertCreated()
             ->assertJsonPath('data.enrollment_id', $enrollment->id);
     }
@@ -108,7 +200,9 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         [$studentToken] = $this->makeApprovedStudent('2026-08-00005');
         CarbonImmutable::setTestNow('2026-08-23 01:00:00'); // 09:00 PHT
 
-        $this->withToken($studentToken)->postJson('/api/v1/queue-tickets')
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken())
+            ->postJson('/api/v1/queue-tickets')
             ->assertCreated()
             ->assertJsonPath('data.ticket_number', 'Q048');
         self::assertSame($cycle->id, QueueTicket::query()->where('ticket_number', 'Q048')->sole()->queue_cycle_id);
@@ -122,7 +216,9 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         [$studentToken] = $this->makeApprovedStudent('2026-08-00006');
         CarbonImmutable::setTestNow('2026-08-23 01:00:00'); // 09:00 PHT, no outstanding tickets anywhere
 
-        $this->withToken($studentToken)->postJson('/api/v1/queue-tickets')
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken())
+            ->postJson('/api/v1/queue-tickets')
             ->assertCreated()
             ->assertJsonPath('data.ticket_number', 'Q001');
         self::assertSame(2, QueueCycle::query()->count());
@@ -135,7 +231,10 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         // 23:30 UTC on the 22nd is 07:30 on the 23rd in Manila.
         CarbonImmutable::setTestNow('2026-08-22 23:30:00');
 
-        $this->withToken($studentToken)->postJson('/api/v1/queue-tickets')->assertCreated();
+        $this->withToken($studentToken)
+            ->withHeader(QueueKioskAccess::TOKEN_HEADER, $this->kioskToken())
+            ->postJson('/api/v1/queue-tickets')
+            ->assertCreated();
 
         self::assertSame('2026-08-23', QueueTicket::query()->sole()->queue_date->toDateString());
     }
@@ -185,5 +284,25 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         return (string) $this->postJson('/api/v1/auth/login', [
             'email' => $email, 'password' => self::PASSWORD,
         ])->json('data.token');
+    }
+
+    /**
+     * @param  list<string>  $abilities
+     */
+    private function kioskToken(
+        array $abilities = [QueueKioskAccess::TOKEN_ABILITY],
+        ?CarbonImmutable $expiresAt = null,
+        UserRole $role = UserRole::QueueKiosk,
+        UserStatus $status = UserStatus::Active,
+    ): string {
+        $user = User::create([
+            'name' => 'Queue Kiosk',
+            'email' => 'queue-kiosk-'.User::query()->count().'@grc.test',
+            'password' => self::PASSWORD,
+            'role' => $role,
+            'status' => $status,
+        ]);
+
+        return $user->createToken('queue-kiosk-test', $abilities, $expiresAt)->plainTextToken;
     }
 }

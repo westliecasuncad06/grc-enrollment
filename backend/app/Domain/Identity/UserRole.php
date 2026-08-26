@@ -14,6 +14,7 @@ enum UserRole: string
     case RegistrarStaff = 'registrar_staff';
     case AccountingStaff = 'accounting_staff';
     case ItAdmin = 'it_admin';
+    case QueueKiosk = 'queue_kiosk';
 
     public function label(): string
     {
@@ -28,6 +29,7 @@ enum UserRole: string
             self::RegistrarStaff => 'Registrar Staff',
             self::AccountingStaff => 'Accounting Staff',
             self::ItAdmin => 'IT Control',
+            self::QueueKiosk => 'Queue Kiosk',
         };
     }
 
@@ -47,7 +49,24 @@ enum UserRole: string
             self::ExecutiveDirector,
             self::RegistrarHead,
             self::RegistrarStaff,
-            self::ItAdmin => false,
+            self::ItAdmin,
+            self::QueueKiosk => false,
         };
+    }
+
+    public function isDevice(): bool
+    {
+        return $this === self::QueueKiosk;
+    }
+
+    /**
+     * @return list<self>
+     */
+    public static function humanCases(): array
+    {
+        return array_values(array_filter(
+            self::cases(),
+            static fn (self $role): bool => ! $role->isDevice(),
+        ));
     }
 }

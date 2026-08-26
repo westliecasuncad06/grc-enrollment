@@ -15,10 +15,12 @@ use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
+use App\Models\Payment;
 use App\Models\Program;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 final class EnrollmentDocumentsEndpointTest extends TestCase
@@ -44,10 +46,10 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         ]);
     }
 
-    private function makeStudent(Curriculum $curriculum, string $email, string $studentNumber): StudentProfile
+    private function makeStudent(Curriculum $curriculum, string $email, string $studentNumber, string $name = 'Test Student'): StudentProfile
     {
         $user = User::create([
-            'name' => 'Test Student', 'email' => $email,
+            'name' => $name, 'email' => $email,
             'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
         ]);
 
@@ -93,8 +95,8 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
 
         return EnrollmentDocument::create([
             'enrollment_id' => $enrollment->id,
-            'document_type' => EnrollmentDocumentType::Com,
-            'document_number' => sprintf('COM%06d', $enrollment->id),
+            'document_type' => EnrollmentDocumentType::Cor,
+            'document_number' => sprintf('COR%06d', $enrollment->id),
             'generated_at' => now(),
         ]);
     }
@@ -128,6 +130,126 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data');
         $response->assertJsonPath('data.0.id', $ownDocument->id);
         $response->assertJsonPath('data.0.student_number', $student->student_number);
+        $response->assertJsonPath('data.0.student_name', null);
+    }
+
+    public function test_a_student_cannot_open_another_students_cor_detail(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.owncordetail@grc.test', '2026-0011');
+        $otherStudent = $this->makeStudent($curriculum, 'student.othercordetail@grc.test', '2026-0012');
+        $otherDocument = $this->makeDocument($otherStudent, $term);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$otherDocument->id}")
+            ->assertForbidden();
+    }
+
+    public function test_a_legacy_com_row_is_presented_to_its_student_as_a_cor(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.legacycor@grc.test', '2026-0013');
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => EnrollmentStatus::Enrolled,
+            'total_units' => 3,
+            'submitted_at' => now(),
+        ]);
+        DB::table('enrollment_documents')->insert([
+            'enrollment_id' => $enrollment->id,
+            'document_type' => 'com',
+            'document_number' => 'COM000013',
+            'generated_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson('/api/v1/enrollment-documents')
+            ->assertOk()
+            ->assertJsonPath('data.0.document_type', 'cor')
+            ->assertJsonPath('data.0.document_type_label', 'Certificate of Registration')
+            ->assertJsonPath('data.0.document_number', 'COR000013');
+    }
+
+    public function test_a_paid_legacy_com_row_opens_as_a_printable_cor_snapshot(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.legacysnapshot@grc.test', '2026-0014');
+        $cashier = User::create([
+            'name' => 'Test Cashier',
+            'email' => 'cashier.legacysnapshot@grc.test',
+            'password' => self::PASSWORD,
+            'role' => UserRole::AccountingStaff,
+            'status' => UserStatus::Active,
+        ]);
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => EnrollmentStatus::Enrolled,
+            'total_units' => 3,
+            'submitted_at' => now(),
+        ]);
+        $payment = Payment::create([
+            'enrollment_id' => $enrollment->id,
+            'confirmed_by' => $cashier->id,
+            'amount' => '1500.00',
+            'confirmed_at' => now(),
+        ]);
+        DB::table('enrollment_documents')->insert([
+            'enrollment_id' => $enrollment->id,
+            'document_type' => 'com',
+            'document_number' => 'COM000014',
+            'generated_at' => $payment->confirmed_at,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $document = EnrollmentDocument::query()->where('document_number', 'COM000014')->sole();
+
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.type', 'certificate_of_registration')
+            ->assertJsonPath('data.document_number', 'COR000014')
+            ->assertJsonPath('data.snapshot.document_title', 'Certificate of Registration')
+            ->assertJsonPath('data.snapshot.student.student_number', '2026-0014')
+            ->assertJsonPath('data.snapshot.signatories.cashier', 'Test Cashier');
+    }
+
+    public function test_an_enrolled_legacy_record_without_an_imported_payment_still_opens_as_a_cor(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.importedcor@grc.test', '2026-0015');
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => EnrollmentStatus::Enrolled,
+            'total_units' => 3,
+            'submitted_at' => now(),
+            'enrolled_at' => now(),
+        ]);
+        DB::table('enrollment_documents')->insert([
+            'enrollment_id' => $enrollment->id,
+            'document_type' => 'com',
+            'document_number' => 'COM000015',
+            'generated_at' => $enrollment->enrolled_at,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $document = EnrollmentDocument::query()->where('document_number', 'COM000015')->sole();
+
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.document_number', 'COR000015')
+            ->assertJsonPath('data.snapshot.document_title', 'Certificate of Registration')
+            ->assertJsonPath('data.snapshot.fees.payment_amount', '0.00')
+            ->assertJsonPath('data.snapshot.signatories.cashier', 'Not provided');
     }
 
     public function test_a_registrar_head_sees_every_enrollment_document(): void
@@ -165,5 +287,76 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $response = $this->withToken($registrarStaffToken)->getJson('/api/v1/enrollment-documents');
 
         $response->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_accounting_staff_sees_prior_certificates_of_registration(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.cashiercor@grc.test', '2026-0007');
+        $document = $this->makeDocument($student, $term);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'cashier.cor@grc.test');
+
+        $response = $this->withToken($token)->getJson('/api/v1/enrollment-documents');
+
+        $response->assertOk()->assertJsonPath('data.0.id', $document->id);
+        $response->assertJsonPath('data.0.document_type', 'cor');
+
+        $this->withToken($token)
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.type', 'certificate_of_registration')
+            ->assertJsonPath('data.document_number', $document->document_number);
+    }
+
+    public function test_accounting_staff_can_find_a_students_prior_cor_by_student_number(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $matchingStudent = $this->makeStudent($curriculum, 'student.matchingcor@grc.test', '2026-0101');
+        $matchingDocument = $this->makeDocument($matchingStudent, $term);
+        $otherStudent = $this->makeStudent($curriculum, 'student.othercor@grc.test', '2026-0102');
+        $this->makeDocument($otherStudent, $term);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'cashier.searchcor@grc.test');
+
+        $this->withToken($token)
+            ->getJson('/api/v1/enrollment-documents?student_number=2026-0101')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $matchingDocument->id)
+            ->assertJsonPath('data.0.student_number', '2026-0101');
+    }
+
+    public function test_accounting_staff_and_registrar_head_can_find_cors_by_student_name(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $matchingStudent = $this->makeStudent(
+            $curriculum,
+            'student.aurora.cor@grc.test',
+            '2026-0103',
+            'Aurora S. Lopez',
+        );
+        $matchingDocument = $this->makeDocument($matchingStudent, $term);
+        $otherStudent = $this->makeStudent(
+            $curriculum,
+            'student.other-name.cor@grc.test',
+            '2026-0104',
+            'Ramon Santos',
+        );
+        $this->makeDocument($otherStudent, $term);
+
+        foreach ([
+            [UserRole::AccountingStaff, 'cashier.name-search@grc.test'],
+            [UserRole::RegistrarHead, 'registrar.name-search@grc.test'],
+        ] as [$role, $email]) {
+            $this->withToken($this->tokenForNewUser($role, $email))
+                ->getJson('/api/v1/enrollment-documents?student_name=aurora')
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.id', $matchingDocument->id)
+                ->assertJsonPath('data.0.student_number', '2026-0103')
+                ->assertJsonPath('data.0.student_name', 'Aurora S. Lopez');
+        }
     }
 }

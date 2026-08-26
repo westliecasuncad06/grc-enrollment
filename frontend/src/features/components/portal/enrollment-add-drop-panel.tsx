@@ -35,7 +35,10 @@ import {
   useCreateEnrollmentChangeRequestMutation,
   useEnrollmentChangeRequestsQuery,
 } from "@/features/hooks/use-enrollment-change-requests"
-import { useSectionsQuery, useSubjectsQuery } from "@/features/hooks/use-reference-data"
+import {
+  useSectionsQuery,
+  useSubjectsQuery,
+} from "@/features/hooks/use-reference-data"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 import { isApiClientError } from "@/features/services/api-client"
 
@@ -121,7 +124,8 @@ export function EnrollmentAddDropPanel({
   )
 
   const reasonRequired = pending !== null && !reason.trim()
-  const sectionRequired = pending?.kind === "change_section" && toSectionId === null
+  const sectionRequired =
+    pending?.kind === "change_section" && toSectionId === null
 
   const confirmPending = async () => {
     if (!pending) return
@@ -218,7 +222,8 @@ export function EnrollmentAddDropPanel({
           <CardTitle level={2}>Your subjects</CardTitle>
         </CardHeader>
         <CardContent>
-          {enrollment.subjects.filter((s) => s.status !== "dropped").length === 0 ? (
+          {enrollment.subjects.filter((s) => s.status !== "dropped").length ===
+          0 ? (
             <p>No active subjects on this enrollment.</p>
           ) : (
             <DataTable
@@ -252,6 +257,11 @@ export function EnrollmentAddDropPanel({
                     const currentSection = sections.find(
                       (s) => s.id === subject.section_id,
                     )
+                    const subjectId =
+                      currentSection?.subject_id ??
+                      subjectsQuery.data?.find(
+                        (candidate) => candidate.code === subject.subject_code,
+                      )?.id
                     return (
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -269,9 +279,9 @@ export function EnrollmentAddDropPanel({
                             setError("")
                           }}
                         >
-                          Drop
+                          Drop subject
                         </Button>
-                        {currentSection && (
+                        {subjectId !== undefined && (
                           <Button
                             type="button"
                             size="sm"
@@ -280,7 +290,7 @@ export function EnrollmentAddDropPanel({
                               setPending({
                                 kind: "change_section",
                                 fromSectionId: subject.section_id,
-                                subjectId: currentSection.subject_id,
+                                subjectId,
                                 subjectLabel: subject.subject_title,
                               })
                               setReason("")
@@ -288,7 +298,7 @@ export function EnrollmentAddDropPanel({
                               setError("")
                             }}
                           >
-                            Change section
+                            Change schedule
                           </Button>
                         )}
                       </div>
@@ -303,7 +313,7 @@ export function EnrollmentAddDropPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle level={2}>Add a subject</CardTitle>
+          <CardTitle level={2}>Add subject</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
           {addError && (
@@ -337,7 +347,9 @@ export function EnrollmentAddDropPanel({
               <FieldLabel htmlFor="add-drop-section">Section</FieldLabel>
               <Select
                 value={addSectionId !== null ? String(addSectionId) : ""}
-                onValueChange={(value) => setAddSectionId(Number(value) || null)}
+                onValueChange={(value) =>
+                  setAddSectionId(Number(value) || null)
+                }
               >
                 <SelectTrigger id="add-drop-section" className="w-full">
                   <SelectValue placeholder="Choose a section" />
@@ -392,7 +404,10 @@ export function EnrollmentAddDropPanel({
                   {
                     key: "type",
                     header: "Type",
-                    render: (request) => request.request_type_label,
+                    render: (request) =>
+                      request.request_type === "change_section"
+                        ? "Change schedule"
+                        : request.request_type_label,
                   },
                   {
                     key: "subject",
@@ -439,7 +454,7 @@ export function EnrollmentAddDropPanel({
             <AlertDialogTitle>
               {pending?.kind === "drop"
                 ? `Drop ${pending.subjectLabel}?`
-                : `Change section for ${pending?.subjectLabel}?`}
+                : `Change schedule for ${pending?.subjectLabel}?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               This submits a request for Registrar Head approval — it does not

@@ -40,3 +40,21 @@ export const archiveAndCreateNextInputSchema = z
 export type ArchiveAndCreateNextInput = z.infer<
   typeof archiveAndCreateNextInputSchema
 >
+
+/**
+ * A Draft term can have its identifying year and semester corrected before
+ * it begins. Enrollment dates are deliberately absent from this payload.
+ */
+export const updateDraftAcademicTermIdentityInputSchema = z
+  .object({
+    school_year: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{4}$/, "Use the YYYY-YYYY format."),
+    semester: z.enum(["1st", "2nd"]),
+  })
+  .strict()
+
+export type UpdateDraftAcademicTermIdentityInput = z.infer<
+  typeof updateDraftAcademicTermIdentityInputSchema
+>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Academic\ListAcademicGrades;
 use App\Actions\Academic\RecordAcademicGrade;
+use App\Actions\Academic\SubmitSectionGrades;
 use App\Actions\Academic\UpdateAcademicGrade;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AcademicGrade\IndexAcademicGradeRequest;
@@ -16,6 +17,7 @@ use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 final class AcademicGradeController extends Controller
 {
@@ -72,6 +74,7 @@ final class AcademicGradeController extends Controller
         UpdateAcademicGradeRequest $request,
         AcademicGrade $academicGrade,
         UpdateAcademicGrade $updater,
+        SubmitSectionGrades $submitSectionGrades,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
@@ -83,7 +86,22 @@ final class AcademicGradeController extends Controller
 
         $this->authorize($ability, $academicGrade);
 
-        $grade = $updater->execute($academicGrade, $request->validated(), $actor, $contextFactory->fromRequest($request));
+        $context = $contextFactory->fromRequest($request);
+
+        if ($action === 'submit') {
+            $section = $academicGrade->section;
+
+            if ($section === null) {
+                throw ValidationException::withMessages([
+                    'action' => 'A section grade cannot be submitted without its section.',
+                ]);
+            }
+
+            $submitSectionGrades->execute($section, $actor, $context);
+            $grade = $academicGrade->refresh()->load(['student', 'subject', 'section']);
+        } else {
+            $grade = $updater->execute($academicGrade, $request->validated(), $actor, $context);
+        }
 
         return $this->cachePrivateResponse(AcademicGradeResource::make($grade)->response($request));
     }

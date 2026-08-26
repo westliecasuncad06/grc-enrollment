@@ -392,6 +392,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
         $response->assertOk();
         self::assertSame(0, $section->refresh()->enrolled_count);
         self::assertSame('dropped', $enrollmentSubject->refresh()->status->value);
+        self::assertSame('enrolled', $enrollment->refresh()->status->value);
     }
 
     public function test_registrar_head_approves_a_change_section_request_atomically(): void

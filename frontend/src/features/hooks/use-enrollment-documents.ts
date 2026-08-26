@@ -4,7 +4,10 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
 import type { EnrollmentDocumentFilters } from "@/features/schemas/enrollment-document-schema"
-import { listEnrollmentDocuments } from "@/features/services/enrollment-document-service"
+import {
+  getCertificateOfRegistration,
+  listEnrollmentDocuments,
+} from "@/features/services/enrollment-document-service"
 
 export const enrollmentDocumentsQueryKey = (
   userId: string | null,
@@ -21,5 +24,18 @@ export function useEnrollmentDocumentsQuery(
     queryKey: enrollmentDocumentsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listEnrollmentDocuments(filters, signal),
     enabled: enabled && session !== null,
+  })
+}
+
+export function useCertificateOfRegistrationQuery(
+  id: number | null,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: ["certificate-of-registration", session?.userId ?? null, id],
+    queryFn: ({ signal }) => getCertificateOfRegistration(id as number, signal),
+    enabled: enabled && session !== null && id !== null,
   })
 }

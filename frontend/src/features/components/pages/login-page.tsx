@@ -16,6 +16,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { isAuthError } from "@/features/auth/auth-error"
 import { Button } from "@/features/components/ui/button"
 import {
   Field,
@@ -45,6 +46,8 @@ type LoginValues = z.infer<typeof loginSchema>
  */
 const invalidCredentialsMessage =
   "The email or password you entered was not recognized."
+const queueKioskSurfaceMessage =
+  "This device identity must sign in through the Queue Kiosk."
 
 const copy = {
   eyebrow: "Enrollment portal",
@@ -97,8 +100,15 @@ export function LoginPage() {
   const submitLogin = async (values: LoginValues) => {
     try {
       await signIn(values)
-    } catch {
-      setError("root.credentials", { message: invalidCredentialsMessage })
+    } catch (cause) {
+      const requiresDevicePortal =
+        isAuthError(cause) &&
+        cause.code === "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL"
+      setError("root.credentials", {
+        message: requiresDevicePortal
+          ? queueKioskSurfaceMessage
+          : invalidCredentialsMessage,
+      })
       setValue("password", "")
 
       return
@@ -187,6 +197,10 @@ export function LoginPage() {
                   <li key={message}>{message}</li>
                 ))}
               </ul>
+              {errors.root?.credentials?.message ===
+                queueKioskSurfaceMessage && (
+                <Link href="/queue">Open Queue Kiosk</Link>
+              )}
             </div>
           )}
 

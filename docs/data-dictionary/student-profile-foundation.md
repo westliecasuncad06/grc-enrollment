@@ -58,5 +58,11 @@ write-gated resource in this API (ADR 0008).
 
 ## Seeded data
 
+`student_profiles.is_demo_account` is a non-null boolean, defaulting to
+`false`. It distinguishes the legacy local QA student profiles from the
+structured roster used for local factual attrition scenarios. Analytics and
+honors reports exclude demo accounts; it is private operational provenance
+and is never serialized by the student-profile API.
+
 None. No acceptance criterion required seeded fixtures for this sub-project;
 tests create records directly.

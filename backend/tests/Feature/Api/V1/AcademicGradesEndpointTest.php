@@ -6,6 +6,8 @@ use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -18,6 +20,8 @@ use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
+use App\Models\Enrollment;
+use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Program;
 use App\Models\Section;
@@ -116,6 +120,23 @@ final class AcademicGradesEndpointTest extends TestCase
         ]);
     }
 
+    private function enroll(StudentProfile $student, AcademicTerm $term, Section $section): void
+    {
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => EnrollmentStatus::Enrolled,
+            'total_units' => $section->subject->units,
+            'enrolled_at' => now(),
+        ]);
+
+        EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id,
+            'section_id' => $section->id,
+            'status' => EnrollmentSubjectStatus::Enrolled,
+        ]);
+    }
+
     public function test_anonymous_request_is_unauthenticated(): void
     {
         $this->getJson('/api/v1/academic-grades')->assertUnauthorized();
@@ -137,6 +158,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $professor = User::create(['name' => 'Prof', 'email' => 'prof.create@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
+        $this->enroll($student, $term, $section);
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->postJson('/api/v1/academic-grades', [
@@ -162,6 +184,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $professor = User::create(['name' => 'Prof', 'email' => 'prof.lead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
+        $this->enroll($student, $term, $section);
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->postJson('/api/v1/academic-grades', [
@@ -184,6 +207,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $professor = User::create(['name' => 'Prof', 'email' => 'prof.leadok@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
+        $this->enroll($student, $term, $section);
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->postJson('/api/v1/academic-grades', [
@@ -272,7 +296,9 @@ final class AcademicGradesEndpointTest extends TestCase
         $professor = User::create(['name' => 'Prof', 'email' => 'prof.edit@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
+        $this->enroll($student, $term, $section);
         $grade = $this->makeGrade($student, $subject, $section, $term, $professor);
+        $grade->update(['mark' => '1.50', 'final_grade' => '1.50']);
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->patchJson("/api/v1/academic-grades/{$grade->id}", [
@@ -330,7 +356,9 @@ final class AcademicGradesEndpointTest extends TestCase
         $professor = User::create(['name' => 'Prof', 'email' => 'prof.submit@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
+        $this->enroll($student, $term, $section);
         $grade = $this->makeGrade($student, $subject, $section, $term, $professor);
+        $grade->update(['mark' => '1.50', 'final_grade' => '1.50']);
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->patchJson("/api/v1/academic-grades/{$grade->id}", ['action' => 'submit']);

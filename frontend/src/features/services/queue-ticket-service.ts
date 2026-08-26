@@ -17,6 +17,11 @@ import {
 
 export const QUEUE_TICKETS_PATH = "/api/v1/queue-tickets"
 
+export interface KioskClaimCredentials {
+  studentToken: string
+  kioskToken: string
+}
+
 function parse<T>(
   schema: {
     safeParse: (
@@ -67,11 +72,20 @@ export async function updateQueueTicket(
 
 export async function claimQueueTicket(
   studentNumber?: string,
+  kiosk?: KioskClaimCredentials,
+  signal?: AbortSignal,
 ): Promise<QueueTicket> {
   const payload = await postAuthenticatedJson(
     QUEUE_TICKETS_PATH,
     studentNumber ? { student_number: studentNumber } : undefined,
+    signal,
+    kiosk
+      ? {
+          token: kiosk.studentToken,
+          headers: { "X-Queue-Kiosk-Token": kiosk.kioskToken },
+          suppressUnauthorizedHandler: true,
+        }
+      : undefined,
   )
-  return parse(queueTicketEnvelopeSchema, payload, "claimed queue ticket")
-    .data
+  return parse(queueTicketEnvelopeSchema, payload, "claimed queue ticket").data
 }

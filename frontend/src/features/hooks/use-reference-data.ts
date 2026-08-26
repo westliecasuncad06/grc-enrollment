@@ -8,12 +8,14 @@ import {
   createAcademicTerm,
   getAcademicTerms,
   updateAcademicTerm,
+  updateDraftAcademicTermIdentity,
   getCurricula,
   getPrograms,
   getSections,
   getSubjects,
 } from "@/features/services/reference-data-service"
 import type { ArchiveAndCreateNextInput } from "@/features/schemas/academic-term-schema"
+import type { UpdateDraftAcademicTermIdentityInput } from "@/features/schemas/academic-term-schema"
 
 export const academicTermsQueryKey = (userId: string | null) =>
   ["academic-terms", userId] as const
@@ -68,6 +70,26 @@ export function useUpdateAcademicTermMutation() {
       academicTermId: number
       action: "open_enrollment" | "archive"
     }) => updateAcademicTerm(academicTermId, action),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: academicTermsQueryKey(session?.userId ?? null),
+        exact: true,
+      }),
+  })
+}
+
+export function useUpdateDraftAcademicTermIdentityMutation() {
+  const { session } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      academicTermId,
+      input,
+    }: {
+      academicTermId: number
+      input: UpdateDraftAcademicTermIdentityInput
+    }) => updateDraftAcademicTermIdentity(academicTermId, input),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: academicTermsQueryKey(session?.userId ?? null),

@@ -909,6 +909,48 @@ and several expensive datasets must finish before PHPUnit emits its next
 supplementary suite evidence; no new monolithic run or unrelated repair is
 authorized.
 
+### Milestone: backend workflow and reports
+
+- Added deterministic per-program/year holdout selection, reusable roster parsing, local IT enrollment filtering, and a reversible `student_profiles.is_demo_account` marker.
+- Added shared normalized NSTP/PATHFIT/PE GWA exclusion, exact unrounded honors eligibility, protected aggregate attrition reporting, and Dean-only live honors reporting.
+- Focused unit and API tests passed for GWA behavior, roster selection, demo marker, aggregate attrition, and submitted-grade honors eligibility. The full suite remains pending.
+- Local `php artisan migrate --force` failed before applying the new migration because MariaDB denied `ALTER` to `grc_app` on `student_profiles`; no scenario enrollment has run yet.
+- The local MariaDB administrator applied the same reversible migration and recorded it after confirming the application account cannot alter schema. The IT Control scenario then began through `RunItControlAutomationStep`; it exposed a pre-existing local schedule gap: TCP has 18 curriculum placements but zero published AY 2026-2027 2nd-semester sections, so its students are correctly recorded as workflow warnings instead of receiving invented enrollments.
+- Scenario result: the IT student step completed `partial` with 2,211 submitted and 823 warnings; the existing Registrar and Cashier steps then completed successfully (2,211 and 2,212 processed). Final factual counts are 3,210 baseline enrolled, 2,214 comparison-term enrolled, and 996 not enrolled. The approved 3,037/173 target is blocked by the local schedule gap, not silently rewritten.
+- Final narrow checks: GWA unit tests passed (9 tests, 22 assertions), focused attrition and honors API cases passed, PHP syntax and route registration passed, and scoped frontend Prettier passed. The full backend/frontend suites and browser acceptance remain pending; do not interpret the local partial scenario as acceptance of the 3,037/173 target.
+
+## 2026-08-24 — Attrition scenario continuation
+
+User directed the implementation to proceed. The next task is to close the local
+published-section gap through the existing scheduling lifecycle, then rerun the
+idempotent IT, Registrar, and Cashier automation and re-verify the approved
+3,037 enrolled / 173 attrited scenario. No commit or push is authorized.
+
+Pre-generation analysis found the gap spans multiple program/year cohorts:
+senior plans have too few capacity-bearing blocks and TCP has no usable active
+plan. Proceeding through the local IT schedule-generation and approval steps is
+authorized for this local scenario; no direct enrollment or schedule-row edits
+will be used.
+
+The standard schedule lifecycle regenerated and approved proposals successfully.
+Using the existing audited `UpdateSection` action, 73 published but unscheduled
+sections were assigned deterministic local scenario slots, and TCP received an
+active scheduled year-one plan through `SaveSectionPlan` plus normal Dean and
+Executive approval. A further repair is blocked by the existing governance rule:
+four curricula have no plan for a rostered year level, while their other year
+plans are already submitted/locked; `SaveSectionPlan` correctly refuses a
+post-submission amendment. No direct database plan/section edit was made.
+
+The repaired enrollment pass added 449 submissions; Registrar and Cashier
+automation both completed successfully, bringing comparison-term official
+non-demo enrollment to 2,663. A final idempotent pass confirmed 374 remaining
+non-holdout students are blocked by the locked missing-year plans. Reflection
+against the scenario selector confirms it retains exactly 173 deterministic
+holdouts from its 3,210 parsed roster profiles; the local baseline also contains
+a small legacy provenance mismatch outside that roster scope. An authorized
+schedule-amendment policy is required before the scenario can truthfully reach
+3,037 enrolled / 173 attrited.
+
 The bounded Unit partition completed terminally in 46.564 seconds (334 tests,
 844 assertions) with two known, unrelated AuditVocabulary expectation failures
 and one PHPUnit deprecation. `DemoEnrollmentSeederTest` alone contains 35
@@ -7694,3 +7736,689 @@ enrollments (subjects, payments, assessments, COM documents, and queue
 tickets) report zero rows. The Registrar Head can now archive the restored
 1st semester through the normal application action. No code, commit, or push
 was made.
+
+## 2026-08-23 — Queue kiosk portal and live Student queue continuation
+
+Session started from the supplied Claude handoff for the remaining queue work:
+Part A adds a dedicated, dual-session `/queue` kiosk with a non-human
+`queue_kiosk` device role, Cashier-managed reversible shared credentials, and
+a kiosk-only second-token gate for Student ticket claims; Part B consumes the
+already-shipped `GET /api/v1/queue-status` view with three-second polling and
+an accessible in-page call alert. The full `PRD.md`, this entire progress
+ledger, the handoff brief, current branch/status, and recent queue commits were
+read before implementation. This is an architectural feature, so current-code
+reconciliation and explicit design approval precede test-first implementation.
+No commit or push is authorized. The pre-existing untracked root
+`node_modules/` remains user-owned and out of scope.
+
+Initial auth-file inspection used stale guessed paths from the handoff and
+failed read-only with `PathNotFound`; repository discovery immediately located
+the current modules under `frontend/src/features/services/` and
+`frontend/src/features/auth/`. No files were changed by the failed command.
+
+The same read-only reconciliation found that the current queue modules/tests
+also use evolved names (`queue-ticket-service.ts`, `use-queue-tickets.ts`,
+`Actions/Enrollment/ClaimQueueTicket.php`, and endpoint-specific test files),
+not the initially guessed generic paths. `rg --files` resolved each location;
+the failed reads caused no repository changes.
+
+Current-code reconciliation milestone: `/api/v1/queue-tickets` intentionally
+serves both Student self-claims and Accounting on-behalf claims through one
+controller/Policy path, while the frontend API client currently owns one
+module-scope portal token provider and one global 401 handler. The proposed
+integration therefore keeps the URI/controller contract intact, adds a
+role-aware Student-only kiosk-header middleware to that route, and adds
+per-request bearer/header overrides that can suppress the portal 401 handler.
+This avoids duplicate same-method Laravel routes and prevents a kiosk/student
+401 from clearing the unrelated persistent portal session. Design approval is
+the next gate; implementation has not started.
+
+The user approved the proposed five-part architecture: the existing claim URI
+stays intact behind a Student-only kiosk-token condition; `queue_kiosk` is a
+non-human device identity isolated from `/portal`; kiosk and Student sessions
+have separate storage lifetimes; credential reads/changes are least-privilege,
+no-store, and audited without secrets; and one reusable three-second live view
+serves kiosk, enrollment, and dashboard contexts. The durable design spec and
+self-review are now in progress. Production code remains untouched.
+
+Design-spec milestone: added
+`docs/superpowers/specs/2026-08-23-queue-kiosk-live-student-view-design.md`
+with the approved identity, credential, authorization, dual-session, kiosk
+flow, polling, live-panel, alert, failure-recovery, documentation, and
+test/verification contracts. Self-review reconciled every named handoff
+requirement with the current single claim route and global portal auth client,
+and added PRD-required privileged-read auditing plus token revocation on kiosk
+password rotation. `git diff --check` passed. The durable spec is awaiting the
+required user review before implementation planning; no production code has
+been changed.
+
+The user approved the durable design spec. Implementation planning has begun
+under the repository's required test-first workflow. The feature remains one
+coherent vertical slice because the `/queue` state machine consumes the same
+Student queue service/panel and dual-token claim contract that Part B exposes;
+the two parts are not independently deployable without leaving the approved
+kiosk journey incomplete. Production code remains untouched while the
+file/interface map and executable plan are prepared.
+
+Planning self-review caught two correctable issues before execution: the
+initial plan referred conditionally to a hook test file that does not exist,
+and one multi-hunk patch used an imprecise context and failed without changing
+the plan. Repository discovery removed the nonexistent-file branch; a smaller
+exact patch then aligned the credential Action signatures and audit strings.
+No production code was affected.
+
+Implementation-plan milestone: added
+`docs/superpowers/plans/2026-08-23-queue-kiosk-live-student-view.md` with twelve
+reviewable red/green tasks spanning device persistence, Sanctum isolation,
+Student claim proof, credential management, API-client token isolation,
+Cashier UI, Student polling/alerts, portal integration, the `/queue` state
+machine, synchronized documentation, and full live verification. Self-review
+confirmed every approved spec section has an owning task, all explicit
+`Modify:` paths exist, the Accounting mutation contract remains unchanged,
+the kiosk-only mutation has one stable interface, no forbidden placeholders
+remain, and `git diff --check` passes. Execution approach selection is the next
+gate; production code is still untouched.
+
+SDD setup started after the user selected subagent-driven execution. The first
+attempt to invoke the bundled workspace helper through bare `bash` failed
+read-only because Bash is not on this PowerShell session's PATH. Repository
+discovery located Git for Windows at `C:\Program Files\Git\bin\bash.exe`; the
+same helper then succeeded and created this plan's ignored workspace/ledger.
+Worktree detection confirmed this is the normal `main` checkout. Per the
+approved plan, agents will work in place without commits; task reviews will use
+task-scoped working-tree diff packages instead of commit ranges.
+
+Focused pre-implementation baseline: the selected backend identity/auth/queue
+cluster passed **58 tests / 226 assertions** in 47.28s. The first combined
+eight-file frontend Vitest baseline produced only its run banner for more than
+three minutes and was terminated with Ctrl+C (exit 1); no assertion failure
+was printed. The same files will be rerun in smaller chunks to distinguish the
+repository's known slow-runner behavior from a real baseline defect.
+
+The split frontend rerun completed: **5 files / 36 tests** passed in 13.54s
+for auth/services, and **3 files / 28 tests** passed in 37.88s for queue and
+portal panels. The latter emitted only the already-known jsdom canvas
+`getContext()` notice. With both backend and frontend focused baselines
+established, SDD Task 1 may begin.
+
+SDD Task 1 milestone — device identity and persistence: added the canonical
+`queue_kiosk` role/constants, human-only role enumeration, reversible
+`queue_kiosk_credentials` schema/model relationships, and isolated
+local/testing `QueueKioskSeeder`. The focused suite passed **28 tests / 116
+assertions** and scoped Pint passed. Independent review found the task fully
+spec-compliant with no Critical/Important issues; one stale seeder-docblock
+wording note is deferred for the final review. HEAD remains `8ec1639`; no
+commit or push occurred. Task 2 auth isolation is next.
+
+Task 2 implementation reached green for its behavior cluster (**26 tests / 101
+assertions**) and scoped Pint, but the complete `ApiSurfaceTest` has one
+expected-inventory failure. Read-only `git show HEAD` confirmed the seven
+reported Cashier/curriculum-migration/Student-account URIs already exist in
+starting HEAD while the starting inventory lists none, so this is baseline
+test drift rather than Task 2 behavior. Ruling: keep Task 2 scoped; reconcile
+the full exact inventory in Task 4, which already adds two new paths to that
+same list. Independent Task 2 review is next.
+
+SDD Task 2 review milestone: kiosk logins now receive only the
+`queue-kiosk:claim` ability, and class-based middleware limits direct device
+requests to `auth.me`/`auth.logout` while preserving human-role behavior.
+Independent review approved the implementation with no Critical/Important
+findings and independently confirmed the one route-inventory failure is
+pre-existing. One minor report-file-list omission is deferred. No commit or
+push occurred. Task 3 will add the Student-only second-token claim proof.
+
+SDD Task 3 review milestone: the existing Student self-claim route now requires
+a second, active `queue_kiosk` Sanctum token with the exact
+`queue-kiosk:claim` ability through `X-Queue-Kiosk-Token`; fabricated,
+revoked, expired, disabled-owner, Student-owner, and wrong-ability proofs all
+fail with one generic 403. Accounting claims still rely on the existing Policy
+and succeed with either no kiosk header or a junk header. The RED run captured
+7 expected authorization gaps; GREEN passed **16 claim tests / 30 assertions**,
+the focused route-shape test, scoped Pint, and diff checks. The combined queue
+cluster passed **63 tests / 391 assertions** except for the already-documented
+Task 4-owned API inventory drift. Independent review approved with no findings.
+No commit or push occurred. Task 4 will add and audit the Accounting credential
+API while reconciling that exact route inventory.
+
+SDD Task 4 review milestone: added Accounting-only, Policy-backed audited
+`GET|PUT /api/v1/queue-kiosk-credential` endpoints with exact
+`type/email/password` no-store responses. Password rotation now locks the
+canonical kiosk credential/User, updates the hash and encrypted copy, revokes
+all kiosk tokens, and records only safe audit metadata inside one transaction.
+The full API inventory was reconciled with the two new routes and seven
+verified baseline omissions; the combined suite passed **34 tests / 361
+assertions**, scoped Pint, and diff checks. Independent review approved with no
+Critical/Important findings. Deferred minors: add an explicit 256-character
+validation case and a direct audit-failure rollback regression during final
+triage. No commit or push occurred. Task 5 will establish isolated frontend
+kiosk authentication/session plumbing.
+
+SDD Task 5 review milestone: added backward-compatible per-request bearer,
+header, and 401-handler options to the authenticated API helpers; explicit
+kiosk tokens no longer interact with the persistent portal bearer. Normal
+portal sign-in now rejects `queue_kiosk`, best-effort revokes its just-issued
+token, never persists it, and provides dedicated `/queue` guidance. Restored
+kiosk sessions render no portal children, sign out, and redirect exactly once.
+Initial review found two Important defects—case-insensitive reserved-header
+bypass and a duplicate lifecycle redirect. Focused RED regressions reproduced
+both; the fixes passed **69 Task 5 tests**, **3 scheduling role-map tests**,
+typecheck, zero-warning scoped ESLint, and diff checks. Fresh re-review approved
+the functional/security result with no Critical/Important findings. One minor
+test detail (a concrete AbortSignal for PATCH/PUT/DELETE) is deferred. This
+controller entry resolves the reviewer-requested progress update. No commit or
+push occurred. Task 6 will build the dedicated kiosk setup/hand-off screen.
+
+SDD Task 6 review milestone: added the Accounting `queue-kiosk-access` module
+with strict credential schemas/service, viewer-scoped zero-lifetime query and
+mutation cache handling, audited filter vocabulary, and a guarded
+shadcn-native credential workspace. The UI keeps credentials masked by default,
+confirms that rotation signs out active kiosks, prevents synchronous duplicate
+PUTs, and gives generic in-dialog failure/retry feedback with deterministic
+focus. Three review rounds closed subtle confidentiality/lifecycle defects:
+late cache recreation/retargeting, stale A→B success UI, duplicate activation,
+delayed retry focus, post-paint stale dialog/error flashes, and revealed-state
+carryover. A viewer-keyed inner workspace now isolates all form/dialog/status/
+visibility state synchronously. Final bounded checks passed **12 workspace
+tests** including axe, **19 service/hook/audit/role tests**, **4 registry
+tests**, typecheck, zero-warning scoped ESLint, Prettier, and diff checks.
+Completion review approved with no findings. The frontend-design/shadcn skills
+kept the implementation within the existing radix-nova institutional portal
+system; no components or dependencies were added. No commit or push occurred.
+Task 7 will add the strict dual-token queue service and polling hooks.
+
+SDD Task 7 review milestone: added the strict `StudentQueueView` schema/service,
+viewer-only `['student-queue', viewerId]` query key, and the approved three-
+second polling hook with background polling and always-on focus refetch. The
+explicit Student token path suppresses only its own global 401 side effect;
+tokens never enter query keys. Kiosk claims now send the Student bearer plus
+the exact `X-Queue-Kiosk-Token` proof and invalidate only the Student viewer's
+queue key, while the existing Accounting mutation/signature remains unchanged.
+The final focused suite passed **3 files / 16 tests**, typecheck, zero-warning
+scoped ESLint, Prettier, and diff checks. Independent review approved with no
+findings. No commit or push occurred. Task 8 will build the reusable live
+Student queue panel and transition alerts.
+
+SDD Task 8 review milestone: added the pure kiosk/default/compact live Student
+queue panel, guarded sound preference, and same-ticket `waiting → serving`
+alert hook with exact toast/title/vibration, visible assertive call message,
+and deterministic timer/audio/title cleanup. Four review rounds closed shared
+browser-state and accessibility issues: overlapping title claims, persisted or
+concurrent AudioContext state, reduced-motion leakage, nested called-state
+contrast, remaining root-label contrast, and duplicate reusable-panel IDs.
+The final implementation uses owner-aware shared title/audio coordinators,
+gesture-gated actual sound state, semantic static high contrast, transform/
+opacity-only opt-in motion, and SSR-safe per-panel list relationships. Final
+checks passed **4 files / 23 tests** including axe, typecheck, zero-warning
+scoped ESLint, Prettier, and diff checks. Approval review found no issues. No
+dependency, commit, or push was added. Task 9 will replace static Student queue
+markup in the normal portal with this shared polled panel.
+
+SDD Task 9 review milestone: the Student enrollment workspace now replaces only
+its stale queue-ticket block with the normal-session polled default live panel,
+while enrollment ID/status, assessment, payment confirmation, and Add/Drop
+boundaries remain intact. Student overview renders the same component in compact
+mode before system status; every non-Student role makes no queue-status request
+and renders no queue region. Neither integration imports or exposes a claim
+mutation—eligible users are directed to the Cashier kiosk. Split verification
+passed **8 enrollment-panel**, **25 enrollment-workspace**, and **26 overview
+tests**, plus typecheck, zero-warning scoped ESLint, Prettier, and diff checks;
+the exact combined command twice hit the known ~30-second harness reporting
+boundary with no remaining process. Functional review approved; one minor direct
+overview loading/error/retry coverage gap is deferred. This controller entry
+resolves the required progress update. No commit or push occurred. Task 10 will
+build the dedicated `/queue` dual-session kiosk flow.
+
+SDD Task 10 review milestone: added the standalone `/queue` flow with isolated
+`grc.kiosk-token.v1` device persistence, in-memory Student sessions, role-safe
+login/revocation, live kiosk-mode queue view, dual-token claim, Done/device
+teardown, and responsive accessible RHF/Zod forms. Security review found that
+the root provider still mounted portal auth and exposed several late-login/
+claim/cache timing races. The final structure skips portal AuthProvider entirely
+on normalized `/queue`, fences and revokes stale issued tokens, mounts queue
+query/mutation only in a viewer-keyed Student-active child, aborts and generation-
+fences stale claims, synchronously locks claim activation, and owns Student
+cache cleanup for both Done and device sign-out. Deferred-request tests settle
+even after abort across Done, device sign-out, and Student A→B handoff; unresolved
+`cancelQueries` tests prove local state/storage/cache clear in the same action
+turn. Final bounded verification passed **15 provider/store/session tests**,
+**12 Task 7 queue regressions**, **20 kiosk page tests** including axe, typecheck,
+zero-warning scoped ESLint, Prettier, and diff checks. Final review approved with
+no findings. No dependency, commit, or push occurred. Task 11 will synchronize
+PRD/ADR/OpenAPI documentation with the tested final contract.
+
+SDD Task 11 review milestone: synchronized the durable queue-kiosk contract
+across the PRD, Accepted ADR 0023, OpenAPI 3.1 specification, and seeded
+identity guide. The documents now distinguish the non-human `queue_kiosk`
+device from the nine primary actors, confine Student self-claims to `/queue`
+with `X-Queue-Kiosk-Token`, preserve Accounting's on-behalf claim, describe
+independent portal/device/in-memory Student token lifecycles, and record the
+audited reversible-secret exception plus rotation revocation. The required
+contract vocabulary search, stale claim-language audit, YAML parse and
+structural assertions, and `git diff --check` passed; `swagger-cli` was not
+installed, so no dependency was added. Independent review found the durable
+contracts aligned with the implemented routes, middleware, requests,
+resources, stores, and services; its sole Important finding was this required
+controller-owned progress entry, now resolved. No commit or push occurred.
+Task 12 will run the complete quality gates, fresh local MariaDB seed, and live
+browser acceptance journey.
+
+SDD Task 12 verification start: current `git status --short` contains the
+Tasks 1–11 source, test, specification, plan, ADR, OpenAPI, seed-documentation,
+and controller progress changes plus the pre-existing untracked root
+`node_modules/`; no unrelated scope has been identified. The fresh gates are:
+`php artisan test`, `composer format:check`, and `composer analyse`; isolated
+`mariadb_migrator` fresh migrate/seed plus a secret-safe one-row identity/
+credential check; frontend Vitest, typecheck, ESLint, and Prettier; the live
+`/queue`/Accounting/Student portal browser walkthrough; then diff, status,
+scope, and hard-coded-secret scans. No commit or push is authorized.
+
+SDD Task 12 automated-verification milestone: the fresh bounded backend
+queue/kiosk cluster passed **128 tests / 679 assertions**; isolated
+`mariadb_migrator` fresh migration/seed passed and a secret-safe application
+read found exactly one active kiosk user and one matching credential. Scoped
+PHPStan passed all 20 changed production PHP files, changed backend formatting
+is clean, and a minimal fail-fast seeder guard resolved the slice's sole new
+static-analysis finding. The full backend suite remained active without a
+terminal summary for 699.058s and was stopped by exact PID at the documented
+boundary, so it is recorded as incomplete—not passed; repository-wide PHPStan
+and Pint retain 94 and 8 verified out-of-scope baseline findings.
+
+Frontend verification obtained a terminal full-suite result of **926/936
+tests** and **135/139 files** before fixes: nine failures were historical
+curriculum/scheduling baselines and one stale connected-module heading fixture
+belonged to this slice. That fixture and two changed-file lint findings were
+fixed; a complete split over all changed/regression files then passed **29
+files / 306 tests**, typecheck passed, and changed-file ESLint/Prettier are
+clean. The exact full repository gates still report the nine out-of-scope test
+failures, eight out-of-scope lint errors, and 66 out-of-scope formatting files;
+the 9-minute full test command was not rerun after the focused fixture fix.
+
+The alternate live stack was proven healthy on isolated ports 8011/3011 and a
+safe login/read/logout probe confirmed it used only `mariadb_migrator`, but the
+mandated browser client and primary controller session both reported no
+available browser (`[]`). The Browser workflow forbids a standalone substitute,
+so all 12 visual/live steps and screenshots remain explicitly **not run**.
+Every Task 12-owned process/listener was cleared; the pre-existing port
+3000/8000 owners were untouched. Final diff/secret scans passed with no hard-
+coded credential/token. Independent Task 12 review approved the code, evidence,
+safety, and browser handling; its two minor report path/temporal-wording fixes
+are resolved. No commit or push occurred. Whole-slice code review is next;
+live browser acceptance remains externally blocked until a browser is attached.
+
+Whole-slice review required changes before approval. One Critical defect showed
+that `X-Queue-Kiosk-Token` was absent from Laravel's CORS allow-list, which
+would block the cross-origin browser claim preflight. Important findings cover
+a concurrent old-password kiosk login surviving rotation, Student queue/claim
+401 teardown plus an unavailable Done action during loading/error, missing
+shared/default credential warnings, and an OpenAPI role enum that omitted
+`it_admin`. All five earlier deferred test/doc minors and a newly identified
+write-only sound preference are included in one final RED-GREEN fix pass. Live
+browser unavailability remains a separate environment acceptance gap; no
+commit or push is authorized.
+
+Final-review remediation milestone: all Critical/Important findings and every
+deferred Minor from the whole-slice review have focused RED-GREEN coverage and
+fresh bounded evidence. Laravel now permits the kiosk proof header in CORS;
+the real preflight regression passes. Login re-locks/revalidates the account
+inside its transaction, and a deterministic two-process test proves an
+old-password kiosk login cannot issue a surviving token after rotation. Student
+queue-status/claim 401 responses now clear only the in-memory Student session
+and query cache while retaining the device; Done is available in every Student
+state; retry and safe API-message paths are covered. The credential workspace
+warns on the development default and now expressly prohibits reusing the
+shared device credential for a personal account. OpenAPI role parity includes
+both `it_admin` and `queue_kiosk`; 256-character immutability, audit rollback,
+concrete AbortSignal propagation, overview loading/error/retry, and remounted
+sound-preference/fresh-gesture behavior are all directly tested.
+
+Fresh evidence: backend **106 tests / 652 assertions**, affected frontend
+**30 files / 326 tests**, OpenAPI role/YAML parity, scoped PHPStan/Pint,
+typecheck, scoped zero-warning ESLint/Prettier, diff, and changed-file secret
+checks passed. The prior full-suite baseline/incomplete and no-browser live-
+acceptance limits remain explicitly unchanged. An independent post-fix review
+is next; no commit or push occurred.
+
+Post-fix whole-slice review milestone: independent review found no Critical,
+Important, or Minor code findings. It reconfirmed token/device isolation,
+second-token authorization, locked rotation/login ordering, Student-only 401
+cleanup, cache/abort fencing, retry/Done behavior, encrypted/no-store/audited
+credentials, and backend/frontend/OpenAPI role parity. Fresh reviewer evidence
+passed `git diff --check 8ec1639`, syntax lint of changed kiosk/auth PHP,
+frontend `tsc --noEmit --incremental false`, and OpenAPI role-parity PHPUnit
+(**1 test / 5 assertions**). Code readiness is approved. The only remaining
+release-acceptance gap is unchanged: no browser instance is available to run
+the required live multi-session, responsive, keyboard, reduced-motion, audio,
+rotation, and screenshot journey. No commit or push occurred.
+
+Live-acceptance retry (2026-08-24): the required browser-control runtime was
+initialized again for the isolated local `/queue` target, but selection still
+returned no available browser and the permitted browser inventory was empty.
+Per the mandatory browser workflow, no standalone automation substitute was
+used and no local server/browser journey was started. Code readiness remains
+approved; attach an in-app browser instance before resuming the outstanding
+live acceptance walkthrough. No commit or push occurred.
+
+Second live-acceptance retry (2026-08-24): required browser selection again
+returned no available browser and its permitted inventory remained empty. No
+fallback automation, server start, commit, or push was performed; the live
+journey remains pending an attached in-app browser.
+
+Draft academic-term correction started (2026-08-24): approved scope is a
+Registrar Head-only edit of `school_year` and `semester` for Draft terms.
+The edit must leave all enrollment-window dates untouched, reject non-Draft
+and duplicate year/semester requests, record an audit event, document the
+versioned API contract, and ship with focused backend and frontend RED-GREEN
+tests. No commit or push is authorized.
+
+Draft academic-term correction implementation milestone: added the audited
+`PATCH /api/v1/academic-terms/{academicTerm}/draft-identity` contract and
+Registrar Head policy path, with transaction locking plus database-constraint
+handling for duplicate identities. The action accepts only Draft terms and
+updates no schedule-date field. The Enrollment workspace now exposes an Edit
+draft term dialog for Draft rows only (desktop and mobile), and its request
+contains only school_year and semester. Focused RED tests first established
+the missing route/action; green evidence is backend AcademicTermsEndpointTest
+**24 tests / 57 assertions**, frontend workspace **7 tests**, and frontend
+typecheck. No commit or push occurred.
+
+Draft academic-term correction verification complete: fresh focused backend
+coverage passed **50 tests / 377 assertions** (AcademicTermsEndpoint,
+ApiSurface, and AuditVocabulary), including the expected Registrar Head,
+duplicate, non-Draft, enrollment-date-preservation, audit, authentication,
+and route-inventory branches. The workspace integration test passed **7/7**
+and frontend typecheck passed. Scoped Pint, production-file PHPStan, frontend
+Prettier and ESLint, OpenAPI YAML parsing, `git diff --check`, and the
+draft-term changed-file credential scan passed. PHPStan over the whole changed
+AcademicTermsEndpoint test still encounters two confirmed pre-existing generic
+collection findings at unchanged line 100; production analysis is clean. No
+commit or push occurred.
+
+Queue live-panel typography correction started (2026-08-24): approved scope
+is limited to unavailable-status copy in the existing Student/Kiosk queue
+panel. Actual ticket numbers remain high-emphasis; `Not issued` and `No
+number is currently being served.` will receive compact responsive status
+typography, without changing queue data, polling, alerts, access, or layout.
+Focused frontend RED-GREEN coverage is required. No commit or push is
+authorized.
+
+Queue live-panel typography correction verification: unavailable ticket and
+serving values now carry explicit status-copy classes, retaining the large
+display scale only for actual queue numbers. Kiosk status copy uses a compact
+responsive 1.75rem–2.75rem cap and a readable sans-serif treatment. The
+focused component/style suite passed **13/13 tests** after a verified RED
+failure, while scoped Prettier, ESLint, and frontend typecheck passed. No
+commit or push occurred.
+
+COA schedule-submission and room-catalog correction started (2026-08-24):
+the active BSA draft has a saved first-year plan count of 1 while scheduled
+block `ACC102` still exists. Submission re-releases the plan and correctly
+refuses to delete that protected block. Approved scope is to reconcile that
+safe minimum for submission without removing schedule/enrollment data,
+prevent a future lower count from being persisted before its protected-block
+validation runs, and expose COA rooms `3A`–`3G` and `5A`–`5G`. Existing
+CCS-only `LAB 1`–`LAB 4` remain unchanged. Focused backend and frontend
+RED-GREEN coverage is required. No commit or push is authorized.
+
+COA schedule-submission and room-catalog implementation milestone: release
+now raises a stale plan count to the highest protected generated block before
+any deletion is considered, so a scheduled `ACC102` restores the first-year
+count to 2 and can proceed to approval without data deletion. Plan saves now
+reject a lower protected count before persistence, and the Program Chair sees
+the exact validation reason on Remove section. COA's authoritative catalog and
+frontend fallback now include `3A`–`3G` and `5A`–`5G`; `LAB 1`–`LAB 4` remain
+CCS-only. Focused backend and frontend RED-GREEN tests have been run; local
+room catalog reseeding and final scoped verification are next. No commit or
+push occurred.
+
+COA schedule-submission and room-catalog verification complete: focused
+backend coverage passed **14 tests / 48 assertions** across section-plan
+submission/capacity and room catalog/seeder behavior; focused frontend
+coverage passed **25/25 tests**. Frontend typecheck, scoped zero-warning
+ESLint, scoped Prettier, backend Pint, and `git diff --check` passed. The
+local `RoomCatalogSeeder` ran successfully and a read-only query confirmed
+COA now has all requested `3A`–`3G` and `5A`–`5G` records. PHPStan reports
+four confirmed pre-existing findings in unchanged return/grouping/nullable
+typing in `SaveSectionPlan`; no suppression was added and the new code
+introduced no PHPStan finding. The frontend test environment still emits its
+existing non-fatal missing-canvas implementation notice. No commit or push
+occurred.
+
+Student queue waiting-state UI polish started (2026-08-24): approved scope is
+limited to the Student/default and compact queue surfaces. Unissued-ticket and
+no-serving states will become compact neutral status cards with the pending
+Registrar context prioritized; real ticket/serving numbers, kiosk mode,
+polling, alerts, accessibility, and queue data remain unchanged. Focused
+frontend RED-GREEN component/style coverage is required. No commit or push is
+authorized.
+
+Student queue waiting-state UI polish verification: Student/default and
+compact views now surface `Waiting for Registrar approval` inside the unissued
+ticket card, give unavailable cards a compact neutral treatment, and keep red
+display emphasis for real serving numbers. Kiosk mode, queue behavior, data,
+polling, and alerts are unchanged. RED-GREEN component coverage and the
+focused component/style suite passed **15/15 tests**; TypeScript, scoped
+Prettier, and zero-warning scoped ESLint passed. The existing non-fatal
+missing-canvas notice remains limited to the test environment. No attached
+in-app browser is currently available for a live visual screenshot check. No
+commit or push occurred.
+
+## 2026-08-24 — Attrition, GWA, and Dean's List implementation started
+
+User approved the Phase 5 vertical-slice plan. Scope: use the structured
+3,210-student roster only; retain a deterministic rounded 5% holdout in every
+program/year cohort while enrolling the remaining students through the
+existing local-only IT Control lifecycle; publish factual, aggregate-only
+Registrar Head attrition analytics; and publish a live Dean-only honors list
+after all term grades are submitted. The approved honors cutoff is an exact
+weighted GWA of 1.00–1.50 inclusive, with normalized `NSTP`/`PATHFIT`/`PE`
+subjects excluded from GWA everywhere, including grade slips and academic
+records. Existing professor grade submission, Registrar Head locking/access,
+and print behavior must remain intact. Work proceeds directly on `main` by
+repository instruction; the substantial pre-existing queue, draft-term,
+room-catalog, and UI changes remain untouched. No commit or push is
+authorized.
+
+### Continuation result
+
+- Added a guarded `SaveSectionPlan` amendment path: submitted year plans remain immutable, while a previously absent year can be created as a new draft. Focused regression coverage passed (1 test, 3 assertions).
+- Applied it through Program Chair release and normal proposal submission for the four missing cohorts. Their source curricula have no 2nd-semester placements at those years, so release correctly generated zero sections. The remaining scenario records cannot be enrolled without creating academic offerings, which would invent curriculum data outside the approved scope.
+
+## 2026-08-25 — Student subject-action correction started
+
+User approved a bounded Student Enrollment UI correction: remove the visible
+whole-term withdrawal panel and present the existing subject-level actions as
+`Change schedule`, `Drop subject`, and `Add subject`. A drop must remain an
+add/drop change request against one enrollment subject and must never change
+the parent enrollment to `withdrawn`. Existing staff withdrawal records and
+the separate whole-term backend workflow remain out of scope. Focused
+frontend and backend RED-GREEN coverage is required. No commit or push is
+authorized.
+
+Implemented the Student-facing wording and removed the Student workspace
+render of the whole-term withdrawal panel. The change-schedule action now
+falls back to the returned subject catalog when its current section has not
+yet resolved, so it remains available per active subject. Added a frontend
+regression for the three subject actions and a backend assertion that an
+approved drop retains the parent `enrolled` status. Focused verification
+passed: the two affected Vitest files (30 tests) and the one Laravel approval
+test (4 assertions).
+
+Final verification after formatting passed: the same focused Vitest pair
+remained green (30 tests), `vendor\\bin\\pint --test` passed for the backend
+regression, scoped frontend Prettier passed, and `git diff --check` passed.
+The focused frontend runner emitted only its existing non-fatal jsdom canvas
+notice. No commit or push occurred.
+
+## 2026-08-25 — COR reference-layout discovery started
+
+The user supplied scanned Certificate of Registration / Admission Form
+references and requested that the system COR match that document structure.
+The request is being reconciled against the current Digital COM implementation
+and the PRD's explicit unresolved COR-versus-COM terminology decision before
+any code or document-policy change. No implementation, commit, or push is
+authorized yet.
+
+GRC has now confirmed that COM and COR are the same artifact. The approved
+direction replaces COM with a single printable COR generated only after
+Cashier payment confirmation, exposes prior paid COR history to the owning
+Student and Accounting Staff, and backfills historical paid enrollments
+idempotently. The design document records the immutable-snapshot policy,
+two-page reference layout, access boundaries, and fictional local-test address
+rule at `docs/superpowers/specs/2026-08-25-certificate-of-registration-design.md`.
+No commit or push is authorized.
+
+The approved COR design now has an execution-ready, test-first plan at
+`docs/superpowers/plans/2026-08-25-certificate-of-registration.md`. It covers
+the reversible type conversion, immutable snapshots, idempotent historical
+backfill, Cashier/Student/Registrar authorization, protected detail contract,
+two-page A4 print rendering, and final PDF/PNG inspection. Plan self-review
+found no placeholders or unowned spec requirements; `git diff --check` passed
+for the design and plan files. No production code, commit, or push has been
+made in this planning step.
+
+Plan review immediately before implementation identified and corrected one
+historic-data gap: converted COM rows have no stored content, so the backfill
+must populate their COR snapshot in place as well as create rows for paid
+enrollments that lack a document. This preserves the one-document-per-
+enrollment constraint and makes prior CORs viewable. No production code,
+commit, or push has occurred yet.
+
+COR implementation has started inline. RED-GREEN evidence completed for the
+canonical `cor` enum, reversible snapshot schema column, snapshot cast, payment
+confirmation's `COR` number/response, immutable payment snapshot, and
+Accounting Staff read access plus protected COR detail route. Added the
+idempotent `cor:backfill` command, which creates missing paid/enrolled CORs or
+populates converted legacy rows in place. The frontend contracts and visible
+Student/Cashier payment copy now use COR. The detailed A4 renderer and dedicated
+Cashier COR-history workspace are still in progress. The attempted combined
+frontend focused Vitest process produced only its runner banner for over a
+minute and was safely stopped after identifying it as this task's child
+process; it recorded no test result. No commit or push occurred.
+## 2026-08-25 — COR implementation verification note
+
+- The combined root-level frontend/backend check was not runnable because this repository intentionally keeps `frontend/` and `backend/` independently runnable. No code or data changed from that command; subsequent checks are being run from their respective directories.
+- The local application database migration was attempted, but MariaDB denied `grc_app@localhost` the required `ALTER` privilege on `grc_enrollment.enrollment_documents`. The migration remains pending and the COR historical backfill was not run against that database; test-database verification remains available.
+
+## 2026-08-25 — Certificate of Registration implementation
+
+- Replaced the canonical enrollment document type with `cor`, added an immutable payment-time snapshot, a protected detail endpoint, and a reversible migration that converts legacy COM rows to COR rows.
+- Cashier payment confirmation now generates a COR snapshot atomically; `cor:backfill` completes paid historical enrollments without duplicating their existing document rows.
+- Added Student-owned COR list/detail/print access and a Cashier COR Records workspace with exact student-number lookup and print access. The printable document contains the registration table, admission certification, fee assessment, withdrawal terms, and signature lines from the approved reference.
+- Focused backend checks passed: enrollment-document authorization/list/search (8 tests, 21 assertions), payment-confirmation COR generation (13 assertions), snapshot construction (10 assertions), and migration schema (9 assertions). Frontend typecheck and focused COR service/document/student tests passed (12 tests); full backend suite was also started and exposed an unrelated existing `NotificationTypeTest` expectation gap for two queue notifications.
+- The full suite continued after that unrelated failure but was deliberately stopped as a long-running verification process; its result must not be recorded as passing. No product process was stopped.
+
+## 2026-08-25 — COR legacy-read fix
+
+- Diagnosed the Student COR 500 from request logging: legacy database rows still contain `document_type = com`, while the canonical COR enum rejected that backing value before the pending conversion migration could run.
+- Added a read-time compatibility cast that exposes legacy COM rows as the canonical COR type without reintroducing COM as a domain value. This lets students list their existing certificate records immediately while the database migration remains awaiting MariaDB `ALTER` permission.
+- Verified the local database reads an existing `com` row as `cor`, and added an API regression test for a Student listing a legacy COM row as a COR (passed: 3 assertions).
+- Added a protected, non-persistent snapshot fallback for a paid legacy COM record, so its Student/Cashier detail response is printable immediately even before the `snapshot` schema column can be migrated. The full COR document endpoint/model regression set passes (12 tests, 33 assertions).
+- Legacy document numbers are now presented with the `COR` prefix too. The two legacy list/detail regression tests pass with 10 assertions, and the affected model/resources pass PHP syntax checks and whitespace validation.
+
+## 2026-08-25 — COR other-fee schedule
+
+- The printable COR now reserves all 15 other-fee lines from the supplied reference: Registration through Library Fee. Each amount is taken from the student's assessment; an unassessed reference line displays `0.00` and does not alter total tuition, other fees, or grand total.
+- New COR snapshots contain the complete schedule, and the frontend fills the same schedule for older saved snapshots without modifying their historical data. Snapshot, payment-confirmation, printable-document, and frontend type checks passed.
+
+## 2026-08-25 — Reference fee schedule and Accounting adjustment started
+
+- The user has directed that the COR assessment use the rates shown in the supplied reference and that Accounting Staff be able to adjust a pending student's fee assessment before payment confirmation. The implementation will preserve payment-time COR snapshots: no finalized payment or issued COR may be edited.
+- The reference's displayed 13.50 units and PHP 2,700.00 net tuition establishes a PHP 200.00 per-unit tuition rate. The exact other-fee schedule will be reconciled to the reference's PHP 4,700.00 total and implemented as a normal assessed line-item schedule, rather than as display-only zero placeholders. The adjustment workflow will be Accounting-only, reason-required, transactionally recomputed, and audited.
+
+### Implementation and verification complete
+
+- The automatic assessment now uses the reference-COR PHP 200.00/unit tuition rate. Its full other-fee schedule totals PHP 4,700.00 for BSIT: Registration 200, Guidance and Counseling and Student Affair 200, Medical and Dental 200, Student Information System Fee 200, Energy/Water/Communication Fees 1,200, Community Extension Fee 200, Research & Publication 200, Computer Lab Fee 1 500, Student I.D. 100, Development Fee 400, Postal 150, Computer Lab Fee 2 (BSIT) 500, Sports Development Fee 50, Hand Book 100, and Library Fee 500. Computer Lab Fee 2 is excluded automatically for non-BSIT programs.
+- Added the Accounting-only `PATCH /api/v1/enrollments/{enrollment}/assessment` workflow. It accepts every current assessment line plus a required reason, locks and recomputes the assessment transactionally, records before/after audit values, and rejects missing assessments, non-pending enrollments, confirmed payments, and issued CORs. It never changes subjects or any academic enrollment data.
+- The Accounting Payment Queue now has **Adjust fees**: editable tuition rate and other-fee amounts, a required reason, and an updated amount due before payment confirmation. The later payment creates the immutable COR snapshot from the final adjusted assessment.
+- Updated the safe environment template to PHP 200.00/unit and the Registrar policy-settings explanation. No local `.env` fee override was present.
+- Fresh verification passed: backend payment/assessment and BSIT schedule tests **4 tests / 31 assertions**, audit vocabulary **2 tests / 2 assertions**, policy settings **1 test / 10 assertions**, COR document history **10 tests / 31 assertions**, frontend Accounting/COR tests **22 tests**, TypeScript typecheck, scoped Pint, and `git diff --check`. The frontend runner emitted only its existing non-fatal jsdom canvas notice. No commit or push occurred.
+
+## 2026-08-25 — COR two-page print correction started
+
+- User reported the printable grand total spilling onto a third page. The layout diagnosis is that the first A4 page keeps screen-scale assessment row padding alongside 13mm margins. The print-only correction will compact the first-page typography/spacing and use a fixed, border-box A4 sheet, while preserving the existing two semantic COR page sections and the complete fee schedule.
+
+### Implementation and verification complete
+
+- Print CSS now uses fixed 210mm × 297mm border-box COR sheets with 9mm × 12mm internal margins. It compacts only print-mode header, facts, subject-table, admission, and assessment spacing; the normal portal view is unchanged. This restores sufficient first-page space for the grand total and retains the second page for terms/signatures, instead of emitting a third page for the total alone.
+- The focused COR document component test passed, frontend TypeScript typecheck passed, scoped Prettier passed, and `git diff --check` passed. No attached in-app browser is available for an additional native print-preview screenshot. No commit or push occurred.
+
+## 2026-08-25 — Historical enrolled COR completeness
+
+- User found an enrolled student with two enrollments but only one visible COR. Live audit found **14,617** enrolled records, **2,663** payment/document records, and **11,954** enrolled records without a document. The latest authorized direction is therefore implemented as one COR per `enrolled` enrollment, including historical imports lacking a payment row; draft, pending, and non-enrolled records remain excluded.
+- `cor:backfill` is now idempotent for every enrolled record. If the snapshot migration is available, it creates/finishes an immutable snapshot; if the old local schema is still awaiting the `snapshot` column migration, it creates a legacy-compatible document row that is immediately presented as COR by the existing cast and rendered through the protected transient snapshot fallback.
+- The legacy fallback now renders no-payment historical CORs safely with `payment_amount` `0.00` and Cashier `Not provided`; it does not fabricate a payment or change the enrollment. When the pending migration becomes available, a subsequent `cor:backfill` persists those snapshots.
+- Ran the live idempotent backfill in safe short passes. Final live database verification: **14,617 enrolled**, **14,617 enrollment documents**, and **0 enrolled records without a COR**. A sampled multi-enrollment student had 8 enrolled records and 8 COR records. No personally identifying result was recorded here.
+- Fresh regression verification passed: full `EnrollmentDocumentsEndpointTest` **11 tests / 36 assertions**, including the new no-imported-payment printable COR case; scoped Pint and `git diff --check` passed. An initial filtered test attempt encountered a transient test-database migration race, then the clean full rerun passed. No commit or push occurred.
+
+## 2026-08-25 — COR room-column removal started
+
+- User requested removing Room from the printable COR because schedule room assignments may still change. The student COR table will retain only subject, unit, section, schedule ID, and schedule; room data remains in the protected enrollment/scheduling records for staff use.
+
+### Implementation and verification complete
+
+- Removed the Room column and values from the printable COR subject table, including corrected total-row colspan. Added a regression assertion that the Room header is absent.
+- Focused COR document test, frontend TypeScript typecheck, scoped Prettier, and `git diff --check` passed. No commit or push occurred.
+
+## 2026-08-25 — Staff COR lookup and history modal started
+
+- User requested that both Accounting Staff and Registrar Head can search COR records by student name as well as student number. The staff list will expose a clickable authorized student name; it opens that student's complete COR history in a modal, and selecting a COR opens the printable document in a second modal. Student access remains limited to their own records. No commit or push is authorized.
+
+### Implementation and verification complete
+
+- The protected COR list accepts exact `student_number` and partial `student_name` filters. It returns a display name only to Accounting Staff, Registrar Head, and Registrar Staff; Student callers continue to receive `null` for that field and can only query their own CORs.
+- Accounting Staff and Registrar Head now share the COR Records workspace. Staff can search by name or number, click a student's name to view every COR under that student in a paginated modal, then open the selected printable COR in a second modal. Registrar Head now has a COR Records navigation entry.
+- Updated the public API contract and added focused API/UI regression coverage. Verification passed: `EnrollmentDocumentsEndpointTest` (12 tests, 47 assertions), scoped Pint, Cashier COR/service/role capability Vitest (9 tests), frontend TypeScript typecheck, scoped Prettier, and `git diff --check`. The local isolated `grc_enrollment_test` database was rebuilt after an interrupted prior test left it incomplete; the application database was not changed. No commit or push occurred.
+
+## 2026-08-25 — Professor section grade sheet implementation started
+
+- Began the approved section-first Professor Grade Submission plan on `main`, as required by the repository instructions. The slice adds assigned-class summaries, protected section rosters with names and student numbers, partial bulk draft saving, atomic complete-roster submission, and a responsive Professor grade sheet while preserving Registrar Head locking and historical grades.
+- Implementation is following a test-first RED-GREEN cycle. The existing unrelated dirty worktree is being preserved, and no commit or push is authorized.
+
+## 2026-08-26 — Professor grade-sheet backend milestone
+
+- Added the section summary, exact enrolled-roster grade sheet, idempotent bulk draft save, and atomic complete-roster submit API slice with Faculty ownership checks and per-row audit records. The legacy individual submit now delegates to the section transaction, and legacy grade creation validates the section subject, term, and enrolled roster.
+- RED-GREEN focused checks have passed for summaries, protected names/numbers, dropped/pending exclusion, draft upserts, incomplete submission rollback, complete repeat-safe submission, invalid/non-roster rows, and legacy safeguards.
+- One authorization check did not reach application code because two `RefreshDatabase` commands were accidentally launched in parallel against the shared MariaDB test database, producing a schema-drop race. Backend database tests will be run sequentially for the remainder of this task; the application database was not involved.
+
+## 2026-08-26 — Professor grade-sheet frontend milestone
+
+- Replaced the section dropdown and per-student actions with assigned-class cards and a responsive section grade sheet. Local edits are preserved across failed saves, only changed rows with valid marks are bulk-saved, and final submission first saves pending valid edits before sending the complete-section confirmation request.
+- Focused workspace Vitest passed all 11 behavior/accessibility tests. The first TypeScript check then found test-fixture literals inferred too narrowly (`0`/`not_started` instead of the section-summary union); production code was not implicated. The fixtures are being widened to the published schema types before rerunning the check.
+
+## 2026-08-26 — Professor grade-sheet contract milestone
+
+- Added the four section-first grade-submission operations and their exact privacy-minimized response/request schemas to the OpenAPI contract, and expanded the PRD endpoint inventory with the assigned-class and grade-sheet reads.
+- The first Redocly run correctly caught three unresolved reusable path-parameter references introduced in this milestone; they were replaced with explicit `section` path parameters. Six separate OpenAPI 3.1 `nullable` errors remain in pre-existing, unrelated analytics/honors edits and are not part of the grade-submission slice.
+- To make the required whole-contract validation meaningful, the six unrelated analytics/honors query schemas were mechanically converted from OpenAPI 3.0 `nullable: true` syntax to the equivalent OpenAPI 3.1 nullable type arrays. No endpoint behavior or policy was changed.
+
+### Focused verification complete
+
+- Fresh sequential backend verification passed **31 tests / 129 assertions** across the new section-grade endpoints and the preserved legacy/Registrar grade workflow.
+- Frontend service and workspace verification passed **15 tests**, including assigned-class metadata, exact student names/numbers, grade vocabularies, changed-row draft saving, complete-section confirmation, read-only final states, error preservation, empty rosters, and accessibility. The runner emitted only the existing non-fatal jsdom canvas notice from `vitest-axe`.
+- Frontend TypeScript and the complete OpenAPI contract now pass. Scoped Pint and Prettier were applied to the grade-submission files. Full applicable checks are next.
+
+### Full-suite baseline audit
+
+- The full Laravel suite was started sequentially and ran through all unit, action, and API groups. Both `AcademicGradesEndpointTest` and `SectionGradesEndpointTest` passed inside that full run. Existing failures appeared in unrelated notification vocabulary, analytics derivation/index metadata, curriculum/faculty/section audit snapshots, automation, and migration reversibility tests.
+- The full run also exposed a stale API route-inventory expectation. The four section-grade routes were added, along with five already-present routes from the earlier COR/assessment/analytics work so the inventory again reflects the real protected surface.
+- After more than 30 minutes, the already-failing run entered repeated full demo/roster seeder setup with no additional grade-submission coverage. Only that test process was interrupted; the Laravel application server remained running and the application database was never targeted.
+- The refreshed API surface suite now passes **24 tests / 342 assertions** after its protected-route inventory was synchronized.
+- All ESLint findings in the new grade-submission files were corrected and the scoped lint passes. A fresh whole-frontend ESLint run still reports **12 unrelated pre-existing errors** in Accounting payment, analytics labels, Cashier COR/curriculum tests, curriculum migration state handling, and enrollment hooks; none point to a grade-submission file. The production build passes.
+- Grade-workspace coverage now also exercises loading, no assigned sections, retry, and keyboard activation. A legacy-endpoint regression explicitly proves that an individual submit cannot create a partial submitted roster.
+
+### Professor grade-sheet implementation complete
+
+- Final fresh backend verification passed **56 tests / 476 assertions** across the section-grade endpoints, legacy and Registrar grade workflow, and protected API route surface. Scoped Pint passed.
+- Final frontend verification passed **19 tests**, TypeScript, scoped ESLint, scoped Prettier, Oxlint, and the production Next.js build. Oxlint emitted only three existing Fast Refresh warnings in shared shadcn UI files; `vitest-axe` emitted its existing non-fatal jsdom canvas notice.
+- The complete OpenAPI 3.1 contract and `git diff --check` passed. Draft, pending, dropped, withdrawn, unrelated, and non-owned roster writes remain rejected; complete submitted sheets remain read-only until Registrar Head locking. No migration, historical-grade rewrite, commit, or push occurred.
+
+## 2026-08-26 — Unified Student Records implementation started
+
+- The user approved a saving point containing all current product changes before the new Admission/Student profile slice begins. Generated dependencies, environment files, secrets, and local artifacts remain excluded; the repository root dependency directory is now explicitly ignored.
+- The approved new slice consolidates Admission account creation, student lookup/editing, account-setup email delivery, and Admission-approved student profile changes. Implementation will proceed test-first after the current product changes are verified, committed in logical groups, and pushed to `origin/main`.
+
+### Current-product saving-point verification
+
+- Fresh focused backend verification passed **137 tests / 761 assertions** across queue/kiosk access, COR and payment confirmation, analytics/honors, academic-term controls, Professor/Registrar grades, and the protected API surface.
+- Fresh focused frontend verification passed **87 tests** across the same user-facing slices. TypeScript, Oxlint, the production Next.js build, the complete OpenAPI contract, scoped Pint for every changed PHP file reported by the formatter, and `git diff --check` passed. Vitest emitted only the existing non-fatal jsdom canvas warning; Oxlint emitted only three existing Fast Refresh warnings in shared UI primitives.
+- The whole-backend Pint check still reports eight untouched legacy files. They were deliberately not rewritten as part of this saving point; the three currently changed files reported by Pint were formatted and their scoped check passes.

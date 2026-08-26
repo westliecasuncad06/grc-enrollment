@@ -18,18 +18,20 @@ final class RoleUserSeederTest extends TestCase
 
     private const SEED_PASSWORD = 'password';
 
-    public function test_it_seeds_exactly_one_active_user_for_every_role(): void
+    public function test_it_seeds_exactly_one_active_human_user_for_every_human_role(): void
     {
         $this->seed(RoleUserSeeder::class);
 
-        $this->assertSame(count(UserRole::cases()), User::count());
+        $this->assertSame(10, User::count());
 
-        foreach (UserRole::cases() as $role) {
+        foreach (UserRole::humanCases() as $role) {
             $user = User::where('role', $role->value)->first();
 
             $this->assertNotNull($user, "Missing seeded user for role {$role->value}.");
             $this->assertSame(UserStatus::Active, $user->status);
         }
+
+        $this->assertDatabaseMissing('users', ['role' => UserRole::QueueKiosk->value]);
     }
 
     public function test_seeded_emails_are_unique_and_use_the_reserved_test_domain(): void

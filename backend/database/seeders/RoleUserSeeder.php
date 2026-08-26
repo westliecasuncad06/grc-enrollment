@@ -8,10 +8,11 @@ use App\Domain\Organization\CollegeCode;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 use RuntimeException;
 
 /**
- * Seeds exactly one synthetic development identity per PRD role.
+ * Seeds exactly one synthetic development identity per supported human role.
  *
  * These are database fixtures for local development and automated tests. They
  * are not production accounts. Every identity deliberately shares the
@@ -45,8 +46,9 @@ final class RoleUserSeeder extends Seeder
         $this->guardEnvironment();
 
         DB::transaction(function (): void {
-            foreach (UserRole::cases() as $role) {
-                $identity = self::IDENTITIES[$role->value];
+            foreach (UserRole::humanCases() as $role) {
+                $identity = self::IDENTITIES[$role->value]
+                    ?? throw new LogicException("Missing development identity for {$role->value}.");
 
                 $attributes = [
                     'name' => $identity['name'],

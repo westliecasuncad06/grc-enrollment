@@ -5,16 +5,17 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * PRD §10.3 generated enrollment artifacts (the Digital COM).
+ * PRD §10.3 generated enrollment artifacts (renamed to COR by the later
+ * reversible conversion migration).
  *
  * Two unique constraints, both required by the PRD: one document per type per
  * enrollment — which is what makes FR-FIN-009's "generating twice must not
  * produce a duplicate document" enforceable in storage — and document numbers
  * unique within their type.
  *
- * `document_type` is a plain string holding only 'com' for now. PRD §17 has not
- * resolved whether COR is a distinct artifact, so no second type is created and
- * no numbering, signature, or retention rule is encoded here.
+ * `document_type` is deliberately a plain string. The 2026-08-25 conversion
+ * migrates its legacy value to the single canonical `cor` artifact and adds
+ * the immutable printable snapshot.
  */
 return new class extends Migration
 {

@@ -16,9 +16,23 @@ namespace App\Domain\Academic;
 final class GradePointAverage
 {
     /**
-     * @param  list<array{mark: ?GradeMark, units: float}>  $rows
+     * @param  list<array{mark: ?GradeMark, units: float, counts_toward_gpa?: bool}>  $rows
      */
     public static function compute(array $rows): ?string
+    {
+        $average = self::unrounded($rows);
+
+        if ($average === null) {
+            return null;
+        }
+
+        return number_format(round($average, 2), 2);
+    }
+
+    /**
+     * @param  list<array{mark: ?GradeMark, units: float, counts_toward_gpa?: bool}>  $rows
+     */
+    public static function unrounded(array $rows): ?float
     {
         $units = self::gpaUnits($rows);
 
@@ -29,25 +43,25 @@ final class GradePointAverage
         $weightedSum = 0.0;
 
         foreach ($rows as $row) {
-            if ($row['mark'] === null || ! $row['mark']->countsTowardGpa()) {
+            if (! self::countsTowardGpa($row)) {
                 continue;
             }
 
             $weightedSum += (float) $row['mark']->value * $row['units'];
         }
 
-        return number_format(round($weightedSum / $units, 2), 2);
+        return $weightedSum / $units;
     }
 
     /**
-     * @param  list<array{mark: ?GradeMark, units: float}>  $rows
+     * @param  list<array{mark: ?GradeMark, units: float, counts_toward_gpa?: bool}>  $rows
      */
     public static function gpaUnits(array $rows): float
     {
         $units = 0.0;
 
         foreach ($rows as $row) {
-            if ($row['mark'] !== null && $row['mark']->countsTowardGpa()) {
+            if (self::countsTowardGpa($row)) {
                 $units += $row['units'];
             }
         }
@@ -60,7 +74,7 @@ final class GradePointAverage
      * whether its mark counts toward the GPA (so an `INC` still contributes
      * its units to the academic total, just not to the GPA denominator).
      *
-     * @param  list<array{mark: ?GradeMark, units: float}>  $rows
+     * @param  list<array{mark: ?GradeMark, units: float, counts_toward_gpa?: bool}>  $rows
      */
     public static function academicUnits(array $rows): float
     {
@@ -71,5 +85,13 @@ final class GradePointAverage
         }
 
         return $units;
+    }
+
+    /** @param array{mark: ?GradeMark, units: float, counts_toward_gpa?: bool} $row */
+    private static function countsTowardGpa(array $row): bool
+    {
+        return ($row['counts_toward_gpa'] ?? true)
+            && $row['mark'] !== null
+            && $row['mark']->countsTowardGpa();
     }
 }

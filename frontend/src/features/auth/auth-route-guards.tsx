@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useEffect, type ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { getSafeReturnPath } from "@/features/router/safe-return-path"
@@ -29,25 +29,32 @@ function SessionRestoreState() {
  * rendered nothing.
  */
 export function RequireSession({ children }: { children: ReactNode }) {
-  const { session, status } = useAuth()
+  const { session, signOut, status } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const kioskRedirected = useRef(false)
 
   const search = searchParams.toString()
   // Only append "?" when there is a query string — `/portal` must encode to
   // exactly "%2Fportal", never "%2Fportal%3F".
   const returnTo = search ? `${pathname}?${search}` : pathname
-  const redirectTo =
-    status === "anonymous" && !session
+  const isQueueKiosk = session?.role === "queue_kiosk"
+  const redirectTo = isQueueKiosk
+    ? "/queue"
+    : status === "anonymous" && !session
       ? `/login?returnTo=${encodeURIComponent(returnTo)}`
       : null
 
   useEffect(() => {
-    if (redirectTo !== null) {
+    if (isQueueKiosk && !kioskRedirected.current) {
+      kioskRedirected.current = true
+      signOut()
+      router.replace("/queue")
+    } else if (redirectTo !== null && !kioskRedirected.current) {
       router.replace(redirectTo)
     }
-  }, [redirectTo, router])
+  }, [isQueueKiosk, redirectTo, router, signOut])
 
   if (status === "restoring") {
     return <SessionRestoreState />

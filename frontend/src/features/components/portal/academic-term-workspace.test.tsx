@@ -89,10 +89,7 @@ describe("AcademicTermWorkspace", () => {
     await user.type(screen.getByLabelText("School year"), "2028-2029")
     await fillDateTime("Enrollment start", "2028-07-01T00:00")
     await fillDateTime("Enrollment deadline", "2028-07-15T00:00")
-    await fillDateTime(
-      "Add/drop/Change subject deadline",
-      "2028-07-20T00:00",
-    )
+    await fillDateTime("Add/drop/Change subject deadline", "2028-07-20T00:00")
 
     await user.click(screen.getByRole("button", { name: "Create school year" }))
 
@@ -117,9 +114,7 @@ describe("AcademicTermWorkspace", () => {
     expect(
       screen.queryByText("Start the first school year"),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByLabelText("School year"),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("School year")).not.toBeInTheDocument()
   })
 
   it("shows the existing academic terms table", async () => {
@@ -128,8 +123,12 @@ describe("AcademicTermWorkspace", () => {
     )
     renderWorkspace()
 
-    expect((await screen.findAllByText("2022-2023 · 2nd")).length).toBeGreaterThan(0)
-    expect((await screen.findAllByText("Semester Ongoing")).length).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText("2022-2023 · 2nd")).length,
+    ).toBeGreaterThan(0)
+    expect(
+      (await screen.findAllByText("Semester Ongoing")).length,
+    ).toBeGreaterThan(0)
     const termCard = screen.getByRole("article", {
       name: "2022-2023 · 2nd enrollment cycle",
     })
@@ -140,9 +139,81 @@ describe("AcademicTermWorkspace", () => {
     renderWorkspace()
     await screen.findAllByText("2022-2023 · 2nd")
 
-    expect(screen.queryByRole("button", { name: /^Close/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /^Close/i }),
+    ).not.toBeInTheDocument()
     expect(
       screen.getAllByRole("button", { name: /Archive/i }).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("lets the Registrar Head correct a Draft term identity while keeping its enrollment dates intact", async () => {
+    const user = userEvent.setup()
+    let displayedTerms = {
+      data: [
+        {
+          type: "academic-term" as const,
+          id: 2,
+          school_year: "2026-2028",
+          semester: "2nd",
+          starts_at: null,
+          ends_at: null,
+          enrollment_opens_at: "2026-07-01T08:00:00Z",
+          enrollment_closes_at: "2026-07-15T17:00:00Z",
+          add_drop_deadline_at: "2026-07-20T17:00:00Z",
+          grading_deadline_at: null,
+          status: "draft" as const,
+          status_label: "Draft",
+          is_actionable_current: true,
+        },
+      ],
+    }
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        url(input).includes("/academic-terms/2/draft-identity") &&
+        init?.method === "PATCH"
+      ) {
+        displayedTerms = {
+          data: [
+            {
+              ...displayedTerms.data[0],
+              school_year: "2026-2027",
+              semester: "1st",
+            },
+          ],
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: displayedTerms.data[0] })),
+        )
+      }
+
+      return Promise.resolve(new Response(JSON.stringify(displayedTerms)))
+    })
+    renderWorkspace()
+
+    await user.click(
+      (await screen.findAllByRole("button", { name: "Edit draft term" }))[0],
+    )
+    expect(await screen.findByText("Correct draft term")).toBeInTheDocument()
+    expect(screen.getByLabelText("School year")).toHaveValue("2026-2028")
+
+    await user.clear(screen.getByLabelText("School year"))
+    await user.type(screen.getByLabelText("School year"), "2026-2027")
+    await user.click(screen.getByLabelText("Semester"))
+    await user.click(screen.getByRole("option", { name: "1st" }))
+    await user.click(screen.getByRole("button", { name: "Save changes" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/academic-terms/2/draft-identity"),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ school_year: "2026-2027", semester: "1st" }),
+        }),
+      ),
+    )
+    expect(
+      (await screen.findAllByText("2026-2027 · 1st")).length,
     ).toBeGreaterThan(0)
   })
 

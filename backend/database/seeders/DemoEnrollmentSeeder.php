@@ -367,6 +367,7 @@ final class DemoEnrollmentSeeder extends Seeder
                     'year_level' => $definition['yearLevel'],
                     'admission_status' => AdmissionStatus::Admitted,
                     'academic_standing' => AcademicStanding::Good,
+                    'is_demo_account' => true,
                 ],
             );
         }
@@ -568,6 +569,7 @@ final class DemoEnrollmentSeeder extends Seeder
                 'enrollment_category_derived_at' => null,
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
+                'is_demo_account' => true,
             ],
         );
     }

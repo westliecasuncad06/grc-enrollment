@@ -429,6 +429,25 @@ const createdEnrollment = {
   },
 }
 
+const studentQueueView = {
+  data: {
+    type: "student_queue_view",
+    stage: "pending_payment",
+    can_claim: false,
+    ticket: {
+      ticket_number: "Q-LIVE-007",
+      status: "waiting",
+      status_label: "Waiting",
+      priority: "regular",
+      priority_label: "Regular",
+      position: 2,
+    },
+    now_serving_ticket_number: "Q-LIVE-005",
+    upcoming_ticket_numbers: ["Q-LIVE-006", "Q-LIVE-007"],
+    cut_off_today: false,
+  },
+} as const
+
 const studentAccount = {
   type: "student_account",
   student_id: 4,
@@ -478,10 +497,15 @@ function mockRoutes(
   overrides: {
     enrollments?: unknown
     onSubmit?: () => unknown
+    queueStatus?: unknown
   } = {},
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const target = url(input)
+    if (target.includes("/queue-status"))
+      return Promise.resolve(
+        new Response(JSON.stringify(overrides.queueStatus ?? studentQueueView)),
+      )
     if (target.endsWith("/student-account"))
       return Promise.resolve(
         new Response(JSON.stringify({ data: studentAccount })),
@@ -680,8 +704,7 @@ describe("EnrollmentWorkspace", () => {
     expect(postIndex).toBeGreaterThan(-1)
     const eligibleSubjectFetchesBeforePost = fetchMock.mock.calls
       .slice(0, postIndex)
-      .filter(([request]) => url(request).includes("/eligible-subjects"))
-      .length
+      .filter(([request]) => url(request).includes("/eligible-subjects")).length
     expect(eligibleSubjectFetchesBeforePost).toBeGreaterThan(1)
   })
 
@@ -991,7 +1014,9 @@ describe("EnrollmentWorkspace", () => {
     })
 
     expect(await screen.findByText("Enrollment #9")).toBeInTheDocument()
-    expect(screen.getAllByText(/Q000001/).length).toBeGreaterThan(0)
+    expect(
+      await screen.findByRole("region", { name: "Your Cashier queue" }),
+    ).toHaveTextContent("Q-LIVE-007")
     // Not yet enrolled -- the Add/Drop panel only appears once `enrolled`.
     expect(
       screen.queryByRole("heading", { name: "Add/Drop requests" }),
@@ -1066,7 +1091,7 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("embeds the Withdraw panel once the enrollment is enrolled", async () => {
+  it("offers subject changes instead of a whole-term withdrawal once the enrollment is enrolled", async () => {
     fetchMock.mockImplementation(
       mockRoutes({
         enrollments: {
@@ -1093,10 +1118,13 @@ describe("EnrollmentWorkspace", () => {
       },
     })
 
+    await screen.findByRole("heading", { name: "Add/Drop requests" })
     expect(
-      await screen.findByRole("heading", { name: "Withdraw from this term" }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Withdraw" })).toBeInTheDocument()
+      screen.queryByRole("heading", { name: "Withdraw from this term" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Withdraw" }),
+    ).not.toBeInTheDocument()
   })
 
   it("shows a closed banner and disables selection and submission when the enrollment window is closed", async () => {

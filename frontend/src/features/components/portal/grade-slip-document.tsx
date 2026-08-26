@@ -15,13 +15,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/features/components/ui/table"
-import { markTone, markToneBadgeVariant } from "@/features/lib/grade-presentation"
+import {
+  markTone,
+  markToneBadgeVariant,
+} from "@/features/lib/grade-presentation"
 import type { GradeSlip } from "@/features/schemas/academic-record-schema"
 
 /**
  * A single term's printable grade slip: CODE | SUBJECT DESCRIPTION | UNITS |
  * FINAL | REMARKS | SECTION | PROFESSOR | SIGNATURE, matching the
- * institution's reference form, with TOTAL ACADEMIC UNITS and GPA below.
+ * institution's reference form, with TOTAL ACADEMIC UNITS and GWA below.
  * Presentational — the caller (`AcademicRecordView`) owns fetching and
  * picking which term's slip this is, so the same component renders both
  * the student's own grade slip and the Registrar's transcript lookup.
@@ -83,7 +86,7 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
             <TableCell colSpan={6}>{slip.total_academic_units}</TableCell>
           </TableRow>
           <TableRow>
-            <TableCell colSpan={2}>GPA</TableCell>
+            <TableCell colSpan={2}>GWA</TableCell>
             <TableCell colSpan={6}>{slip.gpa ?? "—"}</TableCell>
           </TableRow>
         </TableFooter>
@@ -91,9 +94,9 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
       {slip.excluded_from_gpa_count > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
           {slip.excluded_from_gpa_count} subject
-          {slip.excluded_from_gpa_count === 1 ? "" : "s"} with a non-numeric
-          mark {slip.excluded_from_gpa_count === 1 ? "is" : "are"} excluded
-          from the GPA above.
+          {slip.excluded_from_gpa_count === 1 ? "" : "s"}{" "}
+          {slip.excluded_from_gpa_count === 1 ? "is" : "are"} excluded from the
+          GWA above because of a completion mark or the NSTP/PATHFIT/PE rule.
         </p>
       )}
     </PrintDocument>

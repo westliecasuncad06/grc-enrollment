@@ -1,12 +1,17 @@
 import { screen, waitFor } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   AnonymousOnly,
   RequireSession,
 } from "@/features/auth/auth-route-guards"
 import { routerMock } from "@/tests/navigation-mock"
-import { renderWithSession, testSession } from "@/tests/render-app"
+import {
+  createStubGateway,
+  renderWithAuthProvider,
+  renderWithSession,
+  testSession,
+} from "@/tests/render-app"
 
 /**
  * Replaces the react-router `app-router.test.tsx` suite. Real URL changes are
@@ -65,6 +70,39 @@ describe("RequireSession", () => {
 
     expect(screen.getByText("portal content")).toBeInTheDocument()
     expect(routerMock.replace).not.toHaveBeenCalled()
+  })
+
+  it("clears a restored kiosk session and redirects it to the device portal", async () => {
+    const signOut = vi.fn()
+    renderWithSession(<RequireSession>portal content</RequireSession>, {
+      route: "/portal",
+      session: { ...testSession, role: "queue_kiosk" },
+      signOut,
+    })
+
+    await waitFor(() => {
+      expect(signOut).toHaveBeenCalledOnce()
+      expect(routerMock.replace).toHaveBeenCalledWith("/queue")
+    })
+    expect(screen.queryByText("portal content")).not.toBeInTheDocument()
+  })
+
+  it("redirects only once while an AuthProvider clears a restored kiosk session", async () => {
+    const signOut = vi.fn(() => Promise.resolve())
+    renderWithAuthProvider(<RequireSession>portal content</RequireSession>, {
+      route: "/portal",
+      gateway: createStubGateway({
+        restore: () => Promise.resolve({ ...testSession, role: "queue_kiosk" }),
+        signOut,
+      }),
+    })
+
+    await waitFor(() => {
+      expect(signOut).toHaveBeenCalledOnce()
+      expect(routerMock.replace).toHaveBeenCalledOnce()
+      expect(routerMock.replace).toHaveBeenCalledWith("/queue")
+    })
+    expect(screen.queryByText("portal content")).not.toBeInTheDocument()
   })
 })
 

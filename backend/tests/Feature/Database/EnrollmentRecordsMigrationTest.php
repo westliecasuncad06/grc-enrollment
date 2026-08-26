@@ -77,7 +77,7 @@ final class EnrollmentRecordsMigrationTest extends TestCase
 
         $this->assertTrue(Schema::hasColumns('enrollment_documents', [
             'id', 'enrollment_id', 'document_type', 'document_number',
-            'storage_path', 'content_hash', 'generated_at',
+            'storage_path', 'content_hash', 'snapshot', 'generated_at',
         ]));
 
         $this->assertTrue(Schema::hasColumns('student_profiles', [
@@ -273,8 +273,8 @@ final class EnrollmentRecordsMigrationTest extends TestCase
 
         EnrollmentDocument::create([
             'enrollment_id' => $enrollment->id,
-            'document_type' => EnrollmentDocumentType::Com,
-            'document_number' => 'COM-0001',
+            'document_type' => EnrollmentDocumentType::Cor,
+            'document_number' => 'COR-0001',
             'generated_at' => now(),
         ]);
 
@@ -282,8 +282,8 @@ final class EnrollmentRecordsMigrationTest extends TestCase
 
         EnrollmentDocument::create([
             'enrollment_id' => $enrollment->id,
-            'document_type' => EnrollmentDocumentType::Com,
-            'document_number' => 'COM-0002',
+            'document_type' => EnrollmentDocumentType::Cor,
+            'document_number' => 'COR-0002',
             'generated_at' => now(),
         ]);
     }

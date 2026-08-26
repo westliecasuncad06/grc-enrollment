@@ -75,7 +75,7 @@ describe("LandingPage", () => {
     )
     expect(steps[2]).toHaveTextContent("Authorized review and approval")
     expect(steps[3]).toHaveTextContent(
-      "Payment confirmation and Digital COM finalization",
+      "Payment confirmation and COR finalization",
     )
   })
 

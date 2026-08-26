@@ -56,6 +56,15 @@ export function createApiAuthGateway(tokenStore: AuthTokenStore): AuthGateway {
         throw cause
       }
 
+      if (payload.user.role === "queue_kiosk") {
+        await logout(undefined, {
+          token: payload.token,
+          suppressUnauthorizedHandler: true,
+        }).catch(() => undefined)
+
+        throw new AuthError("QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL")
+      }
+
       lastWriteSucceeded = tokenStore.write(payload.token)
 
       return toSession(payload.user)

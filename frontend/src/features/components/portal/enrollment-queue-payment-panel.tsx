@@ -1,12 +1,21 @@
 "use client"
 
+import { useAuth } from "@/features/auth/use-auth"
+import { StudentQueueLivePanel } from "@/features/components/queue/student-queue-live-panel"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
+import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { useStudentQueueQuery } from "@/features/hooks/use-student-queue"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 
 /**
@@ -21,6 +30,12 @@ export function EnrollmentQueuePaymentPanel({
 }: {
   enrollment: Enrollment
 }) {
+  const { session } = useAuth()
+  const queueQuery = useStudentQueueQuery({
+    viewerId: session?.userId ?? null,
+    enabled: session?.role === "student",
+  })
+
   return (
     <Card>
       <CardHeader>
@@ -30,39 +45,34 @@ export function EnrollmentQueuePaymentPanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
+        {queueQuery.isPending && (
+          <Alert>
+            <AlertTitle>Loading queue status</AlertTitle>
+            <AlertDescription>Loading your Cashier queue…</AlertDescription>
+          </Alert>
+        )}
+        {queueQuery.isError && (
+          <Alert variant="destructive">
+            <AlertTitle>Queue status unavailable</AlertTitle>
+            <AlertDescription>
+              Your live Cashier queue could not be loaded. Try again to refresh
+              it.
+            </AlertDescription>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void queueQuery.refetch()}
+            >
+              Retry queue status
+            </Button>
+          </Alert>
+        )}
+        {queueQuery.data && (
+          <StudentQueueLivePanel queue={queueQuery.data} mode="default" />
+        )}
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border p-3">
-            <dt className="text-xs text-muted-foreground">Queue ticket</dt>
-            <dd className="text-sm font-medium">
-              {enrollment.queue_ticket ? (
-                <>
-                  {enrollment.queue_ticket.ticket_number}{" "}
-                  <span className="font-normal text-muted-foreground">
-                    · {enrollment.queue_ticket.status_label}
-                  </span>
-                  {enrollment.queue_ticket.status === "waiting" &&
-                    enrollment.queue_ticket.position !== null && (
-                      <p className="mt-1 text-sm font-normal text-muted-foreground">
-                        {enrollment.queue_ticket.position === 0
-                          ? "You're next in line."
-                          : `${enrollment.queue_ticket.position} ${enrollment.queue_ticket.position === 1 ? "student is" : "students are"} ahead of you.`}
-                      </p>
-                    )}
-                </>
-              ) : (
-                <span className="font-normal text-muted-foreground">
-                  {enrollment.registrar_decided_at === null &&
-                  enrollment.status === "pending_registrar_approval"
-                    ? "Waiting for registrar approval — no queue number yet"
-                    : "Not issued"}
-                </span>
-              )}
-            </dd>
-          </div>
-          <div className="rounded-lg border p-3">
-            <dt className="text-xs text-muted-foreground">
-              Payment confirmed
-            </dt>
+            <dt className="text-xs text-muted-foreground">Payment confirmed</dt>
             <dd className="text-sm font-medium">
               {enrollment.payment_confirmed_at ? (
                 new Date(enrollment.payment_confirmed_at).toLocaleString()

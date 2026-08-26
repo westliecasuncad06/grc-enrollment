@@ -5,6 +5,10 @@ import {
   listQueueTickets,
   updateQueueTicket,
 } from "@/features/services/queue-ticket-service"
+import {
+  setAuthTokenProvider,
+  setUnauthorizedHandler,
+} from "@/features/services/api-client"
 
 const paginationLinks = {
   first: "https://api.test/queue-tickets?page=1",
@@ -38,8 +42,15 @@ const ticket = {
 describe("queue-ticket-service", () => {
   const fetchMock = vi.fn<typeof fetch>()
 
-  beforeEach(() => vi.stubGlobal("fetch", fetchMock))
-  afterEach(() => vi.unstubAllGlobals())
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock)
+    setAuthTokenProvider(() => "portal-token")
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    setAuthTokenProvider(() => null)
+    setUnauthorizedHandler(() => undefined)
+  })
 
   it("lists queue tickets with filters and pagination", async () => {
     fetchMock.mockResolvedValueOnce(
@@ -93,5 +104,45 @@ describe("queue-ticket-service", () => {
     expect(JSON.parse(init?.body as string)).toEqual({
       student_number: "2026-08-00001",
     })
+  })
+
+  it("keeps Accounting claims on the portal bearer without a kiosk header", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: ticket }), { status: 201 }),
+      ),
+    )
+
+    await claimQueueTicket()
+    await claimQueueTicket("2026-08-00001")
+
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer portal-token",
+      })
+      expect(init?.headers).not.toHaveProperty("X-Queue-Kiosk-Token")
+    }
+  })
+
+  it("uses separate Student and kiosk credentials without invoking the portal 401 handler", async () => {
+    const portalUnauthorizedHandler = vi.fn()
+    setUnauthorizedHandler(portalUnauthorizedHandler)
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: {} }), { status: 401 }),
+    )
+
+    await expect(
+      claimQueueTicket(undefined, {
+        studentToken: "student-token",
+        kioskToken: "kiosk-token",
+      }),
+    ).rejects.toMatchObject({ status: 401 })
+
+    const [, init] = fetchMock.mock.calls[0] ?? []
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer student-token",
+      "X-Queue-Kiosk-Token": "kiosk-token",
+    })
+    expect(portalUnauthorizedHandler).not.toHaveBeenCalled()
   })
 })

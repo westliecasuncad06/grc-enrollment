@@ -32,6 +32,10 @@ tags:
       visibility as Organization; writes to curricula are restricted to the
       Program Chair role — see ADR 0009. Status vocabularies are provisional
       pending PRD §17 approval.
+  - name: Analytics
+    description: Aggregate-only factual retention reporting for the Registrar Head.
+  - name: Honors
+    description: Live Dean-only honors reporting from official term grades.
   - name: Faculty Input
     description: >
       Faculty-declared availability and ranked subject preferences
@@ -397,6 +401,44 @@ paths:
       responses:
         "200":
           description: Updated academic term.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcademicTermResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/academic-terms/{academicTerm}/draft-identity:
+    patch:
+      operationId: updateDraftAcademicTermIdentity
+      summary: Correct the school year and semester of a Draft term
+      description: >
+        Registrar Head only. The term must still be Draft and the requested
+        school_year/semester combination must be unique. This endpoint changes
+        no enrollment-window dates and does not transition the term lifecycle.
+      security:
+        - bearerAuth: []
+      tags:
+        - Organization
+      parameters:
+        - name: academicTerm
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcademicTermDraftIdentityUpdateRequest"
+      responses:
+        "200":
+          description: Corrected Draft academic term.
           content:
             application/json:
               schema:
@@ -2386,13 +2428,13 @@ paths:
   /api/v1/enrollment-documents:
     get:
       operationId: getEnrollmentDocuments
-      summary: List generated enrollment documents (the Digital COM)
+      summary: List generated Certificates of Registration
       description: >
         Role-scoped per FR-FIN-010 (see
         App\Models\EnrollmentDocument::scopeVisibleTo): a Student sees only
-        their own documents; the Registrar Head and Registrar Staff (PRD
-        §3.8, widened in Phase 7b), as keepers of the official record, see
-        every one.
+        their own documents; Accounting Staff, the Registrar Head, and
+        Registrar Staff may search the official record. Staff may filter by
+        student number or a partial student name.
       security:
         - bearerAuth: []
       tags:
@@ -2405,13 +2447,26 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: student_number
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+        - name: student_name
+          in: query
+          required: false
+          description: Case-insensitive partial display-name match for authorized staff.
+          schema:
+            type: string
+            maxLength: 100
         - name: document_type
           in: query
           required: false
           schema:
             type: string
             enum:
-              - com
+              - cor
         - name: per_page
           in: query
           required: false
@@ -2445,6 +2500,203 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           description: A query parameter failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/sections/grade-submission:
+    get:
+      operationId: getSectionGradeSubmission
+      summary: List a professor's assigned classes and grading progress
+      description: >
+        Faculty-only section-first grade-submission index. Returns only
+        sections assigned to the authenticated professor, with subject,
+        academic term, schedule, enrolled count, and grading progress.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Assigned-class summaries for the authenticated professor.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionGradeSummariesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/sections/{section}/grades:
+    get:
+      operationId: getSectionGrades
+      summary: View the enrolled roster and grade sheet for an assigned section
+      description: >
+        Faculty-only grade sheet. The authenticated professor must own the
+        section. Only students whose enrollment and exact section-subject row
+        are both enrolled are returned; no contact, address, or payment data
+        is exposed.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: section
+          in: path
+          required: true
+          description: Section ID.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The current enrolled roster and its grade state.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionGradeSheetResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The section does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postSectionGradeDrafts
+      summary: Save selected draft grades for an assigned section
+      description: >
+        Idempotently creates or updates selected draft rows. Partial progress
+        is allowed. Every student must belong to the section's current exact
+        enrolled roster, and submitted or locked grades cannot be edited.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: section
+          in: path
+          required: true
+          description: Section ID.
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveSectionGradeDraftsRequest"
+      responses:
+        "200":
+          description: The updated grade sheet.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionGradeSheetResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The section does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            A mark is invalid for the subject, a student is duplicated or is
+            not in the current enrolled roster, or a grade is no longer draft.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/sections/{section}/grades/submit:
+    post:
+      operationId: postSectionGradesSubmit
+      summary: Submit an assigned section's complete grade sheet
+      description: >
+        Locks the current roster and grade rows in one transaction, validates
+        that every enrolled student has a subject-valid mark, and transitions
+        every draft grade to submitted using one submission time. Empty or
+        incomplete rosters fail atomically. Repeating an already submitted or
+        locked complete sheet is idempotent.
+      security:
+        - bearerAuth: []
+      tags:
+        - Academic Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: section
+          in: path
+          required: true
+          description: Section ID.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The submitted or already-finalized grade sheet.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionGradeSheetResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The section does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The roster is empty, incomplete, stale, or contains an invalid mark.
           content:
             application/json:
               schema:
@@ -2801,6 +3053,181 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postQueueTicket
+      summary: Claim a payment-queue ticket
+      description: >
+        A Student claims only their own pending-payment ticket and must send
+        an active `queue_kiosk` Sanctum token with `queue-kiosk:claim` in the
+        `X-Queue-Kiosk-Token` header. Accounting Staff claims on a Student's
+        behalf by supplying `student_number`; its existing request does not
+        require or use that header.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: X-Queue-Kiosk-Token
+          in: header
+          required: false
+          description: >
+            Required only when the bearer is a Student claiming their own
+            ticket. It must be a valid active `queue_kiosk` token with the
+            `queue-kiosk:claim` ability. Accounting Staff must not rely on
+            this header for an on-behalf claim.
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreQueueTicketRequest"
+      responses:
+        "201":
+          description: The idempotently claimed queue ticket.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueTicketResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: >
+            The bearer is not authorized to claim this ticket, or a Student
+            did not supply valid kiosk proof.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The request body or eligible pending-payment enrollment is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/queue-status:
+    get:
+      operationId: getStudentQueueStatus
+      summary: Read the authenticated Student's live queue view
+      description: >
+        Student only. Returns the caller's own queue state and ticket plus
+        ticket-number-only board information; it never returns another
+        Student's identity. This supports the normal portal's live view and
+        the kiosk after Student sign-in.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The private live Student queue view.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentQueueViewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/queue-kiosk-credential:
+    get:
+      operationId: getQueueKioskCredential
+      summary: Read the shared queue-kiosk credential
+      description: >
+        Accounting Staff only. This privileged credential read is audited and
+        returns a private no-store response; do not retain the password in a
+        shared cache, log, or diagnostic output.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The private no-store queue-kiosk credential resource.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueKioskCredentialResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: putQueueKioskCredential
+      summary: Rotate the shared queue-kiosk password
+      description: >
+        Accounting Staff only. The password must be 8–255 characters. A
+        successful rotation updates the canonical device credential, revokes
+        all active kiosk tokens, is audited, and returns a private no-store
+        credential resource.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQueueKioskCredentialRequest"
+      responses:
+        "200":
+          description: The rotated private no-store queue-kiosk credential resource.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueKioskCredentialResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The password did not satisfy the request contract.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/queue-tickets/{queueTicket}:
     patch:
       operationId: patchQueueTicket
@@ -2998,6 +3425,41 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/analytics/attrition:
+    get:
+      operationId: getAttritionReport
+      summary: Get aggregate first-to-second semester attrition
+      security: [{ bearerAuth: [] }]
+      tags: [Analytics]
+      parameters:
+        - { name: baseline_academic_term_id, in: query, required: true, schema: { type: integer } }
+        - { name: comparison_academic_term_id, in: query, required: true, schema: { type: integer } }
+        - { name: college, in: query, schema: { type: [string, "null"] } }
+        - { name: program_id, in: query, schema: { type: [integer, "null"] } }
+        - { name: year_level, in: query, schema: { type: [integer, "null"] } }
+      responses:
+        "200": { description: Aggregate-only report, headers: { Cache-Control: { $ref: "#/components/headers/NoStore" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/reports/honors:
+    get:
+      operationId: getHonorsReport
+      summary: Get live Dean's List qualifiers
+      security: [{ bearerAuth: [] }]
+      tags: [Honors]
+      parameters:
+        - { name: academic_term_id, in: query, required: true, schema: { type: integer } }
+        - { name: college, in: query, schema: { type: [string, "null"] } }
+        - { name: program_id, in: query, schema: { type: [integer, "null"] } }
+        - { name: year_level, in: query, schema: { type: [integer, "null"] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200": { description: Paginated live honors report, headers: { Cache-Control: { $ref: "#/components/headers/NoStore" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/notifications/{notification}/read:
     patch:
       operationId: patchNotificationRead
@@ -3422,6 +3884,8 @@ components:
             - registrar_head
             - registrar_staff
             - accounting_staff
+            - it_admin
+            - queue_kiosk
         role_label:
           type: string
         college:
@@ -3532,6 +3996,13 @@ components:
         enrollment_opens_at: { type: string, format: date-time }
         enrollment_closes_at: { type: string, format: date-time }
         add_drop_deadline_at: { type: string, format: date-time }
+    AcademicTermDraftIdentityUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [school_year, semester]
+      properties:
+        school_year: { type: string, pattern: '^\\d{4}-\\d{4}$' }
+        semester: { type: string, enum: [1st, 2nd] }
     AcademicTermWorkflowsResponse:
       type: object
       additionalProperties: false
@@ -4714,6 +5185,7 @@ components:
         - id
         - student_id
         - student_number
+        - student_name
         - student_financial_status
         - student_financial_status_label
         - academic_term_id
@@ -4738,6 +5210,8 @@ components:
           type: integer
         student_number:
           type: string
+        student_name:
+          type: ["string", "null"]
           description: >
             Never email or name — exposed so the Registrar Head and
             Accounting Staff can identify whose enrollment they are
@@ -5079,6 +5553,134 @@ components:
         remarks:
           type: ["string", "null"]
           description: Prohibited when action is submit or lock.
+    SectionGradeSummariesResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionGradeSummaryResource"
+    SectionGradeSheetResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/SectionGradeSheetResource"
+    SectionGradeSummaryResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - section_id
+        - section_code
+        - subject
+        - academic_term
+        - schedule
+        - enrolled_count
+        - recorded_count
+        - submitted_count
+        - locked_count
+        - missing_count
+        - state
+      properties:
+        type: { type: string, const: grade_section_summary }
+        section_id: { type: integer, minimum: 1 }
+        section_code: { type: string }
+        subject:
+          type: object
+          additionalProperties: false
+          required: [id, code, title, is_completion_only]
+          properties:
+            id: { type: integer, minimum: 1 }
+            code: { type: string }
+            title: { type: string }
+            is_completion_only: { type: boolean }
+        academic_term:
+          type: object
+          additionalProperties: false
+          required: [id, school_year, semester]
+          properties:
+            id: { type: integer, minimum: 1 }
+            school_year: { type: string }
+            semester: { type: string }
+        schedule:
+          type: object
+          additionalProperties: false
+          required: [days, starts_at_time, ends_at_time]
+          properties:
+            days: { type: [string, "null"] }
+            starts_at_time: { type: [string, "null"] }
+            ends_at_time: { type: [string, "null"] }
+        enrolled_count: { type: integer, minimum: 0 }
+        recorded_count: { type: integer, minimum: 0 }
+        submitted_count: { type: integer, minimum: 0 }
+        locked_count: { type: integer, minimum: 0 }
+        missing_count: { type: integer, minimum: 0 }
+        state:
+          type: string
+          enum: [not_started, in_progress, ready, submitted, locked]
+    SectionGradeSheetResource:
+      type: object
+      additionalProperties: false
+      required: [type, section, rows]
+      properties:
+        type: { type: string, const: section_grade_sheet }
+        section:
+          $ref: "#/components/schemas/SectionGradeSummaryResource"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionGradeRowResource"
+    SectionGradeRowResource:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollment_subject_id
+        - student_id
+        - student_number
+        - student_name
+        - grade_id
+        - mark
+        - mark_label
+        - remarks
+        - status
+        - status_label
+      properties:
+        enrollment_subject_id: { type: integer, minimum: 1 }
+        student_id: { type: integer, minimum: 1 }
+        student_number: { type: string }
+        student_name: { type: string }
+        grade_id: { type: [integer, "null"], minimum: 1 }
+        mark:
+          type: [string, "null"]
+          enum: ["1.00", "1.25", "1.50", "1.75", "2.00", "2.25", "2.50", "2.75", "3.00", "5.00", C, NC, INC, DRP, null]
+        mark_label: { type: [string, "null"] }
+        remarks: { type: [string, "null"] }
+        status:
+          type: string
+          enum: [not_recorded, draft, submitted, locked]
+        status_label: { type: string }
+    SaveSectionGradeDraftsRequest:
+      type: object
+      additionalProperties: false
+      required: [grades]
+      properties:
+        grades:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [student_id, mark]
+            properties:
+              student_id: { type: integer, minimum: 1 }
+              mark:
+                type: string
+                enum: ["1.00", "1.25", "1.50", "1.75", "2.00", "2.25", "2.50", "2.75", "3.00", "5.00", C, NC, INC, DRP]
+              remarks: { type: [string, "null"] }
     CreateWithdrawalRequestRequest:
       type: object
       additionalProperties: false
@@ -5392,6 +5994,134 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/QueueTicketResource"
+    StoreQueueTicketRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        student_number:
+          type: string
+          maxLength: 255
+          description: >
+            Required by the controller only for Accounting Staff's on-behalf
+            claim. A Student omits it to claim their own ticket at the kiosk.
+    StudentQueueViewResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/StudentQueueViewResource"
+    StudentQueueViewResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - stage
+        - can_claim
+        - ticket
+        - now_serving_ticket_number
+        - upcoming_ticket_numbers
+        - cut_off_today
+      properties:
+        type:
+          type: string
+          const: student_queue_view
+        stage:
+          type: string
+          enum:
+            - no_active_enrollment
+            - pending_registrar_approval
+            - pending_payment
+            - enrolled
+        can_claim:
+          type: boolean
+          description: >
+            True only when the Student has a pending-payment enrollment and
+            no ticket. The claim action is available only at the kiosk.
+        ticket:
+          type: [object, 'null']
+          additionalProperties: false
+          required:
+            - ticket_number
+            - status
+            - status_label
+            - priority
+            - priority_label
+            - position
+          properties:
+            ticket_number:
+              type: string
+              minLength: 1
+            status:
+              type: string
+              enum:
+                - waiting
+                - serving
+                - served
+                - cancelled
+            status_label:
+              type: string
+              minLength: 1
+            priority:
+              type: string
+              enum:
+                - regular
+                - priority
+            priority_label:
+              type: string
+              minLength: 1
+            position:
+              type: [integer, 'null']
+              minimum: 0
+        now_serving_ticket_number:
+          type: [string, 'null']
+          minLength: 1
+        upcoming_ticket_numbers:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: Ticket numbers only; no other Student identity is exposed.
+        cut_off_today:
+          type: boolean
+    QueueKioskCredentialResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/QueueKioskCredentialResource"
+    QueueKioskCredentialResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - email
+        - password
+      properties:
+        type:
+          type: string
+          const: queue_kiosk_credential
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          description: >
+            Shared kiosk password. This field is intentionally returned only
+            by the Accounting-authorized private no-store resource.
+    UpdateQueueKioskCredentialRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - password
+      properties:
+        password:
+          type: string
+          minLength: 8
+          maxLength: 255
     QueueTicketResource:
       type: object
       additionalProperties: false
@@ -5599,6 +6329,7 @@ components:
         - id
         - enrollment_id
         - student_number
+        - student_name
         - document_type
         - document_type_label
         - document_number
@@ -5613,10 +6344,13 @@ components:
           type: integer
         student_number:
           type: string
+        student_name:
+          type: ["string", "null"]
+          description: Student display name for authorized staff; null for Student callers.
         document_type:
           type: string
           enum:
-            - com
+            - cor
         document_type_label:
           type: string
         document_number:

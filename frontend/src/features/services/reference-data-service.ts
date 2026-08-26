@@ -14,8 +14,10 @@ import {
 import {
   archiveAndCreateNextInputSchema,
   storeAcademicTermInputSchema,
+  updateDraftAcademicTermIdentityInputSchema,
   type ArchiveAndCreateNextInput,
   type StoreAcademicTermInput,
+  type UpdateDraftAcademicTermIdentityInput,
 } from "@/features/schemas/academic-term-schema"
 import { z } from "zod"
 import {
@@ -118,6 +120,31 @@ export async function updateAcademicTerm(
     academicTermEnvelopeSchema,
     payload,
     "updated academic term",
+  ).data
+}
+
+/**
+ * Corrects only a Draft term's school year and semester. Enrollment schedule
+ * dates remain on their dedicated endpoint and cannot be changed here.
+ */
+export async function updateDraftAcademicTermIdentity(
+  academicTermId: number,
+  input: UpdateDraftAcademicTermIdentityInput,
+): Promise<AcademicTerm> {
+  const parsedInput = parseResponse(
+    updateDraftAcademicTermIdentityInputSchema,
+    input,
+    "draft academic term identity update request",
+  )
+  const payload = await patchAuthenticatedJson(
+    `${ACADEMIC_TERMS_PATH}/${academicTermId}/draft-identity`,
+    parsedInput,
+  )
+
+  return parseResponse(
+    academicTermEnvelopeSchema,
+    payload,
+    "updated draft academic term",
   ).data
 }
 

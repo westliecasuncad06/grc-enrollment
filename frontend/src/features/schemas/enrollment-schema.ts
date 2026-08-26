@@ -82,6 +82,7 @@ const queueTicketSchema = z
 
 const assessmentItemSchema = z
   .object({
+    id: z.number().int().positive().optional(),
     category: z.enum(["tuition", "miscellaneous"]),
     category_label: z.string().min(1),
     label: z.string().min(1),
@@ -214,6 +215,23 @@ export const confirmPaymentInputSchema = z
   })
   .strict()
 
+export const adjustEnrollmentAssessmentInputSchema = z
+  .object({
+    reason: z.string().trim().min(3, "Enter a reason for this fee adjustment.").max(1000),
+    items: z
+      .array(
+        z
+          .object({
+            id: z.number().int().positive(),
+            amount: z.string().regex(/^\d{1,8}(?:\.\d{1,2})?$/).optional(),
+            unit_amount: z.string().regex(/^\d{1,8}(?:\.\d{1,2})?$/).optional(),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict()
+
 const paymentConfirmationPaymentSchema = z
   .object({
     external_reference: z.string().nullable(),
@@ -225,7 +243,7 @@ const paymentConfirmationPaymentSchema = z
 
 const paymentConfirmationDocumentSchema = z
   .object({
-    document_type: z.literal("com").nullable(),
+    document_type: z.literal("cor").nullable(),
     document_number: z.string().nullable(),
     generated_at: z.iso.datetime().nullable(),
   })
@@ -252,6 +270,9 @@ export type EnrollmentFilters = z.input<typeof enrollmentFiltersSchema>
 export type StoreEnrollmentInput = z.infer<typeof storeEnrollmentInputSchema>
 export type UpdateEnrollmentInput = z.infer<typeof updateEnrollmentInputSchema>
 export type ConfirmPaymentInput = z.infer<typeof confirmPaymentInputSchema>
+export type AdjustEnrollmentAssessmentInput = z.infer<
+  typeof adjustEnrollmentAssessmentInputSchema
+>
 export type PaymentConfirmation = z.infer<
   typeof paymentConfirmationEnvelopeSchema
 >["data"]

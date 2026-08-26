@@ -28,6 +28,15 @@ slice — see ADR 0010 for the conflict-detection design).
 
 ## Authorization
 
+## Submitted-plan amendment invariant
+
+`SaveSectionPlan::save()` never reopens, changes, or clears an existing
+`submitted` year-level plan. A Program Chair may add a *previously absent*
+year-level plan as a new `draft`, after which it follows the ordinary release
+and Dean/Executive proposal approval lifecycle. This supports correcting an
+omitted cohort without rewriting the submitted years that remain the official
+record.
+
 Read/write shape matches `Curriculum` exactly (ADR 0009): `GET /api/v1/sections`
 is readable by every role. `Section::scopeVisibleTo()` restricts Executive
 Director to published rows only for the master schedule; it restricts Faculty to

@@ -120,7 +120,7 @@ final readonly class BuildPolicySettingsSummary
                 label: 'Tuition rate per unit',
                 currentValue: (string) config('fees.tuition_per_unit'),
                 status: PolicyValueStatus::Provisional,
-                description: 'A flat per-unit rate applied to every enrollment\'s total_units at Registrar approval — no per-program or per-year differentiation exists, and this figure is not a GRC-approved tuition schedule.',
+                description: 'The PHP 200.00 reference-COR rate is applied to every enrollment\'s total units at Registrar approval. Accounting may make audited pre-payment corrections to an individual assessment; finalized COR snapshots are immutable.',
                 prdReference: 'PRD §17 — Payment confirmation fields and supporting reference requirements.',
             ),
             new PolicyValueState(
@@ -128,7 +128,7 @@ final readonly class BuildPolicySettingsSummary
                 label: 'Miscellaneous fees',
                 currentValue: self::miscellaneousFeesSummary(),
                 status: PolicyValueStatus::Provisional,
-                description: 'Flat fees charged on every assessment regardless of program or year level. File-editable only (config/fees.php) — not env-overridable, since a list of {label, amount} rows has no safe flat-string env representation.',
+                description: 'The reference-COR fee lines apply to every assessment except Computer Lab Fee 2, which is limited to BSIT. Accounting may make audited pre-payment corrections to an individual assessment; finalized COR snapshots are immutable.',
                 prdReference: 'PRD §17 — Payment confirmation fields and supporting reference requirements.',
             ),
             new PolicyValueState(

@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  availableScheduleActions,
   createScheduleProposal,
   createSection,
   replaceSection,
   toSectionReplacement,
 } from "@/features/services/scheduling-service"
+import type { ScheduleProposal } from "@/features/schemas/scheduling-schema"
 
 const section = {
   type: "section",
@@ -27,6 +29,19 @@ const section = {
   status: "planned",
   status_label: "Planned",
 } as const
+
+const draftProposal: ScheduleProposal = {
+  type: "schedule_proposal",
+  id: 9,
+  academic_term_id: 2,
+  submitted_by: 4,
+  is_submitted: true,
+  status: "draft",
+  status_label: "Draft",
+  decided_by: null,
+  decided_at: null,
+  decision_reason: null,
+}
 
 describe("scheduling-service", () => {
   const fetchMock = vi.fn<typeof fetch>()
@@ -85,5 +100,9 @@ describe("scheduling-service", () => {
       professor_id: 12,
       schedule_days: "THU",
     })
+  })
+
+  it("exposes no schedule actions to the queue kiosk role", () => {
+    expect(availableScheduleActions("queue_kiosk", draftProposal)).toEqual([])
   })
 })

@@ -5,6 +5,7 @@ namespace App\Actions\Academic;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradePointAverage;
 use App\Domain\Academic\GradeSlip;
+use App\Domain\Academic\SubjectGwaExclusionRule;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\StudentProfile;
@@ -28,11 +29,13 @@ final readonly class BuildGradeSlip
             ->map(fn (AcademicGrade $grade): array => [
                 'mark' => $grade->mark,
                 'units' => (float) $grade->subject->units,
+                'counts_toward_gpa' => SubjectGwaExclusionRule::countsTowardGwa($grade->subject->code),
             ])
             ->all();
 
         $excludedFromGpaCount = $grades
-            ->filter(fn (AcademicGrade $grade): bool => ! ($grade->mark?->countsTowardGpa() ?? false))
+            ->filter(fn (AcademicGrade $grade): bool => ! ($grade->mark?->countsTowardGpa() ?? false)
+                || ! SubjectGwaExclusionRule::countsTowardGwa($grade->subject->code))
             ->count();
 
         return new GradeSlip(

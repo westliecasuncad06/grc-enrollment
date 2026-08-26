@@ -34,6 +34,7 @@ import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { Checkbox } from "@/features/components/ui/checkbox"
 import {
+  useAdjustEnrollmentAssessmentMutation,
   useConfirmPaymentMutation,
   useEnrollmentsListQuery,
 } from "@/features/hooks/use-enrollment"
@@ -101,6 +102,15 @@ function formatPhp(amount: string): string {
     style: "currency",
     currency: "PHP",
   }).format(Number(amount))
+}
+
+type FeeAdjustmentItem = {
+  id: number
+  label: string
+  category: "tuition" | "miscellaneous"
+  quantity: string | null
+  amount: string | null
+  unit_amount: string | null
 }
 
 function WaitingTicketCard({
@@ -192,6 +202,11 @@ export function AccountingPaymentWorkspace() {
   const [confirming, setConfirming] = useState(false)
   const [amount, setAmount] = useState("")
   const [promissoryNoteOnFile, setPromissoryNoteOnFile] = useState(false)
+  const [adjustingAssessment, setAdjustingAssessment] = useState(false)
+  const [adjustmentReason, setAdjustmentReason] = useState("")
+  const [adjustmentItems, setAdjustmentItems] = useState<FeeAdjustmentItem[]>(
+    [],
+  )
   const [recordingBalance, setRecordingBalance] = useState(false)
   const [balancePaymentAmount, setBalancePaymentAmount] = useState("")
   const [lastConfirmation, setLastConfirmation] =
@@ -215,6 +230,7 @@ export function AccountingPaymentWorkspace() {
     { enabled: authorized },
   )
   const paymentMutation = useConfirmPaymentMutation()
+  const assessmentMutation = useAdjustEnrollmentAssessmentMutation()
   const accountPaymentMutation = useRecordStudentAccountPaymentMutation()
   const cycleQuery = useQueueCycleQuery({ enabled: authorized })
   const cutOffMutation = useCutOffQueueMutation()
@@ -271,6 +287,68 @@ export function AccountingPaymentWorkspace() {
     setPromissoryNoteOnFile(false)
     setError("")
     setConfirming(true)
+  }
+
+  const openAssessmentAdjustment = () => {
+    const assessment = nowServingEnrollment?.assessment
+    if (!assessment) return
+
+    const editableItems = assessment.items.flatMap((item) =>
+      item.id === undefined
+        ? []
+        : [
+            {
+              id: item.id,
+              label: item.label,
+              category: item.category,
+              quantity: item.quantity,
+              amount: item.amount,
+              unit_amount: item.unit_amount,
+            },
+          ],
+    )
+
+    if (editableItems.length !== assessment.items.length) {
+      setError("This assessment cannot be adjusted because one or more fee lines are incomplete.")
+      return
+    }
+
+    setAdjustmentItems(editableItems)
+    setAdjustmentReason("")
+    setError("")
+    setAdjustingAssessment(true)
+  }
+
+  const updateAssessmentItem = (
+    id: number,
+    field: "amount" | "unit_amount",
+    value: string,
+  ) => {
+    setAdjustmentItems((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    )
+  }
+
+  const saveAssessmentAdjustment = async () => {
+    if (!nowServingEnrollment) return
+    setError("")
+    try {
+      const result = await assessmentMutation.mutateAsync({
+        id: nowServingEnrollment.id,
+        reason: adjustmentReason.trim(),
+        items: adjustmentItems.map((item) =>
+          item.category === "tuition"
+            ? { id: item.id, unit_amount: item.unit_amount ?? "" }
+            : { id: item.id, amount: item.amount ?? "" },
+        ),
+      })
+      setAmount(result.assessment?.total_amount ?? "")
+      setAdjustingAssessment(false)
+    } catch {
+      setError(
+        "The fee assessment could not be adjusted. Check every amount and try again.",
+      )
+    }
   }
 
   const confirmPayment = async () => {
@@ -363,7 +441,7 @@ export function AccountingPaymentWorkspace() {
   return (
     <WorkspacePage
       title="Payment queue"
-      description="Call the next student, confirm their payment, and generate the Digital COM."
+      description="Call the next student, confirm their payment, and generate the COR."
       unauthorized={!authorized}
       lastUpdated={Math.max(
         ticketsQuery.dataUpdatedAt,
@@ -382,17 +460,17 @@ export function AccountingPaymentWorkspace() {
           <AlertDescription className="grid gap-3">
             <p>
               Payment confirmed for enrollment #{lastConfirmation.enrollment.id}
-              . Digital COM{" "}
+              . Certificate of Registration{" "}
               {lastConfirmation.document.document_number ?? "pending"} is ready.
             </p>
             {lastConfirmation.document.document_number && (
               <PrintDocument
-                title="Digital Certificate of Matriculation"
+                title="Certificate of Registration"
                 actions={<PrintButton />}
               >
                 <div className="grid gap-1 rounded-lg border p-4">
                   <p className="font-medium">
-                    Digital Certificate of Matriculation
+                    Certificate of Registration
                   </p>
                   <p className="font-mono text-sm text-muted-foreground">
                     {lastConfirmation.document.document_number}
@@ -635,6 +713,18 @@ export function AccountingPaymentWorkspace() {
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
+                        variant="outline"
+                        disabled={
+                          assessmentMutation.isPending ||
+                          !nowServingEnrollment?.assessment ||
+                          isCurrentEnrollmentProcessed
+                        }
+                        onClick={openAssessmentAdjustment}
+                      >
+                        Adjust fees
+                      </Button>
+                      <Button
+                        type="button"
                         disabled={confirmDisabled}
                         onClick={openConfirm}
                       >
@@ -808,6 +898,91 @@ export function AccountingPaymentWorkspace() {
         )}
       </AsyncBoundary>
       <AlertDialog
+        open={adjustingAssessment}
+        onOpenChange={(open) => {
+          if (!open && !assessmentMutation.isPending)
+            setAdjustingAssessment(false)
+        }}
+      >
+        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Adjust fee assessment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Update this student&apos;s tuition rate or other fee amounts before
+              payment. A reason is required and the issued COR cannot be
+              changed after payment confirmation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <FieldGroup>
+            {adjustmentItems.map((item) => {
+              const tuitionAmount =
+                item.category === "tuition" &&
+                item.quantity !== null &&
+                item.unit_amount !== null
+                  ? (Number(item.quantity) * Number(item.unit_amount)).toFixed(2)
+                  : null
+
+              return (
+                <Field key={item.id}>
+                  <FieldLabel htmlFor={`assessment-item-${item.id}`}>
+                    {item.category === "tuition"
+                      ? `${item.label} rate per unit`
+                      : item.label}
+                  </FieldLabel>
+                  <Input
+                    id={`assessment-item-${item.id}`}
+                    inputMode="decimal"
+                    value={
+                      item.category === "tuition"
+                        ? (item.unit_amount ?? "")
+                        : (item.amount ?? "")
+                    }
+                    onChange={(event) =>
+                      updateAssessmentItem(
+                        item.id,
+                        item.category === "tuition" ? "unit_amount" : "amount",
+                        event.target.value,
+                      )
+                    }
+                    disabled={assessmentMutation.isPending}
+                  />
+                  {tuitionAmount && (
+                    <p className="text-sm text-muted-foreground">
+                      {item.quantity} units × rate = {formatPhp(tuitionAmount)}
+                    </p>
+                  )}
+                </Field>
+              )
+            })}
+            <Field>
+              <FieldLabel htmlFor="assessment-adjustment-reason">
+                Adjustment reason
+              </FieldLabel>
+              <Input
+                id="assessment-adjustment-reason"
+                value={adjustmentReason}
+                onChange={(event) => setAdjustmentReason(event.target.value)}
+                disabled={assessmentMutation.isPending}
+              />
+            </Field>
+          </FieldGroup>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={assessmentMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={
+                assessmentMutation.isPending || adjustmentReason.trim().length < 3
+              }
+              onClick={() => void saveAssessmentAdjustment()}
+            >
+              {assessmentMutation.isPending ? "Saving fees" : "Save adjusted fees"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
         open={confirming}
         onOpenChange={(open) => {
           if (!open && !paymentMutation.isPending) setConfirming(false)
@@ -818,7 +993,7 @@ export function AccountingPaymentWorkspace() {
             <AlertDialogTitle>Confirm received payment</AlertDialogTitle>
             <AlertDialogDescription>
               This is a manual payment — no external reference is collected.
-              Confirming generates the Digital COM and is recorded in the
+              Confirming generates the Certificate of Registration and is recorded in the
               operational audit log. Confirming twice has no additional effect.
             </AlertDialogDescription>
           </AlertDialogHeader>

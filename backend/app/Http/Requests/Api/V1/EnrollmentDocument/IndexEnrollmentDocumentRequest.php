@@ -20,6 +20,8 @@ final class IndexEnrollmentDocumentRequest extends FormRequest
     {
         return [
             'enrollment_id' => ['sometimes', 'integer', 'exists:enrollments,id'],
+            'student_number' => ['sometimes', 'string', 'max:100'],
+            'student_name' => ['sometimes', 'string', 'max:100'],
             'document_type' => ['sometimes', Rule::in(array_map(
                 fn (EnrollmentDocumentType $type): string => $type->value,
                 EnrollmentDocumentType::cases(),

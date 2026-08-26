@@ -6,7 +6,7 @@ export interface AuthContextValue {
   session: AuthSession | null
   storageAvailable: boolean
   status: "restoring" | "anonymous" | "authenticated"
-  signIn: (credentials: Credentials) => Promise<void>
+  signIn: (credentials: Credentials) => Promise<AuthSession>
   signOut: () => void
 }
 

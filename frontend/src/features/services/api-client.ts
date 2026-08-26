@@ -30,6 +30,25 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
   handleUnauthorized = handler
 }
 
+/** Per-request authentication isolation for device and portal token flows. */
+export interface AuthenticatedRequestOptions {
+  token?: string
+  headers?: Readonly<Record<string, string>>
+  suppressUnauthorizedHandler?: boolean
+}
+
+const reservedHeaderNames = new Set(["accept", "authorization", "content-type"])
+
+function getCallerHeaders(
+  headers: AuthenticatedRequestOptions["headers"],
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers ?? {}).filter(
+      ([name]) => !reservedHeaderNames.has(name.toLowerCase()),
+    ),
+  )
+}
+
 export type ApiClientErrorKind =
   "configuration" | "connection" | "contract" | "http"
 
@@ -120,6 +139,7 @@ async function readJson(response: Response): Promise<unknown> {
 
 interface RequestOptions {
   authenticated?: boolean
+  authenticatedOptions?: AuthenticatedRequestOptions
   body?: unknown
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   signal?: AbortSignal
@@ -127,9 +147,16 @@ interface RequestOptions {
 
 async function request(
   path: string,
-  { authenticated = false, body, method, signal }: RequestOptions,
+  {
+    authenticated = false,
+    authenticatedOptions,
+    body,
+    method,
+    signal,
+  }: RequestOptions,
 ): Promise<unknown> {
   const headers: Record<string, string> = {
+    ...getCallerHeaders(authenticatedOptions?.headers),
     Accept: "application/json",
   }
 
@@ -138,7 +165,7 @@ async function request(
   }
 
   if (authenticated) {
-    const token = provideToken()
+    const token = authenticatedOptions?.token ?? provideToken()
 
     if (token !== null) {
       headers.Authorization = `Bearer ${token}`
@@ -178,7 +205,11 @@ async function request(
   if (!response.ok) {
     // A rejected token must never leave the app in a half-signed-in state.
     // Login itself returns 401 for bad credentials, so it opts out.
-    if (response.status === 401 && authenticated) {
+    if (
+      response.status === 401 &&
+      authenticated &&
+      !authenticatedOptions?.suppressUnauthorizedHandler
+    ) {
       handleUnauthorized()
     }
 
@@ -215,8 +246,14 @@ export function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
 export function getAuthenticatedJson(
   path: string,
   signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
 ): Promise<unknown> {
-  return request(path, { authenticated: true, method: "GET", signal })
+  return request(path, {
+    authenticated: true,
+    authenticatedOptions: options,
+    method: "GET",
+    signal,
+  })
 }
 
 export function postJson(
@@ -231,9 +268,11 @@ export function postAuthenticatedJson(
   path: string,
   body?: unknown,
   signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
 ): Promise<unknown> {
   return request(path, {
     authenticated: true,
+    authenticatedOptions: options,
     body: body ?? {},
     method: "POST",
     signal,
@@ -244,21 +283,41 @@ export function patchAuthenticatedJson(
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
 ): Promise<unknown> {
-  return request(path, { authenticated: true, body, method: "PATCH", signal })
+  return request(path, {
+    authenticated: true,
+    authenticatedOptions: options,
+    body,
+    method: "PATCH",
+    signal,
+  })
 }
 
 export function putAuthenticatedJson(
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
 ): Promise<unknown> {
-  return request(path, { authenticated: true, body, method: "PUT", signal })
+  return request(path, {
+    authenticated: true,
+    authenticatedOptions: options,
+    body,
+    method: "PUT",
+    signal,
+  })
 }
 
 export function deleteAuthenticatedJson(
   path: string,
   signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
 ): Promise<unknown> {
-  return request(path, { authenticated: true, method: "DELETE", signal })
+  return request(path, {
+    authenticated: true,
+    authenticatedOptions: options,
+    method: "DELETE",
+    signal,
+  })
 }

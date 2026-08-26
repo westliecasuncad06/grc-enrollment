@@ -4,7 +4,10 @@ namespace App\Http\Requests\Api\V1\AcademicGrade;
 
 use App\Domain\Academic\CompletionOnlySubjectRule;
 use App\Domain\Academic\GradeMark;
+use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Models\AcademicGrade;
+use App\Models\EnrollmentSubject;
 use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
@@ -67,6 +70,30 @@ final class StoreAcademicGradeRequest extends FormRequest
 
             if (! is_numeric($studentId) || ! is_numeric($subjectId) || ! is_numeric($academicTermId)) {
                 return;
+            }
+
+            if ($section !== null && $section->subject_id !== (int) $subjectId) {
+                $validator->errors()->add('subject_id', 'The subject does not match the selected section.');
+            }
+
+            if ($section !== null && $section->academic_term_id !== (int) $academicTermId) {
+                $validator->errors()->add('academic_term_id', 'The academic term does not match the selected section.');
+            }
+
+            if ($section !== null) {
+                $isEnrolledInSection = EnrollmentSubject::query()
+                    ->where('section_id', $section->id)
+                    ->where('status', EnrollmentSubjectStatus::Enrolled->value)
+                    ->whereHas('enrollment', function ($query) use ($studentId, $section): void {
+                        $query->where('student_id', (int) $studentId)
+                            ->where('academic_term_id', $section->academic_term_id)
+                            ->where('status', EnrollmentStatus::Enrolled->value);
+                    })
+                    ->exists();
+
+                if (! $isEnrolledInSection) {
+                    $validator->errors()->add('student_id', 'The student is not enrolled in this section.');
+                }
             }
 
             $duplicateExists = AcademicGrade::query()

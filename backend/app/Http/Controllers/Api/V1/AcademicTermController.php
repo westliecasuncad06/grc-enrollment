@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Organization\ArchiveAndCreateNextTerm;
 use App\Actions\Organization\CreateAcademicTerm;
 use App\Actions\Organization\TransitionAcademicTerm;
+use App\Actions\Organization\UpdateDraftAcademicTermIdentity;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AcademicTerm\ArchiveAndCreateNextRequest;
 use App\Http\Requests\Api\V1\AcademicTerm\StoreAcademicTermRequest;
 use App\Http\Requests\Api\V1\AcademicTerm\UpdateAcademicTermRequest;
+use App\Http\Requests\Api\V1\AcademicTerm\UpdateDraftAcademicTermIdentityRequest;
 use App\Http\Resources\Api\V1\AcademicTermResource;
 use App\Models\AcademicTerm;
 use App\Models\User;
@@ -80,6 +82,29 @@ final class AcademicTermController extends Controller
             $user,
             $contextFactory->fromRequest($request),
         );
+
+        return $this->cachePrivateResponse(AcademicTermResource::make($term)->response($request));
+    }
+
+    /**
+     * Corrects a Draft term's school year and semester without changing the
+     * term's enrollment schedule or lifecycle state.
+     *
+     * @throws AuthenticationException
+     */
+    public function updateDraftIdentity(
+        UpdateDraftAcademicTermIdentityRequest $request,
+        AcademicTerm $academicTerm,
+        UpdateDraftAcademicTermIdentity $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
+        $this->authorize('update', $academicTerm);
+
+        $term = $action->execute($academicTerm, [
+            'school_year' => (string) $request->validated('school_year'),
+            'semester' => (string) $request->validated('semester'),
+        ], $user, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(AcademicTermResource::make($term)->response($request));
     }

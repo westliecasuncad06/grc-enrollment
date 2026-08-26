@@ -212,6 +212,108 @@ final class AcademicTermsEndpointTest extends TestCase
         self::assertArrayHasKey('add_drop_deadline_at', $response->json('error.errors'));
     }
 
+    public function test_a_registrar_head_can_correct_a_draft_term_identity_without_changing_its_enrollment_schedule(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2028',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::Draft,
+            'enrollment_opens_at' => '2026-07-01 08:00:00',
+            'enrollment_closes_at' => '2026-07-15 17:00:00',
+            'add_drop_deadline_at' => '2026-07-20 17:00:00',
+        ]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.correct-draft@grc.test');
+
+        $response = $this->withToken($token)->patchJson(
+            "/api/v1/academic-terms/{$term->id}/draft-identity",
+            ['school_year' => '2026-2027', 'semester' => '1st'],
+        );
+
+        $response->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('data.school_year', '2026-2027')
+            ->assertJsonPath('data.semester', '1st')
+            ->assertJsonPath('data.status', 'draft');
+
+        $term->refresh();
+        self::assertSame('2026-2027', $term->school_year);
+        self::assertSame('1st', $term->semester);
+        self::assertSame('2026-07-01T08:00:00Z', $term->enrollment_opens_at?->utc()->format('Y-m-d\\TH:i:s\\Z'));
+        self::assertSame('2026-07-15T17:00:00Z', $term->enrollment_closes_at?->utc()->format('Y-m-d\\TH:i:s\\Z'));
+        self::assertSame('2026-07-20T17:00:00Z', $term->add_drop_deadline_at?->utc()->format('Y-m-d\\TH:i:s\\Z'));
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'academic_term.draft_identity_updated',
+            'auditable_type' => 'academic_term',
+            'auditable_id' => $term->id,
+        ]);
+    }
+
+    public function test_a_draft_term_correction_cannot_duplicate_an_existing_school_year_and_semester(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2028',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::Draft,
+        ]);
+        AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::Archived,
+        ]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.correct-duplicate@grc.test');
+
+        $response = $this->withToken($token)->patchJson(
+            "/api/v1/academic-terms/{$term->id}/draft-identity",
+            ['school_year' => '2026-2027', 'semester' => '1st'],
+        );
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertArrayHasKey('school_year', $response->json('error.errors'));
+        $this->assertDatabaseHas('academic_terms', [
+            'id' => $term->id,
+            'school_year' => '2026-2028',
+            'semester' => '2nd',
+        ]);
+    }
+
+    public function test_a_non_draft_term_cannot_have_its_school_year_or_semester_corrected(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2028',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar-head.correct-ongoing@grc.test');
+
+        $response = $this->withToken($token)->patchJson(
+            "/api/v1/academic-terms/{$term->id}/draft-identity",
+            ['school_year' => '2026-2027', 'semester' => '1st'],
+        );
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        self::assertArrayHasKey('school_year', $response->json('error.errors'));
+        $this->assertDatabaseHas('academic_terms', [
+            'id' => $term->id,
+            'school_year' => '2026-2028',
+            'semester' => '2nd',
+        ]);
+    }
+
+    public function test_a_non_registrar_head_cannot_correct_a_draft_term_identity(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2028',
+            'semester' => '2nd',
+            'status' => AcademicTermStatus::Draft,
+        ]);
+        $token = $this->tokenFor(UserRole::Dean, 'dean.correct-draft@grc.test');
+
+        $this->withToken($token)->patchJson(
+            "/api/v1/academic-terms/{$term->id}/draft-identity",
+            ['school_year' => '2026-2027', 'semester' => '1st'],
+        )->assertForbidden();
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>

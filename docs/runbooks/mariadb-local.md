@@ -207,6 +207,32 @@ this recovery. Restart `mysqld` and re-run `CHECK TABLE` after zerofilling; it
 should report `OK`. Re-run `SHOW GRANTS FOR '<user>'@'<host>';` for `grc_app`,
 `grc_migrator`, `grc_test`, and `pma` afterward to confirm privileges survived.
 
+### Gotcha: `columns_priv.MAI` fails plain `-r` with "sort_buffer_size is too small"
+
+Seen 2026-08-25 during a routine Aria checkpoint recovery (same signature as
+above). Every other system table repaired cleanly with plain `-r`, but
+`columns_priv.MAI` failed:
+
+```
+aria_chk.exe: error: aria_sort_buffer_size is too small. Current aria_sort_buffer_size: 16384  rows: 234  sort_length: 1006
+aria_chk.exe: error: Create index by sort failed
+Aria table 'columns_priv.MAI' is not fixed because of errors
+```
+
+Raising the buffer explicitly (`--sort_buffer_size=64M`, even `--sort_buffer_size=268435456`)
+had **no effect** — `aria_chk` kept reporting the same `16384` regardless. `-o`
+(`--safe-recover`) alone didn't help either. What worked, per `aria_chk --help`'s
+own hint under `-f, --force` ("Add another `--force` to avoid 'sort_buffer_size
+is too small' errors"), was **passing `-f` twice**:
+
+```powershell
+& C:\xampp\mysql\bin\aria_chk.exe --datadir=C:\xampp\mysql\data --require-control-file -r -f -f columns_priv.MAI
+```
+
+This switched the run from a sort-based rebuild to a plain check-and-fix path
+and reported `was ok. Status updated`. Server survived a `SHOW COLUMNS` canary
+afterward, confirming the table was actually healthy and not just marked so.
+
 ## One-time setup: databases and principals
 
 Run as `root` (no password on this instance; connects over `127.0.0.1:3306`).

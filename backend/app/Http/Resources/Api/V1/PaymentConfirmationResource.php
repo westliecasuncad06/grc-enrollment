@@ -13,8 +13,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 final class PaymentConfirmationResource extends JsonResource
 {
     /**
-     * Bundles the now-`enrolled` enrollment with its `Payment` and Digital
-     * COM in one response, the same "return the aggregate" shape
+     * Bundles the now-`enrolled` enrollment with its `Payment` and Certificate
+     * of Registration in one response, the same "return the aggregate" shape
      * `SubmitEnrollment`'s response already uses for its own five writes.
      *
      * @return array{
@@ -26,7 +26,7 @@ final class PaymentConfirmationResource extends JsonResource
     public function toArray(Request $request): array
     {
         $payment = $this->resource->payment;
-        $document = $this->resource->documents->firstWhere('document_type', EnrollmentDocumentType::Com);
+        $document = $this->resource->documents->firstWhere('document_type', EnrollmentDocumentType::Cor);
 
         return [
             'enrollment' => EnrollmentResource::make($this->resource)->toArray($request),

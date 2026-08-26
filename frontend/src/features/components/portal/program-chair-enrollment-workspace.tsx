@@ -754,10 +754,8 @@ export function ProgramChairEnrollmentWorkspace({
       })
       setCounts(nextCounts)
       await sectionsQuery.refetch()
-    } catch {
-      setError(
-        `The last ${yearLabel(year)} section could not be removed. Assigned schedules or enrolled students must be cleared first.`,
-      )
+    } catch (caughtError) {
+      setError(scheduleErrorMessage(caughtError))
     }
   }
   const generateSubjectsForYear = async (year: number) => {

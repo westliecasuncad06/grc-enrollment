@@ -32,6 +32,8 @@ final class AuditableType
 
     public const ENROLLMENT = 'enrollment';
 
+    public const ASSESSMENT = 'assessment';
+
     public const ACCOUNT_PAYMENT = 'account_payment';
 
     public const ACADEMIC_GRADE = 'academic_grade';
@@ -58,6 +60,8 @@ final class AuditableType
 
     public const QUEUE_CYCLE = 'queue_cycle';
 
+    public const QUEUE_KIOSK_CREDENTIAL = 'queue_kiosk_credential';
+
     /**
      * @return list<string>
      */
@@ -78,6 +82,7 @@ final class AuditableType
             self::FACULTY_DIRECTORY,
             self::FACULTY_WORKFORCE_PROFILE,
             self::ENROLLMENT,
+            self::ASSESSMENT,
             self::ACCOUNT_PAYMENT,
             self::ACADEMIC_GRADE,
             self::QUEUE_TICKET,
@@ -91,6 +96,7 @@ final class AuditableType
             self::ENROLLMENT_CHANGE_REQUEST,
             self::STUDENT_SCHEDULE_PREFERENCE,
             self::QUEUE_CYCLE,
+            self::QUEUE_KIOSK_CREDENTIAL,
         ];
     }
 }

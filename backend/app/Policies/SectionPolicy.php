@@ -47,6 +47,26 @@ final class SectionPolicy
         return $user->role === UserRole::ProgramChair && $user->college !== null;
     }
 
+    public function viewGradeSubmission(User $user): bool
+    {
+        return $user->role === UserRole::Faculty;
+    }
+
+    public function viewGrades(User $user, Section $section): bool
+    {
+        return $user->role === UserRole::Faculty && $section->professor_id === $user->id;
+    }
+
+    public function updateGrades(User $user, Section $section): bool
+    {
+        return $this->viewGrades($user, $section);
+    }
+
+    public function submitGrades(User $user, Section $section): bool
+    {
+        return $this->viewGrades($user, $section);
+    }
+
     public function update(User $user, Section $section): bool
     {
         return $user->role === UserRole::ProgramChair

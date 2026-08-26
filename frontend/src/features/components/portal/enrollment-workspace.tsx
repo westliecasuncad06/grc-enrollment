@@ -12,7 +12,6 @@ import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrol
 import { EnrollmentCategoryExplanation } from "@/features/components/portal/enrollment-category-explanation"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
-import { EnrollmentWithdrawPanel } from "@/features/components/portal/enrollment-withdraw-panel"
 import { StudentAccountBalancePanel } from "@/features/components/portal/student-account-balance-panel"
 import {
   StatusStepper,
@@ -660,10 +659,6 @@ export function EnrollmentWorkspace() {
           }
           windowClosesAt={addDrop?.closes_at ?? null}
         />
-      )}
-
-      {activeEnrollment?.status === "enrolled" && (
-        <EnrollmentWithdrawPanel enrollment={activeEnrollment} />
       )}
 
       {(enrollmentsQuery.data ?? []).length > 0 && (

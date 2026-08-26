@@ -102,6 +102,8 @@ final class AuditAction
 
     public const ENROLLMENT_PAYMENT_CONFIRMED = 'enrollment.payment_confirmed';
 
+    public const ASSESSMENT_ADJUSTED = 'assessment.adjusted';
+
     public const ACCOUNT_PAYMENT_RECORDED = 'account_payment.recorded';
 
     public const WITHDRAWAL_REQUEST_CREATED = 'withdrawal_request.created';
@@ -119,6 +121,8 @@ final class AuditAction
     public const TRANSFEREE_CREDIT_REJECTED = 'transferee_credit.rejected';
 
     public const ACADEMIC_TERM_CREATED = 'academic_term.created';
+
+    public const ACADEMIC_TERM_DRAFT_IDENTITY_UPDATED = 'academic_term.draft_identity_updated';
 
     public const SUBJECT_OFFERINGS_REPLACED = 'subject_offerings.replaced';
 
@@ -155,6 +159,10 @@ final class AuditAction
     public const QUEUE_CYCLE_RESUMED = 'queue_cycle.resumed';
 
     public const QUEUE_CYCLE_CLOSED = 'queue_cycle.closed';
+
+    public const QUEUE_KIOSK_CREDENTIAL_VIEWED = 'queue_kiosk_credential.viewed';
+
+    public const QUEUE_KIOSK_PASSWORD_CHANGED = 'queue_kiosk.password_changed';
 
     /**
      * @return list<string>
@@ -211,6 +219,7 @@ final class AuditAction
             self::QUEUE_TICKET_SKIPPED,
             self::QUEUE_TICKET_MARKED_PRIORITY,
             self::ENROLLMENT_PAYMENT_CONFIRMED,
+            self::ASSESSMENT_ADJUSTED,
             self::ACCOUNT_PAYMENT_RECORDED,
             self::WITHDRAWAL_REQUEST_CREATED,
             self::WITHDRAWAL_REQUEST_APPROVED,
@@ -220,6 +229,7 @@ final class AuditAction
             self::TRANSFEREE_CREDIT_APPROVED,
             self::TRANSFEREE_CREDIT_REJECTED,
             self::ACADEMIC_TERM_CREATED,
+            self::ACADEMIC_TERM_DRAFT_IDENTITY_UPDATED,
             self::SUBJECT_OFFERINGS_REPLACED,
             self::SECTION_PLAN_SUBMITTED,
             self::SECTION_PLAN_AUTO_ASSIGNED,
@@ -238,6 +248,8 @@ final class AuditAction
             self::QUEUE_CYCLE_CUT_OFF,
             self::QUEUE_CYCLE_RESUMED,
             self::QUEUE_CYCLE_CLOSED,
+            self::QUEUE_KIOSK_CREDENTIAL_VIEWED,
+            self::QUEUE_KIOSK_PASSWORD_CHANGED,
         ];
     }
 }

@@ -136,7 +136,10 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Review eligible subjects and recommendation rationale.
 - Select subjects from available published sections.
 - Submit the enrollment request.
-- View queue ticket and payment status.
+- View a live, privacy-preserving queue ticket and payment status in the
+  normal portal.
+- Claim a queue ticket only at the authorized Cashier kiosk; the normal portal
+  does not expose a claim action.
 - View grades and approved academic history.
 - Download or print the Digital COM after payment confirmation.
 - Manage permitted profile fields and password.
@@ -205,6 +208,19 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Trigger idempotent enrollment finalization and Digital COM generation through that payment-confirmation action.
 - Cannot change academic records, curriculum data, or Registrar decisions.
 
+### Queue kiosk device identity
+
+`queue_kiosk` is a non-human, shared device identity for the dedicated
+Cashier kiosk. It is not a tenth primary external actor and does not renumber
+the nine primary institutional actors above; the already documented IT role is
+also unchanged. The device owns no Student record and is never the actor for a
+Student claim. It is used only on `/queue` to prove that a Student's claim is
+being made at an authenticated kiosk.
+
+Accounting Staff may view and rotate the shared kiosk credential through its
+authorized workspace. The device itself may validate or end its own session,
+but cannot use ordinary portal APIs.
+
 ---
 
 ## 4. Core User Journeys and State Machines
@@ -229,12 +245,19 @@ Rules:
 
 1. A student saves subject choices as `draft`.
 2. Submission performs authoritative validation and creates `pending_registrar_approval`.
-3. The system reserves or creates a queue ticket, but payment processing is not active until Registrar approval.
+3. The system does not issue a queue ticket until Registrar approval has made
+   the enrollment `pending_payment`; the Student then claims one at the
+   Cashier kiosk, or Accounting Staff may issue one on the Student's behalf.
 4. Registrar Head approval changes the enrollment to `pending_payment`.
 5. Accounting confirmation changes it to `enrolled`.
 6. The same database transaction creates or confirms the Digital COM record.
 7. Rejection, cancellation, and withdrawal require a reason and audit entry.
 8. Repeated requests must not duplicate seats, payments, queue tickets, notifications, or documents.
+
+For a Student, a pending-payment ticket is claimed at the Cashier kiosk, using
+the Student's own bearer token plus authenticated kiosk proof. Accounting
+Staff may continue to issue a ticket on a Student's behalf as part of the
+front-desk workflow.
 
 ### 4.3 Grade Lifecycle
 
@@ -244,6 +267,11 @@ Rules:
 - Submission validates the complete roster and records the submitter and time.
 - Locking follows the approved Registrar policy.
 - Corrections after locking require an authorized, audited workflow.
+- GWA excludes normalized subject codes beginning `NSTP`, `PATHFIT`, or `PE`
+  (spaces and case ignored). These subjects remain on the academic record and
+  require grade submission, but do not contribute units or weighted points.
+- Dean's List is computed live after every non-dropped enrolled subject has a
+  submitted or locked grade; its inclusive unrounded GWA range is 1.00–1.50.
 
 ### 4.4 Prediction Lifecycle
 
@@ -297,7 +325,10 @@ The system validates the student's academic history against curriculum and prere
 - **2.1 Authenticate and Read Profile** — initializes approved new-student profiles, returns Admission Status View, and establishes the authenticated student context.
 - **2.2 Validate Capacities and Prerequisites** — cross-references `STUDENT RECORDS` with `CURRICULUM AND SCHEDULING` and outputs the Eligible Subject Pool.
 - **2.3 Generate Predictive Recommendation** — formats a rule-compliant recommended academic load from the eligible pool and student profile.
-- **2.4 Finalize Subject and Generate Queue Ticket** — records the verified Subject Selection as a Pending PEF Record in `ENROLLMENT RECORDS` and issues the Queue Ticket.
+- **2.4 Finalize Subject and Generate Queue Ticket** — records the verified
+  Subject Selection as a Pending PEF Record in `ENROLLMENT RECORDS`; after
+  Registrar approval, the pending-payment enrollment can receive one queue
+  ticket through the Cashier kiosk or Accounting Staff's on-behalf flow.
 
 #### Requirements
 
@@ -308,7 +339,8 @@ The system validates the student's academic history against curriculum and prere
 - **FR-ENR-005:** Provide an understandable reason for included, excluded, and recommended subjects.
 - **FR-ENR-006:** Preserve a student's valid selections when validation errors occur.
 - **FR-ENR-007:** Submit enrollment atomically and prevent duplicate active enrollments.
-- **FR-ENR-008:** Generate one unique queue ticket per submitted enrollment.
+- **FR-ENR-008:** Allow exactly one unique queue ticket to be claimed for an
+  eligible pending-payment enrollment.
 - **FR-ENR-009:** Show a Digital PEF or equivalent enrollment summary before final submission.
 - **FR-ENR-010:** Provide real-time or refreshed status updates without a full application reload.
 - **FR-ENR-011:** Enforce approved block-section eligibility rules, including preventing irregular students from reserving slots designated exclusively for regular block students.
@@ -320,7 +352,9 @@ The system validates the student's academic history against curriculum and prere
 - Two conflicting sections cannot be submitted together.
 - A duplicate submission does not increment seat reservations twice.
 - An irregular student cannot submit a regular-block section when GRC policy reserves that section for regular students.
-- A successful submission creates exactly one enrollment, the selected enrollment subjects, one queue ticket, one audit entry, and the appropriate notification.
+- A successful submission creates exactly one enrollment, the selected
+  enrollment subjects, one audit entry, and the appropriate notification; it
+  does not issue a queue ticket before Registrar approval and a valid claim.
 - A server-side validation failure returns `422` and maps errors to the corresponding form fields.
 
 ### 5.3 Process 3.0 — Execute Final Approvals, Payment Queue, Withdrawal, and COM
@@ -600,6 +634,12 @@ The `frontend/`, `backend/`, and `ml-service/` must be independently runnable. T
 - Export React components using PascalCase.
 - Avoid `any`, duplicated API types, deep prop drilling, and unnecessary global state.
 
+`/queue` is a dedicated kiosk route outside `/portal`; it does not render the
+portal shell or portal authentication provider. It keeps the device session
+separate from the Student session and uses the shared live Student queue panel.
+The normal portal renders that live panel for Students but never renders a
+claim control.
+
 ---
 
 ## 8. API Contract
@@ -716,8 +756,14 @@ POST   /api/v1/enrollments/{enrollment}/withdraw
 GET    /api/v1/payment-queue
 POST   /api/v1/enrollments/{enrollment}/confirm-payment
 GET    /api/v1/enrollments/{enrollment}/matriculation-document
+POST   /api/v1/queue-tickets
+GET    /api/v1/queue-status
+GET    /api/v1/queue-kiosk-credential
+PUT    /api/v1/queue-kiosk-credential
 
 GET    /api/v1/sections/{section}/roster
+GET    /api/v1/sections/grade-submission
+GET    /api/v1/sections/{section}/grades
 POST   /api/v1/sections/{section}/grades
 POST   /api/v1/sections/{section}/grades/submit
 
@@ -743,11 +789,23 @@ The final route inventory must be documented in an OpenAPI specification or equi
 - The login use case calls a dedicated token-generation service.
 - Return tokens only through `AuthResource`.
 - Apply an approved expiration policy and store only hashed token values server-side.
-- The frontend's single `auth-token` module is the only module that reads, stores, or removes the token from `localStorage`.
+- The normal portal's `auth-token` module is the only module that reads,
+  stores, or removes the normal portal token from `localStorage`.
+- The `/queue` kiosk uses a separate `kiosk-token` store for the persistent
+  device token. A Student token used there is in-memory only; it is cleared on
+  Done or refresh and never enters browser storage or a query key.
 - The shared HTTP client appends `Authorization: Bearer <token>`.
-- On `401`, clear the token and route the user to sign-in.
+- On `401`, clear and route only the session that made the request. Explicit
+  kiosk or in-memory Student requests must not clear an unrelated portal
+  session.
 - Logout revokes the current token and clears local storage.
 - Do not use session cookies, CSRF-cookie endpoints, or `withCredentials`.
+
+`queue_kiosk` receives only the kiosk claim ability and is restricted to
+`GET /api/v1/auth/me` and `POST /api/v1/auth/logout` when used directly. A
+Student `POST /api/v1/queue-tickets` request must additionally send a valid
+active kiosk token in `X-Queue-Kiosk-Token`; Accounting's on-behalf claim does
+not use that header.
 
 Public self-registration is out of scope. Admission Staff provisions student accounts through an authorized endpoint. If an account-creation endpoint returns a first-login token, it must follow the same `AuthResource` and token service controls.
 
@@ -798,6 +856,14 @@ Because bearer tokens are stored in local storage:
 - Apply secure backup, restoration, retention, and disposal procedures.
 - Audit privileged reads and every privileged write.
 - Review third-party packages, agent skills, and plugins as software supply-chain dependencies before installation.
+
+The shared queue-kiosk password is an intentional reversible-secret exception:
+the normal `users.password` value remains one-way hashed, while the canonical
+device credential has separately encrypted ciphertext so an authorized
+Accounting user can view it. Compromise of both the database and `APP_KEY`
+can reveal that shared secret, so this mechanism must never be reused for a
+personal-user password. Credential reads and rotations are authorized, audited,
+private/no-store, and rotation revokes every active kiosk token.
 
 ---
 
@@ -1231,6 +1297,13 @@ Each role receives a role-correct dashboard containing only authorized modules. 
 - accessible breadcrumb or page context
 - last-updated indicators for live and analytical data
 
+Student portal views include the reusable live queue panel, which shows only
+the Student's own ticket and privacy-preserving board information (ticket
+numbers, not other Students' identities). It polls every three seconds and
+refetches on focus; browsers or operating systems can still throttle a
+background tab, so the UI must ask the Student to keep it open and visible near
+their service time. Claims remain available only on `/queue`.
+
 ---
 
 ## 13. Development-Time Agent Skills and Plugins
@@ -1562,7 +1635,8 @@ The roadmap maps to the manuscript's six structural phases: Project Planning and
 - Eligible subjects respect academic history and curriculum.
 - Conflict, capacity, duplicate, unit, prerequisite, and regular-block eligibility rules work server-side.
 - Student submits one atomic enrollment.
-- One queue ticket and Digital PEF summary are produced.
+- One queue ticket can be claimed after Registrar approval, and the Digital
+  PEF summary is produced.
 - Validation errors map correctly to the SPA.
 - Concurrency tests prevent overbooking and duplicate seat reservation.
 
@@ -1593,6 +1667,9 @@ The roadmap maps to the manuscript's six structural phases: Project Planning and
 - Professors submit grades only for assigned sections.
 - Demand forecast feeds Program Chair planning.
 - Attrition analytics are role-restricted and advisory.
+- Attrition is factual and aggregate-only: a non-demo student officially
+  enrolled in an AY first semester but not officially enrolled in its second
+  semester. It returns no student identities and does not use risk outputs.
 - Honors results match deterministic policy tests.
 - Compliance exports are authorized and audited.
 - Prediction failure displays cached data and a freshness note.

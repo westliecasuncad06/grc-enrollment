@@ -60,6 +60,8 @@ export const auditActions = [
   "academic_term.archived",
   "academic_term.enrollment_opened",
   "academic_term.enrollment_schedule_updated",
+  "queue_kiosk_credential.viewed",
+  "queue_kiosk.password_changed",
 ] as const
 export const auditableTypes = [
   "curriculum",
@@ -80,6 +82,7 @@ export const auditableTypes = [
   "academic_term_workflow",
   "section_plan",
   "academic_term_year_level_window",
+  "queue_kiosk_credential",
 ] as const
 export const auditActionSchema = z.enum(auditActions)
 export const auditableTypeSchema = z.enum(auditableTypes)

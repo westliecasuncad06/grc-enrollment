@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react"
+import { useState } from "react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -27,6 +28,7 @@ function createGateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
 
 function AuthProbe() {
   const { session, signIn, signOut, status, storageAvailable } = useAuth()
+  const [signInResult, setSignInResult] = useState<AuthSession | null>(null)
 
   return (
     <>
@@ -37,11 +39,17 @@ function AuthProbe() {
       <button
         type="button"
         onClick={() =>
-          void signIn({ email: "student.seed@grc.test", password: "secret" })
+          void signIn({
+            email: "student.seed@grc.test",
+            password: "secret",
+          }).then(setSignInResult)
         }
       >
         Sign in
       </button>
+      <output aria-label="sign-in result">
+        {signInResult?.displayName ?? "none"}
+      </output>
       <button type="button" onClick={signOut}>
         Sign out
       </button>
@@ -103,6 +111,19 @@ describe("AuthProvider", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("auth state")).toHaveTextContent(
         "authenticated:Test Student:persistence-off",
+      )
+    })
+  })
+
+  it("returns the gateway session from signIn", async () => {
+    const user = userEvent.setup()
+    renderProvider(createGateway())
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("sign-in result")).toHaveTextContent(
+        "Test Student",
       )
     })
   })

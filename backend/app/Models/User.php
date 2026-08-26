@@ -9,6 +9,7 @@ use App\Domain\Organization\CollegeCode;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -26,6 +27,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property ?CarbonImmutable $updated_at
  * @property-read Collection<int, AuditLog> $auditLogs
  * @property-read Collection<int, Notification> $notifications
+ * @property-read ?QueueKioskCredential $queueKioskCredential
  */
 final class User extends Authenticatable
 {
@@ -77,5 +79,13 @@ final class User extends Authenticatable
     public function notifications(): HasMany
     {
         return $this->hasMany(Notification::class);
+    }
+
+    /**
+     * @return HasOne<QueueKioskCredential, $this>
+     */
+    public function queueKioskCredential(): HasOne
+    {
+        return $this->hasOne(QueueKioskCredential::class);
     }
 }

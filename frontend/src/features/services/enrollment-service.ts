@@ -1,5 +1,6 @@
 import {
   confirmPaymentInputSchema,
+  adjustEnrollmentAssessmentInputSchema,
   eligibleSubjectsEnvelopeSchema,
   enrollmentEnvelopeSchema,
   enrollmentFiltersSchema,
@@ -8,6 +9,7 @@ import {
   storeEnrollmentInputSchema,
   updateEnrollmentInputSchema,
   type ConfirmPaymentInput,
+  type AdjustEnrollmentAssessmentInput,
   type EligibleSubject,
   type Enrollment,
   type EnrollmentFilters,
@@ -143,4 +145,24 @@ export async function confirmPayment(
     payload,
     "payment confirmation",
   ).data
+}
+
+/**
+ * Accounting-only, pre-payment correction. The API recomputes all totals and
+ * rejects the request after payment/COR generation, so this client never
+ * mutates authoritative billing state locally.
+ */
+export async function adjustEnrollmentAssessment(
+  id: number,
+  input: AdjustEnrollmentAssessmentInput,
+): Promise<Enrollment> {
+  const payload = await patchAuthenticatedJson(
+    `${ENROLLMENTS_PATH}/${id}/assessment`,
+    parse(
+      adjustEnrollmentAssessmentInputSchema,
+      input,
+      "assessment adjustment request",
+    ),
+  )
+  return parse(enrollmentEnvelopeSchema, payload, "adjusted assessment").data
 }

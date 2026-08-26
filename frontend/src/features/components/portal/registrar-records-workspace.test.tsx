@@ -261,9 +261,9 @@ describe("RegistrarRecordsWorkspace", () => {
                   id: 7,
                   enrollment_id: 55,
                   student_number: "2026-0003",
-                  document_type: "com",
-                  document_type_label: "Certificate of Matriculation",
-                  document_number: "COM-2026-0001",
+                  document_type: "cor",
+                  document_type_label: "Certificate of Registration",
+                  document_number: "COR-2026-0001",
                   generated_at: "2026-07-01T00:00:00Z",
                 },
               ]),
@@ -281,7 +281,7 @@ describe("RegistrarRecordsWorkspace", () => {
     const table = await screen.findByRole("table", {
       name: "Enrollment documents",
     })
-    expect(within(table).getByText("COM-2026-0001")).toBeInTheDocument()
+    expect(within(table).getByText("COR-2026-0001")).toBeInTheDocument()
   })
 
   it("shows empty states for each module with nothing recorded", async () => {

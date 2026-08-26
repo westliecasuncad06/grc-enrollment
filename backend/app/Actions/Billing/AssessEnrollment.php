@@ -50,7 +50,7 @@ final readonly class AssessEnrollment
         $tuitionPerUnit = $this->numericConfigValue('fees.tuition_per_unit');
         $currency = (string) config('fees.currency');
 
-        $computed = AssessmentComputation::compute($totalUnits, $tuitionPerUnit, $this->miscellaneousFees());
+        $computed = AssessmentComputation::compute($totalUnits, $tuitionPerUnit, $this->miscellaneousFees($enrollment));
 
         $assessment = Assessment::create([
             'enrollment_id' => $enrollment->id,
@@ -91,7 +91,7 @@ final readonly class AssessEnrollment
     /**
      * @return list<array{label: string, amount: numeric-string}>
      */
-    private function miscellaneousFees(): array
+    private function miscellaneousFees(Enrollment $enrollment): array
     {
         $raw = config('fees.miscellaneous');
         $fees = [];
@@ -99,6 +99,8 @@ final readonly class AssessEnrollment
         if (! is_array($raw)) {
             return $fees;
         }
+
+        $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
 
         foreach ($raw as $entry) {
             if (! is_array($entry)) {
@@ -109,6 +111,11 @@ final readonly class AssessEnrollment
             $amount = $entry['amount'] ?? null;
 
             if (! is_string($label) || ! is_string($amount) || ! is_numeric($amount)) {
+                continue;
+            }
+
+            $programCodes = $entry['program_codes'] ?? null;
+            if (is_array($programCodes) && ! in_array($programCode, $programCodes, true)) {
                 continue;
             }
 

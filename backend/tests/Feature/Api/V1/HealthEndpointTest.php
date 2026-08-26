@@ -145,6 +145,33 @@ final class HealthEndpointTest extends TestCase
             ->assertHeaderMissing('Access-Control-Allow-Credentials');
     }
 
+    public function test_queue_ticket_claim_accepts_the_real_kiosk_cors_preflight_headers(): void
+    {
+        $response = $this
+            ->withHeaders([
+                'Origin' => 'http://localhost:5173',
+                'Access-Control-Request-Method' => 'POST',
+                'Access-Control-Request-Headers' => 'Authorization, Content-Type, X-Queue-Kiosk-Token',
+            ])
+            ->options('/api/v1/queue-tickets');
+
+        $response
+            ->assertNoContent()
+            ->assertHeader('Access-Control-Allow-Origin', 'http://localhost:5173')
+            ->assertHeader('Access-Control-Allow-Methods')
+            ->assertHeader('Access-Control-Allow-Headers')
+            ->assertHeaderMissing('Access-Control-Allow-Credentials');
+
+        $allowedHeaders = array_map(
+            static fn (string $header): string => strtolower(trim($header)),
+            explode(',', (string) $response->headers->get('Access-Control-Allow-Headers')),
+        );
+
+        foreach (['authorization', 'content-type', 'x-queue-kiosk-token'] as $requiredHeader) {
+            self::assertContains($requiredHeader, $allowedHeaders);
+        }
+    }
+
     public function test_health_endpoint_enforces_the_documented_rate_limit(): void
     {
         $response = null;

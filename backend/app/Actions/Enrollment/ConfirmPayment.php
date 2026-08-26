@@ -22,9 +22,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * PRD §5.3 FR-FIN-007/008: confirms an externally received payment (no
  * gateway integration — see `Payment`'s own docblock) and generates the
- * Digital COM in the same transaction, mirroring `SubmitEnrollment`'s
+ * Certificate of Registration in the same transaction, mirroring `SubmitEnrollment`'s
  * five-write shape: the `Payment` row, the enrollment's own transition to
- * `enrolled`, the `EnrollmentDocument` (com), one audit entry, and the
+ * `enrolled`, the `EnrollmentDocument` (COR), one audit entry, and the
  * confirmation notification.
  *
  * FR-FIN-009 idempotency rests on `payments.enrollment_id`'s unique
@@ -33,7 +33,7 @@ use Illuminate\Validation\ValidationException;
  * after the enrollment has already moved on to `enrolled` — returns the
  * existing records rather than erroring or creating a duplicate.
  *
- * No PDF pipeline: §17 leaves COM format, numbering, signatures, and
+ * No PDF pipeline: the approved COR print workflow renders protected structured data,
  * retention open, so `document_number` is an opaque deterministic string
  * (the same choice already made for `Q%06d` queue tickets) and
  * `storage_path` stays null. FR-FIN-010's "view and print/download" is
@@ -47,7 +47,10 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class ConfirmPayment
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private BuildCorSnapshot $buildCorSnapshot,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $validated
@@ -81,7 +84,7 @@ final readonly class ConfirmPayment
 
             // An explicit enrollment payment has already passed the PHP
             // 1,000.00 minimum in ConfirmPaymentRequest. A partial payment
-            // therefore still finalizes enrollment and generates the COM;
+            // therefore still finalizes enrollment and generates the COR;
             // only an omitted amount falls back to what was assessed. An
             // enrollment with no assessment (created directly by legacy test
             // fixtures) keeps the established behavior of staying null.
@@ -108,11 +111,25 @@ final readonly class ConfirmPayment
                 ->where('status', EnrollmentSubjectStatus::Selected)
                 ->update(['status' => EnrollmentSubjectStatus::Enrolled]);
 
+            $payment->setRelation('confirmer', $actor);
+            $snapshot = $this->buildCorSnapshot->execute(
+                $lockedEnrollment->fresh([
+                    'student.user',
+                    'student.program',
+                    'academicTerm',
+                    'enrollmentSubjects.section.subject',
+                    'assessment.items',
+                ]),
+                $payment,
+            );
+
             $document = EnrollmentDocument::create([
                 'enrollment_id' => $lockedEnrollment->id,
-                'document_type' => EnrollmentDocumentType::Com,
-                'document_number' => sprintf('COM%06d', $lockedEnrollment->id),
+                'document_type' => EnrollmentDocumentType::Cor,
+                'document_number' => sprintf('COR%06d', $lockedEnrollment->id),
                 'storage_path' => null,
+                'snapshot' => $snapshot,
+                'content_hash' => $this->buildCorSnapshot->hash($snapshot),
                 'generated_at' => $confirmedAt,
             ]);
 
@@ -134,7 +151,7 @@ final readonly class ConfirmPayment
             Notification::create([
                 'user_id' => $lockedEnrollment->student->user_id,
                 'type' => NotificationType::EnrollmentPaymentConfirmed,
-                'message' => "Your payment has been confirmed. Your Certificate of Matriculation ({$document->document_number}) is ready.",
+                'message' => "Your payment has been confirmed. Your Certificate of Registration ({$document->document_number}) is ready.",
             ]);
 
             return [

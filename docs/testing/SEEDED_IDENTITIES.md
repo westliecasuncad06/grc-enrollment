@@ -2,7 +2,7 @@
 
 **Scope:** Local development and automated tests only.
 **Sources:** `backend/database/seeders/RoleUserSeeder.php` and
-`backend/database/seeders/CollegeProgramChairSeeder.php`
+`backend/database/seeders/CollegeProgramChairSeeder.php`.
 
 These are **database fixtures**, not production accounts. They exist so every
 PRD role can be exercised against real Sanctum authentication during
@@ -39,6 +39,28 @@ rows in place rather than creating duplicates.
 
 All are created with status `active`. Emails use the reserved `.test` TLD
 (RFC 2606), so they can never resolve to a real mailbox.
+
+## Queue kiosk device fixture
+
+**Source:** `backend/database/seeders/QueueKioskSeeder.php`.
+
+The following development-only device identity is intentionally separate from
+the human-role identities above. It is allowed solely because the seeder refuses
+to run outside Laravel's `local` and `testing` environments:
+
+| Role | Email | Password | Surface |
+|---|---|---|---|
+| `queue_kiosk` | `queue@grc.com` | `password` | `/queue` only |
+
+Rotate this password immediately after seeding through the Accounting **Queue
+kiosk access** workspace. It is a deliberately weak local/testing fixture, not
+a production credential, and must not be reused for a personal account.
+
+The normal portal `/login` rejects the `queue_kiosk` role, revokes the
+just-issued wrong-surface token, and directs the operator to `/queue`. The
+device route keeps its own kiosk session; a Student signs in there separately
+to claim their own ticket. Do not use this fixture on the normal portal or in
+production.
 
 ## College-specific Program Chair identities
 
@@ -80,6 +102,9 @@ locked grades, then runs the real `ClassifyEnrollmentStanding` against
 them, so the category shown below is the classifier's own verdict, not an
 assumption. None of the eight carry an enrollment for the current term —
 every one is free to submit a real, fresh enrollment through the UI/API.
+All legacy `student*.seed@grc.test` QA student profiles are marked
+`is_demo_account=true`; the 3,210 structured-roster profiles are explicitly
+marked `false` and are the only participants in the local attrition scenario.
 
 | # | Email | Year | Category | Completed semesters | What makes them Irregular |
 |---|---|---|---|---|---|

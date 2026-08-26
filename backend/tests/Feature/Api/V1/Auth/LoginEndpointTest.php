@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
 final class LoginEndpointTest extends TestCase
@@ -26,12 +27,13 @@ final class LoginEndpointTest extends TestCase
     private function seedUser(
         UserStatus $status = UserStatus::Active,
         string $email = 'student.seed@grc.test',
+        UserRole $role = UserRole::Student,
     ): User {
         return User::create([
             'name' => 'Seed Student',
             'email' => $email,
             'password' => self::PASSWORD,
-            'role' => UserRole::Student,
+            'role' => $role,
             'status' => $status,
         ]);
     }
@@ -104,6 +106,30 @@ final class LoginEndpointTest extends TestCase
         ])->assertOk();
 
         $this->assertDatabaseCount('personal_access_tokens', 1);
+    }
+
+    public function test_login_issues_the_kiosk_claim_ability_only_to_queue_kiosk_accounts(): void
+    {
+        $this->seedUser(email: 'queue-kiosk.seed@grc.test', role: UserRole::QueueKiosk);
+        $this->seedUser(email: 'student.ability.seed@grc.test');
+
+        $kioskPlainTextToken = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => 'queue-kiosk.seed@grc.test',
+            'password' => self::PASSWORD,
+        ])->json('data.token');
+
+        $studentPlainTextToken = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.ability.seed@grc.test',
+            'password' => self::PASSWORD,
+        ])->json('data.token');
+
+        $kioskToken = PersonalAccessToken::findToken($kioskPlainTextToken);
+        $studentToken = PersonalAccessToken::findToken($studentPlainTextToken);
+
+        self::assertNotNull($kioskToken);
+        self::assertNotNull($studentToken);
+        self::assertSame(['queue-kiosk:claim'], $kioskToken->abilities);
+        self::assertSame(['*'], $studentToken->abilities);
     }
 
     public function test_the_stored_token_is_hashed_not_plain_text(): void

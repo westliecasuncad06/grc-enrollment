@@ -246,7 +246,15 @@ describe("EnrollmentAddDropPanel", () => {
     const table = await screen.findByRole("table", { name: "Your subjects" })
     expect(within(table).getByText("Programming 1")).toBeInTheDocument()
 
-    await user.click(within(table).getByRole("button", { name: "Drop" }))
+    expect(
+      await within(table).findByRole("button", { name: "Change schedule" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Add subject" }),
+    ).toBeInTheDocument()
+    await user.click(
+      within(table).getByRole("button", { name: "Drop subject" }),
+    )
     const dialog = await screen.findByRole("alertdialog")
     await user.type(
       within(dialog).getByLabelText("Reason"),

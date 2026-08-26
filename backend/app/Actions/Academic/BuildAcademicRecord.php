@@ -6,6 +6,7 @@ use App\Domain\Academic\AcademicRecord;
 use App\Domain\Academic\AcademicRecordTerm;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradePointAverage;
+use App\Domain\Academic\SubjectGwaExclusionRule;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\StudentProfile;
@@ -63,11 +64,13 @@ final readonly class BuildAcademicRecord
             ->map(fn (AcademicGrade $grade): array => [
                 'mark' => $grade->mark,
                 'units' => (float) $grade->subject->units,
+                'counts_toward_gpa' => SubjectGwaExclusionRule::countsTowardGwa($grade->subject->code),
             ])
             ->all();
 
         $excludedFromGpaCount = $termGrades
-            ->filter(fn (AcademicGrade $grade): bool => ! ($grade->mark?->countsTowardGpa() ?? false))
+            ->filter(fn (AcademicGrade $grade): bool => ! ($grade->mark?->countsTowardGpa() ?? false)
+                || ! SubjectGwaExclusionRule::countsTowardGwa($grade->subject->code))
             ->count();
 
         return new AcademicRecordTerm(

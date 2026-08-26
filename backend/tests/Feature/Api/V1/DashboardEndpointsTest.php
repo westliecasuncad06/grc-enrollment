@@ -270,7 +270,7 @@ final class DashboardEndpointsTest extends TestCase
         self::assertNotNull($values['sections.viability_threshold']['prd_reference']);
 
         self::assertSame('provisional', $values['fees.tuition_per_unit']['status']);
-        self::assertSame('450.00', $values['fees.tuition_per_unit']['current_value']);
+        self::assertSame('200.00', $values['fees.tuition_per_unit']['current_value']);
         self::assertSame('provisional', $values['fees.miscellaneous']['status']);
         self::assertStringContainsString('Registration', $values['fees.miscellaneous']['current_value']);
     }

@@ -39,6 +39,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Subject $subject
  * @property-read ?User $professor
  * @property-read Collection<int, EnrollmentSubject> $enrollmentSubjects
+ * @property-read Collection<int, AcademicGrade> $academicGrades
  */
 final class Section extends Model
 {
@@ -130,6 +131,14 @@ final class Section extends Model
     public function enrollmentSubjects(): HasMany
     {
         return $this->hasMany(EnrollmentSubject::class);
+    }
+
+    /**
+     * @return HasMany<AcademicGrade, $this>
+     */
+    public function academicGrades(): HasMany
+    {
+        return $this->hasMany(AcademicGrade::class);
     }
 
     /**

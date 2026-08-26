@@ -17,6 +17,7 @@ use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\Assessment;
+use App\Models\AssessmentItem;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
@@ -125,7 +126,82 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
     }
 
-    public function test_confirming_payment_transitions_enrollment_and_generates_com(): void
+    public function test_accounting_staff_can_adjust_a_pending_assessment_before_payment_and_cor_generation(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $assessment = $this->makeAssessment($enrollment, '800.00');
+        $tuition = AssessmentItem::create([
+            'assessment_id' => $assessment->id,
+            'category' => 'tuition',
+            'label' => 'Tuition',
+            'quantity' => '3.0',
+            'unit_amount' => '200.00',
+            'amount' => '600.00',
+        ]);
+        $registration = AssessmentItem::create([
+            'assessment_id' => $assessment->id,
+            'category' => 'miscellaneous',
+            'label' => 'Registration',
+            'quantity' => null,
+            'unit_amount' => null,
+            'amount' => '200.00',
+        ]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.assessment-adjust@grc.test');
+
+        $response = $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/assessment", [
+            'reason' => 'Applied approved student fee adjustment.',
+            'items' => [
+                ['id' => $tuition->id, 'unit_amount' => '250.00'],
+                ['id' => $registration->id, 'amount' => '300.00'],
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.assessment.total_amount', '1050.00')
+            ->assertJsonPath('data.assessment.items.0.unit_amount', '250.00')
+            ->assertJsonPath('data.assessment.items.0.amount', '750.00')
+            ->assertJsonPath('data.assessment.items.1.amount', '300.00');
+        $this->assertDatabaseHas('assessments', ['id' => $assessment->id, 'total_amount' => '1050.00']);
+        self::assertSame('250.00', $tuition->refresh()->unit_amount);
+        self::assertSame('750.00', $tuition->amount);
+        self::assertSame('300.00', $registration->refresh()->amount);
+        self::assertSame(AuditAction::ASSESSMENT_ADJUSTED, AuditLog::query()->sole()->action);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('enrollment_documents', 0);
+    }
+
+    public function test_a_fee_assessment_cannot_be_adjusted_after_payment_has_created_the_cor(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $assessment = $this->makeAssessment($enrollment, '600.00');
+        $tuition = AssessmentItem::create([
+            'assessment_id' => $assessment->id,
+            'category' => 'tuition',
+            'label' => 'Tuition',
+            'quantity' => '3.0',
+            'unit_amount' => '200.00',
+            'amount' => '600.00',
+        ]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.assessment-locked@grc.test');
+        $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [])->assertCreated();
+
+        $response = $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/assessment", [
+            'reason' => 'This must not alter an issued certificate.',
+            'items' => [['id' => $tuition->id, 'unit_amount' => '250.00']],
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertSame('200.00', $tuition->refresh()->unit_amount);
+        self::assertSame('600.00', $assessment->refresh()->total_amount);
+    }
+
+    public function test_confirming_payment_transitions_enrollment_and_generates_cor(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -141,13 +217,18 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $response->assertCreated();
         $response->assertJsonPath('data.enrollment.status', 'enrolled');
         $response->assertJsonPath('data.payment.external_reference', 'OR-000123');
-        $response->assertJsonPath('data.document.document_number', sprintf('COM%06d', $enrollment->id));
+        $response->assertJsonPath('data.document.document_type', 'cor');
+        $response->assertJsonPath('data.document.document_number', sprintf('COR%06d', $enrollment->id));
 
         self::assertSame('enrolled', $enrollment->refresh()->status->value);
         self::assertNotNull($enrollment->payment_confirmed_at);
         self::assertNotNull($enrollment->enrolled_at);
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('enrollment_documents', 1);
+        self::assertSame(
+            'Certificate of Registration',
+            EnrollmentDocument::query()->sole()->snapshot['document_title'],
+        );
         self::assertSame(AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditLog::query()->sole()->action);
         self::assertSame(NotificationType::EnrollmentPaymentConfirmed, Notification::query()->sole()->type);
     }
@@ -273,7 +354,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
         self::assertSame(EnrollmentStatus::PendingPayment, $enrollment->refresh()->status);
     }
 
-    public function test_a_1000_enrollment_payment_with_a_promissory_note_finalizes_and_generates_com(): void
+    public function test_a_1000_enrollment_payment_with_a_promissory_note_finalizes_and_generates_cor(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -291,7 +372,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
             ->assertJsonPath('data.enrollment.status', 'enrolled')
             ->assertJsonPath('data.payment.amount', '1000.00')
             ->assertJsonPath('data.payment.promissory_note_on_file', true)
-            ->assertJsonPath('data.document.document_type', 'com');
+            ->assertJsonPath('data.document.document_type', 'cor');
         $this->assertDatabaseHas('payments', [
             'enrollment_id' => $enrollment->id,
             'amount' => '1000.00',

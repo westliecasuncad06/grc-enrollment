@@ -254,6 +254,7 @@ function mockAll({
   completeSchedules = false,
   missingProfessorOnly = false,
   failSubmit = false,
+  failProtectedBlockReduction = false,
   returnedRemark = "",
   proposal = null as null | Record<string, unknown>,
   restoredPlans = false,
@@ -365,7 +366,30 @@ function mockAll({
     if (
       target.includes("/academic-term-section-plans") ||
       target.includes("/section-plan")
-    )
+    ) {
+      if (
+        failProtectedBlockReduction &&
+        init?.method === "PATCH" &&
+        typeof init.body === "string" &&
+        /"1":0(?=[,}])/u.test(init.body)
+      )
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "The section count could not be saved.",
+                errors: {
+                  counts: [
+                    "Cannot reduce 1th-year sections below 2 while IT102 has assigned schedule or enrollment data.",
+                  ],
+                },
+                request_id: "section-count-test",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
       return Promise.resolve(
         new Response(
           JSON.stringify(
@@ -383,6 +407,7 @@ function mockAll({
           ),
         ),
       )
+    }
     if (target.includes("/schedule-generation-runs/latest"))
       return Promise.resolve(
         new Response(JSON.stringify(latestGenerationRun ?? { data: null })),
@@ -468,7 +493,14 @@ function renderWorkspaceWithClient(
       college: "ccs",
       signedInAt: "2026-07-29T12:00:00Z",
     },
-    signIn: () => Promise.resolve(),
+    signIn: () =>
+      Promise.resolve({
+        userId: "4",
+        displayName: "Chair",
+        role: "program_chair",
+        college: "ccs",
+        signedInAt: "2026-07-29T12:00:00Z",
+      }),
     signOut: () => undefined,
     status: "authenticated",
     storageAvailable: true,
@@ -1133,6 +1165,35 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       await screen.findByRole("button", { name: "Add section" }),
     ).toBeEnabled()
     expect(screen.getByRole("button", { name: "Remove section" })).toBeEnabled()
+  })
+
+  it("shows the protected-block reason when a section removal would lower the plan too far", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockAll({ failProtectedBlockReduction: true }))
+    renderWorkspace()
+    for (let year = 1; year <= 4; year++) {
+      await chooseCurriculum(user, year)
+      const input = await screen.findByLabelText("Number of block sections")
+      await user.clear(input)
+      await user.type(input, "1")
+      await user.click(
+        screen.getByRole("button", {
+          name: year === 4 ? "Continue to review" : "Save and continue",
+        }),
+      )
+    }
+    await user.click(
+      screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "Remove section" }),
+    )
+
+    expect(
+      await screen.findByText(
+        "Cannot reduce 1th-year sections below 2 while IT102 has assigned schedule or enrollment data.",
+      ),
+    ).toBeInTheDocument()
   })
 
   it("offers a year-specific subject generation action when a year is empty", async () => {

@@ -1,5 +1,6 @@
 import {
   enrollmentDocumentFiltersSchema,
+  certificateOfRegistrationResponseSchema,
   paginatedEnrollmentDocumentsSchema,
   type EnrollmentDocument,
   type EnrollmentDocumentFilters,
@@ -51,4 +52,15 @@ export async function listEnrollmentDocuments(
     ),
     "enrollment document list",
   )
+}
+
+export async function getCertificateOfRegistration(
+  id: number,
+  signal?: AbortSignal,
+): Promise<import("@/features/schemas/enrollment-document-schema").CertificateOfRegistration> {
+  return parse(
+    certificateOfRegistrationResponseSchema,
+    await getAuthenticatedJson(`${ENROLLMENT_DOCUMENTS_PATH}/${id}`, signal),
+    "Certificate of Registration",
+  ).data
 }

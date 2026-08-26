@@ -86,7 +86,7 @@ const automationSteps: readonly AutomationStepDefinition[] = [
     step: "cashier_confirm_all",
     label: "Cashier confirms all",
     description:
-      "Confirms recorded payments, finalizes enrollment, and creates Digital COMs.",
+      "Confirms recorded payments, finalizes enrollment, and creates CORs.",
     role: "Accounting Staff",
   },
 ] as const

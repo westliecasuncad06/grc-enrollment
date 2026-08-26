@@ -46,12 +46,12 @@ final class EnrollmentsEndpointTest extends TestCase
         ]);
     }
 
-    private function makeCurriculum(): Curriculum
+    private function makeCurriculum(string $programCode = 'BSCS'): Curriculum
     {
-        $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'status' => ProgramStatus::Active]);
+        $program = Program::create(['code' => $programCode, 'name' => $programCode.' Program', 'status' => ProgramStatus::Active]);
 
         return Curriculum::create([
-            'program_id' => $program->id, 'name' => 'BSCS Curriculum',
+            'program_id' => $program->id, 'name' => $programCode.' Curriculum',
             'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active,
         ]);
     }
@@ -934,10 +934,31 @@ final class EnrollmentsEndpointTest extends TestCase
         // in the same step, folded into the same single audit row (see
         // AssessEnrollment's docblock), not a second AuditLog/Notification.
         $this->assertDatabaseCount('assessments', 1);
-        // makeEnrollment() sets total_units = 3.0; default config/fees.php
-        // is 450.00/unit + 350.00 + 200.00 + 500.00 misc = 1350.00 + 1050.00.
-        $response->assertJsonPath('data.assessment.total_amount', '2400.00');
-        $response->assertJsonCount(4, 'data.assessment.items');
+        // makeEnrollment() sets total_units = 3.0 and this fixture is BSCS.
+        // The reference schedule is PHP 200.00/unit plus PHP 4,200.00 in
+        // all-student fees; the PHP 500.00 Lab Fee 2 is deliberately BSIT-only.
+        $response->assertJsonPath('data.assessment.total_amount', '4800.00');
+        $response->assertJsonCount(15, 'data.assessment.items');
+    }
+
+    public function test_registrar_approval_adds_the_bsit_only_second_computer_lab_fee(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum('BSIT');
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.bsit-fees@grc.test');
+
+        $response = $this->withToken($staffToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertOk()
+            ->assertJsonPath('data.assessment.total_amount', '5300.00')
+            ->assertJsonCount(16, 'data.assessment.items')
+            ->assertJsonFragment([
+                'label' => 'Computer Lab Fee 2 (BSIT)',
+                'amount' => '500.00',
+            ]);
     }
 
     public function test_a_registrar_head_role_cannot_perform_registrar_approve(): void

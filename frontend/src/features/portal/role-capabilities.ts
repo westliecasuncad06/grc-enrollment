@@ -71,8 +71,8 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       ),
       portalModule(
         "digital-com",
-        "Digital COM",
-        "View and print your Digital Certificate of Matriculation.",
+        "Certificate of Registration",
+        "View and print your Certificate of Registration.",
         FileCheck2,
       ),
     ],
@@ -204,7 +204,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "honors",
         "Honors",
-        "See the future review space for validated academic distinctions.",
+        "Review the live Dean's List after faculty submit complete term grades.",
         Medal,
       ),
       portalModule(
@@ -274,6 +274,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         FileSearch,
       ),
       portalModule(
+        "cor-records",
+        "COR Records",
+        "Find and print a student's confirmed Certificate of Registration history.",
+        FileSearch,
+      ),
+      portalModule(
         "overrides-voids",
         "Overrides & Voids",
         "Void an already-approved enrollment before payment is confirmed, for authorized edge cases.",
@@ -288,7 +294,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "attrition-analytics",
         "Attrition Analytics",
-        "Preview advisory student-support analytics without automatic denials.",
+        "Review aggregate first-to-second semester enrollment attrition without student identities.",
         BarChart3,
       ),
       portalModule(
@@ -360,7 +366,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "enrollment-documents",
         "Enrollment Documents",
-        "View every student's generated enrollment documents, including the Digital COM.",
+        "View every student's generated Certificate of Registration.",
         FileText,
       ),
     ],
@@ -372,7 +378,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "payment-queue",
         "Payment Queue",
-        "Call the next student, confirm their payment, and generate the Digital COM.",
+        "Call the next student, confirm their payment, and generate the COR.",
         ReceiptText,
       ),
       portalModule(
@@ -380,6 +386,18 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Transaction History",
         "Review enrollment payments and balance-payment receipts.",
         ScrollText,
+      ),
+      portalModule(
+        "cor-records",
+        "COR Records",
+        "Find and print confirmed Certificates of Registration for prior enrollments.",
+        FileSearch,
+      ),
+      portalModule(
+        "queue-kiosk-access",
+        "Queue Kiosk Access",
+        "Review the shared kiosk credential and rotate it before a controlled handoff.",
+        Lock,
       ),
     ],
   },
@@ -407,6 +425,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ShieldCheck,
       ),
     ],
+  },
+  queue_kiosk: {
+    roleLabel: "Queue Kiosk",
+    welcomeHeading:
+      "This device identity is available only through the dedicated Queue Kiosk.",
+    modules: [],
   },
 }
 

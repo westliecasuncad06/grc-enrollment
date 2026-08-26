@@ -23,9 +23,9 @@ const document = {
   id: 1,
   enrollment_id: 9,
   student_number: "2026-0001",
-  document_type: "com",
-  document_type_label: "Certificate of Matriculation",
-  document_number: "COM000009",
+  document_type: "cor",
+  document_type_label: "Certificate of Registration",
+  document_number: "COR000009",
   generated_at: "2026-07-30T00:00:00Z",
 } as const
 
@@ -62,26 +62,26 @@ describe("StudentDigitalComWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("shows the student's generated Digital COM", async () => {
+  it("shows the student's generated Certificate of Registration", async () => {
     vi.stubGlobal("fetch", mockFetch())
     renderWithSession(<StudentDigitalComWorkspace />, {
       session: studentSession,
     })
 
-    expect(await screen.findByText(/COM000009/)).toBeInTheDocument()
+    expect(await screen.findByText(/COR000009/)).toBeInTheDocument()
     expect(
-      screen.getByText("Certificate of Matriculation"),
-    ).toBeInTheDocument()
+      screen.getAllByText("Certificate of Registration").length,
+    ).toBeGreaterThan(0)
   })
 
-  it("shows an empty message when no Digital COM has been generated", async () => {
+  it("shows an empty message when no Certificate of Registration has been generated", async () => {
     vi.stubGlobal("fetch", mockFetch([]))
     renderWithSession(<StudentDigitalComWorkspace />, {
       session: studentSession,
     })
 
     expect(
-      await screen.findByText("No Digital COM has been generated yet."),
+      await screen.findByText("No Certificate of Registration has been generated yet."),
     ).toBeInTheDocument()
   })
 
@@ -91,7 +91,7 @@ describe("StudentDigitalComWorkspace", () => {
       session: studentSession,
     })
 
-    await screen.findByText(/COM000009/)
+    await screen.findByText(/COR000009/)
     expect(await axe(container)).toHaveNoViolations()
   })
 })

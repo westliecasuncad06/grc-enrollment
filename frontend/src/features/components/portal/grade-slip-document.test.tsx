@@ -63,7 +63,7 @@ function gradeSlipFixture(
 }
 
 describe("GradeSlipDocument", () => {
-  it("renders the slip rows, totals, and GPA", () => {
+  it("renders the slip rows, totals, and GWA", () => {
     renderWithSession(<GradeSlipDocument slip={gradeSlipFixture()} />)
 
     expect(screen.getByText("CS101")).toBeInTheDocument()
@@ -84,7 +84,7 @@ describe("GradeSlipDocument", () => {
     renderWithSession(<GradeSlipDocument slip={gradeSlipFixture()} />)
 
     expect(
-      screen.getByText(/1 subject.*excluded from the GPA/),
+      screen.getByText(/1 subject.*excluded from the GWA/),
     ).toBeInTheDocument()
   })
 

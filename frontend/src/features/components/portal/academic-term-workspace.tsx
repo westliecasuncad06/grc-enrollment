@@ -8,6 +8,7 @@ import { useAuth } from "@/features/auth/use-auth"
 import { ArchiveTermDialog } from "@/features/components/portal/archive-term-dialog"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { EditDraftAcademicTermDialog } from "@/features/components/portal/edit-draft-academic-term-dialog"
 import { EnrollmentScheduleCard } from "@/features/components/portal/enrollment-schedule-card"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
@@ -158,14 +159,19 @@ export function AcademicTermWorkspace() {
           {currentTerm ? (
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm">
-                Current: <strong>{formatAcademicTerm(currentTerm)}</strong> · {currentTerm.status_label}
+                Current: <strong>{formatAcademicTerm(currentTerm)}</strong> ·{" "}
+                {currentTerm.status_label}
               </p>
               {(currentTerm.status === "semester_ongoing" ||
                 currentTerm.status === "semester_closed") && (
                 <ArchiveTermDialog
                   term={currentTerm}
                   trigger={
-                        <Button type="button" variant="outline" className="w-full sm:w-auto">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                    >
                       Archive current semester
                     </Button>
                   }
@@ -182,18 +188,19 @@ export function AcademicTermWorkspace() {
           )}
         </CardContent>
       </Card>
-      {currentTerm && currentTerm.status !== "semester_closed" && currentTerm.status !== "archived" && (
-        <EnrollmentScheduleCard currentTerm={currentTerm} />
-      )}
+      {currentTerm &&
+        currentTerm.status !== "semester_closed" &&
+        currentTerm.status !== "archived" && (
+          <EnrollmentScheduleCard currentTerm={currentTerm} />
+        )}
       {!termsQuery.isPending && !hasNonArchivedTerm && (
         <Card>
           <CardHeader>
             <CardTitle>Start the first school year</CardTitle>
             <CardDescription>
               No school year exists yet. Every later term is created by
-              archiving the one before it — this form only runs once, to
-              start the very first cycle. The new term starts in Draft
-              status.
+              archiving the one before it — this form only runs once, to start
+              the very first cycle. The new term starts in Draft status.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -303,7 +310,11 @@ export function AcademicTermWorkspace() {
                     </FieldError>
                   </Field>
                 </div>
-                <Button type="submit" className="w-full sm:w-auto" disabled={mutation.isPending}>
+                <Button
+                  type="submit"
+                  className="w-full sm:w-auto"
+                  disabled={mutation.isPending}
+                >
                   {mutation.isPending ? "Creating term" : "Create school year"}
                 </Button>
               </FieldGroup>
@@ -334,8 +345,17 @@ export function AcademicTermWorkspace() {
                 key: "lifecycle_action",
                 header: "Action",
                 render: (term) =>
-                  term.status === "semester_ongoing" ||
-                  term.status === "semester_closed" ? (
+                  term.status === "draft" ? (
+                    <EditDraftAcademicTermDialog
+                      term={term}
+                      trigger={
+                        <Button type="button" size="sm" variant="outline">
+                          Edit draft term
+                        </Button>
+                      }
+                    />
+                  ) : term.status === "semester_ongoing" ||
+                    term.status === "semester_closed" ? (
                     <ArchiveTermDialog
                       term={term}
                       trigger={
@@ -354,7 +374,7 @@ export function AcademicTermWorkspace() {
                 render: (term) =>
                   term.enrollment_opens_at && term.enrollment_closes_at
                     ? `${term.enrollment_opens_at} – ${term.enrollment_closes_at}`
-                  : "Not set",
+                    : "Not set",
               },
             ]}
             renderCard={(term) => {
@@ -362,6 +382,7 @@ export function AcademicTermWorkspace() {
               const canArchive =
                 term.status === "semester_ongoing" ||
                 term.status === "semester_closed"
+              const canEditDraft = term.status === "draft"
               const enrollmentWindow =
                 term.enrollment_opens_at && term.enrollment_closes_at
                   ? `${term.enrollment_opens_at} – ${term.enrollment_closes_at}`
@@ -380,15 +401,37 @@ export function AcademicTermWorkspace() {
                   <CardContent className="grid gap-3">
                     <dl className="grid gap-2 text-sm">
                       <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-2">
-                        <dt className="text-muted-foreground">Enrollment window</dt>
-                        <dd className="min-w-0 text-right font-medium">{enrollmentWindow}</dd>
+                        <dt className="text-muted-foreground">
+                          Enrollment window
+                        </dt>
+                        <dd className="min-w-0 text-right font-medium">
+                          {enrollmentWindow}
+                        </dd>
                       </div>
                     </dl>
+                    {canEditDraft && (
+                      <EditDraftAcademicTermDialog
+                        term={term}
+                        trigger={
+                          <Button
+                            type="button"
+                            className="w-full"
+                            variant="outline"
+                          >
+                            Edit draft term
+                          </Button>
+                        }
+                      />
+                    )}
                     {canArchive && (
                       <ArchiveTermDialog
                         term={term}
                         trigger={
-                          <Button type="button" className="w-full" variant="outline">
+                          <Button
+                            type="button"
+                            className="w-full"
+                            variant="outline"
+                          >
                             Archive term
                           </Button>
                         }

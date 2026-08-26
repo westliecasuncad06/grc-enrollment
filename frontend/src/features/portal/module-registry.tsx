@@ -32,6 +32,10 @@ import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-ope
 import { ItControlStudentsWorkspace } from "@/features/components/portal/it-control-students-workspace"
 import { ItControlFacultyWorkspace } from "@/features/components/portal/it-control-faculty-workspace"
 import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
+import { QueueKioskAccessWorkspace } from "@/features/components/portal/queue-kiosk-access-workspace"
+import { AttritionAnalyticsWorkspace } from "@/features/components/portal/attrition-analytics-workspace"
+import { HonorsWorkspace } from "@/features/components/portal/honors-workspace"
+import { CashierCorRecordsWorkspace } from "@/features/components/portal/cashier-cor-records-workspace"
 
 export type ConnectedModuleId =
   | "student-accounts"
@@ -57,6 +61,8 @@ export type ConnectedModuleId =
   | "overrides-voids"
   | "payment-queue"
   | "payment-records"
+  | "cor-records"
+  | "queue-kiosk-access"
   | "grades"
   | "digital-com"
   | "enrollment-change-requests"
@@ -74,6 +80,8 @@ export type ConnectedModuleId =
   | "it-control-students"
   | "it-control-faculty"
   | "it-control-enrollment-override"
+  | "attrition-analytics"
+  | "honors"
 
 export type PortalModuleComponent = ComponentType
 
@@ -101,6 +109,8 @@ export const connectedModuleIds = [
   "overrides-voids",
   "payment-queue",
   "payment-records",
+  "cor-records",
+  "queue-kiosk-access",
   "grades",
   "digital-com",
   "enrollment-change-requests",
@@ -118,6 +128,8 @@ export const connectedModuleIds = [
   "it-control-students",
   "it-control-faculty",
   "it-control-enrollment-override",
+  "attrition-analytics",
+  "honors",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const studentAccountsWorkspace: PortalModuleComponent = () => (
@@ -213,6 +225,8 @@ export const connectedModuleRegistry: Readonly<
   "overrides-voids": overridesVoidsWorkspace,
   "payment-queue": AccountingPaymentWorkspace,
   "payment-records": PaymentRecordsWorkspace,
+  "cor-records": CashierCorRecordsWorkspace,
+  "queue-kiosk-access": QueueKioskAccessWorkspace,
   grades: StudentGradesWorkspace,
   "digital-com": StudentDigitalComWorkspace,
   "enrollment-change-requests": EnrollmentChangeRequestsWorkspace,
@@ -230,6 +244,8 @@ export const connectedModuleRegistry: Readonly<
   "it-control-students": ItControlStudentsWorkspace,
   "it-control-faculty": ItControlFacultyWorkspace,
   "it-control-enrollment-override": enrollmentOverrideWorkspace,
+  "attrition-analytics": AttritionAnalyticsWorkspace,
+  honors: HonorsWorkspace,
 }
 
 export function isConnectedModuleId(

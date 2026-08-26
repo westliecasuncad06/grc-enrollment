@@ -46,6 +46,7 @@ const expectedModuleIds = {
     "academic-terms",
     "grade-approvals",
     "academic-transcripts",
+    "cor-records",
     "overrides-voids",
     "enrollment-change-requests",
     "attrition-analytics",
@@ -63,12 +64,18 @@ const expectedModuleIds = {
     "enrollment-change-requests",
     "enrollment-documents",
   ],
-  accounting_staff: ["payment-queue", "payment-records"],
+  accounting_staff: [
+    "payment-queue",
+    "payment-records",
+    "cor-records",
+    "queue-kiosk-access",
+  ],
   it_admin: [
     "it-control-students",
     "it-control-faculty",
     "it-control-enrollment-override",
   ],
+  queue_kiosk: [],
 } as const
 
 describe("rolePortalDefinitions", () => {

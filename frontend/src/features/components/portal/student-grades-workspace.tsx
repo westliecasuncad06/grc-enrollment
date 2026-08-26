@@ -5,7 +5,7 @@ import { AcademicRecordView } from "@/features/components/portal/academic-record
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 
 /**
- * The student's own Grades module — separate from Digital COM (see
+ * The student's own Grades module — separate from the COR (see
  * `StudentDigitalComWorkspace`) since the two are unrelated records that
  * used to share one page and one failure boundary.
  */

@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Domain\Academic\GradeSlip;
+use App\Domain\Academic\SubjectGwaExclusionRule;
 use App\Models\AcademicGrade;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -108,7 +109,8 @@ final class GradeSlipResource extends JsonResource
             'professor_name' => $section?->professor?->name,
             'status' => $grade->status->value,
             'status_label' => $grade->status->label(),
-            'counts_toward_gpa' => $grade->mark?->countsTowardGpa() ?? false,
+            'counts_toward_gpa' => ($grade->mark?->countsTowardGpa() ?? false)
+                && SubjectGwaExclusionRule::countsTowardGwa($grade->subject->code),
         ];
     }
 }

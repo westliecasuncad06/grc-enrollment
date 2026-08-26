@@ -46,6 +46,27 @@ const waitingTicket = {
   created_at: "2026-07-30T00:10:00Z",
 } as const
 
+const assessmentItems = [
+  {
+    id: 101,
+    category: "tuition",
+    category_label: "Tuition",
+    label: "Tuition",
+    quantity: "10.50",
+    unit_amount: "200.00",
+    amount: "2100.00",
+  },
+  {
+    id: 102,
+    category: "miscellaneous",
+    category_label: "Miscellaneous",
+    label: "Registration",
+    quantity: null,
+    unit_amount: null,
+    amount: "200.00",
+  },
+] as const
+
 const pendingPaymentEnrollment = {
   type: "enrollment",
   id: 9,
@@ -70,7 +91,7 @@ const pendingPaymentEnrollment = {
     total_amount: "5775.00",
     currency: "PHP",
     assessed_at: "2026-07-30T00:00:00Z",
-    items: [],
+    items: assessmentItems,
   },
 } as const
 
@@ -209,6 +230,24 @@ function mockRoutes(
       return Promise.resolve(
         new Response(JSON.stringify({ data: studentAccount })),
       )
+    if (target.includes("/enrollments/9/assessment") && init?.method === "PATCH")
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              ...pendingPaymentEnrollment,
+              assessment: {
+                ...pendingPaymentEnrollment.assessment,
+                total_amount: "2925.00",
+                items: [
+                  { ...assessmentItems[0], unit_amount: "250.00", amount: "2625.00" },
+                  assessmentItems[1],
+                ],
+              },
+            },
+          }),
+        ),
+      )
     if (target.includes("/enrollments") && init?.method === "POST")
       return Promise.resolve(
         new Response(
@@ -222,8 +261,8 @@ function mockRoutes(
                 confirmed_at: "2026-07-30T00:00:00Z",
               },
               document: {
-                document_type: "com",
-                document_number: "COM000009",
+                document_type: "cor",
+                document_number: "COR000009",
                 generated_at: "2026-07-30T00:00:00Z",
               },
             },
@@ -287,6 +326,42 @@ describe("AccountingPaymentWorkspace", () => {
 
     const waitingRow = await screen.findByRole("table", { name: "Waiting" })
     expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
+  })
+
+  it("lets Accounting adjust the pending assessment before confirming payment", async () => {
+    fetchMock.mockImplementation(mockRoutes())
+    const user = userEvent.setup()
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await user.click(await screen.findByRole("button", { name: "Adjust fees" }))
+    expect(screen.getByText("Adjust fee assessment")).toBeInTheDocument()
+    await user.clear(screen.getByLabelText("Tuition rate per unit"))
+    await user.type(screen.getByLabelText("Tuition rate per unit"), "250.00")
+    await user.type(
+      screen.getByLabelText("Adjustment reason"),
+      "Applied approved student fee adjustment.",
+    )
+    await user.click(screen.getByRole("button", { name: "Save adjusted fees" }))
+
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/enrollments/9/assessment"),
+        expect.objectContaining({ method: "PATCH" }),
+      ),
+    )
+    const call = fetchMock.mock.calls.find(
+      ([target, init]) =>
+        url(target).includes("/enrollments/9/assessment") && init?.method === "PATCH",
+    )
+    expect(JSON.parse(call?.[1]?.body as string)).toEqual({
+      reason: "Applied approved student fee adjustment.",
+      items: [
+        { id: 101, unit_amount: "250.00" },
+        { id: 102, amount: "200.00" },
+      ],
+    })
   })
 
   it("shows a cut-off banner and lets the cashier resume the queue", async () => {
@@ -556,7 +631,7 @@ describe("AccountingPaymentWorkspace", () => {
     })
   })
 
-  it("confirms a payment pre-filled with the assessed total and shows the generated Digital COM", async () => {
+  it("confirms a payment pre-filled with the assessed total and shows the generated COR", async () => {
     const user = userEvent.setup()
     let paymentRequest: RequestInit | undefined
     fetchMock.mockImplementation((input, init) => {
@@ -585,7 +660,7 @@ describe("AccountingPaymentWorkspace", () => {
       within(dialog).getByRole("button", { name: "Confirm payment" }),
     )
 
-    expect((await screen.findAllByText(/COM000009/)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/COR000009/)).length).toBeGreaterThan(0)
     await vi.waitFor(() => expect(paymentRequest).toBeDefined())
     expect(JSON.parse(paymentRequest?.body as string)).toEqual({
       promissory_note_on_file: true,

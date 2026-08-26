@@ -5,6 +5,7 @@ import {
 } from "@/features/schemas/auth-schema"
 import {
   ApiClientError,
+  type AuthenticatedRequestOptions,
   getAuthenticatedJson,
   postAuthenticatedJson,
   postJson,
@@ -54,8 +55,9 @@ export async function login(
 
 export async function fetchCurrentUser(
   signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
 ): Promise<AuthenticatedUser> {
-  const payload = await getAuthenticatedJson(AUTH_ME_PATH, signal)
+  const payload = await getAuthenticatedJson(AUTH_ME_PATH, signal, options)
   const parsed = userEnvelopeSchema.safeParse(payload)
 
   if (!parsed.success) {
@@ -65,6 +67,9 @@ export async function fetchCurrentUser(
   return parsed.data.data
 }
 
-export async function logout(signal?: AbortSignal): Promise<void> {
-  await postAuthenticatedJson(AUTH_LOGOUT_PATH, undefined, signal)
+export async function logout(
+  signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
+): Promise<void> {
+  await postAuthenticatedJson(AUTH_LOGOUT_PATH, undefined, signal, options)
 }

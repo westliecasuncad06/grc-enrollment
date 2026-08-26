@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
+import { renderWithSession } from "@/tests/render-app"
 
 const baseEnrollment: Enrollment = {
   type: "enrollment",
@@ -28,118 +30,50 @@ const baseEnrollment: Enrollment = {
   assessment: null,
 }
 
+const liveQueueView = {
+  type: "student_queue_view",
+  stage: "pending_payment",
+  can_claim: false,
+  ticket: {
+    ticket_number: "Q-LIVE-007",
+    status: "waiting",
+    status_label: "Waiting",
+    priority: "regular",
+    priority_label: "Regular",
+    position: 2,
+  },
+  now_serving_ticket_number: "Q-LIVE-005",
+  upcoming_ticket_numbers: ["Q-LIVE-006", "Q-LIVE-007"],
+  cut_off_today: false,
+} as const
+
 describe("EnrollmentQueuePaymentPanel", () => {
+  const fetchMock = vi.fn<typeof fetch>()
+
+  beforeEach(() => {
+    fetchMock.mockReset()
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ data: liveQueueView }))),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
   it("shows the enrollment id and status", () => {
-    render(<EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />)
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
+    )
 
     expect(screen.getByText("Enrollment #9")).toBeInTheDocument()
     expect(screen.getByText("Pending Registrar Approval")).toBeInTheDocument()
   })
 
-  it("shows a waiting message when pending registrar approval with no ticket", () => {
-    render(<EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />)
-
-    expect(
-      screen.getByText("Waiting for registrar approval — no queue number yet"),
-    ).toBeInTheDocument()
-  })
-
-  it("shows the queue ticket once one is issued", () => {
-    render(
-      <EnrollmentQueuePaymentPanel
-        enrollment={{
-          ...baseEnrollment,
-          status: "pending_payment",
-          registrar_decided_at: "2026-07-31T00:00:00Z",
-          queue_ticket: {
-            ticket_number: "Q000001",
-            queue_date: "2026-07-31",
-            status: "waiting",
-            status_label: "Waiting",
-            priority: "regular",
-            priority_label: "Regular",
-            position: 0,
-          },
-        }}
-      />,
-    )
-
-    expect(screen.getByText(/Q000001/)).toBeInTheDocument()
-    expect(screen.getByText(/Waiting/)).toBeInTheDocument()
-  })
-
-  it("shows how many students are ahead when waiting", () => {
-    render(
-      <EnrollmentQueuePaymentPanel
-        enrollment={{
-          ...baseEnrollment,
-          status: "pending_payment",
-          registrar_decided_at: "2026-07-31T00:00:00Z",
-          queue_ticket: {
-            ticket_number: "Q000003",
-            queue_date: "2026-07-31",
-            status: "waiting",
-            status_label: "Waiting",
-            priority: "regular",
-            priority_label: "Regular",
-            position: 3,
-          },
-        }}
-      />,
-    )
-
-    expect(screen.getByText("3 students are ahead of you.")).toBeInTheDocument()
-  })
-
-  it("shows a next-in-line message when nobody is ahead", () => {
-    render(
-      <EnrollmentQueuePaymentPanel
-        enrollment={{
-          ...baseEnrollment,
-          status: "pending_payment",
-          registrar_decided_at: "2026-07-31T00:00:00Z",
-          queue_ticket: {
-            ticket_number: "Q000004",
-            queue_date: "2026-07-31",
-            status: "waiting",
-            status_label: "Waiting",
-            priority: "regular",
-            priority_label: "Regular",
-            position: 0,
-          },
-        }}
-      />,
-    )
-
-    expect(screen.getByText("You're next in line.")).toBeInTheDocument()
-  })
-
-  it("does not show a position message once the ticket is being served", () => {
-    render(
-      <EnrollmentQueuePaymentPanel
-        enrollment={{
-          ...baseEnrollment,
-          status: "pending_payment",
-          registrar_decided_at: "2026-07-31T00:00:00Z",
-          queue_ticket: {
-            ticket_number: "Q000005",
-            queue_date: "2026-07-31",
-            status: "serving",
-            status_label: "Serving",
-            priority: "regular",
-            priority_label: "Regular",
-            position: null,
-          },
-        }}
-      />,
-    )
-
-    expect(screen.queryByText(/ahead of you/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/next in line/)).not.toBeInTheDocument()
-  })
-
   it("shows the assessed amount due and its breakdown once assessed", () => {
-    render(
+    renderWithSession(
       <EnrollmentQueuePaymentPanel
         enrollment={{
           ...baseEnrollment,
@@ -179,13 +113,15 @@ describe("EnrollmentQueuePaymentPanel", () => {
   })
 
   it("does not show an amount-due section before assessment", () => {
-    render(<EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />)
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
+    )
 
     expect(screen.queryByText("Amount due")).not.toBeInTheDocument()
   })
 
   it("shows the payment confirmation date once paid", () => {
-    render(
+    renderWithSession(
       <EnrollmentQueuePaymentPanel
         enrollment={{
           ...baseEnrollment,
@@ -203,10 +139,103 @@ describe("EnrollmentQueuePaymentPanel", () => {
   })
 
   it("has no detectable accessibility violations", async () => {
-    const { container } = render(
+    const { container } = renderWithSession(
       <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
     )
 
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("replaces the enrollment snapshot ticket with the current live queue view", async () => {
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel
+        enrollment={{
+          ...baseEnrollment,
+          status: "pending_payment",
+          registrar_decided_at: "2026-07-31T00:00:00Z",
+          queue_ticket: {
+            ticket_number: "Q-STALE-001",
+            queue_date: "2026-07-31",
+            status: "waiting",
+            status_label: "Waiting",
+            priority: "regular",
+            priority_label: "Regular",
+            position: 0,
+          },
+        }}
+      />,
+    )
+
+    const queueRegion = await screen.findByRole("region", {
+      name: "Your Cashier queue",
+    })
+    expect(
+      within(queueRegion).getAllByText("Q-LIVE-007").length,
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText("Q-STALE-001")).not.toBeInTheDocument()
+    expect(within(queueRegion).getByText("Q-LIVE-005")).toBeInTheDocument()
+  })
+
+  it("makes the live queue loading and retryable failure states explicit", async () => {
+    const user = userEvent.setup()
+    let resolveQueue: ((response: Response) => void) | undefined
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveQueue = resolve
+        }),
+    )
+
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
+    )
+
+    expect(screen.getByText("Loading your Cashier queue…")).toBeInTheDocument()
+
+    await waitFor(() => expect(resolveQueue).toBeTypeOf("function"))
+
+    resolveQueue?.(
+      new Response(JSON.stringify({ message: "Unavailable" }), {
+        status: 400,
+      }),
+    )
+    expect(
+      await screen.findByRole("button", { name: "Retry queue status" }),
+    ).toBeInTheDocument()
+
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(new Response(JSON.stringify({ data: liveQueueView }))),
+    )
+    await user.click(screen.getByRole("button", { name: "Retry queue status" }))
+    expect(
+      await screen.findByRole("region", { name: "Your Cashier queue" }),
+    ).toBeInTheDocument()
+  })
+
+  it("guides claim-eligible students to the Cashier kiosk without a claim action", async () => {
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              ...liveQueueView,
+              can_claim: true,
+              ticket: null,
+            },
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
+    )
+
+    expect(
+      await screen.findByText("Claim your number at the Cashier kiosk."),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /claim/i }),
+    ).not.toBeInTheDocument()
   })
 })

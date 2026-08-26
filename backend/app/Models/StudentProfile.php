@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property AdmissionStatus $admission_status
  * @property AcademicStanding $academic_standing
  * @property ?FinancialStatus $financial_status
+ * @property bool $is_demo_account
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read User $user
@@ -48,6 +49,7 @@ final class StudentProfile extends Model
         'admission_status',
         'academic_standing',
         'financial_status',
+        'is_demo_account',
     ];
 
     /**
@@ -62,6 +64,7 @@ final class StudentProfile extends Model
             'admission_status' => AdmissionStatus::class,
             'academic_standing' => AcademicStanding::class,
             'financial_status' => FinancialStatus::class,
+            'is_demo_account' => 'boolean',
         ];
     }
 

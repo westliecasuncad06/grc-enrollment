@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EnrollmentDocumentTypeCast;
 use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $document_number
  * @property ?string $storage_path
  * @property ?string $content_hash
+ * @property ?array<string, mixed> $snapshot
  * @property CarbonImmutable $generated_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -30,6 +32,7 @@ final class EnrollmentDocument extends Model
         'document_number',
         'storage_path',
         'content_hash',
+        'snapshot',
         'generated_at',
     ];
 
@@ -39,7 +42,8 @@ final class EnrollmentDocument extends Model
     protected function casts(): array
     {
         return [
-            'document_type' => EnrollmentDocumentType::class,
+            'document_type' => EnrollmentDocumentTypeCast::class,
+            'snapshot' => 'array',
             'generated_at' => 'immutable_datetime',
         ];
     }
@@ -52,20 +56,26 @@ final class EnrollmentDocument extends Model
         return $this->belongsTo(Enrollment::class);
     }
 
+    /** The UI never exposes a legacy COM prefix after the artifact rename. */
+    public function certificateNumber(): string
+    {
+        return preg_replace('/^COM/', 'COR', $this->document_number) ?? $this->document_number;
+    }
+
     /**
-     * FR-FIN-010: a Student sees only their own generated documents; the
-     * Registrar Head, as keeper of the official record, sees every one.
-     * Registrar Staff gets the same broad read access per PRD §3.8 ("view
-     * permitted ... enrollment documents"), widened in Phase 7b Task 3. No
-     * other role reads this endpoint — `EnrollmentDocumentPolicy::viewAny`
-     * restricts every other role to zero rows before this scope ever runs.
+     * A Student sees only their own CORs. Accounting Staff, Registrar Head,
+     * and Registrar Staff may read the official COR history.
      *
      * @param  Builder<EnrollmentDocument>  $query
      * @return Builder<EnrollmentDocument>
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if (in_array($user->role, [UserRole::RegistrarHead, UserRole::RegistrarStaff], true)) {
+        if (in_array($user->role, [
+            UserRole::AccountingStaff,
+            UserRole::RegistrarHead,
+            UserRole::RegistrarStaff,
+        ], true)) {
             return $query;
         }
 

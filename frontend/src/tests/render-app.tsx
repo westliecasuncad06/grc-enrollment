@@ -81,7 +81,7 @@ export function renderWithSession(
     route = "/",
     routeParams = {},
     session = testSession,
-    signIn = () => Promise.resolve(),
+    signIn = () => Promise.resolve(testSession),
     signOut = () => undefined,
     status = "authenticated",
     storageAvailable = true,

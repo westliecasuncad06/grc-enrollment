@@ -5,7 +5,10 @@ import {
   createAuthTokenStore,
   type TokenStorageLike,
 } from "@/features/auth/auth-token"
-import { setAuthTokenProvider } from "@/features/services/api-client"
+import {
+  setAuthTokenProvider,
+  setUnauthorizedHandler,
+} from "@/features/services/api-client"
 
 function createMemoryStorage(): TokenStorageLike {
   const values = new Map<string, string>()
@@ -29,6 +32,15 @@ const validUser = {
   role: "student",
   role_label: "Student",
   status: "active",
+}
+
+const queueKioskUser = {
+  ...validUser,
+  id: 99,
+  name: "Queue Kiosk",
+  email: "queue-kiosk.seed@grc.test",
+  role: "queue_kiosk" as const,
+  role_label: "Queue Kiosk",
 }
 
 describe("createApiAuthGateway", () => {
@@ -108,6 +120,104 @@ describe("createApiAuthGateway", () => {
     await expect(
       gateway.signIn({ email: "student.seed@grc.test", password: "wrong" }),
     ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" })
+  })
+
+  it("revokes a successful queue kiosk login without persisting its token to the portal", async () => {
+    const tokenStore = createAuthTokenStore(createMemoryStorage())
+    const gateway = createApiAuthGateway(tokenStore)
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              type: "auth-session",
+              token: "2|kiosk-token",
+              token_type: "Bearer",
+              expires_at: null,
+              user: queueKioskUser,
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    try {
+      await expect(
+        gateway.signIn({ email: queueKioskUser.email, password: "secret" }),
+      ).rejects.toMatchObject({
+        code: "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL",
+      })
+
+      expect(tokenStore.read()).toBeNull()
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "http://127.0.0.1:8000/api/v1/auth/logout",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer 2|kiosk-token",
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+          credentials: "omit",
+          cache: "no-store",
+          signal: undefined,
+        },
+      )
+    } finally {
+      fetchMock.mockReset()
+    }
+  })
+
+  it("rejects a kiosk sign-in without invoking the portal handler when its revoke returns 401", async () => {
+    const onUnauthorized = vi.fn()
+    const gateway = createApiAuthGateway(
+      createAuthTokenStore(createMemoryStorage()),
+    )
+    setUnauthorizedHandler(onUnauthorized)
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              type: "auth-session",
+              token: "2|kiosk-token",
+              token_type: "Bearer",
+              expires_at: null,
+              user: queueKioskUser,
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "UNAUTHENTICATED",
+              message: "Authentication is required.",
+              errors: {},
+              request_id: "req-kiosk-revoke",
+            },
+          }),
+          { status: 401 },
+        ),
+      )
+
+    try {
+      await expect(
+        gateway.signIn({ email: queueKioskUser.email, password: "secret" }),
+      ).rejects.toMatchObject({
+        code: "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL",
+      })
+
+      expect(onUnauthorized).not.toHaveBeenCalled()
+    } finally {
+      fetchMock.mockReset()
+      setUnauthorizedHandler(() => undefined)
+    }
   })
 
   it("restore returns null immediately when no token is stored", async () => {

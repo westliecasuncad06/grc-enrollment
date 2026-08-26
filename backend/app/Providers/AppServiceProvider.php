@@ -4,10 +4,13 @@ namespace App\Providers;
 
 use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Policies\AcademicRecordPolicy;
+use App\Policies\AttritionReportPolicy;
 use App\Policies\DashboardPolicy;
 use App\Policies\EligibleSubjectPolicy;
 use App\Policies\FacultyMemberPolicy;
+use App\Policies\HonorsReportPolicy;
 use App\Policies\ItControlPolicy;
+use App\Policies\SectionPolicy;
 use App\Policies\StuckEnrollmentPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -45,5 +48,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-analytics', [DashboardPolicy::class, 'viewAnalytics']);
         Gate::define('view-stuck-enrollments', [StuckEnrollmentPolicy::class, 'viewAny']);
         Gate::define('view-academic-record', [AcademicRecordPolicy::class, 'view']);
+        Gate::define('view-attrition-report', [AttritionReportPolicy::class, 'view']);
+        Gate::define('view-honors-report', [HonorsReportPolicy::class, 'view']);
+        Gate::define('view-section-grade-submission', [SectionPolicy::class, 'viewGradeSubmission']);
     }
 }

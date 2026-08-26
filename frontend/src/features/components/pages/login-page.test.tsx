@@ -122,6 +122,29 @@ describe("LoginPage", () => {
     expect(document.body).not.toHaveTextContent("incorrect-password")
   })
 
+  it("directs an authenticated kiosk identity to the queue device portal", async () => {
+    const user = userEvent.setup()
+    renderLogin(
+      "/login",
+      createStubGateway({
+        signIn: () =>
+          Promise.reject(new AuthError("QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL")),
+      }),
+    )
+    await enterCredentials(user)
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+    expect(
+      await screen.findByRole("link", { name: /queue kiosk/i }),
+    ).toHaveAttribute("href", "/queue")
+    expect(
+      screen.queryByText(
+        "The email or password you entered was not recognized.",
+      ),
+    ).not.toBeInTheDocument()
+  })
+
   it("reports an unexpected failure with the same generic message", async () => {
     const user = userEvent.setup()
     renderLogin(

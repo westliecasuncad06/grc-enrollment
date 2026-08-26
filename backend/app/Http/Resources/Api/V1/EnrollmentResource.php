@@ -56,7 +56,7 @@ final class EnrollmentResource extends JsonResource
      *         total_amount: ?string,
      *         currency: string,
      *         assessed_at: string,
-     *         items: list<array{category: string, category_label: string, label: string, quantity: ?string, unit_amount: ?string, amount: ?string}>
+     *         items: list<array{id: int, category: string, category_label: string, label: string, quantity: ?string, unit_amount: ?string, amount: ?string}>
      *     }
      * }
      */
@@ -118,6 +118,7 @@ final class EnrollmentResource extends JsonResource
                 'items' => array_values(
                     $assessment->items
                         ->map(fn (AssessmentItem $item): array => [
+                            'id' => $item->id,
                             'category' => $item->category->value,
                             'category_label' => $item->category->label(),
                             'label' => $item->label,

@@ -12,6 +12,12 @@ import Link from "next/link"
 import { useAuth } from "@/features/auth/use-auth"
 import { GrcBrand } from "@/features/components/common/grc-brand"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
+import { StudentQueueLivePanel } from "@/features/components/queue/student-queue-live-panel"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -26,6 +32,7 @@ import {
 import { useEnrollmentScheduleQuery } from "@/features/hooks/use-enrollment-windows"
 import { useHealthQuery } from "@/features/hooks/use-health-query"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
+import { useStudentQueueQuery } from "@/features/hooks/use-student-queue"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import {
@@ -45,6 +52,10 @@ export function GrcConnectPage() {
     activeAcademicTerm?.id ?? null,
     isStudent,
   )
+  const studentQueueQuery = useStudentQueueQuery({
+    viewerId: session?.userId ?? null,
+    enabled: isStudent,
+  })
 
   if (!session) {
     return null
@@ -184,6 +195,37 @@ export function GrcConnectPage() {
             })}
           </div>
         </section>
+      )}
+
+      {isStudent && (
+        <>
+          {studentQueueQuery.isPending ? (
+            <Alert>
+              <AlertTitle>Loading queue status</AlertTitle>
+              <AlertDescription>Loading your Cashier queue…</AlertDescription>
+            </Alert>
+          ) : studentQueueQuery.isError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Queue status unavailable</AlertTitle>
+              <AlertDescription>
+                Your live Cashier queue could not be loaded. Try again to
+                refresh it.
+              </AlertDescription>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void studentQueueQuery.refetch()}
+              >
+                Retry queue status
+              </Button>
+            </Alert>
+          ) : studentQueueQuery.data ? (
+            <StudentQueueLivePanel
+              queue={studentQueueQuery.data}
+              mode="compact"
+            />
+          ) : null}
+        </>
       )}
 
       <section className="portal-status-grid" aria-label="GRC Connect status">

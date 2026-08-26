@@ -23,6 +23,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
@@ -144,5 +145,125 @@ final class SaveSectionPlanSubmitTest extends TestCase
             SectionPlanStatus::Submitted,
             AcademicTermSectionPlan::query()->where('curriculum_id', $curriculum->id)->where('year_level', 1)->sole()->status,
         );
+    }
+
+    public function test_submitting_restores_a_saved_count_that_would_remove_a_scheduled_block(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $chair = $this->makeChair();
+        $subject = $this->placeSubject($curriculum, 'ITC');
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id,
+            'college' => 'ccs', 'year_level' => 1, 'section_count' => 2,
+            'students_per_block' => 40, 'status' => SectionPlanStatus::Draft,
+        ]);
+        $context = new AuditRequestContext('submit-test', null);
+
+        app(SaveSectionPlan::class)->release($term, $curriculum->id, $chair, $context, 1);
+
+        $scheduledBlock = Section::query()
+            ->where('subject_id', $subject->id)
+            ->where('section_code', 'IT102')
+            ->sole();
+        $scheduledBlock->update([
+            'schedule_days' => 'M',
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '10:00:00',
+            'room' => 'Room 101',
+            'modality' => SectionModality::FaceToFace,
+        ]);
+
+        // Reproduces the persisted mismatch caused when an earlier remove
+        // attempt saved the lower count before release rejected it.
+        $plan->update(['section_count' => 1]);
+
+        $proposal = app(SaveSectionPlan::class)->submit(
+            $term, $curriculum->id, $chair, $context,
+        );
+
+        self::assertSame('draft', $proposal->status->value);
+        self::assertSame(2, $plan->refresh()->section_count);
+        self::assertDatabaseHas('sections', [
+            'id' => $scheduledBlock->id,
+            'section_code' => 'IT102',
+            'room' => 'Room 101',
+        ]);
+    }
+
+    public function test_saving_a_lower_count_keeps_a_scheduled_block_protected_before_it_can_persist(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $chair = $this->makeChair();
+        $subject = $this->placeSubject($curriculum, 'ITC');
+        $plan = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id,
+            'college' => 'ccs', 'year_level' => 1, 'section_count' => 2,
+            'students_per_block' => 40, 'status' => SectionPlanStatus::Draft,
+        ]);
+        $context = new AuditRequestContext('submit-test', null);
+        $action = app(SaveSectionPlan::class);
+
+        $action->release($term, $curriculum->id, $chair, $context, 1);
+        Section::query()
+            ->where('subject_id', $subject->id)
+            ->where('section_code', 'IT102')
+            ->sole()
+            ->update([
+                'schedule_days' => 'M',
+                'starts_at_time' => '08:00:00',
+                'ends_at_time' => '10:00:00',
+                'room' => 'Room 101',
+                'modality' => SectionModality::FaceToFace,
+            ]);
+
+        try {
+            $action->save($term, $curriculum->id, $chair, [1 => 1, 2 => 0, 3 => 0, 4 => 0]);
+            self::fail('Expected a lower count that would remove IT102 to be rejected before it persists.');
+        } catch (ValidationException $exception) {
+            self::assertSame(
+                'Cannot reduce 1th-year sections below 2 while IT102 has assigned schedule or enrollment data.',
+                $exception->errors()['counts'][0],
+            );
+        }
+
+        self::assertSame(2, $plan->refresh()->section_count);
+    }
+
+    public function test_a_missing_year_can_be_added_without_reopening_a_submitted_year_plan(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $chair = $this->makeChair();
+        $submitted = AcademicTermSectionPlan::create([
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'college' => 'ccs',
+            'year_level' => 1,
+            'section_count' => 1,
+            'students_per_block' => 40,
+            'status' => SectionPlanStatus::Submitted,
+            'submitted_by' => $chair->id,
+            'submitted_at' => now(),
+        ]);
+
+        app(SaveSectionPlan::class)->save(
+            $term,
+            $curriculum->id,
+            $chair,
+            [2 => 2],
+            [2 => 40],
+        );
+
+        self::assertSame(SectionPlanStatus::Submitted, $submitted->refresh()->status);
+        self::assertSame(1, $submitted->section_count);
+        self::assertDatabaseHas('academic_term_section_plans', [
+            'academic_term_id' => $term->id,
+            'curriculum_id' => $curriculum->id,
+            'year_level' => 2,
+            'section_count' => 2,
+            'status' => SectionPlanStatus::Draft->value,
+        ]);
     }
 }

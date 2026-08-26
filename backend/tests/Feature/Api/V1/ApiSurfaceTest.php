@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Http\Middleware\EnsureQueueKioskUsesDeviceSurface;
+use App\Http\Middleware\EnsureStudentQueueClaimUsesKiosk;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
@@ -31,10 +33,14 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/academic-terms/{academicTerm}/enrollment-windows',
             'GET|HEAD api/v1/academic-terms/{academicTerm}/faculty-load-report',
             'GET|HEAD api/v1/academic-terms/{academicTerm}/schedule-generation-runs/latest',
+            'GET|HEAD api/v1/analytics/attrition',
             'GET|HEAD api/v1/audit-logs',
             'GET|HEAD api/v1/auth/me',
+            'GET|HEAD api/v1/cashier-payment-candidates',
+            'GET|HEAD api/v1/cashier-transactions',
             'GET|HEAD api/v1/class-rosters',
             'GET|HEAD api/v1/curricula',
+            'GET|HEAD api/v1/curricula/{curriculum}/migration-preview',
             'GET|HEAD api/v1/dashboards/enrollment-summary',
             'GET|HEAD api/v1/dashboards/institution-summary',
             'GET|HEAD api/v1/dashboards/policy-settings',
@@ -43,6 +49,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/enrollment-blocks',
             'GET|HEAD api/v1/enrollment-change-requests',
             'GET|HEAD api/v1/enrollment-documents',
+            'GET|HEAD api/v1/enrollment-documents/{enrollmentDocument}',
             'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-curriculum-subject-preferences',
@@ -63,16 +70,22 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/programs/{program}/current-curriculum-subjects',
             'GET|HEAD api/v1/prospectus',
             'GET|HEAD api/v1/queue-cycle',
+            'GET|HEAD api/v1/queue-kiosk-credential',
             'GET|HEAD api/v1/queue-status',
             'GET|HEAD api/v1/queue-tickets',
+            'GET|HEAD api/v1/reports/honors',
             'GET|HEAD api/v1/room-options',
             'GET|HEAD api/v1/schedule-generation-runs/{scheduleGenerationRun}',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/schedule-proposals/{scheduleProposal}/sections',
             'GET|HEAD api/v1/sections',
+            'GET|HEAD api/v1/sections/grade-submission',
+            'GET|HEAD api/v1/sections/{section}/grades',
             'GET|HEAD api/v1/stuck-enrollments',
+            'GET|HEAD api/v1/student-account',
             'GET|HEAD api/v1/student-profile',
             'GET|HEAD api/v1/student-schedule-preferences',
+            'GET|HEAD api/v1/students/{student}/account',
             'GET|HEAD api/v1/subject-offerings',
             'GET|HEAD api/v1/subjects',
             'GET|HEAD api/v1/transferee-credits',
@@ -80,12 +93,14 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/academic-grades/{academicGrade}',
             'PATCH api/v1/academic-term-workflows/{workflow}',
             'PATCH api/v1/academic-terms/{academicTerm}',
+            'PATCH api/v1/academic-terms/{academicTerm}/draft-identity',
             'PATCH api/v1/academic-terms/{academicTerm}/enrollment-schedule',
             'PATCH api/v1/academic-terms/{academicTerm}/section-plan',
             'PATCH api/v1/curricula/{curriculum}',
             'PATCH api/v1/curricula/{curriculum}/transition',
             'PATCH api/v1/enrollment-change-requests/{enrollmentChangeRequest}',
             'PATCH api/v1/enrollments/{enrollment}',
+            'PATCH api/v1/enrollments/{enrollment}/assessment',
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}',
             'PATCH api/v1/faculty-members/{facultyMember}/workforce-profile',
@@ -106,6 +121,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
+            'POST api/v1/curricula/{curriculum}/migrations',
             'POST api/v1/curricula/{curriculum}/subject-placements',
             'POST api/v1/enrollments',
             'POST api/v1/enrollments/{enrollment}/change-requests',
@@ -121,10 +137,14 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/queue-tickets',
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
+            'POST api/v1/sections/{section}/grades',
+            'POST api/v1/sections/{section}/grades/submit',
             'POST api/v1/student-profiles',
+            'POST api/v1/students/{student}/account-payments',
             'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-threshold',
+            'PUT api/v1/queue-kiosk-credential',
             'PUT api/v1/student-schedule-preferences',
         ], $routes);
     }
@@ -134,6 +154,9 @@ final class ApiSurfaceTest extends TestCase
         $guarded = [
             'api.v1.auth.logout',
             'api.v1.auth.me',
+            'api.v1.cashier-payment-candidates.show',
+            'api.v1.cashier-transactions.index',
+            'api.v1.analytics.attrition',
             'api.v1.audit-logs.index',
             'api.v1.class-rosters.index',
             'api.v1.notifications.index',
@@ -141,6 +164,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.programs',
             'api.v1.academic-terms.index',
             'api.v1.academic-terms.update',
+            'api.v1.academic-terms.draft-identity.update',
             'api.v1.academic-term-workflows.index',
             'api.v1.academic-term-workflows.update',
             'api.v1.academic-terms.store',
@@ -148,6 +172,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.curricula.index',
             'api.v1.curricula.store',
             'api.v1.curricula.update',
+            'api.v1.curricula.migrations.preview',
+            'api.v1.curricula.migrations.store',
             'api.v1.subject-offerings.index',
             'api.v1.subject-offerings.store',
             'api.v1.eligible-subjects.index',
@@ -156,6 +182,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.enrollments.index',
             'api.v1.enrollments.store',
             'api.v1.enrollments.update',
+            'api.v1.enrollments.assessment.update',
             'api.v1.enrollments.payment',
             'api.v1.enrollments.withdraw',
             'api.v1.withdrawal-requests.index',
@@ -167,12 +194,14 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
             'api.v1.enrollment-documents.index',
+            'api.v1.enrollment-documents.show',
             'api.v1.payments.index',
             'api.v1.academic-grades.index',
             'api.v1.academic-grades.store',
             'api.v1.academic-grades.update',
             'api.v1.prospectus.show',
             'api.v1.grade-slip.show',
+            'api.v1.reports.honors',
             'api.v1.it-control.automation-runs.index',
             'api.v1.it-control.automation-runs.show',
             'api.v1.it-control.automation-runs.store',
@@ -181,6 +210,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.queue-tickets.index',
             'api.v1.queue-tickets.store',
             'api.v1.queue-status.show',
+            'api.v1.queue-kiosk-credential.show',
+            'api.v1.queue-kiosk-credential.update',
             'api.v1.queue-tickets.update',
             'api.v1.queue-cycle.show',
             'api.v1.queue-cycle.cut-off',
@@ -198,12 +229,19 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.faculty-subject-preferences.update',
             'api.v1.faculty-subject-preferences.destroy',
             'api.v1.sections.index',
+            'api.v1.sections.grade-submission.index',
+            'api.v1.sections.grades.show',
+            'api.v1.sections.grades.store',
+            'api.v1.sections.grades.submit',
             'api.v1.sections.store',
             'api.v1.sections.update',
             'api.v1.schedule-proposals.index',
             'api.v1.schedule-proposals.store',
             'api.v1.schedule-proposals.update',
             'api.v1.student-profile.show',
+            'api.v1.student-account.show-own',
+            'api.v1.students.account.show',
+            'api.v1.students.account-payments.store',
             'api.v1.student-profiles.store',
             'api.v1.student-schedule-preferences.show',
             'api.v1.student-schedule-preferences.update',
@@ -221,9 +259,37 @@ final class ApiSurfaceTest extends TestCase
         }
     }
 
+    public function test_queue_kiosk_device_surface_middleware_protects_both_authenticated_route_groups(): void
+    {
+        foreach (['api.v1.auth.me', 'api.v1.auth.logout', 'api.v1.programs'] as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains(EnsureQueueKioskUsesDeviceSurface::class, $route->gatherMiddleware());
+        }
+    }
+
+    public function test_queue_ticket_claim_has_one_student_kiosk_proof_route_without_a_blanket_role_gate(): void
+    {
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(static fn ($route): bool => $route->methods() === ['POST'] && $route->uri() === 'api/v1/queue-tickets')
+            ->values();
+
+        $this->assertCount(1, $routes);
+
+        $middleware = $routes->sole()->gatherMiddleware();
+        $this->assertContains(EnsureStudentQueueClaimUsesKiosk::class, $middleware);
+        $this->assertEmpty(array_filter($middleware, static fn (string $entry): bool => str_starts_with($entry, 'role:')));
+    }
+
     public function test_curriculum_writes_are_gated_to_the_program_chair_role(): void
     {
-        $gated = ['api.v1.curricula.store', 'api.v1.curricula.update'];
+        $gated = [
+            'api.v1.curricula.store',
+            'api.v1.curricula.update',
+            'api.v1.curricula.migrations.preview',
+            'api.v1.curricula.migrations.store',
+        ];
 
         foreach ($gated as $name) {
             $route = Route::getRoutes()->getByName($name);
@@ -372,6 +438,8 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.queue-cycle.show',
             'api.v1.queue-cycle.cut-off',
             'api.v1.queue-cycle.resume',
+            'api.v1.queue-kiosk-credential.show',
+            'api.v1.queue-kiosk-credential.update',
         ] as $name) {
             $route = Route::getRoutes()->getByName($name);
 
@@ -469,13 +537,21 @@ final class ApiSurfaceTest extends TestCase
 
     /**
      * Same shape as `test_enrollments_carry_no_role_middleware`: create is
-     * Faculty-only and the PATCH route serves a content edit plus two
-     * further checkpoints, all resolved by AcademicGradePolicy per request,
-     * never by a blanket `role:` middleware on either route.
+     * Faculty-only writes and the Registrar checkpoint are resolved by the
+     * relevant AcademicGradePolicy/SectionPolicy ability per request, never
+     * by blanket `role:` middleware on the legacy or section-first routes.
      */
     public function test_academic_grades_carry_no_role_middleware(): void
     {
-        foreach (['api.v1.academic-grades.index', 'api.v1.academic-grades.store', 'api.v1.academic-grades.update'] as $name) {
+        foreach ([
+            'api.v1.academic-grades.index',
+            'api.v1.academic-grades.store',
+            'api.v1.academic-grades.update',
+            'api.v1.sections.grade-submission.index',
+            'api.v1.sections.grades.show',
+            'api.v1.sections.grades.store',
+            'api.v1.sections.grades.submit',
+        ] as $name) {
             $route = Route::getRoutes()->getByName($name);
 
             $this->assertNotNull($route, "Missing route {$name}.");

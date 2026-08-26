@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Billing\AdjustEnrollmentAssessment;
 use App\Actions\Enrollment\ConfirmPayment;
 use App\Actions\Enrollment\ListEnrollments;
 use App\Actions\Enrollment\RequestWithdrawal;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Actions\Enrollment\TransitionEnrollment;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Enrollment\AdjustEnrollmentAssessmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\ConfirmPaymentRequest;
 use App\Http\Requests\Api\V1\Enrollment\IndexEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\StoreEnrollmentRequest;
@@ -142,6 +144,26 @@ final class EnrollmentController extends Controller
         $response->setStatusCode($result['created'] ? 201 : 200);
 
         return $this->cachePrivateResponse($response);
+    }
+
+    /** @throws AuthenticationException */
+    public function adjustAssessment(
+        AdjustEnrollmentAssessmentRequest $request,
+        Enrollment $enrollment,
+        AdjustEnrollmentAssessment $adjustAssessment,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('adjustAssessment', Enrollment::class);
+
+        $updated = $adjustAssessment->execute(
+            $enrollment,
+            $request->validated(),
+            $actor,
+            $contextFactory->fromRequest($request),
+        );
+
+        return $this->cachePrivateResponse(EnrollmentResource::make($updated)->response($request));
     }
 
     /**

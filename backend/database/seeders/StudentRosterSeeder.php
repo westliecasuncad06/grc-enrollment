@@ -21,6 +21,7 @@ use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\SectionBlockCode;
 use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Organization\StudentRosterMap;
+use App\Domain\Organization\StudentRosterReader;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\Curriculum;
@@ -32,7 +33,6 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -70,8 +70,6 @@ final class StudentRosterSeeder extends Seeder
     private const PASSWORD = 'password';
 
     private const CHUNK_SIZE = 500;
-
-    private const STUDENT_NUMBER_PATTERN = '/^\d{4}-\d{2}-\d{5}$/';
 
     private const SECTION_CHUNK_SIZE = 1000;
 
@@ -254,6 +252,7 @@ final class StudentRosterSeeder extends Seeder
                 'year_level' => $row['year_level'],
                 'admission_status' => AdmissionStatus::Admitted->value,
                 'academic_standing' => AcademicStanding::Good->value,
+                'is_demo_account' => false,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -262,7 +261,7 @@ final class StudentRosterSeeder extends Seeder
         DB::table('student_profiles')->upsert(
             $profileRows,
             ['student_number'],
-            ['user_id', 'program_id', 'curriculum_id', 'entry_year', 'year_level', 'admission_status', 'academic_standing', 'updated_at'],
+            ['user_id', 'program_id', 'curriculum_id', 'entry_year', 'year_level', 'admission_status', 'academic_standing', 'is_demo_account', 'updated_at'],
         );
     }
 
@@ -1385,47 +1384,7 @@ final class StudentRosterSeeder extends Seeder
      */
     private function parseRoster(string $path): array
     {
-        if (! is_file($path)) {
-            throw new RuntimeException("StudentRosterSeeder could not find its roster file at {$path}");
-        }
-
-        $rows = [];
-        $inSection = false;
-
-        foreach (preg_split('/\R/u', File::get($path)) ?: [] as $line) {
-            $trimmed = trim($line);
-
-            if (str_starts_with($trimmed, '#### ')) {
-                $inSection = true;
-
-                continue;
-            }
-
-            if (str_starts_with($trimmed, '#')) {
-                $inSection = false;
-
-                continue;
-            }
-
-            if (! $inSection || $trimmed === '' || ! str_starts_with($trimmed, '|')) {
-                continue;
-            }
-
-            $cells = array_map('trim', explode('|', trim($trimmed, '|')));
-            if (count($cells) !== 7 || preg_match(self::STUDENT_NUMBER_PATTERN, $cells[0]) !== 1) {
-                continue;
-            }
-
-            $rows[] = [
-                'student_number' => $cells[0],
-                'name' => $cells[1],
-                'email' => $cells[2],
-                'program_code' => $cells[3],
-                'year_level' => (int) $cells[5],
-            ];
-        }
-
-        return $rows;
+        return (new StudentRosterReader)->read($path);
     }
 
     private function guardEnvironment(): void

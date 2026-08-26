@@ -78,6 +78,8 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
       setStorageAvailable(gateway.persistenceAvailable())
       setSession(authenticatedSession)
       setStatus("authenticated")
+
+      return authenticatedSession
     },
     [gateway],
   )

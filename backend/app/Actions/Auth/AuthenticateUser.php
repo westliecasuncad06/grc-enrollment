@@ -3,6 +3,8 @@
 namespace App\Actions\Auth;
 
 use App\Domain\Identity\Exceptions\InvalidCredentialsException;
+use App\Domain\Identity\QueueKioskAccess;
+use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -34,23 +36,31 @@ final class AuthenticateUser
             throw InvalidCredentialsException::make();
         }
 
-        if (! Hash::check($password, $user->password)) {
-            throw InvalidCredentialsException::make();
-        }
-
-        if ($user->status !== UserStatus::Active) {
-            throw InvalidCredentialsException::make();
-        }
-
         $expiresAt = $this->expiresAt();
 
-        return DB::transaction(function () use ($user, $tokenName, $expiresAt): array {
-            $token = $user->createToken($tokenName, ['*'], $expiresAt?->toDateTime());
+        return DB::transaction(function () use ($user, $password, $tokenName, $expiresAt): array {
+            $lockedUser = User::query()
+                ->whereKey($user->id)
+                ->lockForUpdate()
+                ->first();
 
-            $user->forceFill(['last_login_at' => CarbonImmutable::now()])->save();
+            if (
+                ! $lockedUser instanceof User
+                || ! Hash::check($password, $lockedUser->password)
+                || $lockedUser->status !== UserStatus::Active
+            ) {
+                throw InvalidCredentialsException::make();
+            }
+
+            $abilities = $lockedUser->role === UserRole::QueueKiosk
+                ? [QueueKioskAccess::TOKEN_ABILITY]
+                : ['*'];
+            $token = $lockedUser->createToken($tokenName, $abilities, $expiresAt?->toDateTime());
+
+            $lockedUser->forceFill(['last_login_at' => CarbonImmutable::now()])->save();
 
             return [
-                'user' => $user,
+                'user' => $lockedUser,
                 'token' => $token,
                 'expiresAt' => $expiresAt,
             ];

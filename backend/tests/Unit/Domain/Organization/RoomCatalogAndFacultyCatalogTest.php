@@ -18,6 +18,16 @@ final class RoomCatalogAndFacultyCatalogTest extends TestCase
         self::assertContains('2A', RoomCatalog::forCollege(CollegeCode::Coa));
     }
 
+    public function test_coa_can_schedule_the_requested_3_and_5_series_rooms(): void
+    {
+        $rooms = RoomCatalog::forCollege(CollegeCode::Coa);
+
+        foreach (['3A', '3B', '3C', '3D', '3E', '3F', '3G', '5A', '5B', '5C', '5D', '5E', '5F', '5G'] as $room) {
+            self::assertContains($room, $rooms);
+        }
+        self::assertNotContains('LAB 1', $rooms);
+    }
+
     public function test_faculty_catalog_reads_csv_surnames_and_skips_unassigned_rows(): void
     {
         $faculty = CatalogFaculty::fromCsv(

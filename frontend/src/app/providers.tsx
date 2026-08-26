@@ -2,6 +2,7 @@
 
 import { QueryClientProvider } from "@tanstack/react-query"
 import { useState, type ReactNode } from "react"
+import { usePathname } from "next/navigation"
 
 import { createApiAuthGateway } from "@/features/auth/api-auth-gateway"
 import { AuthProvider } from "@/features/auth/auth-context"
@@ -20,9 +21,18 @@ import { setAuthTokenProvider } from "@/features/services/api-client"
  * keeps this file out of the server bundle, and the lazy initializers keep it
  * correct even so.
  */
-export function Providers({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(createAppQueryClient)
+function PortalAuthBoundary({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+  const normalizedPathname = pathname.replace(/\/+$/, "") || "/"
 
+  if (normalizedPathname === "/queue") {
+    return children
+  }
+
+  return <PortalAuthProvider>{children}</PortalAuthProvider>
+}
+
+function PortalAuthProvider({ children }: { children: ReactNode }) {
   const [gateway] = useState(() => {
     const tokenStore = createBrowserAuthTokenStore()
 
@@ -36,9 +46,15 @@ export function Providers({ children }: { children: ReactNode }) {
     return createApiAuthGateway(tokenStore)
   })
 
+  return <AuthProvider gateway={gateway}>{children}</AuthProvider>
+}
+
+export function Providers({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(createAppQueryClient)
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider gateway={gateway}>{children}</AuthProvider>
+      <PortalAuthBoundary>{children}</PortalAuthBoundary>
       <Toaster />
     </QueryClientProvider>
   )

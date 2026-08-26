@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AcademicRecordController;
 use App\Http\Controllers\Api\V1\AcademicTermController;
 use App\Http\Controllers\Api\V1\AcademicTermSectionPlanController;
 use App\Http\Controllers\Api\V1\AcademicTermWorkflowController;
+use App\Http\Controllers\Api\V1\AttritionReportController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
@@ -14,8 +15,8 @@ use App\Http\Controllers\Api\V1\CashierTransactionController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurrentCurriculumSubjectController;
 use App\Http\Controllers\Api\V1\CurriculumController;
-use App\Http\Controllers\Api\V1\CurriculumSubjectPlacementController;
 use App\Http\Controllers\Api\V1\CurriculumMigrationController;
+use App\Http\Controllers\Api\V1\CurriculumSubjectPlacementController;
 use App\Http\Controllers\Api\V1\Dashboard\EnrollmentSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\InstitutionSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\PolicySettingsController;
@@ -37,6 +38,7 @@ use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\HonorsReportController;
 use App\Http\Controllers\Api\V1\ItControl\AutomationRunController;
 use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
 use App\Http\Controllers\Api\V1\ItControl\StudentAccountController as ItControlStudentAccountController;
@@ -45,11 +47,13 @@ use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
 use App\Http\Controllers\Api\V1\ProspectusController;
 use App\Http\Controllers\Api\V1\QueueCycleController;
+use App\Http\Controllers\Api\V1\QueueKioskCredentialController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
 use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
+use App\Http\Controllers\Api\V1\SectionGradeController;
 use App\Http\Controllers\Api\V1\StudentAccountController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\StudentQueueViewController;
@@ -58,6 +62,8 @@ use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectOfferingController;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
 use App\Http\Controllers\Api\V1\WithdrawalRequestController;
+use App\Http\Middleware\EnsureQueueKioskUsesDeviceSurface;
+use App\Http\Middleware\EnsureStudentQueueClaimUsesKiosk;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
 
@@ -73,7 +79,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             ->middleware('throttle:30,1')
             ->name('login');
 
-        Route::middleware(['auth:sanctum', EnsureUserIsActive::class])->group(function (): void {
+        Route::middleware(['auth:sanctum', EnsureUserIsActive::class, EnsureQueueKioskUsesDeviceSurface::class])->group(function (): void {
             Route::post('/logout', LogoutController::class)->name('logout');
             Route::get('/me', MeController::class)->name('me');
         });
@@ -81,10 +87,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // Readable by every role; ProgramPolicy/AcademicTermPolicy plus each
     // model's visibleTo() scope decide which rows a given role receives.
-    Route::middleware(['auth:sanctum', EnsureUserIsActive::class, 'throttle:60,1'])->group(function (): void {
+    Route::middleware(['auth:sanctum', EnsureUserIsActive::class, EnsureQueueKioskUsesDeviceSurface::class, 'throttle:60,1'])->group(function (): void {
         Route::get('/programs', ProgramController::class)->name('programs');
         Route::get('/academic-terms', [AcademicTermController::class, 'index'])->name('academic-terms.index');
         Route::patch('/academic-terms/{academicTerm}', [AcademicTermController::class, 'update'])->name('academic-terms.update');
+        Route::patch('/academic-terms/{academicTerm}/draft-identity', [AcademicTermController::class, 'updateDraftIdentity'])->name('academic-terms.draft-identity.update');
 
         // GET is readable by every role (AcademicTermPolicy::view gates a
         // learner-scoped role to learner-visible terms, same as the term
@@ -111,6 +118,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
+        Route::get('/sections/grade-submission', [SectionGradeController::class, 'index'])->name('sections.grade-submission.index');
+        Route::get('/sections/{section}/grades', [SectionGradeController::class, 'show'])->name('sections.grades.show');
+        Route::post('/sections/{section}/grades', [SectionGradeController::class, 'store'])->name('sections.grades.store');
+        Route::post('/sections/{section}/grades/submit', [SectionGradeController::class, 'submit'])->name('sections.grades.submit');
         Route::get('/schedule-proposals', [ScheduleProposalController::class, 'index'])->name('schedule-proposals.index');
         Route::get('/schedule-proposals/{scheduleProposal}/sections', [ScheduleProposalController::class, 'sections'])->name('schedule-proposals.sections');
         Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
@@ -165,14 +176,20 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::patch('/enrollments/{enrollment}', [EnrollmentController::class, 'update'])->name('enrollments.update');
 
         // FR-FIN-007–009: Accounting-only, idempotent payment confirmation
-        // + Digital COM generation. No `role:` middleware — EnrollmentPolicy
+        // + COR generation. No `role:` middleware — EnrollmentPolicy
         // resolves `confirmPayment` the same way it resolves the other two
         // Registrar Head checkpoints.
         Route::post('/enrollments/{enrollment}/payment', [EnrollmentController::class, 'confirmPayment'])->name('enrollments.payment');
 
-        // FR-FIN-010: Student own, Registrar Head all —
-        // EnrollmentDocument::scopeVisibleTo.
+        // Accounting may correct financial assessment lines while payment is
+        // still pending. The action itself locks the record and rejects any
+        // payment/COR-finalized assessment.
+        Route::patch('/enrollments/{enrollment}/assessment', [EnrollmentController::class, 'adjustAssessment'])->name('enrollments.assessment.update');
+
+        // Student own; Accounting Staff and Registrar readers can view COR
+        // history through EnrollmentDocument::scopeVisibleTo.
         Route::get('/enrollment-documents', [EnrollmentDocumentController::class, 'index'])->name('enrollment-documents.index');
+        Route::get('/enrollment-documents/{enrollmentDocument}', [EnrollmentDocumentController::class, 'show'])->name('enrollment-documents.show');
 
         // Accounting Staff's own payment history, plus Registrar Head
         // oversight — a narrower read than widening Enrollment::scopeVisibleTo,
@@ -216,7 +233,9 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // claimQueueTicket resolves both cases; see ClaimQueueTicket. Sits
         // outside the accounting-only queue-tickets group below since a
         // Student must also reach it.
-        Route::post('/queue-tickets', [QueueTicketController::class, 'store'])->name('queue-tickets.store');
+        Route::post('/queue-tickets', [QueueTicketController::class, 'store'])
+            ->middleware(EnsureStudentQueueClaimUsesKiosk::class)
+            ->name('queue-tickets.store');
 
         // PRD §5.3 FR-FIN-006: the student's own read-only queue status —
         // stage, own ticket + position, and the board (now serving, next
@@ -342,6 +361,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         });
 
         Route::middleware('role:registrar_head')->group(function (): void {
+            Route::get('/analytics/attrition', AttritionReportController::class)
+                ->name('analytics.attrition');
             Route::get('/audit-logs', AuditLogController::class)
                 ->name('audit-logs.index');
             Route::get('/dashboards/policy-settings', PolicySettingsController::class)
@@ -376,6 +397,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/dashboards/enrollment-summary', EnrollmentSummaryController::class)
                 ->name('dashboards.enrollment-summary');
         });
+        Route::middleware('role:dean')->group(function (): void {
+            Route::get('/reports/honors', HonorsReportController::class)
+                ->name('reports.honors');
+        });
         Route::middleware('role:executive_director')->group(function (): void {
             Route::get('/dashboards/institution-summary', InstitutionSummaryController::class)
                 ->name('dashboards.institution-summary');
@@ -390,6 +415,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // grades), so the coarse `role:` middleware fits here — re-checked
         // by QueueTicketPolicy as defense in depth.
         Route::middleware('role:accounting_staff')->group(function (): void {
+            Route::get('/queue-kiosk-credential', [QueueKioskCredentialController::class, 'show'])->name('queue-kiosk-credential.show');
+            Route::put('/queue-kiosk-credential', [QueueKioskCredentialController::class, 'update'])->name('queue-kiosk-credential.update');
             Route::get('/queue-tickets', [QueueTicketController::class, 'index'])->name('queue-tickets.index');
             Route::patch('/queue-tickets/{queueTicket}', [QueueTicketController::class, 'update'])->name('queue-tickets.update');
             Route::get('/queue-cycle', [QueueCycleController::class, 'show'])->name('queue-cycle.show');

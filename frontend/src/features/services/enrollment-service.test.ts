@@ -196,8 +196,8 @@ describe("enrollment-service", () => {
               confirmed_at: "2026-07-30T00:00:00Z",
             },
             document: {
-              document_type: "com",
-              document_number: "COM000009",
+              document_type: "cor",
+              document_number: "COR000009",
               generated_at: "2026-07-30T00:00:00Z",
             },
           },
@@ -209,7 +209,7 @@ describe("enrollment-service", () => {
     const result = await confirmPayment(9, { external_reference: "OR-000123" })
 
     expect(result.enrollment.status).toBe("enrolled")
-    expect(result.document.document_number).toBe("COM000009")
+    expect(result.document.document_number).toBe("COR000009")
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/enrollments/9/payment")
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST")
   })

@@ -89,9 +89,9 @@ const enrollmentJourney = [
     icon: CheckCheck,
   },
   {
-    title: "Payment confirmation and Digital COM finalization",
+    title: "Payment confirmation and COR finalization",
     description:
-      "Accounting confirms payment before the Digital Certificate of Matriculation is finalized.",
+      "Accounting confirms payment before the Certificate of Registration is finalized.",
     icon: Building2,
   },
 ] as const
@@ -114,7 +114,7 @@ export function LandingPage() {
             <h1 id="landing-title">Your GRC enrollment journey starts here.</h1>
             <p className="landing-hero__summary">
               The GRC Automated Enrollment System brings schedules, subject
-              selection, approvals, payment confirmation, and your Digital COM
+              selection, approvals, payment confirmation, and your Certificate of Registration
               together in one role-guided experience.
             </p>
             <div className="landing-actions">

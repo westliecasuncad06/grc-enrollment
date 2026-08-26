@@ -1,4 +1,5 @@
-export type AuthErrorCode = "INVALID_CREDENTIALS"
+export type AuthErrorCode =
+  "INVALID_CREDENTIALS" | "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL"
 
 export class AuthError extends Error {
   readonly code: AuthErrorCode

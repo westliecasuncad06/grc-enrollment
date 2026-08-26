@@ -6,6 +6,7 @@ import { useAuth } from "@/features/auth/use-auth"
 import type { EnrollmentFilters } from "@/features/schemas/enrollment-schema"
 import {
   confirmPayment,
+  adjustEnrollmentAssessment,
   getEligibleSubjects,
   getEnrollmentBlocks,
   getEnrollments,
@@ -176,6 +177,23 @@ export function useConfirmPaymentMutation() {
         amount,
         promissory_note_on_file: promissoryNoteOnFile,
       }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useAdjustEnrollmentAssessmentMutation() {
+  const invalidate = useInvalidateEnrollmentQueries()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      reason,
+      items,
+    }: {
+      id: number
+      reason: string
+      items: Array<{ id: number; amount?: string; unit_amount?: string }>
+    }) => adjustEnrollmentAssessment(id, { reason, items }),
     onSuccess: () => invalidate(),
   })
 }

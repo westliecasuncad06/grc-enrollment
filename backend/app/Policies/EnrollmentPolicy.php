@@ -76,6 +76,16 @@ final class EnrollmentPolicy
     }
 
     /**
+     * Accounting may correct an assessment's financial lines before payment,
+     * but never its academic enrollment data. The action enforces the
+     * pending-payment/no-payment state under a database lock.
+     */
+    public function adjustAssessment(User $user): bool
+    {
+        return $user->role === UserRole::AccountingStaff;
+    }
+
+    /**
      * FR-FIN-004: only the owning Student may request withdrawal from their
      * own `enrolled` enrollment — an instance-level ownership check, unlike
      * every other ability here, because this is the first Student action
