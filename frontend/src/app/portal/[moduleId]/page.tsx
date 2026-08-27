@@ -6,7 +6,7 @@ const legacyModuleRedirects: Record<string, string> = {
   "admission-status": "student-records",
   "credential-issuance": "student-records",
   "demand-forecast": "program-chair-enrollment",
-  "faculty-assignment": "faculty-loading",
+  "faculty-assignment": "schedule",
   "sections-schedules": "schedule",
 }
 

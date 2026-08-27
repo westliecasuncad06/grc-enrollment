@@ -331,7 +331,7 @@ export function DemandForecastDialog({
                 </h3>
                 <p className="text-sm text-muted-foreground">
                   {facultyLoad.threshold_units === null
-                    ? "Set a college-term threshold in Schedule & Faculty Loading to enable overload flags."
+                    ? "Set a college-term threshold in Faculty Loading to enable overload flags."
                     : `Threshold: ${facultyLoad.threshold_units} units per professor.`}
                 </p>
               </div>
