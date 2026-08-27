@@ -106,13 +106,8 @@ export function FacultyLoadingWorkspace() {
     [reportQuery.data?.faculty, filter],
   )
   const visibleWorkforce = useMemo(
-    () =>
-      (workforceQuery.data ?? []).filter(
-        (member) =>
-          filter.professorId === "" ||
-          String(member.id) === filter.professorId,
-      ),
-    [workforceQuery.data, filter],
+    () => workforceQuery.data ?? [],
+    [workforceQuery.data],
   )
   const saveThreshold = useMutation({
     mutationFn: () => saveFacultyLoadThreshold(termId, Number(threshold)),
@@ -240,6 +235,11 @@ export function FacultyLoadingWorkspace() {
                 {reportQuery.data?.threshold_units === null && (
                   <p className="text-sm text-muted-foreground">
                     Overload flags remain off until a threshold is configured.
+                  </p>
+                )}
+                {saveThreshold.error instanceof Error && (
+                  <p className="text-sm text-destructive">
+                    {saveThreshold.error.message}
                   </p>
                 )}
               </CardContent>
@@ -479,7 +479,7 @@ export function FacultyLoadingWorkspace() {
                       colSpan={5}
                       className="py-9 text-center text-muted-foreground"
                     >
-                      No faculty match the current professor filter.
+                      No faculty in your college yet.
                     </TableCell>
                   </TableRow>
                 )}

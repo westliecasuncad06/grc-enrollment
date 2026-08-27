@@ -187,7 +187,7 @@ describe("FacultyLoadingWorkspace", () => {
 
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
-    fetchMock.mockImplementation((input) => {
+    fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
       const body = url.endsWith("/academic-terms")
         ? terms
@@ -199,7 +199,9 @@ describe("FacultyLoadingWorkspace", () => {
               : faculty
             : url.endsWith("/faculty-load-report")
               ? facultyLoadReport
-              : { data: [] }
+              : url.includes("/faculty-load-threshold") && init?.method === "PUT"
+                ? { data: { max_units: 18 } }
+                : { data: [] }
       return Promise.resolve(new Response(JSON.stringify(body)))
     })
   })
@@ -267,4 +269,28 @@ describe("FacultyLoadingWorkspace", () => {
     expect(screen.getByLabelText("Account status")).toHaveValue("disabled")
     expect(screen.getByLabelText("Employment type")).toHaveValue("part_time")
   })
+
+  it("saves a faculty load threshold successfully", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText("Faculty load threshold")
+
+    const thresholdInput = screen.getByPlaceholderText("e.g. 18") as HTMLInputElement
+    await user.clear(thresholdInput)
+    await user.type(thresholdInput, "24")
+
+    await user.click(screen.getByRole("button", { name: "Save threshold" }))
+
+    // Verify the PUT request was made to the faculty-load-threshold endpoint
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    const putCalls = (
+      fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit | undefined]>
+    ).filter(([input, init]) => {
+      const url = requestUrl(input)
+      return url.includes("/faculty-load-threshold") && init?.method === "PUT"
+    })
+    expect(putCalls.length).toBe(1)
+  })
+
 })
