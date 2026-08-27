@@ -11,7 +11,11 @@ Migrations: `backend/database/migrations/2026_07_26_00000{1,2,3,4}_*.php`.
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | primary key, auto-increment | |
-| `name` | `VARCHAR(255)` | not null | Display name |
+| `name` | `VARCHAR(255)` | not null | Composed display name ("First M. Last Suffix"). Kept in sync with the four fields below by `App\Domain\Identity\PersonName::compose()` whenever any of them is written through the Student provisioning/correction/change-request flows; never edited directly by those flows. |
+| `first_name` | `VARCHAR(255)` | nullable | Added `2026_08_26_000003`. Nullable at the DB level only so pre-split seeders/roles without a name-collecting form (e.g. Faculty, still seeder-only) keep working; required by every Form Request that actually collects a name. |
+| `middle_initial` | `VARCHAR(10)` | nullable | Added `2026_08_26_000003`. An initial (e.g. `M`), not a full middle name — always optional. |
+| `last_name` | `VARCHAR(255)` | nullable | Added `2026_08_26_000003`. Same nullability rationale as `first_name`. |
+| `suffix` | `VARCHAR(20)` | nullable | Added `2026_08_26_000003`. Free text (`Jr.`, `Sr.`, `III`, …), always optional. |
 | `email` | `VARCHAR(255)` | not null, **unique** | Normalized (trimmed, lowercased) by the application before validation, not by the database |
 | `password` | `VARCHAR(255)` | not null | bcrypt hash via Laravel's `hashed` cast; never stored or returned in plain text |
 | `role` | `VARCHAR(255)` | not null | Application-backed string, not a MySQL `ENUM`, so new roles need only a normal migration. Exact values: `student`, `admission_staff`, `faculty`, `program_chair`, `dean`, `executive_director`, `registrar_head`, `registrar_staff`, `accounting_staff` — see `App\Domain\Identity\UserRole` |
@@ -22,6 +26,17 @@ Migrations: `backend/database/migrations/2026_07_26_00000{1,2,3,4}_*.php`.
 No foreign keys in this slice. `student_profiles`, which would reference
 `users`, is deliberately deferred until its institutional policy fields
 (admission status, academic standing, approved contact fields) are confirmed.
+
+**Name-split backfill (`2026_08_26_000003`):** every pre-existing `users` row
+was parsed best-effort into `first_name`/`middle_initial`/`last_name`/`suffix`
+from its existing `name` string (comma-formatted "SURNAME,GIVEN NAME" faculty
+CSV artifacts, trailing `Jr./Sr./II/III/IV/V` suffixes, and single-token names
+are all handled explicitly). `name` itself is never rewritten by the backfill
+— it stays exactly what it already was for every existing account, so the
+migration carries zero display-regression risk. The split columns are
+best-effort structured metadata for existing rows; they become the source of
+truth (with `name` recomposed from them) only once a row is next edited
+through the Student provisioning/correction/change-request flows.
 
 ## `programs`
 

@@ -7,20 +7,32 @@ use App\Models\StudentProfile;
 use App\Models\User;
 
 /**
- * Own-record only, no broader role-based visibility — unlike every other
- * Policy in this codebase, there is no "planning role sees everyone's" case
- * here. Nothing in PRD §3 grants any role a general student-profile read;
- * Admission Staff writes (creates) profiles but does not read them back
- * through this endpoint.
+ * A Student may view only their own record. Admission Staff is the one
+ * broader role-based reader/writer here, per PRD §3.2's Student Records
+ * directory: it may list, view, and directly correct any profile. No other
+ * staff role gets a general student-profile read through this endpoint —
+ * Accounting Staff's narrower `viewAccount`/`recordAccountPayment`
+ * abilities below are the only exception, scoped to the payment desk.
  */
 final class StudentProfilePolicy
 {
     public function view(User $user, StudentProfile $profile): bool
     {
-        return $user->id === $profile->user_id;
+        return $user->id === $profile->user_id
+            || $user->role === UserRole::AdmissionStaff;
+    }
+
+    public function viewAny(User $user): bool
+    {
+        return $user->role === UserRole::AdmissionStaff;
     }
 
     public function create(User $user): bool
+    {
+        return $user->role === UserRole::AdmissionStaff;
+    }
+
+    public function update(User $user, StudentProfile $profile): bool
     {
         return $user->role === UserRole::AdmissionStaff;
     }

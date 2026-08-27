@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\AcademicTermSectionPlanController;
 use App\Http\Controllers\Api\V1\AcademicTermWorkflowController;
 use App\Http\Controllers\Api\V1\AttritionReportController;
 use App\Http\Controllers\Api\V1\AuditLogController;
+use App\Http\Controllers\Api\V1\Auth\AccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
@@ -55,6 +56,7 @@ use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\SectionGradeController;
 use App\Http\Controllers\Api\V1\StudentAccountController;
+use App\Http\Controllers\Api\V1\StudentProfileChangeRequestController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
 use App\Http\Controllers\Api\V1\StudentQueueViewController;
 use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
@@ -73,6 +75,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         ->name('health');
 
     Route::prefix('auth')->name('auth.')->group(function (): void {
+        Route::post('/account-setup', AccountSetupController::class)
+            ->middleware('throttle:10,1')
+            ->name('account-setup');
+
         // Public. Per-account+IP throttling is applied inside the controller;
         // this coarse limiter is an additional flood guard.
         Route::post('/login', LoginController::class)
@@ -137,6 +143,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Own-record only — no role gate beyond authentication, since the
         // Policy resolves "whose profile is this" the same way auth/me does.
         Route::get('/student-profile', [StudentProfileController::class, 'show'])->name('student-profile.show');
+        Route::get('/student-profile-change-requests', [StudentProfileChangeRequestController::class, 'index'])->name('student-profile-change-requests.index');
+        Route::post('/student-profile-change-requests', [StudentProfileChangeRequestController::class, 'store'])->name('student-profile-change-requests.store');
+        Route::patch('/student-profile-change-requests/{studentProfileChangeRequest}', [StudentProfileChangeRequestController::class, 'update'])->name('student-profile-change-requests.update');
+        Route::delete('/student-profile-change-requests/{studentProfileChangeRequest}', [StudentProfileChangeRequestController::class, 'destroy'])->name('student-profile-change-requests.destroy');
+        Route::patch('/student-profile-change-requests/{studentProfileChangeRequest}/decision', [StudentProfileChangeRequestController::class, 'decide'])->name('student-profile-change-requests.decision.update');
 
         // Student owns their account summary; Accounting Staff may look up
         // the served Student's account and record a balance-only receipt.
@@ -357,7 +368,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // PRD §3.2: "Create new student accounts and initial profiles" —
         // first production consumer of the admission_staff role.
         Route::middleware('role:admission_staff')->group(function (): void {
+            Route::get('/student-profiles', [StudentProfileController::class, 'index'])->name('student-profiles.index');
             Route::post('/student-profiles', [StudentProfileController::class, 'store'])->name('student-profiles.store');
+            Route::get('/student-profiles/{studentProfile}', [StudentProfileController::class, 'showForAdmission'])->name('student-profiles.show');
+            Route::patch('/student-profiles/{studentProfile}', [StudentProfileController::class, 'update'])->name('student-profiles.update');
+            Route::post('/student-profiles/{studentProfile}/account-setup-invitations', [StudentProfileController::class, 'resendSetupInvitation'])->name('student-profiles.account-setup-invitations.store');
         });
 
         Route::middleware('role:registrar_head')->group(function (): void {

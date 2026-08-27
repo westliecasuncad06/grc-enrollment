@@ -2635,6 +2635,33 @@
   border-left-color: var(--institutional-gold);
 }
 
+.portal-sidebar .portal-navigation,
+.portal-mobile-sheet .portal-navigation {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 30%) transparent;
+}
+
+.portal-sidebar .portal-navigation::-webkit-scrollbar,
+.portal-mobile-sheet .portal-navigation::-webkit-scrollbar {
+  width: 0.35rem;
+}
+
+.portal-sidebar .portal-navigation::-webkit-scrollbar-track,
+.portal-mobile-sheet .portal-navigation::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.portal-sidebar .portal-navigation::-webkit-scrollbar-thumb,
+.portal-mobile-sheet .portal-navigation::-webkit-scrollbar-thumb {
+  background-color: rgb(255 255 255 / 30%);
+  border-radius: 999px;
+}
+
+.portal-sidebar .portal-navigation::-webkit-scrollbar-thumb:hover,
+.portal-mobile-sheet .portal-navigation::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 255 255 / 48%);
+}
+
 .portal-sidebar__footer [data-slot="separator"] {
   background: rgb(255 255 255 / 20%);
 }

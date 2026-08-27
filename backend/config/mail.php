@@ -14,7 +14,9 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    // Setup emails contain one-time account codes. Keep the safe local
+    // fallback in memory so credentials are never written to application logs.
+    'default' => env('MAIL_MAILER', 'array'),
 
     /*
     |--------------------------------------------------------------------------

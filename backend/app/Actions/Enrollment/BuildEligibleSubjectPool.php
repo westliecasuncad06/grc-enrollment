@@ -5,9 +5,12 @@ namespace App\Actions\Enrollment;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Domain\Academic\PrerequisiteVerdict;
+use App\Domain\Curriculum\SemesterCoverage;
+use App\Domain\Curriculum\SemesterSlot;
 use App\Domain\Enrollment\BlockSectionAccessPolicy;
 use App\Domain\Enrollment\EligibleSubjectEntry;
 use App\Domain\Enrollment\EnrollmentAccessContext;
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\SchedulePreferenceScorer;
@@ -54,6 +57,23 @@ final readonly class BuildEligibleSubjectPool
             ->orderBy('year_level')
             ->orderBy('semester')
             ->get();
+
+        // Irregular students pick subjects one at a time rather than taking
+        // a published block, so unlike a regular student — who is already
+        // implicitly bounded to their own year's block sections by
+        // BlockSectionAccessPolicy below — an irregular student would
+        // otherwise see the entire 4-year curriculum at once, most of it
+        // years away and irrelevant. Bound the pool to backlog-or-current
+        // placements using the same ordinal rule ClassifyEnrollmentStanding
+        // uses to decide what still "needs adding": a placement ahead of the
+        // student's current standing isn't something they need yet.
+        if ($student->enrollment_category !== null && strtolower($student->enrollment_category) === EnrollmentCategory::Irregular->value) {
+            $currentOrdinal = (SemesterSlot::tryFrom($term->semester) ?? SemesterSlot::First)->ordinal($student->year_level);
+
+            $placements = $placements->filter(
+                fn (CurriculumSubject $placement): bool => SemesterCoverage::primary($placement->semester)->ordinal($placement->year_level) <= $currentOrdinal,
+            )->values();
+        }
 
         // Resolved once for the whole pool: which audience windows are open
         // is a property of the term, not of any single placement.

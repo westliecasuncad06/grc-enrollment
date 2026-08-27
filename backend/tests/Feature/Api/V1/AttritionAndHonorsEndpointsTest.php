@@ -48,8 +48,8 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
     /** @return array{0: AcademicTerm, 1: AcademicTerm, 2: Curriculum} */
     private function termsAndCurriculum(): array
     {
-        $first = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st semester', 'status' => AcademicTermStatus::SemesterClosed]);
-        $second = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd semester', 'status' => AcademicTermStatus::SemesterOngoing]);
+        $first = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        $second = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing]);
         $program = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active]);
         $curriculum = Curriculum::create(['program_id' => $program->id, 'name' => 'BSCS', 'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active]);
 

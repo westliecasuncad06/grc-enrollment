@@ -725,6 +725,7 @@ Required status handling:
 POST   /api/v1/auth/login
 POST   /api/v1/auth/logout
 GET    /api/v1/auth/me
+POST   /api/v1/auth/account-setup
 POST   /api/v1/auth/forgot-password
 POST   /api/v1/auth/reset-password
 
@@ -734,6 +735,18 @@ GET    /api/v1/subjects
 GET    /api/v1/curricula
 POST   /api/v1/curricula
 PATCH  /api/v1/curricula/{curriculum}
+
+GET    /api/v1/student-profile
+GET    /api/v1/student-profiles
+POST   /api/v1/student-profiles
+GET    /api/v1/student-profiles/{studentProfile}
+PATCH  /api/v1/student-profiles/{studentProfile}
+POST   /api/v1/student-profiles/{studentProfile}/account-setup-invitations
+GET    /api/v1/student-profile-change-requests
+POST   /api/v1/student-profile-change-requests
+PATCH  /api/v1/student-profile-change-requests/{studentProfileChangeRequest}
+DELETE /api/v1/student-profile-change-requests/{studentProfileChangeRequest}
+PATCH  /api/v1/student-profile-change-requests/{studentProfileChangeRequest}/decision
 
 GET    /api/v1/faculty-availabilities
 POST   /api/v1/faculty-availabilities

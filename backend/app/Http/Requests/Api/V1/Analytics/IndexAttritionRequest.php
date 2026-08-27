@@ -46,8 +46,8 @@ final class IndexAttritionRequest extends FormRequest
 
             if (! $baseline instanceof AcademicTerm || ! $comparison instanceof AcademicTerm
                 || $baseline->school_year !== $comparison->school_year
-                || strtolower($baseline->semester) !== '1st semester'
-                || strtolower($comparison->semester) !== '2nd semester') {
+                || strtolower($baseline->semester) !== '1st'
+                || strtolower($comparison->semester) !== '2nd') {
                 $validator->errors()->add(
                     'comparison_academic_term_id',
                     'Attrition requires the 1st and 2nd semesters of the same school year.',

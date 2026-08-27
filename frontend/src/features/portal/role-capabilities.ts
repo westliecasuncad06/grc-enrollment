@@ -1,6 +1,5 @@
 import {
   ArrowLeftRight,
-  BadgeCheck,
   BarChart3,
   Building2,
   CalendarDays,
@@ -75,6 +74,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "View and print your Certificate of Registration.",
         FileCheck2,
       ),
+      portalModule(
+        "student-information",
+        "Student Information",
+        "View your official information and request Admission-approved corrections.",
+        UserCheck,
+      ),
     ],
   },
   admission_staff: {
@@ -82,22 +87,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     welcomeHeading: "Guide applicant records toward enrollment readiness.",
     modules: [
       portalModule(
-        "student-accounts",
-        "Student Accounts",
-        "Prepare admitted student accounts through the authorized workspace.",
+        "student-records",
+        "Student Records",
+        "Create accounts, maintain verified profiles, and decide student information changes.",
         Users,
-      ),
-      portalModule(
-        "admission-status",
-        "Admission Status",
-        "Coordinate admission progress and record checks.",
-        UserCheck,
-      ),
-      portalModule(
-        "credential-issuance",
-        "Credential Issuance",
-        "Manage the controlled handoff of student access credentials.",
-        BadgeCheck,
       ),
     ],
   },

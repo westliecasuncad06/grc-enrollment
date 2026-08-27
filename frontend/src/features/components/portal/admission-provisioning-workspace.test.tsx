@@ -1,506 +1,416 @@
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { axe } from "vitest-axe"
 
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { renderWithSession } from "@/tests/render-app"
-
-const credential = "Aa1!Aa1!Aa1!Aa1!Aa1!"
-const writeTextMock = vi.fn<(value: string) => Promise<void>>()
 
 const profile = {
   type: "student_profile",
   id: 31,
   user_id: 41,
-  student_number: "STU-2027-1001",
+  student_number: "2027-08-01001",
+  name: "Amina Santos",
+  first_name: "Amina",
+  middle_initial: null,
+  last_name: "Santos",
+  suffix: null,
+  email: "amina.santos@grc.test",
+  address: "123 Mabini Street, Caloocan City",
   program_id: 11,
+  program_code: "BSIT",
+  program_name: "Bachelor of Science in Information Technology",
   curriculum_id: 22,
+  entry_year: 2027,
+  curriculum_name: "BSIT 2027 Curriculum",
+  curriculum_effective_school_year: "2027-2028",
   year_level: 1,
   enrollment_category: "regular",
   admission_status: "admitted",
   admission_status_label: "Admitted",
   academic_standing: "good",
-  academic_standing_label: "Good",
+  academic_standing_label: "Good Standing",
   financial_status: null,
   financial_status_label: null,
+  requirements_verified_at: "2026-08-26T08:00:00Z",
+  academic_setup_editable: true,
+  account_setup_status: "pending",
+  invitation_delivery_status: "sent",
 } as const
+
+const enrolledProfile = {
+  ...profile,
+  id: 32,
+  student_number: "2026-08-01099",
+  name: "Marco Dela Cruz",
+  first_name: "Marco",
+  last_name: "Dela Cruz",
+  email: "marco.delacruz@grc.test",
+  academic_setup_editable: false,
+  account_setup_status: "active",
+} as const
+
+const pagination = {
+  links: {
+    first: "http://localhost/api?page=1",
+    last: "http://localhost/api?page=1",
+    prev: null,
+    next: null,
+  },
+  meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
+}
 
 const programs = {
   data: [
     {
       type: "program",
       id: 11,
-      code: "BSCS",
-      name: "BS Computer Science",
-      status: "active",
-      status_label: "Active",
-    },
-    {
-      type: "program",
-      id: 12,
       code: "BSIT",
-      name: "BS Information Technology",
+      name: "Bachelor of Science in Information Technology",
       status: "active",
       status_label: "Active",
     },
   ],
+}
+
+const changeRequest = {
+  type: "student_profile_change_request",
+  id: 7,
+  student_id: profile.id,
+  student_number: profile.student_number,
+  student_name: profile.name,
+  status: "pending",
+  status_label: "Pending",
+  official: {
+    name: profile.name,
+    first_name: profile.first_name,
+    middle_initial: profile.middle_initial,
+    last_name: profile.last_name,
+    suffix: profile.suffix,
+    email: profile.email,
+    address: profile.address,
+  },
+  requested: {
+    name: "Amina Reyes Santos",
+    first_name: profile.first_name,
+    middle_initial: "Reyes",
+    last_name: profile.last_name,
+    suffix: null,
+    email: "amina.reyes@grc.test",
+    address: "Proposed Address, Caloocan City",
+  },
+  reason: "Correct my official personal information.",
+  decision_notes: null,
+  identity_verified_at: null,
+  requested_at: "2026-08-26T08:00:00Z",
+  decided_at: null,
 } as const
 
-const curricula = {
-  data: [
-    {
-      type: "curriculum",
-      id: 22,
-      program_id: 11,
-      name: "BSCS 2026 Curriculum",
-      effective_school_year: "2026-2027",
-      status: "active",
-      status_label: "Active",
-      decided_at: null,
-      last_decision_reason: null,
-      subjects: [],
+function urlOf(input: RequestInfo | URL): string {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url
+}
+
+function bodyOf(init: RequestInit | undefined): Record<string, unknown> {
+  return typeof init?.body === "string"
+    ? (JSON.parse(init.body) as Record<string, unknown>)
+    : {}
+}
+
+function renderWorkspace() {
+  return renderWithSession(<AdmissionProvisioningWorkspace />, {
+    session: {
+      userId: "5",
+      displayName: "Admission Staff",
+      role: "admission_staff",
+      signedInAt: "2026-08-26T00:00:00Z",
     },
-    {
-      type: "curriculum",
-      id: 23,
-      program_id: 12,
-      name: "BSIT 2026 Curriculum",
-      effective_school_year: "2026-2027",
-      status: "active",
-      status_label: "Active",
-      decided_at: null,
-      last_decision_reason: null,
-      subjects: [],
-    },
-  ],
-} as const
-
-function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") {
-    return input
-  }
-
-  return input instanceof URL ? input.toString() : input.url
+  })
 }
 
-const generatedStudentNumber = "2027-08-01001"
-
-function renderWorkspace(
-  initialModuleId = "student-accounts",
-  generateCredential = () => credential,
-  writeCredential = writeTextMock,
-) {
-  return renderWithSession(
-    <AdmissionProvisioningWorkspace
-      initialModuleId={initialModuleId}
-      generateCredential={generateCredential}
-      writeCredential={writeCredential}
-      generateStudentNumber={() => generatedStudentNumber}
-    />,
-    {
-      session: {
-        userId: "5",
-        displayName: "Admission Staff",
-        role: "admission_staff",
-        signedInAt: "2026-07-29T12:00:00Z",
-      },
-    },
-  )
-}
-
-/** Opens a `Select` trigger (waiting for it to become enabled first) and picks an item. */
-async function selectOption(
-  user: ReturnType<typeof userEvent.setup>,
-  labelText: string,
-  optionName: string,
-) {
-  const trigger = screen.getByLabelText(labelText)
-  await waitFor(() => expect(trigger).not.toBeDisabled())
-  await user.click(trigger)
-  await user.click(await screen.findByRole("option", { name: optionName }))
-}
-
-async function completeForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Student name"), "Amina Santos")
-  await user.type(
-    screen.getByLabelText("Email address"),
-    "amina.santos@grc.test",
-  )
-  // Student number is auto-generated (see `generateStudentNumber` injected
-  // by `renderWorkspace`) — no need to type one.
-  await selectOption(user, "Program", "BSCS — BS Computer Science")
-  await selectOption(user, "Curriculum", "BSCS 2026 Curriculum (2026-2027)")
-  await selectOption(user, "Year level", "1st Year")
-}
-
-describe("AdmissionProvisioningWorkspace", () => {
+describe("Student Records workspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
 
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
-    writeTextMock.mockReset()
-    writeTextMock.mockResolvedValue(undefined)
-  })
-
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  it("provisions a selected program and curriculum, then shows and clears the one-time credential receipt", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
+    fetchMock.mockImplementation((input, init) => {
+      const url = urlOf(input)
+      if (url.includes("/api/v1/programs")) {
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      }
+      if (url.includes("/api/v1/student-profiles") && init?.method === "POST") {
         return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
+          new Response(JSON.stringify({ data: profile }), { status: 201 }),
         )
       }
-      if (url.endsWith("/curricula")) {
+      if (url.includes("/api/v1/student-profiles")) {
         return Promise.resolve(
-          new Response(JSON.stringify(curricula), { status: 200 }),
+          new Response(JSON.stringify({ data: [profile], ...pagination })),
         )
       }
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: profile }), { status: 201 }),
-      )
+      if (url.includes("/api/v1/student-profile-change-requests")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [], ...pagination })),
+        )
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url}`))
     })
+  })
 
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("uses one three-part workspace and creates an account only after requirements confirmation", async () => {
+    const user = userEvent.setup()
     renderWorkspace()
-    await completeForm(user)
-    await user.click(
-      screen.getByRole("button", { name: "Create student account" }),
-    )
 
     expect(
-      await screen.findByText("Student account created"),
+      screen.getByRole("heading", { name: "Student Records" }),
     ).toBeInTheDocument()
-    expect(screen.getByText(credential)).toBeInTheDocument()
-    expect(screen.getByText("Admission status: Admitted")).toBeInTheDocument()
-    expect(screen.getByText("Academic standing: Good")).toBeInTheDocument()
-    const [url, request] = fetchMock.mock.calls.at(-1) as [string, RequestInit]
-    if (typeof request.body !== "string") {
-      throw new Error(
-        "Expected the provisioning request to contain a JSON body.",
-      )
-    }
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Create Account",
+      "Student Directory",
+      "Change Requests",
+    ])
+    expect(screen.queryByLabelText("Curriculum")).not.toBeInTheDocument()
+    expect(screen.queryByText(/temporary credential/i)).not.toBeInTheDocument()
 
-    expect(url).toBe("http://127.0.0.1:8000/api/v1/student-profiles")
-    expect(request.method).toBe("POST")
-    expect(JSON.parse(request.body) as Record<string, unknown>).toEqual({
-      name: "Amina Santos",
-      email: "amina.santos@grc.test",
-      password: credential,
-      student_number: generatedStudentNumber,
-      program_id: 11,
-      curriculum_id: 22,
-      year_level: 1,
-      enrollment_category: "regular",
-    })
-
-    await user.click(
-      screen.getByRole("button", { name: "Copy temporary credential" }),
-    )
-    expect(writeTextMock).toHaveBeenCalledWith(credential)
-    expect(screen.getByRole("status")).toHaveTextContent("Credential copied")
-    await user.click(
-      screen.getByRole("button", { name: "Close credential receipt" }),
-    )
-    expect(screen.queryByText(credential)).not.toBeInTheDocument()
-  })
-
-  it("auto-fills a YYYY-MM-NNNNN student number and can generate a new one", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs"))
-        return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
-        )
-      if (url.endsWith("/curricula"))
-        return Promise.resolve(
-          new Response(JSON.stringify(curricula), { status: 200 }),
-        )
-      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
-    })
-
-    let call = 0
-    const numbers = ["2027-08-01001", "2027-08-02002"]
-    renderWithSession(
-      <AdmissionProvisioningWorkspace
-        generateCredential={() => credential}
-        writeCredential={writeTextMock}
-        generateStudentNumber={() => numbers[call++] ?? numbers[0]}
-      />,
-      {
-        session: {
-          userId: "5",
-          displayName: "Admission Staff",
-          role: "admission_staff",
-          signedInAt: "2026-07-29T12:00:00Z",
-        },
-      },
-    )
-
-    const field = screen.getByLabelText("Student number")
-    expect(field).toHaveValue("2027-08-01001")
-
-    await user.type(screen.getByLabelText("Student name"), "Amina Santos")
-    await user.click(
-      screen.getByRole("button", { name: "Generate new number" }),
-    )
-    expect(field).toHaveValue("2027-08-02002")
-    // Regenerating the student number does not wipe the rest of the form.
-    expect(screen.getByLabelText("Student name")).toHaveValue("Amina Santos")
-  })
-
-  it("maps a 422 validation response to the named form field", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
-        )
-      }
-      if (url.endsWith("/curricula")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(curricula), { status: 200 }),
-        )
-      }
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            error: {
-              code: "VALIDATION_FAILED",
-              message: "The submitted data is invalid.",
-              errors: { email: ["The email has already been taken."] },
-              request_id: "request-4",
-            },
-          }),
-          { status: 422 },
-        ),
-      )
-    })
-
-    renderWorkspace()
-    await completeForm(user)
-    await user.click(
-      screen.getByRole("button", { name: "Create student account" }),
-    )
-
-    expect(
-      await screen.findByText("The email has already been taken."),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText("Email address")).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    )
-  })
-
-  it("clears the selected curriculum from form state when the program changes", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
-        )
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify(curricula), { status: 200 }),
-      )
-    })
-
-    renderWorkspace()
-    await selectOption(user, "Program", "BSCS — BS Computer Science")
-    await selectOption(user, "Curriculum", "BSCS 2026 Curriculum (2026-2027)")
-    expect(screen.getByLabelText("Curriculum")).toHaveTextContent(
-      "BSCS 2026 Curriculum (2026-2027)",
-    )
-
-    await selectOption(user, "Program", "BSIT — BS Information Technology")
-
-    expect(screen.getByLabelText("Curriculum")).toHaveTextContent(
-      "Select a curriculum",
-    )
-    await user.click(screen.getByLabelText("Curriculum"))
-    expect(
-      screen.getByRole("option", {
-        name: "BSIT 2026 Curriculum (2026-2027)",
-      }),
-    ).toBeInTheDocument()
-    await user.keyboard("{Escape}")
-
-    await user.type(screen.getByLabelText("Student name"), "Amina Santos")
+    await user.type(screen.getByLabelText("First name"), profile.first_name)
+    await user.type(screen.getByLabelText("Last name"), profile.last_name)
+    await user.type(screen.getByLabelText("Email address"), profile.email)
+    await user.type(screen.getByLabelText("Complete address"), profile.address)
+    await user.clear(screen.getByLabelText("Student number"))
     await user.type(
-      screen.getByLabelText("Email address"),
-      "amina.santos@grc.test",
+      screen.getByLabelText("Student number"),
+      profile.student_number,
     )
-    await selectOption(user, "Year level", "1st Year")
+    await user.clear(screen.getByLabelText("Entry year"))
+    await user.type(screen.getByLabelText("Entry year"), "2027")
+    await user.click(screen.getByLabelText("Program"))
     await user.click(
-      screen.getByRole("button", { name: "Create student account" }),
+      await screen.findByRole("option", {
+        name: "BSIT — Bachelor of Science in Information Technology",
+      }),
     )
 
-    expect(await screen.findByText("Select a curriculum.")).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it("announces a clipboard denial without persisting the credential", async () => {
-    const user = userEvent.setup()
-    writeTextMock.mockRejectedValueOnce(
-      new DOMException("Denied", "NotAllowedError"),
-    )
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
-        )
-      }
-      if (url.endsWith("/curricula")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(curricula), { status: 200 }),
-        )
-      }
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: profile }), { status: 201 }),
-      )
+    const submit = screen.getByRole("button", {
+      name: "Create account and email setup",
     })
-
-    renderWorkspace()
-    await completeForm(user)
-    await user.click(
-      screen.getByRole("button", { name: "Create student account" }),
-    )
-    await screen.findByText("Student account created")
-    await user.click(
-      screen.getByRole("button", { name: "Copy temporary credential" }),
-    )
-
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Credential copy is unavailable in this browser.",
-    )
-  })
-
-  it("disables a duplicate submission while provisioning is pending", async () => {
-    const user = userEvent.setup()
-    let resolveProvision: (response: Response) => void = () => undefined
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
-        )
-      }
-      if (url.endsWith("/curricula")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(curricula), { status: 200 }),
-        )
-      }
-      return new Promise((resolve) => {
-        resolveProvision = resolve
-      })
-    })
-
-    renderWorkspace()
-    await completeForm(user)
-    await user.click(
-      screen.getByRole("button", { name: "Create student account" }),
-    )
-
-    expect(
-      screen.getByRole("button", { name: "Creating student account…" }),
-    ).toBeDisabled()
-    resolveProvision(
-      new Response(JSON.stringify({ data: profile }), { status: 201 }),
-    )
-    await screen.findByText("Student account created")
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-  })
-
-  it("replaces a failed attempt's temporary credential on retry", async () => {
-    const user = userEvent.setup()
-    let provisionAttempts = 0
-    const attemptedPasswords: string[] = []
-    const firstCredential = "Bb2!Bb2!Bb2!Bb2!Bb2!"
-    const retryCredential = "Cc3@Cc3@Cc3@Cc3@Cc3@"
-    let credentialIndex = 0
-    fetchMock.mockImplementation((request, init) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
-        )
-      }
-      if (url.endsWith("/curricula")) {
-        return Promise.resolve(
-          new Response(JSON.stringify(curricula), { status: 200 }),
-        )
-      }
-      provisionAttempts += 1
-      if (typeof init?.body !== "string") {
-        throw new Error("Expected a JSON provisioning request.")
-      }
-      attemptedPasswords.push(
-        (JSON.parse(init.body) as { password: string }).password,
-      )
-      if (provisionAttempts === 1) {
-        return Promise.reject(new TypeError("Network unavailable"))
-      }
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: profile }), { status: 201 }),
-      )
-    })
-
-    renderWorkspace("credential-issuance", () => {
-      const generated = [firstCredential, retryCredential][credentialIndex]
-      credentialIndex += 1
-      return generated
-    })
-    expect(
-      screen.getByRole("heading", { name: "Credential issuance" }),
-    ).toBeInTheDocument()
-    await completeForm(user)
-    await user.click(
-      screen.getByRole("button", { name: "Create student account" }),
-    )
-
+    await user.click(submit)
     expect(
       await screen.findByText(
-        "The student account could not be created. Check the connection and try again.",
+        "Confirm that Admission received the student's requirements.",
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByText(firstCredential)).not.toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "Try again" }))
 
-    await waitFor(() => {
-      expect(screen.getByText("Student account created")).toBeInTheDocument()
+    await user.click(
+      screen.getByLabelText("Requirements submitted and verified"),
+    )
+    await user.click(submit)
+
+    expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+    const provisioningCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        urlOf(input).endsWith("/api/v1/student-profiles") &&
+        init?.method === "POST",
+    )
+    const body = bodyOf(provisioningCall?.[1])
+    expect(body).toMatchObject({
+      first_name: profile.first_name,
+      last_name: profile.last_name,
+      address: profile.address,
+      requirements_verified: true,
+      entry_year: 2027,
     })
-    expect(provisionAttempts).toBe(2)
-    expect(attemptedPasswords).toEqual([firstCredential, retryCredential])
-    expect(screen.getByText(retryCredential)).toBeInTheDocument()
-    expect(screen.queryByText(firstCredential)).not.toBeInTheDocument()
+    expect(body).not.toHaveProperty("password")
+    expect(body).not.toHaveProperty("curriculum_id")
   })
 
-  it("has no detectable accessibility violations once loaded", async () => {
-    fetchMock.mockImplementation((request) => {
-      const url = requestUrl(request)
-      if (url.endsWith("/programs")) {
+  it("searches by name and opens the full student profile editor", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+    await user.type(screen.getByLabelText("Search student records"), "Amina")
+    await user.click(screen.getByRole("button", { name: "Search" }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: profile.name }),
+      ).toBeInTheDocument(),
+    )
+    await user.click(screen.getByRole("button", { name: profile.name }))
+
+    expect(
+      screen.getByRole("dialog", { name: profile.name }),
+    ).toBeInTheDocument()
+    expect(screen.getByDisplayValue(profile.email)).toBeInTheDocument()
+    expect(screen.getByDisplayValue(profile.address)).toBeInTheDocument()
+    expect(
+      screen.getByLabelText("Identity verified in person at Admission"),
+    ).toBeInTheDocument()
+  })
+
+  it("locks the academic setup selectors once a student already has an enrollment", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      const url = urlOf(input)
+      if (url.includes("/api/v1/programs")) {
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      }
+      if (
+        url.includes(`/api/v1/student-profiles/${enrolledProfile.id}`) &&
+        init?.method === "PATCH"
+      ) {
         return Promise.resolve(
-          new Response(JSON.stringify(programs), { status: 200 }),
+          new Response(
+            JSON.stringify({
+              data: { ...enrolledProfile, address: "Updated Address" },
+            }),
+          ),
         )
       }
-      return Promise.resolve(
-        new Response(JSON.stringify(curricula), { status: 200 }),
-      )
+      if (url.includes("/api/v1/student-profiles")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: [enrolledProfile], ...pagination }),
+          ),
+        )
+      }
+      if (url.includes("/api/v1/student-profile-change-requests")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [], ...pagination })),
+        )
+      }
+      return Promise.reject(new Error(`Unexpected request: ${url}`))
     })
+    const user = userEvent.setup()
+    renderWorkspace()
 
-    const { container } = renderWorkspace()
+    await user.click(screen.getByRole("tab", { name: "Student Directory" }))
+    await user.type(
+      screen.getByLabelText("Search student records"),
+      enrolledProfile.name,
+    )
+    await user.click(screen.getByRole("button", { name: "Search" }))
+    await user.click(
+      await screen.findByRole("button", { name: enrolledProfile.name }),
+    )
+
+    expect(
+      screen.getByRole("dialog", { name: enrolledProfile.name }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "Student number, program, entry year, year level, category, financial status, and admission status are locked because this student already has an enrollment.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText("Student number")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Program")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Entry year")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Year level")).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText("Enrollment category"),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Financial status")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Admission status")).not.toBeInTheDocument()
+
+    expect(screen.getByLabelText("First name")).toBeInTheDocument()
+    expect(screen.getByLabelText("Last name")).toBeInTheDocument()
+    expect(screen.getByLabelText("Middle initial")).toBeInTheDocument()
+    expect(screen.getByLabelText("Suffix")).toBeInTheDocument()
+    expect(screen.getByLabelText("Email")).toBeInTheDocument()
+    const address = screen.getByLabelText("Complete address")
+    await user.clear(address)
+    await user.type(address, "Updated Address")
+    await user.type(
+      screen.getByLabelText("Reason for correction"),
+      "Student presented an updated barangay certificate.",
+    )
+    await user.click(
+      screen.getByLabelText("Identity verified in person at Admission"),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Save verified correction" }),
+    )
+
     await waitFor(() => {
-      expect(screen.getByLabelText("Program")).not.toBeDisabled()
+      const patchCall = fetchMock.mock.calls.find(
+        ([reqInput, reqInit]) =>
+          urlOf(reqInput).endsWith(
+            `/api/v1/student-profiles/${enrolledProfile.id}`,
+          ) && reqInit?.method === "PATCH",
+      )
+      expect(patchCall).toBeDefined()
+      const body = bodyOf(patchCall?.[1])
+      expect(body).toMatchObject({ address: "Updated Address" })
+      expect(body).not.toHaveProperty("student_number")
+      expect(body).not.toHaveProperty("program_id")
+      expect(body).not.toHaveProperty("entry_year")
+      expect(body).not.toHaveProperty("year_level")
+      expect(body).not.toHaveProperty("enrollment_category")
+      expect(body).not.toHaveProperty("financial_status")
+      expect(body).not.toHaveProperty("admission_status")
     })
-    expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("compares requested values and requires in-person verification before approval", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      const url = urlOf(input)
+      if (url.includes("/api/v1/programs")) {
+        return Promise.resolve(new Response(JSON.stringify(programs)))
+      }
+      if (url.endsWith("/decision") && init?.method === "PATCH") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...changeRequest,
+                status: "approved",
+                status_label: "Approved",
+                official: changeRequest.requested,
+                identity_verified_at: "2026-08-26T09:00:00Z",
+                decided_at: "2026-08-26T09:00:00Z",
+              },
+            }),
+          ),
+        )
+      }
+      if (url.includes("student-profile-change-requests")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: [changeRequest], ...pagination }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(screen.getByRole("tab", { name: "Change Requests" }))
+    await user.click(await screen.findByRole("button", { name: "Review" }))
+
+    expect(screen.getByText(changeRequest.official.email)).toBeInTheDocument()
+    expect(screen.getByText(changeRequest.requested.email)).toBeInTheDocument()
+    const approve = screen.getByRole("button", { name: "Approve changes" })
+    expect(approve).toBeDisabled()
+    await user.click(
+      screen.getByLabelText("Student identity verified in person at Admission"),
+    )
+    expect(approve).toBeEnabled()
+    await user.click(approve)
+
+    await waitFor(() => {
+      const decision = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          urlOf(input).endsWith("/decision") && init?.method === "PATCH",
+      )
+      expect(bodyOf(decision?.[1])).toEqual({
+        action: "approve",
+        identity_verified_in_person: true,
+      })
+    })
   })
 })

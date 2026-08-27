@@ -59,12 +59,11 @@ tags:
       term's `planned` sections to `published`.
   - name: Student Records
     description: >
-      Student account provisioning and self-service profile reads (PRD §5.2,
-      DFD 2.1). Admission Staff provisions the User and StudentProfile
-      together in one transaction (§3.2); a student may read only their own
-      profile, with no broader role-based visibility. `admission_status` and
-      `academic_standing` vocabularies are provisional pending PRD §17
-      approval.
+      Admission-managed account provisioning and verified profile corrections,
+      plus Student self-service profile reads and change requests (PRD §5.2,
+      DFD 2.1). New accounts stay disabled until the one-time email setup code
+      is used. Admission Staff may search records and decide profile changes;
+      Students may read and request changes only for their own profile.
   - name: Enrollment
     description: >
       Process 2.0's eligible-subject pool and submission (PRD §5.2, DFD 2.2)
@@ -171,6 +170,48 @@ paths:
           $ref: "#/components/responses/InternalError"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/auth/account-setup:
+    post:
+      operationId: postAuthAccountSetup
+      summary: Activate a pending Student account with its one-time code
+      description: >
+        Public, throttled initial-password setup. The code is delivered in the
+        email body, stored only as a hash, expires after 60 minutes, and is
+        invalidated after use or resend. The response never serializes a code
+        or token.
+      security: []
+      tags:
+        - Auth
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountSetupRequest"
+      responses:
+        "200":
+          description: The pending account was activated and may now sign in.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSetupResponse"
+        "422":
+          description: The request is invalid, expired, reused, or does not identify a pending Student account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/auth/login:
     post:
       operationId: postAuthLogin
@@ -1601,15 +1642,73 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/student-profiles:
+    get:
+      operationId: getStudentProfiles
+      summary: Search the Admission student directory
+      description: >
+        Admission Staff only. Returns a paginated directory searchable by
+        student name, student number, or email. Responses include no password,
+        setup code, or reset-token data.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: A page of matching student records.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedStudentProfilesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The search or pagination parameters failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
     post:
       operationId: postStudentProfile
       summary: Provision a student account and initial profile
       description: >
-        Admission Staff only. Creates the User (role student, active) and
-        StudentProfile together in one transaction — a profile never exists
-        without its account, or vice versa. Always created with
-        admission_status admitted and academic_standing good. The response
-        never includes the submitted password.
+        Admission Staff only. Requires an address and an explicit attestation
+        that requirements were submitted. Creates the disabled Student User
+        and StudentProfile atomically, resolves the curriculum from program
+        and entry year, then attempts delivery of a one-time account-setup
+        email. No client password or curriculum override is accepted.
       security:
         - bearerAuth: []
       tags:
@@ -1641,8 +1740,151 @@ paths:
         "422":
           description: >
             The submitted data is invalid, the email or student number is
-            already taken, or the curriculum does not belong to the given
-            program.
+            already taken, or no curriculum covers the program and entry year.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: studentProfile
+        in: path
+        required: true
+        description: Student profile ID.
+        schema:
+          type: integer
+    get:
+      operationId: getStudentProfileForAdmission
+      summary: View one student record as Admission Staff
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      responses:
+        "200":
+          description: The requested student record.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      operationId: patchStudentProfileForAdmission
+      summary: Apply an in-person verified Admission correction
+      description: >
+        Name, email, and address may be corrected after identity verification.
+        Student number, program, entry year, year level, enrollment category,
+        financial status, and admission status are rejected after the first
+        enrollment. Curriculum is always resolved by the server, and academic
+        standing is never editable here.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStudentProfileRequest"
+      responses:
+        "200":
+          description: The verified correction was applied.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation, duplicate-email, curriculum-resolution, or post-enrollment field restriction failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profiles/{studentProfile}/account-setup-invitations:
+    post:
+      operationId: postStudentProfileAccountSetupInvitation
+      summary: Resend a pending Student account setup invitation
+      description: >
+        Admission Staff only. Replaces any previous setup code before sending
+        a new email. Active accounts cannot receive another setup invitation.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          description: Student profile ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The record reflects the latest delivery attempt.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The account has already completed setup.
           content:
             application/json:
               schema:
@@ -1656,9 +1898,10 @@ paths:
       operationId: getStudentProfile
       summary: Read the authenticated user's own student profile
       description: >
-        Own-record only, the same "whoever is authenticated" shape as
-        `/api/v1/auth/me` — no role sees another student's profile, and this
-        slice grants no planning role broad visibility either.
+        Student own-record only. Returns official identity/contact data,
+        program and curriculum labels, approved status labels, and account
+        setup state. Pending requested changes are exposed only through the
+        change-request collection.
       security:
         - bearerAuth: []
       tags:
@@ -1681,6 +1924,270 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           description: The authenticated user has no student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profile-change-requests:
+    get:
+      operationId: getStudentProfileChangeRequests
+      summary: List role-scoped Student profile change requests
+      description: >
+        A Student sees only their own request history. Admission Staff sees
+        all requests and may filter by status. No other role is authorized.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: A role-scoped page of change requests.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedStudentProfileChangeRequestsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A filter or pagination field failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postStudentProfileChangeRequest
+      summary: Request changes to the authenticated Student's profile
+      description: >
+        Student only. The proposed name, email, and address are kept separate
+        from the official profile until Admission completes in-person
+        verification and approves the request. Only one pending request is
+        allowed per Student.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreStudentProfileChangeRequest"
+      responses:
+        "201":
+          description: The pending change request was created.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileChangeRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Another request is already pending for this Student.
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: Validation failed, or no value changed from the official profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profile-change-requests/{studentProfileChangeRequest}:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: studentProfileChangeRequest
+        in: path
+        required: true
+        description: Student profile change request ID.
+        schema:
+          type: integer
+    patch:
+      operationId: patchStudentProfileChangeRequest
+      summary: Revise the authenticated Student's pending request
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreStudentProfileChangeRequest"
+      responses:
+        "200":
+          description: The pending request was revised.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileChangeRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No change request exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The request is no longer pending, so it cannot be revised.
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: The values failed validation or do not change the official profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteStudentProfileChangeRequest
+      summary: Cancel the authenticated Student's pending request
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      responses:
+        "200":
+          description: The request was marked cancelled.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileChangeRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No change request exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The request is no longer pending, so it cannot be cancelled.
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/student-profile-change-requests/{studentProfileChangeRequest}/decision:
+    patch:
+      operationId: patchStudentProfileChangeRequestDecision
+      summary: Approve or reject a pending profile change as Admission Staff
+      description: >
+        Requires in-person identity verification. Approval atomically applies
+        the complete requested identity/contact set only when the official
+        profile still matches the request's base version. Rejection requires
+        decision notes. Both outcomes notify the Student.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfileChangeRequest
+          in: path
+          required: true
+          description: Student profile change request ID.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideStudentProfileChangeRequest"
+      responses:
+        "200":
+          description: The request was approved or rejected.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileChangeRequestResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No change request exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The request is no longer pending, or (on approval) the official
+            profile changed after this request was submitted.
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: Identity verification, rejection notes, or approval email-uniqueness validation failed.
           content:
             application/json:
               schema:
@@ -3721,6 +4228,17 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: The request conflicts with the current resource state.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/NoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     ValidationError:
       description: The request is invalid for the current lifecycle state.
       headers:
@@ -3806,6 +4324,48 @@ components:
           maxLength: 255
         password:
           type: string
+    AccountSetupRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - code
+        - password
+        - password_confirmation
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        code:
+          type: string
+          maxLength: 255
+          description: One-time code delivered separately in the account-setup email body.
+        password:
+          type: string
+          minLength: 8
+        password_confirmation:
+          type: string
+          minLength: 8
+    AccountSetupResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+            - status
+          properties:
+            type:
+              type: string
+              const: account-setup
+            status:
+              type: string
+              const: active
     AuthResponse:
       type: object
       additionalProperties: false
@@ -6586,11 +7146,23 @@ components:
         decision_reason:
           type: ["string", "null"]
           description: Required exactly when action is dean_return or executive_return.
+    PaginatedStudentProfilesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, links, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentProfileResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
     StudentProfileResponse:
       type: object
       additionalProperties: false
-      required:
-        - data
+      required: [data]
       properties:
         data:
           $ref: "#/components/schemas/StudentProfileResource"
@@ -6602,13 +7174,32 @@ components:
         - id
         - user_id
         - student_number
+        - name
+        - first_name
+        - middle_initial
+        - last_name
+        - suffix
+        - email
+        - address
         - program_id
+        - program_code
+        - program_name
         - curriculum_id
+        - entry_year
+        - curriculum_name
+        - curriculum_effective_school_year
         - year_level
+        - enrollment_category
         - admission_status
         - admission_status_label
         - academic_standing
         - academic_standing_label
+        - financial_status
+        - financial_status_label
+        - requirements_verified_at
+        - academic_setup_editable
+        - account_setup_status
+        - invitation_delivery_status
       properties:
         type:
           type: string
@@ -6619,87 +7210,345 @@ components:
           type: integer
         student_number:
           type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])-\d{5}$'
+        name:
+          type: string
+          description: Composed display name — "First M. Last Suffix". Always kept in sync with the split name fields.
+        first_name:
+          type: string
+        middle_initial:
+          type: [string, 'null']
+          maxLength: 10
+        last_name:
+          type: string
+        suffix:
+          type: [string, 'null']
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        address:
+          type: [string, 'null']
+          maxLength: 1000
         program_id:
           type: integer
+        program_code:
+          type: string
+        program_name:
+          type: string
         curriculum_id:
           type: integer
+        entry_year:
+          type: [integer, 'null']
+        curriculum_name:
+          type: string
+        curriculum_effective_school_year:
+          type: string
         year_level:
           type: integer
+          minimum: 1
+          maximum: 4
+        enrollment_category:
+          type: [string, 'null']
+          enum: [regular, irregular, null]
         admission_status:
           type: string
-          description: >
-            Provisional vocabulary pending PRD §17 approval — see
-            App\Domain\Identity\AdmissionStatus.
-          enum:
-            - pending
-            - admitted
-            - enrolled
-            - graduated
-            - withdrawn
+          enum: [pending, admitted, enrolled, graduated, withdrawn]
         admission_status_label:
           type: string
         academic_standing:
           type: string
-          description: >
-            Provisional vocabulary pending PRD §17 approval — see
-            App\Domain\Identity\AcademicStanding.
-          enum:
-            - good
-            - probation
-            - warning
+          enum: [good, probation, warning]
         academic_standing_label:
           type: string
         financial_status:
           type: [string, 'null']
-          description: >
-            Informational only, set at admission provisioning — never read by
-            fee computation. See App\Domain\Identity\FinancialStatus.
-          enum:
-            - scholar
-            - payee
-            - null
+          description: Informational only; it is not read by fee computation.
+          enum: [scholar, payee, null]
         financial_status_label:
           type: [string, 'null']
+        requirements_verified_at:
+          type: [string, 'null']
+          format: date-time
+        academic_setup_editable:
+          type: boolean
+          description: False after the Student has any enrollment.
+        account_setup_status:
+          type: string
+          enum: [pending, active]
+        invitation_delivery_status:
+          type: string
+          enum: [not_sent, sent, failed]
     StoreStudentProfileRequest:
       type: object
       additionalProperties: false
       required:
-        - name
+        - first_name
+        - last_name
         - email
-        - password
+        - address
+        - requirements_verified
         - student_number
         - program_id
-        - curriculum_id
+        - entry_year
         - year_level
       properties:
-        name:
+        first_name:
           type: string
           maxLength: 255
+        middle_initial:
+          type: [string, 'null']
+          maxLength: 10
+        last_name:
+          type: string
+          maxLength: 255
+        suffix:
+          type: [string, 'null']
+          maxLength: 20
         email:
           type: string
           format: email
           maxLength: 255
-        password:
+        address:
           type: string
-          minLength: 8
+          maxLength: 1000
+        requirements_verified:
+          type: boolean
+          const: true
         student_number:
           type: string
           maxLength: 255
           pattern: '^\d{4}-(0[1-9]|1[0-2])-\d{5}$'
-          description: >
-            YYYY-MM-NNNNN — the year and month provisioned, then a random
-            5-digit suffix. The frontend generates this by default.
         program_id:
           type: integer
-        curriculum_id:
+        entry_year:
           type: integer
-          description: Must belong to the given program_id.
+          minimum: 1000
+          maximum: 9999
         year_level:
           type: integer
           minimum: 1
+          maximum: 4
+        enrollment_category:
+          type: [string, 'null']
+          enum: [regular, irregular, null]
         financial_status:
           type: [string, 'null']
-          enum:
-            - scholar
-            - payee
-            - null
+          enum: [scholar, payee, null]
+    UpdateStudentProfileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+        - identity_verified_in_person
+      properties:
+        first_name:
+          type: string
+          maxLength: 255
+        middle_initial:
+          type: [string, 'null']
+          maxLength: 10
+        last_name:
+          type: string
+          maxLength: 255
+        suffix:
+          type: [string, 'null']
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        address:
+          type: string
+          maxLength: 1000
+        student_number:
+          type: string
+          maxLength: 255
+          pattern: '^\d{4}-(0[1-9]|1[0-2])-\d{5}$'
+        program_id:
+          type: integer
+        entry_year:
+          type: integer
+          minimum: 1000
+          maximum: 9999
+        year_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        enrollment_category:
+          type: string
+          enum: [regular, irregular]
+        financial_status:
+          type: [string, 'null']
+          enum: [scholar, payee, null]
+        admission_status:
+          type: string
+          enum: [pending, admitted, enrolled, graduated, withdrawn]
+        reason:
+          type: string
+          maxLength: 1000
+        identity_verified_in_person:
+          type: boolean
+          const: true
+    StoreStudentProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [first_name, last_name, email, address, reason]
+      properties:
+        first_name:
+          type: string
+          maxLength: 255
+        middle_initial:
+          type: [string, 'null']
+          maxLength: 10
+        last_name:
+          type: string
+          maxLength: 255
+        suffix:
+          type: [string, 'null']
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        address:
+          type: string
+          maxLength: 1000
+        reason:
+          type: string
+          maxLength: 1000
+    DecideStudentProfileChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [action, identity_verified_in_person]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        identity_verified_in_person:
+          type: boolean
+          const: true
+        notes:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Required when action is reject.
+    PaginatedStudentProfileChangeRequestsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, links, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentProfileChangeRequestResource"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    StudentProfileChangeRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/StudentProfileChangeRequestResource"
+    StudentProfileChangeRequestResource:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - student_id
+        - student_number
+        - student_name
+        - status
+        - status_label
+        - official
+        - requested
+        - reason
+        - decision_notes
+        - identity_verified_at
+        - requested_at
+        - decided_at
+      properties:
+        type:
+          type: string
+          const: student_profile_change_request
+        id:
+          type: integer
+        student_id:
+          type: integer
+        student_number:
+          type: string
+        student_name:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+        status_label:
+          type: string
+        official:
+          $ref: "#/components/schemas/StudentProfileOfficialIdentityFields"
+        requested:
+          $ref: "#/components/schemas/StudentProfileRequestedIdentityFields"
+        reason:
+          type: string
+        decision_notes:
+          type: [string, 'null']
+        identity_verified_at:
+          type: [string, 'null']
+          format: date-time
+        requested_at:
+          type: [string, 'null']
+          format: date-time
+        decided_at:
+          type: [string, 'null']
+          format: date-time
+    StudentProfileOfficialIdentityFields:
+      type: object
+      additionalProperties: false
+      required: [name, first_name, middle_initial, last_name, suffix, email, address]
+      properties:
+        name:
+          type: string
+          description: Composed display name — "First M. Last Suffix".
+        first_name:
+          type: string
+        middle_initial:
+          type: [string, 'null']
+          maxLength: 10
+        last_name:
+          type: string
+        suffix:
+          type: [string, 'null']
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        address:
+          type: [string, 'null']
+          description: Null when the official profile has no address on file yet.
+    StudentProfileRequestedIdentityFields:
+      type: object
+      additionalProperties: false
+      required: [name, first_name, middle_initial, last_name, suffix, email, address]
+      properties:
+        name:
+          type: string
+          description: Composed display name — "First M. Last Suffix".
+        first_name:
+          type: string
+        middle_initial:
+          type: [string, 'null']
+          maxLength: 10
+        last_name:
+          type: string
+        suffix:
+          type: [string, 'null']
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+          description: A requested address is always a complete, required value.

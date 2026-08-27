@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   connectedModuleIds,
@@ -48,9 +48,10 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "payment-records": "Transaction history",
   "cor-records": "Certificate of Registration Records",
   "queue-kiosk-access": "Queue kiosk access",
-  "student-accounts": "Student accounts",
-  "admission-status": "Admission status",
-  "credential-issuance": "Credential issuance",
+  "student-records": "Student Records",
+  "student-information": "Student Information",
+  "attrition-analytics": "Attrition analytics",
+  honors: "Dean's list",
   "enrollment-dashboard": "Enrollment dashboard",
   "institution-dashboard": "Institution dashboard",
   "stuck-students": "Stuck students",
@@ -63,8 +64,18 @@ const migratedRegionNames: Partial<Record<string, string>> = {
 const unmigratedRegionNames: Partial<Record<string, string>> = {}
 
 describe("connectedModuleRegistry", () => {
-  it("dispatches exactly the forty-one role-owned connected module IDs", () => {
-    expect(connectedModuleIds).toHaveLength(42)
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify({ data: [] }))),
+    )
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("dispatches every role-owned connected module ID", () => {
     expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
       [...connectedModuleIds].sort(),
     )

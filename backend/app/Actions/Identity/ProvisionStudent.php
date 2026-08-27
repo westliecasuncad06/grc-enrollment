@@ -9,6 +9,7 @@ use App\Domain\Curriculum\CurriculumVersion;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Identity\PersonName;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Models\Curriculum;
@@ -16,6 +17,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -29,7 +31,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{name: string, email: string, password: string, student_number: string, program_id: int, entry_year: int, year_level: int, enrollment_category?: ?string, financial_status?: ?string}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, entry_year: int, year_level: int, enrollment_category?: ?string, financial_status?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -51,11 +53,21 @@ final class ProvisionStudent
             }
 
             $user = User::create([
-                'name' => $data['name'],
+                'name' => PersonName::compose(
+                    $data['first_name'],
+                    $data['middle_initial'] ?? null,
+                    $data['last_name'],
+                    $data['suffix'] ?? null,
+                ),
+                'first_name' => $data['first_name'],
+                'middle_initial' => $data['middle_initial'] ?? null,
+                'last_name' => $data['last_name'],
+                'suffix' => $data['suffix'] ?? null,
                 'email' => $data['email'],
-                'password' => $data['password'],
+                'password' => Str::random(64),
                 'role' => UserRole::Student,
-                'status' => UserStatus::Active,
+                'status' => UserStatus::Disabled,
+                'account_setup_completed_at' => null,
             ]);
 
             $profile = StudentProfile::create([
@@ -72,6 +84,9 @@ final class ProvisionStudent
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
                 'financial_status' => $data['financial_status'] ?? null,
+                'address' => $data['address'],
+                'requirements_verified_at' => now(),
+                'requirements_verified_by' => $actor->id,
             ]);
             $profile->refresh();
 

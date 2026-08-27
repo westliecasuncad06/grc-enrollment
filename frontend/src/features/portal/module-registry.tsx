@@ -1,6 +1,7 @@
 import type { ComponentType } from "react"
 
-import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
+import { StudentRecordsWorkspace } from "@/features/components/portal/student-records-workspace"
+import { StudentInformationWorkspace } from "@/features/components/portal/student-information-workspace"
 import { AnalyticsDashboardWorkspace } from "@/features/components/portal/analytics-dashboard-workspace"
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
@@ -38,9 +39,8 @@ import { HonorsWorkspace } from "@/features/components/portal/honors-workspace"
 import { CashierCorRecordsWorkspace } from "@/features/components/portal/cashier-cor-records-workspace"
 
 export type ConnectedModuleId =
-  | "student-accounts"
-  | "admission-status"
-  | "credential-issuance"
+  | "student-records"
+  | "student-information"
   | "availability-preferences"
   | "teaching-schedule"
   | "program-chair-enrollment"
@@ -86,9 +86,8 @@ export type ConnectedModuleId =
 export type PortalModuleComponent = ComponentType
 
 export const connectedModuleIds = [
-  "student-accounts",
-  "admission-status",
-  "credential-issuance",
+  "student-records",
+  "student-information",
   "availability-preferences",
   "teaching-schedule",
   "program-chair-enrollment",
@@ -131,18 +130,6 @@ export const connectedModuleIds = [
   "attrition-analytics",
   "honors",
 ] as const satisfies readonly ConnectedModuleId[]
-
-const studentAccountsWorkspace: PortalModuleComponent = () => (
-  <AdmissionProvisioningWorkspace initialModuleId="student-accounts" />
-)
-
-const admissionStatusWorkspace: PortalModuleComponent = () => (
-  <AdmissionProvisioningWorkspace initialModuleId="admission-status" />
-)
-
-const credentialIssuanceWorkspace: PortalModuleComponent = () => (
-  <AdmissionProvisioningWorkspace initialModuleId="credential-issuance" />
-)
 
 const availabilityPreferencesWorkspace: PortalModuleComponent = () => (
   <FacultyInputWorkspace />
@@ -202,9 +189,8 @@ const enrollmentDocumentsWorkspace: PortalModuleComponent = () => (
 export const connectedModuleRegistry: Readonly<
   Record<ConnectedModuleId, PortalModuleComponent>
 > = {
-  "student-accounts": studentAccountsWorkspace,
-  "admission-status": admissionStatusWorkspace,
-  "credential-issuance": credentialIssuanceWorkspace,
+  "student-records": StudentRecordsWorkspace,
+  "student-information": StudentInformationWorkspace,
   "availability-preferences": availabilityPreferencesWorkspace,
   "teaching-schedule": teachingScheduleWorkspace,
   "program-chair-enrollment": programChairEnrollmentWorkspace,

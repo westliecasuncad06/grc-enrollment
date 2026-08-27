@@ -498,6 +498,62 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.is_eligible', true);
     }
 
+    public function test_an_irregular_student_does_not_see_a_subject_placed_ahead_of_their_year_level(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $current = $this->makeSubject('CS101');
+        $future = $this->makeSubject('CS301');
+        $this->placeSubject($curriculum, $current, 1);
+        $this->placeSubject($curriculum, $future, 3);
+        $this->makeSection($term, $current);
+        $this->makeSection($term, $future);
+        $student = $this->makeStudent($curriculum);
+        $student->forceFill(['enrollment_category' => 'irregular'])->save();
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.code', 'CS101');
+    }
+
+    public function test_an_irregular_student_still_sees_a_backlog_subject_from_an_earlier_year_level(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $backlog = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $backlog, 1);
+        $this->makeSection($term, $backlog);
+        $student = $this->makeStudent($curriculum);
+        $student->forceFill(['year_level' => 2, 'enrollment_category' => 'irregular'])->save();
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.code', 'CS101');
+    }
+
+    public function test_a_regular_students_pool_is_not_bounded_by_year_level(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $future = $this->makeSubject('CS301');
+        $this->placeSubject($curriculum, $future, 3);
+        // Unclassified (regular) 1st-year student -- the irregular-only
+        // ordinal bound must not apply, so the pool still surfaces this
+        // 3rd-year placement, ineligible for its own unrelated reason.
+        $token = $this->tokenFor($this->makeStudent($curriculum));
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.code', 'CS301');
+        $response->assertJsonPath('data.0.is_eligible', false);
+        $response->assertJsonPath('data.0.reasons.0.code', 'no_sections_available');
+    }
+
     public function test_a_regular_student_cannot_reach_another_year_levels_block(): void
     {
         $term = $this->makeTerm();

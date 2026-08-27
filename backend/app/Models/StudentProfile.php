@@ -24,6 +24,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property AdmissionStatus $admission_status
  * @property AcademicStanding $academic_standing
  * @property ?FinancialStatus $financial_status
+ * @property ?string $address
+ * @property ?CarbonImmutable $requirements_verified_at
+ * @property ?int $requirements_verified_by
  * @property bool $is_demo_account
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -49,6 +52,9 @@ final class StudentProfile extends Model
         'admission_status',
         'academic_standing',
         'financial_status',
+        'address',
+        'requirements_verified_at',
+        'requirements_verified_by',
         'is_demo_account',
     ];
 
@@ -64,6 +70,7 @@ final class StudentProfile extends Model
             'admission_status' => AdmissionStatus::class,
             'academic_standing' => AcademicStanding::class,
             'financial_status' => FinancialStatus::class,
+            'requirements_verified_at' => 'immutable_datetime',
             'is_demo_account' => 'boolean',
         ];
     }
@@ -114,5 +121,11 @@ final class StudentProfile extends Model
     public function accountPayments(): HasMany
     {
         return $this->hasMany(AccountPayment::class, 'student_id');
+    }
+
+    /** @return HasMany<StudentProfileChangeRequest, $this> */
+    public function profileChangeRequests(): HasMany
+    {
+        return $this->hasMany(StudentProfileChangeRequest::class, 'student_id');
     }
 }

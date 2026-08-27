@@ -25,6 +25,7 @@ final class ApiSurfaceTest extends TestCase
             'DELETE api/v1/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}',
             'DELETE api/v1/faculty-specializations/{facultySpecialization}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
+            'DELETE api/v1/student-profile-change-requests/{studentProfileChangeRequest}',
             'GET|HEAD api/v1/academic-grades',
             'GET|HEAD api/v1/academic-record',
             'GET|HEAD api/v1/academic-term-section-plans',
@@ -84,6 +85,9 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/stuck-enrollments',
             'GET|HEAD api/v1/student-account',
             'GET|HEAD api/v1/student-profile',
+            'GET|HEAD api/v1/student-profile-change-requests',
+            'GET|HEAD api/v1/student-profiles',
+            'GET|HEAD api/v1/student-profiles/{studentProfile}',
             'GET|HEAD api/v1/student-schedule-preferences',
             'GET|HEAD api/v1/students/{student}/account',
             'GET|HEAD api/v1/subject-offerings',
@@ -109,6 +113,9 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/queue-tickets/{queueTicket}',
             'PATCH api/v1/schedule-proposals/{scheduleProposal}',
             'PATCH api/v1/sections/{section}',
+            'PATCH api/v1/student-profile-change-requests/{studentProfileChangeRequest}',
+            'PATCH api/v1/student-profile-change-requests/{studentProfileChangeRequest}/decision',
+            'PATCH api/v1/student-profiles/{studentProfile}',
             'PATCH api/v1/transferee-credits/{transfereeCredit}',
             'PATCH api/v1/withdrawal-requests/{withdrawalRequest}',
             'POST api/v1/academic-grades',
@@ -118,6 +125,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/academic-terms/{academicTerm}/section-plan/auto-assign',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/release',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/submit',
+            'POST api/v1/auth/account-setup',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
             'POST api/v1/curricula',
@@ -139,7 +147,9 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/sections',
             'POST api/v1/sections/{section}/grades',
             'POST api/v1/sections/{section}/grades/submit',
+            'POST api/v1/student-profile-change-requests',
             'POST api/v1/student-profiles',
+            'POST api/v1/student-profiles/{studentProfile}/account-setup-invitations',
             'POST api/v1/students/{student}/account-payments',
             'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
@@ -242,7 +252,16 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.student-account.show-own',
             'api.v1.students.account.show',
             'api.v1.students.account-payments.store',
+            'api.v1.student-profile-change-requests.index',
+            'api.v1.student-profile-change-requests.store',
+            'api.v1.student-profile-change-requests.update',
+            'api.v1.student-profile-change-requests.destroy',
+            'api.v1.student-profile-change-requests.decision.update',
+            'api.v1.student-profiles.index',
             'api.v1.student-profiles.store',
+            'api.v1.student-profiles.show',
+            'api.v1.student-profiles.update',
+            'api.v1.student-profiles.account-setup-invitations.store',
             'api.v1.student-schedule-preferences.show',
             'api.v1.student-schedule-preferences.update',
             'api.v1.dashboards.enrollment-summary',
@@ -406,10 +425,18 @@ final class ApiSurfaceTest extends TestCase
 
     public function test_student_profile_provisioning_is_gated_to_the_admission_staff_role(): void
     {
-        $route = Route::getRoutes()->getByName('api.v1.student-profiles.store');
+        foreach ([
+            'api.v1.student-profiles.index',
+            'api.v1.student-profiles.store',
+            'api.v1.student-profiles.show',
+            'api.v1.student-profiles.update',
+            'api.v1.student-profiles.account-setup-invitations.store',
+        ] as $name) {
+            $route = Route::getRoutes()->getByName($name);
 
-        $this->assertNotNull($route);
-        $this->assertContains('role:admission_staff', $route->gatherMiddleware());
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:admission_staff', $route->gatherMiddleware());
+        }
     }
 
     public function test_cross_cutting_read_routes_have_the_exact_role_boundaries(): void

@@ -122,8 +122,6 @@ export function AcademicRecordView({ studentId }: { studentId?: number }) {
   return (
     <AsyncBoundary
       query={query}
-      isEmpty={(record) => record.terms.length === 0}
-      emptyMessage="No grades have been recorded yet."
       loadingLabel="Loading grades…"
       loadingFallback={<Skeleton className="h-64" />}
     >
@@ -158,6 +156,11 @@ function AcademicRecordBody({
           <CardDescription>Latest school year first</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          {schoolYears.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No terms recorded yet.
+            </p>
+          )}
           {schoolYears.map(([schoolYear, terms]) => {
             const isActiveYear = terms.some(
               (term) => term.academic_term_id === selectedTermId,
@@ -237,6 +240,11 @@ function AcademicRecordBody({
           ) : (
             <GradeTiles slip={toGradeSlip(record, selectedTerm)} />
           )
+        ) : schoolYears.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No grades have been recorded yet. Open the Prospectus above to
+            see the subjects you still need to take.
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">
             Select a school year and semester to view its grades.

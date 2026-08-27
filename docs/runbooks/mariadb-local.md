@@ -233,6 +233,67 @@ This switched the run from a sort-based rebuild to a plain check-and-fix path
 and reported `was ok. Status updated`. Server survived a `SHOW COLUMNS` canary
 afterward, confirming the table was actually healthy and not just marked so.
 
+### Gotcha: `mysql.db`'s header itself is unreadable — `aria_chk` refuses, not just fails
+
+Seen 2026-08-26 after `mysqld` crashed mid-migration (17+ minutes into a large
+data backfill, unrelated to this signature otherwise). Startup aborted with:
+
+```
+[ERROR] Fatal error: Can't open and lock privilege tables: Incorrect file format 'db'
+```
+
+**More severe than the `columns_priv` gotcha above.** Both `aria_chk -r` and
+`aria_chk -z` (even with `--datadir`/`--require-control-file` correct) refuse
+outright:
+
+```
+aria_chk.exe: error: '../data/mysql/db.MAI' is not a Aria table
+```
+
+This means the `.MAI` header itself is corrupted beyond recognition, not just
+mis-stamped or index-damaged — `-f -f` does not help either, because the tool
+never gets far enough to attempt a repair. Every *other* Aria system table
+(including `columns_priv`, `help_topic`, `proxies_priv`, which separately hit
+the sort_buffer_size gotcha in the same incident) recovered fine with the
+techniques above; `db` specifically did not.
+
+Fix: swap in a fresh, empty copy of the table from XAMPP's own pristine
+template rather than trying to repair the broken one in place — the same
+"restore from template" idea the full rebuild section above uses, applied
+surgically to one table instead of the whole datadir:
+
+1. Confirm `mysqld` is fully stopped.
+2. **Move the corrupted files aside, don't delete them**: `db.frm`, `db.MAD`,
+   `db.MAI` (and any `db.MAD-<timestamp>.BAK` sitting next to them from a
+   *previous* incident — their presence is itself evidence this exact table
+   has failed this way before) out of `C:\xampp\mysql\data\mysql\`.
+3. Copy `db.frm`, `db.MAD`, `db.MAI` from `C:\xampp\mysql\backup\mysql\` (the
+   pristine, empty template XAMPP ships) into `C:\xampp\mysql\data\mysql\`.
+4. Start `mysqld` normally. The log should show
+   `[Note] Zerofilling moved table: '.\mysql\db'` and then either come up
+   clean or hit the next broken table (repair those with the techniques
+   above) — `db` itself will not error again.
+5. **The freshly-installed `db` table is empty — no schema-level grants
+   survive.** Re-apply the exact `GRANT` statements in "One-time setup"
+   below for every project-specific user. `global_priv` (a *different* Aria
+   table, usually undamaged) holds each user's existence and password hash
+   independently of `db`, so `SELECT Host, User FROM mysql.global_priv;`
+   while running with `--skip-grant-tables` tells you exactly which
+   users need their grants restored — don't guess or re-grant unrelated
+   users sharing the instance. In this incident only three project-specific
+   users existed at all (`grc_app`, `grc_migrator`, `grc_test`); every other
+   local project sharing the instance connects as `root`, which needs no
+   `db` entry, so nothing else needed restoring.
+6. Verify with the same checks as any recovery: `SHOW GRANTS FOR
+   '<user>'@'<host>';` for every restored user, a DDL-denial canary for
+   `grc_app` (see "Running migrations" below), and confirm `grc_migrator`
+   still has full DDL rights.
+
+Move the emergency backup of `mysql/` you took before starting *outside* the
+datadir once you're done (e.g. `C:\xampp\db_recovery_<date>\`) — leaving it
+inside `data\` makes MariaDB treat it as a bogus extra database, same as the
+warning in "Instance rebuild" above.
+
 ## One-time setup: databases and principals
 
 Run as `root` (no password on this instance; connects over `127.0.0.1:3306`).

@@ -2,6 +2,9 @@ import { PortalModulePage } from "@/features/components/pages/portal-module-page
 import { redirect } from "next/navigation"
 
 const legacyModuleRedirects: Record<string, string> = {
+  "student-accounts": "student-records",
+  "admission-status": "student-records",
+  "credential-issuance": "student-records",
   "demand-forecast": "program-chair-enrollment",
   "faculty-assignment": "schedule-faculty-loading",
   "sections-schedules": "schedule-faculty-loading",

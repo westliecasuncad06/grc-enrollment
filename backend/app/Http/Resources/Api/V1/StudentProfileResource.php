@@ -20,7 +20,16 @@ final class StudentProfileResource extends JsonResource
      *     id: int,
      *     user_id: int,
      *     student_number: string,
+     *     name: string,
+     *     first_name: string,
+     *     middle_initial: ?string,
+     *     last_name: string,
+     *     suffix: ?string,
+     *     email: string,
+     *     address: ?string,
      *     program_id: int,
+     *     program_code: string,
+     *     program_name: string,
      *     curriculum_id: int,
      *     entry_year: ?int,
      *     curriculum_name: string,
@@ -32,19 +41,34 @@ final class StudentProfileResource extends JsonResource
      *     academic_standing: string,
      *     academic_standing_label: string,
      *     financial_status: ?string,
-     *     financial_status_label: ?string
+     *     financial_status_label: ?string,
+     *     requirements_verified_at: ?string,
+     *     academic_setup_editable: bool,
+     *     account_setup_status: 'pending'|'active',
+     *     invitation_delivery_status: 'not_sent'|'sent'|'failed'
      * }
      */
     public function toArray(Request $request): array
     {
         $curriculum = $this->resource->curriculum;
+        $user = $this->resource->user;
+        $program = $this->resource->program;
 
         return [
             'type' => 'student_profile',
             'id' => $this->resource->id,
             'user_id' => $this->resource->user_id,
             'student_number' => $this->resource->student_number,
+            'name' => $user->name,
+            'first_name' => $user->first_name ?? '',
+            'middle_initial' => $user->middle_initial,
+            'last_name' => $user->last_name ?? '',
+            'suffix' => $user->suffix,
+            'email' => $user->email,
+            'address' => $this->resource->address,
             'program_id' => $this->resource->program_id,
+            'program_code' => $program->code,
+            'program_name' => $program->name,
             'curriculum_id' => $this->resource->curriculum_id,
             'entry_year' => $this->resource->entry_year,
             'curriculum_name' => $curriculum->name,
@@ -57,6 +81,16 @@ final class StudentProfileResource extends JsonResource
             'academic_standing_label' => $this->resource->academic_standing->label(),
             'financial_status' => $this->resource->financial_status?->value,
             'financial_status_label' => $this->resource->financial_status?->label(),
+            'requirements_verified_at' => $this->resource->requirements_verified_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'academic_setup_editable' => ! ((bool) ($this->resource->enrollments_exists ?? false)),
+            'account_setup_status' => $user->account_setup_completed_at === null ? 'pending' : 'active',
+            'invitation_delivery_status' => match (true) {
+                $user->account_setup_invitation_failed_at !== null
+                    && ($user->account_setup_invitation_sent_at === null
+                        || $user->account_setup_invitation_failed_at->greaterThan($user->account_setup_invitation_sent_at)) => 'failed',
+                $user->account_setup_invitation_sent_at !== null => 'sent',
+                default => 'not_sent',
+            },
         ];
     }
 }

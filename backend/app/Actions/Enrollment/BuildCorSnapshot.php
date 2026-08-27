@@ -39,7 +39,7 @@ final class BuildCorSnapshot
             'student' => [
                 'student_number' => $student->student_number,
                 'name' => $student->user->name,
-                'address' => 'Not provided',
+                'address' => filled($student->address) ? $student->address : 'Not provided',
                 'course' => $student->program->name,
                 'level' => 'Year '.$student->year_level,
                 'platform' => 'Not provided',

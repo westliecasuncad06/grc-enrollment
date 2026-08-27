@@ -25,7 +25,11 @@ final class BuildCorSnapshotTest extends TestCase
     {
         $studentUser = new User(['name' => 'Student One']);
         $program = new Program(['code' => 'BSIT', 'name' => 'Bachelor of Science in Information Technology']);
-        $student = new StudentProfile(['student_number' => '2026-0001', 'year_level' => 4]);
+        $student = new StudentProfile([
+            'student_number' => '2026-0001',
+            'year_level' => 4,
+            'address' => "123 Mabini Street\nCaloocan City",
+        ]);
         $student->setRelation('user', $studentUser);
         $student->setRelation('program', $program);
 
@@ -73,7 +77,7 @@ final class BuildCorSnapshotTest extends TestCase
 
         self::assertSame('Certificate of Registration', $snapshot['document_title']);
         self::assertSame('2026-0001', $snapshot['student']['student_number']);
-        self::assertSame('Not provided', $snapshot['student']['address']);
+        self::assertSame("123 Mabini Street\nCaloocan City", $snapshot['student']['address']);
         self::assertSame('CS101', $snapshot['subjects'][0]['code']);
         self::assertSame('10:30 AM - 01:30 PM Mon', $snapshot['subjects'][0]['schedule']);
         self::assertSame('1500.00', $snapshot['fees']['total_tuition']);

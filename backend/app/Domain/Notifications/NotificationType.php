@@ -29,4 +29,6 @@ enum NotificationType: string
     case CurriculumReturned = 'curriculum_returned';
     case QueueTicketClaimed = 'queue_ticket_claimed';
     case QueueCycleCutOff = 'queue_cycle_cut_off';
+    case StudentProfileChangeApproved = 'student_profile_change_approved';
+    case StudentProfileChangeRejected = 'student_profile_change_rejected';
 }

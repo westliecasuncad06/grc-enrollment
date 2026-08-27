@@ -77,13 +77,21 @@ final class StudentProfilePolicyTest extends TestCase
         self::assertFalse($policy->view($other, $profile));
     }
 
-    public function test_no_planning_role_has_broad_view_access(): void
+    public function test_no_planning_role_other_than_admission_staff_has_broad_view_access(): void
     {
         $policy = new StudentProfilePolicy;
         $owner = $this->makeUser(UserRole::Student, 'owner');
         $profile = $this->makeProfileFor($owner);
 
         self::assertFalse($policy->view($this->makeUser(UserRole::RegistrarHead, 'registrar-head'), $profile));
-        self::assertFalse($policy->view($this->makeUser(UserRole::AdmissionStaff, 'admission'), $profile));
+    }
+
+    public function test_admission_staff_has_broad_view_access_for_the_student_records_directory(): void
+    {
+        $policy = new StudentProfilePolicy;
+        $owner = $this->makeUser(UserRole::Student, 'owner');
+        $profile = $this->makeProfileFor($owner);
+
+        self::assertTrue($policy->view($this->makeUser(UserRole::AdmissionStaff, 'admission'), $profile));
     }
 }

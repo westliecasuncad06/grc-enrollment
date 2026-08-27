@@ -1,68 +1,84 @@
-# Student Profile Foundation Data Dictionary
+# Student Records and Account Setup Data Dictionary
 
-**Database:** MariaDB 10.4.32 (`grc_enrollment` / `grc_enrollment_test`), per
-ADR 0007.
+**Database:** MariaDB 10.4.32 (`grc_enrollment` / `grc_enrollment_test`), per ADR 0007.
 
-Schema: `student_profiles` (see `docs/data-dictionary/enrollment-records.md`
-for the column-level table — it landed in the schema-foundation task). This
-slice adds the first API layer over that table: provisioning and
-self-service reads (PRD §5.2, DFD 2.1).
+**Owning logical store:** PRD `STUDENT RECORDS`. This slice covers Admission provisioning and corrections, Student self-service profile reads, initial password setup, and Admission-approved profile change requests. Enrollment and academic-history fields remain documented in `enrollment-records.md`.
 
-## Provisioning transaction
+## Security and lifecycle rules
 
-`App\Actions\Identity\ProvisionStudent` creates the `User` (role `student`,
-status `active`) and the `StudentProfile` together inside one
-`DB::transaction()`. A `StudentProfile` must never exist without its `User`,
-or vice versa — there is no two-step "create the account, then create the
-profile" flow, matching PRD §3.2's "create new student accounts *and*
-initial profiles" as one Admission Staff action, not two calls against two
-endpoints.
+- Admission creates the Student `users` row and `student_profiles` row in one database transaction only after attesting that requirements were submitted.
+- A new account is `disabled` with a server-generated hidden password until the Student successfully uses the emailed one-time setup code. The API never accepts or returns an initial password, setup code, or reset-token value.
+- Curriculum is resolved from `program_id` plus `entry_year`; clients cannot select or override `curriculum_id`.
+- Invitation delivery runs after commit. A delivery failure leaves the single pending account intact and records a resendable failed state. Resend replaces the prior code.
+- Laravel's password broker stores only the hashed code and applies the configured 60-minute expiry. Successful setup is single-use, activates the account, replaces the hidden password, and deletes the code.
+- Existing accounts are backfilled with `account_setup_completed_at` so this migration never disables working users.
+- Students may propose only name, email, and complete address changes. The official record is unchanged until Admission verifies identity in person and approves the complete request atomically.
+- Admission direct corrections require a reason and in-person verification. Academic setup fields are editable only before the first enrollment; curriculum and academic standing are never directly editable.
+- Audit rows contain action metadata and changed field names/counts, not name, email, address, reason text, decision-note text, passwords, or setup codes.
 
-`admission_status` is always set to `AdmissionStatus::Admitted` and
-`academic_standing` to `AcademicStanding::Good` on provisioning — a new
-account is only ever created because the student *was* admitted, and a
-brand-new student has no academic history yet to reflect anything else.
-Both enums are pre-existing provisional vocabulary from the schema-foundation
-task (PRD §17 unconfirmed); this slice introduces no new vocabulary.
+## `users` additions
 
-`StoreStudentProfileRequest::withValidator()` cross-checks that the
-submitted `curriculum_id` actually belongs to the submitted `program_id`,
-rejecting the mismatch as a 422 before the transaction ever opens — nothing
-enforced this at the data layer before, and enrolling a student under a
-curriculum from a different program would be a silent data-integrity bug.
+| Column | Type | Constraints | Producer / consumer | Sensitivity and notes |
+|---|---|---|---|---|
+| `account_setup_completed_at` | `TIMESTAMP` | nullable | Set by account activation; read by login and Student Records | Account lifecycle metadata. `null` means initial setup is still pending. |
+| `account_setup_invitation_sent_at` | `TIMESTAMP` | nullable | Set after successful mail delivery; read by Admission | Delivery metadata; contains no email content or code. |
+| `account_setup_invitation_failed_at` | `TIMESTAMP` | nullable | Set after failed mail delivery; read by Admission | Delivery metadata used to expose the resend action. |
 
-Admission Staff sets the student's initial password directly in the request
-(the same fail-closed, no-default-credential pattern as
-`RoleUserSeeder`/`DemoEnrollmentSeeder`); no invitation-email flow exists in
-this codebase, and building one is out of scope for this slice. The response
-never echoes the password back — `StudentProfileResource`'s key set is
-fixed and excludes it, even though the caller already knows the value they
-just submitted.
+The existing `users.status` remains the login enforcement field: pending setup accounts are `disabled`; successful setup changes it to `active`.
 
-## Authorization — own-record only, no broader role visibility
+## `student_profiles` additions
 
-Unlike Faculty Input (own-record for Faculty, but every planning role sees
-every professor's rows — see `docs/data-dictionary/faculty-input.md`),
-**no role** gets broad read access to student profiles in this slice.
-`StudentProfilePolicy::view()` checks only `$user->id === $profile->user_id`.
-`GET /api/v1/student-profile` takes no path parameter — it resolves
-"whose profile is this" from the authenticated token exactly like
-`GET /api/v1/auth/me`, not from a route-supplied ID. A 404 (not a 500) is
-returned when the authenticated user has no profile, e.g. a non-student role
-or a student account that was never provisioned through this endpoint.
+| Column | Type | Constraints | Producer / consumer | Sensitivity and notes |
+|---|---|---|---|---|
+| `address` | `TEXT` | nullable for migration compatibility | Admission provisioning/direct correction or approved Student request; Student Information and future COR snapshots | Personal contact data. Required for newly provisioned accounts; existing rows may display `Not provided`. Multiline printable value. |
+| `requirements_verified_at` | `TIMESTAMP` | nullable | Set during Admission provisioning | Evidence that Admission confirmed submitted requirements; not a document checklist. |
+| `requirements_verified_by` | `BIGINT UNSIGNED` | nullable FK → `users.id`, `NULL` on staff deletion | Set during Admission provisioning | Admission actor responsible for the attestation. |
 
-`StudentProfilePolicy::create()` restricts provisioning to
-`UserRole::AdmissionStaff`, re-checking the route's `role:admission_staff`
-middleware as defense in depth — the same two-layer pattern as every other
-write-gated resource in this API (ADR 0008).
+The established fields `entry_year`, `program_id`, `curriculum_id`, `year_level`, `enrollment_category`, `financial_status`, and `admission_status` remain part of the profile. `academic_setup_editable` is an API-derived boolean (`false` once any enrollment exists), not a stored column.
 
-## Seeded data
+Future COR snapshots copy the current approved `student_profiles.address`. Existing COR snapshot JSON is immutable and is never rewritten after a profile change.
 
-`student_profiles.is_demo_account` is a non-null boolean, defaulting to
-`false`. It distinguishes the legacy local QA student profiles from the
-structured roster used for local factual attrition scenarios. Analytics and
-honors reports exclude demo accounts; it is private operational provenance
-and is never serialized by the student-profile API.
+## `password_reset_tokens`
 
-None. No acceptance criterion required seeded fixtures for this sub-project;
-tests create records directly.
+Laravel password-broker storage is also used for initial Student account setup.
+
+| Column | Type | Constraints | Producer / consumer | Sensitivity and notes |
+|---|---|---|---|---|
+| `email` | `VARCHAR(255)` | primary key | Invitation sender and account setup action | Identifies the pending account; one current code per email. |
+| `token` | `VARCHAR(255)` | not null | Laravel password broker | One-way hash only; never serialized or logged. |
+| `created_at` | `TIMESTAMP` | nullable | Laravel password broker | Used to enforce the configured 60-minute expiry. |
+
+## `student_profile_change_requests`
+
+| Column | Type | Constraints | Producer / consumer | Sensitivity and notes |
+|---|---|---|---|---|
+| `id` | `BIGINT UNSIGNED` | primary key, auto-increment | API resource identifier | |
+| `student_id` | `BIGINT UNSIGNED` | FK → `student_profiles.id`, cascade delete | Owning Student and Admission review | Ownership boundary. Indexed with `status`. |
+| `requested_first_name` | `VARCHAR(255)` | not null | Student request/revision; Admission comparison/decision | Proposed personal data; does not change `users.first_name`/`users.name` until approval. |
+| `requested_middle_initial` | `VARCHAR(10)` | nullable | Student request/revision; Admission comparison/decision | Proposed personal data; optional. |
+| `requested_last_name` | `VARCHAR(255)` | not null | Student request/revision; Admission comparison/decision | Proposed personal data. |
+| `requested_suffix` | `VARCHAR(20)` | nullable | Student request/revision; Admission comparison/decision | Proposed personal data; optional. |
+| `requested_email` | `VARCHAR(255)` | not null | Student request/revision; Admission comparison/decision | Proposed personal data; uniqueness is rechecked at approval. |
+| `requested_address` | `TEXT` | not null | Student request/revision; Admission comparison/decision | Proposed personal data. |
+| `reason` | `TEXT` | not null | Student request/revision; Admission review | User-provided sensitive context; deliberately excluded from audit payload values. |
+| `base_profile_updated_at` | `TIMESTAMP` | not null | Captured on create/revision; checked on approval | Optimistic stale-request guard. |
+| `status` | `VARCHAR(255)` | not null | Request workflow | `pending`, `approved`, `rejected`, or `cancelled`. One pending request per Student is enforced by transactional application logic. |
+| `decided_by` | `BIGINT UNSIGNED` | nullable FK → `users.id`, `NULL` on staff deletion | Admission decision | Admission actor who approved or rejected. |
+| `decision_notes` | `TEXT` | nullable | Admission decision; Student status view | Required for rejection; excluded from audit payload values. |
+| `identity_verified_at` | `TIMESTAMP` | nullable | Admission decision | Evidence of in-person verification. |
+| `decided_at` | `TIMESTAMP` | nullable | Approval, rejection, or cancellation | Workflow completion time. |
+| `created_at`, `updated_at` | `TIMESTAMP` | nullable | Laravel timestamps | `created_at` is indexed with `status`. |
+
+## API ownership and serialization
+
+- `GET /api/v1/student-profile` and Student change-request operations resolve ownership from the Sanctum bearer identity; Students cannot supply another Student ID.
+- Admission-only `/api/v1/student-profiles` routes support paginated name, student-number, and email search, verified corrections, and invitation resend.
+- `StudentProfileResource` serializes approved identity/contact fields (the composed `name` alongside the split `first_name`/`middle_initial`/`last_name`/`suffix` — clients edit the parts, never the composed string), program/curriculum labels, permitted status labels, requirements time, academic editability, and delivery/setup state. It never serializes credential or token fields.
+- Change-request resources show official and proposed identity/contact groups, each with the same composed-plus-split name shape, so clients do not present pending values as already official.
+- Approvals and rejections notify the owning Student. Authorization is enforced by policy in addition to route middleware where applicable.
+
+## Retention and reversibility
+
+Official profile data is retained with the Student record under the institution's general records policy. Change requests are retained as decision history unless an approved retention policy later requires archival or deletion. Setup codes are temporary authentication material: expired values are rejected and successful setup or resend invalidates the prior code.
+
+Migration `2026_08_26_000001_add_student_record_and_account_setup_fields.php` reverses the three User columns, the three Student-profile fields, and `password_reset_tokens`. Migration `2026_08_26_000002_create_student_profile_change_requests_table.php` drops the request table. Rollback does not attempt to restore already delivered emails or external mail-provider state.

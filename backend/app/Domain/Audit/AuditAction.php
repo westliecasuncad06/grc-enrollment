@@ -66,6 +66,24 @@ final class AuditAction
 
     public const STUDENT_PROFILE_PROVISIONED = 'student_profile.provisioned';
 
+    public const STUDENT_PROFILE_UPDATED = 'student_profile.updated';
+
+    public const STUDENT_ACCOUNT_SETUP_INVITATION_SENT = 'student_account.setup_invitation_sent';
+
+    public const STUDENT_ACCOUNT_SETUP_INVITATION_FAILED = 'student_account.setup_invitation_failed';
+
+    public const STUDENT_ACCOUNT_ACTIVATED = 'student_account.activated';
+
+    public const STUDENT_PROFILE_CHANGE_REQUESTED = 'student_profile_change.requested';
+
+    public const STUDENT_PROFILE_CHANGE_REQUEST_UPDATED = 'student_profile_change.updated';
+
+    public const STUDENT_PROFILE_CHANGE_REQUEST_CANCELLED = 'student_profile_change.cancelled';
+
+    public const STUDENT_PROFILE_CHANGE_REQUEST_APPROVED = 'student_profile_change.approved';
+
+    public const STUDENT_PROFILE_CHANGE_REQUEST_REJECTED = 'student_profile_change.rejected';
+
     public const STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED = 'student_profile.enrollment_category_reclassified';
 
     public const STUDENT_CURRICULUM_MIGRATED = 'student_profile.curriculum_migrated';
@@ -201,6 +219,15 @@ final class AuditAction
             self::SECTION_PUBLISHED,
             self::SCHEDULE_PROPOSAL_CLOSED,
             self::STUDENT_PROFILE_PROVISIONED,
+            self::STUDENT_PROFILE_UPDATED,
+            self::STUDENT_ACCOUNT_SETUP_INVITATION_SENT,
+            self::STUDENT_ACCOUNT_SETUP_INVITATION_FAILED,
+            self::STUDENT_ACCOUNT_ACTIVATED,
+            self::STUDENT_PROFILE_CHANGE_REQUESTED,
+            self::STUDENT_PROFILE_CHANGE_REQUEST_UPDATED,
+            self::STUDENT_PROFILE_CHANGE_REQUEST_CANCELLED,
+            self::STUDENT_PROFILE_CHANGE_REQUEST_APPROVED,
+            self::STUDENT_PROFILE_CHANGE_REQUEST_REJECTED,
             self::STUDENT_ENROLLMENT_CATEGORY_RECLASSIFIED,
             self::STUDENT_CURRICULUM_MIGRATED,
             self::AUDIT_LOG_LIST_VIEWED,

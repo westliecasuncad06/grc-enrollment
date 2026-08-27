@@ -7,6 +7,8 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Passwords\CanResetPassword;
+use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -16,6 +18,10 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * @property int $id
  * @property string $name
+ * @property ?string $first_name
+ * @property ?string $middle_initial
+ * @property ?string $last_name
+ * @property ?string $suffix
  * @property string $email
  * @property string $password
  * @property UserRole $role
@@ -23,19 +29,28 @@ use Laravel\Sanctum\HasApiTokens;
  * @property ?FacultyEmploymentType $employment_type
  * @property UserStatus $status
  * @property ?CarbonImmutable $last_login_at
+ * @property ?CarbonImmutable $account_setup_completed_at
+ * @property ?CarbonImmutable $account_setup_invitation_sent_at
+ * @property ?CarbonImmutable $account_setup_invitation_failed_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Collection<int, AuditLog> $auditLogs
  * @property-read Collection<int, Notification> $notifications
  * @property-read ?QueueKioskCredential $queueKioskCredential
+ * @property-read ?StudentProfile $studentProfile
  */
-final class User extends Authenticatable
+final class User extends Authenticatable implements CanResetPasswordContract
 {
+    use CanResetPassword;
     use HasApiTokens;
 
     /** @var list<string> */
     protected $fillable = [
         'name',
+        'first_name',
+        'middle_initial',
+        'last_name',
+        'suffix',
         'email',
         'password',
         'role',
@@ -43,6 +58,9 @@ final class User extends Authenticatable
         'employment_type',
         'status',
         'last_login_at',
+        'account_setup_completed_at',
+        'account_setup_invitation_sent_at',
+        'account_setup_invitation_failed_at',
     ];
 
     /** @var list<string> */
@@ -62,6 +80,9 @@ final class User extends Authenticatable
             'employment_type' => FacultyEmploymentType::class,
             'status' => UserStatus::class,
             'last_login_at' => 'immutable_datetime',
+            'account_setup_completed_at' => 'immutable_datetime',
+            'account_setup_invitation_sent_at' => 'immutable_datetime',
+            'account_setup_invitation_failed_at' => 'immutable_datetime',
         ];
     }
 
@@ -87,5 +108,11 @@ final class User extends Authenticatable
     public function queueKioskCredential(): HasOne
     {
         return $this->hasOne(QueueKioskCredential::class);
+    }
+
+    /** @return HasOne<StudentProfile, $this> */
+    public function studentProfile(): HasOne
+    {
+        return $this->hasOne(StudentProfile::class);
     }
 }
