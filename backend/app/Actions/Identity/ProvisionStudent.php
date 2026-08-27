@@ -31,7 +31,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, entry_year: int, year_level: int, enrollment_category?: ?string, financial_status?: ?string}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, entry_year: int, year_level: int, enrollment_category?: ?string, student_type: string, financial_status?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -52,17 +52,17 @@ final class ProvisionStudent
                 ]);
             }
 
+            $firstName = (string) PersonName::normalizeNamePart($data['first_name']);
+            $middleInitial = PersonName::normalizeNamePart($data['middle_initial'] ?? null);
+            $lastName = (string) PersonName::normalizeNamePart($data['last_name']);
+            $suffix = PersonName::normalizeSuffix($data['suffix'] ?? null);
+
             $user = User::create([
-                'name' => PersonName::compose(
-                    $data['first_name'],
-                    $data['middle_initial'] ?? null,
-                    $data['last_name'],
-                    $data['suffix'] ?? null,
-                ),
-                'first_name' => $data['first_name'],
-                'middle_initial' => $data['middle_initial'] ?? null,
-                'last_name' => $data['last_name'],
-                'suffix' => $data['suffix'] ?? null,
+                'name' => PersonName::compose($firstName, $middleInitial, $lastName, $suffix),
+                'first_name' => $firstName,
+                'middle_initial' => $middleInitial,
+                'last_name' => $lastName,
+                'suffix' => $suffix,
                 'email' => $data['email'],
                 'password' => Str::random(64),
                 'role' => UserRole::Student,
@@ -81,6 +81,7 @@ final class ProvisionStudent
                 // explicit category; only an irregular one takes the
                 // per-subject enrollment path.
                 'enrollment_category' => $data['enrollment_category'] ?? EnrollmentCategory::Regular->value,
+                'student_type' => $data['student_type'],
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
                 'financial_status' => $data['financial_status'] ?? null,
@@ -105,6 +106,7 @@ final class ProvisionStudent
                     'entry_year' => $profile->entry_year,
                     'year_level' => $profile->year_level,
                     'enrollment_category' => $profile->enrollment_category,
+                    'student_type' => $profile->student_type?->value,
                     'admission_status' => $profile->admission_status->value,
                     'academic_standing' => $profile->academic_standing->value,
                     'financial_status' => $profile->financial_status?->value,

@@ -27,6 +27,7 @@ final class UpdateStudentProfile
         'entry_year',
         'year_level',
         'enrollment_category',
+        'student_type',
         'financial_status',
         'admission_status',
     ];
@@ -62,6 +63,14 @@ final class UpdateStudentProfile
             }
 
             $userData = Arr::only($data, [...self::NAME_PART_FIELDS, 'email']);
+            foreach (['first_name', 'middle_initial', 'last_name'] as $namePart) {
+                if (array_key_exists($namePart, $userData)) {
+                    $userData[$namePart] = PersonName::normalizeNamePart($userData[$namePart]);
+                }
+            }
+            if (array_key_exists('suffix', $userData)) {
+                $userData['suffix'] = PersonName::normalizeSuffix($userData['suffix']);
+            }
             if (array_intersect(array_keys($userData), self::NAME_PART_FIELDS) !== []) {
                 $userData['name'] = PersonName::compose(
                     $userData['first_name'] ?? $user->first_name ?? '',
@@ -81,6 +90,7 @@ final class UpdateStudentProfile
                 'entry_year',
                 'year_level',
                 'enrollment_category',
+                'student_type',
                 'financial_status',
                 'admission_status',
             ]);

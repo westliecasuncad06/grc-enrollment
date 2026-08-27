@@ -140,6 +140,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'entry_year' => 2027,
             'year_level' => 2,
             'enrollment_category' => 'irregular',
+            'student_type' => 'transferee',
             'financial_status' => 'payee',
             'admission_status' => 'admitted',
             'reason' => 'Corrected after reviewing the submitted admission documents.',
@@ -163,6 +164,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'entry_year' => 2027,
             'year_level' => 2,
             'enrollment_category' => 'irregular',
+            'student_type' => 'transferee',
         ]);
 
         $audit = AuditLog::query()->where('action', AuditAction::STUDENT_PROFILE_UPDATED)->sole();
@@ -171,6 +173,32 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
         self::assertStringNotContainsString('corrected.student@grc.test', $auditPayload);
         self::assertStringNotContainsString('Corrected Complete Address', $auditPayload);
         self::assertStringNotContainsString('Corrected after reviewing the submitted admission documents.', $auditPayload);
+    }
+
+    public function test_admission_correcting_a_name_normalizes_the_casing_regardless_of_input(): void
+    {
+        $admission = $this->user(UserRole::AdmissionStaff, 'Admission Editor', 'admission.casing.edit@grc.test');
+        $student = $this->student('Original Student', 'original.casing@grc.test', '2026-08-01093');
+        Sanctum::actingAs($admission);
+
+        $this->patchJson('/api/v1/student-profiles/'.$student->id, [
+            'first_name' => 'MARY-JANE',
+            'last_name' => "o'brien",
+            'suffix' => 'jr',
+            'reason' => 'Corrected the spelling and casing of the legal name.',
+            'identity_verified_in_person' => true,
+        ])->assertOk()
+            ->assertJsonPath('data.name', "Mary-Jane O'Brien Jr")
+            ->assertJsonPath('data.first_name', 'Mary-Jane')
+            ->assertJsonPath('data.last_name', "O'Brien")
+            ->assertJsonPath('data.suffix', 'Jr');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $student->user_id,
+            'first_name' => 'Mary-Jane',
+            'last_name' => "O'Brien",
+            'suffix' => 'Jr',
+        ]);
     }
 
     public function test_admission_update_requires_a_reason_and_in_person_verification(): void

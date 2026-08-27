@@ -75,6 +75,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -109,6 +110,44 @@ final class StudentProfilesEndpointTest extends TestCase
         self::assertStringNotContainsString('new.student@grc.test', $invitationPayload);
     }
 
+    public function test_provisioning_normalizes_name_casing_regardless_of_how_admission_typed_it(): void
+    {
+        [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.casing@grc.test');
+        Mail::fake();
+
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'first_name' => 'juan',
+            'middle_initial' => 'm',
+            'last_name' => 'DELA CRUZ',
+            'suffix' => 'iii',
+            'email' => 'casing.student@grc.test',
+            'address' => '1 Casing Street, Caloocan City',
+            'student_number' => '2027-08-10009',
+            'program_id' => $program->id,
+            'entry_year' => 2027,
+            'year_level' => 1,
+            'student_type' => 'freshman',
+            'requirements_verified' => true,
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.name', 'Juan M. Dela Cruz III');
+        $response->assertJsonPath('data.first_name', 'Juan');
+        $response->assertJsonPath('data.middle_initial', 'M');
+        $response->assertJsonPath('data.last_name', 'Dela Cruz');
+        $response->assertJsonPath('data.suffix', 'III');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'casing.student@grc.test',
+            'name' => 'Juan M. Dela Cruz III',
+            'first_name' => 'Juan',
+            'middle_initial' => 'M',
+            'last_name' => 'Dela Cruz',
+            'suffix' => 'III',
+        ]);
+    }
+
     public function test_provisioning_requires_verified_requirements_and_an_address(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
@@ -122,6 +161,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => false,
         ]);
 
@@ -149,6 +189,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -174,6 +215,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ])->assertCreated();
 
@@ -238,6 +280,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ])->assertCreated();
 
@@ -284,6 +327,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -313,6 +357,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -336,6 +381,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'entry_year' => 2027,
             'year_level' => 1,
             'financial_status' => 'scholar',
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
         $scholar->assertCreated();
@@ -351,11 +397,50 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
         $unset->assertCreated();
         $unset->assertJsonPath('data.financial_status', null);
         $unset->assertJsonPath('data.financial_status_label', null);
+    }
+
+    public function test_student_type_is_required_and_exposed_with_its_label(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.studenttype@grc.test');
+        Mail::fake();
+
+        $missing = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'first_name' => 'No',
+            'last_name' => 'Type',
+            'email' => 'no.type.student@grc.test',
+            'address' => '107 No Type Road, Caloocan City',
+            'student_number' => '2027-08-10014',
+            'program_id' => $program->id,
+            'entry_year' => 2027,
+            'year_level' => 1,
+            'requirements_verified' => true,
+        ]);
+        $missing->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['errors' => ['student_type']]]);
+        $this->assertDatabaseMissing('users', ['email' => 'no.type.student@grc.test']);
+
+        $transferee = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'first_name' => 'Trans',
+            'last_name' => 'Feree',
+            'email' => 'transferee.student@grc.test',
+            'address' => '108 Transferee Avenue, Caloocan City',
+            'student_number' => '2027-08-10015',
+            'program_id' => $program->id,
+            'entry_year' => 2027,
+            'year_level' => 1,
+            'student_type' => 'transferee',
+            'requirements_verified' => true,
+        ]);
+        $transferee->assertCreated();
+        $transferee->assertJsonPath('data.student_type', 'transferee');
+        $transferee->assertJsonPath('data.student_type_label', 'Transferee');
     }
 
     public function test_a_non_admission_staff_role_cannot_provision_a_student(): void
@@ -372,6 +457,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -398,6 +484,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2035,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -435,6 +522,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2023,
             'year_level' => 4,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -460,6 +548,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'program_id' => $program->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
