@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
-import type { AcademicTerm } from "@/features/schemas/reference-data-schema"
 
 export function useAcademicTermSelection() {
   const termsQuery = useAcademicTermsQuery()
