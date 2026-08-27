@@ -18,7 +18,16 @@ adds one small domain helper (`Subject::isLectureComponent()`).
 
 **Sequencing:** these ship as two separate implementation passes, each with
 its own plan. Sub-project 1 ships first — it introduces the shared
-`Combobox` UI primitive that sub-project 2's room picker also uses.
+`useAcademicTermSelection()` hook that sub-project 2's term filter also
+uses.
+
+**Correction from the original approved design:** a searchable-dropdown
+primitive already exists — `SearchableCombobox`
+(`features/components/ui/searchable-combobox.tsx`, built on
+`@base-ui/react`'s `Combobox`, already used in four places including
+`faculty-subject-preference-form.tsx`). No new UI primitive is built by
+either sub-project; every "searchable dropdown" reference below means this
+existing component.
 
 ## Sub-project 1: Split Schedule & Faculty Loading
 
@@ -49,16 +58,14 @@ a separate "Find professor" text search, Assignment state).
   dropdowns (Subject, Professor — see below) + the Faculty Load Report list
   + a **"Faculty Workforce" button** that opens the existing Workforce table
   and edit-profile dialog inside a `Dialog` modal instead of a third tab.
-- Searchable dropdown = a combobox: a text input that filters a dropdown
-  list of options as you type, single-select. Subject options come from
-  `useSubjectsQuery()` (label: code — title); Professor options come from
+- Searchable dropdown = the existing `SearchableCombobox` component
+  (`options`, `value`, `onValueChange`, `placeholder`, `emptyMessage`
+  props — see its usage in `faculty-subject-preference-form.tsx` for the
+  established call pattern). Subject options come from `useSubjectsQuery()`
+  (label: `${code} — ${title}`); Professor options come from
   `useFacultyDirectoryQuery()` (label: name). This replaces today's
   Subject text-only search, the Professor `<select>`, and the separate
-  "Find professor" text box with one control per field. No new UI
-  primitive exists in `features/components/ui` yet — build a small
-  `Combobox` component there (native-select fallback content, keyboard
-  filtering) since it is reusable and this is the second place (after the
-  room picker in sub-project 2) that wants it.
+  "Find professor" text box with one `SearchableCombobox` per field.
 - Term-selection, "current vs. archived term" derivation, and the
   faculty-load report query are needed by `FacultyLoadingWorkspace` only
   (the Schedule page needs just the term selector, not the report).
@@ -97,8 +104,8 @@ per-room detail view:
    term's sections.
 2. **Filter 2 — Room.** A list of the actor's room options for the
    selected term (same `useRoomOptionsQuery()`/`getLocalRoomOptions()`
-   fallback as today, unchanged). Rendered using the `Combobox` component
-   from sub-project 1 (type to narrow, pick one room).
+   fallback as today, unchanged). Rendered using the existing
+   `SearchableCombobox` (type to narrow, pick one room).
 3. **Room detail popup.** Selecting a room opens a `Dialog` scoped to that
    room + term, with a view toggle:
    - **Table view (default):** every section scheduled in that room this
@@ -160,10 +167,10 @@ per-room detail view:
 
 ## Accessibility and responsive behavior
 
-- The new `Combobox` has a visible label, is keyboard-operable (arrow keys
-  + Enter to select, Escape to close), and exposes the selected value to
-  screen readers (matches the existing shadcn form-control conventions
-  already used across this codebase).
+- `SearchableCombobox` already provides labeling, keyboard operation, and
+  screen-reader semantics via `@base-ui/react`; the dialog-portal handling
+  it already implements is required for the Faculty Workforce modal and
+  the Room detail dialog (both render a combobox inside a `Dialog`).
 - The room calendar grid scrolls horizontally inside its own container on
   narrow viewports (per this codebase's existing wide-content convention)
   rather than letting the page scroll horizontally.
