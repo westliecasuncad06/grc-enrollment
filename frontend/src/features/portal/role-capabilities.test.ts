@@ -18,7 +18,8 @@ const expectedModuleIds = {
   program_chair: [
     "program-chair-enrollment",
     "subjects-prerequisites",
-    "schedule-faculty-loading",
+    "schedule",
+    "faculty-loading",
     "rooms",
     "schedule-proposals",
     "program-chair-analytics",

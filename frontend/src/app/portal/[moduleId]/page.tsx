@@ -6,8 +6,8 @@ const legacyModuleRedirects: Record<string, string> = {
   "admission-status": "student-records",
   "credential-issuance": "student-records",
   "demand-forecast": "program-chair-enrollment",
-  "faculty-assignment": "schedule-faculty-loading",
-  "sections-schedules": "schedule-faculty-loading",
+  "faculty-assignment": "faculty-loading",
+  "sections-schedules": "schedule",
 }
 
 export default async function Page({

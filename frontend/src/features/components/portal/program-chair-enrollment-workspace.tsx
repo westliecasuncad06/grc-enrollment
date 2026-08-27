@@ -878,15 +878,15 @@ export function ProgramChairEnrollmentWorkspace({
           <CardHeader>
             <CardTitle>Still need to fix a room or professor?</CardTitle>
             <CardDescription>
-              Room and professor assignments stay editable in Schedule &amp;
-              Faculty Loading while this schedule waits for Dean and Executive
-              Director review — only a published section locks.
+              Room and professor assignments stay editable in Schedule while
+              this schedule waits for Dean and Executive Director review —
+              only a published section locks.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href="/portal/schedule-faculty-loading">
-                Open Schedule &amp; Faculty Loading
+              <Link href="/portal/schedule">
+                Open Schedule
                 <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
               </Link>
             </Button>

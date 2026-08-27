@@ -1051,8 +1051,8 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByRole("link", { name: /Open Schedule & Faculty Loading/ }),
-    ).toHaveAttribute("href", "/portal/schedule-faculty-loading")
+      screen.getByRole("link", { name: "Open Schedule" }),
+    ).toHaveAttribute("href", "/portal/schedule")
   })
 
   it("shows the Dean and Executive Director approval history to the Program Chair", async () => {

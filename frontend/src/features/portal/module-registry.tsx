@@ -10,7 +10,8 @@ import { CurriculumApprovalsWorkspace } from "@/features/components/portal/curri
 import { ProgramChairEnrollmentWorkspace } from "@/features/components/portal/program-chair-enrollment-workspace"
 import { AcademicTermWorkspace } from "@/features/components/portal/academic-term-workspace"
 import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
-import { ScheduleFacultyLoadingWorkspace } from "@/features/components/portal/schedule-faculty-loading-workspace"
+import { ScheduleWorkspace } from "@/features/components/portal/schedule-workspace"
+import { FacultyLoadingWorkspace } from "@/features/components/portal/faculty-loading-workspace"
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
 import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
 import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
@@ -45,7 +46,8 @@ export type ConnectedModuleId =
   | "teaching-schedule"
   | "program-chair-enrollment"
   | "subjects-prerequisites"
-  | "schedule-faculty-loading"
+  | "schedule"
+  | "faculty-loading"
   | "rooms"
   | "schedule-proposals"
   | "program-chair-analytics"
@@ -92,7 +94,8 @@ export const connectedModuleIds = [
   "teaching-schedule",
   "program-chair-enrollment",
   "subjects-prerequisites",
-  "schedule-faculty-loading",
+  "schedule",
+  "faculty-loading",
   "rooms",
   "schedule-proposals",
   "program-chair-analytics",
@@ -149,8 +152,9 @@ const academicTermWorkspace: PortalModuleComponent = () => (
 const enrollmentOverrideWorkspace: PortalModuleComponent = () => (
   <ItControlEnrollmentOverrideWorkspace />
 )
-const scheduleFacultyLoadingWorkspace: PortalModuleComponent = () => (
-  <ScheduleFacultyLoadingWorkspace />
+const scheduleWorkspace: PortalModuleComponent = () => <ScheduleWorkspace />
+const facultyLoadingWorkspace: PortalModuleComponent = () => (
+  <FacultyLoadingWorkspace />
 )
 const roomsOperationsWorkspace: PortalModuleComponent = () => (
   <RoomsOperationsWorkspace />
@@ -195,7 +199,8 @@ export const connectedModuleRegistry: Readonly<
   "teaching-schedule": teachingScheduleWorkspace,
   "program-chair-enrollment": programChairEnrollmentWorkspace,
   "subjects-prerequisites": curriculumWorkspace,
-  "schedule-faculty-loading": scheduleFacultyLoadingWorkspace,
+  schedule: scheduleWorkspace,
+  "faculty-loading": facultyLoadingWorkspace,
   rooms: roomsOperationsWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "program-chair-analytics": AnalyticsDashboardWorkspace,

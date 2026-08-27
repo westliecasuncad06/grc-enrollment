@@ -141,10 +141,16 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         Network,
       ),
       portalModule(
-        "schedule-faculty-loading",
-        "Schedule & Faculty Loading",
-        "Review editable section schedules, faculty loads, conflicts, and advisory recommendations.",
+        "schedule",
+        "Schedule",
+        "Review and edit the generated section schedule and assignments for the selected term.",
         CalendarDays,
+      ),
+      portalModule(
+        "faculty-loading",
+        "Faculty Loading",
+        "Set the faculty load threshold, review the load report, and manage the faculty workforce.",
+        Gauge,
       ),
       portalModule(
         "rooms",
