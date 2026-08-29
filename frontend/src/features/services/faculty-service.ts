@@ -4,6 +4,7 @@ import type {
   Subject,
 } from "@/features/schemas/reference-data-schema"
 import {
+  decideFacultySpecializationInputSchema,
   facultyAvailabilitiesEnvelopeSchema,
   facultyAvailabilityEnvelopeSchema,
   facultyAvailabilityInputSchema,
@@ -13,6 +14,7 @@ import {
   facultySubjectPreferenceEnvelopeSchema,
   facultySubjectPreferenceInputSchema,
   facultySubjectPreferencesEnvelopeSchema,
+  type DecideFacultySpecializationInput,
   type FacultyAvailability,
   type FacultyAvailabilityInput,
   type FacultySpecialization,
@@ -285,11 +287,13 @@ export async function getFacultyTeachingHistory(
 
 export async function getFacultySpecializations(
   signal?: AbortSignal,
+  professorId?: number,
 ): Promise<readonly FacultySpecialization[]> {
-  const payload = await getAuthenticatedJson(
-    FACULTY_SPECIALIZATIONS_PATH,
-    signal,
-  )
+  const path =
+    professorId === undefined
+      ? FACULTY_SPECIALIZATIONS_PATH
+      : `${FACULTY_SPECIALIZATIONS_PATH}?professor_id=${professorId}`
+  const payload = await getAuthenticatedJson(path, signal)
 
   return parseContract(
     facultySpecializationsEnvelopeSchema,
@@ -314,6 +318,26 @@ export async function createFacultySpecialization(
     facultySpecializationEnvelopeSchema,
     payload,
     "created faculty specialization",
+  ).data
+}
+
+export async function decideFacultySpecialization(
+  id: number,
+  input: DecideFacultySpecializationInput,
+): Promise<FacultySpecialization> {
+  const payload = await patchAuthenticatedJson(
+    `${FACULTY_SPECIALIZATIONS_PATH}/${id}`,
+    parseInput(
+      decideFacultySpecializationInputSchema,
+      input,
+      "faculty specialization decision",
+    ),
+  )
+
+  return parseContract(
+    facultySpecializationEnvelopeSchema,
+    payload,
+    "decided faculty specialization",
   ).data
 }
 

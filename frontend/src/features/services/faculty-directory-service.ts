@@ -16,11 +16,14 @@ export const FACULTY_MEMBERS_PATH = "/api/v1/faculty-members"
 export async function getFacultyMembers(
   signal?: AbortSignal,
   includeInactive = false,
+  college?: string,
 ): Promise<readonly FacultyMember[]> {
+  const params = new URLSearchParams()
+  if (includeInactive) params.set("include_inactive", "1")
+  if (college) params.set("college", college)
+  const query = params.toString()
   const payload = await getAuthenticatedJson(
-    includeInactive
-      ? `${FACULTY_MEMBERS_PATH}?include_inactive=1`
-      : FACULTY_MEMBERS_PATH,
+    query ? `${FACULTY_MEMBERS_PATH}?${query}` : FACULTY_MEMBERS_PATH,
     signal,
   )
   const result = facultyMembersEnvelopeSchema.safeParse(payload)
