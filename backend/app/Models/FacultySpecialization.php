@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Domain\Faculty\FacultySpecializationStatus;
 use App\Domain\Faculty\SpecializationProficiency;
+use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -63,18 +64,26 @@ final class FacultySpecialization extends Model
     }
 
     /**
-     * Faculty members see only their own profile. Planning roles need the
-     * full teaching-capability picture when preparing assignments.
+     * Faculty members see only their own profile. A Program Chair sees only
+     * their own college's professors. Other planning roles (e.g. Registrar
+     * Head) need the full cross-college teaching-capability picture.
      *
      * @param  Builder<FacultySpecialization>  $query
      * @return Builder<FacultySpecialization>
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if (! $user->role->isLearnerScoped()) {
-            return $query;
+        if ($user->role->isLearnerScoped()) {
+            return $query->where('professor_id', $user->id);
         }
 
-        return $query->where('professor_id', $user->id);
+        if ($user->role === UserRole::ProgramChair) {
+            return $query->whereHas(
+                'professor',
+                fn (Builder $professors) => $professors->where('college', $user->college?->value),
+            );
+        }
+
+        return $query;
     }
 }

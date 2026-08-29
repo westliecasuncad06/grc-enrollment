@@ -297,4 +297,56 @@ final class FacultySpecializationsEndpointTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('error.code', 'VALIDATION_FAILED');
     }
+
+    public function test_a_program_chair_only_sees_specializations_for_their_own_college(): void
+    {
+        [, $chairToken] = $this->programChair('chair.visibility@grc.test', CollegeCode::Ccs);
+        [$ownProfessor, $ownToken] = $this->faculty('faculty.visibility-own@grc.test', CollegeCode::Ccs);
+        [, $otherToken] = $this->faculty('faculty.visibility-other@grc.test', CollegeCode::Coe);
+        $ownSubject = $this->subject('IT109', CollegeCode::Ccs);
+        $otherSubject = $this->subject('ED104', CollegeCode::Coe);
+
+        $this->withToken($ownToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $ownSubject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated();
+        $this->app['auth']->forgetGuards();
+        $this->withToken($otherToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $otherSubject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated();
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($chairToken)->getJson('/api/v1/faculty-specializations')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.professor_id', $ownProfessor->id);
+    }
+
+    public function test_faculty_specializations_can_be_filtered_by_professor_id(): void
+    {
+        [, $chairToken] = $this->programChair('chair.filter@grc.test', CollegeCode::Ccs);
+        [$firstProfessor, $firstToken] = $this->faculty('faculty.filter-first@grc.test', CollegeCode::Ccs);
+        [$secondProfessor, $secondToken] = $this->faculty('faculty.filter-second@grc.test', CollegeCode::Ccs);
+        $subject = $this->subject('IT110', CollegeCode::Ccs);
+
+        $this->withToken($firstToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated();
+        $this->app['auth']->forgetGuards();
+        $anotherSubject = $this->subject('IT111', CollegeCode::Ccs);
+        $this->withToken($secondToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $anotherSubject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated();
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($chairToken)->getJson("/api/v1/faculty-specializations?professor_id={$firstProfessor->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.professor_id', $firstProfessor->id);
+
+        self::assertNotSame($firstProfessor->id, $secondProfessor->id);
+    }
 }

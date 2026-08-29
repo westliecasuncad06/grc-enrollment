@@ -25,6 +25,10 @@ final class FacultySpecializationController extends Controller
 
         $specializations = FacultySpecialization::query()
             ->visibleTo($user)
+            ->when(
+                $request->filled('professor_id'),
+                fn ($query) => $query->where('professor_id', (int) $request->query('professor_id')),
+            )
             ->orderBy('proficiency')
             ->orderBy('subject_id')
             ->get();
