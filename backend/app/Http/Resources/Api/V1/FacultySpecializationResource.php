@@ -21,6 +21,10 @@ final class FacultySpecializationResource extends JsonResource
             'proficiency_label' => $this->resource->proficiency->label(),
             'source' => $this->resource->source,
             'notes' => $this->resource->notes,
+            'status' => $this->resource->status->value,
+            'status_label' => $this->resource->status->label(),
+            'decided_at' => $this->resource->decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'decision_reason' => $this->resource->decision_reason,
         ];
     }
 }

@@ -122,4 +122,19 @@ final class FacultySpecializationsEndpointTest extends TestCase
 
         $this->assertDatabaseHas('faculty_specializations', ['id' => $specializationId]);
     }
+
+    public function test_a_newly_declared_specialization_is_pending_and_exposes_status_fields(): void
+    {
+        [, $token] = $this->faculty('faculty.specialization-status@grc.test');
+        $subject = $this->subject('IT104', CollegeCode::Ccs);
+
+        $this->withToken($token)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'primary',
+        ])->assertCreated()
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.status_label', 'Pending')
+            ->assertJsonPath('data.decided_at', null)
+            ->assertJsonPath('data.decision_reason', null);
+    }
 }

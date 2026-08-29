@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Faculty\FacultySpecializationStatus;
 use App\Domain\Faculty\SpecializationProficiency;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,6 +15,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $subject_id
  * @property SpecializationProficiency $proficiency
  * @property string $source
+ * @property FacultySpecializationStatus $status
+ * @property ?int $decided_by
+ * @property ?CarbonImmutable $decided_at
+ * @property ?string $decision_reason
  * @property ?string $notes
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
@@ -29,6 +34,10 @@ final class FacultySpecialization extends Model
         'proficiency',
         'source',
         'notes',
+        'status',
+        'decided_by',
+        'decided_at',
+        'decision_reason',
     ];
 
     /** @return array<string, string> */
@@ -36,6 +45,8 @@ final class FacultySpecialization extends Model
     {
         return [
             'proficiency' => SpecializationProficiency::class,
+            'status' => FacultySpecializationStatus::class,
+            'decided_at' => 'immutable_datetime',
         ];
     }
 
