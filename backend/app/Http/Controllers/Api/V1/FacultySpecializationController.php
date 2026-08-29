@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Faculty\CreateFacultySpecialization;
+use App\Actions\Faculty\DecideFacultySpecialization;
 use App\Actions\Faculty\DeleteFacultySpecialization;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\FacultySpecialization\DecideFacultySpecializationRequest;
 use App\Http\Requests\Api\V1\FacultySpecialization\StoreFacultySpecializationRequest;
 use App\Http\Resources\Api\V1\FacultySpecializationResource;
 use App\Models\FacultySpecialization;
@@ -43,6 +45,26 @@ final class FacultySpecializationController extends Controller
         $response->setStatusCode(201);
 
         return $this->privateResponse($response);
+    }
+
+    public function update(
+        DecideFacultySpecializationRequest $request,
+        FacultySpecialization $facultySpecialization,
+        DecideFacultySpecialization $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
+        $this->authorize('decide', $facultySpecialization);
+
+        $specialization = $action->execute(
+            $facultySpecialization,
+            $request->validated('action'),
+            $user,
+            $request->validated('reason'),
+            $contextFactory->fromRequest($request),
+        );
+
+        return $this->privateResponse(FacultySpecializationResource::make($specialization)->response($request));
     }
 
     public function destroy(

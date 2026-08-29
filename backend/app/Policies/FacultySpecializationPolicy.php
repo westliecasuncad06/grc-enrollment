@@ -33,4 +33,11 @@ final class FacultySpecializationPolicy
     {
         return $user->role === UserRole::Faculty && $specialization->professor_id === $user->id;
     }
+
+    public function decide(User $user, FacultySpecialization $specialization): bool
+    {
+        return $user->role === UserRole::ProgramChair
+            && $user->college !== null
+            && $specialization->professor->college === $user->college;
+    }
 }

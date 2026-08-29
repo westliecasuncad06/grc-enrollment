@@ -31,4 +31,6 @@ enum NotificationType: string
     case QueueCycleCutOff = 'queue_cycle_cut_off';
     case StudentProfileChangeApproved = 'student_profile_change_approved';
     case StudentProfileChangeRejected = 'student_profile_change_rejected';
+    case FacultySpecializationApproved = 'faculty_specialization_approved';
+    case FacultySpecializationRejected = 'faculty_specialization_rejected';
 }

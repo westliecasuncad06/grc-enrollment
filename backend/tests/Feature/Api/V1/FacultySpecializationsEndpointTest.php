@@ -201,4 +201,100 @@ final class FacultySpecializationsEndpointTest extends TestCase
             ->assertJsonPath('error.code', 'VALIDATION_FAILED')
             ->assertJsonPath('error.errors.professor_id.0', 'Select the professor you are assigning this subject to.');
     }
+
+    public function test_a_program_chair_approves_a_pending_specialization_in_their_college(): void
+    {
+        [$chair, $chairToken] = $this->programChair('chair.decide-approve@grc.test', CollegeCode::Ccs);
+        [, $facultyToken] = $this->faculty('faculty.decide-approve@grc.test', CollegeCode::Ccs);
+        $subject = $this->subject('IT106', CollegeCode::Ccs);
+
+        $specializationId = $this->withToken($facultyToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated()->json('data.id');
+
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($chairToken)->patchJson("/api/v1/faculty-specializations/{$specializationId}", [
+            'action' => 'approve',
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'approved')
+            ->assertJsonPath('data.status_label', 'Approved');
+
+        $this->assertDatabaseHas('faculty_specializations', [
+            'id' => $specializationId,
+            'status' => 'approved',
+            'decided_by' => $chair->id,
+        ]);
+    }
+
+    public function test_rejecting_a_specialization_requires_a_reason_and_notifies_the_professor(): void
+    {
+        [, $chairToken] = $this->programChair('chair.decide-reject@grc.test', CollegeCode::Ccs);
+        [$professor, $facultyToken] = $this->faculty('faculty.decide-reject@grc.test', CollegeCode::Ccs);
+        $subject = $this->subject('IT107', CollegeCode::Ccs);
+
+        $specializationId = $this->withToken($facultyToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated()->json('data.id');
+
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($chairToken)->patchJson("/api/v1/faculty-specializations/{$specializationId}", [
+            'action' => 'reject',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.errors.reason.0', 'A reason is required for this action.');
+
+        $this->withToken($chairToken)->patchJson("/api/v1/faculty-specializations/{$specializationId}", [
+            'action' => 'reject',
+            'reason' => 'Not enough evidence of teaching experience.',
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'rejected')
+            ->assertJsonPath('data.decision_reason', 'Not enough evidence of teaching experience.');
+
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $professor->id,
+            'type' => 'faculty_specialization_rejected',
+        ]);
+    }
+
+    public function test_a_program_chair_cannot_decide_a_specialization_outside_their_college(): void
+    {
+        [, $chairToken] = $this->programChair('chair.decide-other@grc.test', CollegeCode::Ccs);
+        [, $otherFacultyToken] = $this->faculty('faculty.decide-other@grc.test', CollegeCode::Coe);
+        $subject = $this->subject('ED103', CollegeCode::Coe);
+
+        $specializationId = $this->withToken($otherFacultyToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated()->json('data.id');
+
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($chairToken)->patchJson("/api/v1/faculty-specializations/{$specializationId}", [
+            'action' => 'approve',
+        ])->assertForbidden();
+    }
+
+    public function test_a_specialization_cannot_be_decided_twice(): void
+    {
+        [, $chairToken] = $this->programChair('chair.decide-twice@grc.test', CollegeCode::Ccs);
+        [, $facultyToken] = $this->faculty('faculty.decide-twice@grc.test', CollegeCode::Ccs);
+        $subject = $this->subject('IT108', CollegeCode::Ccs);
+
+        $specializationId = $this->withToken($facultyToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'secondary',
+        ])->assertCreated()->json('data.id');
+
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($chairToken)->patchJson("/api/v1/faculty-specializations/{$specializationId}", ['action' => 'approve'])
+            ->assertOk();
+
+        $this->withToken($chairToken)->patchJson("/api/v1/faculty-specializations/{$specializationId}", ['action' => 'approve'])
+            ->assertUnprocessable()
+            ->assertJsonPath('error.code', 'VALIDATION_FAILED');
+    }
 }

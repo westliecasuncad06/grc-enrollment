@@ -354,6 +354,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/faculty-invitations', [FacultyInvitationController::class, 'index'])->name('faculty-invitations.index');
             Route::post('/faculty-invitations', [FacultyInvitationController::class, 'store'])->name('faculty-invitations.store');
             Route::post('/faculty-invitations/{user}/resend', [FacultyInvitationController::class, 'resend'])->name('faculty-invitations.resend');
+
+            Route::patch('/faculty-specializations/{facultySpecialization}', [FacultySpecializationController::class, 'update'])->name('faculty-specializations.update');
         });
 
         // Enrollment analytics are role-scoped by DashboardPolicy: Program
