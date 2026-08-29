@@ -381,7 +381,6 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.faculty-availabilities.store',
             'api.v1.faculty-availabilities.update',
             'api.v1.faculty-availabilities.destroy',
-            'api.v1.faculty-specializations.store',
             'api.v1.faculty-specializations.destroy',
             'api.v1.faculty-subject-preferences.store',
             'api.v1.faculty-subject-preferences.update',
@@ -402,6 +401,10 @@ final class ApiSurfaceTest extends TestCase
         $specializationsReadRoute = Route::getRoutes()->getByName('api.v1.faculty-specializations.index');
         $this->assertNotNull($specializationsReadRoute);
         $this->assertNotContains('role:faculty', $specializationsReadRoute->gatherMiddleware());
+
+        $specializationsStoreRoute = Route::getRoutes()->getByName('api.v1.faculty-specializations.store');
+        $this->assertNotNull($specializationsStoreRoute);
+        $this->assertContains('role:faculty,program_chair', $specializationsStoreRoute->gatherMiddleware());
     }
 
     public function test_section_writes_are_gated_to_the_program_chair_role(): void
