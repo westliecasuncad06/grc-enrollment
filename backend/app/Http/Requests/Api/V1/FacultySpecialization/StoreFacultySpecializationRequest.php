@@ -20,10 +20,11 @@ final class StoreFacultySpecializationRequest extends FormRequest
         $actor = $this->user();
         $isChairAssigning = $actor?->role === UserRole::ProgramChair && $this->filled('professor_id');
         $targetProfessorId = $isChairAssigning ? (int) $this->input('professor_id') : $actor?->id;
+        $isProgramChair = $actor?->role === UserRole::ProgramChair;
 
         return [
             'professor_id' => [
-                'sometimes',
+                Rule::requiredIf($isProgramChair),
                 'integer',
                 Rule::exists('users', 'id')->where(
                     fn ($query) => $query->where('role', UserRole::Faculty->value)
@@ -42,6 +43,14 @@ final class StoreFacultySpecializationRequest extends FormRequest
             ],
             'proficiency' => ['sometimes', Rule::enum(SpecializationProficiency::class)],
             'notes' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'professor_id.required' => 'Select the professor you are assigning this subject to.',
         ];
     }
 }

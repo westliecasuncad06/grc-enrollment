@@ -188,4 +188,17 @@ final class FacultySpecializationsEndpointTest extends TestCase
         ])->assertUnprocessable()
             ->assertJsonPath('error.code', 'VALIDATION_FAILED');
     }
+
+    public function test_a_program_chair_must_specify_a_professor_when_declaring_a_specialization(): void
+    {
+        [, $chairToken] = $this->programChair('chair.no-professor@grc.test', CollegeCode::Ccs);
+        $subject = $this->subject('IT112', CollegeCode::Ccs);
+
+        $this->withToken($chairToken)->postJson('/api/v1/faculty-specializations', [
+            'subject_id' => $subject->id,
+            'proficiency' => 'primary',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.code', 'VALIDATION_FAILED')
+            ->assertJsonPath('error.errors.professor_id.0', 'Select the professor you are assigning this subject to.');
+    }
 }
