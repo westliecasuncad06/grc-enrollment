@@ -48,6 +48,26 @@ final class FacultySpecializationsEndpointTest extends TestCase
         ]);
     }
 
+    /** @return array{User, string} */
+    private function programChair(string $email, CollegeCode $college = CollegeCode::Ccs): array
+    {
+        $chair = User::create([
+            'name' => 'Test Chair',
+            'email' => $email,
+            'password' => self::PASSWORD,
+            'role' => UserRole::ProgramChair,
+            'college' => $college,
+            'status' => UserStatus::Active,
+        ]);
+
+        $token = (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $email,
+            'password' => self::PASSWORD,
+        ])->json('data.token');
+
+        return [$chair, $token];
+    }
+
     public function test_a_professor_declares_and_lists_their_teaching_specializations(): void
     {
         [$professor, $token] = $this->faculty('faculty.specialization@grc.test');
@@ -136,5 +156,36 @@ final class FacultySpecializationsEndpointTest extends TestCase
             ->assertJsonPath('data.status_label', 'Pending')
             ->assertJsonPath('data.decided_at', null)
             ->assertJsonPath('data.decision_reason', null);
+    }
+
+    public function test_a_program_chair_assigns_a_specialization_to_a_professor_in_their_college_and_it_is_auto_approved(): void
+    {
+        [$chair, $chairToken] = $this->programChair('chair.specialization@grc.test', CollegeCode::Ccs);
+        [$professor] = $this->faculty('faculty.assigned-by-chair@grc.test', CollegeCode::Ccs);
+        $subject = $this->subject('IT105', CollegeCode::Ccs);
+
+        $this->withToken($chairToken)->postJson('/api/v1/faculty-specializations', [
+            'professor_id' => $professor->id,
+            'subject_id' => $subject->id,
+            'proficiency' => 'primary',
+        ])->assertCreated()
+            ->assertJsonPath('data.professor_id', $professor->id)
+            ->assertJsonPath('data.source', 'program_chair_assigned')
+            ->assertJsonPath('data.status', 'approved')
+            ->assertJsonPath('data.status_label', 'Approved');
+    }
+
+    public function test_a_program_chair_cannot_assign_a_specialization_to_a_professor_outside_their_college(): void
+    {
+        [, $chairToken] = $this->programChair('chair.specialization-other@grc.test', CollegeCode::Ccs);
+        [$otherCollegeProfessor] = $this->faculty('faculty.other-college@grc.test', CollegeCode::Coe);
+        $subject = $this->subject('ED102', CollegeCode::Coe);
+
+        $this->withToken($chairToken)->postJson('/api/v1/faculty-specializations', [
+            'professor_id' => $otherCollegeProfessor->id,
+            'subject_id' => $subject->id,
+            'proficiency' => 'primary',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.code', 'VALIDATION_FAILED');
     }
 }

@@ -25,7 +25,8 @@ final class FacultySpecializationPolicy
 
     public function create(User $user): bool
     {
-        return $user->role === UserRole::Faculty;
+        return $user->role === UserRole::Faculty
+            || ($user->role === UserRole::ProgramChair && $user->college !== null);
     }
 
     public function delete(User $user, FacultySpecialization $specialization): bool

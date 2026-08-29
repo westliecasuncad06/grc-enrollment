@@ -378,13 +378,16 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::patch('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'update'])->name('faculty-availabilities.update');
             Route::delete('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'destroy'])->name('faculty-availabilities.destroy');
 
-            Route::post('/faculty-specializations', [FacultySpecializationController::class, 'store'])->name('faculty-specializations.store');
             Route::delete('/faculty-specializations/{facultySpecialization}', [FacultySpecializationController::class, 'destroy'])->name('faculty-specializations.destroy');
 
             Route::post('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'store'])->name('faculty-subject-preferences.store');
             Route::patch('/faculty-subject-preferences/{facultySubjectPreference}', [FacultySubjectPreferenceController::class, 'update'])->name('faculty-subject-preferences.update');
             Route::delete('/faculty-subject-preferences/{facultySubjectPreference}', [FacultySubjectPreferenceController::class, 'destroy'])->name('faculty-subject-preferences.destroy');
         });
+
+        Route::post('/faculty-specializations', [FacultySpecializationController::class, 'store'])
+            ->middleware('role:faculty,program_chair')
+            ->name('faculty-specializations.store');
 
         // PRD §3.2: "Create new student accounts and initial profiles" —
         // first production consumer of the admission_staff role.
