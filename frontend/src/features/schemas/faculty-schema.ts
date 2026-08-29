@@ -153,8 +153,12 @@ export const facultySpecializationSchema = z
     subject_id: z.number().int().positive(),
     proficiency: z.enum(["primary", "secondary"]),
     proficiency_label: z.string().min(1),
-    source: z.enum(["declared", "seeded"]),
+    source: z.enum(["declared", "seeded", "program_chair_assigned"]),
     notes: z.string().nullable(),
+    status: z.enum(["pending", "approved", "rejected"]),
+    status_label: z.string().min(1),
+    decided_at: z.string().nullable(),
+    decision_reason: z.string().nullable(),
   })
   .strict()
 
@@ -168,8 +172,16 @@ export const facultySpecializationEnvelopeSchema = z
 
 export const facultySpecializationInputSchema = z
   .object({
+    professor_id: z.number().int().positive().optional(),
     subject_id: z.number().int().positive("Select a subject."),
     proficiency: z.enum(["primary", "secondary"]),
+  })
+  .strict()
+
+export const decideFacultySpecializationInputSchema = z
+  .object({
+    action: z.enum(["approve", "reject"]),
+    reason: z.string().trim().min(1).max(1000).optional(),
   })
   .strict()
 
@@ -207,6 +219,9 @@ export type FacultyCurriculumSubjectPreferenceInput = z.infer<
 export type FacultySpecialization = z.infer<typeof facultySpecializationSchema>
 export type FacultySpecializationInput = z.infer<
   typeof facultySpecializationInputSchema
+>
+export type DecideFacultySpecializationInput = z.infer<
+  typeof decideFacultySpecializationInputSchema
 >
 export type FacultyTeachingHistory = z.infer<
   typeof facultyTeachingHistorySchema

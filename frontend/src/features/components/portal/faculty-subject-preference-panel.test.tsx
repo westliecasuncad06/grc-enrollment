@@ -49,6 +49,10 @@ const specialization = {
   proficiency_label: "Primary",
   source: "declared",
   notes: null,
+  status: "approved",
+  status_label: "Approved",
+  decided_at: null,
+  decision_reason: null,
 } as const
 
 function url(input: RequestInfo | URL): string {
