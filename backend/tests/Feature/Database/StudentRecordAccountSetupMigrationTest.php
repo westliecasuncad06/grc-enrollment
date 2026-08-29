@@ -24,13 +24,13 @@ final class StudentRecordAccountSetupMigrationTest extends TestCase
      * corrupts any later reversibility test sharing this database
      * connection within the same test run.
      *
-     * `--step=3`, not 2: `2026_08_26_000003_split_user_name_into_parts` also
-     * alters `users` and is the most recently applied migration, so it has
-     * to come off too before this migration's own `users` changes can.
+     * `--step=7`: must rollback past all migrations from 2026_08_29_000001 (new
+     * migration) through 2026_08_26_000002 to get before 2026_08_26_000001
+     * which adds the `account_setup_completed_at` column.
      */
     public function test_the_migration_backfills_completed_setup_for_pre_existing_accounts(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 3])->assertExitCode(0);
+        $this->artisan('migrate:rollback', ['--step' => 7])->assertExitCode(0);
         self::assertFalse(Schema::hasColumn('users', 'account_setup_completed_at'));
 
         DB::table('users')->insert([

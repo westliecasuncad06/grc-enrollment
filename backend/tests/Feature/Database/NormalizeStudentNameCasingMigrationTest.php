@@ -12,7 +12,7 @@ final class NormalizeStudentNameCasingMigrationTest extends TestCase
 
     public function test_the_migration_normalizes_casing_for_existing_student_rows_only(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 1])->assertExitCode(0);
+        $this->artisan('migrate:rollback', ['--step' => 2])->assertExitCode(0);
 
         $student = DB::table('users')->insertGetId([
             'name' => 'JUAN M. DELA CRUZ III',

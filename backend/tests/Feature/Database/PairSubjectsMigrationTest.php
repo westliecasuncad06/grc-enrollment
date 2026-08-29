@@ -12,13 +12,14 @@ final class PairSubjectsMigrationTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * `--step=2`, not 1: `2026_08_27_000003_normalize_student_name_casing`
-     * is now the most recently applied migration, so it has to come off
-     * too before this migration (`add_paired_subject_id_to_subjects`) can.
+     * `--step=3`, not 2: `2026_08_29_000001_add_status_to_faculty_specializations_table`
+     * and `2026_08_27_000003_normalize_student_name_casing` are now the most
+     * recently applied migrations, so they have to come off too before this
+     * migration (`add_paired_subject_id_to_subjects`) can.
      */
     public function test_the_migration_pairs_lecture_and_laboratory_subjects_by_code_and_title(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 2])->assertExitCode(0);
+        $this->artisan('migrate:rollback', ['--step' => 3])->assertExitCode(0);
         self::assertFalse(Schema::hasColumn('subjects', 'paired_subject_id'));
 
         $insert = fn (array $overrides) => DB::table('subjects')->insertGetId(array_merge([
