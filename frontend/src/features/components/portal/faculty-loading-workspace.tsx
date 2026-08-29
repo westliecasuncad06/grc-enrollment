@@ -1,13 +1,12 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { PencilLine, SlidersHorizontal, Users } from "lucide-react"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { SlidersHorizontal } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AcademicTermSelector } from "@/features/components/portal/academic-term-selector"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
-import { WorkspaceField } from "@/features/components/portal/workspace-field"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -18,42 +17,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/features/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
 import {
   getFacultyLoadReport,
   saveFacultyLoadThreshold,
 } from "@/features/services/schedule-generation-service"
-import { updateFacultyWorkforceProfile } from "@/features/services/faculty-directory-service"
-import type { FacultyMember } from "@/features/schemas/scheduling-schema"
 
 export function FacultyLoadingWorkspace() {
   const { session } = useAuth()
-  const queryClient = useQueryClient()
   const termSelection = useAcademicTermSelection()
   const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } =
     termSelection
   const facultyQuery = useFacultyDirectoryQuery()
-  const workforceQuery = useFacultyDirectoryQuery(true)
   const reportQuery = useQuery({
     queryKey: ["faculty-load-report", session?.userId ?? null, termId],
     queryFn: () => getFacultyLoadReport(termId),
@@ -61,14 +40,6 @@ export function FacultyLoadingWorkspace() {
   })
   const [threshold, setThreshold] = useState("")
   const [filter, setFilter] = useState({ subjectId: "", professorId: "" })
-  const [workforceOpen, setWorkforceOpen] = useState(false)
-  const [workforceEditing, setWorkforceEditing] =
-    useState<FacultyMember | null>(null)
-  const [workforceDraft, setWorkforceDraft] = useState({
-    status: "active" as "active" | "disabled",
-    employment_type: "part_time" as "full_time" | "part_time",
-    reason: "",
-  })
   const subjectOptions = useMemo(() => {
     const subjectsById = new Map<number, { code: string; title: string }>()
     for (const member of reportQuery.data?.faculty ?? []) {
@@ -113,10 +84,6 @@ export function FacultyLoadingWorkspace() {
       ),
     [reportQuery.data?.faculty, filter],
   )
-  const visibleWorkforce = useMemo(
-    () => workforceQuery.data ?? [],
-    [workforceQuery.data],
-  )
   const saveThreshold = useMutation({
     mutationFn: () => saveFacultyLoadThreshold(termId, Number(threshold)),
     onSuccess: () => {
@@ -124,52 +91,23 @@ export function FacultyLoadingWorkspace() {
       void reportQuery.refetch()
     },
   })
-  const saveWorkforceProfile = useMutation({
-    mutationFn: async () => {
-      if (!workforceEditing) throw new Error("Choose a faculty member to edit.")
-      return updateFacultyWorkforceProfile(workforceEditing.id, {
-        status: workforceDraft.status,
-        employment_type: workforceDraft.employment_type,
-        reason: workforceDraft.reason || undefined,
-      })
-    },
-    onSuccess: () => {
-      setWorkforceEditing(null)
-      void queryClient.invalidateQueries({
-        queryKey: ["faculty-directory", session?.userId ?? null],
-      })
-      void reportQuery.refetch()
-    },
-  })
-  const openWorkforceProfile = (member: FacultyMember) => {
-    setWorkforceEditing(member)
-    setWorkforceDraft({
-      status: member.status,
-      employment_type: member.employment_type ?? "part_time",
-      reason: "",
-    })
-  }
   const query = {
     isPending:
       termSelection.termsQuery.isPending ||
       facultyQuery.isPending ||
-      workforceQuery.isPending ||
       reportQuery.isPending,
     isError:
       termSelection.termsQuery.isError ||
       facultyQuery.isError ||
-      workforceQuery.isError ||
       reportQuery.isError,
     error:
       termSelection.termsQuery.error ??
       facultyQuery.error ??
-      workforceQuery.error ??
       reportQuery.error,
     data: true as const,
     refetch: () => {
       void termSelection.termsQuery.refetch()
       void facultyQuery.refetch()
-      void workforceQuery.refetch()
       void reportQuery.refetch()
     },
   }
@@ -195,7 +133,7 @@ export function FacultyLoadingWorkspace() {
                     </div>
                     <CardTitle level={2}>Faculty load threshold</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      Set one maximum teaching-unit threshold for this college
+                       Set one maximum teaching-unit threshold for this college
                       and term. Assignment recommendations remain editable.
                     </p>
                   </div>
@@ -342,14 +280,6 @@ export function FacultyLoadingWorkspace() {
                     <Badge variant="outline">
                       {visibleFaculty.length} professors
                     </Badge>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setWorkforceOpen(true)}
-                    >
-                      <Users data-icon="inline-start" aria-hidden="true" />
-                      Faculty Workforce
-                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -415,180 +345,6 @@ export function FacultyLoadingWorkspace() {
           </div>
         )}
       </AsyncBoundary>
-
-      <Dialog open={workforceOpen} onOpenChange={setWorkforceOpen}>
-        <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Faculty workforce</DialogTitle>
-            <DialogDescription>
-              Manage the local planning status and employment type for
-              faculty in your college. Inactive faculty cannot be recommended
-              or assigned.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-end">
-            <Badge variant="outline">{visibleWorkforce.length} faculty</Badge>
-          </div>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Faculty member</TableHead>
-                  <TableHead>Account status</TableHead>
-                  <TableHead>Employment type</TableHead>
-                  <TableHead>Planning reference</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleWorkforce.map((member) => (
-                  <TableRow key={member.id}>
-                    <TableCell className="font-medium">
-                      {member.name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          member.is_assignable ? "secondary" : "destructive"
-                        }
-                      >
-                        {member.status_label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {member.employment_type_label ?? "Unspecified"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {member.planning_unit_reference
-                        ? `${member.planning_unit_reference}-unit reference`
-                        : "No fixed reference"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        aria-label={`Edit workforce profile for ${member.name}`}
-                        onClick={() => openWorkforceProfile(member)}
-                      >
-                        <PencilLine data-icon="inline-start" />
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {visibleWorkforce.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="py-9 text-center text-muted-foreground"
-                    >
-                      No faculty in your college yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={workforceEditing !== null}
-        onOpenChange={(open) => !open && setWorkforceEditing(null)}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Update faculty workforce profile</DialogTitle>
-            <DialogDescription>
-              {workforceEditing?.name ?? "Faculty member"} will be available
-              for future schedule recommendations only while their account is
-              active. Marking an active account inactive requires an audit
-              reason.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <WorkspaceField label="Account status">
-              <select
-                value={workforceDraft.status}
-                onChange={(event) =>
-                  setWorkforceDraft({
-                    ...workforceDraft,
-                    status: event.target.value as "active" | "disabled",
-                  })
-                }
-                className="h-9 rounded-md border bg-background px-2"
-              >
-                <option value="active">Active</option>
-                <option value="disabled">Inactive</option>
-              </select>
-            </WorkspaceField>
-            <WorkspaceField label="Employment type">
-              <select
-                value={workforceDraft.employment_type}
-                onChange={(event) =>
-                  setWorkforceDraft({
-                    ...workforceDraft,
-                    employment_type: event.target.value as
-                      "full_time" | "part_time",
-                  })
-                }
-                className="h-9 rounded-md border bg-background px-2"
-              >
-                <option value="full_time">Full-time (33-unit reference)</option>
-                <option value="part_time">Part-time</option>
-              </select>
-            </WorkspaceField>
-            <WorkspaceField
-              label={
-                workforceEditing?.status === "active" &&
-                workforceDraft.status === "disabled"
-                  ? "Reason for making this account inactive"
-                  : "Change note (optional)"
-              }
-            >
-              <Input
-                value={workforceDraft.reason}
-                onChange={(event) =>
-                  setWorkforceDraft({
-                    ...workforceDraft,
-                    reason: event.target.value,
-                  })
-                }
-                placeholder="Record the reason for this change"
-              />
-            </WorkspaceField>
-          </div>
-          {saveWorkforceProfile.error instanceof Error && (
-            <p className="text-sm text-destructive">
-              {saveWorkforceProfile.error.message}
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setWorkforceEditing(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void saveWorkforceProfile.mutateAsync()}
-              disabled={
-                saveWorkforceProfile.isPending ||
-                (workforceEditing?.status === "active" &&
-                  workforceDraft.status === "disabled" &&
-                  !workforceDraft.reason.trim())
-              }
-            >
-              {saveWorkforceProfile.isPending
-                ? "Saving…"
-                : "Save workforce profile"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </WorkspacePage>
   )
 }

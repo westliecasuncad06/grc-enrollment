@@ -164,39 +164,48 @@ export function FacultyWorkforceSpecializationsPanel({
       </div>
 
       {canManage && (
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-          <label
-            className="grid gap-2 text-sm font-medium"
-            htmlFor="workforce-add-subject"
-          >
-            Add subject
-            <SearchableCombobox
-              id="workforce-add-subject"
-              label="Add subject"
-              options={subjectOptions}
-              value={newSubjectId}
-              onValueChange={setNewSubjectId}
-              placeholder="Search code or title"
-              emptyMessage="No matching subject."
-            />
-          </label>
-          <select
-            aria-label="Proficiency"
-            value={newProficiency}
-            onChange={(event) => setNewProficiency(event.target.value as "primary" | "secondary")}
-            className="h-9 rounded-md border bg-background px-2"
-          >
-            <option value="primary">Primary</option>
-            <option value="secondary">Secondary</option>
-          </select>
-          <Button
-            type="button"
-            onClick={() => void addSpecialization.mutateAsync()}
-            disabled={!newSubjectId || addSpecialization.isPending}
-          >
-            Add subject
-          </Button>
+        <div className="grid gap-2">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+            <label
+              className="grid gap-2 text-sm font-medium"
+              htmlFor="workforce-add-subject"
+            >
+              Add subject
+              <SearchableCombobox
+                id="workforce-add-subject"
+                label="Add subject"
+                options={subjectOptions}
+                value={newSubjectId}
+                onValueChange={setNewSubjectId}
+                placeholder="Search code or title"
+                emptyMessage="No matching subject."
+              />
+            </label>
+            <select
+              aria-label="Proficiency"
+              value={newProficiency}
+              onChange={(event) => setNewProficiency(event.target.value as "primary" | "secondary")}
+              className="h-9 rounded-md border bg-background px-2"
+            >
+              <option value="primary">Primary</option>
+              <option value="secondary">Secondary</option>
+            </select>
+            <Button
+              type="button"
+              onClick={() => void addSpecialization.mutateAsync()}
+              disabled={!newSubjectId || addSpecialization.isPending}
+            >
+              {addSpecialization.isPending ? "Adding…" : "Add subject"}
+            </Button>
+          </div>
+          {addSpecialization.error instanceof Error && (
+            <p className="text-sm text-destructive">{addSpecialization.error.message}</p>
+          )}
         </div>
+      )}
+
+      {decide.error instanceof Error && (
+        <p className="text-sm text-destructive">{decide.error.message}</p>
       )}
 
       <AlertDialog open={rejectingId !== null} onOpenChange={(open) => !open && setRejectingId(null)}>
@@ -218,6 +227,9 @@ export function FacultyWorkforceSpecializationsPanel({
               </label>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {decide.error instanceof Error && (
+            <p className="px-6 text-sm text-destructive">{decide.error.message}</p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={decide.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction

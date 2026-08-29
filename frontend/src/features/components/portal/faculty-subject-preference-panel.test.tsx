@@ -307,4 +307,31 @@ describe("FacultySubjectPreferencePanel", () => {
       ),
     ).not.toBeInTheDocument()
   })
+
+  it("shows the approval status of a declared specialization", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input) => {
+      const requestUrl = url(input)
+      if (requestUrl.endsWith("/faculty-preference-catalog"))
+        return Promise.resolve(new Response(JSON.stringify(catalog)))
+      if (requestUrl.endsWith("/faculty-specializations"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [{ ...specialization, status: "pending", status_label: "Pending" }],
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWithSession(<FacultyInputWorkspace />, { session })
+
+    await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
+
+    expect(
+      within(
+        screen.getByRole("table", { name: "Declared specializations" }),
+      ).getByText("Pending"),
+    ).toBeInTheDocument()
+  })
 })

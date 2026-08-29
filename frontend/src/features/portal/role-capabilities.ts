@@ -154,6 +154,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         Gauge,
       ),
       portalModule(
+        "faculty-workforce",
+        "Faculty Workforce",
+        "Search professors in your college, manage their workforce status, and approve which subjects they may teach.",
+        Users,
+      ),
+      portalModule(
         "rooms",
         "Rooms",
         "Review room availability, capacity, and scheduled physical-week use before assigning a section.",
@@ -332,6 +338,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Rooms",
         "Maintain the authoritative room inventory and review all scheduled room use.",
         Building2,
+      ),
+      portalModule(
+        "faculty-workforce",
+        "Faculty Workforce",
+        "View faculty across every college and the subjects they are approved to teach.",
+        Users,
       ),
       portalModule(
         "staff-invitations",

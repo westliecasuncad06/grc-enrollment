@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -267,37 +267,6 @@ describe("FacultyLoadingWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("opens the Faculty Workforce table in a modal and edits a profile from within it", async () => {
-    const user = userEvent.setup()
-    renderWorkspace()
-
-    await screen.findByText("Faculty load threshold")
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-
-    await user.click(
-      await screen.findByRole("button", { name: "Faculty Workforce" }),
-    )
-
-    const workforceDialog = screen.getByRole("dialog", {
-      name: "Faculty workforce",
-    })
-    expect(
-      await within(workforceDialog).findByText("Marian S. Villanueva"),
-    ).toBeInTheDocument()
-
-    await user.click(
-      within(workforceDialog).getByRole("button", {
-        name: "Edit workforce profile for Marian S. Villanueva",
-      }),
-    )
-
-    const editDialog = screen.getByRole("dialog", {
-      name: "Update faculty workforce profile",
-    })
-    expect(editDialog).toHaveTextContent("Employment type")
-    expect(screen.getByLabelText("Account status")).toHaveValue("disabled")
-    expect(screen.getByLabelText("Employment type")).toHaveValue("part_time")
-  })
 
   it("saves a faculty load threshold successfully", async () => {
     const user = userEvent.setup()

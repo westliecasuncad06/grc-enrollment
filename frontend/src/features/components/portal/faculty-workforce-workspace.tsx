@@ -167,7 +167,7 @@ export function FacultyWorkforceWorkspace() {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       >
-        <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90dvh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selected?.name ?? "Faculty member"}</DialogTitle>
             <DialogDescription>
@@ -183,91 +183,94 @@ export function FacultyWorkforceWorkspace() {
             </p>
           )}
 
-          {canManage && selected && (
-            <div className="grid gap-4">
-              <WorkspaceField label="Account status">
-                <select
-                  aria-label="Account status"
-                  value={draft.status}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      status: event.target.value as "active" | "disabled",
-                    })
-                  }
-                  className="h-9 rounded-md border bg-background px-2"
-                >
-                  <option value="active">Active</option>
-                  <option value="disabled">Inactive</option>
-                </select>
-              </WorkspaceField>
-              <WorkspaceField label="Employment type">
-                <select
-                  aria-label="Employment type"
-                  value={draft.employment_type}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      employment_type: event.target.value as
-                        "full_time" | "part_time",
-                    })
-                  }
-                  className="h-9 rounded-md border bg-background px-2"
-                >
-                  <option value="full_time">
-                    Full-time (33-unit reference)
-                  </option>
-                  <option value="part_time">Part-time</option>
-                </select>
-              </WorkspaceField>
-              <WorkspaceField
-                label={
-                  selected.status === "active" && draft.status === "disabled"
-                    ? "Reason for making this account inactive"
-                    : "Change note (optional)"
-                }
-              >
-                <Input
-                  value={draft.reason}
-                  onChange={(event) =>
-                    setDraft({ ...draft, reason: event.target.value })
-                  }
-                  placeholder="Record the reason for this change"
-                />
-              </WorkspaceField>
-              {saveWorkforceProfile.error instanceof Error && (
-                <p className="text-sm text-destructive">
-                  {saveWorkforceProfile.error.message}
-                </p>
-              )}
-              <DialogFooter>
-                <Button
-                  type="button"
-                  onClick={() => void saveWorkforceProfile.mutateAsync()}
-                  disabled={
-                    saveWorkforceProfile.isPending ||
-                    (selected.status === "active" &&
-                      draft.status === "disabled" &&
-                      !draft.reason.trim())
+          <div className={canManage ? "grid grid-cols-2 gap-6" : "block"}>
+            {canManage && selected && (
+              <div className="grid content-start gap-4">
+                <WorkspaceField label="Account status">
+                  <select
+                    aria-label="Account status"
+                    value={draft.status}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        status: event.target.value as "active" | "disabled",
+                      })
+                    }
+                    className="h-9 w-full rounded-md border bg-background px-2"
+                  >
+                    <option value="active">Active</option>
+                    <option value="disabled">Inactive</option>
+                  </select>
+                </WorkspaceField>
+                <WorkspaceField label="Employment type">
+                  <select
+                    aria-label="Employment type"
+                    value={draft.employment_type}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        employment_type: event.target.value as
+                          "full_time" | "part_time",
+                      })
+                    }
+                    className="h-9 w-full rounded-md border bg-background px-2"
+                  >
+                    <option value="full_time">
+                      Full-time (33-unit reference)
+                    </option>
+                    <option value="part_time">Part-time</option>
+                  </select>
+                </WorkspaceField>
+                <WorkspaceField
+                  label={
+                    selected.status === "active" && draft.status === "disabled"
+                      ? "Reason for making this account inactive"
+                      : "Change note (optional)"
                   }
                 >
-                  {saveWorkforceProfile.isPending
-                    ? "Saving…"
-                    : "Save workforce profile"}
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
+                  <Input
+                    value={draft.reason}
+                    onChange={(event) =>
+                      setDraft({ ...draft, reason: event.target.value })
+                    }
+                    placeholder="Record the reason for this change"
+                  />
+                </WorkspaceField>
+                {saveWorkforceProfile.error instanceof Error && (
+                  <p className="text-sm text-destructive">
+                    {saveWorkforceProfile.error.message}
+                  </p>
+                )}
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    onClick={() => void saveWorkforceProfile.mutateAsync()}
+                    disabled={
+                      saveWorkforceProfile.isPending ||
+                      (selected.status === "active" &&
+                        draft.status === "disabled" &&
+                        !draft.reason.trim())
+                    }
+                  >
+                    {saveWorkforceProfile.isPending
+                      ? "Saving…"
+                      : "Save workforce profile"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
 
-          {selected && (
-            <FacultyWorkforceSpecializationsPanel
-              professorId={selected.id}
-              college={selected.college}
-              canManage={canManage}
-            />
-          )}
+            {selected && (
+              <FacultyWorkforceSpecializationsPanel
+                professorId={selected.id}
+                college={selected.college}
+                canManage={canManage}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
+
     </WorkspacePage>
   )
 }

@@ -32,6 +32,7 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "schedule-proposals": "Schedule proposals",
   schedule: "Schedule",
   "faculty-loading": "Faculty Loading",
+  "faculty-workforce": "Faculty Workforce",
   "program-chair-analytics": "Analytics",
   "faculty-invitations": "Invite Professors",
   "staff-invitations": "Invite Staff",

@@ -204,6 +204,7 @@ export function FacultySpecializationList({
                     <TableRow>
                       <TableHead>Subject</TableHead>
                       <TableHead>Proficiency</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -221,6 +222,7 @@ export function FacultySpecializationList({
                                 : `Subject #${row.subject_id}`}
                             </TableCell>
                             <TableCell>{row.proficiency_label}</TableCell>
+                            <TableCell>{row.status_label}</TableCell>
                             <TableCell className="text-right">
                               <Button
                                 type="button"

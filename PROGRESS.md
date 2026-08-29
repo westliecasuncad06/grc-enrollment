@@ -1,5 +1,27 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-08-30 — Faculty Workforce page and specialization approval system
+
+All 14 tasks in `docs/superpowers/plans/2026-08-29-faculty-workforce-page-and-specialization-approval.md` completed and verified.
+
+### What was built
+- **Backend (Tasks 1–5)**: `FacultySpecializationStatus` enum + migration (`pending`, `approved`, `rejected`); Program Chair direct assignment action auto-approved with `source = 'program_chair_assigned'`; `DecideFacultySpecialization` action with rejection-reason audit and `faculty_specialization_approved` / `faculty_specialization_rejected` notification triggers; `scopeVisibleTo` visibility scoping on `FacultySpecialization`; Registrar Head cross-college read access for `GET /api/v1/faculty-members?college=`.
+- **Frontend schemas/services (Tasks 6–7)**: `faculty-schema.ts` extended with `status`, `status_label`, `decided_at`, `decision_reason`, `decideFacultySpecializationInputSchema`; `faculty-service.ts`, `faculty-directory-service.ts`, and `use-faculty-directory.ts` updated.
+- **FacultyWorkforceWorkspace (Task 8)**: new page component with search, college filter (Registrar Head only), and ported workforce profile editing dialog.
+- **FacultyWorkforceSpecializationsPanel (Task 9)**: subject combobox, proficiency selector, approve/reject dialog with mutation error display.
+- **Navigation registration (Task 10)**: `faculty-workforce` portal module registered for `program_chair` (after `faculty-loading`) and `registrar_head` (after `rooms`) in `role-capabilities.ts` and `module-registry.tsx`.
+- **FacultyLoadingWorkspace cleanup (Task 11)**: removed Faculty Workforce button, dialogs, query, and state from the Faculty Loading workspace.
+- **Status column on declared specializations (Task 12)**: added `Status` header and `status_label` cell to the "Declared specializations" table in `faculty-specialization-list.tsx`; new test in `faculty-subject-preference-panel.test.tsx` verifies `Pending` is rendered.
+- **Notification presentation (Task 13)**: added `faculty_specialization_approved` and `faculty_specialization_rejected` to `PRESENTATION_BY_TYPE` and `notificationDestinationPath` (routes faculty to `/portal/availability-preferences`).
+
+### Checks passed
+- Backend `FacultySpecializationsEndpointTest`: 14 tests / 69 assertions ✓
+- Backend `FacultyMembersEndpointTest`: 16 tests / 70 assertions ✓
+- Frontend Vitest (5 suites): 23 tests — `faculty-workforce-workspace`, `role-capabilities`, `module-registry`, `faculty-loading-workspace`, `faculty-subject-preference-panel` ✓
+- Frontend TypeScript `tsc --noEmit`: no errors ✓
+
+No commit or push has been made.
+
 ## 2026-08-28 — MariaDB Aria privilege table corruption repair and access restoration
 
 Session started to diagnose and resolve HTTP 500 error on API login (`POST /api/v1/auth/login`).

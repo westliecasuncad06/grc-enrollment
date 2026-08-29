@@ -20,6 +20,7 @@ const expectedModuleIds = {
     "subjects-prerequisites",
     "schedule",
     "faculty-loading",
+    "faculty-workforce",
     "rooms",
     "schedule-proposals",
     "program-chair-analytics",
@@ -53,6 +54,7 @@ const expectedModuleIds = {
     "audit-logs",
     "policy-settings",
     "rooms",
+    "faculty-workforce",
     "staff-invitations",
   ],
   registrar_staff: [

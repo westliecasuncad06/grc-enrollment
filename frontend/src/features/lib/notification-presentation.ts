@@ -120,6 +120,16 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "destructive",
     icon: Ban,
   },
+  faculty_specialization_approved: {
+    label: "Subject approved",
+    tone: "success",
+    icon: BadgeCheck,
+  },
+  faculty_specialization_rejected: {
+    label: "Subject not approved",
+    tone: "destructive",
+    icon: Ban,
+  },
 }
 
 const DEFAULT_PRESENTATION: NotificationPresentation = {
@@ -147,6 +157,9 @@ export function notificationDestinationPath(
   role: UserRole,
 ): string | null {
   switch (notificationType) {
+    case "faculty_specialization_approved":
+    case "faculty_specialization_rejected":
+      return role === "faculty" ? "/portal/availability-preferences" : null
     case "schedule_submitted_for_dean":
       return role === "dean" ? "/portal/schedule-approvals" : null
     case "schedule_dean_approved":
