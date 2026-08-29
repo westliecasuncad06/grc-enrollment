@@ -35,6 +35,7 @@ final class FacultyMemberController extends Controller
             $actor,
             $contextFactory->fromRequest($request),
             $request->boolean('include_inactive'),
+            $request->string('college')->value() ?: null,
         );
 
         $response = FacultyMemberResource::collection($members)->response($request);

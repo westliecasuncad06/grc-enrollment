@@ -19,12 +19,23 @@ final readonly class ListFacultyMembers
     /**
      * @return Collection<int, User>
      */
-    public function execute(User $actor, AuditRequestContext $context, bool $includeInactive = false): Collection
-    {
-        return DB::transaction(function () use ($actor, $context, $includeInactive): Collection {
+    public function execute(
+        User $actor,
+        AuditRequestContext $context,
+        bool $includeInactive = false,
+        ?string $college = null,
+    ): Collection {
+        return DB::transaction(function () use ($actor, $context, $includeInactive, $college): Collection {
             $members = User::query()
                 ->where('role', UserRole::Faculty)
-                ->where('college', $actor->college?->value)
+                ->when(
+                    $actor->role === UserRole::ProgramChair,
+                    fn ($query) => $query->where('college', $actor->college?->value),
+                )
+                ->when(
+                    $actor->role === UserRole::RegistrarHead && $college !== null,
+                    fn ($query) => $query->where('college', $college),
+                )
                 ->when(! $includeInactive, fn ($query) => $query->where('status', UserStatus::Active))
                 ->orderBy('name')
                 ->orderBy('id')

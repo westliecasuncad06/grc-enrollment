@@ -317,7 +317,6 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // existing "curriculum"/"subjects-prerequisites" module ownership.
         // CurriculumPolicy re-checks the role as defense in depth.
         Route::middleware('role:program_chair')->group(function (): void {
-            Route::get('/faculty-members', FacultyMemberController::class)->name('faculty-members.index');
             Route::patch('/faculty-members/{facultyMember}/workforce-profile', [FacultyMemberController::class, 'updateWorkforceProfile'])->name('faculty-members.workforce-profile.update');
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
@@ -357,6 +356,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
             Route::patch('/faculty-specializations/{facultySpecialization}', [FacultySpecializationController::class, 'update'])->name('faculty-specializations.update');
         });
+
+        Route::get('/faculty-members', FacultyMemberController::class)
+            ->middleware('role:program_chair,registrar_head')
+            ->name('faculty-members.index');
 
         // Enrollment analytics are role-scoped by DashboardPolicy: Program
         // Chairs receive only their assigned college, while Registrar Head can

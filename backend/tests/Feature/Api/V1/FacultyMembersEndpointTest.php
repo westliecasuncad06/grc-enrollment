@@ -163,13 +163,47 @@ final class FacultyMembersEndpointTest extends TestCase
         ]);
     }
 
+    public function test_registrar_head_sees_faculty_across_every_college_and_can_filter_by_one(): void
+    {
+        $registrarHead = $this->makeUser('directory-registrar', UserRole::RegistrarHead, 'Registrar Head', UserStatus::Active, null);
+        $ccsFaculty = $this->makeUser('directory-ccs', UserRole::Faculty, 'CCS Faculty', UserStatus::Active, CollegeCode::Ccs);
+        $coeFaculty = $this->makeUser('directory-coe', UserRole::Faculty, 'COE Faculty', UserStatus::Active, CollegeCode::Coe);
+
+        $this->withToken($this->tokenFor($registrarHead))
+            ->getJson('/api/v1/faculty-members')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $this->withToken($this->tokenFor($registrarHead))
+            ->getJson('/api/v1/faculty-members?college=coe')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $coeFaculty->id);
+
+        self::assertNotSame($ccsFaculty->id, $coeFaculty->id);
+    }
+
+    public function test_registrar_head_cannot_edit_a_workforce_profile(): void
+    {
+        $registrarHead = $this->makeUser('workforce-registrar', UserRole::RegistrarHead, 'Registrar Head', UserStatus::Active, null);
+        $faculty = $this->makeUser('workforce-registrar-target', UserRole::Faculty, 'Target Faculty', UserStatus::Active, CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($registrarHead))
+            ->patchJson("/api/v1/faculty-members/{$faculty->id}/workforce-profile", [
+                'status' => UserStatus::Disabled->value,
+                'employment_type' => 'part_time',
+                'reason' => 'Should not be allowed.',
+            ])
+            ->assertForbidden();
+    }
+
     /**
      * @return iterable<string, array{UserRole}>
      */
     public static function nonChairRoleProvider(): iterable
     {
         foreach (UserRole::cases() as $role) {
-            if ($role !== UserRole::ProgramChair) {
+            if ($role !== UserRole::ProgramChair && $role !== UserRole::RegistrarHead) {
                 yield $role->value => [$role];
             }
         }
