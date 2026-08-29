@@ -37,4 +37,44 @@ final class RoomConflictDetectorTest extends TestCase
         self::assertTrue($detector->hasConflict([...$slot, 'modality' => 'f2f'], [[...$slot, 'modality' => 'hyflex_a']]));
         self::assertTrue($detector->hasConflict([...$slot, 'modality' => 'hyflex_b'], [[...$slot, 'modality' => 'hyflex_b']]));
     }
+
+    /**
+     * Back-to-back classes share a room legitimately: one ends exactly when
+     * the next begins. The interval is half-open, so a touching boundary is
+     * never a double-booking.
+     */
+    public function test_back_to_back_classes_touching_at_the_boundary_are_not_a_conflict(): void
+    {
+        $detector = new RoomConflictDetector(new ScheduleDayParser);
+
+        self::assertFalse($detector->hasConflict([
+            'schedule_days' => 'Monday',
+            'starts_at_time' => '13:30:00',
+            'ends_at_time' => '16:30:00',
+            'modality' => 'f2f',
+        ], [[
+            'schedule_days' => 'Monday',
+            'starts_at_time' => '16:30:00',
+            'ends_at_time' => '19:30:00',
+            'modality' => 'f2f',
+        ]]));
+    }
+
+    /** One minute of genuine overlap past the boundary is still a conflict. */
+    public function test_one_minute_of_overlap_past_the_boundary_is_a_conflict(): void
+    {
+        $detector = new RoomConflictDetector(new ScheduleDayParser);
+
+        self::assertTrue($detector->hasConflict([
+            'schedule_days' => 'Monday',
+            'starts_at_time' => '13:30:00',
+            'ends_at_time' => '16:31:00',
+            'modality' => 'f2f',
+        ], [[
+            'schedule_days' => 'Monday',
+            'starts_at_time' => '16:30:00',
+            'ends_at_time' => '19:30:00',
+            'modality' => 'f2f',
+        ]]));
+    }
 }

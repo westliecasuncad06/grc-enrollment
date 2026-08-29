@@ -55,6 +55,7 @@ final class StudentProfileController extends Controller
             'entry_year' => $request->validated('entry_year'),
             'year_level' => $request->validated('year_level'),
             'enrollment_category' => $request->validated('enrollment_category'),
+            'student_type' => $request->validated('student_type'),
             'financial_status' => $request->validated('financial_status'),
         ], $actor, $contextFactory->fromRequest($request));
 

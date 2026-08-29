@@ -24,6 +24,10 @@ final class AuditableType
 
     public const STUDENT_PROFILE = 'student_profile';
 
+    public const FACULTY_ACCOUNT = 'faculty_account';
+
+    public const STAFF_ACCOUNT = 'staff_account';
+
     public const STUDENT_PROFILE_CHANGE_REQUEST = 'student_profile_change_request';
 
     public const AUDIT_LOG = 'audit_log';
@@ -80,6 +84,8 @@ final class AuditableType
             self::FACULTY_LOAD_THRESHOLD,
             self::SCHEDULE_PROPOSAL,
             self::STUDENT_PROFILE,
+            self::FACULTY_ACCOUNT,
+            self::STAFF_ACCOUNT,
             self::STUDENT_PROFILE_CHANGE_REQUEST,
             self::AUDIT_LOG,
             self::FACULTY_DIRECTORY,

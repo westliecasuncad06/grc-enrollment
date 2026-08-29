@@ -589,6 +589,92 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertArrayHasKey('sections.1.section_id', $response->json('error.errors'));
     }
 
+    public function test_submitting_a_lecture_without_its_paired_laboratory_is_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lab = $this->makeSubject('PROG1L', 2.0);
+        $lecture = Subject::create([
+            'code' => 'PROG1', 'title' => 'PROG1 Title', 'units' => 1.0,
+            'status' => SubjectStatus::Active, 'paired_subject_id' => $lab->id,
+        ]);
+        $lab->forceFill(['paired_subject_id' => $lecture->id])->save();
+        $this->placeSubject($curriculum, $lecture);
+        $this->placeSubject($curriculum, $lab);
+        $lectureSection = $this->makeSection($term, $lecture, ['section_code' => 'A']);
+        $this->makeSection($term, $lab, [
+            'section_code' => 'A', 'schedule_days' => 'Th', 'starts_at_time' => '10:00:00', 'ends_at_time' => '11:00:00',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $lectureSection->id]],
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('sections.0.section_id', $response->json('error.errors'));
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    public function test_submitting_a_lecture_and_laboratory_in_mismatched_sections_is_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lab = $this->makeSubject('PROG1L', 2.0);
+        $lecture = Subject::create([
+            'code' => 'PROG1', 'title' => 'PROG1 Title', 'units' => 1.0,
+            'status' => SubjectStatus::Active, 'paired_subject_id' => $lab->id,
+        ]);
+        $lab->forceFill(['paired_subject_id' => $lecture->id])->save();
+        $this->placeSubject($curriculum, $lecture);
+        $this->placeSubject($curriculum, $lab);
+        $lectureSection = $this->makeSection($term, $lecture, ['section_code' => 'A']);
+        $labSection = $this->makeSection($term, $lab, [
+            'section_code' => 'B', 'schedule_days' => 'Th', 'starts_at_time' => '10:00:00', 'ends_at_time' => '11:00:00',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $lectureSection->id], ['section_id' => $labSection->id]],
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('sections.0.section_id', $response->json('error.errors'));
+        $this->assertDatabaseCount('enrollments', 0);
+    }
+
+    public function test_submitting_a_matched_lecture_and_laboratory_pair_succeeds(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lab = $this->makeSubject('PROG1L', 2.0);
+        $lecture = Subject::create([
+            'code' => 'PROG1', 'title' => 'PROG1 Title', 'units' => 1.0,
+            'status' => SubjectStatus::Active, 'paired_subject_id' => $lab->id,
+        ]);
+        $lab->forceFill(['paired_subject_id' => $lecture->id])->save();
+        $this->placeSubject($curriculum, $lecture);
+        $this->placeSubject($curriculum, $lab);
+        $lectureSection = $this->makeSection($term, $lecture, ['section_code' => 'A']);
+        $labSection = $this->makeSection($term, $lab, [
+            'section_code' => 'A', 'schedule_days' => 'Th', 'starts_at_time' => '10:00:00', 'ends_at_time' => '11:00:00',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $lectureSection->id], ['section_id' => $labSection->id]],
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.total_units', 3);
+    }
+
     public function test_conflicting_sections_cannot_be_submitted_together(): void
     {
         $term = $this->makeTerm();

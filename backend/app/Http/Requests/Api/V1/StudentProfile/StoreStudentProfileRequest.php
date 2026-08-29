@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api\V1\StudentProfile;
 
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\StudentType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -49,6 +50,7 @@ final class StoreStudentProfileRequest extends FormRequest
             // year level outside that range has no enrollment window at all.
             'year_level' => ['required', 'integer', 'between:1,4'],
             'enrollment_category' => ['sometimes', 'nullable', Rule::enum(EnrollmentCategory::class)],
+            'student_type' => ['required', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
         ];
     }

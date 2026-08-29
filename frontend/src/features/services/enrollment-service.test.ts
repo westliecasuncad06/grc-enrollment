@@ -28,6 +28,7 @@ const eligibleSubject = {
   code: "CS101",
   title: "Programming 1",
   units: 3,
+  paired_subject_id: null,
   year_level: 1,
   semester: "1st",
   is_required: true,

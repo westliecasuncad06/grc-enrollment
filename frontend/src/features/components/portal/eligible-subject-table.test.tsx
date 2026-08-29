@@ -43,6 +43,7 @@ function subject(overrides: Partial<EligibleSubject> = {}): EligibleSubject {
     code: "CS101",
     title: "Programming 1",
     units: 3,
+    paired_subject_id: null,
     year_level: 1,
     semester: "1st",
     is_required: true,
@@ -200,7 +201,7 @@ describe("EligibleSubjectTable", () => {
 
     expect(onClear).toHaveBeenCalledWith(1)
     expect(screen.queryByText("CS101")).not.toBeInTheDocument()
-    expect(screen.getByText("1 subject removed")).toBeInTheDocument()
+    expect(screen.getByText("1 subject not shown")).toBeInTheDocument()
   })
 
   it("brings every removed subject back into view via Show all", async () => {
@@ -242,6 +243,150 @@ describe("EligibleSubjectTable", () => {
     renderTable({ subjects: [earlier] })
 
     expect(screen.queryByText("Backlog")).not.toBeInTheDocument()
+  })
+
+  it("hides an advance (one-year-ahead) subject from the table by default, and enables Add subject for it", () => {
+    const advance = subject({ year_level: 2, semester: "2nd" })
+    renderTable({
+      subjects: [advance],
+      currentYearLevel: 1,
+      currentSemester: "2nd",
+    })
+
+    expect(screen.queryByText("CS101")).not.toBeInTheDocument()
+    expect(screen.getByText("1 subject not shown")).toBeInTheDocument()
+    expect(screen.getByLabelText("Add subject")).not.toBeDisabled()
+  })
+
+  it("brings an advance subject into view, tagged Next year, via the Add subject picker", async () => {
+    const user = userEvent.setup()
+    const advance = subject({ year_level: 2, semester: "2nd" })
+    renderTable({
+      subjects: [advance],
+      currentYearLevel: 1,
+      currentSemester: "2nd",
+    })
+
+    const addInput = screen.getByLabelText("Add subject")
+    await user.click(addInput)
+    await user.click(await screen.findByRole("option", { name: /CS101/ }))
+
+    expect(screen.getAllByText("CS101").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Next year").length).toBeGreaterThan(0)
+  })
+
+  it("does not tag or hide a subject two years ahead — the pool never includes it, but defensively this table would still show it plainly", () => {
+    const tooFarAhead = subject({ year_level: 3, semester: "2nd" })
+    renderTable({
+      subjects: [tooFarAhead],
+      currentYearLevel: 1,
+      currentSemester: "2nd",
+    })
+
+    expect(screen.getAllByText("CS101").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Next year")).not.toBeInTheDocument()
+  })
+
+  it("tags each half of a lecture/laboratory pair with its partner's code", () => {
+    const lecture = subject({ subject_id: 1, code: "PROG1", paired_subject_id: 2 })
+    const lab = subject({
+      subject_id: 2,
+      code: "PROG1L",
+      paired_subject_id: 1,
+      available_sections: [section({ id: 2, subject_id: 2 })],
+    })
+    renderTable({ subjects: [lecture, lab] })
+
+    expect(screen.getAllByText("Paired with PROG1L").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Paired with PROG1").length).toBeGreaterThan(0)
+  })
+
+  it("auto-selects the matching section for a paired lecture/laboratory subject", async () => {
+    const user = userEvent.setup()
+    const onChoose = vi.fn()
+    const lecture = subject({
+      subject_id: 1,
+      code: "PROG1",
+      paired_subject_id: 2,
+      available_sections: [section({ id: 1, subject_id: 1, section_code: "A" })],
+    })
+    const lab = subject({
+      subject_id: 2,
+      code: "PROG1L",
+      paired_subject_id: 1,
+      available_sections: [
+        section({
+          id: 2,
+          subject_id: 2,
+          section_code: "A",
+          subject_code: "PROG1L",
+          subject_title: "Computer Programming 1 LAB",
+        }),
+      ],
+    })
+    renderTable({ subjects: [lecture, lab], onChoose })
+
+    await user.click(screen.getAllByLabelText("PROG1 section")[0])
+    await user.click(await screen.findByRole("option", { name: /Section A/ }))
+
+    expect(onChoose).toHaveBeenCalledWith(1, 1)
+    expect(onChoose).toHaveBeenCalledWith(2, 2)
+  })
+
+  it("does not auto-select a paired subject when no matching section code exists on its side", async () => {
+    const user = userEvent.setup()
+    const onChoose = vi.fn()
+    const lecture = subject({
+      subject_id: 1,
+      code: "PROG1",
+      paired_subject_id: 2,
+      available_sections: [section({ id: 1, subject_id: 1, section_code: "A" })],
+    })
+    const lab = subject({
+      subject_id: 2,
+      code: "PROG1L",
+      paired_subject_id: 1,
+      available_sections: [
+        section({ id: 2, subject_id: 2, section_code: "B" }),
+      ],
+    })
+    renderTable({ subjects: [lecture, lab], onChoose })
+
+    await user.click(screen.getAllByLabelText("PROG1 section")[0])
+    await user.click(await screen.findByRole("option", { name: /Section A/ }))
+
+    expect(onChoose).toHaveBeenCalledWith(1, 1)
+    expect(onChoose).not.toHaveBeenCalledWith(2, expect.anything())
+  })
+
+  it("removes and clears the paired subject too when one half is removed", async () => {
+    const user = userEvent.setup()
+    const onClear = vi.fn()
+    const lecture = subject({
+      subject_id: 1,
+      code: "PROG1",
+      paired_subject_id: 2,
+      available_sections: [section({ id: 1, subject_id: 1, section_code: "A" })],
+    })
+    const lab = subject({
+      subject_id: 2,
+      code: "PROG1L",
+      paired_subject_id: 1,
+      available_sections: [section({ id: 2, subject_id: 2, section_code: "A" })],
+    })
+    renderTable({
+      subjects: [lecture, lab],
+      selections: { 1: 1, 2: 2 },
+      onClear,
+    })
+
+    await user.click(screen.getAllByRole("button", { name: "Remove PROG1" })[0])
+
+    expect(onClear).toHaveBeenCalledWith(1)
+    expect(onClear).toHaveBeenCalledWith(2)
+    expect(screen.queryByText("PROG1")).not.toBeInTheDocument()
+    expect(screen.queryByText("PROG1L")).not.toBeInTheDocument()
+    expect(screen.getByText("2 subjects not shown")).toBeInTheDocument()
   })
 
   it("lets you add back one specific removed subject via the Add subject picker", async () => {

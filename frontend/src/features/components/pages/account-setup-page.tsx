@@ -5,7 +5,7 @@ import { KeyRound, MailCheck, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, type Resolver } from "react-hook-form"
 
 import {
   Alert,
@@ -22,14 +22,58 @@ import {
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
-import {
-  accountSetupSchema,
-  type AccountSetupInput,
-} from "@/features/schemas/admission-schema"
+import { accountSetupSchema } from "@/features/schemas/admission-schema"
+import { facultyAccountSetupSchema } from "@/features/schemas/faculty-invitation-schema"
+import { staffAccountSetupSchema } from "@/features/schemas/staff-invitation-schema"
 import { setupStudentAccount } from "@/features/services/admission-service"
+import { setupFacultyAccount } from "@/features/services/faculty-invitation-service"
+import { setupStaffAccount } from "@/features/services/staff-invitation-service"
 
-export function AccountSetupPage() {
+interface AccountSetupFormValues {
+  email: string
+  code: string
+  name?: string
+  password: string
+  password_confirmation: string
+}
+
+interface AccountSetupPageProps {
+  /** Faculty and staff supply a name here since the inviting Chair/Registrar Head only gave an email — the Student flow never needed this field. */
+  variant?: "student" | "faculty" | "staff"
+}
+
+const COPY = {
+  student: {
+    eyebrow: "Student account",
+    inviterLine:
+      "Use the one-time code delivered separately in your Admission account-setup email.",
+    enterLine: "Enter the email and one-time code from your Admission message.",
+    nameHint: "",
+  },
+  faculty: {
+    eyebrow: "Faculty account",
+    inviterLine:
+      "Use the one-time code delivered separately in your Program Chair's invitation email.",
+    enterLine:
+      "Enter the email and one-time code from your Program Chair's invitation.",
+    nameHint:
+      "Your Program Chair invited you by email only — tell us your name here.",
+  },
+  staff: {
+    eyebrow: "Staff account",
+    inviterLine:
+      "Use the one-time code delivered separately in your Registrar's Office invitation email.",
+    enterLine:
+      "Enter the email and one-time code from your Registrar's Office invitation.",
+    nameHint:
+      "The Registrar's Office invited you by email only — tell us your name here.",
+  },
+} as const
+
+export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps) {
   const router = useRouter()
+  const needsName = variant !== "student"
+  const copy = COPY[variant]
   const [completed, setCompleted] = useState(false)
   const [requestError, setRequestError] = useState("")
   const {
@@ -37,11 +81,18 @@ export function AccountSetupPage() {
     handleSubmit,
     register,
     setError,
-  } = useForm<AccountSetupInput>({
-    resolver: zodResolver(accountSetupSchema),
+  } = useForm<AccountSetupFormValues>({
+    resolver: zodResolver(
+      variant === "faculty"
+        ? facultyAccountSetupSchema
+        : variant === "staff"
+          ? staffAccountSetupSchema
+          : accountSetupSchema,
+    ) as Resolver<AccountSetupFormValues>,
     defaultValues: {
       email: "",
       code: "",
+      ...(needsName ? { name: "" } : {}),
       password: "",
       password_confirmation: "",
     },
@@ -56,10 +107,33 @@ export function AccountSetupPage() {
     return () => window.clearTimeout(redirectTimer)
   }, [completed, router])
 
-  const submit = async (values: AccountSetupInput) => {
+  const submit = async (values: AccountSetupFormValues) => {
     setRequestError("")
     try {
-      await setupStudentAccount(values)
+      if (variant === "faculty") {
+        await setupFacultyAccount({
+          email: values.email,
+          code: values.code,
+          name: values.name ?? "",
+          password: values.password,
+          password_confirmation: values.password_confirmation,
+        })
+      } else if (variant === "staff") {
+        await setupStaffAccount({
+          email: values.email,
+          code: values.code,
+          name: values.name ?? "",
+          password: values.password,
+          password_confirmation: values.password_confirmation,
+        })
+      } else {
+        await setupStudentAccount({
+          email: values.email,
+          code: values.code,
+          password: values.password,
+          password_confirmation: values.password_confirmation,
+        })
+      }
       setCompleted(true)
     } catch (error) {
       if (!applyApiFieldErrors(error, setError)) {
@@ -90,12 +164,9 @@ export function AccountSetupPage() {
           </span>
         </Link>
         <div className="login-purpose">
-          <p className="eyebrow">Student account</p>
+          <p className="eyebrow">{copy.eyebrow}</p>
           <h2 id="setup-purpose-title">Create your private password.</h2>
-          <p>
-            Use the one-time code delivered separately in your Admission
-            account-setup email.
-          </p>
+          <p>{copy.inviterLine}</p>
         </div>
         <ul className="login-trust-list">
           <li>
@@ -154,9 +225,7 @@ export function AccountSetupPage() {
               <div>
                 <p className="eyebrow">Secure activation</p>
                 <h1 id="account-setup-title">Set up your account</h1>
-                <p className="login-form-intro">
-                  Enter the email and one-time code from your Admission message.
-                </p>
+                <p className="login-form-intro">{copy.enterLine}</p>
               </div>
               {requestError && (
                 <Alert variant="destructive">
@@ -195,6 +264,19 @@ export function AccountSetupPage() {
                     </FieldDescription>
                     <FieldError>{errors.code?.message}</FieldError>
                   </Field>
+                  {needsName && (
+                    <Field data-invalid={Boolean(errors.name)}>
+                      <FieldLabel htmlFor="setup-name">Full name</FieldLabel>
+                      <Input
+                        id="setup-name"
+                        autoComplete="name"
+                        disabled={isSubmitting}
+                        {...register("name")}
+                      />
+                      <FieldDescription>{copy.nameHint}</FieldDescription>
+                      <FieldError>{errors.name?.message}</FieldError>
+                    </Field>
+                  )}
                   <Field data-invalid={Boolean(errors.password)}>
                     <FieldLabel htmlFor="setup-password">
                       New password

@@ -15,6 +15,7 @@ delete-behavior rationale.
 | `code` | `VARCHAR(255)` | not null, **unique** | e.g. `CS101` |
 | `title` | `VARCHAR(255)` | not null | |
 | `units` | `TINYINT UNSIGNED` | not null | Credit units |
+| `paired_subject_id` | `BIGINT UNSIGNED` | nullable, FK → `subjects.id`, `SET NULL` on delete | This subject's lecture/laboratory companion, symmetric (both rows point at each other). A subject's LEC and LAB components are institutional policy always taken together — `BuildEligibleSubjectPool`/`EligibleSubjectTable`/`StoreEnrollmentRequest` all read this. Backfilled once (migration `2026_08_27_000002_add_paired_subject_id_to_subjects.php`) by matching a `" LEC"`-titled subject to the same-college subject whose code is its own plus a trailing `"L"` and whose own title ends in `" LAB"` — not set for a lab-only course with no matching lecture code (e.g. `ITPLUS3`/`ITPLUS4`). |
 | `status` | `VARCHAR(255)` | not null | Application-backed string. **Provisional** `active`/`inactive` — see `App\Domain\Curriculum\SubjectStatus`; institutional vocabulary unconfirmed (PRD §17) |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 

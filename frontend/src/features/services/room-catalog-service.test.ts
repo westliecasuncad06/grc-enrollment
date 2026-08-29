@@ -24,6 +24,9 @@ describe("getLocalRoomOptions", () => {
         "5G",
       ]),
     )
-    expect(names).not.toContain("LAB 1")
+    // LAB 1-4 are now shared campus rooms available to every college; COM
+    // LAB 2 remains CBAE-exclusive inventory.
+    expect(names).toContain("LAB 1")
+    expect(names).not.toContain("COM LAB 2")
   })
 })

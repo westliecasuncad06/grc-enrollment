@@ -43,6 +43,7 @@ export const eligibleSubjectSchema = z
     code: z.string().min(1),
     title: z.string().min(1),
     units: z.number().positive(),
+    paired_subject_id: z.number().int().positive().nullable(),
     year_level: z.number().int().positive(),
     semester: z.string().min(1),
     is_required: z.boolean(),

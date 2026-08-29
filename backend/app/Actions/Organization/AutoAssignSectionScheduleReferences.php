@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Scheduling\RoomConflictDetector;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
 use App\Models\AcademicTerm;
@@ -33,7 +34,11 @@ use Illuminate\Validation\ValidationException;
  * fills currently-null fields, the same "don't clobber manual work"
  * precedent `capacity_source` already established for capacity. A subject
  * whose placement has no `reference_professor_name` stays unassigned; no
- * name is ever invented.
+ * name is ever invented. For the same reason, a `reference_room` that would
+ * double-book an already-scheduled section (any college — rooms are shared
+ * campus-wide) is left unset rather than silently overlapping it; the
+ * section stays incomplete for a Program Chair, or the catalog-based
+ * `GenerateFacultyAssignmentRecommendations`, to resolve instead.
  *
  * Like every sibling write on this workflow (`SaveSectionPlan::save()` /
  * `release()` / `submit()`), this is scoped to the acting Program Chair's
@@ -60,6 +65,7 @@ final class AutoAssignSectionScheduleReferences
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly SectionConflictDetector $conflictDetector,
+        private readonly RoomConflictDetector $roomConflictDetector,
     ) {}
 
     /**
@@ -127,9 +133,6 @@ final class AutoAssignSectionScheduleReferences
 
                 $changes = [];
 
-                if ($section->professor_id === null && $placement->reference_professor_name !== null) {
-                    $changes['professor_id'] = $this->findOrCreateFaculty($placement->reference_professor_name)->id;
-                }
                 if ($section->schedule_days === null && $placement->reference_day !== null) {
                     $changes['schedule_days'] = $placement->reference_day;
                 }
@@ -183,8 +186,21 @@ final class AutoAssignSectionScheduleReferences
                 // never a real one — skip it so the room stays open for the
                 // normal room-catalog assignment to fill instead.
                 if ($section->room === null && $placement->reference_room !== null
-                    && strtolower($placement->reference_room) !== 'online') {
+                    && strtolower($placement->reference_room) !== 'online'
+                    && ! $this->referenceRoomConflicts($section, $placement->reference_room, $changes)) {
                     $changes['room'] = $placement->reference_room;
+                }
+
+                // Resolved last, against this section's FINAL day/time: every
+                // block section of one subject names the same reference
+                // professor, so assigning it unconditionally handed one
+                // person every block at the same hour.
+                if ($section->professor_id === null && $placement->reference_professor_name !== null) {
+                    $professorId = $this->findOrCreateFaculty($placement->reference_professor_name)->id;
+
+                    if (! $this->referenceProfessorConflicts($section, $professorId, $changes)) {
+                        $changes['professor_id'] = $professorId;
+                    }
                 }
 
                 if ($changes !== []) {
@@ -253,6 +269,73 @@ final class AutoAssignSectionScheduleReferences
                 'status' => UserStatus::Active,
             ],
         );
+    }
+
+    /**
+     * A room named in historical curriculum reference data can now collide
+     * with an already-scheduled section — rooms are shared campus-wide, so
+     * this checks every college's booking in that room this term, not just
+     * this curriculum's. `$pendingChanges` carries this same pass's not-yet-
+     * saved day/time/modality so the check uses the section's final values.
+     *
+     * @param  array<string, mixed>  $pendingChanges
+     */
+    private function referenceRoomConflicts(Section $section, string $room, array $pendingChanges): bool
+    {
+        $modality = $pendingChanges['modality'] ?? $section->modality;
+
+        $existing = Section::query()
+            ->where('academic_term_id', $section->academic_term_id)
+            ->where('room', $room)
+            ->whereKeyNot($section->id)
+            ->whereNotNull('schedule_days')
+            ->get(['schedule_days', 'starts_at_time', 'ends_at_time', 'modality'])
+            ->map(fn (Section $other): array => [
+                'schedule_days' => $other->schedule_days,
+                'starts_at_time' => $other->starts_at_time,
+                'ends_at_time' => $other->ends_at_time,
+                'modality' => $other->modality?->value,
+            ])
+            ->all();
+
+        return $this->roomConflictDetector->hasConflict([
+            'schedule_days' => $pendingChanges['schedule_days'] ?? $section->schedule_days,
+            'starts_at_time' => $pendingChanges['starts_at_time'] ?? $section->starts_at_time,
+            'ends_at_time' => $pendingChanges['ends_at_time'] ?? $section->ends_at_time,
+            'modality' => $modality instanceof SectionModality ? $modality->value : null,
+        ], $existing);
+    }
+
+    /**
+     * Whether giving `$professorId` this section would double-book them
+     * against any other section they already teach this term — any college,
+     * any plan status. `$pendingChanges` carries this same pass's not-yet-
+     * saved day/time so the check uses the section's final slot.
+     *
+     * @param  array<string, mixed>  $pendingChanges
+     */
+    private function referenceProfessorConflicts(Section $section, int $professorId, array $pendingChanges): bool
+    {
+        $existing = array_values(
+            Section::query()
+                ->where('academic_term_id', $section->academic_term_id)
+                ->where('professor_id', $professorId)
+                ->whereKeyNot($section->id)
+                ->whereNotNull('schedule_days')
+                ->get(['schedule_days', 'starts_at_time', 'ends_at_time'])
+                ->map(fn (Section $other): array => [
+                    'schedule_days' => $other->schedule_days,
+                    'starts_at_time' => $other->starts_at_time,
+                    'ends_at_time' => $other->ends_at_time,
+                ])
+                ->all(),
+        );
+
+        return $this->conflictDetector->hasConflict([
+            'schedule_days' => $pendingChanges['schedule_days'] ?? $section->schedule_days,
+            'starts_at_time' => $pendingChanges['starts_at_time'] ?? $section->starts_at_time,
+            'ends_at_time' => $pendingChanges['ends_at_time'] ?? $section->ends_at_time,
+        ], $existing);
     }
 
     private function hasReferenceTime(?CurriculumSubject $placement): bool

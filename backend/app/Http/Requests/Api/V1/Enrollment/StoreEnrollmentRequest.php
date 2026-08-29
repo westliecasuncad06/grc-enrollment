@@ -101,6 +101,7 @@ final class StoreEnrollmentRequest extends FormRequest
             $this->rejectDuplicateSubjects($validator, $sectionIds, $sections);
             $this->rejectScheduleConflicts($validator, $sectionIds, $sections);
             $this->rejectIneligibleSections($validator, $student, $term, $sectionIds);
+            $this->rejectUnpairedLectureLabComponents($validator, $sectionIds, $sections);
             $this->rejectOverload($validator, $sections);
         });
     }
@@ -311,6 +312,54 @@ final class StoreEnrollmentRequest extends FormRequest
         foreach ($sectionIds as $index => $sectionId) {
             if (! isset($eligibleSectionIds[$sectionId])) {
                 $validator->errors()->add("sections.{$index}.section_id", 'This section is not currently eligible for selection.');
+            }
+        }
+    }
+
+    /**
+     * A subject's lecture and laboratory components are institutional
+     * policy always taken together, never separately (`Subject::$paired_subject_id`,
+     * set once by a title/code-based backfill — see its migration). This is
+     * the server-side enforcement boundary; `EligibleSubjectTable` already
+     * keeps the two in sync automatically on the happy path, so this should
+     * only ever fire against a client that bypassed that UX. Block-code
+     * submissions are exempt — `validateBlockSubmission()`'s own docblock
+     * already establishes that a Program Chair-authored block's fixed
+     * subject list is trusted as a whole, not re-validated subject by
+     * subject.
+     *
+     * @param  list<int>  $sectionIds
+     * @param  Collection<int, Section>  $sections
+     */
+    private function rejectUnpairedLectureLabComponents(Validator $validator, array $sectionIds, Collection $sections): void
+    {
+        $sectionCodeBySubjectId = [];
+        foreach ($sections as $section) {
+            $sectionCodeBySubjectId[$section->subject_id] = $section->section_code;
+        }
+
+        foreach ($sectionIds as $index => $sectionId) {
+            $section = $sections->get($sectionId);
+            $pairedSubjectId = $section?->subject->paired_subject_id;
+
+            if ($pairedSubjectId === null) {
+                continue;
+            }
+
+            if (! array_key_exists($pairedSubjectId, $sectionCodeBySubjectId)) {
+                $validator->errors()->add(
+                    "sections.{$index}.section_id",
+                    'This subject\'s lecture and laboratory components must be taken together.',
+                );
+
+                continue;
+            }
+
+            if ($sectionCodeBySubjectId[$pairedSubjectId] !== $section->section_code) {
+                $validator->errors()->add(
+                    "sections.{$index}.section_id",
+                    'The lecture and laboratory sections must be the same section.',
+                );
             }
         }
     }

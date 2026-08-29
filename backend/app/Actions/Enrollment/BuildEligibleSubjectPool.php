@@ -63,16 +63,32 @@ final readonly class BuildEligibleSubjectPool
         // implicitly bounded to their own year's block sections by
         // BlockSectionAccessPolicy below — an irregular student would
         // otherwise see the entire 4-year curriculum at once, most of it
-        // years away and irrelevant. Bound the pool to backlog-or-current
-        // placements using the same ordinal rule ClassifyEnrollmentStanding
-        // uses to decide what still "needs adding": a placement ahead of the
-        // student's current standing isn't something they need yet.
+        // irrelevant. The pool is bounded to two windows: everything up to
+        // and including the term being enrolled into (their current
+        // semester plus any not-yet-taken backlog from an earlier one), and
+        // — separately — the same semester slot one year ahead, so a
+        // student who is caught up can still get ahead. Nothing two or more
+        // years ahead is ever offered; the frontend (EligibleSubjectTable)
+        // is what keeps the "one year ahead" window out of the default
+        // selection and behind its "Add subject" picker, using the same
+        // ordinal math client-side (curriculum-ordinal.ts's
+        // isAdvanceSubject). A placement offered either semester (the
+        // composite '1st|2nd' string) matches on whichever of its two
+        // ordinals falls in either window, per
+        // App\Domain\Curriculum\SemesterCoverage's own contract.
         if ($student->enrollment_category !== null && strtolower($student->enrollment_category) === EnrollmentCategory::Irregular->value) {
             $currentOrdinal = (SemesterSlot::tryFrom($term->semester) ?? SemesterSlot::First)->ordinal($student->year_level);
 
-            $placements = $placements->filter(
-                fn (CurriculumSubject $placement): bool => SemesterCoverage::primary($placement->semester)->ordinal($placement->year_level) <= $currentOrdinal,
-            )->values();
+            $placements = $placements->filter(function (CurriculumSubject $placement) use ($currentOrdinal): bool {
+                foreach (SemesterCoverage::parse($placement->semester) as $slot) {
+                    $ordinal = $slot->ordinal($placement->year_level);
+                    if ($ordinal <= $currentOrdinal || $ordinal === $currentOrdinal + 2) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })->values();
         }
 
         // Resolved once for the whole pool: which audience windows are open

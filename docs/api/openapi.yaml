@@ -64,6 +64,13 @@ tags:
       DFD 2.1). New accounts stay disabled until the one-time email setup code
       is used. Admission Staff may search records and decide profile changes;
       Students may read and request changes only for their own profile.
+  - name: Faculty Accounts
+    description: >
+      Program-Chair-managed Faculty account invitations, scoped to the
+      inviting Chair's own college. New accounts stay disabled until the
+      one-time email setup code is used and the professor supplies their own
+      name and password — the Faculty counterpart to Student Records'
+      account-provisioning flow.
   - name: Enrollment
     description: >
       Process 2.0's eligible-subject pool and submission (PRD §5.2, DFD 2.2)
@@ -204,6 +211,95 @@ paths:
                 $ref: "#/components/schemas/AccountSetupResponse"
         "422":
           description: The request is invalid, expired, reused, or does not identify a pending Student account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/faculty-account-setup:
+    post:
+      operationId: postAuthFacultyAccountSetup
+      summary: Activate a pending Faculty account with its one-time code
+      description: >
+        Public, throttled initial-password setup. Unlike the Student flow,
+        the professor also supplies their own full name here, since the
+        inviting Program Chair only provided an email address. The code is
+        delivered in the email body, stored only as a hash, expires after 60
+        minutes, and is invalidated after use or resend.
+      security: []
+      tags:
+        - Faculty Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacultyAccountSetupRequest"
+      responses:
+        "200":
+          description: The pending account was activated and may now sign in.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyAccountSetupResponse"
+        "422":
+          description: The request is invalid, expired, reused, or does not identify a pending Faculty account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/staff-account-setup:
+    post:
+      operationId: postAuthStaffAccountSetup
+      summary: Activate a pending staff account with its one-time code
+      description: >
+        Public, throttled initial-password setup, mirroring the Faculty
+        flow exactly: the invitee also supplies their own full name here,
+        since the inviting Registrar Head only provided an email and role.
+        Covers every role `UserRole::registrarInvitableCases()` allows
+        (Faculty, Program Chair, Dean, Executive Director, Registrar Head,
+        Registrar Staff, Accounting Staff, IT Control). The code is
+        delivered in the email body, stored only as a hash, expires after
+        60 minutes, and is invalidated after use or resend.
+      security: []
+      tags:
+        - Staff Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffAccountSetupRequest"
+      responses:
+        "200":
+          description: The pending account was activated and may now sign in.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffAccountSetupResponse"
+        "422":
+          description: The request is invalid, expired, reused, or does not identify a pending staff account.
           content:
             application/json:
               schema:
@@ -1879,6 +1975,266 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The account has already completed setup.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/faculty-invitations:
+    get:
+      operationId: getFacultyInvitations
+      summary: List every Faculty account in the Program Chair's own college
+      description: >
+        Program Chair only. Returns pending invitations and already-activated
+        professors alike, newest first, scoped to the actor's own college.
+      security:
+        - bearerAuth: []
+      tags:
+        - Faculty Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The Chair's college's Faculty accounts.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyInvitationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postFacultyInvitations
+      summary: Invite a professor by email
+      description: >
+        Program Chair only. Creates a disabled Faculty account in the actor's
+        own college and immediately sends a one-time setup code by email. The
+        professor supplies their own name and password when redeeming it.
+      security:
+        - bearerAuth: []
+      tags:
+        - Faculty Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreFacultyInvitationRequest"
+      responses:
+        "201":
+          description: The invitation was created and the setup email was sent (or its failure recorded).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyInvitationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The email is missing, malformed, already registered, or the actor has no assigned college.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/faculty-invitations/{user}/resend:
+    post:
+      operationId: postFacultyInvitationResend
+      summary: Resend a pending Faculty account setup invitation
+      description: >
+        Program Chair only, and only for a Faculty account in the actor's own
+        college. Replaces any previous setup code before sending a new email.
+      security:
+        - bearerAuth: []
+      tags:
+        - Faculty Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: user
+          in: path
+          required: true
+          description: Faculty account (User) ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The record reflects the latest delivery attempt.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyInvitationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No Faculty account with that ID exists in the actor's own college.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The account has already completed setup.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/staff-invitations:
+    get:
+      operationId: getStaffInvitations
+      summary: List every account across the roles a Registrar Head may invite
+      description: >
+        Registrar Head only. Returns pending invitations and already-activated
+        staff alike, newest first, across every role
+        `UserRole::registrarInvitableCases()` allows — unlike Faculty
+        invitations, this is not scoped to one college.
+      security:
+        - bearerAuth: []
+      tags:
+        - Staff Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Every invitable-role account.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffInvitationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: postStaffInvitations
+      summary: Invite anyone into a GRC staff account by email
+      description: >
+        Registrar Head only. Creates a disabled account with the given role
+        and immediately sends a one-time setup code by email. The invitee
+        supplies their own name and password when redeeming it. `role` must
+        be one of `UserRole::registrarInvitableCases()` — every
+        staff/leadership role except Student (Admission's own "Create a
+        student account" flow) and AdmissionStaff.
+      security:
+        - bearerAuth: []
+      tags:
+        - Staff Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreStaffInvitationRequest"
+      responses:
+        "201":
+          description: The invitation was created and the setup email was sent (or its failure recorded).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffInvitationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The email is missing, malformed, already registered, or the role is not invitable through this form.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/staff-invitations/{user}/resend:
+    post:
+      operationId: postStaffInvitationResend
+      summary: Resend a pending staff account setup invitation
+      description: >
+        Registrar Head only, and only for an account whose role is one of
+        `UserRole::registrarInvitableCases()`. Replaces any previous setup
+        code before sending a new email.
+      security:
+        - bearerAuth: []
+      tags:
+        - Staff Accounts
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: user
+          in: path
+          required: true
+          description: Staff account (User) ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The record reflects the latest delivery attempt.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffInvitationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No account with that ID exists in the invitable-role set.
           content:
             application/json:
               schema:
@@ -4366,6 +4722,243 @@ components:
             status:
               type: string
               const: active
+    FacultyAccountSetupRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - code
+        - name
+        - password
+        - password_confirmation
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        code:
+          type: string
+          maxLength: 255
+          description: One-time code delivered separately in the account-setup email body.
+        name:
+          type: string
+          maxLength: 255
+          description: The professor's full name — the inviting Chair supplied only an email address.
+        password:
+          type: string
+          minLength: 8
+        password_confirmation:
+          type: string
+          minLength: 8
+    FacultyAccountSetupResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+            - status
+          properties:
+            type:
+              type: string
+              const: faculty-account-setup
+            status:
+              type: string
+              const: active
+    StoreFacultyInvitationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+    FacultyInvitation:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - email
+        - name
+        - status
+        - invitation_sent_at
+        - activated_at
+      properties:
+        type:
+          type: string
+          const: faculty_invitation
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          description: A placeholder derived from the email's local part until the professor completes setup.
+        status:
+          type: string
+          enum: [pending, activated, failed]
+        invitation_sent_at:
+          type: [string, 'null']
+          format: date-time
+        activated_at:
+          type: [string, 'null']
+          format: date-time
+    FacultyInvitationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/FacultyInvitation"
+    FacultyInvitationListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacultyInvitation"
+    StaffInvitableRole:
+      type: string
+      description: >
+        Every role a Registrar Head may invite — mirrors
+        `UserRole::registrarInvitableCases()`.
+      enum:
+        - faculty
+        - program_chair
+        - dean
+        - executive_director
+        - registrar_head
+        - registrar_staff
+        - accounting_staff
+        - it_admin
+    StaffAccountSetupRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - code
+        - name
+        - password
+        - password_confirmation
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        code:
+          type: string
+          maxLength: 255
+          description: One-time code delivered separately in the account-setup email body.
+        name:
+          type: string
+          maxLength: 255
+          description: The invitee's full name — the inviting Registrar Head supplied only an email address and role.
+        password:
+          type: string
+          minLength: 8
+        password_confirmation:
+          type: string
+          minLength: 8
+    StaffAccountSetupResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+            - status
+          properties:
+            type:
+              type: string
+              const: staff-account-setup
+            status:
+              type: string
+              const: active
+    StoreStaffInvitationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        role:
+          $ref: "#/components/schemas/StaffInvitableRole"
+    StaffInvitation:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - email
+        - name
+        - role
+        - role_label
+        - status
+        - invitation_sent_at
+        - activated_at
+      properties:
+        type:
+          type: string
+          const: staff_invitation
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          description: A placeholder derived from the email's local part until the invitee completes setup.
+        role:
+          $ref: "#/components/schemas/StaffInvitableRole"
+        role_label:
+          type: string
+        status:
+          type: string
+          enum: [pending, activated, failed]
+        invitation_sent_at:
+          type: [string, 'null']
+          format: date-time
+        activated_at:
+          type: [string, 'null']
+          format: date-time
+    StaffInvitationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          $ref: "#/components/schemas/StaffInvitation"
+    StaffInvitationListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/StaffInvitation"
     AuthResponse:
       type: object
       additionalProperties: false
@@ -5559,6 +6152,7 @@ components:
         - code
         - title
         - units
+        - paired_subject_id
         - year_level
         - semester
         - is_required
@@ -5578,6 +6172,12 @@ components:
         units:
           type: number
           format: float
+        paired_subject_id:
+          type: [integer, 'null']
+          description: >
+            The subject_id of this subject's lecture/laboratory companion,
+            when one exists and appears in this pool. A subject's LEC and
+            LAB components are always taken together, never separately.
         year_level:
           type: integer
         semester:
@@ -7190,6 +7790,8 @@ components:
         - curriculum_effective_school_year
         - year_level
         - enrollment_category
+        - student_type
+        - student_type_label
         - admission_status
         - admission_status_label
         - academic_standing
@@ -7251,6 +7853,12 @@ components:
         enrollment_category:
           type: [string, 'null']
           enum: [regular, irregular, null]
+        student_type:
+          type: [string, 'null']
+          description: Whether the student entered as a Freshman or a Transferee. Informational only.
+          enum: [freshman, transferee, null]
+        student_type_label:
+          type: [string, 'null']
         admission_status:
           type: string
           enum: [pending, admitted, enrolled, graduated, withdrawn]
@@ -7292,6 +7900,7 @@ components:
         - program_id
         - entry_year
         - year_level
+        - student_type
       properties:
         first_name:
           type: string
@@ -7332,6 +7941,10 @@ components:
         enrollment_category:
           type: [string, 'null']
           enum: [regular, irregular, null]
+        student_type:
+          type: string
+          description: Whether the student entered as a Freshman or a Transferee. Required at admission provisioning.
+          enum: [freshman, transferee]
         financial_status:
           type: [string, 'null']
           enum: [scholar, payee, null]
@@ -7378,6 +7991,9 @@ components:
         enrollment_category:
           type: string
           enum: [regular, irregular]
+        student_type:
+          type: string
+          enum: [freshman, transferee]
         financial_status:
           type: [string, 'null']
           enum: [scholar, payee, null]

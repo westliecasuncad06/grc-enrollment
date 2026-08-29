@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 export const enrollmentCategorySchema = z.enum(["regular", "irregular"])
+export const studentTypeSchema = z.enum(["freshman", "transferee"])
 export const financialStatusSchema = z.enum(["scholar", "payee"])
 export const admissionStatusSchema = z.enum([
   "pending",
@@ -44,6 +45,7 @@ export const provisionStudentSchema = z
     entry_year: z.number().int().min(2000).max(2100),
     year_level: z.number().int().min(1).max(4),
     enrollment_category: enrollmentCategorySchema,
+    student_type: studentTypeSchema,
     financial_status: financialStatusSchema.nullable().optional(),
     requirements_verified: z.literal(true, {
       error: "Confirm that Admission received the student's requirements.",
@@ -73,6 +75,8 @@ export const studentProfileSchema = z
     curriculum_effective_school_year: z.string().min(1),
     year_level: z.number().int().positive(),
     enrollment_category: enrollmentCategorySchema.nullable(),
+    student_type: studentTypeSchema.nullable(),
+    student_type_label: z.string().min(1).nullable(),
     admission_status: admissionStatusSchema,
     admission_status_label: z.string().min(1),
     academic_standing: academicStandingSchema,
@@ -138,6 +142,7 @@ export const updateStudentProfileSchema = z
     entry_year: z.number().int().min(2000).max(2100).optional(),
     year_level: z.number().int().min(1).max(4).optional(),
     enrollment_category: enrollmentCategorySchema.optional(),
+    student_type: studentTypeSchema.optional(),
     financial_status: financialStatusSchema.nullable().optional(),
     admission_status: admissionStatusSchema.optional(),
     reason: z.string().trim().min(1),

@@ -11,10 +11,14 @@ final class RoomCatalogAndFacultyCatalogTest extends TestCase
 {
     public function test_room_catalog_only_returns_rooms_available_to_the_requested_college(): void
     {
+        // The shared campus rooms (LAB 1-4, 2A, 3A-3G, 4A-4E, 5A-5G) are
+        // available to every college — a Program Chair still cannot see a
+        // room reserved for another college's exclusive inventory.
         self::assertContains('3A', RoomCatalog::forCollege(CollegeCode::Ccs));
         self::assertContains('LAB 1', RoomCatalog::forCollege(CollegeCode::Ccs));
-        self::assertNotContains('2A', RoomCatalog::forCollege(CollegeCode::Ccs));
+        self::assertContains('2A', RoomCatalog::forCollege(CollegeCode::Ccs));
         self::assertNotContains('COM LAB 2', RoomCatalog::forCollege(CollegeCode::Ccs));
+        self::assertNotContains('TESDA HALL', RoomCatalog::forCollege(CollegeCode::Coa));
         self::assertContains('2A', RoomCatalog::forCollege(CollegeCode::Coa));
     }
 
@@ -25,7 +29,10 @@ final class RoomCatalogAndFacultyCatalogTest extends TestCase
         foreach (['3A', '3B', '3C', '3D', '3E', '3F', '3G', '5A', '5B', '5C', '5D', '5E', '5F', '5G'] as $room) {
             self::assertContains($room, $rooms);
         }
-        self::assertNotContains('LAB 1', $rooms);
+        // LAB 1-4 are now shared campus rooms, so COA can see them too —
+        // COM LAB 2 remains CBAE-exclusive inventory.
+        self::assertContains('LAB 1', $rooms);
+        self::assertNotContains('COM LAB 2', $rooms);
     }
 
     public function test_faculty_catalog_reads_csv_surnames_and_skips_unassigned_rows(): void

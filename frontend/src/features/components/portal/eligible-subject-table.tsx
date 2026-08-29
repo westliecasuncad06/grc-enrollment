@@ -16,7 +16,10 @@ import {
   SelectValue,
 } from "@/features/components/ui/select"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
-import { isBacklogSubject } from "@/features/lib/curriculum-ordinal"
+import {
+  isAdvanceSubject,
+  isBacklogSubject,
+} from "@/features/lib/curriculum-ordinal"
 import { formatTimeRange } from "@/features/lib/format-time"
 import {
   compareBySchedule,
@@ -110,20 +113,32 @@ function columns(
   onRemove: (subjectId: number) => void,
   disabled: boolean,
   isBacklog: (subject: EligibleSubject) => boolean,
+  isAdvance: (subject: EligibleSubject) => boolean,
+  pairedCodeOf: (subject: EligibleSubject) => string | null,
 ): DataTableColumn<EligibleSubject>[] {
   return [
     {
       key: "subject",
       header: "Subject",
-      render: (subject) => (
-        <div>
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium">{subject.code}</span>
-            {isBacklog(subject) && <Badge variant="warning">Backlog</Badge>}
+      render: (subject) => {
+        const pairedCode = pairedCodeOf(subject)
+
+        return (
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium">{subject.code}</span>
+              {isBacklog(subject) && <Badge variant="warning">Backlog</Badge>}
+              {isAdvance(subject) && (
+                <Badge variant="outline">Next year</Badge>
+              )}
+              {pairedCode && (
+                <Badge variant="secondary">Paired with {pairedCode}</Badge>
+              )}
+            </div>
+            <div className="text-muted-foreground">{subject.title}</div>
           </div>
-          <div className="text-muted-foreground">{subject.title}</div>
-        </div>
-      ),
+        )
+      },
     },
     {
       key: "units",
@@ -238,6 +253,13 @@ function columns(
  * so it never reads as disabled. It never changes a selection. Remove hides a
  * subject from view for the session and clears any selection it had; nothing
  * here is persisted or affects eligibility.
+ *
+ * `subjects` can include "advance" entries — one year ahead of the
+ * student's own standing, same semester (`BuildEligibleSubjectPool` bounds
+ * the pool no further than that). Those start hidden from the table just
+ * like a removed row, and share the same "Add subject" combobox to bring
+ * them into view — a student who is caught up can still choose to get
+ * ahead, without next year's subjects cluttering the default list.
  */
 export function EligibleSubjectTable({
   subjects,
@@ -257,7 +279,16 @@ export function EligibleSubjectTable({
   currentYearLevel?: number | null
   currentSemester?: string | null
 }) {
+  // Subjects the student explicitly removed from view this session.
   const [removedIds, setRemovedIds] = useState<ReadonlySet<number>>(new Set())
+  // Advance subjects (see isAdvance below) the student explicitly chose to
+  // add via the combobox — everything else advance stays hidden by default,
+  // computed fresh each render rather than seeded once at mount, since
+  // currentYearLevel/currentSemester can resolve after this table's first
+  // render.
+  const [addedAdvanceIds, setAddedAdvanceIds] = useState<ReadonlySet<number>>(
+    new Set(),
+  )
   const [arrangedBySchedule, setArrangedBySchedule] = useState(false)
   const [addSubjectValue, setAddSubjectValue] = useState("")
 
@@ -270,27 +301,116 @@ export function EligibleSubjectTable({
       currentYearLevel,
       currentSemester,
     )
+  const isAdvance = (subject: EligibleSubject): boolean =>
+    currentYearLevel !== null &&
+    currentSemester !== null &&
+    isAdvanceSubject(
+      subject.year_level,
+      subject.semester,
+      currentYearLevel,
+      currentSemester,
+    )
+  // Hidden from the main table either because the student removed it, or
+  // because it's a not-yet-added advance (one-year-ahead) subject — the
+  // "Add subject" combobox is how either kind comes back into view.
+  const isHidden = (subject: EligibleSubject): boolean =>
+    removedIds.has(subject.subject_id) ||
+    (isAdvance(subject) && !addedAdvanceIds.has(subject.subject_id))
 
-  const remove = (subjectId: number) => {
-    if (selections[subjectId] !== undefined) onClear(subjectId)
-    setRemovedIds((prev) => new Set(prev).add(subjectId))
-  }
-  const showRemoved = () => setRemovedIds(new Set())
-  const addSubject = (subjectId: number) => {
+  const subjectById = new Map(
+    subjects.map((subject) => [subject.subject_id, subject]),
+  )
+  /**
+   * A subject's own paired lecture/laboratory component, when the pair
+   * actually appears in this pool (it may not — e.g. the other half was
+   * already completed and is excluded entirely).
+   */
+  const pairOf = (subject: EligibleSubject): EligibleSubject | null =>
+    subject.paired_subject_id !== null
+      ? (subjectById.get(subject.paired_subject_id) ?? null)
+      : null
+
+  const reveal = (subjectId: number) => {
     setRemovedIds((prev) => {
+      if (!prev.has(subjectId)) return prev
       const next = new Set(prev)
       next.delete(subjectId)
       return next
     })
+    setAddedAdvanceIds((prev) =>
+      prev.has(subjectId) ? prev : new Set(prev).add(subjectId),
+    )
   }
 
-  const removedSubjects = subjects.filter((subject) =>
-    removedIds.has(subject.subject_id),
-  )
-  const removedVisibleCount = removedSubjects.length
-  const visibleSubjects = subjects.filter(
-    (subject) => !removedIds.has(subject.subject_id),
-  )
+  /**
+   * A subject's lecture and laboratory components are institutional policy
+   * always taken together, never separately — choosing a section for one
+   * automatically chooses the matching section (same section code, the
+   * convention the block-generation process already relies on) for the
+   * other, revealing it first if it was hidden. If no matching section code
+   * exists on the pair's side, nothing is auto-chosen there; the student
+   * still can't submit an unpaired half — `StoreEnrollmentRequest` enforces
+   * that server-side.
+   */
+  const choose = (subjectId: number, sectionId: number) => {
+    onChoose(subjectId, sectionId)
+
+    const subject = subjectById.get(subjectId)
+    const paired = subject ? pairOf(subject) : null
+    if (!subject || !paired) return
+
+    const chosenSection = subject.available_sections.find(
+      (section) => section.id === sectionId,
+    )
+    const matchingPairedSection = paired.available_sections.find(
+      (section) => section.section_code === chosenSection?.section_code,
+    )
+    if (!matchingPairedSection) return
+
+    reveal(paired.subject_id)
+    if (selections[paired.subject_id] !== matchingPairedSection.id) {
+      onChoose(paired.subject_id, matchingPairedSection.id)
+    }
+  }
+
+  const clear = (subjectId: number) => {
+    onClear(subjectId)
+
+    const subject = subjectById.get(subjectId)
+    const paired = subject ? pairOf(subject) : null
+    if (paired && selections[paired.subject_id] !== undefined) {
+      onClear(paired.subject_id)
+    }
+  }
+
+  const remove = (subjectId: number) => {
+    if (selections[subjectId] !== undefined) clear(subjectId)
+    setRemovedIds((prev) => new Set(prev).add(subjectId))
+
+    const subject = subjectById.get(subjectId)
+    const paired = subject ? pairOf(subject) : null
+    if (paired) {
+      if (selections[paired.subject_id] !== undefined) onClear(paired.subject_id)
+      setRemovedIds((prev) => new Set(prev).add(paired.subject_id))
+    }
+  }
+  const showAll = () => {
+    setRemovedIds(new Set())
+    setAddedAdvanceIds(
+      new Set(subjects.filter(isAdvance).map((subject) => subject.subject_id)),
+    )
+  }
+  const addSubject = (subjectId: number) => {
+    reveal(subjectId)
+
+    const subject = subjectById.get(subjectId)
+    const paired = subject ? pairOf(subject) : null
+    if (paired) reveal(paired.subject_id)
+  }
+
+  const hiddenSubjects = subjects.filter(isHidden)
+  const hiddenCount = hiddenSubjects.length
+  const visibleSubjects = subjects.filter((subject) => !isHidden(subject))
   const rows = arrangedBySchedule
     ? [...visibleSubjects].sort((a, b) =>
         compareBySchedule(
@@ -324,7 +444,7 @@ export function EligibleSubjectTable({
           <SearchableCombobox
             id="add-subject"
             label="Add subject"
-            options={removedSubjects.map((subject) => ({
+            options={hiddenSubjects.map((subject) => ({
               value: String(subject.subject_id),
               label: `${subject.code} — ${subject.title}`,
             }))}
@@ -335,22 +455,16 @@ export function EligibleSubjectTable({
               setAddSubjectValue("")
             }}
             placeholder="Add subject"
-            emptyMessage="No removed subjects to add back."
-            disabled={disabled || removedSubjects.length === 0}
+            emptyMessage="No subjects available to add."
+            disabled={disabled || hiddenCount === 0}
           />
         </div>
-        {removedVisibleCount > 0 && (
+        {hiddenCount > 0 && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>
-              {removedVisibleCount} subject
-              {removedVisibleCount === 1 ? "" : "s"} removed
+              {hiddenCount} subject{hiddenCount === 1 ? "" : "s"} not shown
             </span>
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              onClick={showRemoved}
-            >
+            <Button type="button" variant="link" size="sm" onClick={showAll}>
               Show all
             </Button>
           </div>
@@ -363,15 +477,17 @@ export function EligibleSubjectTable({
         columns={columns(
           subjects,
           selections,
-          onChoose,
-          onClear,
+          choose,
+          clear,
           remove,
           disabled,
           isBacklog,
+          isAdvance,
+          (subject) => pairOf(subject)?.code ?? null,
         )}
         emptyMessage={
-          removedVisibleCount > 0
-            ? "Every subject in view has been removed. Use Show all above to bring them back."
+          hiddenCount > 0
+            ? "Every subject in view is hidden. Use Show all above to bring them back."
             : undefined
         }
       />

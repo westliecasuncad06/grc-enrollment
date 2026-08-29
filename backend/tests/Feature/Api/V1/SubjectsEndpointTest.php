@@ -60,4 +60,19 @@ final class SubjectsEndpointTest extends TestCase
         $response->assertOk();
         self::assertSame(['CS101', 'CS999'], collect($response->json('data'))->pluck('code')->all());
     }
+
+    public function test_the_response_carries_the_pairing_metadata_the_room_scheduler_needs(): void
+    {
+        $lab = Subject::create(['code' => 'PROG1L', 'title' => 'Computer Programming 1 LAB', 'units' => 1, 'status' => SubjectStatus::Active, 'college' => 'ccs', 'room_requirement' => 'laboratory']);
+        Subject::create(['code' => 'PROG1', 'title' => 'Computer Programming 1 LEC', 'units' => 3, 'status' => SubjectStatus::Active, 'college' => 'ccs', 'paired_subject_id' => $lab->id, 'room_requirement' => 'lecture']);
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.subject-pairing@grc.test');
+
+        $response = $this->withToken($token)->getJson('/api/v1/subjects')->assertOk();
+
+        $bySubject = collect($response->json('data'))->keyBy('code');
+        self::assertSame('ccs', $bySubject['PROG1']['college']);
+        self::assertSame($lab->id, $bySubject['PROG1']['paired_subject_id']);
+        self::assertSame('lecture', $bySubject['PROG1']['room_requirement']);
+        self::assertNull($bySubject['PROG1L']['paired_subject_id']);
+    }
 }

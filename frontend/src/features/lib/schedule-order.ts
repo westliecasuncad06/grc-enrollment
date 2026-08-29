@@ -20,17 +20,36 @@ const DAY_TOKENS: readonly (readonly [string, number])[] = [
   ["F", 5],
 ]
 
+/**
+ * Segments delimited the same way the backend's `CanonicalScheduleDays`
+ * joins its output (space, comma, slash, semicolon, ampersand, pipe) are
+ * parsed independently. Without this split, the API's real "MON/TUE/WED"
+ * response would match only "M" from the first segment, then abort on the
+ * un-tokenizable "ON/TUE/WED" left over — silently dropping every day after
+ * the first. Matching is case-insensitive so the canonical all-caps "THU"
+ * form and the legacy mixed-case "Th" shorthand both resolve, mirroring
+ * `App\Domain\Scheduling\ScheduleDayParser`'s own `strtoupper()` + per-segment
+ * loop.
+ */
 export function parseScheduleDays(scheduleDays: string | null): number[] {
   if (scheduleDays === null) return []
 
   const days: number[] = []
-  let remaining = scheduleDays
+  const segments = scheduleDays
+    .split(/[\s,/;&|]+/)
+    .filter((segment) => segment !== "")
 
-  while (remaining !== "") {
-    const token = DAY_TOKENS.find(([symbol]) => remaining.startsWith(symbol))
-    if (!token) break
-    days.push(token[1])
-    remaining = remaining.slice(token[0].length)
+  for (const segment of segments) {
+    let remaining = segment.toUpperCase()
+
+    while (remaining !== "") {
+      const token = DAY_TOKENS.find(([symbol]) =>
+        remaining.startsWith(symbol.toUpperCase()),
+      )
+      if (!token) break
+      days.push(token[1])
+      remaining = remaining.slice(token[0].length)
+    }
   }
 
   return [...new Set(days)]

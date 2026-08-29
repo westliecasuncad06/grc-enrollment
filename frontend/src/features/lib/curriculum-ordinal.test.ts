@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  isAdvanceSubject,
   isBacklogSubject,
   semesterOrdinal,
 } from "@/features/lib/curriculum-ordinal"
@@ -38,5 +39,23 @@ describe("isBacklogSubject", () => {
 
   it("is not backlog for a future semester", () => {
     expect(isBacklogSubject(4, "1st", 3, "2nd")).toBe(false)
+  })
+})
+
+describe("isAdvanceSubject", () => {
+  it("is advance when exactly one year ahead, same semester", () => {
+    expect(isAdvanceSubject(2, "2nd", 1, "2nd")).toBe(true)
+  })
+
+  it("is not advance for the student's current semester", () => {
+    expect(isAdvanceSubject(1, "2nd", 1, "2nd")).toBe(false)
+  })
+
+  it("is not advance for a backlog (earlier) semester", () => {
+    expect(isAdvanceSubject(1, "1st", 1, "2nd")).toBe(false)
+  })
+
+  it("is not advance when two or more years ahead", () => {
+    expect(isAdvanceSubject(3, "2nd", 1, "2nd")).toBe(false)
   })
 })

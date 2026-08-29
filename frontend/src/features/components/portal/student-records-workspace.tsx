@@ -122,6 +122,7 @@ function CreateAccountPanel() {
       entry_year: new Date().getFullYear(),
       year_level: 1,
       enrollment_category: "regular",
+      student_type: "freshman",
       financial_status: null,
       requirements_verified: false as true,
     },
@@ -318,6 +319,30 @@ function CreateAccountPanel() {
                   )}
                 />
               </Field>
+              <Field data-invalid={Boolean(errors.student_type)}>
+                <FieldLabel htmlFor="record-student-type">
+                  Student type
+                </FieldLabel>
+                <Controller
+                  control={control}
+                  name="student_type"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger
+                        id="record-student-type"
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="freshman">Freshman</SelectItem>
+                        <SelectItem value="transferee">Transferee</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldError>{errors.student_type?.message}</FieldError>
+              </Field>
               <Field>
                 <FieldLabel htmlFor="record-financial">
                   Financial status
@@ -483,6 +508,7 @@ function StudentRecordDialog({
             entry_year: profile.entry_year ?? new Date().getFullYear(),
             year_level: profile.year_level,
             enrollment_category: profile.enrollment_category ?? "regular",
+            student_type: profile.student_type ?? "freshman",
             financial_status: profile.financial_status,
             admission_status: profile.admission_status,
           }
@@ -635,6 +661,34 @@ function StudentRecordDialog({
                     />
                   </Field>
                   <Field>
+                    <FieldLabel htmlFor="edit-student-type">
+                      Student type
+                    </FieldLabel>
+                    <Controller
+                      control={control}
+                      name="student_type"
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <SelectTrigger
+                            id="edit-student-type"
+                            className="w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="freshman">Freshman</SelectItem>
+                            <SelectItem value="transferee">
+                              Transferee
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </Field>
+                  <Field>
                     <FieldLabel htmlFor="edit-financial">
                       Financial status
                     </FieldLabel>
@@ -691,8 +745,8 @@ function StudentRecordDialog({
                 <Alert className="md:col-span-2">
                   <AlertDescription>
                     Student number, program, entry year, year level, category,
-                    financial status, and admission status are locked because
-                    this student already has an enrollment.
+                    student type, financial status, and admission status are
+                    locked because this student already has an enrollment.
                   </AlertDescription>
                 </Alert>
               )}
@@ -797,6 +851,7 @@ function StudentDirectoryPanel() {
                 <TableRow>
                   <TableHead>Student</TableHead>
                   <TableHead>Program</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Account</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
@@ -817,6 +872,7 @@ function StudentDirectoryPanel() {
                       </div>
                     </TableCell>
                     <TableCell>{profile.program_code}</TableCell>
+                    <TableCell>{profile.student_type_label ?? "—"}</TableCell>
                     <TableCell>
                       <InvitationStatus profile={profile} />
                     </TableCell>

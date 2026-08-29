@@ -60,6 +60,11 @@ export const subjectSchema = z
     status: z.enum(["active", "inactive"]),
     status_label: z.string().min(1),
     is_completion_only: z.boolean(),
+    // Optional: added for the room scheduler's lecture/laboratory pairing
+    // rule. Declared optional so fixtures predating this field still parse.
+    college: z.string().nullable().optional(),
+    paired_subject_id: z.number().int().positive().nullable().optional(),
+    room_requirement: z.enum(["lecture", "laboratory"]).nullable().optional(),
   })
   .strict()
 

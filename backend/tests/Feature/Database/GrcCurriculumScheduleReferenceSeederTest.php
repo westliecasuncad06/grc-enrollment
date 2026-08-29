@@ -131,4 +131,92 @@ final class GrcCurriculumScheduleReferenceSeederTest extends TestCase
 
         app(GrcCurriculumScheduleReferenceSeeder::class)->run();
     }
+
+    /**
+     * Most source cells omit AM/PM, so "12:00" -> "3:00" read literally as
+     * 12:00 -> 03:00 — an interval whose end precedes its start. Because
+     * every conflict rule compares HH:MM:SS as strings, such a row matched
+     * nothing and let whole groups of sections share one room, time and
+     * professor.
+     */
+    public function test_a_meridiem_less_afternoon_range_resolves_forwards(): void
+    {
+        $csv = <<<'CSV'
+            college,program_code,year_level,semester,subject_code,day,start_time,end_time,room,modality,professor_name,sched_id,notes
+            ccs,BSIT,1,1st,ITC,MON,12:00,3:00,2A,,,1,
+            ccs,BSIT,1,1st,MATHWRLD,MON,10:30,1:30,2A,,,2,
+
+            CSV;
+        $curriculum = $this->seedCurriculumAndSubjects();
+        $path = tempnam(sys_get_temp_dir(), 'grc_schedule_ref_pm_').'.csv';
+        file_put_contents($path, $csv);
+
+        try {
+            $this->seederForFixture($path)->run();
+
+            $itc = CurriculumSubject::where('curriculum_id', $curriculum->id)
+                ->where('subject_id', Subject::where('code', 'ITC')->sole()->id)->sole();
+            $this->assertSame('12:00:00', $itc->reference_start_time);
+            $this->assertSame('15:00:00', $itc->reference_end_time);
+
+            $math = CurriculumSubject::where('curriculum_id', $curriculum->id)
+                ->where('subject_id', Subject::where('code', 'MATHWRLD')->sole()->id)->sole();
+            $this->assertSame('10:30:00', $math->reference_start_time);
+            $this->assertSame('13:30:00', $math->reference_end_time);
+        } finally {
+            unlink($path);
+        }
+    }
+
+    /**
+     * An evening class written "6:00" -> "9:00" is 18:00-21:00: GRC's
+     * teaching day starts at 07:30, so a meridiem-less start before 07:00
+     * is afternoon, and the end follows it.
+     */
+    public function test_a_meridiem_less_evening_range_resolves_to_the_evening(): void
+    {
+        $csv = <<<'CSV'
+            college,program_code,year_level,semester,subject_code,day,start_time,end_time,room,modality,professor_name,sched_id,notes
+            ccs,BSIT,1,1st,ITC,MON,6:00,9:00,2A,,,1,
+
+            CSV;
+        $curriculum = $this->seedCurriculumAndSubjects();
+        $path = tempnam(sys_get_temp_dir(), 'grc_schedule_ref_eve_').'.csv';
+        file_put_contents($path, $csv);
+
+        try {
+            $this->seederForFixture($path)->run();
+
+            $itc = CurriculumSubject::where('curriculum_id', $curriculum->id)
+                ->where('subject_id', Subject::where('code', 'ITC')->sole()->id)->sole();
+            $this->assertSame('18:00:00', $itc->reference_start_time);
+            $this->assertSame('21:00:00', $itc->reference_end_time);
+        } finally {
+            unlink($path);
+        }
+    }
+
+    /** An explicit AM/PM marker is trusted exactly as written, never shifted. */
+    public function test_an_explicit_morning_range_is_never_shifted(): void
+    {
+        $csv = <<<'CSV'
+            college,program_code,year_level,semester,subject_code,day,start_time,end_time,room,modality,professor_name,sched_id,notes
+            ccs,BSIT,1,1st,ITC,MON,7:30AM,9:30AM,2A,,,1,
+
+            CSV;
+        $curriculum = $this->seedCurriculumAndSubjects();
+        $path = tempnam(sys_get_temp_dir(), 'grc_schedule_ref_am_').'.csv';
+        file_put_contents($path, $csv);
+
+        try {
+            $this->seederForFixture($path)->run();
+
+            $itc = CurriculumSubject::where('curriculum_id', $curriculum->id)
+                ->where('subject_id', Subject::where('code', 'ITC')->sole()->id)->sole();
+            $this->assertSame('07:30:00', $itc->reference_start_time);
+            $this->assertSame('09:30:00', $itc->reference_end_time);
+        } finally {
+            unlink($path);
+        }
+    }
 }

@@ -32,3 +32,23 @@ export function isBacklogSubject(
     semesterOrdinal(currentYearLevel, currentSemester)
   )
 }
+
+/**
+ * A subject is "advance" — offered one year ahead of the student's current
+ * standing, same semester slot — when its ordinal is exactly two more than
+ * the student's current ordinal (a year has two semesters). Mirrors the
+ * backend's `BuildEligibleSubjectPool` window of exactly this same +2 slot;
+ * an irregular student's pool contains nothing two or more years ahead, so
+ * there is no need to check further than +2 here either.
+ */
+export function isAdvanceSubject(
+  subjectYearLevel: number,
+  subjectSemester: string,
+  currentYearLevel: number,
+  currentSemester: string,
+): boolean {
+  return (
+    semesterOrdinal(subjectYearLevel, subjectSemester) ===
+    semesterOrdinal(currentYearLevel, currentSemester) + 2
+  )
+}

@@ -1,23 +1,24 @@
 "use client"
 
-import { useState } from "react"
-import {
-  Building2,
-  CalendarClock,
-  DoorOpen,
-  Search,
-  ShieldCheck,
-  SlidersHorizontal,
-  X,
-} from "lucide-react"
+import { useMemo, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { DoorOpen, Search } from "lucide-react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AcademicTermSelector } from "@/features/components/portal/academic-term-selector"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { RoomDetailDialog } from "@/features/components/portal/room-detail-dialog"
+import {
+  RoomScheduleAssignmentDialog,
+  type RoomScheduleAssignmentResult,
+} from "@/features/components/portal/room-schedule-assignment-dialog"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/features/components/ui/card"
-import { Input } from "@/features/components/ui/input"
+import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import {
   Table,
   TableBody,
@@ -26,205 +27,293 @@ import {
   TableHeader,
   TableRow,
 } from "@/features/components/ui/table"
-import { useAcademicTermsQuery, useSectionsQuery } from "@/features/hooks/use-reference-data"
+import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
+import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
+import {
+  sectionsQueryKey,
+  useSectionsQuery,
+  useSubjectsQuery,
+} from "@/features/hooks/use-reference-data"
 import { useRoomOptionsQuery } from "@/features/hooks/use-room-catalog"
-import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
+import { roomOccupancyQueryKey } from "@/features/hooks/use-room-occupancy"
+import { isLectureComponentSubject } from "@/features/lib/room-calendar"
+import type { Section } from "@/features/schemas/reference-data-schema"
+import { isApiClientError } from "@/features/services/api-client"
+import { formatAcademicTerm } from "@/features/services/reference-data-service"
 import { getLocalRoomOptions } from "@/features/services/room-catalog-service"
+import { replaceSection, toSectionReplacement } from "@/features/services/scheduling-service"
 
-const modalityLabel: Record<"hyflex_a" | "hyflex_b" | "f2f", string> = {
-  hyflex_a: "HyFlex A",
-  hyflex_b: "HyFlex B",
-  f2f: "F2F",
-}
+const asTime = (value: string) => (value ? `${value}:00`.slice(0, 8) : "")
 
-const scheduleDays = ["M", "T", "W", "Th", "F", "Sat"] as const
-
-type AvailabilityFilter = "all" | "available" | "scheduled"
-type ModalityFilter = "all" | keyof typeof modalityLabel
-type DayFilter = "all" | (typeof scheduleDays)[number]
-
-const initialFilters = {
-  search: "",
-  availability: "all" as AvailabilityFilter,
-  modality: "all" as ModalityFilter,
-  day: "all" as DayFilter,
+function assignErrorMessage(error: unknown): string {
+  if (isApiClientError(error)) {
+    const fieldErrors = Object.values(error.fieldErrors ?? {}).flat()
+    if (fieldErrors.length > 0) return fieldErrors[0]
+    return error.message
+  }
+  if (error instanceof Error) return error.message
+  return "The room could not be assigned. Try again."
 }
 
 export function RoomsOperationsWorkspace() {
   const { session } = useAuth()
-  const termsQuery = useAcademicTermsQuery()
+  const queryClient = useQueryClient()
+  const termSelection = useAcademicTermSelection()
+  const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } = termSelection
   const roomsQuery = useRoomOptionsQuery()
-  const sectionsQuery = useSectionsQuery()
-  const activeTerm = getActiveAcademicTerm(termsQuery.data)
   const roomOptions = roomsQuery.data ?? getLocalRoomOptions(session?.college)
-  const [filters, setFilters] = useState(initialFilters)
-  const scheduledSections = (sectionsQuery.data ?? []).filter(
-    (section) =>
-      section.academic_term_id === activeTerm?.id &&
-      section.room !== null &&
-      section.schedule_days !== null,
-  )
-  const hasActiveFilters =
-    filters.search !== "" ||
-    filters.availability !== "all" ||
-    filters.modality !== "all" ||
-    filters.day !== "all"
-  const matchingSections = (roomName: string) =>
-    scheduledSections.filter(
-      (section) =>
-        section.room === roomName &&
-        (filters.modality === "all" || section.modality === filters.modality) &&
-        (filters.day === "all" || section.schedule_days?.includes(filters.day)),
-    )
-  const roomRows = roomOptions
-    .filter((room) =>
-      room.name.toLocaleLowerCase().includes(filters.search.toLocaleLowerCase()),
-    )
-    .map((room) => ({ room, scheduled: matchingSections(room.name) }))
-    .filter(({ scheduled }) => {
-      if (filters.availability === "scheduled") return scheduled.length > 0
-      if (filters.availability === "available") return scheduled.length === 0
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null)
+  const roomComboOptions = roomOptions.map((room) => ({ value: room.name, label: room.name }))
+  const isProgramChair = session?.role === "program_chair"
 
-      return true
-    })
-  const filteredScheduledSections = roomRows.flatMap(({ scheduled }) => scheduled)
+  const sectionsQuery = useSectionsQuery()
+  const subjectsQuery = useSubjectsQuery()
+  const facultyQuery = useFacultyDirectoryQuery()
+  const [assigningSection, setAssigningSection] = useState<Section | null>(null)
+
+  const subjectMap = useMemo(
+    () => new Map((subjectsQuery.data ?? []).map((subject) => [subject.id, subject])),
+    [subjectsQuery.data],
+  )
+  const facultyMap = useMemo(
+    () => new Map((facultyQuery.data ?? []).map((member) => [member.id, member.name])),
+    [facultyQuery.data],
+  )
+  const unassignedSections = useMemo(
+    () =>
+      (sectionsQuery.data ?? [])
+        .filter((section) => section.academic_term_id === termId && section.room === null)
+        .filter((section) => {
+          const subject = subjectMap.get(section.subject_id)
+          return !(subject?.college === "ccs" && isLectureComponentSubject(subject))
+        }),
+    [sectionsQuery.data, subjectMap, termId],
+  )
+
+  const assignSectionMutation = useMutation({
+    mutationFn: ({ section, result }: { section: Section; result: RoomScheduleAssignmentResult }) =>
+      replaceSection(
+        section.id,
+        toSectionReplacement(section, {
+          room: result.room,
+          schedule_days: result.scheduleDays,
+          starts_at_time: asTime(result.startsAtTime),
+          ends_at_time: asTime(result.endsAtTime),
+          modality: result.modality,
+        }),
+      ),
+    onSuccess: (_data, { result }) => {
+      setAssigningSection(null)
+      void queryClient.invalidateQueries({
+        queryKey: sectionsQueryKey(session?.userId ?? null),
+        exact: true,
+      })
+      void queryClient.invalidateQueries({
+        queryKey: roomOccupancyQueryKey(session?.userId ?? null, result.room, termId),
+        exact: true,
+      })
+    },
+  })
+
   const query = {
-    isPending: termsQuery.isPending || roomsQuery.isPending || sectionsQuery.isPending,
-    isError: termsQuery.isError || roomsQuery.isError || sectionsQuery.isError,
-    error: termsQuery.error ?? roomsQuery.error ?? sectionsQuery.error,
+    isPending:
+      termSelection.termsQuery.isPending ||
+      roomsQuery.isPending ||
+      sectionsQuery.isPending ||
+      subjectsQuery.isPending ||
+      facultyQuery.isPending,
+    isError:
+      termSelection.termsQuery.isError ||
+      roomsQuery.isError ||
+      sectionsQuery.isError ||
+      subjectsQuery.isError ||
+      facultyQuery.isError,
+    error:
+      termSelection.termsQuery.error ??
+      roomsQuery.error ??
+      sectionsQuery.error ??
+      subjectsQuery.error ??
+      facultyQuery.error,
     data: true as const,
     refetch: () => {
-      void termsQuery.refetch()
+      void termSelection.termsQuery.refetch()
       void roomsQuery.refetch()
       void sectionsQuery.refetch()
+      void subjectsQuery.refetch()
+      void facultyQuery.refetch()
     },
   }
 
   return (
     <WorkspacePage
-      title="Rooms operations"
+      title="Rooms"
       description={
         session?.role === "registrar_head"
-          ? "System-wide room inventory and scheduled use. Registrar Head manages inventory; assignments remain college-owned."
-          : "Your college's room availability and scheduled physical-week use before you assign a section."
+          ? "System-wide room inventory. Pick a school year, semester, and room to see every college's booking in it."
+          : "Pick a school year, semester, and room to see its full weekly schedule and assign an open slot."
       }
       unauthorized={session?.role !== "program_chair" && session?.role !== "registrar_head"}
-      lastUpdated={Math.max(roomsQuery.dataUpdatedAt, sectionsQuery.dataUpdatedAt)}
+      lastUpdated={roomsQuery.dataUpdatedAt}
     >
       <AsyncBoundary query={query} loadingLabel="Loading room availability…">
         {() => (
-          <>
-            <Card className="overflow-hidden border-primary/15 bg-gradient-to-br from-primary/8 via-card to-card">
-              <CardHeader className="border-b bg-background/55 pb-4 backdrop-blur-sm">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="grid gap-1">
-                    <div className="flex items-center gap-2 text-primary">
-                      <SlidersHorizontal className="size-4" aria-hidden="true" />
-                      <span className="text-xs font-semibold tracking-[0.16em] uppercase">Live room filters</span>
-                    </div>
-                    <CardTitle level={2}>Find the right room before assigning a class</CardTitle>
+          <div className="grid gap-5">
+            <AcademicTermSelector
+              sortedTerms={sortedTerms}
+              term={term}
+              isCurrentTerm={isCurrentTerm}
+              onSelectTerm={setSelectedTermId}
+            />
+
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle level={2}>Find a room</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      A shared campus room may already carry another college&apos;s booking —
+                      opening it shows every booking in it this term, not just your own.
+                    </p>
                   </div>
-                  <Badge variant="secondary">{roomRows.length} of {roomOptions.length} rooms shown</Badge>
+                  <Badge variant="outline">{roomOptions.length} rooms</Badge>
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-4 pt-5 lg:grid-cols-[minmax(0,1.35fr)_repeat(3,minmax(0,0.72fr))_auto] lg:items-end">
-                <label className="grid gap-2 text-sm font-medium" htmlFor="room-search">
-                  Search rooms
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <Input id="room-search" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="e.g. Lab, 3A, EdTech" className="pl-9" />
-                  </div>
-                </label>
-                <label className="grid gap-2 text-sm font-medium" htmlFor="room-availability">
-                  Availability
-                  <select id="room-availability" value={filters.availability} onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value as AvailabilityFilter }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
-                    <option value="all">All rooms</option>
-                    <option value="available">Available</option>
-                    <option value="scheduled">Scheduled</option>
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm font-medium" htmlFor="room-modality">
-                  Modality
-                  <select id="room-modality" value={filters.modality} onChange={(event) => setFilters((current) => ({ ...current, modality: event.target.value as ModalityFilter }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
-                    <option value="all">All modalities</option>
-                    <option value="f2f">F2F</option>
-                    <option value="hyflex_a">HyFlex A</option>
-                    <option value="hyflex_b">HyFlex B</option>
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm font-medium" htmlFor="room-day">
-                  Schedule day
-                  <select id="room-day" value={filters.day} onChange={(event) => setFilters((current) => ({ ...current, day: event.target.value as DayFilter }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
-                    <option value="all">All days</option>
-                    {scheduleDays.map((day) => <option key={day} value={day}>{day}</option>)}
-                  </select>
-                </label>
-                <div className="flex min-h-9 items-end">
-                  {hasActiveFilters && <Button type="button" variant="ghost" size="sm" className="w-full lg:w-auto" onClick={() => setFilters(initialFilters)}><X data-icon="inline-start" aria-hidden="true" />Clear filters</Button>}
+              <CardContent className="grid gap-4">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="room-picker">Room</FieldLabel>
+                    <SearchableCombobox
+                      id="room-picker"
+                      label="Room"
+                      options={roomComboOptions}
+                      value={selectedRoom ?? ""}
+                      onValueChange={(value) => setSelectedRoom(value || null)}
+                      placeholder="Search room, e.g. LAB 1, 3A"
+                      emptyMessage="No room matches."
+                    />
+                  </Field>
+                </FieldGroup>
+                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                  {roomOptions.map((room) => (
+                    <button
+                      key={room.id}
+                      type="button"
+                      onClick={() => setSelectedRoom(room.name)}
+                      className="flex items-center gap-2 rounded-lg border p-3 text-left text-sm font-medium transition-colors hover:border-primary hover:bg-primary/5 focus-visible:border-primary focus-visible:outline-none"
+                    >
+                      <DoorOpen className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                      {room.name}
+                    </button>
+                  ))}
                 </div>
+                {roomOptions.length === 0 && (
+                  <div className="grid place-items-center gap-2 border-t py-10 text-center">
+                    <Search className="size-5 text-muted-foreground" aria-hidden="true" />
+                    <p className="font-medium">No rooms are configured for your college yet.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            {isProgramChair && (
               <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle level={2} className="text-sm font-medium">Available room records</CardTitle>
-                  <DoorOpen className="size-4 text-primary" aria-hidden="true" />
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <CardTitle level={2}>Awaiting a room</CardTitle>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Sections in this term that don&apos;t have a room yet.
+                      </p>
+                    </div>
+                    <Badge variant={unassignedSections.length > 0 ? "destructive" : "outline"}>
+                      {unassignedSections.length} subject{unassignedSections.length === 1 ? "" : "s"}
+                    </Badge>
+                  </div>
                 </CardHeader>
-                <CardContent className="text-2xl font-semibold">{roomRows.length}</CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle level={2} className="text-sm font-medium">Scheduled classes</CardTitle>
-                  <CalendarClock className="size-4 text-primary" aria-hidden="true" />
-                </CardHeader>
-                <CardContent className="text-2xl font-semibold">{filteredScheduledSections.length}</CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle level={2} className="text-sm font-medium">Assignment control</CardTitle>
-                  {session?.role === "registrar_head" ? <ShieldCheck className="size-4 text-primary" aria-hidden="true" /> : <Building2 className="size-4 text-primary" aria-hidden="true" />}
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  {session?.role === "registrar_head" ? "Inventory owner" : "College assignment view"}
+                <CardContent className="grid gap-4">
+                  {assignSectionMutation.isError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {assignErrorMessage(assignSectionMutation.error)}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Subject</TableHead>
+                          <TableHead>Section</TableHead>
+                          <TableHead>Professor</TableHead>
+                          <TableHead />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {unassignedSections.map((section) => {
+                          const subject = subjectMap.get(section.subject_id)
+                          return (
+                            <TableRow key={section.id}>
+                              <TableCell className="font-medium">
+                                {subject ? `${subject.code} — ${subject.title}` : `#${section.subject_id}`}
+                              </TableCell>
+                              <TableCell>{section.section_code}</TableCell>
+                              <TableCell>
+                                {section.professor_id
+                                  ? (facultyMap.get(section.professor_id) ?? "—")
+                                  : <Badge variant="outline">Unassigned</Badge>}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!isCurrentTerm}
+                                  onClick={() => setAssigningSection(section)}
+                                >
+                                  Assign a room
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                        {unassignedSections.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="py-9 text-center text-muted-foreground">
+                              Every section this term already has a room.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
-            </div>
-
-            <Card>
-              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-                <div className="grid gap-1"><CardTitle level={2}>Room availability board</CardTitle><p className="text-sm text-muted-foreground">Availability is based on the active term and your current filters.</p></div>
-                <Badge variant="outline">{roomRows.filter(({ scheduled }) => scheduled.length === 0).length} available</Badge>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader><TableRow><TableHead>Room</TableHead><TableHead>Scheduled classes</TableHead><TableHead>Next use</TableHead><TableHead>Current view</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {roomRows.map(({ room, scheduled }) => {
-                      const nextUse = scheduled[0]
-                      return <TableRow key={room.id}><TableCell className="font-medium">{room.name}</TableCell><TableCell>{scheduled.length}</TableCell><TableCell className="text-muted-foreground">{nextUse ? `${nextUse.schedule_days} · ${nextUse.starts_at_time?.slice(0, 5)}–${nextUse.ends_at_time?.slice(0, 5)}` : "No scheduled use"}</TableCell><TableCell><Badge variant={scheduled.length === 0 ? "secondary" : "outline"}>{scheduled.length === 0 ? "Available" : "Review time slots"}</Badge></TableCell></TableRow>
-                    })}
-                  </TableBody>
-                </Table>
-                {roomRows.length === 0 && <div className="grid place-items-center gap-2 border-t py-10 text-center"><p className="font-medium">No rooms match these filters.</p><p className="text-sm text-muted-foreground">Try another search term or clear the active filters.</p><Button type="button" variant="outline" size="sm" onClick={() => setFilters(initialFilters)}>Clear filters</Button></div>}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle level={2}>Scheduled room use</CardTitle></CardHeader>
-              <CardContent className="grid gap-2">
-                {filteredScheduledSections.length === 0 ? <p className="text-sm text-muted-foreground">No scheduled room use matches the current filters.</p> : filteredScheduledSections.map((section) => (
-                  <div key={section.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
-                    <span className="font-medium">{section.section_code} · Subject #{section.subject_id}</span>
-                    <span>{section.room} · {section.schedule_days} {section.starts_at_time?.slice(0, 5)}–{section.ends_at_time?.slice(0, 5)}</span>
-                    {section.modality && <Badge variant="outline">{modalityLabel[section.modality] ?? "Needs reassignment"}</Badge>}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </>
+            )}
+          </div>
         )}
       </AsyncBoundary>
+
+      <RoomDetailDialog
+        room={selectedRoom}
+        termLabel={term ? formatAcademicTerm(term) : "No term selected"}
+        termId={termId}
+        isCurrentTerm={isCurrentTerm}
+        canAssign={session?.role === "program_chair"}
+        onOpenChange={(open) => {
+          if (!open) setSelectedRoom(null)
+        }}
+      />
+
+      <RoomScheduleAssignmentDialog
+        open={assigningSection !== null}
+        onOpenChange={(open) => {
+          if (!open) setAssigningSection(null)
+        }}
+        termId={termId}
+        onConfirm={(result) => {
+          if (assigningSection) assignSectionMutation.mutate({ section: assigningSection, result })
+        }}
+      />
     </WorkspacePage>
   )
 }

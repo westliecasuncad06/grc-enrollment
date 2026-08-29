@@ -138,8 +138,8 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
 function SemesterTable({ semester }: { semester: ProspectusSemester }) {
   return (
     <div className="mb-4">
-      <Table>
-        <TableCaption>
+      <Table className="caption-top">
+        <TableCaption className="mt-0 mb-2 text-left font-medium text-foreground">
           Year {semester.year_level} · {semester.semester_label}
         </TableCaption>
         <TableHeader>

@@ -219,6 +219,48 @@ const faculty = {
   ],
 } as const
 
+const rooms = {
+  data: [
+    { type: "room_option", id: 1, name: "LAB 1" },
+    { type: "room_option", id: 2, name: "3A" },
+  ],
+} as const
+
+const roomOccupancy = {
+  data: [
+    {
+      type: "room_occupancy",
+      section_id: 11,
+      section_code: "IT101",
+      subject_code: "IT101",
+      subject_title: "Introduction to Computing",
+      professor_name: "Prof. Reyes",
+      schedule_days: "MON/WED",
+      starts_at_time: "08:00:00",
+      ends_at_time: "10:00:00",
+      modality: "f2f",
+      college: "ccs",
+      is_own_college: true,
+      is_lecture_component: false,
+    },
+    {
+      type: "room_occupancy",
+      section_id: 99,
+      section_code: "ELEM101",
+      subject_code: "ELEM101",
+      subject_title: "Foundations",
+      professor_name: "Prof. Cruz",
+      schedule_days: "TUE",
+      starts_at_time: "10:00:00",
+      ends_at_time: "12:00:00",
+      modality: "f2f",
+      college: "coe",
+      is_own_college: false,
+      is_lecture_component: false,
+    },
+  ],
+} as const
+
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input
   return input instanceof URL ? input.toString() : input.url
@@ -239,20 +281,39 @@ function renderWorkspace() {
 describe("ScheduleWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   let sectionSaveError: unknown = null
+  let patchedBody: unknown = null
 
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
     sectionSaveError = null
+    patchedBody = null
     fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
-      if (
-        url.endsWith("/sections/11") &&
-        init?.method === "PATCH" &&
-        sectionSaveError !== null
-      )
+      if (url.endsWith("/sections/11") && init?.method === "PATCH") {
+        if (sectionSaveError !== null)
+          return Promise.resolve(
+            new Response(JSON.stringify(sectionSaveError), { status: 422 }),
+          )
+        patchedBody = typeof init.body === "string" ? JSON.parse(init.body) : null
+        // The request uses `override_reason`; the response resource (like the
+        // real API) echoes it back as `manual_override_reason` — a plain
+        // spread would leak the request-only key into the `.strict()`
+        // response schema and fail contract validation.
+        const { override_reason, ...requestFields } = (patchedBody ?? {}) as Record<string, unknown>
         return Promise.resolve(
-          new Response(JSON.stringify(sectionSaveError), { status: 422 }),
+          new Response(
+            JSON.stringify({
+              data: {
+                ...sections.data[0],
+                ...requestFields,
+                ...(override_reason !== undefined ? { manual_override_reason: override_reason } : {}),
+              },
+            }),
+          ),
         )
+      }
+      if (url.endsWith("/room-options")) return Promise.resolve(new Response(JSON.stringify(rooms)))
+      if (url.includes("/room-occupancy")) return Promise.resolve(new Response(JSON.stringify(roomOccupancy)))
       const body = url.endsWith("/academic-terms")
         ? terms
         : url.endsWith("/sections")
@@ -362,5 +423,86 @@ describe("ScheduleWorkspace", () => {
       await screen.findByRole("cell", { name: "OLD101" }),
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Archived" })).toBeDisabled()
+  })
+
+  it("lets the Program Chair pick a room and an open calendar slot, then save with an override reason", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }))
+    const dialog = screen.getByRole("dialog", { name: "Edit section assignment" })
+
+    await user.click(within(dialog).getByRole("button", { name: /room & schedule/ }))
+    const picker = await screen.findByRole("dialog", { name: "Pick a room" })
+    await user.click(within(picker).getByRole("button", { name: "LAB 1" }))
+
+    const calendarStep = await screen.findByRole("dialog", { name: "LAB 1 — pick an open slot" })
+    // Section 11's own current booking (MON/WED 8-10) is excluded from its
+    // own occupancy view, so 7:30 AM Monday reads as available.
+    await user.click(
+      within(calendarStep).getByRole("button", {
+        name: "Monday 7:30 AM — available, assign a class",
+      }),
+    )
+
+    const formStep = await screen.findByRole("dialog", { name: "Confirm the schedule in LAB 1" })
+    expect(within(formStep).getByRole("button", { name: "Mon" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    )
+    expect(within(formStep).getByLabelText("Start time")).toHaveValue("07:30")
+    expect(within(formStep).getByLabelText("End time")).toHaveValue("09:00")
+
+    await user.click(within(formStep).getByRole("button", { name: "Save schedule" }))
+
+    // Back in the main dialog, the picked schedule is already filled in.
+    expect(within(dialog).getByLabelText("Schedule days")).toHaveValue("M")
+    expect(within(dialog).getByLabelText("Room")).toHaveValue("LAB 1")
+    expect(within(dialog).getByLabelText("Start time")).toHaveValue("07:30")
+    expect(within(dialog).getByLabelText("End time")).toHaveValue("09:00")
+
+    await user.type(within(dialog).getByLabelText("Override reason"), "Moved off a conflicting slot")
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
+
+    await screen.findByRole("cell", { name: "IT101" })
+    expect(patchedBody).toMatchObject({
+      room: "LAB 1",
+      schedule_days: "M",
+      starts_at_time: "07:30:00",
+      ends_at_time: "09:00:00",
+      modality: "f2f",
+      override_reason: "Moved off a conflicting slot",
+    })
+  })
+
+  it("caps the picker's meeting days at two, disabling a third", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }))
+    const dialog = screen.getByRole("dialog", { name: "Edit section assignment" })
+    await user.click(within(dialog).getByRole("button", { name: /room & schedule/ }))
+    const picker = await screen.findByRole("dialog", { name: "Pick a room" })
+    await user.click(within(picker).getByRole("button", { name: "LAB 1" }))
+
+    const calendarStep = await screen.findByRole("dialog", { name: "LAB 1 — pick an open slot" })
+    await user.click(
+      within(calendarStep).getByRole("button", {
+        name: "Monday 7:30 AM — available, assign a class",
+      }),
+    )
+
+    const formStep = await screen.findByRole("dialog", { name: "Confirm the schedule in LAB 1" })
+    await user.click(within(formStep).getByRole("button", { name: "Wed" }))
+
+    expect(within(formStep).getByRole("button", { name: "Mon" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    )
+    expect(within(formStep).getByRole("button", { name: "Wed" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    )
+    expect(within(formStep).getByRole("button", { name: "Fri" })).toBeDisabled()
   })
 })

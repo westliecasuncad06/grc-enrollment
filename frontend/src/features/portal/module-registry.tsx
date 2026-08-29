@@ -31,6 +31,8 @@ import { InstitutionDashboardWorkspace } from "@/features/components/portal/inst
 import { StuckStudentsWorkspace } from "@/features/components/portal/stuck-students-workspace"
 import { PolicySettingsWorkspace } from "@/features/components/portal/policy-settings-workspace"
 import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-operations-workspace"
+import { FacultyInvitationWorkspace } from "@/features/components/portal/faculty-invitation-workspace"
+import { StaffInvitationWorkspace } from "@/features/components/portal/staff-invitation-workspace"
 import { ItControlStudentsWorkspace } from "@/features/components/portal/it-control-students-workspace"
 import { ItControlFacultyWorkspace } from "@/features/components/portal/it-control-faculty-workspace"
 import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
@@ -51,6 +53,8 @@ export type ConnectedModuleId =
   | "rooms"
   | "schedule-proposals"
   | "program-chair-analytics"
+  | "faculty-invitations"
+  | "staff-invitations"
   | "registrar-analytics"
   | "schedule-approvals"
   | "curriculum-approvals"
@@ -99,6 +103,8 @@ export const connectedModuleIds = [
   "rooms",
   "schedule-proposals",
   "program-chair-analytics",
+  "faculty-invitations",
+  "staff-invitations",
   "registrar-analytics",
   "schedule-approvals",
   "curriculum-approvals",
@@ -204,6 +210,8 @@ export const connectedModuleRegistry: Readonly<
   rooms: roomsOperationsWorkspace,
   "schedule-proposals": scheduleProposalsWorkspace,
   "program-chair-analytics": AnalyticsDashboardWorkspace,
+  "faculty-invitations": FacultyInvitationWorkspace,
+  "staff-invitations": StaffInvitationWorkspace,
   "registrar-analytics": AnalyticsDashboardWorkspace,
   "schedule-approvals": ScheduleDecisionWorkspace,
   "curriculum-approvals": CurriculumApprovalsWorkspace,

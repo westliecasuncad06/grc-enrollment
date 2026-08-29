@@ -54,6 +54,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-curriculum-subject-preferences',
+            'GET|HEAD api/v1/faculty-invitations',
             'GET|HEAD api/v1/faculty-members',
             'GET|HEAD api/v1/faculty-preference-catalog',
             'GET|HEAD api/v1/faculty-specializations',
@@ -75,6 +76,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/queue-status',
             'GET|HEAD api/v1/queue-tickets',
             'GET|HEAD api/v1/reports/honors',
+            'GET|HEAD api/v1/room-occupancy',
             'GET|HEAD api/v1/room-options',
             'GET|HEAD api/v1/schedule-generation-runs/{scheduleGenerationRun}',
             'GET|HEAD api/v1/schedule-proposals',
@@ -82,6 +84,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/sections/grade-submission',
             'GET|HEAD api/v1/sections/{section}/grades',
+            'GET|HEAD api/v1/staff-invitations',
             'GET|HEAD api/v1/stuck-enrollments',
             'GET|HEAD api/v1/student-account',
             'GET|HEAD api/v1/student-profile',
@@ -126,8 +129,10 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/academic-terms/{academicTerm}/section-plan/release',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/submit',
             'POST api/v1/auth/account-setup',
+            'POST api/v1/auth/faculty-account-setup',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
+            'POST api/v1/auth/staff-account-setup',
             'POST api/v1/curricula',
             'POST api/v1/curricula/{curriculum}/migrations',
             'POST api/v1/curricula/{curriculum}/subject-placements',
@@ -137,6 +142,8 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/enrollments/{enrollment}/withdraw',
             'POST api/v1/faculty-availabilities',
             'POST api/v1/faculty-curriculum-subject-preferences',
+            'POST api/v1/faculty-invitations',
+            'POST api/v1/faculty-invitations/{user}/resend',
             'POST api/v1/faculty-specializations',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/it-control/automation-runs',
@@ -147,6 +154,8 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/sections',
             'POST api/v1/sections/{section}/grades',
             'POST api/v1/sections/{section}/grades/submit',
+            'POST api/v1/staff-invitations',
+            'POST api/v1/staff-invitations/{user}/resend',
             'POST api/v1/student-profile-change-requests',
             'POST api/v1/student-profiles',
             'POST api/v1/student-profiles/{studentProfile}/account-setup-invitations',
@@ -348,6 +357,22 @@ final class ApiSurfaceTest extends TestCase
         $readRoute = Route::getRoutes()->getByName('api.v1.academic-terms.index');
         $this->assertNotNull($readRoute);
         $this->assertNotContains('role:registrar_head', $readRoute->gatherMiddleware());
+    }
+
+    public function test_staff_invitations_are_gated_to_the_registrar_head_role(): void
+    {
+        $gated = [
+            'api.v1.staff-invitations.index',
+            'api.v1.staff-invitations.store',
+            'api.v1.staff-invitations.resend',
+        ];
+
+        foreach ($gated as $name) {
+            $route = Route::getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "Missing route {$name}.");
+            $this->assertContains('role:registrar_head', $route->gatherMiddleware());
+        }
     }
 
     public function test_faculty_input_writes_are_gated_to_the_faculty_role(): void

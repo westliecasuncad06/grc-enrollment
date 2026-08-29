@@ -69,4 +69,29 @@ enum UserRole: string
             static fn (self $role): bool => ! $role->isDevice(),
         ));
     }
+
+    /**
+     * Every role a Registrar Head may create an account for through the
+     * "Invite Staff" flow: every staff/leadership role except Student
+     * (Admission's own "Create a student account" already owns that, with
+     * its required program/curriculum/entry-year fields Faculty and other
+     * staff roles have no equivalent of) and AdmissionStaff (kept out at
+     * the user's explicit request, alongside QueueKiosk — a device account,
+     * not a human one).
+     *
+     * @return list<self>
+     */
+    public static function registrarInvitableCases(): array
+    {
+        return [
+            self::Faculty,
+            self::ProgramChair,
+            self::Dean,
+            self::ExecutiveDirector,
+            self::RegistrarHead,
+            self::RegistrarStaff,
+            self::AccountingStaff,
+            self::ItAdmin,
+        ];
+    }
 }

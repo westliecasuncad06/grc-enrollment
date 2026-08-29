@@ -26,6 +26,8 @@
 
 The existing `users.status` remains the login enforcement field: pending setup accounts are `disabled`; successful setup changes it to `active`.
 
+These three columns are shared, role-agnostic infrastructure — not Student-specific despite living alongside the Student Records slice. Program Chair's Faculty invitations (`InviteFacultyAccount`/`ActivateFacultyAccount`) and Registrar Head's staff invitations spanning every other non-Student role (`InviteStaffAccount`/`ActivateStaffAccount`, `UserRole::registrarInvitableCases()`) read and write the exact same three columns on `users`, following the same disabled-until-activated lifecycle. Unlike Admission's Student flow, both of those invite with only an email (plus, for staff, a role); the invitee supplies their own name when redeeming the setup code.
+
 ## `student_profiles` additions
 
 | Column | Type | Constraints | Producer / consumer | Sensitivity and notes |
@@ -33,6 +35,7 @@ The existing `users.status` remains the login enforcement field: pending setup a
 | `address` | `TEXT` | nullable for migration compatibility | Admission provisioning/direct correction or approved Student request; Student Information and future COR snapshots | Personal contact data. Required for newly provisioned accounts; existing rows may display `Not provided`. Multiline printable value. |
 | `requirements_verified_at` | `TIMESTAMP` | nullable | Set during Admission provisioning | Evidence that Admission confirmed submitted requirements; not a document checklist. |
 | `requirements_verified_by` | `BIGINT UNSIGNED` | nullable FK → `users.id`, `NULL` on staff deletion | Set during Admission provisioning | Admission actor responsible for the attestation. |
+| `student_type` | `VARCHAR(255)` | nullable, enum values `freshman`/`transferee` (`App\Domain\Identity\StudentType`) | Required at Admission provisioning; editable pre-enrollment correction only | Whether the student entered as an incoming Freshman or a Transferee from another institution. Informational only — does not itself grant `TransfereeCredit` rows; Registrar staff still record those separately. Nullable at the DB level so pre-existing/seeded rows are unaffected. |
 
 The established fields `entry_year`, `program_id`, `curriculum_id`, `year_level`, `enrollment_category`, `financial_status`, and `admission_status` remain part of the profile. `academic_setup_editable` is an API-derived boolean (`false` once any enrollment exists), not a stored column.
 
@@ -81,4 +84,4 @@ Laravel password-broker storage is also used for initial Student account setup.
 
 Official profile data is retained with the Student record under the institution's general records policy. Change requests are retained as decision history unless an approved retention policy later requires archival or deletion. Setup codes are temporary authentication material: expired values are rejected and successful setup or resend invalidates the prior code.
 
-Migration `2026_08_26_000001_add_student_record_and_account_setup_fields.php` reverses the three User columns, the three Student-profile fields, and `password_reset_tokens`. Migration `2026_08_26_000002_create_student_profile_change_requests_table.php` drops the request table. Rollback does not attempt to restore already delivered emails or external mail-provider state.
+Migration `2026_08_26_000001_add_student_record_and_account_setup_fields.php` reverses the three User columns, the three Student-profile fields, and `password_reset_tokens`. Migration `2026_08_26_000002_create_student_profile_change_requests_table.php` drops the request table. Migration `2026_08_27_000001_add_student_type_to_student_profiles.php` drops `student_type`. Rollback does not attempt to restore already delivered emails or external mail-provider state.

@@ -19,9 +19,9 @@ use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AcademicTermEnrollmentWindow;
 use App\Models\Curriculum;
-use App\Models\CurriculumSubject;
 use App\Models\CurriculumMigration;
 use App\Models\CurriculumMigrationCredit;
+use App\Models\CurriculumSubject;
 use App\Models\CurriculumSubjectEquivalency;
 use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
@@ -159,9 +159,37 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertJsonCount(1, 'data.0.available_sections');
         $response->assertJsonPath('data.0.available_sections.0.id', $section->id);
         self::assertSame(
-            ['type', 'subject_id', 'code', 'title', 'units', 'year_level', 'semester', 'is_required', 'is_eligible', 'reasons', 'preference_score', 'preference_reasons', 'available_sections'],
+            ['type', 'subject_id', 'code', 'title', 'units', 'paired_subject_id', 'year_level', 'semester', 'is_required', 'is_eligible', 'reasons', 'preference_score', 'preference_reasons', 'available_sections'],
             array_keys($response->json('data.0')),
         );
+        $response->assertJsonPath('data.0.paired_subject_id', null);
+    }
+
+    public function test_paired_lecture_and_laboratory_subjects_expose_each_others_id(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lab = $this->makeSubject('PROG1L', 2.0);
+        $lecture = Subject::create([
+            'code' => 'PROG1', 'title' => 'PROG1 Title', 'units' => 1.0,
+            'status' => SubjectStatus::Active, 'paired_subject_id' => $lab->id,
+        ]);
+        $lab->forceFill(['paired_subject_id' => $lecture->id])->save();
+        $this->placeSubject($curriculum, $lecture);
+        $this->placeSubject($curriculum, $lab);
+        $this->makeSection($term, $lecture, ['section_code' => 'A']);
+        $this->makeSection($term, $lab, [
+            'section_code' => 'A', 'schedule_days' => 'Th', 'starts_at_time' => '10:00:00', 'ends_at_time' => '11:00:00',
+        ]);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $lectureEntry = collect($response->json('data'))->firstWhere('code', 'PROG1');
+        $labEntry = collect($response->json('data'))->firstWhere('code', 'PROG1L');
+        self::assertSame($lab->id, $lectureEntry['paired_subject_id']);
+        self::assertSame($lecture->id, $labEntry['paired_subject_id']);
     }
 
     public function test_a_student_without_a_saved_preference_still_receives_every_entry_with_a_null_score(): void
@@ -498,16 +526,16 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.is_eligible', true);
     }
 
-    public function test_an_irregular_student_does_not_see_a_subject_placed_ahead_of_their_year_level(): void
+    public function test_an_irregular_student_does_not_see_a_subject_placed_two_or_more_years_ahead(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $current = $this->makeSubject('CS101');
-        $future = $this->makeSubject('CS301');
+        $tooFarAhead = $this->makeSubject('CS301');
         $this->placeSubject($curriculum, $current, 1);
-        $this->placeSubject($curriculum, $future, 3);
+        $this->placeSubject($curriculum, $tooFarAhead, 3);
         $this->makeSection($term, $current);
-        $this->makeSection($term, $future);
+        $this->makeSection($term, $tooFarAhead);
         $student = $this->makeStudent($curriculum);
         $student->forceFill(['enrollment_category' => 'irregular'])->save();
         $token = $this->tokenFor($student);
@@ -518,21 +546,84 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.code', 'CS101');
     }
 
-    public function test_an_irregular_student_still_sees_a_backlog_subject_from_an_earlier_year_level(): void
+    public function test_an_irregular_students_pool_includes_a_backlog_subject_from_an_earlier_semester_with_an_open_section(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $backlog = $this->makeSubject('CS101');
+        $current = $this->makeSubject('CS201');
         $this->placeSubject($curriculum, $backlog, 1);
+        $this->placeSubject($curriculum, $current, 2);
         $this->makeSection($term, $backlog);
+        $this->makeSection($term, $current);
         $student = $this->makeStudent($curriculum);
+        // Year 2, 1st semester -- ordinal 3. CS101 (year 1, 1st sem,
+        // ordinal 1) is a not-yet-taken backlog subject with an open
+        // section this term, so it belongs in the pool automatically
+        // alongside the student's actual current-term subject.
         $student->forceFill(['year_level' => 2, 'enrollment_category' => 'irregular'])->save();
         $token = $this->tokenFor($student);
 
         $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
 
+        $response->assertJsonCount(2, 'data');
+        self::assertSame(
+            ['CS101', 'CS201'],
+            collect($response->json('data'))->pluck('code')->sort()->values()->all(),
+        );
+    }
+
+    public function test_an_irregular_students_pool_includes_a_subject_exactly_one_year_ahead(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $current = $this->makeSubject('CS101');
+        $advance = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $current, 1);
+        $this->placeSubject($curriculum, $advance, 2);
+        $this->makeSection($term, $current);
+        $this->makeSection($term, $advance);
+        $student = $this->makeStudent($curriculum);
+        // Year 1, 1st semester -- ordinal 1. CS201 (year 2, 1st sem,
+        // ordinal 3) is exactly one year ahead, same semester slot -- a
+        // student who is caught up can still get ahead. It's the frontend
+        // (EligibleSubjectTable) that keeps this kind of entry out of the
+        // default selection, not this endpoint.
+        $student->forceFill(['enrollment_category' => 'irregular'])->save();
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertJsonCount(2, 'data');
+        self::assertSame(
+            ['CS101', 'CS201'],
+            collect($response->json('data'))->pluck('code')->sort()->values()->all(),
+        );
+    }
+
+    public function test_an_irregular_students_pool_includes_a_subject_offered_either_semester(): void
+    {
+        $term = AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $flexible = $this->makeSubject('RIZAL');
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $flexible->id,
+            'year_level' => 1, 'semester' => '1st|2nd', 'is_required' => true,
+        ]);
+        $this->makeSection($term, $flexible);
+        $student = $this->makeStudent($curriculum);
+        // Year 1, 2nd semester -- ordinal 2. The placement's primary slot is
+        // 1st (ordinal 1), but it covers both semesters, so it must still
+        // match the student's actual current ordinal of 2.
+        $student->forceFill(['enrollment_category' => 'irregular'])->save();
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
         $response->assertJsonCount(1, 'data');
-        $response->assertJsonPath('data.0.code', 'CS101');
+        $response->assertJsonPath('data.0.code', 'RIZAL');
     }
 
     public function test_a_regular_students_pool_is_not_bounded_by_year_level(): void

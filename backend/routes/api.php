@@ -8,9 +8,11 @@ use App\Http\Controllers\Api\V1\AcademicTermWorkflowController;
 use App\Http\Controllers\Api\V1\AttritionReportController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\AccountSetupController;
+use App\Http\Controllers\Api\V1\Auth\FacultyAccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
+use App\Http\Controllers\Api\V1\Auth\StaffAccountSetupController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
 use App\Http\Controllers\Api\V1\CashierTransactionController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
@@ -31,6 +33,7 @@ use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
 use App\Http\Controllers\Api\V1\EnrollmentWindowController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultyCurriculumSubjectPreferenceController;
+use App\Http\Controllers\Api\V1\FacultyInvitationController;
 use App\Http\Controllers\Api\V1\FacultyLoadReportController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultyPreferenceCatalogController;
@@ -51,10 +54,12 @@ use App\Http\Controllers\Api\V1\QueueCycleController;
 use App\Http\Controllers\Api\V1\QueueKioskCredentialController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
 use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
+use App\Http\Controllers\Api\V1\RoomOccupancyController;
 use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\SectionGradeController;
+use App\Http\Controllers\Api\V1\StaffInvitationController;
 use App\Http\Controllers\Api\V1\StudentAccountController;
 use App\Http\Controllers\Api\V1\StudentProfileChangeRequestController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
@@ -78,6 +83,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('/account-setup', AccountSetupController::class)
             ->middleware('throttle:10,1')
             ->name('account-setup');
+
+        Route::post('/faculty-account-setup', FacultyAccountSetupController::class)
+            ->middleware('throttle:10,1')
+            ->name('faculty-account-setup');
+
+        Route::post('/staff-account-setup', StaffAccountSetupController::class)
+            ->middleware('throttle:10,1')
+            ->name('staff-account-setup');
 
         // Public. Per-account+IP throttling is applied inside the controller;
         // this coarse limiter is an additional flood guard.
@@ -123,6 +136,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/faculty-specializations', [FacultySpecializationController::class, 'index'])->name('faculty-specializations.index');
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
+        Route::get('/room-occupancy', RoomOccupancyController::class)->name('room-occupancy.index');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
         Route::get('/sections/grade-submission', [SectionGradeController::class, 'index'])->name('sections.grade-submission.index');
         Route::get('/sections/{section}/grades', [SectionGradeController::class, 'show'])->name('sections.grades.show');
@@ -333,6 +347,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/schedule-generation-runs/{scheduleGenerationRun}', [ScheduleGenerationRunController::class, 'show'])->name('schedule-generation-runs.show');
             Route::get('/academic-terms/{academicTerm}/faculty-load-report', [FacultyLoadReportController::class, 'show'])->name('faculty-load-report.show');
             Route::put('/academic-terms/{academicTerm}/faculty-load-threshold', [FacultyLoadReportController::class, 'updateThreshold'])->name('faculty-load-threshold.update');
+
+            // A Chair invites professors into their own college only —
+            // FacultyInvitationController scopes index/resend to the actor's
+            // college, matching every other chair-owned resource here.
+            Route::get('/faculty-invitations', [FacultyInvitationController::class, 'index'])->name('faculty-invitations.index');
+            Route::post('/faculty-invitations', [FacultyInvitationController::class, 'store'])->name('faculty-invitations.store');
+            Route::post('/faculty-invitations/{user}/resend', [FacultyInvitationController::class, 'resend'])->name('faculty-invitations.resend');
         });
 
         // Enrollment analytics are role-scoped by DashboardPolicy: Program
@@ -392,6 +413,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             // the system never sits with no current term.
             Route::post('/academic-terms/{academicTerm}/archive-and-create-next', [AcademicTermController::class, 'archiveAndCreateNext'])
                 ->name('academic-terms.archive-and-create-next');
+
+            // Registrar Head invites an account for any staff/leadership
+            // role except Student (Admission's own flow) and AdmissionStaff
+            // — StaffInvitationController scopes to
+            // UserRole::registrarInvitableCases(), not to one college.
+            Route::get('/staff-invitations', [StaffInvitationController::class, 'index'])->name('staff-invitations.index');
+            Route::post('/staff-invitations', [StaffInvitationController::class, 'store'])->name('staff-invitations.store');
+            Route::post('/staff-invitations/{user}/resend', [StaffInvitationController::class, 'resend'])->name('staff-invitations.resend');
         });
 
         Route::prefix('it-control')->name('it-control.')->middleware('role:it_admin')->group(function (): void {

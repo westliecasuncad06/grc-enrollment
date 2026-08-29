@@ -23,6 +23,7 @@ const expectedModuleIds = {
     "rooms",
     "schedule-proposals",
     "program-chair-analytics",
+    "faculty-invitations",
   ],
   dean: [
     "schedule-approvals",
@@ -52,6 +53,7 @@ const expectedModuleIds = {
     "audit-logs",
     "policy-settings",
     "rooms",
+    "staff-invitations",
   ],
   registrar_staff: [
     "enrollment-approvals",

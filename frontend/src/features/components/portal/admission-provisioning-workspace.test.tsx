@@ -26,6 +26,8 @@ const profile = {
   curriculum_effective_school_year: "2027-2028",
   year_level: 1,
   enrollment_category: "regular",
+  student_type: "freshman",
+  student_type_label: "Freshman",
   admission_status: "admitted",
   admission_status_label: "Admitted",
   academic_standing: "good",
@@ -223,6 +225,7 @@ describe("Student Records workspace", () => {
       address: profile.address,
       requirements_verified: true,
       entry_year: 2027,
+      student_type: "freshman",
     })
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
@@ -303,7 +306,7 @@ describe("Student Records workspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        "Student number, program, entry year, year level, category, financial status, and admission status are locked because this student already has an enrollment.",
+        "Student number, program, entry year, year level, category, student type, financial status, and admission status are locked because this student already has an enrollment.",
       ),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Student number")).not.toBeInTheDocument()
@@ -313,6 +316,7 @@ describe("Student Records workspace", () => {
     expect(
       screen.queryByLabelText("Enrollment category"),
     ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Student type")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Financial status")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Admission status")).not.toBeInTheDocument()
 
@@ -350,6 +354,7 @@ describe("Student Records workspace", () => {
       expect(body).not.toHaveProperty("entry_year")
       expect(body).not.toHaveProperty("year_level")
       expect(body).not.toHaveProperty("enrollment_category")
+      expect(body).not.toHaveProperty("student_type")
       expect(body).not.toHaveProperty("financial_status")
       expect(body).not.toHaveProperty("admission_status")
     })

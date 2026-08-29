@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -17,10 +18,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CollegeCode $college
  * @property string $title
  * @property float $units
+ * @property ?int $paired_subject_id
+ * @property ?string $room_requirement
  * @property SubjectStatus $status
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Collection<int, CurriculumSubject> $placements
+ * @property-read ?Subject $pairedSubject
  */
 final class Subject extends Model
 {
@@ -30,6 +34,7 @@ final class Subject extends Model
         'college',
         'title',
         'units',
+        'paired_subject_id',
         'room_requirement',
         'status',
     ];
@@ -56,6 +61,41 @@ final class Subject extends Model
     public function placements(): HasMany
     {
         return $this->hasMany(CurriculumSubject::class);
+    }
+
+    /**
+     * The lecture/laboratory companion of this subject — a subject's LEC
+     * and LAB components are always taken together, never separately. Set
+     * once by the `paired_subject_id` backfill migration; symmetric (both
+     * sides point at each other).
+     *
+     * @return BelongsTo<Subject, $this>
+     */
+    public function pairedSubject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class, 'paired_subject_id');
+    }
+
+    /**
+     * True when this is the lecture half of a paired LEC/LAB subject — used
+     * by the room scheduler to hide a college's asynchronous lecture
+     * components from a physical room's schedule (they hold no room or
+     * meeting time). Prefers the persisted `room_requirement`, falling back
+     * to the same title-suffix heuristic the `paired_subject_id` backfill
+     * and `GrcSubjectCatalogSeeder` already use for subjects seeded before
+     * `room_requirement` existed.
+     */
+    public function isLectureComponent(): bool
+    {
+        if ($this->paired_subject_id === null) {
+            return false;
+        }
+
+        if ($this->room_requirement !== null) {
+            return $this->room_requirement === 'lecture';
+        }
+
+        return ! str_contains(strtoupper($this->title), 'LAB');
     }
 
     /**

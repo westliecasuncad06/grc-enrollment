@@ -26,6 +26,8 @@ const profile = {
   curriculum_effective_school_year: "2027-2028",
   year_level: 1,
   enrollment_category: "regular",
+  student_type: "freshman",
+  student_type_label: "Freshman",
   admission_status: "admitted",
   admission_status_label: "Admitted",
   academic_standing: "good",

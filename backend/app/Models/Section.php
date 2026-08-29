@@ -38,6 +38,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read AcademicTerm $academicTerm
  * @property-read Subject $subject
  * @property-read ?User $professor
+ * @property-read ?AcademicTermSectionPlan $sectionPlan
  * @property-read Collection<int, EnrollmentSubject> $enrollmentSubjects
  * @property-read Collection<int, AcademicGrade> $academicGrades
  */

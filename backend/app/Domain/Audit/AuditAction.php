@@ -74,6 +74,18 @@ final class AuditAction
 
     public const STUDENT_ACCOUNT_ACTIVATED = 'student_account.activated';
 
+    public const FACULTY_ACCOUNT_SETUP_INVITATION_SENT = 'faculty_account.setup_invitation_sent';
+
+    public const FACULTY_ACCOUNT_SETUP_INVITATION_FAILED = 'faculty_account.setup_invitation_failed';
+
+    public const FACULTY_ACCOUNT_ACTIVATED = 'faculty_account.activated';
+
+    public const STAFF_ACCOUNT_SETUP_INVITATION_SENT = 'staff_account.setup_invitation_sent';
+
+    public const STAFF_ACCOUNT_SETUP_INVITATION_FAILED = 'staff_account.setup_invitation_failed';
+
+    public const STAFF_ACCOUNT_ACTIVATED = 'staff_account.activated';
+
     public const STUDENT_PROFILE_CHANGE_REQUESTED = 'student_profile_change.requested';
 
     public const STUDENT_PROFILE_CHANGE_REQUEST_UPDATED = 'student_profile_change.updated';
@@ -277,6 +289,12 @@ final class AuditAction
             self::QUEUE_CYCLE_CLOSED,
             self::QUEUE_KIOSK_CREDENTIAL_VIEWED,
             self::QUEUE_KIOSK_PASSWORD_CHANGED,
+            self::FACULTY_ACCOUNT_SETUP_INVITATION_SENT,
+            self::FACULTY_ACCOUNT_SETUP_INVITATION_FAILED,
+            self::FACULTY_ACCOUNT_ACTIVATED,
+            self::STAFF_ACCOUNT_SETUP_INVITATION_SENT,
+            self::STAFF_ACCOUNT_SETUP_INVITATION_FAILED,
+            self::STAFF_ACCOUNT_ACTIVATED,
         ];
     }
 }

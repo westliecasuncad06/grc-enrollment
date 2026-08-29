@@ -5,6 +5,7 @@ namespace App\Http\Requests\Api\V1\StudentProfile;
 use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\FinancialStatus;
+use App\Domain\Identity\StudentType;
 use App\Models\StudentProfile;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -35,6 +36,7 @@ final class UpdateStudentProfileRequest extends FormRequest
             'entry_year' => ['sometimes', 'integer', 'digits:4'],
             'year_level' => ['sometimes', 'integer', 'between:1,4'],
             'enrollment_category' => ['sometimes', Rule::enum(EnrollmentCategory::class)],
+            'student_type' => ['sometimes', Rule::enum(StudentType::class)],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
             'admission_status' => ['sometimes', Rule::enum(AdmissionStatus::class)],
             'curriculum_id' => ['prohibited'],

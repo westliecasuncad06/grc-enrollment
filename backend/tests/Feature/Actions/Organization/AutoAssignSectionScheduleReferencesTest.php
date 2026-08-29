@@ -385,4 +385,99 @@ final class AutoAssignSectionScheduleReferencesTest extends TestCase
 
         $this->assertSame(0, AuditLog::query()->count());
     }
+
+    public function test_it_skips_a_reference_room_that_would_double_book_another_colleges_section(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'ITC', [
+            'reference_day' => 'Wed', 'reference_start_time' => '08:00:00', 'reference_end_time' => '10:00:00',
+            'reference_room' => '3A', 'reference_modality' => 'f2f', 'reference_professor_name' => 'MR. MACINAS',
+        ]);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $section = $this->makeSection($term, $plan, $placement->subject_id);
+
+        // Another college already occupies the shared room "3A" at an
+        // overlapping time — rooms are shared campus-wide, so this must be
+        // visible to the auto-assign action even though it belongs to a
+        // completely different curriculum/college.
+        $otherCurriculum = $this->makeCurriculum(CollegeCode::Coe, 'BEED');
+        $otherSubject = Subject::create(['code' => 'ELEM1', 'college' => CollegeCode::Coe, 'title' => 'Elementary 1', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $otherPlan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $otherCurriculum->id, 'college' => 'coe', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        Section::create([
+            'academic_term_id' => $term->id, 'section_plan_id' => $otherPlan->id, 'subject_id' => $otherSubject->id,
+            'section_code' => 'ELEM1', 'capacity' => 40, 'capacity_source' => CapacitySource::Plan,
+            'is_block_exclusive' => true, 'status' => SectionStatus::Planned,
+            'schedule_days' => 'WED', 'starts_at_time' => '09:00:00', 'ends_at_time' => '11:00:00',
+            'room' => '3A', 'modality' => SectionModality::FaceToFace,
+        ]);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $section->refresh();
+        // Day/time/modality/professor still fill from the reference data —
+        // only the conflicting room is withheld.
+        $this->assertSame('Wed', $section->schedule_days);
+        $this->assertSame('08:00:00', $section->starts_at_time);
+        $this->assertSame(SectionModality::FaceToFace, $section->modality);
+        $this->assertNull($section->room);
+    }
+
+    /**
+     * Every block section of one subject names the same
+     * `reference_professor_name`, so assigning it unconditionally gave one
+     * person every block at the same hour.
+     */
+    public function test_it_assigns_a_reference_professor_to_only_one_of_two_sections_sharing_a_slot(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'KOMFIL', [
+            'reference_day' => 'MON', 'reference_start_time' => '10:30:00', 'reference_end_time' => '13:30:00',
+            'reference_modality' => 'f2f', 'reference_professor_name' => 'ISABEL M. GARCHITORENA',
+        ]);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 2, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $first = $this->makeSection($term, $plan, $placement->subject_id, ['section_code' => 'ELEM101']);
+        $second = $this->makeSection($term, $plan, $placement->subject_id, ['section_code' => 'ELEM102']);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $first->refresh();
+        $second->refresh();
+        // Both still get their day/time from the reference; only the second
+        // is left without the professor, for a Chair to resolve.
+        $this->assertSame('10:30:00', $first->starts_at_time);
+        $this->assertSame('10:30:00', $second->starts_at_time);
+        $this->assertNotNull($first->professor_id);
+        $this->assertNull($second->professor_id);
+    }
+
+    public function test_it_fills_a_reference_room_that_only_conflicts_via_a_complementary_hyflex_pattern(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $placement = $this->makePlacement($curriculum, 'ITC', [
+            'reference_day' => 'Wed', 'reference_start_time' => '08:00:00', 'reference_end_time' => '10:00:00',
+            'reference_room' => '3A', 'reference_modality' => 'hyflex a', 'reference_professor_name' => 'MR. MACINAS',
+        ]);
+        $plan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $curriculum->id, 'college' => 'ccs', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        $section = $this->makeSection($term, $plan, $placement->subject_id);
+
+        $otherCurriculum = $this->makeCurriculum(CollegeCode::Coe, 'BEED');
+        $otherSubject = Subject::create(['code' => 'ELEM1', 'college' => CollegeCode::Coe, 'title' => 'Elementary 1', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $otherPlan = AcademicTermSectionPlan::create(['academic_term_id' => $term->id, 'curriculum_id' => $otherCurriculum->id, 'college' => 'coe', 'year_level' => 1, 'section_count' => 1, 'students_per_block' => 40, 'status' => SectionPlanStatus::Draft]);
+        Section::create([
+            'academic_term_id' => $term->id, 'section_plan_id' => $otherPlan->id, 'subject_id' => $otherSubject->id,
+            'section_code' => 'ELEM1', 'capacity' => 40, 'capacity_source' => CapacitySource::Plan,
+            'is_block_exclusive' => true, 'status' => SectionStatus::Planned,
+            'schedule_days' => 'WED', 'starts_at_time' => '08:00:00', 'ends_at_time' => '10:00:00',
+            'room' => '3A', 'modality' => SectionModality::HyflexB,
+        ]);
+
+        app(AutoAssignSectionScheduleReferences::class)->execute($term, $curriculum->id, $this->makeChair(), $this->context());
+
+        $section->refresh();
+        $this->assertSame('3A', $section->room);
+        $this->assertSame(SectionModality::HyflexA, $section->modality);
+    }
 }

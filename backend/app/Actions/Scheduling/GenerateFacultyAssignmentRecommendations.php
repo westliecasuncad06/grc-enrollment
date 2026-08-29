@@ -21,7 +21,6 @@ use App\Models\RoomCatalogEntry;
 use App\Models\ScheduleGenerationRun;
 use App\Models\Section;
 use App\Models\User;
-use Illuminate\Support\Collection;
 
 /** Builds editable, persisted faculty recommendations from declared inputs. */
 final class GenerateFacultyAssignmentRecommendations
@@ -52,7 +51,7 @@ final class GenerateFacultyAssignmentRecommendations
         $warnings = [];
         foreach ($sections as $section) {
             $this->fillReferenceSchedule($section);
-            $roomWarning = $this->assignConfiguredRoom($run, $section, $sections);
+            $roomWarning = $this->assignConfiguredRoom($run, $section);
             if ($roomWarning !== null) {
                 $warnings[] = $roomWarning;
             }
@@ -90,11 +89,22 @@ final class GenerateFacultyAssignmentRecommendations
             ->get()
             ->keyBy(fn (FacultySpecialization $specialization): string => $specialization->professor_id.':'.$specialization->subject_id);
 
+        // Seeded from EVERY already-assigned section in the term, not just
+        // this run's own college/draft slice. A professor's commitments in
+        // another college — or in a same-college plan already submitted —
+        // are just as real a double-booking, and scoping this to `$sections`
+        // made them invisible to the conflict check below.
         $assignedUnits = [];
         $assignedSlots = [];
-        foreach ($sections->whereNotNull('professor_id') as $section) {
-            $assignedUnits[$section->professor_id] = ($assignedUnits[$section->professor_id] ?? 0) + (float) $section->subject->units;
-            $assignedSlots[$section->professor_id][] = $this->slot($section);
+        $termAssignments = Section::query()
+            ->with('subject:id,units')
+            ->where('academic_term_id', $run->academic_term_id)
+            ->whereNotNull('professor_id')
+            ->get(['id', 'professor_id', 'subject_id', 'schedule_days', 'starts_at_time', 'ends_at_time']);
+        foreach ($termAssignments as $assigned) {
+            $assignedUnits[$assigned->professor_id] = ($assignedUnits[$assigned->professor_id] ?? 0)
+                + (float) ($assigned->subject?->units ?? 0);
+            $assignedSlots[$assigned->professor_id][] = $this->slot($assigned);
         }
 
         foreach ($sections as $section) {
@@ -252,29 +262,54 @@ final class GenerateFacultyAssignmentRecommendations
      * type, or subject requirements intentionally leave the room editable and
      * unassigned rather than inventing a physical placement.
      *
-     * @param  Collection<int, Section>  $sections
+     * The candidate room's existing bookings are read fresh from the
+     * database rather than from the run's own same-college section list —
+     * rooms are shared campus-wide, so a college generating its schedule
+     * must also see every other college's booking in that room this term,
+     * not just its own draft plan's.
+     *
      * @return ?array{type: string, message: string, entity_id: int}
      */
-    private function assignConfiguredRoom(ScheduleGenerationRun $run, Section $section, Collection $sections): ?array
+    private function assignConfiguredRoom(ScheduleGenerationRun $run, Section $section): ?array
     {
-        if ($section->room !== null) {
+        $preassignedRoom = $section->room;
+
+        if ($preassignedRoom !== null) {
             $configured = RoomCatalogEntry::query()
                 ->where('college', $run->college)
-                ->where('name', $section->room)
+                ->where('name', $preassignedRoom)
                 ->whereNotNull('capacity')
                 ->whereNotNull('room_type')
                 ->exists();
 
-            return $configured ? null : [
-                'type' => ScheduleGenerationWarningType::RoomMetadataIncomplete->value,
-                'message' => "Room metadata is incomplete for section {$section->id}; review its room manually.",
-                'entity_id' => $section->id,
-            ];
+            if (! $configured) {
+                return [
+                    'type' => ScheduleGenerationWarningType::RoomMetadataIncomplete->value,
+                    'message' => "Room metadata is incomplete for section {$section->id}; review its room manually.",
+                    'entity_id' => $section->id,
+                ];
+            }
+
+            // A room already on the section is NOT trusted on sight. It is
+            // usually `fillReferenceSchedule`'s verbatim copy of the
+            // curriculum's `reference_room`, and every block section of one
+            // subject carries the same reference room/day/time — so trusting
+            // it placed whole groups of sections in one room at one time.
+            // Keep it only when it is genuinely free; otherwise fall through
+            // and pick a real vacancy below.
+            if (! $this->roomIsOccupied($section, $preassignedRoom)) {
+                return null;
+            }
         }
+
         if ($section->subject->room_requirement === null) {
             return [
-                'type' => ScheduleGenerationWarningType::RoomRequirementMissing->value,
-                'message' => "Subject room requirement is not configured for section {$section->id}; room assignment remains manual.",
+                'type' => $preassignedRoom === null
+                    ? ScheduleGenerationWarningType::RoomRequirementMissing->value
+                    : ScheduleGenerationWarningType::RoomConflictUnresolved->value,
+                'message' => $preassignedRoom === null
+                    ? "Subject room requirement is not configured for section {$section->id}; room assignment remains manual."
+                    : "Section {$section->id} double-books room {$preassignedRoom}, and its subject has no room requirement to pick a replacement from; resolve manually.",
                 'entity_id' => $section->id,
             ];
         }
@@ -285,13 +320,17 @@ final class GenerateFacultyAssignmentRecommendations
                 'entity_id' => $section->id,
             ];
         }
+        // Every overlap rule compares `HH:MM:SS` as strings, so an interval
+        // whose end precedes its start matches nothing and would be handed a
+        // room that is in fact occupied. Refuse to place it at all.
+        if ($section->ends_at_time <= $section->starts_at_time) {
+            return [
+                'type' => ScheduleGenerationWarningType::ScheduleMetadataIncomplete->value,
+                'message' => "Section {$section->id} ends at or before it starts ({$section->starts_at_time}–{$section->ends_at_time}); fix the time range before a room can be assigned.",
+                'entity_id' => $section->id,
+            ];
+        }
 
-        $proposed = [
-            'schedule_days' => $section->schedule_days,
-            'starts_at_time' => $section->starts_at_time,
-            'ends_at_time' => $section->ends_at_time,
-            'modality' => $section->modality->value,
-        ];
         $rooms = RoomCatalogEntry::query()
             ->where('college', $run->college)
             ->where('room_type', $section->subject->room_requirement)
@@ -302,16 +341,7 @@ final class GenerateFacultyAssignmentRecommendations
             if ($room->capacity < $section->capacity) {
                 continue;
             }
-            $existing = $sections
-                ->reject(fn (Section $other): bool => $other->id === $section->id)
-                ->where('room', $room->name)
-                ->map(fn (Section $other): array => [
-                    'schedule_days' => $other->schedule_days,
-                    'starts_at_time' => $other->starts_at_time,
-                    'ends_at_time' => $other->ends_at_time,
-                    'modality' => $other->modality?->value,
-                ])->values()->all();
-            if (! $this->roomConflictDetector->hasConflict($proposed, $existing)) {
+            if (! $this->roomIsOccupied($section, $room->name)) {
                 $section->update(['room' => $room->name]);
                 $section->refresh();
 
@@ -319,11 +349,61 @@ final class GenerateFacultyAssignmentRecommendations
             }
         }
 
+        if ($preassignedRoom !== null) {
+            return [
+                'type' => ScheduleGenerationWarningType::RoomConflictUnresolved->value,
+                'message' => "Section {$section->id} double-books room {$preassignedRoom} and no free {$section->subject->room_requirement} room can replace it; resolve manually.",
+                'entity_id' => $section->id,
+            ];
+        }
+
         return [
             'type' => ScheduleGenerationWarningType::NoRoomAvailable->value,
             'message' => "No configured {$section->subject->room_requirement} room can accommodate section {$section->id}; assign a room manually.",
             'entity_id' => $section->id,
         ];
+    }
+
+    /**
+     * Whether placing `$section` in `$roomName` would collide with a booking
+     * already in that room this term.
+     *
+     * Deliberately NOT scoped to one college or to the run's own section
+     * list — a shared room's true occupancy spans every college. Each
+     * `$section->update()` persists immediately (no surrounding
+     * transaction), so a room claimed earlier in this same run is already
+     * visible to this fresh query.
+     *
+     * An existing booking with a NULL modality is treated as ordinary
+     * face-to-face rather than skipped: `RoomConflictDetector` only judges
+     * rows that declare a physical-week modality, so passing the null
+     * through would silently report a physically-occupied room as free.
+     */
+    private function roomIsOccupied(Section $section, string $roomName): bool
+    {
+        if ($section->schedule_days === null || $section->starts_at_time === null || $section->ends_at_time === null) {
+            return false;
+        }
+
+        $existing = Section::query()
+            ->where('academic_term_id', $section->academic_term_id)
+            ->where('room', $roomName)
+            ->whereKeyNot($section->id)
+            ->whereNotNull('schedule_days')
+            ->get(['id', 'schedule_days', 'starts_at_time', 'ends_at_time', 'modality'])
+            ->map(fn (Section $other): array => [
+                'schedule_days' => $other->schedule_days,
+                'starts_at_time' => $other->starts_at_time,
+                'ends_at_time' => $other->ends_at_time,
+                'modality' => $other->modality?->value ?? SectionModality::FaceToFace->value,
+            ])->values()->all();
+
+        return $this->roomConflictDetector->hasConflict([
+            'schedule_days' => $section->schedule_days,
+            'starts_at_time' => $section->starts_at_time,
+            'ends_at_time' => $section->ends_at_time,
+            'modality' => ($section->modality ?? SectionModality::FaceToFace)->value,
+        ], $existing);
     }
 
     /** @param list<FacultyAvailability> $availability */

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { PencilLine } from "lucide-react"
+import { CalendarDays, PencilLine } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
@@ -42,6 +42,10 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/features/components/ui/tabs"
+import {
+  RoomScheduleAssignmentDialog,
+  type RoomScheduleAssignmentResult,
+} from "@/features/components/portal/room-schedule-assignment-dialog"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
 import {
@@ -89,6 +93,7 @@ export function ScheduleWorkspace() {
   const plansQuery = useSectionPlansQuery(termId, term !== null)
   const [activeYear, setActiveYear] = useState("1")
   const [editing, setEditing] = useState<Section | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [draft, setDraft] = useState({
     professor_id: "",
     schedule_days: "",
@@ -187,6 +192,16 @@ export function ScheduleWorkspace() {
       capacity: section.capacity,
       override_reason: "",
     })
+  }
+  const applyPickedSchedule = (result: RoomScheduleAssignmentResult) => {
+    setDraft((current) => ({
+      ...current,
+      schedule_days: result.scheduleDays,
+      starts_at_time: result.startsAtTime,
+      ends_at_time: result.endsAtTime,
+      room: result.room,
+      modality: result.modality,
+    }))
   }
   const query = {
     isPending:
@@ -425,53 +440,38 @@ export function ScheduleWorkspace() {
                 ))}
               </select>
             </WorkspaceField>
+            <div className="sm:col-span-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-center"
+                onClick={() => setPickerOpen(true)}
+                disabled={editing?.status === "published" || !isCurrentTerm}
+              >
+                <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                {draft.room
+                  ? "Change room & schedule on the room calendar"
+                  : "Pick a room & schedule on the room calendar"}
+              </Button>
+            </div>
             <WorkspaceField label="Schedule days">
-              <Input
-                value={draft.schedule_days}
-                onChange={(event) =>
-                  setDraft({ ...draft, schedule_days: event.target.value })
-                }
-                placeholder="MWF"
-              />
+              <Input value={draft.schedule_days} readOnly placeholder="Pick a room and slot above" />
             </WorkspaceField>
             <WorkspaceField label="Start time">
-              <Input
-                type="time"
-                value={draft.starts_at_time}
-                onChange={(event) =>
-                  setDraft({ ...draft, starts_at_time: event.target.value })
-                }
-              />
+              <Input type="time" value={draft.starts_at_time} readOnly />
             </WorkspaceField>
             <WorkspaceField label="End time">
-              <Input
-                type="time"
-                value={draft.ends_at_time}
-                onChange={(event) =>
-                  setDraft({ ...draft, ends_at_time: event.target.value })
-                }
-              />
+              <Input type="time" value={draft.ends_at_time} readOnly />
             </WorkspaceField>
             <WorkspaceField label="Room">
-              <Input
-                value={draft.room}
-                onChange={(event) =>
-                  setDraft({ ...draft, room: event.target.value })
-                }
-              />
+              <Input value={draft.room} readOnly placeholder="Pick a room above" />
             </WorkspaceField>
             <WorkspaceField label="Modality">
-              <select
-                value={draft.modality}
-                onChange={(event) =>
-                  setDraft({ ...draft, modality: event.target.value })
-                }
-                className="h-9 rounded-md border bg-background px-2"
-              >
-                <option value="f2f">F2F</option>
-                <option value="hyflex_a">HyFlex A</option>
-                <option value="hyflex_b">HyFlex B</option>
-              </select>
+              <Input
+                value={draft.modality ? draft.modality.replace("_", " ").toUpperCase() : ""}
+                readOnly
+                placeholder="Pick a room and slot above"
+              />
             </WorkspaceField>
             <WorkspaceField label="Capacity">
               <Input
@@ -522,6 +522,13 @@ export function ScheduleWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <RoomScheduleAssignmentDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        termId={termId}
+        excludeSectionId={editing?.id}
+        onConfirm={applyPickedSchedule}
+      />
     </WorkspacePage>
   )
 }

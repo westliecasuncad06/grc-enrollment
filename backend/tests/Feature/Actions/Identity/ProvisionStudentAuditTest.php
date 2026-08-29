@@ -13,6 +13,7 @@ use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -29,24 +30,27 @@ final class ProvisionStudentAuditTest extends TestCase
             UserRole::AdmissionStaff,
             'provision.audit.admission@grc.test',
         );
+        Mail::fake();
 
         $response = $this->withHeader('X-Request-ID', 'student-provision-request')
             ->withToken($token)
             ->postJson('/api/v1/student-profiles', [
-                'name' => 'Sensitive Student Name',
+                'first_name' => 'Sensitive',
+                'last_name' => 'Student Name',
                 'email' => 'sensitive.student@grc.test',
-                'password' => 'temporary-secret-password',
+                'address' => '1 Sensitive Street, Caloocan City',
                 'student_number' => '2027-08-30001',
                 'program_id' => $program->id,
-                'curriculum_id' => $curriculum->id,
                 'entry_year' => 2027,
                 'year_level' => 2,
+                'student_type' => 'freshman',
+                'requirements_verified' => true,
             ]);
 
         $response->assertCreated();
         $profileId = (int) $response->json('data.id');
         $userId = (int) $response->json('data.user_id');
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', AuditAction::STUDENT_PROFILE_PROVISIONED)->sole();
 
         self::assertSame(AuditAction::STUDENT_PROFILE_PROVISIONED, $audit->action);
         self::assertSame(AuditableType::STUDENT_PROFILE, $audit->auditable_type);
@@ -64,6 +68,7 @@ final class ProvisionStudentAuditTest extends TestCase
             // The request omitted it, so ProvisionStudent defaults it —
             // every provisioned student has an explicit category.
             'enrollment_category' => 'regular',
+            'student_type' => 'freshman',
             'admission_status' => 'admitted',
             'academic_standing' => 'good',
             'financial_status' => null,
@@ -128,7 +133,7 @@ final class ProvisionStudentAuditTest extends TestCase
 
     public function test_audit_failure_rolls_back_both_user_and_student_profile(): void
     {
-        [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        [$program] = $this->makeProgramAndCurriculum();
         [, $token] = $this->tokenFor(UserRole::AdmissionStaff, 'provision.audit.rollback@grc.test');
 
         AuditLog::creating(static function (): never {
@@ -140,14 +145,16 @@ final class ProvisionStudentAuditTest extends TestCase
         try {
             $this->withToken($token)
                 ->postJson('/api/v1/student-profiles', [
-                    'name' => 'Rollback Student',
+                    'first_name' => 'Rollback',
+                    'last_name' => 'Student',
                     'email' => 'rollback.student@grc.test',
-                    'password' => 'temporary-password',
+                    'address' => '2 Rollback Street, Caloocan City',
                     'student_number' => '2027-08-30002',
                     'program_id' => $program->id,
-                    'curriculum_id' => $curriculum->id,
                     'entry_year' => 2027,
                     'year_level' => 3,
+                    'student_type' => 'freshman',
+                    'requirements_verified' => true,
                 ]);
         } catch (RuntimeException $exception) {
             $caughtException = $exception;

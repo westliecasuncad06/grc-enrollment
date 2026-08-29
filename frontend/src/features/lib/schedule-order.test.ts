@@ -32,6 +32,18 @@ describe("parseScheduleDays", () => {
   it("returns an empty list for null", () => {
     expect(parseScheduleDays(null)).toEqual([])
   })
+
+  it("parses the API's canonical slash-joined MON/TUE/WED format", () => {
+    expect(parseScheduleDays("MON/TUE/WED")).toEqual([1, 2, 3])
+  })
+
+  it("parses THU and FRI in canonical all-caps form", () => {
+    expect(parseScheduleDays("THU/FRI")).toEqual([4, 5])
+  })
+
+  it("parses a single canonical SAT segment", () => {
+    expect(parseScheduleDays("SAT")).toEqual([6])
+  })
 })
 
 describe("hasScheduleConflict", () => {
