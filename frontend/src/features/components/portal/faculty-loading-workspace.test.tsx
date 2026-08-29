@@ -46,6 +46,16 @@ const subjects = {
       status_label: "Active",
       is_completion_only: false,
     },
+    {
+      type: "subject",
+      id: 999,
+      code: "LEAD4",
+      title: "Leadership 4 (Other College)",
+      units: 3,
+      status: "active",
+      status_label: "Active",
+      is_completion_only: false,
+    },
   ],
 } as const
 
@@ -235,6 +245,25 @@ describe("FacultyLoadingWorkspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByText("Assigned subjects: IT101"),
+    ).not.toBeInTheDocument()
+  })
+
+  it("only offers subjects that appear in this college's faculty load report", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(await screen.findByLabelText("Subject"))
+
+    expect(
+      await screen.findByRole("option", {
+        name: "IT101 — Introduction to Computing",
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("option", { name: "IT201 — Data Structures" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("option", { name: /Other College/ }),
     ).not.toBeInTheDocument()
   })
 

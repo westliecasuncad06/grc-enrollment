@@ -39,7 +39,6 @@ import {
 } from "@/features/components/ui/table"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
-import { useSubjectsQuery } from "@/features/hooks/use-reference-data"
 import {
   getFacultyLoadReport,
   saveFacultyLoadThreshold,
@@ -53,7 +52,6 @@ export function FacultyLoadingWorkspace() {
   const termSelection = useAcademicTermSelection()
   const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } =
     termSelection
-  const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
   const workforceQuery = useFacultyDirectoryQuery(true)
   const reportQuery = useQuery({
@@ -71,16 +69,26 @@ export function FacultyLoadingWorkspace() {
     employment_type: "part_time" as "full_time" | "part_time",
     reason: "",
   })
-  const subjectOptions = useMemo(
-    () => [
+  const subjectOptions = useMemo(() => {
+    const subjectsById = new Map<number, { code: string; title: string }>()
+    for (const member of reportQuery.data?.faculty ?? []) {
+      for (const assignment of member.assignments) {
+        if (!subjectsById.has(assignment.subject_id)) {
+          subjectsById.set(assignment.subject_id, {
+            code: assignment.subject_code,
+            title: assignment.subject_title,
+          })
+        }
+      }
+    }
+    return [
       { value: "", label: "All subjects" },
-      ...(subjectsQuery.data ?? []).map((subject) => ({
-        value: String(subject.id),
+      ...Array.from(subjectsById, ([id, subject]) => ({
+        value: String(id),
         label: `${subject.code} — ${subject.title}`,
-      })),
-    ],
-    [subjectsQuery.data],
-  )
+      })).sort((a, b) => a.label.localeCompare(b.label)),
+    ]
+  }, [reportQuery.data?.faculty])
   const professorOptions = useMemo(
     () => [
       { value: "", label: "All professors" },
@@ -144,26 +152,22 @@ export function FacultyLoadingWorkspace() {
   const query = {
     isPending:
       termSelection.termsQuery.isPending ||
-      subjectsQuery.isPending ||
       facultyQuery.isPending ||
       workforceQuery.isPending ||
       reportQuery.isPending,
     isError:
       termSelection.termsQuery.isError ||
-      subjectsQuery.isError ||
       facultyQuery.isError ||
       workforceQuery.isError ||
       reportQuery.isError,
     error:
       termSelection.termsQuery.error ??
-      subjectsQuery.error ??
       facultyQuery.error ??
       workforceQuery.error ??
       reportQuery.error,
     data: true as const,
     refetch: () => {
       void termSelection.termsQuery.refetch()
-      void subjectsQuery.refetch()
       void facultyQuery.refetch()
       void workforceQuery.refetch()
       void reportQuery.refetch()
