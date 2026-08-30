@@ -133,4 +133,26 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
             ->assertJsonPath('data.0.gwa_units', 3)
             ->assertJsonPath('data.0.excluded_subject_count', 1);
     }
+
+    public function test_honors_report_envelope_matches_the_published_v1_contract(): void
+    {
+        [, $term, $curriculum] = $this->termsAndCurriculum();
+        $this->student($curriculum, 'S-001');
+
+        $response = $this->withToken($this->token($this->user(UserRole::Dean, 'dean3@grc.test')))
+            ->getJson("/api/v1/reports/honors?academic_term_id={$term->id}");
+
+        // The frontend parses this envelope with a `.strict()` Zod schema
+        // (frontend/src/features/schemas/attrition-honors-schema.ts): exactly
+        // `data`, `summary`, `meta` at the top level. Laravel's automatic
+        // paginated-resource response also injects a top-level `links` key
+        // and extra `meta.links`/`meta.path`/`meta.from`/`meta.to` entries;
+        // any of that breaks contract parsing on the frontend, so this locks
+        // the exact key set rather than only checking a few paths.
+        $response->assertOk();
+        $body = $response->json();
+        self::assertEqualsCanonicalizing(['data', 'summary', 'meta'], array_keys($body));
+        self::assertEqualsCanonicalizing(['qualifier_count'], array_keys($body['summary']));
+        self::assertEqualsCanonicalizing(['current_page', 'last_page', 'per_page', 'total'], array_keys($body['meta']));
+    }
 }

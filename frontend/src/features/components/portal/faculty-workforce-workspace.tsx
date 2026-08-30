@@ -19,7 +19,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/features/components/ui/dialog"
@@ -167,81 +166,82 @@ export function FacultyWorkforceWorkspace() {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       >
-        <DialogContent className="max-h-[90dvh] max-w-5xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selected?.name ?? "Faculty member"}</DialogTitle>
-            <DialogDescription>
-              {canManage
-                ? "Review this professor's profile and the subjects they may teach."
-                : "Review this professor's profile and the subjects they may teach."}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="flex max-h-dvh flex-col p-0 sm:max-h-[90dvh] sm:max-w-5xl sm:rounded-xl">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <DialogHeader className="mb-4">
+              <DialogTitle>{selected?.name ?? "Faculty member"}</DialogTitle>
+              <DialogDescription>
+                {canManage
+                  ? "Review this professor's profile and the subjects they may teach."
+                  : "Review this professor's profile and the subjects they may teach."}
+              </DialogDescription>
+            </DialogHeader>
 
-          {!canManage && (
-            <p className="text-sm text-muted-foreground">
-              You have read-only access.
-            </p>
-          )}
+            {!canManage && (
+              <p className="mb-4 text-sm text-muted-foreground">
+                You have read-only access.
+              </p>
+            )}
 
-          <div className={canManage ? "grid grid-cols-2 gap-6" : "block"}>
-            {canManage && selected && (
-              <div className="grid content-start gap-4">
-                <WorkspaceField label="Account status">
-                  <select
-                    aria-label="Account status"
-                    value={draft.status}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        status: event.target.value as "active" | "disabled",
-                      })
+            <div className={canManage ? "grid min-w-0 gap-6 sm:grid-cols-[280px_1fr]" : "block"}>
+              {canManage && selected && (
+                <div className="grid content-start gap-4">
+                  <WorkspaceField label="Account status">
+                    <select
+                      aria-label="Account status"
+                      value={draft.status}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          status: event.target.value as "active" | "disabled",
+                        })
+                      }
+                      className="h-9 w-full rounded-md border bg-background px-2"
+                    >
+                      <option value="active">Active</option>
+                      <option value="disabled">Inactive</option>
+                    </select>
+                  </WorkspaceField>
+                  <WorkspaceField label="Employment type">
+                    <select
+                      aria-label="Employment type"
+                      value={draft.employment_type}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          employment_type: event.target.value as
+                            "full_time" | "part_time",
+                        })
+                      }
+                      className="h-9 w-full rounded-md border bg-background px-2"
+                    >
+                      <option value="full_time">
+                        Full-time (33-unit reference)
+                      </option>
+                      <option value="part_time">Part-time</option>
+                    </select>
+                  </WorkspaceField>
+                  <WorkspaceField
+                    label={
+                      selected.status === "active" && draft.status === "disabled"
+                        ? "Reason for making this account inactive"
+                        : "Change note (optional)"
                     }
-                    className="h-9 w-full rounded-md border bg-background px-2"
                   >
-                    <option value="active">Active</option>
-                    <option value="disabled">Inactive</option>
-                  </select>
-                </WorkspaceField>
-                <WorkspaceField label="Employment type">
-                  <select
-                    aria-label="Employment type"
-                    value={draft.employment_type}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        employment_type: event.target.value as
-                          "full_time" | "part_time",
-                      })
-                    }
-                    className="h-9 w-full rounded-md border bg-background px-2"
-                  >
-                    <option value="full_time">
-                      Full-time (33-unit reference)
-                    </option>
-                    <option value="part_time">Part-time</option>
-                  </select>
-                </WorkspaceField>
-                <WorkspaceField
-                  label={
-                    selected.status === "active" && draft.status === "disabled"
-                      ? "Reason for making this account inactive"
-                      : "Change note (optional)"
-                  }
-                >
-                  <Input
-                    value={draft.reason}
-                    onChange={(event) =>
-                      setDraft({ ...draft, reason: event.target.value })
-                    }
-                    placeholder="Record the reason for this change"
-                  />
-                </WorkspaceField>
-                {saveWorkforceProfile.error instanceof Error && (
-                  <p className="text-sm text-destructive">
-                    {saveWorkforceProfile.error.message}
-                  </p>
-                )}
-                <DialogFooter>
+                    <Input
+                      value={draft.reason}
+                      onChange={(event) =>
+                        setDraft({ ...draft, reason: event.target.value })
+                      }
+                      placeholder="Record the reason for this change"
+                    />
+                  </WorkspaceField>
+                  {saveWorkforceProfile.error instanceof Error && (
+                    <p className="text-sm text-destructive">
+                      {saveWorkforceProfile.error.message}
+                    </p>
+                  )}
                   <Button
                     type="button"
                     onClick={() => void saveWorkforceProfile.mutateAsync()}
@@ -256,17 +256,19 @@ export function FacultyWorkforceWorkspace() {
                       ? "Saving…"
                       : "Save workforce profile"}
                   </Button>
-                </DialogFooter>
-              </div>
-            )}
+                </div>
+              )}
 
-            {selected && (
-              <FacultyWorkforceSpecializationsPanel
-                professorId={selected.id}
-                college={selected.college}
-                canManage={canManage}
-              />
-            )}
+              {selected && (
+                <div className="min-w-0">
+                  <FacultyWorkforceSpecializationsPanel
+                    professorId={selected.id}
+                    college={selected.college}
+                    canManage={canManage}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

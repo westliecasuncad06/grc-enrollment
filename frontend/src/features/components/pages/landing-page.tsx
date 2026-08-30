@@ -1,3 +1,6 @@
+"use client"
+
+import { useGSAP } from "@gsap/react"
 import {
   ArrowRight,
   BookOpenCheck,
@@ -13,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import Link from "next/link"
+import { useRef } from "react"
 
 import { PublicFooter } from "@/features/components/layouts/public-footer"
 import { PublicHeader } from "@/features/components/layouts/public-header"
@@ -24,6 +28,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
+import { gsap, ScrollTrigger } from "@/features/lib/gsap"
 
 const academics = [
   {
@@ -50,13 +56,15 @@ const academics = [
 
 const studentServices = [
   {
-    description: "Learn about admission requirements and the GRC admission process.",
+    description:
+      "Learn about admission requirements and the GRC admission process.",
     href: "https://grc.edu.ph/grc-admission/",
     icon: GraduationCap,
     label: "Admissions",
   },
   {
-    description: "Explore scholarship information and application guidance from GRC.",
+    description:
+      "Explore scholarship information and application guidance from GRC.",
     href: "https://grc.edu.ph/grc-scholarship/",
     icon: HeartHandshake,
     label: "Scholarship",
@@ -97,8 +105,172 @@ const enrollmentJourney = [
 ] as const
 
 export function LandingPage() {
+  const reducedMotion = useReducedMotion()
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useGSAP(
+    () => {
+      if (reducedMotion) return
+
+      // ── Hero: stagger-reveal copy elements ───────────────────────────────
+      const heroTl = gsap.timeline({ defaults: { ease: "power2.out" } })
+
+      heroTl
+        .from(".landing-tagline", {
+          opacity: 0,
+          y: 18,
+          duration: 0.55,
+        })
+        .from(
+          ".landing-hero h1",
+          {
+            opacity: 0,
+            y: 28,
+            duration: 0.65,
+          },
+          "-=0.3",
+        )
+        .from(
+          ".landing-hero__summary",
+          {
+            opacity: 0,
+            y: 18,
+            duration: 0.55,
+          },
+          "-=0.35",
+        )
+        .from(
+          ".landing-actions",
+          {
+            opacity: 0,
+            y: 14,
+            duration: 0.45,
+          },
+          "-=0.3",
+        )
+
+      // ── Hero panel: slide in from the right ───────────────────────────────
+      gsap.from(".landing-hero__panel", {
+        opacity: 0,
+        x: 40,
+        duration: 0.8,
+        ease: "power2.out",
+        delay: 0.25,
+      })
+
+      // ── About section: heading fade-up on scroll ──────────────────────────
+      gsap.from("#about-grc .section-heading", {
+        scrollTrigger: {
+          trigger: "#about-grc",
+          start: "top 82%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 30,
+        duration: 0.65,
+        ease: "power2.out",
+      })
+
+      gsap.from(".landing-values-grid article", {
+        scrollTrigger: {
+          trigger: ".landing-values-grid",
+          start: "top 80%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 24,
+        duration: 0.55,
+        ease: "power2.out",
+        stagger: 0.15,
+      })
+
+      // ── Academics section: heading + list stagger on scroll ───────────────
+      gsap.from("#academics .section-heading", {
+        scrollTrigger: {
+          trigger: "#academics",
+          start: "top 82%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 30,
+        duration: 0.6,
+        ease: "power2.out",
+      })
+
+      gsap.from(".academics-list li", {
+        scrollTrigger: {
+          trigger: ".academics-list",
+          start: "top 80%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        x: -20,
+        duration: 0.45,
+        ease: "power2.out",
+        stagger: 0.1,
+      })
+
+      // ── Student services: heading + cards stagger on scroll ───────────────
+      gsap.from("#student-services .section-heading", {
+        scrollTrigger: {
+          trigger: "#student-services",
+          start: "top 82%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 30,
+        duration: 0.6,
+        ease: "power2.out",
+      })
+
+      gsap.from(".student-services-grid [data-slot='card']", {
+        scrollTrigger: {
+          trigger: ".student-services-grid",
+          start: "top 80%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 28,
+        duration: 0.5,
+        ease: "power2.out",
+        stagger: 0.13,
+      })
+
+      // ── Journey section: heading + steps stagger on scroll ────────────────
+      gsap.from("#enrollment .section-heading", {
+        scrollTrigger: {
+          trigger: "#enrollment",
+          start: "top 82%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 30,
+        duration: 0.6,
+        ease: "power2.out",
+      })
+
+      gsap.from(".journey-list li", {
+        scrollTrigger: {
+          trigger: ".journey-list",
+          start: "top 78%",
+          toggleActions: "play none none none",
+        },
+        opacity: 0,
+        y: 32,
+        duration: 0.5,
+        ease: "power2.out",
+        stagger: 0.12,
+      })
+
+      return () => {
+        ScrollTrigger.getAll().forEach((t) => t.kill())
+      }
+    },
+    { scope: containerRef, dependencies: [reducedMotion] },
+  )
+
   return (
-    <div className="institutional-shell">
+    <div className="institutional-shell" ref={containerRef}>
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
@@ -106,7 +278,7 @@ export function LandingPage() {
 
       <main id="main-content" tabIndex={-1}>
         <section className="landing-hero" aria-labelledby="landing-title">
-          <div className="landing-hero__copy reveal reveal--one">
+          <div className="landing-hero__copy">
             <p className="landing-tagline">
               <Sparkles aria-hidden="true" />
               TOUCHING HEARTS, RENEWING MINDS, TRANSFORMING LIVES
@@ -114,8 +286,8 @@ export function LandingPage() {
             <h1 id="landing-title">Your GRC enrollment journey starts here.</h1>
             <p className="landing-hero__summary">
               The GRC Automated Enrollment System brings schedules, subject
-              selection, approvals, payment confirmation, and your Certificate of Registration
-              together in one role-guided experience.
+              selection, approvals, payment confirmation, and your Certificate
+              of Registration together in one role-guided experience.
             </p>
             <div className="landing-actions">
               <Button asChild size="lg">
@@ -130,12 +302,18 @@ export function LandingPage() {
             </div>
           </div>
 
-          <aside className="landing-hero__panel reveal reveal--two" aria-label="GRC enrollment portal">
+          <aside
+            className="landing-hero__panel"
+            aria-label="GRC enrollment portal"
+          >
             <School aria-hidden="true" />
             <p>GRC Connect</p>
-            <strong>Your role. Your next enrollment task. One connected portal.</strong>
+            <strong>
+              Your role. Your next enrollment task. One connected portal.
+            </strong>
             <span>
-              Sign in to continue with the enrollment work assigned to your role.
+              Sign in to continue with the enrollment work assigned to your
+              role.
             </span>
           </aside>
         </section>
@@ -158,7 +336,10 @@ export function LandingPage() {
               responsibility that guide Global Reciprocal Colleges.
             </p>
           </div>
-          <div className="landing-values-grid" aria-label="About Global Reciprocal Colleges">
+          <div
+            className="landing-values-grid"
+            aria-label="About Global Reciprocal Colleges"
+          >
             <article className="landing-value-card">
               <h3 className="eyebrow">Vision</h3>
               <p className="landing-value-card__statement">
@@ -176,11 +357,17 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="academics" className="academics-section" aria-labelledby="academics-title">
+        <section
+          id="academics"
+          className="academics-section"
+          aria-labelledby="academics-title"
+        >
           <div className="section-heading">
             <div>
               <p className="eyebrow">Academics</p>
-              <h2 id="academics-title">Explore GRC’s academic colleges.</h2>
+              <h2 id="academics-title">
+                Explore GRC&apos;s academic colleges.
+              </h2>
             </div>
             <p>
               Learn about the programs and academic communities offered by
@@ -238,7 +425,11 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section id="enrollment" className="journey-section" aria-labelledby="journey-title">
+        <section
+          id="enrollment"
+          className="journey-section"
+          aria-labelledby="journey-title"
+        >
           <div className="section-heading">
             <div>
               <p className="eyebrow">Enrollment at GRC</p>

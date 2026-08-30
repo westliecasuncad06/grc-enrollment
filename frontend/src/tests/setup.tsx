@@ -62,7 +62,13 @@ if (typeof window !== "undefined") {
   window.HTMLElement.prototype.scrollIntoView ??= () => undefined
   window.matchMedia ??= (query: string) =>
     ({
-      matches: false,
+      // Return true for prefers-reduced-motion so GSAP animations are
+      // skipped entirely in tests — elements that would otherwise be stuck
+      // at opacity:0 mid-animation are immediately visible, which lets
+      // assertions on DOM content and interactive elements work without
+      // timing-based flakiness. Other queries that need non-default
+      // behaviour should be stubbed per-test.
+      matches: query.includes("prefers-reduced-motion"),
       media: query,
       onchange: null,
       addListener: () => undefined,

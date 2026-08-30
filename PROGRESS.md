@@ -1,5 +1,46 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-08-30 — Machine Learning Verification (Random Forest & XGBoost) and Historical Attrition Seeding
+
+Completed verification and implementation of machine learning models and seeded realistic student dropout/stop-out data:
+1. **Schedule Demand Prediction (Random Forest)**:
+   - Verified that `ml-service/app/services/section_demand.py` uses `RandomForestRegressor` (`n_estimators=100`, `random_state=42`) with `feature_schema_version = 'v2'`.
+   - Verified end-to-end Python execution returning `RESULT_STRATEGY: random_forest` and `RESULT_MODEL_VERSION: section-demand-rf-v2`.
+2. **Student Attrition Risk Prediction (XGBoost)**:
+   - Implemented `AttritionPredictor` in `ml-service/app/services/attrition.py` using `xgboost.XGBClassifier` (`n_estimators=50`, `max_depth=3`, `learning_rate=0.08`, `random_state=42`).
+   - Defined request/response schemas in `ml-service/app/schemas/attrition.py` and registered `POST /internal/v1/attrition/predict` in `ml-service/app/main.py`.
+   - Added `ml-service/tests/test_attrition.py` test suite with automated assertions.
+   - Built Laravel integration: `backend/app/Services/Analytics/AttritionPredictionClient.php` and `backend/app/Actions/Analytics/GenerateAttritionPredictions.php` with bulk upsert and fallback protection.
+3. **Historical Student Dropout & Stop-out Seeding (2023-2024 to 2026-2027)**:
+   - Created `backend/database/seeders/StudentAttritionHistorySeeder.php` and artisan command `backend/app/Console/Commands/SeedAttritionHistoryCommand.php` (`php artisan students:seed-attrition-history`).
+   - Populated realistic in-term withdrawals (`status = 'withdrawn'`, `mark = 'DRP'`) and term-end stop-outs (failed units with non-continuation into subsequent terms) across all terms from 2023-2024 1st to 2026-2027 1st.
+   - Re-derived section demand observations and generated XGBoost predictions (`attrition_predictions` table populated with risk probabilities, risk bands, and explanations).
+4. **Verification & Checks**:
+   - Python ML tests: `ALL ATTRITION FASTAPI TESTS PASSED!`.
+   - Backend PHPUnit tests: `Tests\Feature\Api\V1\AttritionAndHonorsEndpointsTest` passed (5 passed, 21 assertions).
+   - Frontend TypeScript: `tsc --noEmit` passed with 0 errors.
+
+## 2026-08-30 — Analytics dashboard loading boundary isolation
+
+Resolved full-page loading issue when adjusting the Analytics school-year range slider:
+- Modified `frontend/src/features/components/portal/analytics-dashboard-workspace.tsx` to separate `termsQuery` (initial filter options setup) and `summaryQuery` loading boundaries.
+- The `Analytics filters` card (including the dual-handle `SchoolYearRangeSlider` and select dropdowns) now remains mounted and interactive during filter/range updates.
+- Scoped `summaryQuery`'s `AsyncBoundary` exclusively to the content area below the filters (`DescriptiveTab`).
+- Verified: `tsc --noEmit` exited 0.
+- Verified: `vitest run src/features/components/portal/analytics-dashboard-workspace.test.tsx` passed all 7/7 tests.
+
+## 2026-08-30 — GSAP animation enhancement for landing page, login page, and portal shell
+
+Enhanced the landing page, login page, and portal shell with GSAP animations using `gsap` and `@gsap/react`:
+- Added `frontend/src/features/lib/gsap.ts` with client-guarded plugin registration (`ScrollTrigger`).
+- Added `frontend/src/features/hooks/use-reduced-motion.ts` with synchronous lazy initialiser to respect `prefers-reduced-motion: reduce` across all GSAP hooks.
+- Animated Landing Page (`landing-page.tsx`): Hero tagline/heading/summary/actions stagger reveal, hero panel slide-in, and scroll-triggered fade-ups for About, Academics, Student Services, and Enrollment Journey sections.
+- Animated Login Page (`login-page.tsx`): Institutional panel brand & purpose stagger-in, trust list stagger, and login form card entrance.
+- Animated Portal Shell (`portal-shell.tsx`): Role navigation links stagger-in and content area subtle fade on route change.
+- Removed unused `DialogFooter` import in `faculty-workforce-workspace.tsx` to ensure clean TypeScript verification.
+- Verified: `tsc --noEmit` exited 0.
+- Verified: `vitest run` on `landing-page.test.tsx`, `login-page.test.tsx`, and `portal-shell.test.tsx` passed with 35/35 passing tests.
+
 ## 2026-08-30 — Faculty Workforce page and specialization approval system
 
 All 14 tasks in `docs/superpowers/plans/2026-08-29-faculty-workforce-page-and-specialization-approval.md` completed and verified.

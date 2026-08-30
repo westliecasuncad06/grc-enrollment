@@ -20,11 +20,18 @@ final class HonorsReportController extends Controller
         $pageSize = (int) ($validated['page_size'] ?? 25);
         $results = $report->execute($term, $validated, $page, $pageSize);
 
-        $response = HonorStudentResource::collection($results)
-            ->additional(['summary' => ['qualifier_count' => $results->total()]])
-            ->response($request);
-        $response->headers->set('Cache-Control', 'no-store, private');
-
-        return $response;
+        // Built manually (not via ->response()) because the automatic
+        // paginated-resource response injects a top-level `links` key that
+        // the frontend's `.strict()` v1 contract schema rejects outright.
+        return response()->json([
+            'data' => HonorStudentResource::collection($results->items()),
+            'summary' => ['qualifier_count' => $results->total()],
+            'meta' => [
+                'current_page' => $results->currentPage(),
+                'last_page' => $results->lastPage(),
+                'per_page' => $results->perPage(),
+                'total' => $results->total(),
+            ],
+        ])->withHeaders(['Cache-Control' => 'no-store, private']);
     }
 }

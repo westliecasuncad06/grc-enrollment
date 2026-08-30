@@ -100,16 +100,16 @@ export function FacultyWorkforceSpecializationsPanel({
     .map((subject) => ({ value: String(subject.id), label: `${subject.code} — ${subject.title}` }))
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       <h3 className="text-sm font-semibold">Subjects this professor can teach</h3>
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-hidden rounded-md border">
         <Table aria-label="Subject specializations">
           <TableHeader>
             <TableRow>
-              <TableHead>Subject</TableHead>
-              <TableHead>Proficiency</TableHead>
-              <TableHead>Status</TableHead>
-              {canManage && <TableHead className="text-right">Actions</TableHead>}
+              <TableHead className="w-full">Subject</TableHead>
+              <TableHead className="whitespace-nowrap">Proficiency</TableHead>
+              <TableHead className="whitespace-nowrap">Status</TableHead>
+              {canManage && <TableHead className="whitespace-nowrap text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -117,15 +117,15 @@ export function FacultyWorkforceSpecializationsPanel({
               const subject = subjectsById.get(row.subject_id)
               return (
                 <TableRow key={row.id}>
-                  <TableCell>
+                  <TableCell className="max-w-0 truncate">
                     {subject ? `${subject.code} — ${subject.title}` : `Subject #${row.subject_id}`}
                   </TableCell>
-                  <TableCell>{row.proficiency_label}</TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">{row.proficiency_label}</TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{row.status_label}</Badge>
                   </TableCell>
                   {canManage && (
-                    <TableCell className="text-right">
+                    <TableCell className="whitespace-nowrap text-right">
                       {row.status === "pending" && (
                         <>
                           <Button
@@ -192,6 +192,7 @@ export function FacultyWorkforceSpecializationsPanel({
             </select>
             <Button
               type="button"
+              className="w-full sm:w-auto"
               onClick={() => void addSpecialization.mutateAsync()}
               disabled={!newSubjectId || addSpecialization.isPending}
             >

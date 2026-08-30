@@ -343,17 +343,6 @@ export function AnalyticsDashboardWorkspace() {
     authorized && termsQuery.isSuccess && selectedTerm !== null,
   )
   const runQuery = useLatestScheduleGenerationRunQuery(termId, isProgramChair)
-  const combinedQuery = {
-    isPending: termsQuery.isPending || summaryQuery.isPending,
-    isError: termsQuery.isError || summaryQuery.isError,
-    error: termsQuery.error ?? summaryQuery.error,
-    data: summaryQuery.data,
-    refetch: () => {
-      void termsQuery.refetch()
-      void summaryQuery.refetch()
-    },
-  }
-
   return (
     <WorkspacePage
       title="Analytics"
@@ -365,8 +354,8 @@ export function AnalyticsDashboardWorkspace() {
       unauthorized={!authorized}
       lastUpdated={summaryQuery.dataUpdatedAt}
     >
-      <AsyncBoundary query={combinedQuery} loadingLabel="Loading analytics…">
-        {(summary) => (
+      <AsyncBoundary query={termsQuery} loadingLabel="Loading analytics…">
+        {() => (
           <div className="grid gap-5">
             <Card>
               <CardHeader>
@@ -540,7 +529,12 @@ export function AnalyticsDashboardWorkspace() {
                 ) : null}
               </TabsList>
               <TabsContent value="descriptive">
-                <DescriptiveTab summary={summary} />
+                <AsyncBoundary
+                  query={summaryQuery}
+                  loadingLabel="Loading analytics summary…"
+                >
+                  {(summary) => <DescriptiveTab summary={summary} />}
+                </AsyncBoundary>
               </TabsContent>
               {isProgramChair ? (
                 <TabsContent value="predictive">

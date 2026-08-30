@@ -11,11 +11,16 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
+from app.schemas.attrition import (
+    AttritionPredictionRequest,
+    AttritionPredictionResponse,
+)
 from app.schemas.health import HealthData, HealthResponse
 from app.schemas.section_demand import (
     SectionDemandPredictionRequest,
     SectionDemandPredictionResponse,
 )
+from app.services.attrition import AttritionPredictor
 from app.services.section_demand import SectionDemandPredictor
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -88,6 +93,23 @@ async def predict_section_demand(
             request.data.observations,
             request.data.targets,
             request.data.feature_schema_version,
+        )
+    )
+
+
+@app.post(
+    "/internal/v1/attrition/predict",
+    response_model=AttritionPredictionResponse,
+    tags=["attrition"],
+    summary="Predict student attrition risk using XGBoost",
+)
+async def predict_attrition(
+    request: AttritionPredictionRequest,
+) -> AttritionPredictionResponse:
+    return AttritionPredictionResponse(
+        data=AttritionPredictor().predict(
+            request.data.observations,
+            request.data.targets,
         )
     )
 

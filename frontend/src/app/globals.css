@@ -123,6 +123,17 @@
   --dataviz-series-8: #e34948;
   --dataviz-grid: #e1e0d9;
   --dataviz-axis: #c3c2b7;
+  /* Ordinal ramp for the enrollment funnel (stage position, not series
+     identity — dataviz skill's "funnel stage" example): one hue off
+     --dataviz-series-1, monotone lightness light->dark, validated via
+     `node scripts/validate_palette.js "…" --ordinal --mode light
+     --surface "#ffffff"` (Lightness monotone / Adjacent ΔL / Light-end
+     contrast 2.18:1 / Single hue 4° — all PASS). Stage 1 (earliest, most
+     rows) is lightest; stage 4 (enrolled) is darkest. */
+  --dataviz-funnel-1: #82b3ee;
+  --dataviz-funnel-2: #5296e4;
+  --dataviz-funnel-3: #2d74d1;
+  --dataviz-funnel-4: #153f78;
   --radius: 0.45rem;
   --sidebar: #fbfaf7;
   --sidebar-foreground: var(--ink);
@@ -189,6 +200,15 @@
   --dataviz-series-8: #e66767;
   --dataviz-grid: #2c2c2a;
   --dataviz-axis: #383835;
+  /* Anchor flipped for the dark surface (sequential/ordinal ramps flip
+     anchor in dark — brighter reads as "further along" against a dark
+     card): stage 1 darkest, stage 4 lightest. Validated via
+     `--ordinal --mode dark --surface "#222225"` (Light-end contrast
+     2.98:1 on the recessive #3d6cad step — all PASS). */
+  --dataviz-funnel-1: #3d6cad;
+  --dataviz-funnel-2: #4d84cc;
+  --dataviz-funnel-3: #5f9ce8;
+  --dataviz-funnel-4: #a9cdf5;
 }
 
 @layer base {

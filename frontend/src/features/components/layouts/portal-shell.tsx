@@ -1,9 +1,10 @@
 "use client"
 
+import { useGSAP } from "@gsap/react"
 import { LayoutDashboard, LogOut, Menu } from "lucide-react"
 import Link from "next/link"
 import { useParams, usePathname, useRouter } from "next/navigation"
-import { startTransition, type ReactNode } from "react"
+import { startTransition, useRef, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { Breadcrumb } from "@/features/components/common/breadcrumb"
@@ -36,6 +37,8 @@ import {
   rolePortalDefinitions,
   type RolePortalDefinition,
 } from "@/features/portal/role-capabilities"
+import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
+import { gsap } from "@/features/lib/gsap"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
 
 interface PortalNavigationProps {
@@ -157,6 +160,41 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useParams<{ moduleId?: string }>()
+  const reducedMotion = useReducedMotion()
+  const sidebarRef = useRef<HTMLElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // ── Sidebar nav links: stagger-in on first mount ─────────────────────────
+  useGSAP(
+    () => {
+      if (reducedMotion || !session) return
+      gsap.from(".portal-nav-link", {
+        opacity: 0,
+        x: -10,
+        duration: 0.35,
+        ease: "power2.out",
+        stagger: 0.06,
+        delay: 0.1,
+      })
+    },
+    { scope: sidebarRef, dependencies: [reducedMotion, Boolean(session)] },
+  )
+
+  // ── Portal content area: fade-in on route change ─────────────────────────
+  useGSAP(
+    () => {
+      if (reducedMotion || !session) return
+      gsap.fromTo(
+        ".portal-content",
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
+      )
+    },
+    {
+      scope: contentRef,
+      dependencies: [pathname, reducedMotion, Boolean(session)],
+    },
+  )
 
   if (!session) {
     return null
@@ -203,7 +241,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         Skip to portal content
       </a>
 
-      <aside className="portal-sidebar">
+      <aside className="portal-sidebar" ref={sidebarRef}>
         <div>
           <PortalIdentity />
           <Badge variant="secondary">GRC Connect</Badge>
@@ -236,7 +274,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="portal-main-column">
+      <div className="portal-main-column" ref={contentRef}>
         <header className="portal-topbar">
           <div className="portal-topbar__context">
             <Sheet>

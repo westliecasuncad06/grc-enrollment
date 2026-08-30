@@ -2,6 +2,8 @@
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { EnrollmentFunnelChart } from "@/features/components/portal/enrollment-funnel-chart"
+import { StuckEnrollmentStatusChart } from "@/features/components/portal/stuck-enrollment-status-chart"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
 import {
@@ -10,7 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { useEnrollmentSummaryQuery } from "@/features/hooks/use-dashboard"
+import {
+  useEnrollmentSummaryQuery,
+  useStuckEnrollmentsQuery,
+} from "@/features/hooks/use-dashboard"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import {
   formatAcademicTerm,
@@ -32,6 +37,13 @@ const funnelStageLabels: Record<string, string> = {
   enrolled: "Enrolled",
 }
 
+const funnelStageOrder = [
+  "submitted",
+  "registrar_decided",
+  "payment_confirmed",
+  "enrolled",
+]
+
 export function EnrollmentDashboardWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "dean"
@@ -41,14 +53,22 @@ export function EnrollmentDashboardWorkspace() {
     activeTerm?.id,
     authorized && termsQuery.isSuccess,
   )
+  const stuckQuery = useStuckEnrollmentsQuery(
+    activeTerm?.id,
+    authorized && termsQuery.isSuccess,
+  )
   const combinedQuery = {
-    isPending: termsQuery.isPending || summaryQuery.isPending,
-    isError: termsQuery.isError || summaryQuery.isError,
-    error: termsQuery.error ?? summaryQuery.error,
-    data: summaryQuery.data,
+    isPending: termsQuery.isPending || summaryQuery.isPending || stuckQuery.isPending,
+    isError: termsQuery.isError || summaryQuery.isError || stuckQuery.isError,
+    error: termsQuery.error ?? summaryQuery.error ?? stuckQuery.error,
+    data:
+      summaryQuery.data && stuckQuery.data
+        ? { summary: summaryQuery.data, stuck: stuckQuery.data }
+        : undefined,
     refetch: () => {
       void termsQuery.refetch()
       void summaryQuery.refetch()
+      void stuckQuery.refetch()
     },
   }
 
@@ -67,66 +87,64 @@ export function EnrollmentDashboardWorkspace() {
         query={combinedQuery}
         loadingLabel="Loading the enrollment dashboard…"
       >
-        {(summary) => (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Enrollment status</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {Object.entries(summary.status_counts).map(
-                  ([status, count]) => (
-                    <Badge key={status} variant="outline">
-                      {humanize(status)}: {count}
-                    </Badge>
-                  ),
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Approval funnel</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  How many submitted enrollments have reached each stage.
-                </p>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {Object.entries(summary.funnel_counts).map(([stage, count]) => (
-                  <Badge key={stage} variant="secondary">
-                    {funnelStageLabels[stage] ?? humanize(stage)}: {count}
-                  </Badge>
-                ))}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Section fill</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-2">
-                <p>
-                  {summary.published_sections} of {summary.total_sections}{" "}
-                  sections published
-                </p>
-                <p>
-                  {summary.total_enrolled_seats} of {summary.total_capacity}{" "}
-                  published seats filled
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Grade submission</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {Object.entries(summary.grade_status_counts).map(
-                  ([status, count]) => (
-                    <Badge key={status} variant="outline">
-                      {humanize(status)}: {count}
-                    </Badge>
-                  ),
-                )}
-              </CardContent>
-            </Card>
+        {({ summary, stuck }) => (
+          <div className="grid gap-4">
+            <EnrollmentFunnelChart
+              stages={funnelStageOrder.map((stage) => ({
+                key: stage,
+                label: funnelStageLabels[stage] ?? humanize(stage),
+                count: summary.funnel_counts[stage] ?? 0,
+              }))}
+            />
+            <StuckEnrollmentStatusChart
+              rows={stuck.data}
+              thresholdConfigured={stuck.meta.threshold_configured}
+            />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle level={2}>Enrollment status</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  {Object.entries(summary.status_counts).map(
+                    ([status, count]) => (
+                      <Badge key={status} variant="outline">
+                        {humanize(status)}: {count}
+                      </Badge>
+                    ),
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle level={2}>Section fill</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2">
+                  <p>
+                    {summary.published_sections} of {summary.total_sections}{" "}
+                    sections published
+                  </p>
+                  <p>
+                    {summary.total_enrolled_seats} of {summary.total_capacity}{" "}
+                    published seats filled
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle level={2}>Grade submission</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2">
+                  {Object.entries(summary.grade_status_counts).map(
+                    ([status, count]) => (
+                      <Badge key={status} variant="outline">
+                        {humanize(status)}: {count}
+                      </Badge>
+                    ),
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
       </AsyncBoundary>

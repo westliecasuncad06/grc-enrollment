@@ -1,5 +1,6 @@
 "use client"
 
+import { useGSAP } from "@gsap/react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   ArrowLeft,
@@ -26,6 +27,8 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
+import { gsap } from "@/features/lib/gsap"
 import { getSafeReturnPath } from "@/features/router/safe-return-path"
 
 const loginSchema = z.object({
@@ -82,6 +85,10 @@ export function LoginPage() {
   const errorSummaryRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const reducedMotion = useReducedMotion()
+  const panelRef = useRef<HTMLElement>(null)
+  const formPanelRef = useRef<HTMLElement>(null)
+
   const {
     formState: { errors, isSubmitting },
     handleSubmit,
@@ -96,6 +103,59 @@ export function LoginPage() {
       password: "",
     },
   })
+
+  // ── Institutional panel: brand + purpose + trust list stagger-reveal ────
+  useGSAP(
+    () => {
+      if (reducedMotion) return
+
+      const tl = gsap.timeline({ defaults: { ease: "power2.out" } })
+
+      tl.from(".login-brand", { opacity: 0, x: -20, duration: 0.55 })
+        .from(
+          ".login-purpose .eyebrow",
+          { opacity: 0, y: 12, duration: 0.4 },
+          "-=0.25",
+        )
+        .from(
+          ".login-purpose h2",
+          { opacity: 0, y: 22, duration: 0.55 },
+          "-=0.3",
+        )
+        .from(
+          ".login-purpose > p:last-child",
+          { opacity: 0, y: 14, duration: 0.45 },
+          "-=0.3",
+        )
+        .from(
+          ".login-trust-list li",
+          {
+            opacity: 0,
+            x: -16,
+            duration: 0.4,
+            stagger: 0.1,
+          },
+          "-=0.2",
+        )
+    },
+    { scope: panelRef, dependencies: [reducedMotion] },
+  )
+
+  // ── Form card: slide-up fade-in on mount ────────────────────────────────
+  useGSAP(
+    () => {
+      if (reducedMotion) return
+
+      gsap.from(".login-form-card", {
+        opacity: 0,
+        y: 28,
+        duration: 0.65,
+        ease: "power2.out",
+        delay: 0.15,
+      })
+    },
+    { scope: formPanelRef, dependencies: [reducedMotion] },
+  )
 
   const submitLogin = async (values: LoginValues) => {
     try {
@@ -135,6 +195,7 @@ export function LoginPage() {
       <section
         className="login-institutional-panel"
         aria-labelledby="login-purpose-title"
+        ref={panelRef}
       >
         <Link
           className="login-brand"
@@ -175,7 +236,11 @@ export function LoginPage() {
         </ul>
       </section>
 
-      <section className="login-form-panel" aria-labelledby="login-title">
+      <section
+        className="login-form-panel"
+        aria-labelledby="login-title"
+        ref={formPanelRef}
+      >
         <div className="login-form-card">
           <div>
             <p className="eyebrow">{copy.eyebrow}</p>

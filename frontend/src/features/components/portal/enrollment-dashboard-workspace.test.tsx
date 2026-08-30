@@ -5,6 +5,39 @@ import { axe } from "vitest-axe"
 import { EnrollmentDashboardWorkspace } from "@/features/components/portal/enrollment-dashboard-workspace"
 import { renderWithSession } from "@/tests/render-app"
 
+// recharts' ResponsiveContainer measures its container via
+// getBoundingClientRect on mount before its ResizeObserver ever fires; jsdom
+// reports every element as 0x0, so without this stub the funnel/stuck-status
+// charts render no series and their direct labels never appear. See
+// enrollment-year-over-year-chart.test.tsx for the same stub.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const realGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement): DOMRect {
+      if (this.classList.contains("recharts-responsive-container")) {
+        return {
+          width: 600,
+          height: 320,
+          top: 0,
+          left: 0,
+          bottom: 320,
+          right: 600,
+          x: 0,
+          y: 0,
+          toJSON: () => "",
+        }
+      }
+      return realGetBoundingClientRect.call(this)
+    },
+  )
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 const terms = {
   data: [
     {
@@ -45,12 +78,39 @@ const summary = {
   },
 }
 
+const stuckEnrollments = {
+  data: [
+    {
+      type: "stuck_enrollment",
+      enrollment_id: 1,
+      student_number: "2026-0001",
+      status: "pending_payment",
+      status_label: "Pending payment",
+      days_in_status: 12,
+      is_flagged: true,
+    },
+  ],
+  meta: { threshold_configured: true, threshold_days: 7, academic_term_id: 2 },
+}
+
 function url(input: RequestInfo | URL) {
   return typeof input === "string"
     ? input
     : input instanceof URL
       ? input.toString()
       : input.url
+}
+
+function mockDashboardFetch(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
+  fetchMock.mockImplementation((input) => {
+    const requestUrl = url(input)
+    const body = requestUrl.includes("academic-terms")
+      ? terms
+      : requestUrl.includes("stuck-enrollments")
+        ? stuckEnrollments
+        : summary
+    return Promise.resolve(new Response(JSON.stringify(body)))
+  })
 }
 
 describe("EnrollmentDashboardWorkspace", () => {
@@ -72,16 +132,8 @@ describe("EnrollmentDashboardWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("shows enrollment status, funnel, section fill, and grade counts", async () => {
-    fetchMock.mockImplementation((input) =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(
-            url(input).includes("academic-terms") ? terms : summary,
-          ),
-        ),
-      ),
-    )
+  it("shows enrollment status, funnel, section fill, grade counts, and stuck enrollments", async () => {
+    mockDashboardFetch(fetchMock)
     renderWithSession(<EnrollmentDashboardWorkspace />, {
       session: {
         userId: "5",
@@ -92,22 +144,16 @@ describe("EnrollmentDashboardWorkspace", () => {
     })
 
     expect(await screen.findByText(/Enrolled: 5/)).toBeInTheDocument()
-    expect(screen.getByText(/Submitted: 6/)).toBeInTheDocument()
+    expect(screen.getByText("Submitted: 6 (100%)")).toBeInTheDocument()
     expect(screen.getByText(/3 of 4/)).toBeInTheDocument()
     expect(screen.getByText(/40 of 120/)).toBeInTheDocument()
     expect(screen.getByText(/Locked: 2/)).toBeInTheDocument()
+    expect(screen.getAllByText("Pending payment").length).toBeGreaterThan(0)
+    expect(screen.getByText(/1 of 1 in progress right now/)).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {
-    fetchMock.mockImplementation((input) =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify(
-            url(input).includes("academic-terms") ? terms : summary,
-          ),
-        ),
-      ),
-    )
+    mockDashboardFetch(fetchMock)
     const { container } = renderWithSession(<EnrollmentDashboardWorkspace />, {
       session: {
         userId: "5",
