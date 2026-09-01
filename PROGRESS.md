@@ -1,5 +1,26 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-01 — Majorship Filter and Per-Majorship Curriculum Header Display in Schedule Workspaces
+
+0. **Majorship Filter & Multi-Program Curriculum Grouping**:
+   - **Context & Requirement**: In multi-program colleges like College of Education (COE: `BEED`, `BSED-ENG`, `BSED-FIL`, `BSED-SOCSCI`, `BSED-VAL`) and College of Business Administration & Economics (CBAE: `BSBA-FM`, `BSBA-MM`, `BSBA-HRM`, `BSENTREP`), block sections for different majors (e.g. `ELEM101`, `ENG101`) exist within the same college/year level, and each majorship has its own distinct curriculum versions (e.g., `BEED 2024-2029`, `BSED-ENG 2024-2029`).
+   - **Program & Block Code Mapping Utilities** (`frontend/src/features/lib/program-major-utils.ts`):
+     - Created pure utility module for resolving programs and matching curricula across section block codes (`ELEM`, `ENG`, `FIL`, `SOCSCI`, `VAL`, `TCP`, `FM`, `MM`, `HR`, `EN`, `IT`, `ACC`).
+     - Added functions: `getProgramBlockPrefix`, `extractBlockPrefix`, `getProgramShortLabel`, `findProgramForSection`, and `findCurriculumForSection`.
+   - **Program Chair Enrollment Workspace** (`frontend/src/features/components/portal/program-chair-enrollment-workspace.tsx`):
+     - Added **Majorship Filter Bar** directly below the `1st Year`, `2nd Year`, `3rd Year`, and `4th Year` tabs with pill filters (`All`, `BEED`, `BSED-ENG`, `BSED-FIL`, `BSED-SOCSCI`, etc.) showing real-time section counts per major.
+     - In **"All" View**: Grouped sections by majorship with a dedicated major header (Program Name + Section Count badge), an individual interactive **Curriculum Selector Bar** (`Curriculum for [Program Code] ([Year]): [Select] [Effectivity]`), and its generated block sections.
+     - In **Filtered Majorship View**: Displays the specific majorship's Curriculum Selector bar with effectivity badges above its block sections.
+     - **Curriculum Card Header Badge**: Added distinct curriculum badges on every block section card header (`CardHeader`) indicating the specific curriculum and effectivity school year (e.g. `Curriculum: BEED 2024-2029 (New curriculum)`).
+     - Upgraded `handleCurriculumChange` to support program-scoped section plan updates and real-time auto-population of schedule, faculty, and room assignments.
+   - **Schedule Workspace Parity** (`frontend/src/features/components/portal/schedule-workspace.tsx`):
+     - Added matching Majorship filter bar pills below the year level tabs.
+     - Added per-majorship curriculum info banners and grouped section layouts.
+     - Added curriculum badges on section cards in both table and tiles layout.
+   - **Validation & Quality Checks**:
+     - Verified TypeScript compilation (`npm run typecheck` / `tsc --noEmit`) with 0 errors.
+     - Verified code quality and linter rules with `npm run lint:fast` (0 errors).
+
 ## 2026-09-01 — Room Schedule Calendar Picker Integration in Program Chair Enrollment Workspace
 
 0. **Room-First Schedule Assignment Flow in Program Chair Workspace**:

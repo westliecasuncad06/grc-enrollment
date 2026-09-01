@@ -79,17 +79,27 @@ import { useFacultySubjectPreferencesQuery } from "@/features/hooks/use-faculty-
 import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
 import {
   useCurriculaQuery,
+  useProgramsQuery,
   useSectionsQuery,
   useSubjectsQuery,
   sectionsQueryKey,
 } from "@/features/hooks/use-reference-data"
 import { useSectionPlansQuery } from "@/features/hooks/use-section-plans"
 import {
+  findCurriculumForSection,
+  findProgramForSection,
+  getProgramShortLabel,
+} from "@/features/lib/program-major-utils"
+import {
   replaceSection,
   toSectionReplacement,
 } from "@/features/services/scheduling-service"
 import { isApiClientError } from "@/features/services/api-client"
-import type { Curriculum, Section } from "@/features/schemas/reference-data-schema"
+import type {
+  Curriculum,
+  Program,
+  Section,
+} from "@/features/schemas/reference-data-schema"
 
 const years = [1, 2, 3, 4] as const
 
@@ -109,19 +119,6 @@ function curriculumAgeLabel(
     : "Old curriculum"
 }
 
-const dayOptionsList = [
-  { value: "M", label: "Monday (M)" },
-  { value: "T", label: "Tuesday (T)" },
-  { value: "W", label: "Wednesday (W)" },
-  { value: "Th", label: "Thursday (Th)" },
-  { value: "F", label: "Friday (F)" },
-  { value: "Sat", label: "Saturday (Sat)" },
-  { value: "MW", label: "Mon / Wed (MW)" },
-  { value: "TTh", label: "Tue / Thu (TTh)" },
-  { value: "MWF", label: "Mon / Wed / Fri (MWF)" },
-  { value: "FSat", label: "Fri / Sat (FSat)" },
-] as const
-
 function sectionSaveErrorMessages(error: unknown): readonly string[] {
   if (isApiClientError(error)) {
     const fieldErrors = Object.values(error.fieldErrors ?? {}).flat()
@@ -132,6 +129,219 @@ function sectionSaveErrorMessages(error: unknown): readonly string[] {
   if (error instanceof Error) return [error.message]
 
   return ["The section assignment could not be saved. Try again."]
+}
+
+function ScheduleBlockCard({
+  blockCode,
+  sections,
+  year,
+  curriculum,
+  program,
+  view,
+  isCurrentTerm,
+  facultyMap,
+  subjectFor,
+  unitsFor,
+  facultyNameFor,
+  open,
+  setCalendarSection,
+  newestCurriculumIdByProgram,
+}: {
+  blockCode: string
+  sections: Section[]
+  year: number
+  curriculum?: Curriculum | null
+  program?: { id: number; code: string; name: string } | null
+  view: "table" | "tiles"
+  isCurrentTerm: boolean
+  facultyMap: Map<number, { id: number; name: string }>
+  subjectFor: (subjectId: number) => { code: string; title: string } | undefined
+  unitsFor: (subjectId: number) => number | string
+  facultyNameFor: (professorId: number | null) => string | undefined
+  open: (section: Section) => void
+  setCalendarSection: (val: {
+    blockCode: string
+    year: number
+    sections: Section[]
+  }) => void
+  newestCurriculumIdByProgram?: Map<number, number>
+}) {
+  return (
+    <Card key={blockCode}>
+      <CardHeader className="border-b bg-muted/30">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="grid gap-1">
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              <span>{blockCode}</span>
+              {sections.every(
+                (section) => section.capacity === sections[0].capacity,
+              ) ? (
+                <Badge variant="secondary">{sections[0].capacity} seats</Badge>
+              ) : (
+                <Badge variant="outline">Mixed seat counts</Badge>
+              )}
+              {curriculum && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-normal border-primary/30 text-primary bg-primary/5"
+                >
+                  Curriculum: {curriculum.name.replace(/\s*Curriculum\s*/i, " ")} (
+                  {curriculum.effective_school_year}
+                  {newestCurriculumIdByProgram
+                    ? ` · ${curriculumAgeLabel(curriculum, newestCurriculumIdByProgram)}`
+                    : ""}
+                  )
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span>
+                {yearLabel(year)} block section · {sections.length} subject
+                {sections.length === 1 ? "" : "s"}
+              </span>
+              {program && (
+                <span className="font-medium text-foreground/75">
+                  · {program.name}
+                </span>
+              )}
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() =>
+              setCalendarSection({
+                blockCode,
+                year,
+                sections,
+              })
+            }
+          >
+            <CalendarDays className="size-4" aria-hidden="true" />
+            View in calendar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {view === "table" ? (
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject code</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Units</TableHead>
+                  <TableHead>Sched ID</TableHead>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Professor</TableHead>
+                  <TableHead>Modality</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sections.map((section) => {
+                  const subject = subjectFor(section.subject_id)
+                  const locked = section.status === "published"
+                  return (
+                    <TableRow key={section.id}>
+                      <TableCell className="font-medium">
+                        {subject?.code ?? `#${section.subject_id}`}
+                      </TableCell>
+                      <TableCell>{subject?.title ?? "Subject"}</TableCell>
+                      <TableCell>{unitsFor(section.subject_id)}</TableCell>
+                      <TableCell>{section.id}</TableCell>
+                      <TableCell>{section.schedule_days ?? "—"}</TableCell>
+                      <TableCell>
+                        {section.starts_at_time && section.ends_at_time
+                          ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>{section.room ?? "—"}</TableCell>
+                      <TableCell>
+                        {section.professor_id ? (
+                          facultyMap.get(section.professor_id)?.name ??
+                          `Faculty #${section.professor_id}`
+                        ) : (
+                          <Badge variant="destructive">Unassigned</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {section.modality?.replace("_", " ").toUpperCase() ??
+                          "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => open(section)}
+                          disabled={locked || !isCurrentTerm}
+                        >
+                          <PencilLine data-icon="inline-start" />
+                          {locked
+                            ? "Published"
+                            : !isCurrentTerm
+                              ? "Archived"
+                              : "Edit"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+            {sections.map((section) => (
+              <Card key={section.id} size="sm">
+                <CardHeader>
+                  <CardTitle>
+                    {subjectFor(section.subject_id)?.code ??
+                      `Subject #${section.subject_id}`}
+                  </CardTitle>
+                  <CardDescription>
+                    {subjectFor(section.subject_id)?.title ?? "Subject"} ·{" "}
+                    {unitsFor(section.subject_id)} units
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    Sched ID {section.id} ·{" "}
+                    {section.schedule_days
+                      ? `${section.schedule_days} ${section.starts_at_time?.slice(0, 5)}–${section.ends_at_time?.slice(0, 5)}`
+                      : "No schedule"}{" "}
+                    · Room {section.room ?? "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Prof: {facultyNameFor(section.professor_id) ?? "Unassigned"}
+                  </p>
+                  <Badge variant="secondary">
+                    {section.modality
+                      ? section.modality.replace("_", " ").toUpperCase()
+                      : "Modality not set"}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={section.status === "published" || !isCurrentTerm}
+                    onClick={() => open(section)}
+                  >
+                    <CalendarClockIcon data-icon="inline-start" />
+                    Assign schedule
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export function ScheduleWorkspace() {
@@ -145,8 +355,10 @@ export function ScheduleWorkspace() {
   const facultyQuery = useFacultyDirectoryQuery()
   const preferencesQuery = useFacultySubjectPreferencesQuery()
   const curriculaQuery = useCurriculaQuery()
+  const programsQuery = useProgramsQuery()
   const plansQuery = useSectionPlansQuery(termId, term !== null)
   const [activeYear, setActiveYear] = useState("1")
+  const [selectedMajorId, setSelectedMajorId] = useState<"all" | number>("all")
   const [view, setView] = useState<"table" | "tiles">("table")
   const [editing, setEditing] = useState<Section | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -172,6 +384,27 @@ export function ScheduleWorkspace() {
       section.academic_term_id === termId &&
       !/^[1-4][A-Z]$/u.test(section.section_code),
   )
+
+  const availablePrograms = useMemo(() => {
+    const progs = programsQuery.data ?? []
+    if (progs.length > 0) return progs
+    const programMap = new Map<number, { id: number; code: string; name: string }>()
+    for (const cur of curriculaQuery.data ?? []) {
+      if (!programMap.has(cur.program_id)) {
+        programMap.set(cur.program_id, {
+          id: cur.program_id,
+          code: cur.name.replace(/\s*(Curriculum|\d{4}-\d{4}).*$/iu, "").trim() || `Program ${cur.program_id}`,
+          name: cur.name.replace(/\s*(Curriculum|\d{4}-\d{4}).*$/iu, "").trim() || cur.name,
+        })
+      }
+    }
+    return Array.from(programMap.values()).map((p) => ({
+      ...p,
+      type: "program" as const,
+      status: "active" as const,
+      status_label: "Active",
+    }))
+  }, [programsQuery.data, curriculaQuery.data])
 
   const newestCurriculumIdByProgram = useMemo(() => {
     const map = new Map<number, number>()
@@ -264,12 +497,16 @@ export function ScheduleWorkspace() {
     facultyQuery.data?.find((member) => member.id === professorId)?.name
 
   const groupedByYear = useMemo(() => {
+    const selectedYear = Number(activeYear)
     const groups = new Map<string, Section[]>()
     currentSections
       .filter(
-        (section) =>
-          (planYearById.get(section.section_plan_id ?? -1) ?? "") ===
-          activeYear,
+        (section) => {
+          const planYear = planYearById.get(section.section_plan_id ?? -1)
+          if (planYear) return planYear === activeYear
+          const match = /(\d)\d{2}$/u.exec(section.section_code)
+          return match ? Number(match[1]) === selectedYear : true
+        },
       )
       .sort(
         (left, right) =>
@@ -282,11 +519,66 @@ export function ScheduleWorkspace() {
           section,
         ]),
       )
-    return [...groups.entries()].map(([blockCode, sections]) => ({
-      blockCode,
-      sections,
-    }))
-  }, [currentSections, activeYear, planYearById])
+
+    return [...groups.entries()].map(([blockCode, sections]) => {
+      const program = findProgramForSection({
+        blockCode,
+        section: sections[0],
+        plans: plansQuery.data ?? [],
+        curricula: curriculaQuery.data ?? [],
+        programs: availablePrograms,
+      })
+      const curriculum = findCurriculumForSection({
+        blockCode,
+        section: sections[0],
+        plans: plansQuery.data ?? [],
+        curricula: curriculaQuery.data ?? [],
+        programs: availablePrograms,
+        yearLevel: selectedYear,
+      })
+      return {
+        blockCode,
+        sections,
+        program,
+        curriculum,
+      }
+    })
+  }, [
+    currentSections,
+    activeYear,
+    planYearById,
+    plansQuery.data,
+    curriculaQuery.data,
+    availablePrograms,
+  ])
+
+  const displayedGroups = useMemo(() => {
+    if (selectedMajorId === "all") return groupedByYear
+    return groupedByYear.filter((g) => g.program?.id === selectedMajorId)
+  }, [groupedByYear, selectedMajorId])
+
+  const groupsByProgram = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        program: Program | { id: number; code: string; name: string }
+        groups: typeof groupedByYear
+      }
+    >()
+
+    for (const block of groupedByYear) {
+      if (block.program) {
+        const existing = map.get(block.program.id) ?? {
+          program: block.program,
+          groups: [],
+        }
+        existing.groups.push(block)
+        map.set(block.program.id, existing)
+      }
+    }
+
+    return Array.from(map.values())
+  }, [groupedByYear])
 
   const calendarItems: SectionScheduleItem[] = useMemo(() => {
     if (!calendarSection) return []
@@ -545,225 +837,241 @@ export function ScheduleWorkspace() {
                     </ToggleGroup>
                   </div>
 
-                  {activeCurriculum && (
-                    <div className="my-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
-                      <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="font-medium text-foreground">
-                          Curriculum for {yearLabel(Number(activeYear))}:
-                        </span>
-                        <span className="font-semibold text-primary">
-                          {activeCurriculum.name}
-                        </span>
-                        <Badge variant="secondary" className="text-xs">
-                          {curriculumAgeLabel(activeCurriculum, newestCurriculumIdByProgram)}
+                  {/* Majorship Filter Bar below 1st..4th year tabs */}
+                  {availablePrograms.length > 1 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
+                        Majorship:
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={selectedMajorId === "all" ? "default" : "outline"}
+                        className="h-7 px-3 text-xs gap-1.5 rounded-full"
+                        onClick={() => setSelectedMajorId("all")}
+                      >
+                        <span>All</span>
+                        <Badge
+                          variant={selectedMajorId === "all" ? "secondary" : "outline"}
+                          className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center rounded-full"
+                        >
+                          {groupedByYear.length}
                         </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          SY {activeCurriculum.effective_school_year}
-                        </Badge>
-                      </div>
+                      </Button>
+                      {availablePrograms.map((prog) => {
+                        const count = groupedByYear.filter(
+                          (g) => g.program?.id === prog.id,
+                        ).length
+                        return (
+                          <Button
+                            key={prog.id}
+                            type="button"
+                            size="sm"
+                            variant={selectedMajorId === prog.id ? "default" : "outline"}
+                            className="h-7 px-3 text-xs gap-1.5 rounded-full"
+                            onClick={() => setSelectedMajorId(prog.id)}
+                          >
+                            <span>{getProgramShortLabel(prog)}</span>
+                            <Badge
+                              variant={selectedMajorId === prog.id ? "secondary" : "outline"}
+                              className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center rounded-full"
+                            >
+                              {count}
+                            </Badge>
+                          </Button>
+                        )
+                      })}
                     </div>
                   )}
 
-                  {years.map((year) => (
-                    <TabsContent key={year} value={String(year)} className="mt-3">
-                      {groupedByYear.length === 0 ? (
-                        <Alert>
-                          <AlertDescription>
-                            No generated schedule rows for {yearLabel(year)}.
-                          </AlertDescription>
-                        </Alert>
-                      ) : (
-                        <div className="grid gap-4">
-                          {groupedByYear.map(({ blockCode, sections }) => (
-                            <Card key={blockCode}>
-                              <CardHeader className="border-b bg-muted/30">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div>
-                                    <CardTitle className="flex flex-wrap items-center gap-2">
-                                      {blockCode}
-                                      {sections.every(
-                                        (section) =>
-                                          section.capacity === sections[0].capacity,
-                                      ) ? (
-                                        <Badge variant="secondary">
-                                          {sections[0].capacity} seats
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="outline">
-                                          Mixed seat counts
-                                        </Badge>
-                                      )}
-                                    </CardTitle>
-                                    <CardDescription>
-                                      {yearLabel(year)} block section ·{" "}
-                                      {sections.length} subject
-                                      {sections.length === 1 ? "" : "s"}
-                                    </CardDescription>
+                  {years.map((year) => {
+                    const currentYearNum = year
+                    return (
+                      <TabsContent key={year} value={String(year)} className="mt-3">
+                        {groupedByYear.length === 0 ? (
+                          <Alert>
+                            <AlertDescription>
+                              No generated schedule rows for {yearLabel(year)}.
+                            </AlertDescription>
+                          </Alert>
+                        ) : selectedMajorId !== "all" ? (
+                          <div className="grid gap-4">
+                            {(() => {
+                              const selectedProg = availablePrograms.find(
+                                (p) => p.id === selectedMajorId,
+                              )
+                              const cur =
+                                displayedGroups[0]?.curriculum ??
+                                (curriculaQuery.data ?? []).find(
+                                  (c) => c.program_id === selectedMajorId,
+                                ) ??
+                                activeCurriculum
+                              if (!selectedProg || !cur) return null
+                              return (
+                                <div className="my-1 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
+                                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                                    <span className="font-medium text-foreground">
+                                      Curriculum for {selectedProg.code} ({yearLabel(currentYearNum)}):
+                                    </span>
+                                    <span className="font-semibold text-primary">
+                                      {cur.name}
+                                    </span>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {curriculumAgeLabel(cur, newestCurriculumIdByProgram)}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-xs">
+                                      SY {cur.effective_school_year}
+                                    </Badge>
                                   </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-1.5"
-                                    onClick={() =>
-                                      setCalendarSection({
-                                        blockCode,
-                                        year,
-                                        sections,
-                                      })
-                                    }
-                                  >
-                                    <CalendarDays className="size-4" aria-hidden="true" />
-                                    View in calendar
-                                  </Button>
                                 </div>
-                              </CardHeader>
-                              <CardContent className="pt-0">
-                                {view === "table" ? (
-                                  <div className="overflow-x-auto rounded-lg border">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Subject code</TableHead>
-                                          <TableHead>Description</TableHead>
-                                          <TableHead>Units</TableHead>
-                                          <TableHead>Sched ID</TableHead>
-                                          <TableHead>Day</TableHead>
-                                          <TableHead>Time</TableHead>
-                                          <TableHead>Room</TableHead>
-                                          <TableHead>Professor</TableHead>
-                                          <TableHead>Modality</TableHead>
-                                          <TableHead className="text-right">
-                                            Action
-                                          </TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {sections.map((section) => {
-                                          const subject = subjectFor(
-                                            section.subject_id,
-                                          )
-                                          const locked =
-                                            section.status === "published"
-                                          return (
-                                            <TableRow key={section.id}>
-                                              <TableCell className="font-medium">
-                                                {subject?.code ??
-                                                  `#${section.subject_id}`}
-                                              </TableCell>
-                                              <TableCell>
-                                                {subject?.title ?? "Subject"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {unitsFor(section.subject_id)}
-                                              </TableCell>
-                                              <TableCell>{section.id}</TableCell>
-                                              <TableCell>
-                                                {section.schedule_days ?? "—"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {section.starts_at_time &&
-                                                section.ends_at_time
-                                                  ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
-                                                  : "—"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {section.room ?? "—"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {section.professor_id ? (
-                                                  (facultyMap.get(
-                                                    section.professor_id,
-                                                  )?.name ??
-                                                  `Faculty #${section.professor_id}`)
-                                                ) : (
-                                                  <Badge variant="destructive">
-                                                    Unassigned
-                                                  </Badge>
-                                                )}
-                                              </TableCell>
-                                              <TableCell>
-                                                {section.modality
-                                                  ?.replace("_", " ")
-                                                  .toUpperCase() ?? "—"}
-                                              </TableCell>
-                                              <TableCell className="text-right">
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  onClick={() => open(section)}
-                                                  disabled={
-                                                    locked || !isCurrentTerm
-                                                  }
-                                                >
-                                                  <PencilLine data-icon="inline-start" />
-                                                  {locked
-                                                    ? "Published"
-                                                    : !isCurrentTerm
-                                                      ? "Archived"
-                                                      : "Edit"}
-                                                </Button>
-                                              </TableCell>
-                                            </TableRow>
-                                          )
-                                        })}
-                                      </TableBody>
-                                    </Table>
+                              )
+                            })()}
+
+                            {displayedGroups.length === 0 ? (
+                              <Alert>
+                                <AlertDescription>
+                                  No generated block sections for this majorship in {yearLabel(year)}.
+                                </AlertDescription>
+                              </Alert>
+                            ) : (
+                              displayedGroups.map((block) => (
+                                <ScheduleBlockCard
+                                  key={block.blockCode}
+                                  blockCode={block.blockCode}
+                                  sections={block.sections}
+                                  year={currentYearNum}
+                                  curriculum={block.curriculum}
+                                  program={block.program}
+                                  view={view}
+                                  isCurrentTerm={isCurrentTerm}
+                                  facultyMap={facultyMap}
+                                  subjectFor={subjectFor}
+                                  unitsFor={unitsFor}
+                                  facultyNameFor={facultyNameFor}
+                                  open={open}
+                                  setCalendarSection={setCalendarSection}
+                                  newestCurriculumIdByProgram={newestCurriculumIdByProgram}
+                                />
+                              ))
+                            )}
+                          </div>
+                        ) : groupsByProgram.length > 1 ? (
+                          <div className="grid gap-6">
+                            {groupsByProgram.map(({ program, groups }) => {
+                              const progCurriculum =
+                                groups[0]?.curriculum ??
+                                (curriculaQuery.data ?? []).find(
+                                  (c) => c.program_id === program.id,
+                                ) ??
+                                activeCurriculum
+                              return (
+                                <div key={program.id} className="grid gap-3 pt-2">
+                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <h3 className="text-base font-semibold text-foreground">
+                                        {program.name} ({program.code})
+                                      </h3>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {groups.length} block section{groups.length === 1 ? "" : "s"}
+                                      </Badge>
+                                    </div>
                                   </div>
-                                ) : (
-                                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                                    {sections.map((section) => (
-                                      <Card key={section.id} size="sm">
-                                        <CardHeader>
-                                          <CardTitle>
-                                            {subjectFor(section.subject_id)
-                                              ?.code ??
-                                              `Subject #${section.subject_id}`}
-                                          </CardTitle>
-                                          <CardDescription>
-                                            {subjectFor(section.subject_id)
-                                              ?.title ?? "Subject"}{" "}
-                                            · {unitsFor(section.subject_id)} units
-                                          </CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="grid gap-3">
-                                          <p className="text-sm text-muted-foreground">
-                                            Sched ID {section.id} ·{" "}
-                                            {section.schedule_days
-                                              ? `${section.schedule_days} ${section.starts_at_time?.slice(0, 5)}–${section.ends_at_time?.slice(0, 5)}`
-                                              : "No schedule"}{" "}
-                                            · Room {section.room ?? "—"}
-                                          </p>
-                                          <p className="text-xs text-muted-foreground">
-                                            Prof: {facultyNameFor(section.professor_id) ?? "Unassigned"}
-                                          </p>
-                                          <Badge variant="secondary">
-                                            {section.modality
-                                              ? section.modality.replace("_", " ").toUpperCase()
-                                              : "Modality not set"}
-                                          </Badge>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={section.status === "published" || !isCurrentTerm}
-                                            onClick={() => open(section)}
-                                          >
-                                            <CalendarClockIcon data-icon="inline-start" />
-                                            Assign schedule
-                                          </Button>
-                                        </CardContent>
-                                      </Card>
+
+                                  {progCurriculum && (
+                                    <div className="my-1 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
+                                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                                        <span className="font-medium text-foreground">
+                                          Curriculum for {program.code} ({yearLabel(currentYearNum)}):
+                                        </span>
+                                        <span className="font-semibold text-primary">
+                                          {progCurriculum.name}
+                                        </span>
+                                        <Badge variant="secondary" className="text-xs">
+                                          {curriculumAgeLabel(
+                                            progCurriculum,
+                                            newestCurriculumIdByProgram,
+                                          )}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-xs">
+                                          SY {progCurriculum.effective_school_year}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="grid gap-4">
+                                    {groups.map((block) => (
+                                      <ScheduleBlockCard
+                                        key={block.blockCode}
+                                        blockCode={block.blockCode}
+                                        sections={block.sections}
+                                        year={currentYearNum}
+                                        curriculum={block.curriculum}
+                                        program={block.program}
+                                        view={view}
+                                        isCurrentTerm={isCurrentTerm}
+                                        facultyMap={facultyMap}
+                                        subjectFor={subjectFor}
+                                        unitsFor={unitsFor}
+                                        facultyNameFor={facultyNameFor}
+                                        open={open}
+                                        setCalendarSection={setCalendarSection}
+                                        newestCurriculumIdByProgram={newestCurriculumIdByProgram}
+                                      />
                                     ))}
                                   </div>
-                                )}
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      )}
-                    </TabsContent>
-                  ))}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="grid gap-4">
+                            {activeCurriculum && (
+                              <div className="my-1 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
+                                <div className="flex flex-wrap items-center gap-2 text-sm">
+                                  <span className="font-medium text-foreground">
+                                    Curriculum for {yearLabel(currentYearNum)}:
+                                  </span>
+                                  <span className="font-semibold text-primary">
+                                    {activeCurriculum.name}
+                                  </span>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {curriculumAgeLabel(
+                                      activeCurriculum,
+                                      newestCurriculumIdByProgram,
+                                    )}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    SY {activeCurriculum.effective_school_year}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+
+                            {displayedGroups.map((block) => (
+                              <ScheduleBlockCard
+                                key={block.blockCode}
+                                blockCode={block.blockCode}
+                                sections={block.sections}
+                                year={currentYearNum}
+                                curriculum={block.curriculum}
+                                program={block.program}
+                                view={view}
+                                isCurrentTerm={isCurrentTerm}
+                                facultyMap={facultyMap}
+                                subjectFor={subjectFor}
+                                unitsFor={unitsFor}
+                                facultyNameFor={facultyNameFor}
+                                open={open}
+                                setCalendarSection={setCalendarSection}
+                                newestCurriculumIdByProgram={newestCurriculumIdByProgram}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </TabsContent>
+                    )
+                  })}
                 </Tabs>
               </CardContent>
             </Card>
@@ -777,9 +1085,7 @@ export function ScheduleWorkspace() {
       >
         <DialogContent className="max-h-[100dvh] overflow-y-auto rounded-none sm:max-h-[90dvh] sm:max-w-3xl sm:rounded-xl">
           <DialogHeader>
-            <DialogTitle>
-              Schedule assignment · {editing?.section_code ?? "Block"}
-            </DialogTitle>
+            <DialogTitle>Edit section assignment</DialogTitle>
             <DialogDescription>
               {editing
                 ? `${subjectFor(editing.subject_id)?.code ?? "Subject"} · Sched ID ${editing.id}`
@@ -813,12 +1119,13 @@ export function ScheduleWorkspace() {
                     <Button
                       type="button"
                       variant="outline"
+                      aria-label="Pick room & schedule"
                       className="w-full justify-start gap-2"
                       onClick={() => setPickerOpen(true)}
                     >
                       <CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true" />
                       <span>
-                        Room <strong className="text-foreground">{draft.room}</strong> ·{" "}
+                        Room & schedule: <strong className="text-foreground">{draft.room}</strong> ·{" "}
                         <span className="text-primary font-semibold">{draft.schedule_days}</span>{" "}
                         {draft.starts_at_time}–{draft.ends_at_time} ({draft.modality.toUpperCase()})
                       </span>
@@ -827,26 +1134,15 @@ export function ScheduleWorkspace() {
                   </div>
 
                   <Field>
-                    <FieldLabel htmlFor="schedule-day">Day(s)</FieldLabel>
-                    <Select
+                    <FieldLabel htmlFor="schedule-day">Schedule days</FieldLabel>
+                    <Input
+                      id="schedule-day"
                       value={draft.schedule_days}
-                      onValueChange={(value) =>
-                        setDraft({ ...draft, schedule_days: value })
+                      onChange={(event) =>
+                        setDraft({ ...draft, schedule_days: event.target.value })
                       }
-                    >
-                      <SelectTrigger id="schedule-day" aria-label="Schedule day">
-                        <SelectValue placeholder="Select day" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {dayOptionsList.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                      placeholder="e.g. M, TTh, MWF"
+                    />
                   </Field>
 
                   <Field>
@@ -941,14 +1237,14 @@ export function ScheduleWorkspace() {
                     </div>
                     <Button type="button" size="sm" className="mt-1">
                       <CalendarDays className="size-4" aria-hidden="true" />
-                      Open Room Calendar
+                      Room & schedule on calendar
                     </Button>
                   </div>
                 </div>
               )}
 
               <Field className="sm:col-span-2">
-                <FieldLabel htmlFor="schedule-override">Override Reason (Optional)</FieldLabel>
+                <FieldLabel htmlFor="schedule-override">Override reason</FieldLabel>
                 <Input
                   id="schedule-override"
                   value={draft.override_reason}
@@ -986,7 +1282,7 @@ export function ScheduleWorkspace() {
               onClick={() => saveSection.mutate()}
               disabled={saveSection.isPending}
             >
-              {saveSection.isPending ? "Saving…" : "Save schedule"}
+              {saveSection.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

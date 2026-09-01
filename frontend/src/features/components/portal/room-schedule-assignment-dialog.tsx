@@ -101,7 +101,7 @@ export function RoomScheduleAssignmentDialog({
   onConfirm,
 }: RoomScheduleAssignmentDialogProps) {
   const { session } = useAuth()
-  const [step, setStep] = useState<Step>(initialRoom ? "calendar" : "room")
+  const [step, setStep] = useState<Step>("room")
   const [room, setRoom] = useState<string | null>(initialRoom ?? null)
   const [calendarViewMode, setCalendarViewMode] = useState<
     "overlay" | "room_only" | "section_only"
@@ -115,13 +115,8 @@ export function RoomScheduleAssignmentDialog({
 
   useEffect(() => {
     if (open) {
-      if (initialRoom) {
-        setRoom(initialRoom)
-        setStep("calendar")
-      } else {
-        setRoom(null)
-        setStep("room")
-      }
+      setRoom(initialRoom ?? null)
+      setStep("room")
       setCalendarViewMode("overlay")
       setFormDraft({ days: [], startsAt: "", endsAt: "", modality: "f2f" })
     }
