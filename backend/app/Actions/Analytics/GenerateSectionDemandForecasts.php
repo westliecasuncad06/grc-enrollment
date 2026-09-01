@@ -172,7 +172,11 @@ final class GenerateSectionDemandForecasts
                 }
             });
 
-            $firstResult = reset($forecastByCohort);
+            $hasRandomForest = collect($forecastByCohort)->contains(fn (array $res): bool => $res['strategy'] === 'random_forest');
+            $overallStrategy = $hasRandomForest
+                ? 'random_forest'
+                : ($serviceFallbackCount === count($forecastByCohort) ? 'service_unavailable_historical_baseline' : 'historical_baseline');
+
             $predictionRun->update([
                 'status' => PredictionRunStatus::Succeeded,
                 'model_version' => $serviceFallbackCount === count($forecastByCohort)
@@ -182,7 +186,7 @@ final class GenerateSectionDemandForecasts
                 'metrics' => [
                     'forecast_count' => count($forecastByCohort),
                     'observation_count' => $totalObservationCount,
-                    'strategy' => $firstResult['strategy'],
+                    'strategy' => $overallStrategy,
                     'service_fallback_count' => $serviceFallbackCount,
                 ],
                 'completed_at' => now(),
@@ -262,25 +266,12 @@ final class GenerateSectionDemandForecasts
         $rows = SectionDemandObservation::query()
             ->with('academicTerm')
             ->where('program_id', $cohort['program_id'])
-            ->where('curriculum_id', $cohort['curriculum_id'])
             ->where('year_level', $history->yearLevel)
             ->where('source', 'derived_from_enrollments')
             ->whereHas('academicTerm', fn ($terms) => $terms
                 ->where('semester', $history->semester)
                 ->where('school_year', '<=', $history->schoolYear))
             ->get();
-
-        if ($rows->isEmpty()) {
-            $rows = SectionDemandObservation::query()
-                ->with('academicTerm')
-                ->where('program_id', $cohort['program_id'])
-                ->where('year_level', $history->yearLevel)
-                ->where('source', 'derived_from_enrollments')
-                ->whereHas('academicTerm', fn ($terms) => $terms
-                    ->where('semester', $history->semester)
-                    ->where('school_year', '<=', $history->schoolYear))
-                ->get();
-        }
 
         return $rows
             ->sortBy(fn (SectionDemandObservation $row): string => $row->academicTerm->school_year)

@@ -16,6 +16,8 @@ export interface SectionGenerationRationaleGroup {
 function modelStrategyLabel(strategy: string | null | undefined): string {
   if (strategy === "random_forest") return "Random Forest model"
   if (strategy === "historical_baseline") return "historical baseline"
+  if (strategy === "service_unavailable_historical_baseline")
+    return "historical fallback"
   return "the demand forecast model"
 }
 

@@ -1,5 +1,20 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-01 — Random Forest ML Model Strategy Activation for Section Demand Forecasting
+
+0. **Program-Level Historical Observation Scoping for Random Forest Activation**:
+   - **Context & Issue**: Program Chairs observed that the Demand Forecast modal displayed "Historical baseline" with "Sparse data fallback" even though historical enrollment data (2017–2026) was seeded in the database.
+   - **Root Cause**: `GenerateSectionDemandForecasts::realHistoricalObservations` filtered historical observations strictly by `curriculum_id`. Because newly assigned `2024-2029` curricula only have 1–2 historical terms under that specific curriculum ID, `count($observations)` fell below `_MINIMUM_FOREST_OBSERVATIONS = 4`, causing the ML service to fall back to `historical_baseline`.
+   - **Fix**:
+     - Updated `realHistoricalObservations()` to query `SectionDemandObservation` by `program_id` and `year_level` across all historical terms. This feeds all 9 historical academic terms (2017–2026) to the ML service.
+     - Updated overall prediction run strategy calculation in `GenerateSectionDemandForecasts` to reflect `random_forest` when Random Forest regression is active across cohorts.
+     - Updated frontend formatting in `demand-forecast-dialog.tsx` and `section-generation-rationale.ts` for clean badge and subtext display.
+     - Re-executed generation runs for all colleges in Term 9; verified database `prediction_runs` now store `strategy: random_forest` and `observation_count: 135` (CBAE), `45` (CCS), `36` (COA), `153` (COE).
+   - **Validation & Quality Checks**:
+     - Backend tests: `GenerateSectionDemandForecastsTest` (6/6 passed), `DeriveSectionDemandObservationsTest` (8/8 passed), `ApplyDemandForecastToDraftTest` (5/5 passed), `SectionDemandPredictionClientTest` (1/1 passed).
+     - Python ML tests: `pytest` in `ml-service` (10/10 passed).
+     - Frontend checks: `DemandForecastDialog` Vitest (1/1 passed), `npm run typecheck` (0 errors), `npm run lint:fast` (0 errors).
+
 ## 2026-09-01 — Majorship Filter and Per-Majorship Curriculum Header Display in Schedule Workspaces
 
 0. **Majorship Filter & Multi-Program Curriculum Grouping**:

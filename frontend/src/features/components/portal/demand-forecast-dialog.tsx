@@ -169,7 +169,10 @@ export function DemandForecastDialog({
                 detail={
                   run.model.strategy === "historical_baseline"
                     ? "Sparse data fallback"
-                    : "Training input"
+                    : run.model.strategy ===
+                        "service_unavailable_historical_baseline"
+                      ? "Service fallback"
+                      : "Training input"
                 }
               />
               <ForecastStat
