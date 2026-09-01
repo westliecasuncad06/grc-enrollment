@@ -21,6 +21,10 @@ import { DemandForecastDialog } from "@/features/components/portal/demand-foreca
 import {
   SectionScheduleCalendarDialog,
 } from "@/features/components/portal/section-schedule-calendar-dialog"
+import {
+  RoomScheduleAssignmentDialog,
+  type RoomScheduleAssignmentResult,
+} from "@/features/components/portal/room-schedule-assignment-dialog"
 import type { SectionScheduleItem } from "@/features/components/portal/section-schedule-calendar"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
@@ -127,7 +131,18 @@ import {
 } from "@/features/services/schedule-generation-service"
 
 const years = [1, 2, 3, 4] as const
-const days = ["M", "T", "W", "Th", "F", "Sat"] as const
+const dayOptionsList = [
+  { value: "M", label: "Monday (M)" },
+  { value: "T", label: "Tuesday (T)" },
+  { value: "W", label: "Wednesday (W)" },
+  { value: "Th", label: "Thursday (Th)" },
+  { value: "F", label: "Friday (F)" },
+  { value: "Sat", label: "Saturday (Sat)" },
+  { value: "MW", label: "Monday / Wednesday (MW)" },
+  { value: "TTh", label: "Tuesday / Thursday (TTh)" },
+  { value: "MWF", label: "Mon / Wed / Fri (MWF)" },
+  { value: "FSat", label: "Friday / Saturday (FSat)" },
+] as const
 const modalityLabels = {
   hyflex_a: "Hyflex A",
   hyflex_b: "Hyflex B",
@@ -441,6 +456,7 @@ export function ProgramChairEnrollmentWorkspace({
     year: number
     sections: Section[]
   } | null>(null)
+  const [roomPickerOpen, setRoomPickerOpen] = useState(false)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState("")
@@ -882,6 +898,16 @@ export function ProgramChairEnrollmentWorkspace({
       capacity: section.capacity,
       override_reason: section.manual_override_reason ?? "",
     })
+  }
+  const applyPickedSchedule = (result: RoomScheduleAssignmentResult) => {
+    setScheduleDraft((current) => ({
+      ...current,
+      room: result.room,
+      day: result.scheduleDays,
+      start: result.startsAtTime,
+      end: result.endsAtTime,
+      modality: result.modality,
+    }))
   }
   const saveSchedule = async () => {
     if (!selected) return
@@ -1695,7 +1721,7 @@ export function ProgramChairEnrollmentWorkspace({
           }
         }}
       >
-        <DialogContent className="max-h-[100dvh] overflow-y-auto rounded-none sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-xl">
+        <DialogContent className="max-h-[100dvh] overflow-y-auto rounded-none sm:max-h-[90dvh] sm:max-w-3xl sm:rounded-xl">
           <DialogHeader>
             <DialogTitle>
               Schedule assignment · {selected?.section_code ?? "Block"}
@@ -1708,7 +1734,7 @@ export function ProgramChairEnrollmentWorkspace({
           </DialogHeader>
           {selected && (
             <FieldGroup className="grid gap-3 sm:grid-cols-2">
-              <Field>
+              <Field className="sm:col-span-2">
                 <FieldLabel htmlFor="schedule-professor">Professor</FieldLabel>
                 <SearchableCombobox
                   id="schedule-professor"
@@ -1725,101 +1751,151 @@ export function ProgramChairEnrollmentWorkspace({
                   emptyMessage="No matching professor."
                 />
               </Field>
-              <Field>
-                <FieldLabel htmlFor="schedule-day">Day</FieldLabel>
-                <Select
-                  value={scheduleDraft.day}
-                  onValueChange={(value) =>
-                    setScheduleDraft({ ...scheduleDraft, day: value })
-                  }
-                >
-                  <SelectTrigger id="schedule-day">
-                    <SelectValue placeholder="Select day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {days.map((day) => (
-                        <SelectItem key={day} value={day}>
-                          {day}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field data-invalid={hasInvalidTimeOrder}>
-                <FieldLabel htmlFor="schedule-start">Start time</FieldLabel>
-                <Input
-                  id="schedule-start"
-                  type="time"
-                  value={scheduleDraft.start}
-                  aria-invalid={hasInvalidTimeOrder}
-                  onChange={(event) =>
-                    setScheduleDraft({
-                      ...scheduleDraft,
-                      start: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field data-invalid={hasInvalidTimeOrder}>
-                <FieldLabel htmlFor="schedule-end">End time</FieldLabel>
-                <Input
-                  id="schedule-end"
-                  type="time"
-                  value={scheduleDraft.end}
-                  aria-invalid={hasInvalidTimeOrder}
-                  onChange={(event) =>
-                    setScheduleDraft({
-                      ...scheduleDraft,
-                      end: event.target.value,
-                    })
-                  }
-                />
-                {hasInvalidTimeOrder && (
-                  <FieldError>End time must be after start time.</FieldError>
-                )}
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="schedule-room">Room</FieldLabel>
-                <SearchableCombobox
-                  id="schedule-room"
-                  label="Room"
-                  options={roomOptions.map((room) => ({
-                    value: room.name,
-                    label: room.name,
-                  }))}
-                  value={scheduleDraft.room}
-                  onValueChange={(value) =>
-                    setScheduleDraft({ ...scheduleDraft, room: value })
-                  }
-                  placeholder="Search room"
-                  emptyMessage="No matching room."
-                  disabled={roomsQuery.isPending && roomOptions.length === 0}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="schedule-modality">Modality</FieldLabel>
-                <Select
-                  value={scheduleDraft.modality}
-                  onValueChange={(value) =>
-                    setScheduleDraft({ ...scheduleDraft, modality: value })
-                  }
-                >
-                  <SelectTrigger id="schedule-modality">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {Object.entries(modalityLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
+
+              {scheduleDraft.room ? (
+                <>
+                  <div className="sm:col-span-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setRoomPickerOpen(true)}
+                      className="w-full"
+                    >
+                      <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                      Change room & schedule on the room calendar
+                    </Button>
+                  </div>
+                  <Field>
+                    <FieldLabel htmlFor="schedule-day">Day</FieldLabel>
+                    <Select
+                      value={scheduleDraft.day}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setScheduleError("")
+                        }
+                      }}
+                      onValueChange={(value) =>
+                        setScheduleDraft({ ...scheduleDraft, day: value })
+                      }
+                    >
+                      <SelectTrigger id="schedule-day">
+                        <SelectValue placeholder="Select day" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {dayOptionsList.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                          {scheduleDraft.day &&
+                            !dayOptionsList.some(
+                              (opt) =>
+                                opt.value.toLowerCase() ===
+                                scheduleDraft.day.toLowerCase(),
+                            ) && (
+                              <SelectItem
+                                key={scheduleDraft.day}
+                                value={scheduleDraft.day}
+                              >
+                                {scheduleDraft.day}
+                              </SelectItem>
+                            )}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field data-invalid={hasInvalidTimeOrder}>
+                    <FieldLabel htmlFor="schedule-start">Start time</FieldLabel>
+                    <Input
+                      id="schedule-start"
+                      type="time"
+                      value={scheduleDraft.start}
+                      aria-invalid={hasInvalidTimeOrder}
+                      onChange={(event) =>
+                        setScheduleDraft({
+                          ...scheduleDraft,
+                          start: event.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field data-invalid={hasInvalidTimeOrder}>
+                    <FieldLabel htmlFor="schedule-end">End time</FieldLabel>
+                    <Input
+                      id="schedule-end"
+                      type="time"
+                      value={scheduleDraft.end}
+                      aria-invalid={hasInvalidTimeOrder}
+                      onChange={(event) =>
+                        setScheduleDraft({
+                          ...scheduleDraft,
+                          end: event.target.value,
+                        })
+                      }
+                    />
+                    {hasInvalidTimeOrder && (
+                      <FieldError>End time must be after start time.</FieldError>
+                    )}
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="schedule-room">Room</FieldLabel>
+                    <SearchableCombobox
+                      id="schedule-room"
+                      label="Room"
+                      options={roomOptions.map((room) => ({
+                        value: room.name,
+                        label: room.name,
+                      }))}
+                      value={scheduleDraft.room}
+                      onValueChange={(value) =>
+                        setScheduleDraft({ ...scheduleDraft, room: value })
+                      }
+                      placeholder="Search room"
+                      emptyMessage="No matching room."
+                      disabled={roomsQuery.isPending && roomOptions.length === 0}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="schedule-modality">Modality</FieldLabel>
+                    <Select
+                      value={scheduleDraft.modality}
+                      onValueChange={(value) =>
+                        setScheduleDraft({ ...scheduleDraft, modality: value })
+                      }
+                    >
+                      <SelectTrigger id="schedule-modality">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {Object.entries(modalityLabels).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </>
+              ) : (
+                <div className="sm:col-span-2 rounded-xl border border-dashed border-border bg-muted/20 p-5 text-center">
+                  <p className="text-sm font-medium mb-1">Room & Schedule</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Select a room to view its weekly calendar and assign a conflict-free schedule slot.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => setRoomPickerOpen(true)}
+                    className="w-full sm:w-auto"
+                  >
+                    <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                    Select a room
+                  </Button>
+                </div>
+              )}
+
               <Field
                 data-invalid={scheduleDraft.capacity < selected.enrolled_count}
               >
@@ -1941,6 +2017,15 @@ export function ProgramChairEnrollmentWorkspace({
             openEdit(targetSection)
           }
         }}
+      />
+
+      <RoomScheduleAssignmentDialog
+        open={roomPickerOpen}
+        onOpenChange={setRoomPickerOpen}
+        termId={termId}
+        initialRoom={scheduleDraft.room || null}
+        excludeSectionId={selected?.id}
+        onConfirm={applyPickedSchedule}
       />
     </WorkspacePage>
   )

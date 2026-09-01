@@ -90,9 +90,9 @@ export function RoomScheduleCalendar({
   return (
     <div className="overflow-x-auto rounded-lg border">
       <div
-        className="grid min-w-[58rem]"
+        className="grid w-full min-w-[46rem]"
         style={{
-          gridTemplateColumns: "4.5rem repeat(6, minmax(9.5rem, 1fr))",
+          gridTemplateColumns: "4.25rem repeat(6, minmax(7rem, 1fr))",
           gridTemplateRows: `auto repeat(${SLOT_COUNT}, 2.5rem)`,
         }}
       >

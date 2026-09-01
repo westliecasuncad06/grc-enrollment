@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, DoorOpen } from "lucide-react"
 
 import { useAuth } from "@/features/auth/use-auth"
@@ -69,6 +69,7 @@ interface RoomScheduleAssignmentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   termId: number
+  initialRoom?: string | null
   /** Excluded from the room's occupancy so editing a section's own current booking never reads as a self-conflict. */
   excludeSectionId?: number
   onConfirm: (result: RoomScheduleAssignmentResult) => void
@@ -86,18 +87,32 @@ export function RoomScheduleAssignmentDialog({
   open,
   onOpenChange,
   termId,
+  initialRoom,
   excludeSectionId,
   onConfirm,
 }: RoomScheduleAssignmentDialogProps) {
   const { session } = useAuth()
-  const [step, setStep] = useState<Step>("room")
-  const [room, setRoom] = useState<string | null>(null)
+  const [step, setStep] = useState<Step>(initialRoom ? "calendar" : "room")
+  const [room, setRoom] = useState<string | null>(initialRoom ?? null)
   const [formDraft, setFormDraft] = useState({
     days: [] as string[],
     startsAt: "",
     endsAt: "",
     modality: "f2f" as "f2f" | "hyflex_a" | "hyflex_b",
   })
+
+  useEffect(() => {
+    if (open) {
+      if (initialRoom) {
+        setRoom(initialRoom)
+        setStep("calendar")
+      } else {
+        setRoom(null)
+        setStep("room")
+      }
+      setFormDraft({ days: [], startsAt: "", endsAt: "", modality: "f2f" })
+    }
+  }, [open, initialRoom])
 
   const roomsQuery = useRoomOptionsQuery()
   const roomOptions = roomsQuery.data ?? getLocalRoomOptions(session?.college)
@@ -118,8 +133,6 @@ export function RoomScheduleAssignmentDialog({
   )
 
   const reset = () => {
-    setStep("room")
-    setRoom(null)
     setFormDraft({ days: [], startsAt: "", endsAt: "", modality: "f2f" })
   }
   const close = () => {
@@ -169,7 +182,7 @@ export function RoomScheduleAssignmentDialog({
         if (!next) close()
       }}
     >
-      <DialogContent className="max-h-[90dvh] max-w-4xl overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="max-h-[92dvh] w-[96vw] max-w-7xl overflow-y-auto sm:max-w-7xl">
         <DialogHeader>
           <DialogTitle>
             {step === "room" && "Pick a room"}

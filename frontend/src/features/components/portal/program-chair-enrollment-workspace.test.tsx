@@ -748,6 +748,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     )
     expect(await screen.findByRole("dialog")).toHaveTextContent("IT101")
     expect(screen.getByLabelText("Professor")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Select a room|Change room & schedule/ }),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Google Classroom/i)).not.toBeInTheDocument()
   })
 

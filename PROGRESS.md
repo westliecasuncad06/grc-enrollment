@@ -1,5 +1,20 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-01 — Room Schedule Calendar Picker Integration in Program Chair Enrollment Workspace
+
+0. **Room-First Schedule Assignment Flow in Program Chair Workspace**:
+   - Refined `Schedule assignment` dialog in `ProgramChairEnrollmentWorkspace` (`frontend/src/features/components/portal/program-chair-enrollment-workspace.tsx`):
+     - **Initial Unscheduled State**: When a section has no assigned room/schedule, the manual inputs for Day, Start time, End time, Room, and Modality are completely hidden. Instead, it displays the optional Professor combobox and a prominent `"Select a room"` action card.
+     - **Room & Schedule Modal Flow**: Clicking `"Select a room"` opens `RoomScheduleAssignmentDialog`:
+       1. **Room Selection Pop-up**: Choose a room from the college catalog / search bar.
+       2. **Room Weekly Calendar Preview**: Renders the room's weekly timetable with all existing bookings to prevent double booking.
+       3. **Time Slot Selection**: Clicking an open slot lets the user confirm the days, start time, end time, and modality, and click `"Save schedule"`.
+     - **Populated Schedule State**: Once saved from the room calendar, it returns to the Schedule Assignment dialog with the schedule details (Day, Start time, End time, Room, Modality) fully populated and visible (matching user screenshots), ready for optional faculty selection, seat adjustment, override reason, and final `"Save schedule"`.
+     - **Day Mapping & Selection Fix**: Added comprehensive single and multi-day labels (`dayOptionsList`: `M`, `T`, `W`, `Th`, `F`, `Sat`, `MW`, `TTh`, `MWF`, `FSat`) with fallback matching so assigned days from the calendar always reflect accurately in the Day dropdown. Added `useEffect` in `RoomScheduleAssignmentDialog` to sync room and day state on open.
+     - **Wide Modal & No Horizontal Scrolling**: Expanded `RoomScheduleAssignmentDialog` to `max-w-7xl` (`w-[96vw]`), expanded the Schedule Assignment modal to `sm:max-w-3xl`, and optimized the calendar grid columns (`minmax(7rem, 1fr)`) so Monday to Saturday fit comfortably on desktop without requiring horizontal scrollbars.
+     - **JSX Tag Alignment**: Resolved missing `<DialogTitle>` opening tag and confirmed clean production build.
+   - Updated `program-chair-enrollment-workspace.test.tsx` and verified with fast lint (`npm run lint:fast`) and Next.js production build (`npm run build`).
+
 ## 2026-09-01 — Section & Subject Schedule Weekly Calendar View (Program Chair & Student Portal)
 
 0. **Weekly Calendar View for Section & Subject Schedules**:
