@@ -15,6 +15,8 @@ export const roomOccupancyEntrySchema = z
     college: z.string().nullable(),
     is_own_college: z.boolean(),
     is_lecture_component: z.boolean(),
+    is_section_overlay: z.boolean().optional(),
+    room: z.string().nullable().optional(),
   })
   .strict()
 

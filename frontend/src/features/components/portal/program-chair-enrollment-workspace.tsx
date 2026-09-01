@@ -626,6 +626,46 @@ export function ProgramChairEnrollmentWorkspace({
     subjectsQuery.data,
     directoryQuery.data,
   ])
+  const currentSectionScheduledItems: SectionScheduleItem[] = useMemo(() => {
+    if (!selected) return []
+    const allSections = sectionsQuery.data ?? []
+    return allSections
+      .filter(
+        (s) =>
+          s.section_code === selected.section_code &&
+          s.academic_term_id === selected.academic_term_id &&
+          s.id !== selected.id &&
+          s.schedule_days &&
+          s.starts_at_time &&
+          s.ends_at_time,
+      )
+      .map((s) => {
+        const subj = subjectFor(s.subject_id)
+        const u = unitsFor(s.subject_id)
+        return {
+          id: s.id,
+          subject_code: subj?.code ?? `Subject #${s.subject_id}`,
+          subject_title: subj?.title ?? "Subject",
+          units: typeof u === "number" ? u : Number(u) || null,
+          section_code: s.section_code,
+          room: s.room,
+          professor_name: facultyNameFor(s.professor_id) ?? null,
+          schedule_days: s.schedule_days,
+          starts_at_time: s.starts_at_time,
+          ends_at_time: s.ends_at_time,
+          modality: s.modality ?? null,
+          capacity: s.capacity,
+          enrolled_count: s.enrolled_count,
+        }
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selected,
+    sectionsQuery.data,
+    subjects,
+    subjectsQuery.data,
+    directoryQuery.data,
+  ])
   const capableIds = selected
     ? (preferencesQuery.data ?? [])
         .filter(
@@ -938,10 +978,13 @@ export function ProgramChairEnrollmentWorkspace({
     try {
       await replaceSection(selected.id, input)
       setEditingSection(null)
-      void queryClient.invalidateQueries({
-        queryKey: sectionsQueryKey(session?.userId ?? null),
-        exact: true,
-      })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sections"] }),
+        queryClient.invalidateQueries({ queryKey: ["room-occupancy"] }),
+        queryClient.invalidateQueries({ queryKey: ["section-plans"] }),
+        queryClient.invalidateQueries({ queryKey: ["rooms"] }),
+      ])
+      await sectionsQuery.refetch()
     } catch (caughtError) {
       setScheduleError(scheduleErrorMessage(caughtError))
     }
@@ -2025,6 +2068,8 @@ export function ProgramChairEnrollmentWorkspace({
         termId={termId}
         initialRoom={scheduleDraft.room || null}
         excludeSectionId={selected?.id}
+        sectionCode={selected?.section_code}
+        sectionScheduleItems={currentSectionScheduledItems}
         onConfirm={applyPickedSchedule}
       />
     </WorkspacePage>

@@ -476,46 +476,46 @@ function ScheduleBlockCell({
     compact ? "text-[0.68rem]" : "text-[0.72rem]",
     isConflicting
       ? "border-destructive/60 bg-destructive/15 text-destructive shadow-xs"
-      : "border-primary/30 bg-primary/10 text-foreground hover:bg-primary/15 shadow-xs",
+      : "border-emerald-300/90 bg-emerald-50 text-emerald-950 hover:bg-emerald-100/90 shadow-xs dark:border-emerald-700/80 dark:bg-emerald-950/60 dark:text-emerald-100 dark:hover:bg-emerald-950/80",
     clickable &&
-      "cursor-pointer hover:border-primary/60 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
+      "cursor-pointer hover:border-emerald-500/80 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 active:scale-[0.99]",
   )
 
   const content = (
     <div className="flex h-full flex-col justify-between gap-0.5 overflow-hidden">
       <div>
-        <p className="flex items-center gap-1 font-bold text-foreground truncate">
+        <p className="flex items-center gap-1 font-bold text-emerald-950 dark:text-emerald-50 truncate">
           {isConflicting && (
             <TriangleAlert className="size-3 shrink-0 text-destructive" aria-hidden="true" />
           )}
           <span className="truncate">{entry.subject_code}</span>
           {entry.room && (
-            <span className="ml-auto inline-flex items-center rounded bg-background/80 px-1 py-0.5 text-[0.62rem] font-semibold text-muted-foreground border shrink-0">
+            <span className="ml-auto inline-flex items-center rounded bg-emerald-100/90 dark:bg-emerald-900/80 px-1 py-0.5 text-[0.62rem] font-semibold text-emerald-900 dark:text-emerald-200 border border-emerald-300/80 dark:border-emerald-700 shrink-0">
               {entry.room}
             </span>
           )}
         </p>
         {entry.subject_title && !compact && (
-          <p className="truncate text-xs text-muted-foreground/90 font-medium">
+          <p className="truncate text-xs text-emerald-800/90 dark:text-emerald-200/90 font-medium">
             {entry.subject_title}
           </p>
         )}
       </div>
 
-      <div className="space-y-0.5 text-[0.65rem] text-muted-foreground mt-auto">
+      <div className="space-y-0.5 text-[0.65rem] text-emerald-900/80 dark:text-emerald-300/80 mt-auto">
         <p className="truncate flex items-center gap-1">
-          <User className="size-2.5 shrink-0 opacity-70" aria-hidden="true" />
+          <User className="size-2.5 shrink-0 opacity-75" aria-hidden="true" />
           <span className="truncate">{entry.professor_name ?? "Unassigned"}</span>
         </p>
         {timeRange && (
           <p className="truncate flex items-center gap-1 font-mono text-[0.62rem]">
-            <Clock className="size-2.5 shrink-0 opacity-70" aria-hidden="true" />
+            <Clock className="size-2.5 shrink-0 opacity-75" aria-hidden="true" />
             <span>{timeRange}</span>
           </p>
         )}
         {entry.modality && (
           <p className="truncate">
-            <span className="inline-block rounded bg-muted px-1 py-0.2 text-[0.6rem]">
+            <span className="inline-block rounded bg-emerald-200/60 dark:bg-emerald-900/60 px-1 py-0.2 text-[0.6rem] font-medium text-emerald-900 dark:text-emerald-200">
               {modalityLabel[entry.modality] ?? entry.modality}
             </span>
           </p>
@@ -523,7 +523,7 @@ function ScheduleBlockCell({
       </div>
 
       {block.isClipped && (
-        <p className="truncate text-[0.6rem] italic text-muted-foreground">
+        <p className="truncate text-[0.6rem] italic text-emerald-700/80 dark:text-emerald-300/80">
           Outside 7:30 AM–9:00 PM
         </p>
       )}

@@ -11,6 +11,13 @@ export interface ScheduleSlot {
  * numbering (1 = Monday … 7 = Sunday).
  */
 const DAY_TOKENS: readonly (readonly [string, number])[] = [
+  ["MON", 1],
+  ["TUE", 2],
+  ["WED", 3],
+  ["THU", 4],
+  ["FRI", 5],
+  ["SAT", 6],
+  ["SUN", 7],
   ["Th", 4],
   ["Sat", 6],
   ["Sun", 7],
@@ -18,11 +25,12 @@ const DAY_TOKENS: readonly (readonly [string, number])[] = [
   ["T", 2],
   ["W", 3],
   ["F", 5],
+  ["S", 6],
 ]
 
 /**
  * Segments delimited the same way the backend's `CanonicalScheduleDays`
- * joins its output (space, comma, slash, semicolon, ampersand, pipe) are
+ * joins its output (space, comma, slash, semicolon, ampersand, pipe, hyphen) are
  * parsed independently. Without this split, the API's real "MON/TUE/WED"
  * response would match only "M" from the first segment, then abort on the
  * un-tokenizable "ON/TUE/WED" left over — silently dropping every day after
@@ -36,7 +44,7 @@ export function parseScheduleDays(scheduleDays: string | null): number[] {
 
   const days: number[] = []
   const segments = scheduleDays
-    .split(/[\s,/;&|]+/)
+    .split(/[\s,/;&|–-]+/)
     .filter((segment) => segment !== "")
 
   for (const segment of segments) {

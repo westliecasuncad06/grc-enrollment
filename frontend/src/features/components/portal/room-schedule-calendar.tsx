@@ -281,9 +281,12 @@ function RoomCalendarBlockCell({
     entry.starts_at_time && entry.ends_at_time
       ? formatTimeRange12(entry.starts_at_time, entry.ends_at_time)
       : ""
+  const isSectionOverlay = Boolean(entry.is_section_overlay)
   const label = [
+    isSectionOverlay ? `[Section ${entry.section_code} Schedule]` : null,
     entry.subject_code,
     entry.section_code,
+    entry.room ? `Room ${entry.room}` : null,
     entry.professor_name ?? "Unassigned professor",
     dayLabels[block.day],
     timeRange,
@@ -294,7 +297,7 @@ function RoomCalendarBlockCell({
   ]
     .filter(Boolean)
     .join(", ")
-  const clickable = entry.is_own_college && onSelectBooking !== undefined
+  const clickable = !isSectionOverlay && entry.is_own_college && onSelectBooking !== undefined
   const style = {
     gridColumn: dayIndex + 2,
     gridRow: `${block.startSlot + 2} / span ${block.spanSlots}`,
@@ -302,34 +305,48 @@ function RoomCalendarBlockCell({
     width: `calc(${laneWidthPercent}% - 2px)`,
   }
   const className = cn(
-    "m-px overflow-hidden rounded-md border p-1.5 text-left leading-tight",
+    "m-px overflow-hidden rounded-md border p-1.5 text-left leading-tight transition-all",
     compact ? "text-[0.68rem]" : "text-[0.72rem]",
     isConflicting
       ? "border-destructive/60 bg-destructive/10 text-destructive"
-      : entry.is_own_college
-        ? "border-primary/40 bg-primary/10 text-foreground"
-        : "border-dashed border-muted-foreground/50 bg-muted/60 text-muted-foreground",
+      : isSectionOverlay
+        ? "border-emerald-400/80 bg-emerald-100 text-emerald-950 shadow-xs ring-1 ring-emerald-400/50 dark:border-emerald-700 dark:bg-emerald-950/75 dark:text-emerald-100"
+        : entry.is_own_college
+          ? "border-primary/40 bg-primary/10 text-foreground"
+          : "border-dashed border-muted-foreground/50 bg-muted/60 text-muted-foreground",
     clickable && "cursor-pointer hover:brightness-95 focus-visible:outline-none",
   )
   const content = (
     <>
       <p className="flex items-center gap-1 truncate font-semibold">
         {isConflicting && <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />}
+        {isSectionOverlay && (
+          <span className="size-2 shrink-0 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+        )}
         {entry.subject_code}
       </p>
       {compact ? (
         <>
-          {timeRange && <p className="truncate">{timeRange}</p>}
-          {!entry.is_own_college && entry.college && (
-            <p className="truncate font-semibold uppercase">{entry.college}</p>
+          {timeRange && <p className="truncate font-medium">{timeRange}</p>}
+          {isSectionOverlay ? (
+            <p className="truncate font-medium text-emerald-800 dark:text-emerald-300">
+              {entry.room ? `Room ${entry.room}` : "Room not set"}
+            </p>
+          ) : (
+            !entry.is_own_college && entry.college && (
+              <p className="truncate font-semibold uppercase">{entry.college}</p>
+            )
           )}
         </>
       ) : (
         <>
-          <p className="truncate">{entry.section_code}</p>
+          <p className="truncate font-medium">
+            {entry.section_code}
+            {isSectionOverlay && entry.room ? ` · Room ${entry.room}` : ""}
+          </p>
           <p className="truncate">{entry.professor_name ?? "Unassigned"}</p>
           {timeRange && <p className="truncate">{timeRange}</p>}
-          {!entry.is_own_college && entry.college && (
+          {!isSectionOverlay && !entry.is_own_college && entry.college && (
             <p className="truncate font-semibold uppercase">{entry.college}</p>
           )}
         </>

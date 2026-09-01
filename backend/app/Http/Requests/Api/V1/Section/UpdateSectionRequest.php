@@ -53,16 +53,25 @@ final class UpdateSectionRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if ($this->hasProfessorConflict()) {
+            if ($intraConflict = $this->hasIntraSectionConflict()) {
+                $subjectCode = $intraConflict->subject?->code ?? 'another subject';
                 $validator->errors()->add(
                     'schedule_days',
-                    'This professor is already assigned to another section that conflicts with this schedule.',
+                    "Schedule conflicts with {$subjectCode} in block section {$this->input('section_code')} ({$intraConflict->schedule_days} {$intraConflict->starts_at_time}-{$intraConflict->ends_at_time}).",
                 );
             }
-            if ($this->hasRoomConflict()) {
+            if ($profConflict = $this->hasProfessorConflict()) {
+                $subjectCode = $profConflict->subject?->code ?? 'another class';
+                $validator->errors()->add(
+                    'professor_id',
+                    "This professor is already assigned to {$profConflict->section_code} ({$subjectCode}) on {$profConflict->schedule_days} {$profConflict->starts_at_time}-{$profConflict->ends_at_time}.",
+                );
+            }
+            if ($roomConflict = $this->hasRoomConflict()) {
+                $subjectCode = $roomConflict->subject?->code ?? 'another class';
                 $validator->errors()->add(
                     'room',
-                    'This room is already physically occupied by another section at the proposed time.',
+                    "Room {$this->input('room')} is already occupied by {$roomConflict->section_code} ({$subjectCode}) on {$roomConflict->schedule_days} {$roomConflict->starts_at_time}-{$roomConflict->ends_at_time}.",
                 );
             }
             /** @var ?Section $section */
@@ -88,62 +97,119 @@ final class UpdateSectionRequest extends FormRequest
         return false;
     }
 
-    private function hasProfessorConflict(): bool
+    private function hasIntraSectionConflict(): ?Section
+    {
+        $sectionCode = $this->input('section_code');
+        $academicTermId = $this->input('academic_term_id');
+        $scheduleDays = $this->input('schedule_days');
+        $startsAt = $this->input('starts_at_time');
+        $endsAt = $this->input('ends_at_time');
+
+        if (! $sectionCode || ! $scheduleDays || ! $startsAt || ! $endsAt) {
+            return null;
+        }
+
+        $otherSections = Section::query()
+            ->where('academic_term_id', $academicTermId)
+            ->where('section_code', $sectionCode)
+            ->whereKeyNot($this->route('section'))
+            ->whereNotNull('schedule_days')
+            ->whereNotNull('starts_at_time')
+            ->whereNotNull('ends_at_time')
+            ->with('subject')
+            ->get();
+
+        $detector = app(SectionConflictDetector::class);
+
+        foreach ($otherSections as $other) {
+            if ($detector->hasConflict([
+                'schedule_days' => $scheduleDays,
+                'starts_at_time' => $startsAt,
+                'ends_at_time' => $endsAt,
+            ], [[
+                'schedule_days' => $other->schedule_days,
+                'starts_at_time' => $other->starts_at_time,
+                'ends_at_time' => $other->ends_at_time,
+            ]])) {
+                return $other;
+            }
+        }
+
+        return null;
+    }
+
+    private function hasProfessorConflict(): ?Section
     {
         $professorId = $this->input('professor_id');
 
         if (! is_numeric($professorId)) {
-            return false;
+            return null;
         }
 
-        $existing = array_values(
-            Section::query()
-                ->where('professor_id', $professorId)
-                ->where('academic_term_id', $this->input('academic_term_id'))
-                ->whereKeyNot($this->route('section'))
-                ->get(['schedule_days', 'starts_at_time', 'ends_at_time'])
-                ->map(fn (Section $section): array => [
-                    'schedule_days' => $section->schedule_days,
-                    'starts_at_time' => $section->starts_at_time,
-                    'ends_at_time' => $section->ends_at_time,
-                ])
-                ->all(),
-        );
+        $otherSections = Section::query()
+            ->where('professor_id', $professorId)
+            ->where('academic_term_id', $this->input('academic_term_id'))
+            ->whereKeyNot($this->route('section'))
+            ->whereNotNull('schedule_days')
+            ->whereNotNull('starts_at_time')
+            ->whereNotNull('ends_at_time')
+            ->with('subject')
+            ->get();
 
-        return app(SectionConflictDetector::class)->hasConflict([
-            'schedule_days' => $this->input('schedule_days'),
-            'starts_at_time' => $this->input('starts_at_time'),
-            'ends_at_time' => $this->input('ends_at_time'),
-        ], $existing);
+        $detector = app(SectionConflictDetector::class);
+
+        foreach ($otherSections as $other) {
+            if ($detector->hasConflict([
+                'schedule_days' => $this->input('schedule_days'),
+                'starts_at_time' => $this->input('starts_at_time'),
+                'ends_at_time' => $this->input('ends_at_time'),
+            ], [[
+                'schedule_days' => $other->schedule_days,
+                'starts_at_time' => $other->starts_at_time,
+                'ends_at_time' => $other->ends_at_time,
+            ]])) {
+                return $other;
+            }
+        }
+
+        return null;
     }
 
-    private function hasRoomConflict(): bool
+    private function hasRoomConflict(): ?Section
     {
         $room = $this->input('room');
         if (! is_string($room) || trim($room) === '') {
-            return false;
+            return null;
         }
 
-        $existing = array_values(
-            Section::query()
-                ->where('room', $room)
-                ->where('academic_term_id', $this->input('academic_term_id'))
-                ->whereKeyNot($this->route('section'))
-                ->get(['schedule_days', 'starts_at_time', 'ends_at_time', 'modality'])
-                ->map(fn (Section $section): array => [
-                    'schedule_days' => $section->schedule_days,
-                    'starts_at_time' => $section->starts_at_time,
-                    'ends_at_time' => $section->ends_at_time,
-                    'modality' => $section->modality?->value,
-                ])
-                ->all(),
-        );
+        $otherSections = Section::query()
+            ->where('room', $room)
+            ->where('academic_term_id', $this->input('academic_term_id'))
+            ->whereKeyNot($this->route('section'))
+            ->whereNotNull('schedule_days')
+            ->whereNotNull('starts_at_time')
+            ->whereNotNull('ends_at_time')
+            ->with('subject')
+            ->get();
 
-        return app(RoomConflictDetector::class)->hasConflict([
-            'schedule_days' => $this->input('schedule_days'),
-            'starts_at_time' => $this->input('starts_at_time'),
-            'ends_at_time' => $this->input('ends_at_time'),
-            'modality' => $this->input('modality'),
-        ], $existing);
+        $detector = app(RoomConflictDetector::class);
+
+        foreach ($otherSections as $other) {
+            if ($detector->hasConflict([
+                'schedule_days' => $this->input('schedule_days'),
+                'starts_at_time' => $this->input('starts_at_time'),
+                'ends_at_time' => $this->input('ends_at_time'),
+                'modality' => $this->input('modality'),
+            ], [[
+                'schedule_days' => $other->schedule_days,
+                'starts_at_time' => $other->starts_at_time,
+                'ends_at_time' => $other->ends_at_time,
+                'modality' => $other->modality?->value,
+            ]])) {
+                return $other;
+            }
+        }
+
+        return null;
     }
 }

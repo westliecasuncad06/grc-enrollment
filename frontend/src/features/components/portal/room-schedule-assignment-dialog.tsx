@@ -6,6 +6,7 @@ import { ArrowLeft, DoorOpen } from "lucide-react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { RoomScheduleCalendar } from "@/features/components/portal/room-schedule-calendar"
+import type { SectionScheduleItem } from "@/features/components/portal/section-schedule-calendar"
 import { WorkspaceField } from "@/features/components/portal/workspace-field"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -28,6 +29,8 @@ import {
   slotClockTime,
   SLOT_COUNT,
 } from "@/features/lib/room-calendar"
+import { cn } from "@/features/lib/utils"
+import type { RoomOccupancyEntry } from "@/features/schemas/room-occupancy-schema"
 import { getLocalRoomOptions } from "@/features/services/room-catalog-service"
 
 const dayOptions = [
@@ -72,6 +75,10 @@ interface RoomScheduleAssignmentDialogProps {
   initialRoom?: string | null
   /** Excluded from the room's occupancy so editing a section's own current booking never reads as a self-conflict. */
   excludeSectionId?: number
+  /** The block section code currently being scheduled (e.g. "IT401") */
+  sectionCode?: string | null
+  /** Sibling subjects in the same section that already have schedules, displayed as a light-green overlay. */
+  sectionScheduleItems?: readonly SectionScheduleItem[]
   onConfirm: (result: RoomScheduleAssignmentResult) => void
 }
 
@@ -89,11 +96,16 @@ export function RoomScheduleAssignmentDialog({
   termId,
   initialRoom,
   excludeSectionId,
+  sectionCode,
+  sectionScheduleItems,
   onConfirm,
 }: RoomScheduleAssignmentDialogProps) {
   const { session } = useAuth()
   const [step, setStep] = useState<Step>(initialRoom ? "calendar" : "room")
   const [room, setRoom] = useState<string | null>(initialRoom ?? null)
+  const [calendarViewMode, setCalendarViewMode] = useState<
+    "overlay" | "room_only" | "section_only"
+  >("overlay")
   const [formDraft, setFormDraft] = useState({
     days: [] as string[],
     startsAt: "",
@@ -110,6 +122,7 @@ export function RoomScheduleAssignmentDialog({
         setRoom(null)
         setStep("room")
       }
+      setCalendarViewMode("overlay")
       setFormDraft({ days: [], startsAt: "", endsAt: "", modality: "f2f" })
     }
   }, [open, initialRoom])
@@ -122,10 +135,56 @@ export function RoomScheduleAssignmentDialog({
   )
 
   const occupancyQuery = useRoomOccupancyQuery(room, termId)
-  const visibleEntries = useMemo(
-    () => (occupancyQuery.data ?? []).filter((entry) => entry.section_id !== excludeSectionId),
-    [occupancyQuery.data, excludeSectionId],
-  )
+
+  useEffect(() => {
+    if (open && room) {
+      void occupancyQuery.refetch()
+    }
+  }, [open, room, occupancyQuery])
+
+  const sectionOverlayEntries = useMemo<RoomOccupancyEntry[]>(() => {
+    if (!sectionScheduleItems || sectionScheduleItems.length === 0) return []
+    return sectionScheduleItems.map((item) => ({
+      type: "room_occupancy" as const,
+      section_id: item.id,
+      section_code: item.section_code ?? sectionCode ?? "Section",
+      subject_code: item.subject_code,
+      subject_title: item.subject_title ?? "Subject",
+      professor_name: item.professor_name ?? null,
+      schedule_days: item.schedule_days,
+      starts_at_time: item.starts_at_time,
+      ends_at_time: item.ends_at_time,
+      modality: item.modality,
+      college: session?.college ?? null,
+      is_own_college: true,
+      is_lecture_component: Boolean(item.is_lecture_component),
+      is_section_overlay: true,
+      room: item.room ?? null,
+    }))
+  }, [sectionScheduleItems, sectionCode, session?.college])
+
+  const visibleEntries = useMemo(() => {
+    const roomEntries = (occupancyQuery.data ?? []).filter(
+      (entry) => entry.section_id !== excludeSectionId,
+    )
+    if (calendarViewMode === "room_only") {
+      return roomEntries
+    }
+    if (calendarViewMode === "section_only") {
+      return sectionOverlayEntries
+    }
+    const existingIds = new Set(roomEntries.map((e) => e.section_id))
+    const uniqueOverlay = sectionOverlayEntries.filter(
+      (e) => !existingIds.has(e.section_id),
+    )
+    return [...roomEntries, ...uniqueOverlay]
+  }, [
+    occupancyQuery.data,
+    excludeSectionId,
+    calendarViewMode,
+    sectionOverlayEntries,
+  ])
+
   const week = useMemo(() => buildRoomWeek(visibleEntries), [visibleEntries])
   const conflictingSectionIds = useMemo(
     () => findConflictingIds(visibleEntries, (entry) => entry.section_id),
@@ -256,16 +315,89 @@ export function RoomScheduleAssignmentDialog({
           >
             {() => (
               <div className="grid gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-fit"
-                  onClick={() => setStep("room")}
-                >
-                  <ArrowLeft data-icon="inline-start" aria-hidden="true" />
-                  Change room
-                </Button>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-fit"
+                      onClick={() => setStep("room")}
+                    >
+                      <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+                      Change room
+                    </Button>
+                    <span className="text-xs font-semibold text-foreground">
+                      Selected Room: <span className="text-primary">{room}</span>
+                    </span>
+                  </div>
+
+                  {sectionCode && sectionOverlayEntries.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">Schedule view:</span>
+                      <div className="inline-flex rounded-md border bg-background p-0.5 shadow-xs">
+                        <button
+                          type="button"
+                          onClick={() => setCalendarViewMode("overlay")}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                            calendarViewMode === "overlay"
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                        >
+                          <span className="size-2 rounded-full bg-emerald-400" />
+                          Overlay {sectionCode} (Green)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCalendarViewMode("room_only")}
+                          className={cn(
+                            "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                            calendarViewMode === "room_only"
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                        >
+                          Room {room} only
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCalendarViewMode("section_only")}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                            calendarViewMode === "section_only"
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                        >
+                          <span className="size-2 rounded-full bg-emerald-300" />
+                          {sectionCode} schedule only
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 px-1 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-3 rounded border border-primary/40 bg-primary/10" />
+                    <span className="text-muted-foreground">Room {room} bookings</span>
+                  </div>
+                  {sectionCode && sectionOverlayEntries.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="size-3 rounded border border-emerald-400/80 bg-emerald-100 ring-1 ring-emerald-400/50 dark:bg-emerald-950/75" />
+                      <span className="font-medium text-emerald-800 dark:text-emerald-300">
+                        {sectionCode} plotted schedule (Light Green)
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-3 rounded border border-dashed border-border bg-background" />
+                    <span className="text-muted-foreground">Available (Click to select slot)</span>
+                  </div>
+                </div>
+
                 <RoomScheduleCalendar
                   week={week}
                   onSelectSlot={selectSlot}
@@ -294,7 +426,10 @@ export function RoomScheduleAssignmentDialog({
                 type="multiple"
                 value={formDraft.days}
                 onValueChange={(value) =>
-                  setFormDraft((current) => ({ ...current, days: value.slice(0, MAX_MEETING_DAYS) }))
+                  setFormDraft((current) => ({
+                    ...current,
+                    days: value.slice(0, MAX_MEETING_DAYS),
+                  }))
                 }
                 variant="outline"
                 size="sm"
@@ -307,7 +442,8 @@ export function RoomScheduleAssignmentDialog({
                     aria-label={option.label}
                     className={selectedDestructiveClassName}
                     disabled={
-                      formDraft.days.length >= MAX_MEETING_DAYS && !formDraft.days.includes(option.value)
+                      formDraft.days.length >= MAX_MEETING_DAYS &&
+                      !formDraft.days.includes(option.value)
                     }
                   >
                     {option.label}
@@ -320,14 +456,18 @@ export function RoomScheduleAssignmentDialog({
                 <Input
                   type="time"
                   value={formDraft.startsAt}
-                  onChange={(event) => setFormDraft({ ...formDraft, startsAt: event.target.value })}
+                  onChange={(event) =>
+                    setFormDraft({ ...formDraft, startsAt: event.target.value })
+                  }
                 />
               </WorkspaceField>
               <WorkspaceField label="End time">
                 <Input
                   type="time"
                   value={formDraft.endsAt}
-                  onChange={(event) => setFormDraft({ ...formDraft, endsAt: event.target.value })}
+                  onChange={(event) =>
+                    setFormDraft({ ...formDraft, endsAt: event.target.value })
+                  }
                 />
               </WorkspaceField>
             </div>
@@ -335,7 +475,10 @@ export function RoomScheduleAssignmentDialog({
               <select
                 value={formDraft.modality}
                 onChange={(event) =>
-                  setFormDraft({ ...formDraft, modality: event.target.value as typeof formDraft.modality })
+                  setFormDraft({
+                    ...formDraft,
+                    modality: event.target.value as typeof formDraft.modality,
+                  })
                 }
                 className="h-9 rounded-md border bg-background px-2"
               >

@@ -8,6 +8,7 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
+use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
@@ -388,5 +389,97 @@ final class SectionsEndpointTest extends TestCase
         $response->assertForbidden();
         $this->assertDatabaseHas('sections', ['id' => $section->id, 'capacity' => 40]);
         $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    public function test_cannot_assign_overlapping_schedule_to_different_subjects_in_same_block_section(): void
+    {
+        $term = $this->makeTerm();
+        $subject1 = $this->makeSubject('CAPS2');
+        $subject2 = $this->makeSubject('CAPS2L');
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.intraconflict@grc.test');
+
+        // Subject 1 in IT401: Monday 07:30 - 09:00
+        $sec1 = Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject1->id,
+            'section_code' => 'IT401',
+            'schedule_days' => 'M',
+            'starts_at_time' => '07:30:00',
+            'ends_at_time' => '09:00:00',
+            'room' => '5D',
+            'modality' => SectionModality::FaceToFace,
+            'capacity' => 40,
+            'status' => SectionStatus::Planned,
+        ]);
+
+        // Subject 2 in IT401: try to schedule also Monday 07:30 - 09:00 (Room LAB 3)
+        $sec2 = Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject2->id,
+            'section_code' => 'IT401',
+            'capacity' => 40,
+            'status' => SectionStatus::Planned,
+        ]);
+
+        $response = $this->withToken($token)->patchJson("/api/v1/sections/{$sec2->id}", [
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject2->id,
+            'section_code' => 'IT401',
+            'schedule_days' => 'M',
+            'starts_at_time' => '07:30:00',
+            'ends_at_time' => '09:00:00',
+            'room' => 'LAB 3',
+            'modality' => 'f2f',
+            'capacity' => 40,
+            'status' => 'planned',
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('error.code', 'VALIDATION_FAILED');
+    }
+
+    public function test_cannot_assign_overlapping_schedule_to_same_room(): void
+    {
+        $term = $this->makeTerm();
+        $subject1 = $this->makeSubject('CS101');
+        $subject2 = $this->makeSubject('CS102');
+        $token = $this->tokenFor(UserRole::ProgramChair, 'chair.roomconflict@grc.test');
+
+        Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject1->id,
+            'section_code' => 'IT101',
+            'schedule_days' => 'M',
+            'starts_at_time' => '08:00:00',
+            'ends_at_time' => '10:00:00',
+            'room' => 'Room 101',
+            'modality' => SectionModality::FaceToFace,
+            'capacity' => 40,
+            'status' => SectionStatus::Planned,
+        ]);
+
+        $sec2 = Section::create([
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject2->id,
+            'section_code' => 'IT102',
+            'capacity' => 40,
+            'status' => SectionStatus::Planned,
+        ]);
+
+        $response = $this->withToken($token)->patchJson("/api/v1/sections/{$sec2->id}", [
+            'academic_term_id' => $term->id,
+            'subject_id' => $subject2->id,
+            'section_code' => 'IT102',
+            'schedule_days' => 'M',
+            'starts_at_time' => '09:00:00',
+            'ends_at_time' => '11:00:00',
+            'room' => 'Room 101',
+            'modality' => 'f2f',
+            'capacity' => 40,
+            'status' => 'planned',
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('error.code', 'VALIDATION_FAILED');
     }
 }

@@ -13,7 +13,29 @@
      - **Day Mapping & Selection Fix**: Added comprehensive single and multi-day labels (`dayOptionsList`: `M`, `T`, `W`, `Th`, `F`, `Sat`, `MW`, `TTh`, `MWF`, `FSat`) with fallback matching so assigned days from the calendar always reflect accurately in the Day dropdown. Added `useEffect` in `RoomScheduleAssignmentDialog` to sync room and day state on open.
      - **Wide Modal & No Horizontal Scrolling**: Expanded `RoomScheduleAssignmentDialog` to `max-w-7xl` (`w-[96vw]`), expanded the Schedule Assignment modal to `sm:max-w-3xl`, and optimized the calendar grid columns (`minmax(7rem, 1fr)`) so Monday to Saturday fit comfortably on desktop without requiring horizontal scrollbars.
      - **JSX Tag Alignment**: Resolved missing `<DialogTitle>` opening tag and confirmed clean production build.
-   - Updated `program-chair-enrollment-workspace.test.tsx` and verified with fast lint (`npm run lint:fast`) and Next.js production build (`npm run build`).
+     - **Schedule Submission Backend Fix**: Resolved `ParseError` and fixed loop property reference (`section_count`) in `SaveSectionPlan::release()` and cleaned up stale 0-byte migration file. Verified with `SaveSectionPlanSubmitTest` (5 passed) and `SaveSectionPlanCapacityTest` (4 passed).
+     - **Strict Schedule Conflict Enforcement**: Enhanced `UpdateSectionRequest` and `StoreSectionRequest` with:
+       1. **Intra-Block Section Conflict Detection**: Automatically prevents assigning overlapping schedules across different subjects in the same block section (e.g. `IT401`), returning exact conflicting subject code and day/time slot details.
+       2. **Room Physical Conflict Detection**: Validates physical room occupancy and blocks double-booking with full details of the occupying section and time.
+       3. **Professor Schedule Conflict Detection**: Blocks double-booking faculty across overlapping time slots in the same term.
+     - **Real-Time Calendar & Schedule Synchronization**:
+       - Fixed cache invalidation on `saveSchedule` in `ProgramChairEnrollmentWorkspace` to immediately invalidate and refetch `sections`, `room-occupancy`, `section-plans`, and `rooms` queries concurrently so that saved schedules appear on calendars immediately without requiring a page refresh.
+       - Added automatic refetch on opening `RoomScheduleAssignmentDialog` when a room is selected.
+     - **Schedule Navigation Workspace Parity (`ScheduleWorkspace`)**:
+       - Modernized `ScheduleWorkspace` (`frontend/src/features/components/portal/schedule-workspace.tsx`) accessed via the sidebar `Schedule` navigation:
+         - Added **Curriculum Information Bar** showing the active curriculum per year level (e.g. `BSIT 2024 (New curriculum)` with School Year effectivity).
+         - Added **"View in calendar" button** on every block section card header (`CardHeader`), which opens the **`SectionScheduleCalendarDialog`** rendered in the new Light Green theme.
+         - Upgraded the **Schedule assignment dialog** to the modern room-first flow with `RoomScheduleAssignmentDialog` supporting light-green section overlay and real-time query cache synchronization.
+         - Added **Table vs Tiles view toggle** to switch seamlessly between tabular and grid layouts.
+     - **Light-Green Section Schedule & Calendar View Styling**:
+       - Updated `SectionScheduleCalendar` (`frontend/src/features/components/portal/section-schedule-calendar.tsx`) so that the "View in calendar" modal renders class cards in **light green** (`bg-emerald-50 text-emerald-950 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-100 dark:border-emerald-700`) with matching room pills and professor labels, consistent with the section schedule color theme across the system.
+       - Added section schedule overlay capability to `RoomScheduleAssignmentDialog` (`frontend/src/features/components/portal/room-schedule-assignment-dialog.tsx`) and `RoomScheduleCalendar` (`frontend/src/features/components/portal/room-schedule-calendar.tsx`):
+         - Added `sectionCode` and `sectionScheduleItems` props passed from `ProgramChairEnrollmentWorkspace`.
+         - Renders already-plotted subjects for the current block section in crisp **light green** (`bg-emerald-100 text-emerald-950 border-emerald-400 dark:bg-emerald-950/75 dark:text-emerald-100`) with indicator dot and room name so Program Chairs can easily cross-reference which days/times the section is already busy with when picking an open slot for a room.
+         - Added a 3-way view toggle in the room calendar header: `Overlay [SectionCode] (Green)`, `Room [Room] only`, and `[SectionCode] schedule only`.
+         - Added a color legend bar showing red/pink for room bookings, light green for the section's plotted schedule, and dashed borders for available slots.
+     - **CCS Schedule & Workflow Reset**: Reset Term 9 CCS section schedules (cleared 306 section schedules to fresh state), deleted draft proposals, reset section plans to `Draft`, and reverted the college workflow to `SchedulePreparation` so Program Chairs can edit and test conflict-free scheduling cleanly.
+   - Updated `SectionsEndpointTest.php` (16 passed) and verified with fast lint (`npm run lint:fast`) and Next.js production build (`npm run build`).
 
 ## 2026-09-01 — Section & Subject Schedule Weekly Calendar View (Program Chair & Student Portal)
 
