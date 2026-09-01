@@ -18,6 +18,7 @@ final class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleUserSeeder::class,
+            FeeScheduleSeeder::class,
             QueueKioskSeeder::class,
             // Additive: one Program Chair per supported college, alongside
             // (not replacing) RoleUserSeeder's single generic chair.
@@ -31,6 +32,7 @@ final class DatabaseSeeder extends Seeder
             // per-subject schedule/faculty reference data. See each
             // seeder's docblock.
             GrcSubjectCatalogSeeder::class,
+            GrcOlderSubjectCatalogSeeder::class,
             GrcCurriculumSeeder::class,
             GrcPrerequisiteSeeder::class,
             GrcCurriculumScheduleReferenceSeeder::class,

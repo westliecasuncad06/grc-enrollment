@@ -84,6 +84,14 @@ final class Curriculum extends Model
     }
 
     /**
+     * @return HasMany<CurriculumSubject, $this>
+     */
+    public function curriculumSubjects(): HasMany
+    {
+        return $this->hasMany(CurriculumSubject::class);
+    }
+
+    /**
      * @return HasMany<CurriculumSubjectEquivalency, $this>
      */
     public function targetEquivalencies(): HasMany

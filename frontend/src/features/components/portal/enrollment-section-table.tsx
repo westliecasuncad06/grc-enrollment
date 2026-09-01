@@ -1,11 +1,16 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
+import { CalendarDays, ListIcon } from "lucide-react"
 
 import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import {
+  SectionScheduleCalendar,
+  type SectionScheduleItem,
+} from "@/features/components/portal/section-schedule-calendar"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -16,6 +21,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
+import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
 import { formatTimeRange } from "@/features/lib/format-time"
 import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
@@ -96,13 +102,54 @@ function SectionCard({
   disabled: boolean
   renderSelectedFooter: (block: EnrollmentBlock) => ReactNode
 }) {
+  const [view, setView] = useState<"calendar" | "table">("calendar")
+
+  const calendarItems: SectionScheduleItem[] = useMemo(() => {
+    return block.subjects.map((subject) => ({
+      id: subject.section_id,
+      subject_code: subject.code,
+      subject_title: subject.title,
+      units: subject.units,
+      section_code: block.block_code,
+      room: subject.room,
+      professor_name: subject.professor_name,
+      schedule_days: subject.schedule_days,
+      starts_at_time: subject.starts_at_time,
+      ends_at_time: subject.ends_at_time,
+      modality: subject.modality ?? null,
+      capacity: subject.capacity,
+      enrolled_count: subject.enrolled_count,
+    }))
+  }, [block])
+
   return (
     <Card role="article" aria-label={`${block.block_code} section`}>
       <CardHeader className="gap-3 border-b">
-        <div className="flex flex-wrap items-center gap-3">
-          <CardTitle level={2}>{block.block_code}</CardTitle>
-          <Badge variant="secondary">{seatLabel(block)}</Badge>
-          <Badge variant="outline">{block.total_units} units</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <CardTitle level={2}>{block.block_code}</CardTitle>
+            <Badge variant="secondary">{seatLabel(block)}</Badge>
+            <Badge variant="outline">{block.total_units} units</Badge>
+          </div>
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(val) => {
+              if (val === "table" || val === "calendar") setView(val)
+            }}
+            variant="outline"
+            size="sm"
+            aria-label="Section schedule layout"
+          >
+            <ToggleGroupItem value="calendar" aria-label="Calendar view">
+              <CalendarDays data-icon="inline-start" aria-hidden="true" />
+              Calendar
+            </ToggleGroupItem>
+            <ToggleGroupItem value="table" aria-label="Table view">
+              <ListIcon data-icon="inline-start" aria-hidden="true" />
+              Table
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
         <CardDescription>
           Year {block.year_level} block section · {block.subjects.length}{" "}
@@ -111,7 +158,11 @@ function SectionCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 pt-4">
-        <SectionSchedule block={block} />
+        {view === "calendar" ? (
+          <SectionScheduleCalendar items={calendarItems} disabled={disabled} />
+        ) : (
+          <SectionSchedule block={block} />
+        )}
 
         {selected ? (
           <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">

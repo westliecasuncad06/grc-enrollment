@@ -205,14 +205,11 @@ final class SaveSectionPlan
                 ->whereRaw("section_code REGEXP '^[1-4][A-Z]$'")
                 ->delete();
 
-            foreach ($plans as $yearLevel => $plan) {
-                $this->restoreProtectedBlockCount($plan, (int) $yearLevel);
-                $this->removeReducedGeneratedSections($plan, (int) $yearLevel);
-            }
-
-            foreach ($plans as $yearLevel => $plan) {
-                foreach ($offerings->get($yearLevel, collect()) as $offering) {
-                    for ($number = 1; $number <= $plan->section_count; $number++) {
+            if ($yearLevel !== null) {
+                // When explicitly releasing a specific year level for a newly chosen curriculum,
+                // remove un-enrolled draft sections from other curriculum plans for the same year level.
+                $this->restoreProtectedBlockCount($plan, (int) $yearLevelKey);
+                $this->removeReducedGeneratedSections($plan, (int) $yearLevelKey);
                         $code = SectionBlockCode::fromProgram(
                             $curriculum->program->code,
                             $curriculum->program->college ?? $actor->college,

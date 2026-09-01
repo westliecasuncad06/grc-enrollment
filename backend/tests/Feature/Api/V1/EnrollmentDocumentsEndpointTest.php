@@ -359,4 +359,47 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
                 ->assertJsonPath('data.0.student_name', 'Aurora S. Lopez');
         }
     }
+
+    public function test_a_student_can_download_their_own_cor_pdf(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.pdfdownload@grc.test', '2026-0201');
+        $document = $this->makeDocument($student, $term);
+
+        $response = $this->withToken($this->tokenFor($student->user))
+            ->get("/api/v1/enrollment-documents/{$document->id}/pdf");
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('filename="COR-', (string) $response->headers->get('Content-Disposition'));
+    }
+
+    public function test_a_student_cannot_download_another_students_cor_pdf(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'student.pdfa@grc.test', '2026-0202');
+        $studentB = $this->makeStudent($curriculum, 'student.pdfb@grc.test', '2026-0203');
+        $documentB = $this->makeDocument($studentB, $term);
+
+        $this->withToken($this->tokenFor($studentA->user))
+            ->get("/api/v1/enrollment-documents/{$documentB->id}/pdf")
+            ->assertForbidden();
+    }
+
+    public function test_accounting_staff_can_download_any_students_cor_pdf(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.cashierpdf@grc.test', '2026-0204');
+        $document = $this->makeDocument($student, $term);
+        $cashierToken = $this->tokenForNewUser(UserRole::AccountingStaff, 'cashier.downloadpdf@grc.test');
+
+        $response = $this->withToken($cashierToken)
+            ->get("/api/v1/enrollment-documents/{$document->id}/pdf");
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('Content-Type'));
+    }
 }

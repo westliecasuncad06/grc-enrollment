@@ -94,8 +94,9 @@ final class BuildHonorsReport
             return null;
         }
 
+        $gwaUnits = GradePointAverage::gpaUnits($gpaRows);
         $unrounded = GradePointAverage::unrounded($gpaRows);
-        if ($unrounded === null || $unrounded < 1.0 || $unrounded > 1.5) {
+        if ($unrounded === null || $unrounded < 1.0 || $unrounded > 1.5 || $gwaUnits < 16.0) {
             return null;
         }
 
@@ -110,12 +111,24 @@ final class BuildHonorsReport
             'program_name' => $student->program->name,
             'college' => $student->program->college?->value,
             'year_level' => $student->year_level,
+            'year_level_name' => self::formatYearLevel($student->year_level),
             'academic_term_id' => $term->id,
             'school_year' => $term->school_year,
             'semester' => $term->semester,
             'gwa' => GradePointAverage::compute($gpaRows),
-            'gwa_units' => GradePointAverage::gpaUnits($gpaRows),
+            'gwa_units' => $gwaUnits,
             'excluded_subject_count' => $excludedCount,
         ];
+    }
+
+    public static function formatYearLevel(int $yearLevel): string
+    {
+        return match ($yearLevel) {
+            1 => '1st Year',
+            2 => '2nd Year',
+            3 => '3rd Year',
+            4 => '4th Year',
+            default => "{$yearLevel}th Year",
+        };
     }
 }

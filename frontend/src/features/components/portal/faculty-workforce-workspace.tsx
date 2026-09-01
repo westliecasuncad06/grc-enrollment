@@ -140,14 +140,28 @@ export function FacultyWorkforceWorkspace() {
                       onClick={() => openProfessor(member)}
                       className="flex items-center justify-between rounded-lg border p-3 text-left hover:bg-accent"
                     >
-                      <span>{member.name}</span>
-                      <Badge
-                        variant={
-                          member.is_assignable ? "secondary" : "destructive"
-                        }
-                      >
-                        {member.status_label}
-                      </Badge>
+                      <div>
+                        <span>{member.name}</span>
+                        {member.employment_type_label && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            · {member.employment_type_label}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!member.is_assignable && member.deactivation_reason && (
+                          <Badge variant="outline" className="capitalize text-xs font-normal">
+                            {member.deactivation_reason.replace(/_/g, " ")}
+                          </Badge>
+                        )}
+                        <Badge
+                          variant={
+                            member.is_assignable ? "secondary" : "destructive"
+                          }
+                        >
+                          {member.status_label}
+                        </Badge>
+                      </div>
                     </button>
                   ))}
                   {visibleFaculty.length === 0 && (

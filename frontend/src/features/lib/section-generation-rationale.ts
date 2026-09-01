@@ -7,6 +7,8 @@ export interface SectionGenerationRationaleGroup {
   subjectCode: string
   subjectTitle: string
   yearLevel: number | null
+  curriculumName?: string | null
+  curriculumVersion?: string | null
   sectionCount: number
   reasons: string[]
 }
@@ -102,12 +104,19 @@ export function buildSectionGenerationRationale(
       continue
     }
 
+    const forecast = run?.forecasts?.find(
+      (candidate) =>
+        candidate.subject_id === section.subject_id &&
+        candidate.year_level === plan?.year_level,
+    )
     const subject = subjectById.get(section.subject_id)
     groups.set(key, {
       subjectId: section.subject_id,
       subjectCode: subject?.code ?? `Subject #${section.subject_id}`,
       subjectTitle: subject?.title ?? "",
       yearLevel,
+      curriculumName: forecast?.curriculum_name ?? null,
+      curriculumVersion: forecast?.curriculum_effective_school_year ?? null,
       sectionCount: 1,
       reasons: [...reasons],
     })

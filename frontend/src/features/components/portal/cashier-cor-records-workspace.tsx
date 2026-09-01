@@ -8,7 +8,7 @@ import { CertificateOfRegistrationDocument } from "@/features/components/portal/
 import { DataTable } from "@/features/components/portal/data-table"
 import { Paginator } from "@/features/components/portal/paginator"
 import {
-  PrintButton,
+  DownloadPdfButton,
   PrintDocument,
 } from "@/features/components/portal/print-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
@@ -289,8 +289,8 @@ export function CashierCorRecordsWorkspace() {
           if (!open) setSelectedDocumentId(null)
         }}
       >
-        <DialogContent className="max-h-[90dvh] sm:max-w-6xl">
-          <DialogHeader className="pr-8">
+        <DialogContent className="max-h-[90dvh] sm:max-w-6xl print:max-h-none print:w-full print:max-w-none print:p-0 print:border-none print:shadow-none print:overflow-visible">
+          <DialogHeader className="pr-8 print:hidden">
             <DialogTitle>Certificate of Registration</DialogTitle>
             <DialogDescription>
               Review or print the selected official COR.
@@ -306,7 +306,13 @@ export function CashierCorRecordsWorkspace() {
               cor.snapshot !== null && (
                 <PrintDocument
                   title={cor.document_number}
-                  actions={<PrintButton label="Print COR" />}
+                  actions={
+                    <DownloadPdfButton
+                      documentId={cor.id}
+                      documentNumber={cor.document_number}
+                      label="Download COR"
+                    />
+                  }
                 >
                   <CertificateOfRegistrationDocument
                     cor={{ ...cor, snapshot: cor.snapshot }}

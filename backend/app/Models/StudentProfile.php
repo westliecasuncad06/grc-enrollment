@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $enrollment_category_derived_at
  * @property ?StudentType $student_type
  * @property AdmissionStatus $admission_status
+ * @property ?string $graduation_school_year
  * @property AcademicStanding $academic_standing
  * @property ?FinancialStatus $financial_status
  * @property ?string $address
@@ -53,6 +54,7 @@ final class StudentProfile extends Model
         'enrollment_category_derived_at',
         'student_type',
         'admission_status',
+        'graduation_school_year',
         'academic_standing',
         'financial_status',
         'address',

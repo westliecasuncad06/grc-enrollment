@@ -47,8 +47,7 @@ final readonly class AssessEnrollment
         }
 
         $totalUnits = number_format($enrollment->total_units, 1, '.', '');
-        $tuitionPerUnit = $this->numericConfigValue('fees.tuition_per_unit');
-        $currency = (string) config('fees.currency');
+        $tuitionPerUnit = $this->resolveTuitionPerUnit();
 
         $computed = AssessmentComputation::compute($totalUnits, $tuitionPerUnit, $this->miscellaneousFees($enrollment));
 
@@ -76,7 +75,7 @@ final readonly class AssessEnrollment
     /**
      * @return numeric-string
      */
-    private function numericConfigValue(string $key): string
+    private function resolveTuitionPerUnit(): string
     {
         $raw = config($key);
         $value = is_scalar($raw) ? (string) $raw : '';
@@ -93,14 +92,12 @@ final readonly class AssessEnrollment
      */
     private function miscellaneousFees(Enrollment $enrollment): array
     {
-        $raw = config('fees.miscellaneous');
+        $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
         $fees = [];
 
         if (! is_array($raw)) {
             return $fees;
         }
-
-        $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
 
         foreach ($raw as $entry) {
             if (! is_array($entry)) {

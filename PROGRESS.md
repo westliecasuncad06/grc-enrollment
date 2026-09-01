@@ -1,8 +1,227 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-01 — Section & Subject Schedule Weekly Calendar View (Program Chair & Student Portal)
+
+0. **Weekly Calendar View for Section & Subject Schedules**:
+   - Created `SectionScheduleCalendar` (`frontend/src/features/components/portal/section-schedule-calendar.tsx`) featuring a responsive, accessible weekly timetable grid (Mon–Sat, 7:30 AM – 9:00 PM) with 12-hour formatted time ranges, room badges, faculty names, modality pills, intra-section conflict detection, and an asynchronous & unscheduled subjects tray.
+   - Created `SectionScheduleCalendarDialog` (`frontend/src/features/components/portal/section-schedule-calendar-dialog.tsx`) with dynamic Calendar/Table view switcher, section metadata header (units, seats, year level), and interactive schedule click actions.
+   - Integrated "View in calendar" button (`CalendarDays` icon) on every generated block section card (e.g. `IT101`, `IT102`) in `program-chair-enrollment-workspace.tsx`, allowing Program Chairs to inspect the full timetable and click any subject block to open the "Assign schedule" modal directly.
+   - Upgraded `EnrollmentSectionTable` (`frontend/src/features/components/portal/enrollment-section-table.tsx`) with an inline Calendar/Table layout toggle on each available section card so students can visually preview their weekly schedule before enrolling.
+   - Upgraded `EnrollmentBlockDetailDialog` (`frontend/src/features/components/portal/enrollment-block-detail-dialog.tsx`) to present the weekly calendar view by default with table view toggle and section selection action.
+   - Verified with TypeScript typecheck (`npx tsc --noEmit`), 46 Vitest component tests (across `section-schedule-calendar.test.tsx`, `enrollment-block-detail-dialog.test.tsx`, `enrollment-section-table.test.tsx`, and `program-chair-enrollment-workspace.test.tsx`), and clean Next.js production build (`npm run lint:fast && npm run build`).
+
+## 2026-09-01 — Historical Data Extension (2017-2023), Graduates Feature & ML Random Forest Activation
+
+0. **Academic Term Status Alignment & Background Task Cleanup**:
+   - Set **SY 2025-2026 2nd Semester** (`id: 6`) to `archived` (`closed_at` and `archived_at` set).
+   - Set **SY 2026-2027 1st Semester** (`id: 9`) to `draft` (`closed_at = null`, `archived_at = null`), ready for the Registrar Head to open and configure.
+   - Cleaned up accidental subsequent draft term (`id: 31`) and child workflow/window records.
+   - Disrupted and terminated background daemon task (`task-1185`) so MariaDB can be started cleanly from the XAMPP Control Panel.
+
+0.1. **Year-Level Curriculum Switching & ML Auto-Schedule Repopulation**:
+   - Added curriculum effectivity sub-labels on each year tab (`1st Year`, `2nd Year`, `3rd Year`, `4th Year`).
+   - Added interactive Curriculum Selector bar in the schedule planning & review workspace allowing Program Chairs to view and switch the assigned curriculum for any year level.
+   - Wired `handleCurriculumChange` to save section plans, regenerate block sections with the newly chosen curriculum's subjects, and trigger `autoAssign` for ML faculty assignment, room allocation, and conflict-free schedules in real time.
+   - Updated `SaveSectionPlan::release()` to clean up prior draft sections from superseded curricula for the targeted year level.
+   - Verified with 25 Vitest tests, 12 backend SectionPlan tests, 20 AutoAssign tests, TypeScript typecheck, and Next.js production build.
+
+0.2. **Program Chair UI Polish & E2E Test Curriculum Removal**:
+   - Removed temporary `BSIT 2026 Curriculum (E2E Test)` (`id: 38`) from the database.
+   - Fixed year tab label layout in `program-chair-enrollment-workspace.tsx` and `tabs.tsx` (`group-data-horizontal/tabs:min-h-8`, `min-h-[calc(100%-1px)]`, `py-1.5 px-3.5`) so the year ordinal and effectivity year badge no longer overlap or get clipped inside the active tab pill.
+   - Cleaned up curriculum selector dropdown formatting (`{curriculum.name} ({curriculumAgeLabel})`) and added truncation/whitespace protection in `select.tsx` and the workspace bar (`w-full sm:w-[380px] truncate`), preventing long curriculum names from overflowing vertically outside the select input.
+   - Verified with all 25 Vitest tests and TypeScript typecheck (`npx tsc --noEmit`).
+
+0.3. **Room Schedule View Ordering & Calendar-First Default**:
+   - Updated `room-detail-dialog.tsx` so opening any room dialog immediately presents the interactive weekly **Calendar view** (`RoomScheduleCalendar`) by default.
+   - Reordered the view mode `ToggleGroup` to display `Calendar` first followed by `Table`.
+   - Updated `rooms-operations-workspace.test.tsx` test suite to assert against the calendar-first flow.
+   - Verified with all 10 Vitest tests and TypeScript typecheck (`npx tsc --noEmit`).
+
+1. **Extended Academic Terms & Three Curricula Placements**:
+   - Added 10 historical academic terms covering 2017-2018 through 2022-2023 (17 total terms in database).
+   - Created `GrcOlderSubjectCatalogSeeder.php` for pre-K12 and legacy subjects (`ENG 1-3`, `FIL 1-3`, `MATH 1-2`, `NATSCI 1-2`, etc.).
+   - Generated `curriculum-2018-2023-placements.csv` and `curriculum-2012-2017-placements.csv` and updated `GrcCurriculumSeeder.php` to seed all 3 distinct curriculum versions across 12 programs.
+   - Updated `DatabaseSeeder.php` to include older catalog seeders.
+
+2. **Inactive Faculty Tracking & Deactivation Reasons**:
+   - Added migration `2026_09_01_000001_add_deactivation_reason_to_users_table.php` (`deactivation_reason` string 64).
+   - Updated `User.php`, `FacultyMemberResource.php`, and `WorkbookFacultyProfileSeeder.php` to track reasons ('resigned', 'retired', 'contract_ended').
+   - Extended `facultyMemberSchema` and updated `faculty-workforce-workspace.tsx` to display formatted deactivation badges for inactive faculty.
+
+3. **Graduates API & Registrar Portal Workspace**:
+   - Added migration `2026_09_01_000002_add_graduation_school_year_to_student_profiles_table.php`.
+   - Created `App\Actions\Academic\ListGraduates` with filters (program, graduation_school_year, curriculum, search) and eager-loaded GPA computation.
+   - Added `GraduateResource.php`, `IndexGraduatesRequest.php`, `GraduatePolicy.php`, `GraduateController.php`, and registered `GET /api/v1/graduates` endpoint and `view-graduates` Gate.
+   - Implemented frontend `graduate-schema.ts`, `graduate-service.ts`, `use-graduates.ts` hook, and `graduates-workspace.tsx` with search, filter dropdowns, accessible tables, and pagination.
+   - Registered `graduates` portal module for `registrar_head` and `registrar_staff` in `role-capabilities.ts`, `portal-module-page.tsx`, and `module-registry.tsx`.
+
+4. **Curriculum Visibility in Schedule Generation**:
+   - Updated `demand-forecast-dialog.tsx` to prominently show curriculum version badges in both the subject rationale explanations and recommended block sections cards (highlighting 4th year using 2018-2023 and 1st-3rd year using 2024-2029).
+
+5. **Historical Cohorts & ML Random Forest Activation**:
+   - Executed `HistoricalDataSeeder.php` to generate 3,000 historical cohort students across 2014–2023 with 236,774 locked grades, 23,193 enrollments, 2,581 graduates, and derived 53,336 `section_demand_observations` across 17 terms.
+   - Activated `RandomForestRegressor` (`model_version="section-demand-rf-v2"`, `strategy="random_forest"`) since observation count per cohort (9+) exceeds the `_MINIMUM_FOREST_OBSERVATIONS = 4` threshold.
+
+6. **Verification & Checks Passed**:
+   - Backend PHPUnit `GraduateEndpointTest`: 3 passed, 27 assertions ✓
+   - Backend PHPUnit `GenerateSectionDemandForecastsTest`: 6 passed (including random forest block recommendation), 35 assertions ✓
+   - Python ML Service Pytest: 10 passed, 0 failures in 10.76s ✓
+   - Frontend TypeScript `npx tsc --noEmit`: 0 errors ✓
+   - Frontend Vitest (`graduates-workspace.test.tsx` & `module-registry.test.tsx`): 6 passed, 0 failures ✓
+   - Frontend Production Build (`npm run lint:fast && npm run build`): Passed cleanly with Turbopack ✓
+
+## 2026-08-31 — Honors (Dean's List) Minimum 16 Units Rule & Simplified Table Columns
+
+1. **Backend Minimum 16 Units Qualification Threshold**:
+   - Updated `BuildHonorsReport` (`backend/app/Actions/Academic/BuildHonorsReport.php`) to enforce `$gwaUnits >= 16.0` requirement in `qualifier()`. Students with fewer than 16 GWA units in a term no longer qualify for Dean's List / Honors.
+   - Updated backend feature tests in `AttritionAndHonorsEndpointsTest.php` and `SeedHistoricalHonorsCommandTest.php`.
+
+2. **Frontend Honors Table Column Refinement & Ordinal Year Level Display**:
+   - Simplified `frontend/src/features/components/portal/honors-workspace.tsx` table columns per user instruction to show only:
+     1. **Student**: Student Name (bold) + Student Number (sub-text)
+     2. **Year**: Ordinal Year Level (`1st Year`, `2nd Year`, `3rd Year`, `4th Year`)
+     3. **GWA**: Grade Point Average
+     4. **Units**: Total GWA units
+   - Formatted both Year dropdown filter options and table cell rows to display ordinal labels (`1st Year`, `2nd Year`, `3rd Year`, `4th Year`).
+   - Resolved undefined variable issue in `BuildHonorsReport.php` (`$gwaUnits`), verified live queries across all historical academic terms (Terms 1–6: 283 qualifiers) and all automated test suites pass cleanly (`OK (5 tests, 21 assertions)`).
+
+## 2026-08-31 — Honors (Dean's List) Table Student Column Layout Update
+
+1. **Student Name & ID Layout Alignment**:
+   - Updated `frontend/src/features/components/portal/honors-workspace.tsx` per user request: swapped display order in the "Student" table cell so the Student Name (`{row.student_name}`) is rendered prominently on top (`font-medium`) and the Student ID (`{row.student_number}`) is rendered on the line below in muted text (`text-xs text-muted-foreground`).
+   - Fixed unclosed JSX tags (`<p>` and `</TableCell>`) in `honors-workspace.tsx`.
+   - Verified `npx tsc --noEmit`: 0 TypeScript errors.
+
+## 2026-08-31 — Historical Honors (Dean's List) Data Seeding
+
+1. **Root Cause Analysis & Design Alignment**:
+   - Identified why past semesters showed almost 0 honor students: `StudentRosterSeeder` generated grades independently per subject with random hashing (`crc32 % 100`), making 1.00–1.50 GWA across 7–8 subjects statistically impossible ($0.15^7 \approx 0.00000017$).
+   - Confirmed `BuildHonorsReport` and `HonorsWorkspace` requirements: live qualifications for enrolled students with submitted/locked grades, GWA between 1.00 and 1.50, excluding PE/NSTP/PATHFIT.
+   - User selected the recommended solution: create `SeedHistoricalHonorsCommand` (`php artisan honors:seed-historical`) to seed ~3–5% of enrolled students per cohort (~50–80 honor students per term) across all completed semesters (2023-2024 to 2025-2026).
+
+2. **Implementation & Seeder Command**:
+   - Created `SeedHistoricalHonorsCommand.php` (`php artisan honors:seed-historical`) supporting `--term=` and `--percentage=`.
+   - Created `StudentHistoricalHonorsSeeder.php` seeder wrapper.
+   - Deterministically selects top ~4% of enrolled students per program and year level, upgrading their numeric subject grades to high marks (`1.00`, `1.25`, `1.50`) with `locked` grade status while leaving PE/NSTP excluded from GWA.
+   - Populated 286 historical honor students across all 6 completed academic terms in the active database (Term 1: 24, Term 2: 22, Term 3: 48, Term 4: 47, Term 5: 74, Term 6: 71).
+
+3. **Automated & Manual Verification**:
+   - Created `SeedHistoricalHonorsCommandTest.php` feature test asserting command execution and qualifier evaluation.
+   - Ran PHPUnit suite (`SeedHistoricalHonorsCommandTest.php` & `AttritionAndHonorsEndpointsTest.php`): 6/6 tests passed (28 assertions).
+   - Ran `npx tsc --noEmit`: 0 TypeScript errors.
+   - Executed live database inspection: verified Dean's List workspace query (`GET /api/v1/reports/honors`) returns 286 qualifiers across past completed terms.
+
+
+
+1. **Backend Server-Side PDF Generation (Laravel + Barryvdh DomPDF)**:
+   - Added `GET /api/v1/enrollment-documents/{enrollmentDocument}/pdf` endpoint with Sanctum bearer-token authentication and policy authorization (`EnrollmentDocumentPolicy@view`).
+   - Implemented `EnrollmentDocumentController@downloadPdf` with immutable snapshot hydration and streaming PDF response.
+   - Built strict A4 Blade PDF template (`backend/resources/views/pdf/certificate-of-registration.blade.php`) using native table layouts, exact point measurements, avoided page break containers, and 2-page pagination.
+   - Added automated feature tests covering unauthenticated rejection, student access to own document, cross-student forbidden status, and cashier/registrar authorization.
+
+2. **Frontend PDF Download Dedicated Actions (Next.js + Tailwind)**:
+   - Replaced browser "Print COR" action with direct "Download COR (PDF)" on `StudentDigitalComWorkspace` (in document card actions and active view header) and `CashierCorRecordsWorkspace` (in modal actions).
+   - Removed PrintButton dependency from payment confirmation alert in `AccountingPaymentWorkspace`.
+   - Integrated `getAuthenticatedBlob` in `api-client.ts` and `downloadEnrollmentDocumentPdf` in `enrollment-document-service.ts` with error handling and toast notifications.
+   - Restored and verified `EnrollmentDocumentController@downloadPdf` method on backend.
+
+3. **Verification & Quality Checks**:
+   - `php artisan test tests/Feature/Api/V1/EnrollmentDocumentsEndpointTest.php tests/Feature/Api/V1/FeeScheduleEndpointTest.php`: 18/18 tests passed (61 assertions).
+   - `npx tsc --noEmit`: 0 TypeScript errors.
+   - `npx vitest run certificate-of-registration-document.test.tsx student-digital-com-workspace.test.tsx cashier-cor-records-workspace.test.tsx`: 7/7 tests passed.
+
+## 2026-08-31 — MySQL Database Recovery & PRINT COR Two-Page Document Print Layout Fix
+
+1. **MySQL / MariaDB Crash Resolution & Stability Configuration**:
+   - Resolved unexpected MariaDB shutdown (`InnoDB` crash loop, corrupted `mysql.db` Aria index tables, and tablespace checksum errors after unclean process terminations).
+   - Repaired Aria system tables (`REPAIR TABLE mysql.db`, `mysql.tables_priv`, `mysql.columns_priv`, `mysql.global_priv`) and re-granted full privileges to `grc_app`.
+   - Configured `innodb_buffer_pool_size=64M` and `innodb_force_recovery=1` in `C:\xampp\mysql\bin\my.ini`.
+   - Cleaned stale `.dmp` and `.pid` lock files in `C:\xampp\mysql\data/`.
+   - Verified active MariaDB connection: 3,221 student profiles, 7,494 enrollments fully intact and operational.
+
+2. **Playwright Visual Inspection & Complete PRINT COR Layout Polish**:
+   - Executed Playwright automated headless Chromium rendering to visually inspect both screen view (`cor_screen_view.png`) and print preview media (`cor_print_view.png`).
+   - Identified and fixed critical visual defects:
+     - **Missing Header**: The generic `body[data-printing="document"] header` rule was hiding `<header className="cor-document__header">`. Scoped the exclusion to `header:not(.cor-document__header)`, restoring the official "GLOBAL RECIPROCAL COLLEGES" title and header on Page 1.
+     - **Duplicate Numbering**: Fixed duplicate numbers (`1. 1.`) on Withdrawal Terms by sanitizing strings and styling cleanly with bold indices.
+     - **Table & Assessment Styling**: Enhanced table grid borders (`0.75pt solid #222`), header background (`#e5e7eb`), centered columns (Code, Unit, Section, Schedule ID), and two-column balanced assessment layout with prominent double-underlined Grand Total.
+     - **Signatories**: Perfectly spaced 3-column signature block (`Cashier`, `Student`, `Registrar`) with solid signature lines.
+   - Tested and verified:
+     - `npx tsc --noEmit`: 0 errors.
+     - Vitest suite: 7/7 tests passed (`certificate-of-registration-document.test.tsx`, `student-digital-com-workspace.test.tsx`, `cashier-cor-records-workspace.test.tsx`).
+     - Visual inspection of Playwright print raster: 100% clean 2-page A4 document.
+   - Created `billing:backfill-cors` command (`BackfillAssessmentsAndCorsCommand.php`).
+   - Assessed and synchronized all 7,192 student enrollments in the system with the active fee schedule (Tuition at ₱200.00/unit and full itemized other fees).
+   - Students (e.g. Bryan T. Locsin, S.Y. 2025-2026 2nd semester) now have their exact tuition (27 units $\times$ ₱200.00 = ₱5,400.00), miscellaneous fees (₱3,500.00), and Grand Total (₱8,900.00) populated on their official COR.
+
+2. **2-Page Printable COR & Modal Dialog Printing**:
+   - Fixed modal dialog (`[data-slot="dialog-content"]`) print styling so when viewing a COR inside Cashier/Registrar history dialogs, the dialog modal expands to full static document flow (`position: static; max-height: none; overflow: visible;`) with dialog headers/close buttons hidden.
+   - Set `.cor-document__page` print sizing to `max-width: 210mm; height: auto; overflow: visible;` with `break-after: page; page-break-after: always; break-inside: avoid;` to ensure Page 1 and Page 2 (Withdrawal terms & signatories) print across 2 full pages without clipping or scrollbars.
+   - Extended `usePrintDocument` afterprint fallback debounce to 2000ms to allow Chromium print preview to fully construct both pages.
+
+3. **MariaDB / MySQL InnoDB Stability Configuration**:
+   - Configured `innodb_force_recovery=1` in `C:\xampp\mysql\bin\my.ini` to prevent MariaDB from aborting on tablespace checksum discrepancies after unclean process shutdowns.
+   - Verified active database connection and executed test suite successfully.
+
+4. **Verification**:
+   - `php artisan billing:backfill-cors`: Successfully backfilled and synchronized 7,192 student CORs.
+   - `npx tsc --noEmit`: 0 errors.
+   - `npx vitest run certificate-of-registration-document.test.tsx student-digital-com-workspace.test.tsx`: 5/5 tests passed.
+   - `php artisan test tests/Feature/Api/V1/FeeScheduleEndpointTest.php`: 3/3 tests passed.
+
+## 2026-08-31 — Registrar Head Fee Settings (COR Assessment Setup), Policy Settings Removal, and Room Management Fixes
+
+1. **Registrar Head Fee Settings & Assessment Configuration**:
+   - Created `fee_schedules` database migration and `FeeSchedule` model to store configurable `tuition` rate per unit and `miscellaneous` fee particulars.
+   - Seeded default tuition rate (₱200.00/unit) and 15 reference other fees from the official COR reference sheet (Registration ₱200, Guidance ₱200, Medical/Dental ₱350, SIS ₱200, Energy/Water/Comms ₱1,000, Community Extension ₱200, Research ₱200, Comp Lab 1 ₱500, Student ID ₱100, Dev Fee ₱400, Postal ₱150, Comp Lab 2 BSIT ₱500, Sports ₱0, Handbook ₱0, Library ₱0).
+   - Created `FeeScheduleController` under `/api/v1/fee-schedules` (GET and PUT) authorized for `RegistrarHead`.
+   - Updated `AssessEnrollment` and `BuildCorSnapshot` to calculate tuition dynamically (`units × rate_per_unit`) and populate custom other fee items.
+   - Built `FeeSettingsWorkspace` (`frontend/src/features/components/portal/fee-settings-workspace.tsx`) allowing the Registrar Head to edit the tuition rate per unit with live formula breakdown, edit miscellaneous fee amounts, select degree applicability (All vs BSIT), add custom fee particulars, and remove fees.
+
+2. **Policy Settings Navigation Cleanup**:
+   - Replaced the read-only `policy-settings` module in `role-capabilities.ts` and sidebar navigation with `fee-settings` ("Fee Settings").
+
+3. **Room Deduplication & Draft Term Pre-Assignment Cleanup**:
+   - Updated `RoomCatalogEntryController.php` to group rooms by physical name (`selectRaw('MIN(id) as id, name, MIN(capacity) as capacity, MIN(room_type) as room_type, MIN(college) as college')->groupBy('name')`) for Registrar Head, reducing 125 duplicate cards to the 39 unique physical rooms.
+   - Added defensive room name deduplication in `rooms-operations-workspace.tsx`.
+   - Cleared premature room assignments on draft term sections (`2026-2027 1st Draft`), setting `room = null` so all rooms are clean and unbooked prior to Program Chair schedule generation.
+
+4. **Verification**:
+   - Backend PHPUnit: `FeeScheduleEndpointTest` (3/3 passed), `RoomOccupancyEndpointTest` (6/6 passed).
+   - Frontend TypeScript: `npx tsc --noEmit` passed with 0 errors.
+   - Frontend Vitest: `fee-settings-workspace.test.tsx` (1/1 passed), `rooms-operations-workspace.test.tsx` (10/10 passed), `portal-module-page.test.tsx` (60/60 passed).
+
+## 2026-08-31 — Enrollment Analytics chart refinement
+
+- Removed the status/grade breakdown bar charts from `Enrollment Analytics` per user request, preserving the clean Official Enrollment Trend line chart and KPI cards.
+- Verified `tsc --noEmit`: 0 errors.
+
+## 2026-08-31 — Attrition Analytics filter layout refinement and trend chart integration
+
+1. **Filter Layout & UI Refinement**:
+   - Re-structured the filter section in `frontend/src/features/components/portal/attrition-analytics-workspace.tsx` into a spacious grid layout (`grid gap-4 sm:grid-cols-2 lg:grid-cols-4`).
+   - Fixed narrow text-wrapping on select dropdowns (`Cohort School Year`, `College / Department`, `Degree Program`, `Year Level`) so text like `S.Y. 2024-2025` and `All colleges` fits smoothly on a single line without wrapping.
+   - Placed the `SchoolYearRangeSlider` below the dropdowns with full width for comfortable slider handle adjustment.
+2. **Official Multi-Term Enrollment & Retention Trend Line Chart**:
+   - Passed `activeTermId` into `useProgramChairAnalyticsSummaryQuery` ensuring multi-term trend data loads reliably.
+   - Rendered the smooth monotone trend line chart (`EnrollmentYearOverYearChart`) displaying officially enrolled student movement across consecutive terms (e.g. 2023-2024 to 2026-2027).
+3. **Verification**:
+   - `tsc --noEmit`: 0 errors.
+   - Vitest suite: all 12 tests passed (analytics dashboard & year-over-year chart).
+
+## 2026-08-31 — Attrition Analytics workspace term pairing and school year selector fix
+
+Resolved infinite loading state on `/portal/attrition_analytics`:
+
+- Fixed term pairing logic in `frontend/src/features/components/portal/attrition-analytics-workspace.tsx` where semester comparisons were expecting the literal string `"2nd semester"` rather than matching the API's `"2nd"` / `"1st"` values.
+- Added a `School Year` dropdown selector dynamically populated with all available academic years having a complete 1st & 2nd semester cohort pair (e.g. S.Y. 2025-2026, 2024-2025, 2023-2024), defaulting to the latest available pair.
+- Added protective loading and empty boundary states before querying the attrition report.
+- Verified: `tsc --noEmit` passed with 0 errors.
+
 ## 2026-08-30 — Machine Learning Verification (Random Forest & XGBoost) and Historical Attrition Seeding
 
 Completed verification and implementation of machine learning models and seeded realistic student dropout/stop-out data:
+
 1. **Schedule Demand Prediction (Random Forest)**:
    - Verified that `ml-service/app/services/section_demand.py` uses `RandomForestRegressor` (`n_estimators=100`, `random_state=42`) with `feature_schema_version = 'v2'`.
    - Verified end-to-end Python execution returning `RESULT_STRATEGY: random_forest` and `RESULT_MODEL_VERSION: section-demand-rf-v2`.
@@ -23,6 +242,7 @@ Completed verification and implementation of machine learning models and seeded 
 ## 2026-08-30 — Analytics dashboard loading boundary isolation
 
 Resolved full-page loading issue when adjusting the Analytics school-year range slider:
+
 - Modified `frontend/src/features/components/portal/analytics-dashboard-workspace.tsx` to separate `termsQuery` (initial filter options setup) and `summaryQuery` loading boundaries.
 - The `Analytics filters` card (including the dual-handle `SchoolYearRangeSlider` and select dropdowns) now remains mounted and interactive during filter/range updates.
 - Scoped `summaryQuery`'s `AsyncBoundary` exclusively to the content area below the filters (`DescriptiveTab`).
@@ -32,6 +252,7 @@ Resolved full-page loading issue when adjusting the Analytics school-year range 
 ## 2026-08-30 — GSAP animation enhancement for landing page, login page, and portal shell
 
 Enhanced the landing page, login page, and portal shell with GSAP animations using `gsap` and `@gsap/react`:
+
 - Added `frontend/src/features/lib/gsap.ts` with client-guarded plugin registration (`ScrollTrigger`).
 - Added `frontend/src/features/hooks/use-reduced-motion.ts` with synchronous lazy initialiser to respect `prefers-reduced-motion: reduce` across all GSAP hooks.
 - Animated Landing Page (`landing-page.tsx`): Hero tagline/heading/summary/actions stagger reveal, hero panel slide-in, and scroll-triggered fade-ups for About, Academics, Student Services, and Enrollment Journey sections.
@@ -46,6 +267,7 @@ Enhanced the landing page, login page, and portal shell with GSAP animations usi
 All 14 tasks in `docs/superpowers/plans/2026-08-29-faculty-workforce-page-and-specialization-approval.md` completed and verified.
 
 ### What was built
+
 - **Backend (Tasks 1–5)**: `FacultySpecializationStatus` enum + migration (`pending`, `approved`, `rejected`); Program Chair direct assignment action auto-approved with `source = 'program_chair_assigned'`; `DecideFacultySpecialization` action with rejection-reason audit and `faculty_specialization_approved` / `faculty_specialization_rejected` notification triggers; `scopeVisibleTo` visibility scoping on `FacultySpecialization`; Registrar Head cross-college read access for `GET /api/v1/faculty-members?college=`.
 - **Frontend schemas/services (Tasks 6–7)**: `faculty-schema.ts` extended with `status`, `status_label`, `decided_at`, `decision_reason`, `decideFacultySpecializationInputSchema`; `faculty-service.ts`, `faculty-directory-service.ts`, and `use-faculty-directory.ts` updated.
 - **FacultyWorkforceWorkspace (Task 8)**: new page component with search, college filter (Registrar Head only), and ported workforce profile editing dialog.
@@ -56,6 +278,7 @@ All 14 tasks in `docs/superpowers/plans/2026-08-29-faculty-workforce-page-and-sp
 - **Notification presentation (Task 13)**: added `faculty_specialization_approved` and `faculty_specialization_rejected` to `PRESENTATION_BY_TYPE` and `notificationDestinationPath` (routes faculty to `/portal/availability-preferences`).
 
 ### Checks passed
+
 - Backend `FacultySpecializationsEndpointTest`: 14 tests / 69 assertions ✓
 - Backend `FacultyMembersEndpointTest`: 16 tests / 70 assertions ✓
 - Frontend Vitest (5 suites): 23 tests — `faculty-workforce-workspace`, `role-capabilities`, `module-registry`, `faculty-loading-workspace`, `faculty-subject-preference-panel` ✓
@@ -68,12 +291,13 @@ No commit or push has been made.
 Session started to diagnose and resolve HTTP 500 error on API login (`POST /api/v1/auth/login`).
 Root cause identified: MariaDB `mysql.db` privilege table corrupted with Aria error 176 (wrong page checksum), preventing schema-level grants from being loaded or applied for `grc_app@127.0.0.1` on `grc_enrollment`. System tables `global_priv`, `tables_priv`, and `columns_priv` also reported cross-system stamp warnings.
 Repair completed per `docs/runbooks/mariadb-local.md`:
+
 1. System tables backed up to `C:\xampp\mysql\system-tables-backup-20260828-0024`.
 2. Restored pristine `db.*` templates from `C:\xampp\mysql\backup\mysql\`.
 3. Re-ran `aria_chk -z --require-control-file` across all `.MAI` system tables.
 4. Restarted `mysqld` and re-applied schema grants for `grc_app`, `grc_migrator`, and `grc_test`.
 5. Verified `CHECK TABLE` (all OK), Laravel DB connection via Tinker (`3873` users), DDL denial canary (`OK: DDL denied`), and live HTTP API login (`POST /api/v1/auth/login` returning HTTP 200 with bearer token).
-No commit or push was made.
+   No commit or push was made.
 
 ## 2026-08-16 — Old-to-new curriculum subject crediting
 
@@ -378,7 +602,6 @@ full analytics action suite passed (10 tests / 86 assertions), frontend
 TypeScript passed, and focused analytics/dialog Vitest passed (2 files / 7
 tests). Targeted Prettier and PHP Pint checks passed; no commit or push was
 made.
-
 
 ## 2026-08-09 — Five-plan dataset and IT control implementation preflight
 
@@ -724,6 +947,7 @@ seeders.
 
 Three serious cross-task defects were caught by review and fixed before
 merge:
+
 - **Task 2**: the original design generated exactly one 40-seat block per
   cohort per historical term regardless of real headcount, undershooting
   the plan's own ~5,000-section estimate (landed at 2,147). Fixed by
@@ -1176,11 +1400,11 @@ at `314ace6` (Phase 7c and the grading/enrollment-completion slice — ADR
 0021 — are both merged). The working tree currently carries two further
 uncommitted slices on top: the 2026-08-04 section-terminology/Grades-sidebar
 fix, and the 2026-08-05 assessment/fees, guided Cashier flow, overload
-approval, and 10-connected-professor slice (ADR 0022). **See *Session
-History* at the bottom of this file for the current narrative** — the
-*Current Objective* section immediately below is preserved as historical
+approval, and 10-connected-professor slice (ADR 0022). **See _Session
+History_ at the bottom of this file for the current narrative** — the
+_Current Objective_ section immediately below is preserved as historical
 record of the manual-enrollment-startup slice and is no longer the live
-state; the *Exact Next Steps* section has a 2026-08-05 pointer to what's
+state; the _Exact Next Steps_ section has a 2026-08-05 pointer to what's
 actually next. Nothing since `85a6357` has been committed or pushed — the
 user has repeated, multiple times, that they will say explicitly when that
 should happen.
@@ -1339,7 +1563,7 @@ Both backend and frontend touched; no migrations.
 - **Task 3 — `stuck-students`, factual half and judgment half kept
   separate.** Every non-terminal enrollment's dwell time in its current
   status renders unconditionally (arithmetic, not policy); rows are only
-  *flagged* once `dashboard.stuck_threshold_days` is set, which it isn't by
+  _flagged_ once `dashboard.stuck_threshold_days` is set, which it isn't by
   default — the page states plainly that no institutional threshold is
   configured rather than guessing. Scoped to `Draft`/
   `PendingRegistrarApproval`/`PendingPayment` specifically (not the broader
@@ -1351,7 +1575,7 @@ Both backend and frontend touched; no migrations.
   `enrollment-dashboard`/`stuck-students`, Executive Director's
   `institution-dashboard`, Registrar Head's `policy-settings` (read-only).
   Dean and Executive Director get counts, never rows: `Enrollment::
-  scopeVisibleTo`/`EnrollmentPolicy::viewAny()` currently exclude both roles
+scopeVisibleTo`/`EnrollmentPolicy::viewAny()` currently exclude both roles
   entirely, and widening that scope would hand both roles row-level access
   to every student's record — exactly what PRD §3.6/§9.4 constrain against.
   The new `DashboardPolicy`/`StuckEnrollmentPolicy` follow
@@ -1393,7 +1617,7 @@ below) — no migrations either way.
   `chromium` project from a `throttle-isolated` project (serial, 1 worker,
   depends on `chromium`) — see Task 3.
 - **Task 2 — stack orchestration and state reset.** `php artisan serve
-  --env=testing` verified empirically to correctly route every request to
+--env=testing` verified empirically to correctly route every request to
   `grc_enrollment_test`, not the dev database (see ADR 0016 decision 6).
   `e2e/scripts/reset-db.mjs` runs `migrate:fresh --seed --env=testing`
   once per suite run, not per test. Found and fixed a real infrastructure
@@ -1405,13 +1629,13 @@ below) — no migrations either way.
   0016 decision 5.
 - **Task 3 — the 13 testable journeys.** `e2e/tests/*.spec.ts`, one file
   per journey group, `e2e/fixtures/{auth,api-client,seed-identities,
-  select}.ts` shared helpers. Journeys 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13
+select}.ts` shared helpers. Journeys 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13
   fully covered; 4 & 5 covered together; 15 covered for its authorization
   half only; 14 skipped with a documented reason (ml-service dormant,
   Phase 9 boundary). Found and fixed a real, previously invisible
   live-contract bug: 7 of 11 date-serializing API Resources used a Carbon
   format the frontend's own Zod schemas reject, breaking every workspace
-  that rendered a real timestamp — see *Technical Decisions* and ADR 0016
+  that rendered a real timestamp — see _Technical Decisions_ and ADR 0016
   decision 7. Also found, and left deliberately untouched as an
   application-scope decision, one real UI gap: no student-facing
   "Withdraw" button exists despite the mutation hook being fully
@@ -1420,8 +1644,8 @@ below) — no migrations either way.
   for `executive_director`; that was wrong — the Executive Director's
   approval controls were reachable the whole time, via `master-schedule`.
   Journey 5 originally tested that role's half over the API as a result;
-  it now drives the real UI. See ADR 0016 decision 8 and *Verified
-  Completed — Phase 7c*.
+  it now drives the real UI. See ADR 0016 decision 8 and _Verified
+  Completed — Phase 7c_.
 - **Task 4 — accessibility in a real browser.** `e2e/tests/accessibility.spec.ts`:
   `@axe-core/playwright` against the landing page, login page, portal
   overview, and Eligible Subjects (the page from the original Phase 8b
@@ -1495,7 +1719,7 @@ Frontend-only — no backend or migration changes.
   native `register()` onto `Controller`-wrapped `Select` surfaced a genuine,
   previously-undetected bug: several "auto-select the active academic term"
   behaviors had silently stopped working, caught only because the new tests
-  assert the *selected* value instead of just option presence (see ADR 0015
+  assert the _selected_ value instead of just option presence (see ADR 0015
   decision 5 for the two different fixes this required, and decision 6 for a
   related Radix `Select` controlled-value bug fixed in 4 files). `AsyncBoundary`'s
   empty state now renders through `ui/empty.tsx` (was a bare `<p>`) —
@@ -1534,8 +1758,8 @@ Frontend-only — no backend or migration changes.
   module grid) rather than inventing new styling for them — both were purely
   decorative dead weight already covered by sibling classes.
 - **Task 8 — tests.** No separate pass was needed: every task above was
-  verified with targeted test runs as it landed (see *Commands and Tests Run
-  — Phase 8b*), and every one of the 19 workspace test files retains its
+  verified with targeted test runs as it landed (see _Commands and Tests Run
+  — Phase 8b_), and every one of the 19 workspace test files retains its
   `vitest-axe` "no detectable accessibility violations" case, confirmed by a
   final sweep. 2 new tests added directly to `data-table.test.tsx` for the
   `emptyMessage` prop and the corrected mobile-card heading; 2 new tests for
@@ -1555,7 +1779,7 @@ Frontend-only — no backend or migration changes.
   AA pass — the Chrome browser extension was not connected (same limitation
   Phase 8a recorded). The DOM-level and test-level evidence is solid (every
   structural defect from the screenshot is fixed and asserted by a test), but
-  nobody has *looked* at the rendered result yet.
+  nobody has _looked_ at the rendered result yet.
 
 ## Verified Completed — Phase 8a (accessibility & required states)
 
@@ -1573,7 +1797,7 @@ Frontend-only — no backend or migration changes.
   `minimatch@3.1.5` → `brace-expansion@1.1.18`, which carries a DoS advisory
   (GHSA-mh99-v99m-4gvg). Both fixed via `frontend/package.json` `overrides`
   (same mechanism already used there for `postcss`/`sharp`): `{"eslint":
-  "$eslint"}` accepts the installed ESLint version for peer resolution, and
+"$eslint"}` accepts the installed ESLint version for peer resolution, and
   `brace-expansion` is forced to `^5.0.8`. Verified `npm ci` (matching CI
   exactly) succeeds with 0 vulnerabilities. Enabling the plugin surfaced 5
   violations, all fixed: a redundant `role="region"` on an already-semantic
@@ -1618,7 +1842,7 @@ Frontend-only — no backend or migration changes.
   hand-rolled loading/error/empty sites and 6 duplicated paginators.
   `enrollment-workspace.tsx`, `registrar-enrollment-workspace.tsx`, and
   `registrar-records-workspace.tsx` deliberately keep independent,
-  hand-written `Alert` blocks for their *mutation* failures (submit/approve/
+  hand-written `Alert` blocks for their _mutation_ failures (submit/approve/
   reject/void) rather than routing them through `AsyncBoundary` — a failed
   mutation must preserve in-progress form state (selected section, typed
   reason), which `AsyncBoundary` (built to replace a query's entire render
@@ -1629,7 +1853,7 @@ Frontend-only — no backend or migration changes.
   `vitest-axe` "no detectable accessibility violations" test to all 19
   workspace test files. That pass surfaced one real production defect —
   `TeachingScheduleWorkspace`'s `DataTable` `renderCard` used `CardTitle
-  level={4}` with no intervening `Card`/h3 between it and `WorkspacePage`'s
+level={4}` with no intervening `Card`/h3 between it and `WorkspacePage`'s
   own `h2`, a genuine heading-order (h2→h4) violation; fixed to `level={3}`,
   the default every other `DataTable` consumer gets automatically because
   each wraps its table in its own `Card`. Added real end-to-end integration
@@ -1646,7 +1870,7 @@ Frontend-only — no backend or migration changes.
 - **Task 7 — docs.** `docs/adr/0014-presentation-layer-state-contract.md`
   records the HTTP-status → presentation mapping and the query/mutation
   two-tier split. This reconciliation.
-- **Gate.** See *Commands and Tests Run — Phase 8a*. Full frontend gate
+- **Gate.** See _Commands and Tests Run — Phase 8a_. Full frontend gate
   green (format, lint at `--max-warnings=0` including jsx-a11y, oxlint,
   typecheck, 65 files/354 tests, build, `npm audit` 0 vulnerabilities);
   backend no-regression confirmed at 641/641 (unchanged from Phase 7b, as
@@ -1663,7 +1887,7 @@ Frontend-only — no backend or migration changes.
   backend today (grep confirms nothing currently raises one — every
   business rule that could conflict returns 422 instead), so the 409 path
   is proven at the unit/integration level only, not against a real
-  endpoint; this is a gap in the *backend's* state coverage, not evidence
+  endpoint; this is a gap in the _backend's_ state coverage, not evidence
   against the frontend contract.
 
 ## Verified Completed — Phase 7a (money path, merged `fc56148`)
@@ -1722,7 +1946,7 @@ Frontend-only — no backend or migration changes.
   transitions the enrollment to `enrolled`, and generates the Digital COM
   (`EnrollmentDocument`, type `com`, opaque `COM%06d` number), mirroring
   `SubmitEnrollment`'s five-write shape. **Idempotent** (FR-FIN-009): the
-  Action checks for an existing `Payment` *before* checking the
+  Action checks for an existing `Payment` _before_ checking the
   enrollment's status, so a repeat call — even one arriving after the
   enrollment has already moved on to `enrolled` — returns the existing
   payment/document rather than erroring or duplicating either (`200`
@@ -1761,7 +1985,7 @@ Frontend-only — no backend or migration changes.
   enrollment and locked the grade → Accounting served and completed the
   queue ticket, then confirmed payment (**verified idempotent**: a second
   confirmation call with different, contradictory input returned the
-  *original* payment/document unchanged, and direct SQL confirmed exactly
+  _original_ payment/document unchanged, and direct SQL confirmed exactly
   one row in both `payments` and `enrollment_documents`) → the student's
   own `GET /enrollments`, `/academic-grades`, and `/enrollment-documents`
   all reflected the final state (enrolled, served ticket, locked grade,
@@ -1797,7 +2021,7 @@ Frontend-only — no backend or migration changes.
   enrollment, reason required), `GET /api/v1/withdrawal-requests`
   (Student own, Registrar Staff and Registrar Head all — new
   `WithdrawalRequest::scopeVisibleTo`), `PATCH
-  /api/v1/withdrawal-requests/{withdrawalRequest}` (Registrar-Staff-only
+/api/v1/withdrawal-requests/{withdrawalRequest}` (Registrar-Staff-only
   `action: approve`/`reject`, following ADR 0011's constant-trio shape).
   `approve` drops every still-active `enrollment_subjects` row and, only
   when `config('enrollment.withdrawal.releases_seats')` is true (new flag,
@@ -1836,7 +2060,7 @@ Frontend-only — no backend or migration changes.
   `RegistrarRecordsWorkspace` serves all four Registrar Staff modules
   (Credit Mappings, Drops & Withdrawals, Academic Records, Enrollment
   Documents) via `initialModuleId`, region name `"Registrar records
-  workspace"` (distinct from the Student `grades-com` module's existing
+workspace"` (distinct from the Student `grades-com` module's existing
   `"Academic records workspace"`) — unlike `AccountingPaymentWorkspace`,
   it renders only the module matching `initialModuleId`, not all four at
   once, since these four are unrelated record types rather than steps of
@@ -1852,10 +2076,10 @@ Frontend-only — no backend or migration changes.
   tags (`Withdrawals`, `Transferee Credits`, `Class Rosters`), 3 existing
   tag/route descriptions updated for the Task 3 widening, 7 new paths, and
   ~15 new schemas — Redocly-clean. `docs/data-dictionary/
-  enrollment-records.md`: replaced both "API: none yet" notes, added the
+enrollment-records.md`: replaced both "API: none yet" notes, added the
   `class-rosters` API note to `enrollment_subjects`, and updated the two
-  Task-3-widened tables' API notes. Full gate green (see *Commands and
-  Tests Run*). **Live HTTP proof, not just tests**, against the real dev
+  Task-3-widened tables' API notes. Full gate green (see _Commands and
+  Tests Run_). **Live HTTP proof, not just tests**, against the real dev
   database: a fresh proof student (`proof.withdraw@grc.test`) submitted →
   registrar-approved → paid → `enrolled`; section 1's `enrolled_count`
   went 4 → 3 on withdrawal approval and stayed at 3 on a repeat approval
@@ -1871,7 +2095,7 @@ Frontend-only — no backend or migration changes.
 
 None. Phase 7c is complete and fully quality-gated on `phase-7c-dashboards`,
 not yet committed — committing/merging needs an explicit user request. See
-*Exact Next Steps*.
+_Exact Next Steps_.
 
 ## Files Changed — Phase 7c
 
@@ -2033,8 +2257,8 @@ expectations updated for each migration).
 matcher + jsdom Pointer Events polyfill for Radix `Select`).
 
 **Docs:** `docs/runbooks/mariadb-local.md` (new "server will not start"
-section, unrelated infra fix at the start of this session — see *Commands
-and Tests Run — Phase 8a*); `docs/adr/0014-presentation-layer-state-contract.md`
+section, unrelated infra fix at the start of this session — see _Commands
+and Tests Run — Phase 8a_); `docs/adr/0014-presentation-layer-state-contract.md`
 (new); `PROGRESS.md` (this reconciliation).
 
 ## Files Changed — Phase 7a
@@ -2120,8 +2344,7 @@ ClassRosterController.php}` (3 new); `Http/Requests/Api/V1/
 `Http/Resources/Api/V1/{WithdrawalRequestResource.php,
 TransfereeCreditResource.php, ClassRosterEntryResource.php}` (new);
 `Models/{WithdrawalRequest.php, TransfereeCredit.php,
-EnrollmentSubject.php}` (new `scopeVisibleTo`), `Models/AcademicGrade.php`
-+`EnrollmentDocument.php` (widened `scopeVisibleTo` to include Registrar
+EnrollmentSubject.php}` (new `scopeVisibleTo`), `Models/AcademicGrade.php` +`EnrollmentDocument.php` (widened `scopeVisibleTo` to include Registrar
 Staff); `Policies/{WithdrawalRequestPolicy.php, TransfereeCreditPolicy.php,
 EnrollmentSubjectPolicy.php}` (new), `Policies/{EnrollmentPolicy.php
 (+`withdraw`), AcademicGradePolicy.php, EnrollmentDocumentPolicy.php}`
@@ -2151,58 +2374,58 @@ updated for the new/widened access); `PROGRESS.md` (this reconciliation).
 
 ## Commands and Tests Run — Phase 7a
 
-| Command | Result |
-|---|---|
-| `php artisan test` | **605 passed / 2,284 assertions**, ~35–55s (run after every task) |
-| `vendor\bin\phpstan analyse --memory-limit=1G --no-progress` | No errors (level 8), run after every task |
-| `vendor\bin\pint --test` | passed, run after every task |
-| `composer audit --locked` | No security vulnerability advisories found |
-| `npx @redocly/cli lint docs/api/openapi.yaml` | valid, no warnings, run after every task |
-| `npx vitest run --no-file-parallelism` | **48 files / 243 tests passed** |
-| `npx tsc --noEmit` | passed |
-| `npx eslint . --max-warnings=0` | passed (2 real `@typescript-eslint/no-base-to-string` violations in new test files' ad-hoc URL-stringification helpers fixed by reusing the existing `url()` helper pattern) |
-| `npx prettier --check .` | passed after one auto-fix pass over 7 files |
-| `npm audit --omit=dev` | 0 vulnerabilities |
-| `npx next build` (Turbopack) | compiled successfully, 5 routes |
-| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator` | **zero pending migrations** — confirmed before the live proof, exactly as predicted (Phase 7a adds no new tables) |
-| **Live HTTP, real dev DB:** submitted a fresh enrollment as `proof.student1@grc.test` (`POST /enrollments`, section 1/term 2) | **201**, enrollment #10 created `pending_registrar_approval` with a fresh queue ticket `Q000010` |
-| **Live HTTP, real dev DB:** `faculty.seed@grc.test` encodes + submits a grade (`POST`, then `PATCH action=submit /academic-grades`) | grade #4 created `draft` → `submitted` for the same student/subject/section/term |
-| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` approves the enrollment and locks the grade (`PATCH action=registrar_approve /enrollments/10`, `PATCH action=lock /academic-grades/4`) | enrollment → `pending_payment`; grade → `locked` |
-| **Live HTTP, real dev DB:** same Registrar Head rejects a second seeded enrollment and voids a third (`PATCH action=registrar_reject /enrollments/9`, `PATCH action=void /enrollments/7`, both with a reason) | both **200**, → `rejected` / `cancelled` respectively — both other Task 2 actions proven live |
-| **Live HTTP, real dev DB:** `accounting.seed@grc.test` serves then completes the queue ticket (`PATCH action=serve`, `PATCH action=complete` on `/queue-tickets/4`) | `waiting` → `serving` → `served` |
-| **Live HTTP, real dev DB:** Accounting confirms payment (`POST /enrollments/10/payment`, `external_reference: "OR-000123"`) | **201**, enrollment → `enrolled`, Digital COM `COM000010` generated |
-| **Live HTTP, real dev DB:** repeat the identical `POST` with a *different, contradictory* `external_reference` | **200** (not 201) — returned the **original** `OR-000123`/`COM000010` unchanged; direct SQL confirmed exactly 1 row in both `payments` and `enrollment_documents` for enrollment 10 — FR-FIN-009 idempotency proven live |
-| **Live HTTP, real dev DB:** `proof.student1` reads `GET /enrollments`, `/academic-grades`, `/enrollment-documents` | all three reflect the final state: `enrolled` + served ticket, `locked` grade, COM present |
-| **Live HTTP, real dev DB:** Registrar Head still sees enrollment 10 (now `enrolled`); Accounting Staff's `pending_payment`-scoped list no longer does | both confirmed — visibility boundaries hold after a status transition |
-| **Direct SQL, real dev DB:** audit trail for enrollment 10 | 3 rows in order: `enrollment.submitted` → `enrollment.registrar_approved` → `enrollment.payment_confirmed` |
-| **Direct SQL, real dev DB:** audit trail for grade 4 | 3 rows in order: `academic_grade.created` → `submitted` → `locked` |
-| **Direct SQL, real dev DB:** notifications for `proof.student1` | 4 rows in order: enrollment submitted, registrar approved, grade locked, payment confirmed |
+| Command                                                                                                                                                                                                       | Result                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `php artisan test`                                                                                                                                                                                            | **605 passed / 2,284 assertions**, ~35–55s (run after every task)                                                                                                                                                        |
+| `vendor\bin\phpstan analyse --memory-limit=1G --no-progress`                                                                                                                                                  | No errors (level 8), run after every task                                                                                                                                                                                |
+| `vendor\bin\pint --test`                                                                                                                                                                                      | passed, run after every task                                                                                                                                                                                             |
+| `composer audit --locked`                                                                                                                                                                                     | No security vulnerability advisories found                                                                                                                                                                               |
+| `npx @redocly/cli lint docs/api/openapi.yaml`                                                                                                                                                                 | valid, no warnings, run after every task                                                                                                                                                                                 |
+| `npx vitest run --no-file-parallelism`                                                                                                                                                                        | **48 files / 243 tests passed**                                                                                                                                                                                          |
+| `npx tsc --noEmit`                                                                                                                                                                                            | passed                                                                                                                                                                                                                   |
+| `npx eslint . --max-warnings=0`                                                                                                                                                                               | passed (2 real `@typescript-eslint/no-base-to-string` violations in new test files' ad-hoc URL-stringification helpers fixed by reusing the existing `url()` helper pattern)                                             |
+| `npx prettier --check .`                                                                                                                                                                                      | passed after one auto-fix pass over 7 files                                                                                                                                                                              |
+| `npm audit --omit=dev`                                                                                                                                                                                        | 0 vulnerabilities                                                                                                                                                                                                        |
+| `npx next build` (Turbopack)                                                                                                                                                                                  | compiled successfully, 5 routes                                                                                                                                                                                          |
+| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator`                                                                                                                                     | **zero pending migrations** — confirmed before the live proof, exactly as predicted (Phase 7a adds no new tables)                                                                                                        |
+| **Live HTTP, real dev DB:** submitted a fresh enrollment as `proof.student1@grc.test` (`POST /enrollments`, section 1/term 2)                                                                                 | **201**, enrollment #10 created `pending_registrar_approval` with a fresh queue ticket `Q000010`                                                                                                                         |
+| **Live HTTP, real dev DB:** `faculty.seed@grc.test` encodes + submits a grade (`POST`, then `PATCH action=submit /academic-grades`)                                                                           | grade #4 created `draft` → `submitted` for the same student/subject/section/term                                                                                                                                         |
+| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` approves the enrollment and locks the grade (`PATCH action=registrar_approve /enrollments/10`, `PATCH action=lock /academic-grades/4`)             | enrollment → `pending_payment`; grade → `locked`                                                                                                                                                                         |
+| **Live HTTP, real dev DB:** same Registrar Head rejects a second seeded enrollment and voids a third (`PATCH action=registrar_reject /enrollments/9`, `PATCH action=void /enrollments/7`, both with a reason) | both **200**, → `rejected` / `cancelled` respectively — both other Task 2 actions proven live                                                                                                                            |
+| **Live HTTP, real dev DB:** `accounting.seed@grc.test` serves then completes the queue ticket (`PATCH action=serve`, `PATCH action=complete` on `/queue-tickets/4`)                                           | `waiting` → `serving` → `served`                                                                                                                                                                                         |
+| **Live HTTP, real dev DB:** Accounting confirms payment (`POST /enrollments/10/payment`, `external_reference: "OR-000123"`)                                                                                   | **201**, enrollment → `enrolled`, Digital COM `COM000010` generated                                                                                                                                                      |
+| **Live HTTP, real dev DB:** repeat the identical `POST` with a _different, contradictory_ `external_reference`                                                                                                | **200** (not 201) — returned the **original** `OR-000123`/`COM000010` unchanged; direct SQL confirmed exactly 1 row in both `payments` and `enrollment_documents` for enrollment 10 — FR-FIN-009 idempotency proven live |
+| **Live HTTP, real dev DB:** `proof.student1` reads `GET /enrollments`, `/academic-grades`, `/enrollment-documents`                                                                                            | all three reflect the final state: `enrolled` + served ticket, `locked` grade, COM present                                                                                                                               |
+| **Live HTTP, real dev DB:** Registrar Head still sees enrollment 10 (now `enrolled`); Accounting Staff's `pending_payment`-scoped list no longer does                                                         | both confirmed — visibility boundaries hold after a status transition                                                                                                                                                    |
+| **Direct SQL, real dev DB:** audit trail for enrollment 10                                                                                                                                                    | 3 rows in order: `enrollment.submitted` → `enrollment.registrar_approved` → `enrollment.payment_confirmed`                                                                                                               |
+| **Direct SQL, real dev DB:** audit trail for grade 4                                                                                                                                                          | 3 rows in order: `academic_grade.created` → `submitted` → `locked`                                                                                                                                                       |
+| **Direct SQL, real dev DB:** notifications for `proof.student1`                                                                                                                                               | 4 rows in order: enrollment submitted, registrar approved, grade locked, payment confirmed                                                                                                                               |
 
 ## Commands and Tests Run — Phase 7b
 
-| Command | Result |
-|---|---|
-| `php artisan test` | **641 passed / 2,419 assertions**, ~40–45s (run after every task) |
-| `vendor\bin\phpstan analyse --memory-limit=512M` | No errors (level 8), run after every task |
-| `vendor\bin\pint --test` | passed, run after every task (one auto-fix pass on first run, over 3 files) |
-| `composer audit --locked` | No security vulnerability advisories found |
-| `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml` | valid, no warnings |
-| `npx vitest run --no-file-parallelism` | **48 files / 243 tests passed** |
-| `npx tsc --noEmit` | passed |
-| `npx eslint . --max-warnings=0` | passed (2 real violations fixed during development: a duplicate-union-type-constituent and a missed optional-chain) |
-| `npx prettier --check .` | passed after one auto-fix pass over 6 new files |
-| `npm audit --omit=dev` | 0 vulnerabilities |
-| `npx next build` (Turbopack) | compiled successfully, 5 routes |
-| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator` | **zero pending migrations** — confirmed before the live proof, exactly as predicted (no new tables this phase) |
-| **Live HTTP, real dev DB:** submitted a fresh enrollment as `proof.withdraw@grc.test` (`POST /enrollments`, section 1/term 2) | **201**, enrollment #11 created `pending_registrar_approval` |
-| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` approves, `accounting.seed@grc.test` confirms payment | enrollment #11 → `pending_payment` → `enrolled`; section 1 `enrolled_count` at 4 |
-| **Live HTTP, real dev DB:** `proof.withdraw@grc.test` requests withdrawal (`POST /enrollments/11/withdraw`, reason required) | **201**, withdrawal request #2 created `pending` |
-| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` approves the request (`PATCH action=approve /withdrawal-requests/2`) | **200** → `approved`; enrollment #11 → `withdrawn`, `active_academic_term_id` → `null`; its `enrollment_subjects` row → `dropped`; section 1 `enrolled_count` **4 → 3** |
-| **Live HTTP, real dev DB:** repeat the identical approve call | **422** ("requires ... pending; it is currently 'approved'"); section 1 `enrolled_count` confirmed still **3** — FR-FIN-004/§5.3 idempotency proven live, not just by test |
-| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` records a transferee credit for the same student mapped to `CS102` (the exact prerequisite `CS201` requires), then approves it | **201** then **200** → `approved` |
-| **Live HTTP, real dev DB:** `proof.withdraw@grc.test` reads `GET /eligible-subjects` for `CS201` before and after the credit's approval | **unchanged** both times — still ineligible, same "prerequisite not yet completed" reason — proving `BuildEligibleSubjectPool` never reads `transferee_credits`, live not just by test |
-| **Live HTTP, real dev DB:** `faculty.seed@grc.test` reads `GET /class-rosters?section_id=1` | returned all 4 roster rows for the section, including the just-withdrawn student correctly shown `dropped` |
-| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` reads `GET /academic-grades` and `GET /enrollment-documents` (Task 3 widening) | both returned real rows (4 and 3 respectively) — the widened read access works live |
+| Command                                                                                                                                                                                    | Result                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan test`                                                                                                                                                                         | **641 passed / 2,419 assertions**, ~40–45s (run after every task)                                                                                                                      |
+| `vendor\bin\phpstan analyse --memory-limit=512M`                                                                                                                                           | No errors (level 8), run after every task                                                                                                                                              |
+| `vendor\bin\pint --test`                                                                                                                                                                   | passed, run after every task (one auto-fix pass on first run, over 3 files)                                                                                                            |
+| `composer audit --locked`                                                                                                                                                                  | No security vulnerability advisories found                                                                                                                                             |
+| `npx --yes @redocly/cli@latest lint docs/api/openapi.yaml`                                                                                                                                 | valid, no warnings                                                                                                                                                                     |
+| `npx vitest run --no-file-parallelism`                                                                                                                                                     | **48 files / 243 tests passed**                                                                                                                                                        |
+| `npx tsc --noEmit`                                                                                                                                                                         | passed                                                                                                                                                                                 |
+| `npx eslint . --max-warnings=0`                                                                                                                                                            | passed (2 real violations fixed during development: a duplicate-union-type-constituent and a missed optional-chain)                                                                    |
+| `npx prettier --check .`                                                                                                                                                                   | passed after one auto-fix pass over 6 new files                                                                                                                                        |
+| `npm audit --omit=dev`                                                                                                                                                                     | 0 vulnerabilities                                                                                                                                                                      |
+| `npx next build` (Turbopack)                                                                                                                                                               | compiled successfully, 5 routes                                                                                                                                                        |
+| **Real dev DB:** `php artisan migrate:status --database=mariadb_migrator`                                                                                                                  | **zero pending migrations** — confirmed before the live proof, exactly as predicted (no new tables this phase)                                                                         |
+| **Live HTTP, real dev DB:** submitted a fresh enrollment as `proof.withdraw@grc.test` (`POST /enrollments`, section 1/term 2)                                                              | **201**, enrollment #11 created `pending_registrar_approval`                                                                                                                           |
+| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` approves, `accounting.seed@grc.test` confirms payment                                                                           | enrollment #11 → `pending_payment` → `enrolled`; section 1 `enrolled_count` at 4                                                                                                       |
+| **Live HTTP, real dev DB:** `proof.withdraw@grc.test` requests withdrawal (`POST /enrollments/11/withdraw`, reason required)                                                               | **201**, withdrawal request #2 created `pending`                                                                                                                                       |
+| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` approves the request (`PATCH action=approve /withdrawal-requests/2`)                                                           | **200** → `approved`; enrollment #11 → `withdrawn`, `active_academic_term_id` → `null`; its `enrollment_subjects` row → `dropped`; section 1 `enrolled_count` **4 → 3**                |
+| **Live HTTP, real dev DB:** repeat the identical approve call                                                                                                                              | **422** ("requires ... pending; it is currently 'approved'"); section 1 `enrolled_count` confirmed still **3** — FR-FIN-004/§5.3 idempotency proven live, not just by test             |
+| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` records a transferee credit for the same student mapped to `CS102` (the exact prerequisite `CS201` requires), then approves it | **201** then **200** → `approved`                                                                                                                                                      |
+| **Live HTTP, real dev DB:** `proof.withdraw@grc.test` reads `GET /eligible-subjects` for `CS201` before and after the credit's approval                                                    | **unchanged** both times — still ineligible, same "prerequisite not yet completed" reason — proving `BuildEligibleSubjectPool` never reads `transferee_credits`, live not just by test |
+| **Live HTTP, real dev DB:** `faculty.seed@grc.test` reads `GET /class-rosters?section_id=1`                                                                                                | returned all 4 roster rows for the section, including the just-withdrawn student correctly shown `dropped`                                                                             |
+| **Live HTTP, real dev DB:** `registrar-staff.seed@grc.test` reads `GET /academic-grades` and `GET /enrollment-documents` (Task 3 widening)                                                 | both returned real rows (4 and 3 respectively) — the widened read access works live                                                                                                    |
 
 ## Commands and Tests Run — Phase 8a
 
@@ -2212,34 +2435,34 @@ start of this session, before any Phase 8a work — see
 `docs/runbooks/mariadb-local.md`'s "Server will not start" section for the
 root cause and fix. All commands below ran against the repaired database.
 
-| Command | Result |
-|---|---|
-| `npm run format:check` | 3 files needed formatting (files this session touched); fixed with `prettier --write` on those 3, then re-checked clean |
-| `npm run lint` (`eslint . --max-warnings=0`, includes jsx-a11y) | passed, 0 warnings |
-| `npm run lint:fast` (oxlint) | passed, exit 0; 1 pre-existing warning (`field.tsx`'s `useFieldError` export alongside a component — a Fast Refresh advisory, not an error, unrelated to this phase's changes) |
-| `npm run typecheck` | passed |
-| `npm test` (`vitest run`, default multi-worker pool — no `--no-file-parallelism` needed this run) | **65 files / 354 tests passed** (up from 48 files/243 tests at the end of Phase 7b — +17 files, +111 tests); the 26-file `components/portal/` subset was also independently re-run with `--no-file-parallelism` after each fix during development, per the Known Issues caution below |
-| `npm run build` (Turbopack) | compiled successfully, same 5 routes |
-| `npm audit --audit-level=moderate` | 0 vulnerabilities |
-| `composer test` (backend, no-regression check — this phase touched no backend file) | **641 passed / 2,419 assertions**, unchanged from Phase 7b |
-| **Live HTTP, real dev DB:** `student.seed@grc.test` reads `GET /transferee-credits` | **200**, empty list — this endpoint is broadly readable and scope-filtered, not role-gated, so it does not itself produce a 403 |
-| **Live HTTP, real dev DB:** same student reads `GET /class-rosters` (Faculty/Registrar-only) | **403** `{"error":{"code":"FORBIDDEN","message":"You are not authorized to perform this action."}}` — a genuine cross-role denial, matching `getStatePresentation`'s 403 branch exactly |
-| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` sends `PATCH /enrollments/999999999` (nonexistent id) | **404** `{"error":{"code":"NOT_FOUND","message":"The requested resource was not found."}}` — route-model binding's automatic 404, matching the 404 branch exactly |
-| **Live HTTP, real dev DB:** 32 rapid login attempts with a bad password | first several **401**, then **429** with a real `Retry-After: 5` header and `X-RateLimit-*` headers — confirms `readRetryAfterSeconds` parses a real header, not just a test double |
-| **Not run this session:** manual WCAG 2.1 AA pass (keyboard-only traversal, screen-reader spot check, 200% zoom, responsive breakpoints, reduced-motion) | Chrome browser extension was not connected — see *Known Issues* |
+| Command                                                                                                                                                  | Result                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run format:check`                                                                                                                                   | 3 files needed formatting (files this session touched); fixed with `prettier --write` on those 3, then re-checked clean                                                                                                                                                               |
+| `npm run lint` (`eslint . --max-warnings=0`, includes jsx-a11y)                                                                                          | passed, 0 warnings                                                                                                                                                                                                                                                                    |
+| `npm run lint:fast` (oxlint)                                                                                                                             | passed, exit 0; 1 pre-existing warning (`field.tsx`'s `useFieldError` export alongside a component — a Fast Refresh advisory, not an error, unrelated to this phase's changes)                                                                                                        |
+| `npm run typecheck`                                                                                                                                      | passed                                                                                                                                                                                                                                                                                |
+| `npm test` (`vitest run`, default multi-worker pool — no `--no-file-parallelism` needed this run)                                                        | **65 files / 354 tests passed** (up from 48 files/243 tests at the end of Phase 7b — +17 files, +111 tests); the 26-file `components/portal/` subset was also independently re-run with `--no-file-parallelism` after each fix during development, per the Known Issues caution below |
+| `npm run build` (Turbopack)                                                                                                                              | compiled successfully, same 5 routes                                                                                                                                                                                                                                                  |
+| `npm audit --audit-level=moderate`                                                                                                                       | 0 vulnerabilities                                                                                                                                                                                                                                                                     |
+| `composer test` (backend, no-regression check — this phase touched no backend file)                                                                      | **641 passed / 2,419 assertions**, unchanged from Phase 7b                                                                                                                                                                                                                            |
+| **Live HTTP, real dev DB:** `student.seed@grc.test` reads `GET /transferee-credits`                                                                      | **200**, empty list — this endpoint is broadly readable and scope-filtered, not role-gated, so it does not itself produce a 403                                                                                                                                                       |
+| **Live HTTP, real dev DB:** same student reads `GET /class-rosters` (Faculty/Registrar-only)                                                             | **403** `{"error":{"code":"FORBIDDEN","message":"You are not authorized to perform this action."}}` — a genuine cross-role denial, matching `getStatePresentation`'s 403 branch exactly                                                                                               |
+| **Live HTTP, real dev DB:** `registrar-head.seed@grc.test` sends `PATCH /enrollments/999999999` (nonexistent id)                                         | **404** `{"error":{"code":"NOT_FOUND","message":"The requested resource was not found."}}` — route-model binding's automatic 404, matching the 404 branch exactly                                                                                                                     |
+| **Live HTTP, real dev DB:** 32 rapid login attempts with a bad password                                                                                  | first several **401**, then **429** with a real `Retry-After: 5` header and `X-RateLimit-*` headers — confirms `readRetryAfterSeconds` parses a real header, not just a test double                                                                                                   |
+| **Not run this session:** manual WCAG 2.1 AA pass (keyboard-only traversal, screen-reader spot check, 200% zoom, responsive breakpoints, reduced-motion) | Chrome browser extension was not connected — see _Known Issues_                                                                                                                                                                                                                       |
 
 ## Commands and Tests Run — Phase 8b
 
-| Command | Result |
-|---|---|
-| `npm install motion` | clean install, 4 packages added, 0 vulnerabilities, no `overrides` needed |
-| `npm run lint` (`eslint . --max-warnings=0`, includes jsx-a11y) | passed, 0 warnings — run repeatedly through the phase, not just at the end |
-| `npm run typecheck` | passed |
-| `npm test` (`vitest run`) | **67 files / 362 tests passed** (up from 65 files/354 tests at the end of Phase 8a — +2 files, +8 tests: `motion.test.tsx`, `status-stepper.test.tsx`, plus 2 new cases each in `data-table.test.tsx` and the `curriculum`/`schedule-proposals`/`sections`/`admission-provisioning` 403/404/429 coverage already present) |
-| `npm run build` (Turbopack) | compiled successfully, same 5 routes |
-| `npm audit --audit-level=moderate` | 0 vulnerabilities |
-| `composer test` (backend, no-regression check — this phase touched no backend file) | **641 passed / 2,419 assertions**, unchanged from Phase 8a |
-| **Not run this session:** live visual verification, manual WCAG 2.1 AA pass | Chrome browser extension was not connected — see *Known Issues*. Every structural fix (duplicate header, placeholder frame, centering, raw `<select>`) is confirmed at the DOM/test level via the rewritten `portal-module-page.test.tsx` and the per-workspace test suites, but nobody has visually confirmed the rendered result yet. |
+| Command                                                                             | Result                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm install motion`                                                                | clean install, 4 packages added, 0 vulnerabilities, no `overrides` needed                                                                                                                                                                                                                                                               |
+| `npm run lint` (`eslint . --max-warnings=0`, includes jsx-a11y)                     | passed, 0 warnings — run repeatedly through the phase, not just at the end                                                                                                                                                                                                                                                              |
+| `npm run typecheck`                                                                 | passed                                                                                                                                                                                                                                                                                                                                  |
+| `npm test` (`vitest run`)                                                           | **67 files / 362 tests passed** (up from 65 files/354 tests at the end of Phase 8a — +2 files, +8 tests: `motion.test.tsx`, `status-stepper.test.tsx`, plus 2 new cases each in `data-table.test.tsx` and the `curriculum`/`schedule-proposals`/`sections`/`admission-provisioning` 403/404/429 coverage already present)               |
+| `npm run build` (Turbopack)                                                         | compiled successfully, same 5 routes                                                                                                                                                                                                                                                                                                    |
+| `npm audit --audit-level=moderate`                                                  | 0 vulnerabilities                                                                                                                                                                                                                                                                                                                       |
+| `composer test` (backend, no-regression check — this phase touched no backend file) | **641 passed / 2,419 assertions**, unchanged from Phase 8a                                                                                                                                                                                                                                                                              |
+| **Not run this session:** live visual verification, manual WCAG 2.1 AA pass         | Chrome browser extension was not connected — see _Known Issues_. Every structural fix (duplicate header, placeholder frame, centering, raw `<select>`) is confirmed at the DOM/test level via the rewritten `portal-module-page.test.tsx` and the per-workspace test suites, but nobody has visually confirmed the rendered result yet. |
 
 **Re-confirmed at reconciliation (2026-07-31):** full gate re-run from a
 clean state — `format:check` (found 11 files not yet reformatted after the
@@ -2252,17 +2475,18 @@ table above exactly.
 
 ## Commands and Tests Run — Phase 8c
 
-| Command | Result |
-|---|---|
-| `npm install` (in `e2e/`) | clean install, 8 packages, 0 vulnerabilities |
-| `npx playwright install --with-deps chromium` | installed Chromium 151.0.7922.34 |
-| `npm run reset-db` (`php artisan migrate:fresh --seed --env=testing --force`) | ran repeatedly through the phase; always clean |
-| `npx playwright test` (full suite, `--workers=1`, freshly seeded DB) | **18 passed, 1 skipped (journey 14)** — 13 journeys + 5 accessibility checks, confirmed green together in one run at reconciliation, not just individually during development |
-| `composer test` (backend, no-regression check for the 2 Resource-file fixes) | **641 passed / 2,419 assertions**, unchanged — confirmed both before and after the `CACHE_STORE`/date-format fixes |
-| **Not run this session:** the new `e2e` GitHub Actions job | Per ADR 0012, a workflow is only proven by actually running on GitHub — needs a push. Locally verified: YAML parses (`python -c "import yaml..."`), and every step it runs was independently verified working (the exact `--env=testing` server start, `reset-db.mjs`, `npx playwright test`) during local development. |
+| Command                                                                       | Result                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm install` (in `e2e/`)                                                     | clean install, 8 packages, 0 vulnerabilities                                                                                                                                                                                                                                                                            |
+| `npx playwright install --with-deps chromium`                                 | installed Chromium 151.0.7922.34                                                                                                                                                                                                                                                                                        |
+| `npm run reset-db` (`php artisan migrate:fresh --seed --env=testing --force`) | ran repeatedly through the phase; always clean                                                                                                                                                                                                                                                                          |
+| `npx playwright test` (full suite, `--workers=1`, freshly seeded DB)          | **18 passed, 1 skipped (journey 14)** — 13 journeys + 5 accessibility checks, confirmed green together in one run at reconciliation, not just individually during development                                                                                                                                           |
+| `composer test` (backend, no-regression check for the 2 Resource-file fixes)  | **641 passed / 2,419 assertions**, unchanged — confirmed both before and after the `CACHE_STORE`/date-format fixes                                                                                                                                                                                                      |
+| **Not run this session:** the new `e2e` GitHub Actions job                    | Per ADR 0012, a workflow is only proven by actually running on GitHub — needs a push. Locally verified: YAML parses (`python -c "import yaml..."`), and every step it runs was independently verified working (the exact `--env=testing` server start, `reset-db.mjs`, `npx playwright test`) during local development. |
 
 Two real defects were found and fixed mid-development, each confirmed with
 its own before/after check rather than assumed fixed:
+
 - **Rate limiter silently inert over real HTTP** — `.env.testing`'s
   `CACHE_STORE=array`. Confirmed broken: 31 rapid login attempts against a
   running `--env=testing` server never returned 429. Fixed
@@ -2281,24 +2505,24 @@ its own before/after check rather than assumed fixed:
 
 ## Commands and Tests Run — Phase 7c
 
-| Command | Result |
-|---|---|
-| `composer format:check` (Pint) | clean |
-| `composer analyse` (Larastan level 8) | **0 errors** |
-| `composer test` | **656 passed / 2,513 assertions** (up from 641 baseline) |
-| `composer audit` | clean |
-| `npx prettier --check .` (frontend) | clean (4 files auto-fixed with `--write` mid-development) |
-| `npx eslint . --max-warnings=0` | clean |
-| `npx oxlint` (lint:fast) | 1 pre-existing warning, unrelated file (`ui/field.tsx`), exit code 0 |
-| `npx tsc --noEmit` (frontend) | clean |
-| `npx vitest run --no-file-parallelism` | **376 passed** (up from 362 baseline), 71 files |
-| `npx next build` (Turbopack) | compiled successfully, same 5 routes |
-| `npm audit --audit-level=moderate` (frontend) | 0 vulnerabilities |
-| `npm run reset-db` (e2e) | ran repeatedly through the phase; always clean |
-| `npx playwright test` (full suite, `--workers=1`, freshly seeded DB) | **20 passed, 1 skipped (journey 14)** — 15 journeys + 5 accessibility checks, confirmed green together in one run at reconciliation |
-| `CI=true npx playwright test` (2 workers, freshly seeded DB) | 7 failed — but across journeys 6, 7, 8, 9, 4/5, **and** 16/17, confirming a pre-existing PHP-built-in-server concurrency limitation unrelated to Phase 7c, not a regression; re-confirmed clean afterward with `--workers=1` |
+| Command                                                                                        | Result                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `composer format:check` (Pint)                                                                 | clean                                                                                                                                                                                                                                                            |
+| `composer analyse` (Larastan level 8)                                                          | **0 errors**                                                                                                                                                                                                                                                     |
+| `composer test`                                                                                | **656 passed / 2,513 assertions** (up from 641 baseline)                                                                                                                                                                                                         |
+| `composer audit`                                                                               | clean                                                                                                                                                                                                                                                            |
+| `npx prettier --check .` (frontend)                                                            | clean (4 files auto-fixed with `--write` mid-development)                                                                                                                                                                                                        |
+| `npx eslint . --max-warnings=0`                                                                | clean                                                                                                                                                                                                                                                            |
+| `npx oxlint` (lint:fast)                                                                       | 1 pre-existing warning, unrelated file (`ui/field.tsx`), exit code 0                                                                                                                                                                                             |
+| `npx tsc --noEmit` (frontend)                                                                  | clean                                                                                                                                                                                                                                                            |
+| `npx vitest run --no-file-parallelism`                                                         | **376 passed** (up from 362 baseline), 71 files                                                                                                                                                                                                                  |
+| `npx next build` (Turbopack)                                                                   | compiled successfully, same 5 routes                                                                                                                                                                                                                             |
+| `npm audit --audit-level=moderate` (frontend)                                                  | 0 vulnerabilities                                                                                                                                                                                                                                                |
+| `npm run reset-db` (e2e)                                                                       | ran repeatedly through the phase; always clean                                                                                                                                                                                                                   |
+| `npx playwright test` (full suite, `--workers=1`, freshly seeded DB)                           | **20 passed, 1 skipped (journey 14)** — 15 journeys + 5 accessibility checks, confirmed green together in one run at reconciliation                                                                                                                              |
+| `CI=true npx playwright test` (2 workers, freshly seeded DB)                                   | 7 failed — but across journeys 6, 7, 8, 9, 4/5, **and** 16/17, confirming a pre-existing PHP-built-in-server concurrency limitation unrelated to Phase 7c, not a regression; re-confirmed clean afterward with `--workers=1`                                     |
 | Live HTTP authorization-boundary proof (all 4 new routes × Student/Dean/ExecDir/RegistrarHead) | Student 403 on all 4; Dean 200 on `enrollment-summary`/`stuck-enrollments`, 403 on the other 2; ExecDir 200 on `enrollment-summary`/`institution-summary`, 403 on the other 2; RegistrarHead 200 on `policy-settings` only — matches the intended matrix exactly |
-| No-student-identity-leak string scan (all 4 new payloads) | confirmed: no student name or email appears in any dashboard response, only `student_number` on `stuck-enrollments` |
+| No-student-identity-leak string scan (all 4 new payloads)                                      | confirmed: no student name or email appears in any dashboard response, only `student_number` on `stuck-enrollments`                                                                                                                                              |
 
 One real, unprompted design refinement found via live-data inspection, not a
 test failure: `stuck-students`' first implementation used
@@ -2325,13 +2549,13 @@ specifically; re-confirmed via the same live query.
   transition at all — mutual exclusivity is enforced by Zod's `union()` on
   the frontend and `prohibited_if` plus a `withValidator` check on the
   backend, so content fields and `action` are never accepted together.
-- **Payment confirmation's idempotency check runs *before* the status
+- **Payment confirmation's idempotency check runs _before_ the status
   check, not after.** A naive implementation would reject a repeat
   confirmation with "requires `pending_payment`; currently `enrolled`" —
   technically true but wrong, since FR-FIN-009 requires the repeat to
   succeed. `ConfirmPayment::execute` checks for an existing `Payment` row
   first and short-circuits to returning it, regardless of the current
-  status; only a *first* call is checked against `pending_payment`. Proven
+  status; only a _first_ call is checked against `pending_payment`. Proven
   live, not just by test: a second `POST` with a different, contradictory
   `external_reference` returned the original value unchanged.
 - **Queue ticket transitions carry the coarse `role:accounting_staff`
@@ -2385,7 +2609,7 @@ specifically; re-confirmed via the same live query.
   cases: a Registrar Staff `PATCH` was denied 403 even though
   `WithdrawalRequestPolicy::decide()` correctly returned `true` for that
   role — a `fwrite(STDERR, ...)` diagnostic inside the Policy method
-  revealed the authenticated user was still the *student* from an earlier
+  revealed the authenticated user was still the _student_ from an earlier
   request in the same test. This is the same gotcha
   `EnrollmentsEndpointTest.php` already documents (`makeEnrollment()`'s own
   docblock) but the new withdrawal tests hadn't yet applied: the fix is to
@@ -2395,7 +2619,7 @@ specifically; re-confirmed via the same live query.
 - **Seat release is config-flagged; dropping the subject is not.**
   `config('enrollment.withdrawal.releases_seats')` (default `true`) gates
   only whether `Section.enrolled_count` decrements — because seats are
-  reserved immediately and permanently on submission today, *not*
+  reserved immediately and permanently on submission today, _not_
   releasing them would permanently inflate the count and wrongly block
   other students, but whether that's the confirmed institutional policy is
   still §17-open. Marking `enrollment_subjects` rows `dropped` happens
@@ -2502,7 +2726,7 @@ specifically; re-confirmed via the same live query.
   auto-selection in `schedule-proposals-workspace.tsx` and
   `sections-workspace.tsx` (fixed with a `key`-remounted `Controller` owning
   its own `defaultValue`, and removing the field from the form's top-level
-  `defaultValues`) but the identical-looking fix *broke* the same behavior in
+  `defaultValues`) but the identical-looking fix _broke_ the same behavior in
   `faculty-input-workspace.tsx` (fixed instead by restoring the classic
   `useEffect` + `setValue()` pattern). The difference: whether the
   `Controller` mounts for the first time before or after the async data is
@@ -2512,7 +2736,7 @@ specifically; re-confirmed via the same live query.
 - **This was a real, previously undetected bug**, not a side effect of the
   migration. The old tests only asserted that a matching `<option>` existed
   in the DOM — trivially true for a native `<select>` regardless of which
-  option is actually selected — never that the *right* one was selected.
+  option is actually selected — never that the _right_ one was selected.
   The new `Controller`-based tests assert the displayed value, and caught it.
 - **`AsyncBoundary`'s state transitions stay un-animated by design.** An
   early implementation wrapped every loading/error/empty/success transition
@@ -2594,8 +2818,8 @@ specifically; re-confirmed via the same live query.
   initial migration reset wipes whatever the E2E seeding had put there.
   Does not affect CI, where the two run as fully independent jobs with
   independent database containers. ADR 0016 decision 5.
-- **Two Resource-layer date-serialization bugs, fixed** (see *Commands and
-  Tests Run — Phase 8c* for the before/after confirmation): 7 of 11
+- **Two Resource-layer date-serialization bugs, fixed** (see _Commands and
+  Tests Run — Phase 8c_ for the before/after confirmation): 7 of 11
   date-serializing API Resources used `->toIso8601String()` (emits a
   `+00:00` offset) against frontend Zod schemas built for the `Z`-suffixed
   form already correct in 4 other Resources. This broke every workspace
@@ -2650,7 +2874,7 @@ specifically; re-confirmed via the same live query.
   dev database showed was semantically wrong — an already-enrolled student
   has completed the process, not stalled in it. This is a row-selection
   refinement derived directly from the PRD-authoritative lifecycle order,
-  not a new institutional definition; the dwell-time *threshold* stays
+  not a new institutional definition; the dwell-time _threshold_ stays
   separately gated behind `dashboard.stuck_threshold_days` (default
   `null`). Found live, not by a failing test.
 - **`policy-settings` is read-only, backed by a hardcoded list of 11
@@ -2679,7 +2903,7 @@ specifically; re-confirmed via the same live query.
   in every Vitest test — any text in a table cell also appears in its
   mobile-card twin, producing "Found multiple elements" failures unless
   queries are scoped via `within(screen.getByRole("table", { name:
-  caption }))`. Also surfaced a real, separate accessibility bug in the two
+caption }))`. Also surfaced a real, separate accessibility bug in the two
   new DataTable consumers (`policy-settings-workspace.tsx`,
   `stuck-students-workspace.tsx`): both rendered `DataTable` directly under
   `WorkspacePage`'s `<h1>` with no intervening `<h2>`, so the mobile card's
@@ -2703,7 +2927,7 @@ specifically; re-confirmed via the same live query.
 - **Frontend full-suite parallel flakiness (this machine only) — unchanged
   from prior phases.** `npm test` with Vitest's default multi-worker pool
   is unreliable under this machine's memory pressure; `npx vitest run
-  --no-file-parallelism` is the trustworthy invocation and is what every
+--no-file-parallelism` is the trustworthy invocation and is what every
   frontend result recorded in this document used.
 - No new blocking defect found in Phase 7b beyond the Sanctum
   multi-actor test gotcha (found and fixed — see Technical Decisions).
@@ -2712,9 +2936,9 @@ specifically; re-confirmed via the same live query.
   dimensions — fields, format, naming, sign-off — are unconfirmed) and the
   shared `reports` id for both Dean and Executive Director (no field list,
   format, or export type enumerated anywhere in the PRD). `enrollment-
-  dashboard`, `stuck-students`, `institution-dashboard`, and
-  `policy-settings` are now connected — see *Verified Completed — Phase
-  7c*. (`honors`, `kpis`, and `attrition-analytics` remain separately
+dashboard`, `stuck-students`, `institution-dashboard`, and
+  `policy-settings` are now connected — see _Verified Completed — Phase
+  7c_. (`honors`, `kpis`, and `attrition-analytics` remain separately
   deferred to Phase 9 — they need trained ML output, not just a content
   decision.)
 - **Transferee-credit equivalence rules and withdrawal seat-release
@@ -2753,7 +2977,7 @@ specifically; re-confirmed via the same live query.
   mutation hook being fully implemented. Documented in ADR 0016 decision 8.
   (A second item recorded alongside it — a claimed routing gap for
   `ScheduleDecisionWorkspace`/`executive_director` — was itself wrong; see
-  *Verified Completed — Phase 7c* for the correction and the real bug
+  _Verified Completed — Phase 7c_ for the correction and the real bug
   tracing it further actually found.)
 - **The new `e2e` GitHub Actions job has not run on GitHub yet** — per ADR
   0012, a workflow is only proven correct by actually running; this needs a
@@ -2770,7 +2994,7 @@ specifically; re-confirmed via the same live query.
 
 **Phase 7c's full diff is uncommitted** as of this reconciliation — working
 tree on `phase-7c-dashboards` (branched from `main` after Phase 8c's merge;
-see *Files Changed — Phase 7c*), none staged or committed. Committing was
+see _Files Changed — Phase 7c_), none staged or committed. Committing was
 not requested this session; per `AGENTS.md`, nothing is committed without an
 explicit ask. The diff adds a new backend domain (`app/Domain/Dashboard`,
 `app/Actions/Dashboard`) and four new routes rather than modifying
@@ -2778,7 +3002,7 @@ shipped behavior, plus one real frontend bug fix
 (`master-schedule-workspace.tsx`'s `AsyncBoundary` split, covered by a new
 regression test) and one ADR correction — nothing migrates, nothing changes
 an existing API's request shape, and every change is independently
-confirmed working (see *Commands and Tests Run — Phase 7c*).
+confirmed working (see _Commands and Tests Run — Phase 7c_).
 
 Phase 8a, Phase 8b, and Phase 8c are all safely merged to `main` and pushed
 to `origin` — Phase 8a at `8bb7e66`, Phase 8b's merge commit at `2da5501`,
@@ -2797,7 +3021,7 @@ confirmed via `config('database.connections.mysql.database')` resolving to
 (latest merged commit `85a6357`, the ADR 0021 grading/enrollment-completion
 slice). Everything below Phase 8d in the roadmap headers further down this
 file predates several sessions' worth of work that happened directly on
-`main`'s working tree without a numbered phase — see *Session History* at
+`main`'s working tree without a numbered phase — see _Session History_ at
 the bottom of this file (entries `2026-08-02` through `2026-08-05`) for the
 real, current narrative. The old item 3 below (Withdraw button gap, ADR
 0016 decision 8) is now **done** — see the 2026-08-05 session entry.
@@ -2813,7 +3037,7 @@ real, current narrative. The old item 3 below (Withdraw button gap, ADR
    explicitly and often — do not commit or merge without an explicit ask,
    even though every item above is verified and test-covered.
 2. Once this session's work is committed (when asked), recompute the
-   *Overall Completion* table's Row 8 and the module totals for real
+   _Overall Completion_ table's Row 8 and the module totals for real
    against that commit — see that table's own flagged caveat above.
 3. Confirm the `e2e` CI job actually runs green on GitHub — unconfirmed
    since Phase 8c merged (ADR 0012: a workflow is only proven by running).
@@ -2910,19 +3134,19 @@ real, current narrative. The old item 3 below (Withdraw button gap, ADR
 The number is weighted, auditable, and recomputable. Every row below is scored
 against work that is **merged**, not work that is written or planned.
 
-| # | Component | Weight | Done | Contributes |
-|---|---|---:|---:|---:|
-| 1 | Platform & foundations — 3 service shells, 13 ADRs, OpenAPI, error contract, DB, CI | 8% | 90% | 7.20 |
-| 2 | Identity & RBAC — Sanctum, 9 roles, role middleware, Policies, query scopes | 7% | 85% | 5.95 |
-| 3 | Process 1.0 backend — scheduling (PRD §5.1) | 10% | 80% | 8.00 |
-| 4 | Process 2.0 backend — enrollment & advising (PRD §5.2) | 10% | 80% | 8.00 |
-| 5 | Process 3.0 backend — approvals, payment, COM, transfers, withdrawals (PRD §5.3) | 12% | 95% | 11.40 |
-| 6 | Cross-cutting backend — `audit_logs`, `notifications` | 5% | 100% | 5.00 |
-| 7 | Frontend platform — Next.js, design system, shell, auth | 8% | 100% | 8.00 |
-| 8 | Nine role portals — 40 modules (spans Phases 5–7b) | 25% | 73% | 18.25 |
-| 9 | Process 4.0 — machine learning (PRD §5.4) | 10% | 3% | 0.30 |
-| 10 | Verification & deployment — E2E, security, perf, ISO 25010, handoff | 5% | 35% | 1.75 |
-| | **Total** | **100%** | | **73.85 ≈ 74%** |
+| #   | Component                                                                           |   Weight | Done |     Contributes |
+| --- | ----------------------------------------------------------------------------------- | -------: | ---: | --------------: |
+| 1   | Platform & foundations — 3 service shells, 13 ADRs, OpenAPI, error contract, DB, CI |       8% |  90% |            7.20 |
+| 2   | Identity & RBAC — Sanctum, 9 roles, role middleware, Policies, query scopes         |       7% |  85% |            5.95 |
+| 3   | Process 1.0 backend — scheduling (PRD §5.1)                                         |      10% |  80% |            8.00 |
+| 4   | Process 2.0 backend — enrollment & advising (PRD §5.2)                              |      10% |  80% |            8.00 |
+| 5   | Process 3.0 backend — approvals, payment, COM, transfers, withdrawals (PRD §5.3)    |      12% |  95% |           11.40 |
+| 6   | Cross-cutting backend — `audit_logs`, `notifications`                               |       5% | 100% |            5.00 |
+| 7   | Frontend platform — Next.js, design system, shell, auth                             |       8% | 100% |            8.00 |
+| 8   | Nine role portals — 40 modules (spans Phases 5–7b)                                  |      25% |  73% |           18.25 |
+| 9   | Process 4.0 — machine learning (PRD §5.4)                                           |      10% |   3% |            0.30 |
+| 10  | Verification & deployment — E2E, security, perf, ISO 25010, handoff                 |       5% |  35% |            1.75 |
+|     | **Total**                                                                           | **100%** |      | **73.85 ≈ 74%** |
 
 Two scores that look surprising, explained:
 
@@ -2953,7 +3177,7 @@ Two scores that look surprising, explained:
   entirely unstarted — the bump reflects E2E specifically, not the whole
   row.
 
-**Recompute rule:** when a phase closes, update its row's *Done* column and
+**Recompute rule:** when a phase closes, update its row's _Done_ column and
 re-multiply. Do not adjust weights without recording why in Decisions.
 
 **Phase 8a, Phase 8b, and Phase 8c are all merged** to `main` (Phase 8a at
@@ -2965,17 +3189,17 @@ yet merged**, per this table's own rule — see the Row 8 note.
 
 # ■ System Snapshot
 
-| | |
-|---|---|
-| **Stack** | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant) |
-| **Auth** | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state |
-| **Live API routes** | **48 on `main`; 52 on `phase-7c-dashboards`** (+4 dashboard routes, uncommitted) |
-| **Database tables** | **26** (unchanged — Phase 7c added no migrations) |
-| **Backend tests** | **641 passing on `main`; 656 passing (2,513 assertions) on `phase-7c-dashboards`** · Larastan level 8 clean, Pint clean, `composer audit` clean |
-| **Frontend tests** | **67 files, 362 tests on `main`** (Phase 8a + 8b + 8c) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. **71 files, 376 tests on `phase-7c-dashboards`** (4 new workspace test files, 2 golden-list fixes). |
-| **E2E tests** | **13 spec files, 21 tests (20 passed, 1 skipped), Playwright, 15 journeys** on `phase-7c-dashboards` (uncommitted; Phase 8c's original 12 files/19 tests/13 journeys are merged to `main`) — see *Verified Completed — Phase 7c*. |
-| **CI** | 4 GitHub Actions jobs live — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9). A 5th, E2E, is merged to `main` (Phase 8c) but has not run on GitHub yet (needs a push). |
-| **Portals functional** | **9 of 9** have at least one connected module — **29 of 40 modules on `main`; 33 of 40 on `phase-7c-dashboards`** (uncommitted) |
+|                        |                                                                                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Stack**              | Laravel 12.64 / PHP 8.2.12 · MariaDB 10.4.32 (ADR 0007) · **Next.js 16.2.12** (App Router) + React 19 · FastAPI (ml-service, dormant)                                                                                                                  |
+| **Auth**               | Laravel Sanctum bearer tokens; no cookies, no CSRF, no session state                                                                                                                                                                                   |
+| **Live API routes**    | **48 on `main`; 52 on `phase-7c-dashboards`** (+4 dashboard routes, uncommitted)                                                                                                                                                                       |
+| **Database tables**    | **26** (unchanged — Phase 7c added no migrations)                                                                                                                                                                                                      |
+| **Backend tests**      | **641 passing on `main`; 656 passing (2,513 assertions) on `phase-7c-dashboards`** · Larastan level 8 clean, Pint clean, `composer audit` clean                                                                                                        |
+| **Frontend tests**     | **67 files, 362 tests on `main`** (Phase 8a + 8b + 8c) — run with `--no-file-parallelism` for a reliable result on this machine; see Known Issues. **71 files, 376 tests on `phase-7c-dashboards`** (4 new workspace test files, 2 golden-list fixes). |
+| **E2E tests**          | **13 spec files, 21 tests (20 passed, 1 skipped), Playwright, 15 journeys** on `phase-7c-dashboards` (uncommitted; Phase 8c's original 12 files/19 tests/13 journeys are merged to `main`) — see _Verified Completed — Phase 7c_.                      |
+| **CI**                 | 4 GitHub Actions jobs live — Backend ✅ · Frontend ✅ · OpenAPI ✅ · ML Service ❌ (paused, see Phase 9). A 5th, E2E, is merged to `main` (Phase 8c) but has not run on GitHub yet (needs a push).                                                     |
+| **Portals functional** | **9 of 9** have at least one connected module — **29 of 40 modules on `main`; 33 of 40 on `phase-7c-dashboards`** (uncommitted)                                                                                                                        |
 
 ---
 
@@ -2986,17 +3210,17 @@ one-per-role by `RoleUserSeeder`. Every local/testing synthetic account uses
 the shared password `password`; the seeders refuse to run in production-like
 environments. Credentials are documented in `docs/testing/SEEDED_IDENTITIES.md`.
 
-| # | Role | PRD § | Enum value | Seeded identity | Backend authorization | Portal |
-|---|---|---|---|---|---|---|
-| 1 | Student | §3.1 | `student` | `student.seed@grc.test` | ✅ own profile, eligible pool, enrollment submission/decisions view, grades, payment/queue status, Digital COM + private notifications | ✅ Phase 6 (2 modules) · ✅ Phase 7a (2 more) — all 4 connected |
-| 2 | Admission Staff | §3.2 | `admission_staff` | `admission.seed@grc.test` | ✅ provisions students + private notifications | ✅ Phase 5 (3 modules) |
-| 3 | Professor / Faculty | §3.3 | `faculty` | `faculty.seed@grc.test` | ✅ own availability/preferences, grade encoding (draft→submitted), class roster read + publication notifications | ✅ Phase 5 (2 modules) · ✅ Phase 7b (2 more) — all 4 connected |
-| 4 | Program Chair | §3.4 | `program_chair` | `chair.seed@grc.test` | ✅ curriculum, sections, proposals + publication notifications | ✅ Phase 5 (5 modules) · ⬜ Phase 9 (1 more) |
-| 5 | Dean | §3.5 | `dean` | `dean.seed@grc.test` | ✅ schedule approve/return + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7c (4 more) |
-| 6 | Executive Director | §3.6 | `executive_director` | `executive.seed@grc.test` | ✅ final approve/publish + private notifications | ✅ Phase 5 (1 module) · ⬜ Phase 7c (3 more) |
-| 7 | Registrar Head | §3.7 | `registrar_head` | `registrar-head.seed@grc.test` | ✅ close proposal, audit logs, enrollment approve/reject/void, grade locking, withdrawal/transferee-credit/academic-record/document reads + private notifications | ✅ Phase 5 (1 module) · ✅ Phase 7a (2 more) · ⬜ Phase 7c (3 more) |
-| 8 | Registrar Staff | §3.8 | `registrar_staff` | `registrar-staff.seed@grc.test` | ✅ decides withdrawal requests and transferee credits, reads all academic records and enrollment documents + private notifications | ✅ Phase 7b (4 modules) — all connected |
-| 9 | Accounting Staff | §3.9 | `accounting_staff` | `accounting.seed@grc.test` | ✅ payment queue, serving number, idempotent payment confirmation + Digital COM generation | ✅ Phase 7a (4 modules) — all connected |
+| #   | Role                | PRD § | Enum value           | Seeded identity                 | Backend authorization                                                                                                                                             | Portal                                                              |
+| --- | ------------------- | ----- | -------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1   | Student             | §3.1  | `student`            | `student.seed@grc.test`         | ✅ own profile, eligible pool, enrollment submission/decisions view, grades, payment/queue status, Digital COM + private notifications                            | ✅ Phase 6 (2 modules) · ✅ Phase 7a (2 more) — all 4 connected     |
+| 2   | Admission Staff     | §3.2  | `admission_staff`    | `admission.seed@grc.test`       | ✅ provisions students + private notifications                                                                                                                    | ✅ Phase 5 (3 modules)                                              |
+| 3   | Professor / Faculty | §3.3  | `faculty`            | `faculty.seed@grc.test`         | ✅ own availability/preferences, grade encoding (draft→submitted), class roster read + publication notifications                                                  | ✅ Phase 5 (2 modules) · ✅ Phase 7b (2 more) — all 4 connected     |
+| 4   | Program Chair       | §3.4  | `program_chair`      | `chair.seed@grc.test`           | ✅ curriculum, sections, proposals + publication notifications                                                                                                    | ✅ Phase 5 (5 modules) · ⬜ Phase 9 (1 more)                        |
+| 5   | Dean                | §3.5  | `dean`               | `dean.seed@grc.test`            | ✅ schedule approve/return + private notifications                                                                                                                | ✅ Phase 5 (1 module) · ⬜ Phase 7c (4 more)                        |
+| 6   | Executive Director  | §3.6  | `executive_director` | `executive.seed@grc.test`       | ✅ final approve/publish + private notifications                                                                                                                  | ✅ Phase 5 (1 module) · ⬜ Phase 7c (3 more)                        |
+| 7   | Registrar Head      | §3.7  | `registrar_head`     | `registrar-head.seed@grc.test`  | ✅ close proposal, audit logs, enrollment approve/reject/void, grade locking, withdrawal/transferee-credit/academic-record/document reads + private notifications | ✅ Phase 5 (1 module) · ✅ Phase 7a (2 more) · ⬜ Phase 7c (3 more) |
+| 8   | Registrar Staff     | §3.8  | `registrar_staff`    | `registrar-staff.seed@grc.test` | ✅ decides withdrawal requests and transferee credits, reads all academic records and enrollment documents + private notifications                                | ✅ Phase 7b (4 modules) — all connected                             |
+| 9   | Accounting Staff    | §3.9  | `accounting_staff`   | `accounting.seed@grc.test`      | ✅ payment queue, serving number, idempotent payment confirmation + Digital COM generation                                                                        | ✅ Phase 7a (4 modules) — all connected                             |
 
 The local database was reseeded on 2026-07-29. All 12 synthetic
 `*.seed@grc.test` accounts—the nine role identities plus three additional
@@ -3018,19 +3242,19 @@ that mirrored PRD §16's phase numbering. PRD §16 remains the contractual
 phase definition; this roadmap is the execution order chosen to reach a fully
 functional system before any model is trained.
 
-| Phase | Name | Status | % |
-|---|---|---|---:|
-| 0 | Foundations & Platform | ✅ Complete | 90 |
-| 1 | Identity, RBAC & the Nine Users | ✅ Complete | 85 |
-| 2 | Process 1.0 — Scheduling backend | ✅ Complete (2 deferred) | 80 |
-| 3 | **Next.js Migration** | ✅ Complete | 100 |
-| 4 | Cross-Cutting Backend & ML Substrate | ✅ Complete (merged and verified) | 100 |
-| 5 | Portals over Existing APIs (6 roles) | ✅ Complete (merged and verified) | 100 |
-| 6 | Process 2.0 + Student Portal | ✅ Complete (merged and verified) | 100 |
-| 7 | Process 3.0 + Registrar / Accounting / Grades Portals | ✅ Records core complete (7a+7b); dashboards deferred to 7c | 90 |
-| 8 | Polish, Accessibility, E2E, Performance | ⬜ Planned | 25 |
-| 9 | **Process 4.0 — Machine Learning** | ⬜ Last | 3 |
-| 10 | Deployment & Handoff | ⬜ Planned | 0 |
+| Phase | Name                                                  | Status                                                      |   % |
+| ----- | ----------------------------------------------------- | ----------------------------------------------------------- | --: |
+| 0     | Foundations & Platform                                | ✅ Complete                                                 |  90 |
+| 1     | Identity, RBAC & the Nine Users                       | ✅ Complete                                                 |  85 |
+| 2     | Process 1.0 — Scheduling backend                      | ✅ Complete (2 deferred)                                    |  80 |
+| 3     | **Next.js Migration**                                 | ✅ Complete                                                 | 100 |
+| 4     | Cross-Cutting Backend & ML Substrate                  | ✅ Complete (merged and verified)                           | 100 |
+| 5     | Portals over Existing APIs (6 roles)                  | ✅ Complete (merged and verified)                           | 100 |
+| 6     | Process 2.0 + Student Portal                          | ✅ Complete (merged and verified)                           | 100 |
+| 7     | Process 3.0 + Registrar / Accounting / Grades Portals | ✅ Records core complete (7a+7b); dashboards deferred to 7c |  90 |
+| 8     | Polish, Accessibility, E2E, Performance               | ⬜ Planned                                                  |  25 |
+| 9     | **Process 4.0 — Machine Learning**                    | ⬜ Last                                                     |   3 |
+| 10    | Deployment & Handoff                                  | ⬜ Planned                                                  |   0 |
 
 ## The machine-learning thread
 
@@ -3038,18 +3262,18 @@ ML is last, but it is **not** an afterthought bolted on at the end. Process 4.0
 can only work if the transactional system captured the right data while it was
 being built. Each phase therefore carries an explicit data-capture obligation:
 
-| Phase | Captured so Phase 9 can use it |
-|---|---|
-| 4 | `audit_logs` behavioural event history; the three PRD §10.4 analytics tables land **schema-only** |
-| 6 | Enrollment `submitted_at` timing, subject-selection patterns, eligibility-rejection reasons |
-| 7 | Final grades + status transitions, withdrawal reasons + `processed_at`, payment timing — **the attrition label and most of its features** |
-| 9 | Models only. No plumbing, no schema work. |
+| Phase | Captured so Phase 9 can use it                                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 4     | `audit_logs` behavioural event history; the three PRD §10.4 analytics tables land **schema-only**                                         |
+| 6     | Enrollment `submitted_at` timing, subject-selection patterns, eligibility-rejection reasons                                               |
+| 7     | Final grades + status transitions, withdrawal reasons + `processed_at`, payment timing — **the attrition label and most of its features** |
+| 9     | Models only. No plumbing, no schema work.                                                                                                 |
 
-PRD §11.1 fixes the boundary: *"Subject eligibility remains deterministic;
+PRD §11.1 fixes the boundary: _"Subject eligibility remains deterministic;
 recommendation ranking may use approved historical signals but cannot override
-eligibility rules."* Honors (FR-ANL-006) and government reports (FR-ANL-007)
-also stay deterministic. §4.4: *"Predictions never directly mutate enrollment
-or academic status."*
+eligibility rules."_ Honors (FR-ANL-006) and government reports (FR-ANL-007)
+also stay deterministic. §4.4: _"Predictions never directly mutate enrollment
+or academic status."_
 
 ---
 
@@ -3096,7 +3320,7 @@ placeholders as intended.
 - `src/app/` is now routing only; application code moved to `src/features/`
   (69 files, verified complete by `tsc`).
 - **Demo auth mode deleted** — but it could not simply be dropped: `demoRoles`
-  was the runtime enum validating *real* API responses in `auth-schema.ts`,
+  was the runtime enum validating _real_ API responses in `auth-schema.ts`,
   and `DemoAuthError`/`DemoSession` were used by the live API gateway. Those
   were extracted to `features/auth/roles.ts`, `auth-types.ts` and
   `auth-error.ts` first; only then were the demo files removed, along with
@@ -3104,7 +3328,7 @@ placeholders as intended.
   whole `AuthMode` tri-state collapsed.
 - Test harness rebuilt against a mocked `next/navigation`; `MemoryRouter` and
   the `LocationProbe` have no App Router equivalent, so routing assertions now
-  check the redirect the guard *requested*. 20 files → 15, 145 tests.
+  check the redirect the guard _requested_. 20 files → 15, 145 tests.
 - `app-router.test.tsx` was replaced by `auth-route-guards.test.tsx`, which
   keeps the security-adjacent coverage: `returnTo` encoding, query
   preservation, and rejection of a hostile cross-origin `returnTo`.
@@ -3178,7 +3402,7 @@ published overall score is now 41%.
 
 Six portals, 13 modules, plus one audited faculty-directory read endpoint
 for Program Chair section assignment. All nine tasks are implemented,
-independently reviewed, quality-gated (see *Commands and Tests Run* at the
+independently reviewed, quality-gated (see _Commands and Tests Run_ at the
 top of this file), and merged to local `main`.
 
 - **Task 1 — backend.** `GET /api/v1/faculty-members`, Program Chair only,
@@ -3256,7 +3480,7 @@ modules, and the generalized (no-longer-Phase-5-specific) module registry.
   seeded student, confirming all 5 atomic side effects landed correctly.
 
 §17-blocked, mechanism-implemented-value-flagged: official passing-grade
-*confirmation* (the comparison logic exists and is user-directed, but GRC
+_confirmation_ (the comparison logic exists and is user-directed, but GRC
 has not formally signed off), max units / overload (config exists, both
 values default to `null` = unenforced), block-section eligibility (schema
 exists, comparison uses a documented placeholder pending GRC's real
@@ -3365,7 +3589,7 @@ Deferred twice before on the assumption that the whole slice needed an
 institutional content decision first. A full PRD audit found that was only
 half true: the dashboards' arithmetic (status distributions, funnel counts,
 section fill, dwell time) needs no institutional judgment at all, only the
-*threshold* that labels a dwell time "stuck" does — and PRD §17 never even
+_threshold_ that labels a dwell time "stuck" does — and PRD §17 never even
 registered that question, let alone the shape of "what a dashboard shows."
 Connected `enrollment-dashboard`, `stuck-students`, `institution-dashboard`,
 and `policy-settings` (33/40 modules); left `compliance-reports` and the
@@ -3373,8 +3597,8 @@ shared `reports` id (Dean + Executive Director) as placeholders — those
 three are genuinely §17-blocked (no field list, format, or sign-off
 authority exists for any of them). `honors`/`kpis`/`attrition-analytics`
 stay deferred to Phase 9 as ML work, unaffected by this phase. Complete and
-quality-gated on `phase-7c-dashboards` — see *Verified Completed — Phase
-7c* and ADR 0017. Not yet committed or merged to `main`.
+quality-gated on `phase-7c-dashboards` — see _Verified Completed — Phase
+7c_ and ADR 0017. Not yet committed or merged to `main`.
 
 ## Phase 8 — Polish, Accessibility, E2E, Performance
 
@@ -3382,8 +3606,8 @@ quality-gated on `phase-7c-dashboards` — see *Verified Completed — Phase
 
 PRD §12.4 required states on every page, WCAG 2.1 AA (§12.5), §12.3 form
 behavior, and the presentation-layer part of §12.6. Complete and merged to
-`main`, pushed to `origin` at `8bb7e66` — see *Verified Completed —
-Phase 8a*. The manual WCAG keyboard/screen-reader/zoom pass was the one
+`main`, pushed to `origin` at `8bb7e66` — see _Verified Completed —
+Phase 8a_. The manual WCAG keyboard/screen-reader/zoom pass was the one
 piece not run before merge (no browser connection that session).
 
 ### Phase 8b — Portal UI Coherence & Motion ✅ (merged)
@@ -3397,7 +3621,7 @@ skipped); adopted the landing/login pages' existing print-ledger design
 language into portal chrome instead of inventing a new look; added the
 `motion` library for entrance/stagger/presence animation, gated everywhere
 by `useReducedMotion()`. Complete and merged to `main` (merge commit
-`2da5501`) — see *Verified Completed — Phase 8b* and ADR 0015.
+`2da5501`) — see _Verified Completed — Phase 8b_ and ADR 0015.
 
 ### Phase 8c — Playwright E2E Foundation ✅ (merged)
 
@@ -3413,8 +3637,7 @@ limiter silently inert over real HTTP — that no prior test layer could have
 caught; found and documented (not fixed) two real application UI gaps (one
 of which — the claimed `ScheduleDecisionWorkspace` routing gap — turned out
 to be a misdiagnosis, corrected in Phase 7c). Complete and merged to `main`
-(merge commit `6d1745b`) — see *Verified Completed — Phase 8c* and ADR
-0016.
+(merge commit `6d1745b`) — see _Verified Completed — Phase 8c_ and ADR 0016.
 
 ### Phase 8d — Performance, Security, §12.6 Remaining Features (not started)
 
@@ -3455,110 +3678,110 @@ Source of truth: `frontend/src/features/portal/role-capabilities.ts` and
 `frontend/src/features/portal/module-registry.tsx`. A ✅ module is dispatched
 by `connectedModuleRegistry` to a real workspace component backed by parsed
 API services and tests. Every other module is still a placeholder empty-state
-rendering *"This module is not connected to workflow or authorization APIs."*
-**Not yet merged to `main`** — see *Uncommitted or Risky Changes*.
+rendering _"This module is not connected to workflow or authorization APIs."_
+**Not yet merged to `main`** — see _Uncommitted or Risky Changes_.
 
 Status: ⬜ placeholder · 🔨 in progress · ✅ done
 
 ### 1. Student — 4 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Eligible Subjects | 6 | ✅ |
-| Enrollment | 6 | ✅ (now also embeds Queue & Payment, Add/Drop, and Withdraw — see 2026-08-04/05 session notes) |
-| Grades | 7a | ✅ |
-| Digital COM | 7a | ✅ |
+| Module            | Phase | Status                                                                                         |
+| ----------------- | ----- | ---------------------------------------------------------------------------------------------- |
+| Eligible Subjects | 6     | ✅                                                                                             |
+| Enrollment        | 6     | ✅ (now also embeds Queue & Payment, Add/Drop, and Withdraw — see 2026-08-04/05 session notes) |
+| Grades            | 7a    | ✅                                                                                             |
+| Digital COM       | 7a    | ✅                                                                                             |
 
 ### 2. Admission Staff — 3 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Student Accounts | 5 | ✅ |
-| Admission Status | 5 | ✅ |
-| Credential Issuance | 5 | ✅ |
+| Module              | Phase | Status |
+| ------------------- | ----- | ------ |
+| Student Accounts    | 5     | ✅     |
+| Admission Status    | 5     | ✅     |
+| Credential Issuance | 5     | ✅     |
 
 ### 3. Professor / Faculty — 4 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Availability Preferences | 5 | ✅ |
-| Teaching Schedule | 5 | ✅ |
-| Class Rosters | 7b | ✅ |
-| Grade Submission | 7b | ✅ |
+| Module                   | Phase | Status |
+| ------------------------ | ----- | ------ |
+| Availability Preferences | 5     | ✅     |
+| Teaching Schedule        | 5     | ✅     |
+| Class Rosters            | 7b    | ✅     |
+| Grade Submission         | 7b    | ✅     |
 
 ### 4. Program Chair — 6 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Curriculum | 5 | ✅ |
-| Subjects & Prerequisites | 5 | ✅ |
-| Sections & Schedules | 5 | ✅ |
-| Faculty Assignment | 5 | ✅ |
-| Schedule Proposals | 5 | ✅ |
-| Demand Forecast | **9** | ⬜ blocked on ML |
+| Module                   | Phase | Status           |
+| ------------------------ | ----- | ---------------- |
+| Curriculum               | 5     | ✅               |
+| Subjects & Prerequisites | 5     | ✅               |
+| Sections & Schedules     | 5     | ✅               |
+| Faculty Assignment       | 5     | ✅               |
+| Schedule Proposals       | 5     | ✅               |
+| Demand Forecast          | **9** | ⬜ blocked on ML |
 
 ### 5. Dean — 5 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Schedule Approvals | 5 | ✅ |
-| Enrollment Dashboard | 7c | ✅ |
-| Stuck Students | 7c | ✅ (dwell time factual; threshold unset, flagged not confirmed) |
-| Honors | **9** | ⬜ |
-| Reports | 7c | ⬜ no PRD-specified content |
+| Module               | Phase | Status                                                          |
+| -------------------- | ----- | --------------------------------------------------------------- |
+| Schedule Approvals   | 5     | ✅                                                              |
+| Enrollment Dashboard | 7c    | ✅                                                              |
+| Stuck Students       | 7c    | ✅ (dwell time factual; threshold unset, flagged not confirmed) |
+| Honors               | **9** | ⬜                                                              |
+| Reports              | 7c    | ⬜ no PRD-specified content                                     |
 
 ### 6. Executive Director — 4 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Master Schedule | 5 | ✅ |
-| Institution Dashboard | 7c | ✅ |
-| KPIs | **9** | ⬜ |
-| Reports | 7c | ⬜ no PRD-specified content |
+| Module                | Phase | Status                      |
+| --------------------- | ----- | --------------------------- |
+| Master Schedule       | 5     | ✅                          |
+| Institution Dashboard | 7c    | ✅                          |
+| KPIs                  | **9** | ⬜                          |
+| Reports               | 7c    | ⬜ no PRD-specified content |
 
 ### 7. Registrar Head — 9 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Enrollment (Academic Terms) | 5 | ✅ |
-| Grade Approvals | 2026-08-04 | ✅ mandatory, permanent lock; re-derives Regular/Irregular standing |
-| Academic Transcripts | 2026-08-04 | ✅ look up any student's prospectus/grade slip |
-| Overrides & Voids | 7a | ✅ |
-| Add/Drop Requests | 2026-08-04 | ✅ decides student add/drop/change-section requests |
-| Attrition Analytics | **9** | ⬜ |
-| Compliance Reports | 7c | ⬜ no PRD-specified content |
-| Audit Logs | 5 | ✅ |
-| Policy Settings | 7c | ✅ (read-only view of current config; now also surfaces `fees.*` and overload-cap rows — see 2026-08-05 session) |
+| Module                      | Phase      | Status                                                                                                           |
+| --------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| Enrollment (Academic Terms) | 5          | ✅                                                                                                               |
+| Grade Approvals             | 2026-08-04 | ✅ mandatory, permanent lock; re-derives Regular/Irregular standing                                              |
+| Academic Transcripts        | 2026-08-04 | ✅ look up any student's prospectus/grade slip                                                                   |
+| Overrides & Voids           | 7a         | ✅                                                                                                               |
+| Add/Drop Requests           | 2026-08-04 | ✅ decides student add/drop/change-section requests                                                              |
+| Attrition Analytics         | **9**      | ⬜                                                                                                               |
+| Compliance Reports          | 7c         | ⬜ no PRD-specified content                                                                                      |
+| Audit Logs                  | 5          | ✅                                                                                                               |
+| Policy Settings             | 7c         | ✅ (read-only view of current config; now also surfaces `fees.*` and overload-cap rows — see 2026-08-05 session) |
 
 ### 8. Registrar Staff — 6 modules
 
-| Module | Phase | Status |
-|---|---|---|
+| Module               | Phase      | Status                                                                                                                                           |
+| -------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Enrollment Approvals | 2026-08-04 | ✅ approver moved here from Registrar Head (ADR 0021); now also acknowledges FR-ENR-004 overload flags before approving — see 2026-08-05 session |
-| Credit Mappings | 7b | ✅ |
-| Drops & Withdrawals | 7b | ✅ |
-| Academic Records | 7b | ✅ |
-| Add/Drop Requests | 2026-08-04 | ✅ read visibility, same requests Registrar Head decides |
-| Enrollment Documents | 7b | ✅ |
+| Credit Mappings      | 7b         | ✅                                                                                                                                               |
+| Drops & Withdrawals  | 7b         | ✅                                                                                                                                               |
+| Academic Records     | 7b         | ✅                                                                                                                                               |
+| Add/Drop Requests    | 2026-08-04 | ✅ read visibility, same requests Registrar Head decides                                                                                         |
+| Enrollment Documents | 7b         | ✅                                                                                                                                               |
 
 ### 9. Accounting Staff — 2 modules
 
-| Module | Phase | Status |
-|---|---|---|
-| Payment Queue | 2026-08-05 | ✅ redesigned into one guided flow (Now Serving/Waiting/Served today) replacing the four separate Phase 7a modules below |
-| Payment Records | 2026-08-05 | ✅ new — date-filterable history of every payment confirmed, for both Accounting and Registrar Head |
+| Module          | Phase      | Status                                                                                                                   |
+| --------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Payment Queue   | 2026-08-05 | ✅ redesigned into one guided flow (Now Serving/Waiting/Served today) replacing the four separate Phase 7a modules below |
+| Payment Records | 2026-08-05 | ✅ new — date-filterable history of every payment confirmed, for both Accounting and Registrar Head                      |
 
 **Removed this session (2026-08-05):** Serving Number, Payment Confirmation,
 and COM Finalization no longer exist as separate nav modules — folded into
-the single guided Payment Queue flow (see *Verified Completed* below).
+the single guided Payment Queue flow (see _Verified Completed_ below).
 
 **Totals:** 43 modules · **36 done** counted per role instance (35 distinct
 connected IDs — `enrollment-change-requests` is one module dispatched to
 both Registrar Head and Registrar Staff) · 4 blocked on Phase 9 (Demand
 Forecast, Honors, KPIs, Attrition Analytics) · 3 remain with no PRD-specified
 content (Dean's Reports, Executive Director's Reports, Registrar Head's
-Compliance Reports). **This count is ahead of `main`** — see *Uncommitted or
-Risky Changes*; Row 8 of the completion table below intentionally still
+Compliance Reports). **This count is ahead of `main`** — see _Uncommitted or
+Risky Changes_; Row 8 of the completion table below intentionally still
 scores against the last-merged 29/40, per that table's own "merged only"
 rule.
 
@@ -3742,7 +3965,7 @@ first for a table-level `GRANT`.
 
 **Sanctum guard caching — one authenticated actor per test method.** Chaining
 `withToken()` across different users inside a single test method silently keeps
-the *first* user; `forgetGuards()` does not help. This has cost time three
+the _first_ user; `forgetGuards()` does not help. This has cost time three
 times. Create precondition state directly via Eloquent and authenticate once.
 Treat it as a structural constraint of this suite, not a bug to re-diagnose.
 
@@ -3809,32 +4032,32 @@ a CI problem (GitHub Actions' Frontend job is green); do not change
 confirmed, implement the mechanism and flag the value — the pattern already
 used for section viability thresholds.
 
-| Unconfirmed decision | Blocks |
-|---|---|
-| Official passing-grade rule, special marks, equivalent grades | Phase 6 — **mechanism implemented** (`config/enrollment.php`, `PrerequisiteEvaluator`), pre-populated with the user's 2026-07-30 direction; still needs formal GRC sign-off (FR-ENR-002) |
-| Maximum regular units and overload approval workflow | Phase 6 — **mechanism implemented**, both caps default `null` (unenforced) until GRC sets a value; no overload approval workflow exists (FR-ENR-004) |
-| Regular/irregular student classification and block-section reservation | Phase 6 — **mechanism implemented** (`sections.is_block_exclusive`, `student_profiles.enrollment_category`), comparison uses a documented placeholder string pending GRC's real vocabulary (FR-ENR-011) |
-| Section-viability threshold and exception authority | Phase 2 (implemented informational-only) |
-| Room capacity source and conflict rules | Phase 2 (deliberately out of scope, ADR 0010) |
-| Enrollment reservation timeout and seat-release rules | Phase 6 — reservation timeout still unimplemented (seats are reserved immediately and permanently on submission). Phase 7b — **withdrawal seat release mechanism implemented**, config-flagged (`enrollment.withdrawal.releases_seats`, default `true`); not yet confirmed as institutional policy |
-| Cross-institution grade/credit equivalence for transferee credits | Phase 7b — **mechanism implemented** (record, audit, display only); `source_grade` stays a free string with no equivalence rule, and approved credits never feed `BuildEligibleSubjectPool` |
-| Queue-ticket reset, priority, "how many serving at once" | Phase 7a — **mechanism implemented** (`waiting`→`serving`→`served` two-step order only); no reset cadence, priority rule, or single-active-ticket constraint enforced |
-| Registrar Head's "authorized edge case" scope for override/void (PRD §3.7) | Phase 7a — **mechanism implemented** (`void` scoped to `pending_payment` only); documented as a scope choice, not confirmed policy, in `EnrollmentPolicy::void` |
-| Payment confirmation required fields and supporting references | Phase 7a — **mechanism implemented** (`external_reference`/`amount` both optional); no required-field rule or currency/rounding policy enforced |
-| Whether COR and COM are distinct artifacts | Phase 7a landed the COM API; still unresolved — `enrollment_documents.document_type` stays deliberately single-valued (`com`) |
-| COM format, numbering, signatures, retention | Phase 7a — **mechanism implemented** (opaque `COM%06d` number, `storage_path` stays null, structured data rendered client-side); no PDF pipeline, signature, or retention rule exists |
+| Unconfirmed decision                                                                                                                                              | Blocks                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Official passing-grade rule, special marks, equivalent grades                                                                                                     | Phase 6 — **mechanism implemented** (`config/enrollment.php`, `PrerequisiteEvaluator`), pre-populated with the user's 2026-07-30 direction; still needs formal GRC sign-off (FR-ENR-002)                                                                                                            |
+| Maximum regular units and overload approval workflow                                                                                                              | Phase 6 — **mechanism implemented**, both caps default `null` (unenforced) until GRC sets a value; no overload approval workflow exists (FR-ENR-004)                                                                                                                                                |
+| Regular/irregular student classification and block-section reservation                                                                                            | Phase 6 — **mechanism implemented** (`sections.is_block_exclusive`, `student_profiles.enrollment_category`), comparison uses a documented placeholder string pending GRC's real vocabulary (FR-ENR-011)                                                                                             |
+| Section-viability threshold and exception authority                                                                                                               | Phase 2 (implemented informational-only)                                                                                                                                                                                                                                                            |
+| Room capacity source and conflict rules                                                                                                                           | Phase 2 (deliberately out of scope, ADR 0010)                                                                                                                                                                                                                                                       |
+| Enrollment reservation timeout and seat-release rules                                                                                                             | Phase 6 — reservation timeout still unimplemented (seats are reserved immediately and permanently on submission). Phase 7b — **withdrawal seat release mechanism implemented**, config-flagged (`enrollment.withdrawal.releases_seats`, default `true`); not yet confirmed as institutional policy  |
+| Cross-institution grade/credit equivalence for transferee credits                                                                                                 | Phase 7b — **mechanism implemented** (record, audit, display only); `source_grade` stays a free string with no equivalence rule, and approved credits never feed `BuildEligibleSubjectPool`                                                                                                         |
+| Queue-ticket reset, priority, "how many serving at once"                                                                                                          | Phase 7a — **mechanism implemented** (`waiting`→`serving`→`served` two-step order only); no reset cadence, priority rule, or single-active-ticket constraint enforced                                                                                                                               |
+| Registrar Head's "authorized edge case" scope for override/void (PRD §3.7)                                                                                        | Phase 7a — **mechanism implemented** (`void` scoped to `pending_payment` only); documented as a scope choice, not confirmed policy, in `EnrollmentPolicy::void`                                                                                                                                     |
+| Payment confirmation required fields and supporting references                                                                                                    | Phase 7a — **mechanism implemented** (`external_reference`/`amount` both optional); no required-field rule or currency/rounding policy enforced                                                                                                                                                     |
+| Whether COR and COM are distinct artifacts                                                                                                                        | Phase 7a landed the COM API; still unresolved — `enrollment_documents.document_type` stays deliberately single-valued (`com`)                                                                                                                                                                       |
+| COM format, numbering, signatures, retention                                                                                                                      | Phase 7a — **mechanism implemented** (opaque `COM%06d` number, `storage_path` stays null, structured data rendered client-side); no PDF pipeline, signature, or retention rule exists                                                                                                               |
 | "Stuck student" dwell-time threshold (PRD §3.5's "stuck-student reports" — the phrase appears twice in the whole PRD, with no duration, status set, or threshold) | Phase 7c — **mechanism implemented** (`config('dashboard.stuck_threshold_days')`, default `null`); every in-progress enrollment's dwell time renders unconditionally (arithmetic), but no row is labeled "stuck" until GRC sets a value — this question was never even registered in §17 before now |
-| Which policy values are Registrar-Head-editable, and via what UI | Phase 7c — `policy-settings` ships **read-only**; deciding this needs a settings-table design this phase deliberately did not build (today every value is env-var-only) |
-| Honors cutoff, disqualifying grades, tie handling | Phase 9 |
-| Government report fields, format, naming, sign-off | Phase 9 |
-| Attrition intervention workflow and authorized viewers | Phase 9 |
-| Prediction refresh cadence | Phase 9 |
-| Token lifetime and session-equivalent UX | Phase 1 (provisional 480 min) |
-| Password and account recovery policy | Phase 1 (deferred) |
-| Data retention, archive, backup, disposal schedules | Phase 10 |
-| Hosting environment and supported browsers | Phase 10 |
+| Which policy values are Registrar-Head-editable, and via what UI                                                                                                  | Phase 7c — `policy-settings` ships **read-only**; deciding this needs a settings-table design this phase deliberately did not build (today every value is env-var-only)                                                                                                                             |
+| Honors cutoff, disqualifying grades, tie handling                                                                                                                 | Phase 9                                                                                                                                                                                                                                                                                             |
+| Government report fields, format, naming, sign-off                                                                                                                | Phase 9                                                                                                                                                                                                                                                                                             |
+| Attrition intervention workflow and authorized viewers                                                                                                            | Phase 9                                                                                                                                                                                                                                                                                             |
+| Prediction refresh cadence                                                                                                                                        | Phase 9                                                                                                                                                                                                                                                                                             |
+| Token lifetime and session-equivalent UX                                                                                                                          | Phase 1 (provisional 480 min)                                                                                                                                                                                                                                                                       |
+| Password and account recovery policy                                                                                                                              | Phase 1 (deferred)                                                                                                                                                                                                                                                                                  |
+| Data retention, archive, backup, disposal schedules                                                                                                               | Phase 10                                                                                                                                                                                                                                                                                            |
+| Hosting environment and supported browsers                                                                                                                        | Phase 10                                                                                                                                                                                                                                                                                            |
 
-The one value the PRD *does* state (§4.1): a section below the viability
+The one value the PRD _does_ state (§4.1): a section below the viability
 threshold — **currently documented as 25 students** — must not be published
 without an audited exception.
 
@@ -3845,58 +4068,58 @@ without an audited exception.
 Newest first. Full reasoning for older entries is in
 `docs/history/2026-07-session-log.md`.
 
-| Date | Decision | Reason |
-|---|---|---|
-| 2026-07-31 | Recompute Row 10 (verification & deployment) from 25% to 35%, moving overall completion from 73% to 74%. Row 8 (nine role portals) stays at 73% pending merge. | Phase 8a, 8b, and 8c are all now merged to `main` (`6d1745b` for 8c); Row 10's bump reflects Phase 8c's E2E foundation specifically. Row 8's 4 newly-connected Phase 7c modules (→83%) are not counted until `phase-7c-dashboards` merges, per the table's own "merged, not written or planned" rule. |
-| 2026-07-31 | Build Phase 7c as factual-only dashboards plus a flagged dwell-time threshold, rather than treating the whole slice as blocked. | User's explicit choice via `AskUserQuestion`, after a full PRD audit found only the "stuck" threshold and the report-content modules were genuinely undecided — the dashboards' row counts are arithmetic over PRD-authoritative status enums, not institutional judgment. Follows the project's own established mechanism-implemented/value-flagged pattern (`max_regular_units`, `sections.viability_threshold`). |
-| 2026-07-31 | Give Dean and Executive Director aggregate-only dashboard endpoints (counts, never rows) instead of widening `Enrollment::scopeVisibleTo`/`EnrollmentPolicy::viewAny()` to include them. | Both roles currently have zero read access to enrollment records. Widening the existing scope would hand both roles row-level access to every student's enrollment, which PRD §3.6 ("cannot alter detailed student academic records unless separately authorized") and §9.4 constrain against. New `DashboardPolicy`-gated `DB::table(...)` aggregation Actions avoid touching the existing authorization boundary at all. |
-| 2026-07-31 | Scope `stuck-students` to `Draft`/`PendingRegistrarApproval`/`PendingPayment`, not `Enrollment::scopeActive()`. | Live-data inspection against the dev database showed `active()` (which also includes `Enrolled`) surfaced already-enrolled students as "stuck" candidates — semantically wrong, since they've completed the process. The narrower scope is derived directly from the PRD-authoritative lifecycle order, not a new institutional definition; the threshold that labels dwell time "stuck" stays separately §17-flagged. |
-| 2026-07-31 | Ship `policy-settings` read-only, backed by a hardcoded list of `PolicyValueState` entries rather than a settings table. | Making it writable requires deciding which values are Registrar-editable at runtime — an unmade institutional decision — and every value today is env-var-only with no settings-table schema. The module's own description already promised "see where confirmed values will eventually be configured," not edit them. |
-| 2026-07-31 | Correct ADR 0016 decision 8's claim that no module id reaches `ScheduleDecisionWorkspace` for `executive_director`, and fix the real bug found tracing it. | User's explicit choice via `AskUserQuestion` ("fix both"). Direct re-verification against the component tree showed the claim was false (`MasterScheduleWorkspace` already embeds the same controls); the actual defect was both cards sharing one `AsyncBoundary` gated on `published.length === 0`, hiding the Executive Director's approval controls whenever no section was yet published. |
-| 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 70% to 95%, and Row 8 (nine role portals) from 58% to 73%, moving overall completion from 67% to 73%. | Row 5: all 5 of Process 3.0's subprocesses complete except the tail forwarding attrition events to Process 4.0, deferred to Phase 9. Row 8: 29/40 modules connected. No other row's weight or Done% changed. |
-| 2026-07-30 | Split the remainder of Phase 7b again: deliver withdrawal/transferee-credit/class-roster APIs plus the Registrar Staff and Faculty portal modules ("records core") this session; defer the Dean/Executive Director dashboards to a new "Phase 7c". | User's explicit scope choice via `AskUserQuestion`. The dashboards are the only part of the original Phase 7b scope with no PRD-specified content (FR-ANL-003 is the sole substantive requirement, deferred to Phase 9/Process 4.0) — building them now would mean inventing institutional definitions, which `AGENTS.md` forbids. |
-| 2026-07-30 | Gate withdrawal seat release behind `config('enrollment.withdrawal.releases_seats')`, default `true`; drop the `enrollment_subjects` row unconditionally either way. | User's explicit choice via `AskUserQuestion`. Seats are reserved immediately and permanently on submission today, so *not* releasing them on withdrawal would permanently inflate `enrolled_count` and wrongly block other students — but whether release is the confirmed institutional policy is still §17-open, so it's mechanism-implemented, value-flagged, the same shape as `max_regular_units`. |
-| 2026-07-30 | `TransfereeCredit` approval never feeds `BuildEligibleSubjectPool`; the pool keeps reading only locked `academic_grades`. | User's explicit choice via `AskUserQuestion`. Cross-institution grade equivalence is an open PRD §17 decision — a foreign "1.50" must not silently unlock a local subject's prerequisite. Proven live: approving a credit mapped to a subject's own prerequisite left the dependent subject's eligibility verdict unchanged. |
-| 2026-07-30 | Seed the "other actor's" data directly via Eloquent in `WithdrawalRequestsEndpointTest`/`TransfereeCreditsEndpointTest` rather than a second login+HTTP-submit within one test method. | Root-caused a 403-vs-200 test failure to a documented Sanctum gotcha: chaining `withToken()` for two different actors in one test silently reuses the first actor's cached guard resolution. `EnrollmentsEndpointTest.php` already recorded this fix (`makeEnrollment()`'s docblock); the new withdrawal/transferee-credit tests hadn't yet applied it. |
-| 2026-07-30 | `RegistrarRecordsWorkspace` renders only the module matching `initialModuleId`, unlike `AccountingPaymentWorkspace`/`AdmissionProvisioningWorkspace` which always render every card. | Those two workspaces' modules are sequential steps of one flow; Registrar Staff's four (Credit Mappings, Drops & Withdrawals, Academic Records, Enrollment Documents) are unrelated record types — showing all four on every visit would cram four unrelated tables onto one screen. Every query hook is still called unconditionally per the Rules of Hooks; only the inactive ones are `enabled: false`. |
-| 2026-07-30 | `GradeSubmissionWorkspace` populates its per-section student list from the new class-roster read rather than a new student-search UI. | No student-directory endpoint exists anywhere in this API; the roster already returns exactly the (student_id, student_number) pairs a section needs, and Faculty already reads it for the Class Rosters module. |
-| 2026-07-30 | Split Phase 7 into 7a (money path: grade encoding → approval → payment → COM) and 7b (transferee credits, withdrawal, remaining portals), and deliver only 7a this session. | User's explicit choice via `AskUserQuestion` when the phase-7 plan was scoped, given the full phase's size (5 DFD subprocesses, 10 FR-FIN requirements, 16 modules across 7 roles). |
-| 2026-07-30 | Scope Registrar Head's `void` action to `pending_payment` only, not any pre-`enrolled` state. | PRD §3.7's "authorized edge cases" has no further definition. A narrow, documented scope avoids overlapping `registrar_reject` (pre-approval) or the Phase 7b withdrawal flow (post-`enrolled`), and avoids asserting an unconfirmed institutional policy as fact. |
-| 2026-07-30 | `ConfirmPayment` checks for an existing `Payment` row *before* checking the enrollment's current status. | A repeat confirmation call naturally arrives after the enrollment has already moved to `enrolled` — checking status first would incorrectly reject a call FR-FIN-009 requires to succeed idempotently. Proven live: a second call with different, contradictory input returned the original record unchanged. |
-| 2026-07-30 | Update `docs/data-dictionary/enrollment-records.md`'s existing scope note rather than create a new Process-3.0 data-dictionary page. | All 6 tables Phase 7a gave an API to were already fully documented there as schema-only groundwork from an earlier phase; a new page would have duplicated that schema documentation. |
-| 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 15% to 70%, and Row 8 (nine role portals) from 38% to 58%, moving overall completion from 55% to 67%. | Row 5: 4 of Process 3.0's 5 subprocesses complete, only transferee credits/withdrawal (3.2) deferred to Phase 7b. Row 8: 23/40 modules connected. No other row's weight or Done% changed. |
-| 2026-07-30 | Merge `phase-7-process-3` into local `main` **and** push to `origin/main`. | Explicit user authorization given at the start of this session ("yes proceed to pushed to origin") — unlike every prior phase, this was a direct instruction, not an extrapolation from a general merge authorization. |
-| 2026-07-30 | Ingest only `code`/`title`/`units` from the user's two real CCS block-section spreadsheets, as an additive seeder alongside the existing synthetic catalog. | User's explicit choice among three CSV-scope options. Schedule/room/faculty/modality columns were out of Phase 6's DFD 2.2/2.4 scope; replacing the synthetic catalog would have broken 500+ existing tests and 4 demo student lifecycles for no Phase 6 benefit. |
-| 2026-07-30 | Pre-populate `config/enrollment.php`'s grading comparison with the user's explicit direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC) rather than leaving it null by default. | User's explicit Phase 6 planning direction, distinct from formal GRC §17 sign-off — recorded as such in the config file's own docblock. Makes the system demonstrable end to end while keeping `PrerequisiteEvaluator`'s `needs_verification` fallback real, tested, and reachable by clearing the value. |
-| 2026-07-30 | Use a documented placeholder string (`'irregular'`) for FR-ENR-011's block-section comparison rather than inventing a confirmed regular/irregular enum. | The approved schema (`is_block_exclusive` bool, `enrollment_category` free string) gives no reference value to compare against. Matches the existing `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE` pattern — demonstrable and testable without asserting GRC's real vocabulary. |
-| 2026-07-30 | Defer FR-ENR-003's cross-section conflict exclusion from the eligible-pool endpoint (Task 4) to the submission endpoint (Task 5). | The acceptance criterion is "cannot be *submitted* together" — there is no draft-selection state at pool-view time for two sections to conflict against. `SectionConflictDetector` (reused unchanged from Phase 2) runs pairwise across the submitted set at submission instead. |
-| 2026-07-30 | Recompute Row 4 (Process 2.0 backend) from 25% to 80%, and Row 8 (nine role portals) from 33% to 38%, moving overall completion from 48% to 55%. | Row 4: 3 of DFD 2.1–2.4's four subprocesses are complete, the 4th (ML recommendation) deliberately deferred to Phase 9 — the same shape already recorded for Row 3. Row 8: 15/40 modules connected. No other row's weight or Done% changed. |
-| 2026-07-30 | Merge `phase-6-process-2` into local `main` without pushing to `origin/main`. | Same user-scoped authorization pattern as every prior phase: finish the task, commit, merge locally; push needs separate explicit authorization. |
-| 2026-07-29 | Retire `HANDOFF.md`; fold its verified content into `PROGRESS.md` and delete it. | Two competing handoff documents had drifted — `main`'s said Phase 4 was the active objective, the branch's said "stopped, do not resume Task 9" — while `PROGRESS.md` was three phases stale on `main`. `AGENTS.md` already designates `PROGRESS.md` as the update target at every milestone; a second file undermines that. User's explicit choice among three options offered at takeover. |
-| 2026-07-29 | Recompute Portal-row (row 8) Done% from 5% to 33% (13/40 modules), moving overall completion from 41% to 48%. | Phase 5 landed 13 of 40 modules fully wired to live APIs, not scaffolding. No other row's weight or Done% changed; per the standing recompute rule, only a closed phase's own row moves. |
-| 2026-07-29 | Merge `phase-5-portal-workspaces` into local `main` without pushing to `origin/main`. | User-scoped authorization at takeover: finish Task 9, commit, merge locally; push requires separate explicit authorization not given in this session. |
-| 2026-07-29 | Document the Vitest full-parallel-worker flakiness as an Operational Caution rather than changing `vitest.config.ts`. | Five full-suite runs failed a different 2–27-test subset each time on this ~6 GB-free machine; every failing test passed alone, and `--no-file-parallelism` passed clean twice. The cause is machine memory pressure, not the tests or the code; CI is unaffected. Changing shared test-runner defaults for a local-machine artifact would slow every future run for no correctness benefit. |
-| 2026-07-29 | Give every local/testing synthetic login the shared password `password`; retain the production-environment refusal and hashed storage. | Explicit user direction to make switching among all nine role portals easy during development. The full dataset applies the same password to its additional student scenarios. |
-| 2026-07-28 | Extract `demoRoles`, the session/credential/gateway types and `DemoAuthError` out of the `demo-*` modules **before** deleting them. | They were not demo-only despite the naming: `demoRoles` is the runtime enum validating *real* API responses in `auth-schema.ts`, and `DemoAuthError`/`DemoSession` were used by the live API gateway. Deleting the files first would have broken production code. |
-| 2026-07-28 | Assert routing in tests via the mocked router's calls rather than a rendered URL. | The App Router has no `MemoryRouter`, so real URL changes are not observable in jsdom. Guards are asserted on the redirect they *request*; true end-to-end routing moves to Playwright in Phase 8, which PRD §14.3 requires anyway. |
-| 2026-07-28 | Pin `postcss` and `sharp` through `overrides` instead of accepting Next's pinned versions. | Next 16.2.12 ships versions with advisories that fail CI's `npm audit --audit-level=moderate`; npm's suggested fix is a downgrade to `next@9.3.3`. Both patches are semver-compatible and already elsewhere in the tree. |
-| 2026-07-28 | Do not adopt `eslint-config-next`. | It bundles `eslint-plugin-react@7.37.5`, which has no ESLint 10 support and crashes the lint run. The existing type-checked `typescript-eslint` + `react-hooks` rules are stricter than what it would have added. |
-| 2026-07-28 | Reorganise the roadmap into 11 execution phases, moving all machine learning to Phase 9. | User direction: make the whole system functional first. Each earlier phase now carries an explicit ML data-capture obligation so Phase 9 builds models, not plumbing. |
-| 2026-07-28 | Migrate the frontend from Vite/React to Next.js, and amend PRD §1.2/§6.1/§7/§7.3 accordingly (PRD → v3.2). | User direction. Realigns with the manuscript's original architecture diagram, which the PRD had deliberately overridden. PRD §18 requires the document be updated when architecture changes. Also touched `README.md`'s architecture block — one line, same decision, forward-pointing note only since the migration has not run yet. See ADR 0013. |
-| 2026-07-28 | Use Next.js as a client-rendered application only — no SSR of authorized data, no server session, no API proxying. | Preserves ADR 0001's independently-runnable service boundary and PRD §9.1's bearer-token rule. Next.js is adopted for routing and build pipeline, not to move computation to a Node server. |
-| 2026-07-28 | Keep the bearer token in `localStorage` under Next.js rather than moving to an httpOnly cookie. | Preserves the proven Sanctum flow and stays compliant with PRD §9.1's explicit no-cookie/no-`withCredentials` rule. Server-side route protection is given up knowingly; guards stay client-side. |
-| 2026-07-28 | Delete the frontend demo auth mode rather than porting it. | It predates real authentication; nine seeded database identities now cover the same need. Vite's `MODE === "test"` guard has no exact Next equivalent, and porting it wrong would make a committed password a valid production login. |
-| 2026-07-28 | Build portals for backend-ready roles (Phase 5) before completing Process 2.0. | 22 endpoints are merged with no UI. Five portals can become functional with zero new backend work — the fastest path to a demonstrably working system. |
-| 2026-07-28 | Archive the session log and failure record to `docs/history/` instead of deleting or keeping them inline. | 1,350 of 2,255 lines were historical narrative, making `PROGRESS.md` unusable as a tracker. Nothing is lost; the detail is one link away. |
-| 2026-07-28 | Score completion with a published weighting table rather than asserting a single number. | The percentage must be auditable and challengeable, and recomputable as each phase closes. |
-| 2026-07-28 | `StudentProfilePolicy::view()` gets no broader role visibility — own-record only. | Nothing in PRD §3 grants any role read access to *other* students' profiles; inventing one would be scope creep beyond DFD 2.1. |
-| 2026-07-28 | Provision `User` + `StudentProfile` together in one transaction. | PRD §3.2 makes it one Admission Staff responsibility, and no `POST /users` endpoint exists to support a two-step flow. |
-| 2026-07-28 | Pause the `ml-service` CI investigation. | Explicit user direction after two hypotheses were ruled out. Resumes in Phase 9. |
-| 2026-07-28 | Scope `SectionConflictDetector` to same-professor double-booking only. | Neither the schema nor the seed data evidences room or availability matching as a hard rule; inventing either would repeat the §17 mistake. ADR 0010. |
-| 2026-07-28 | Adopt rather than discard the 43-file untracked scaffold found in the working tree. | A full read-through confirmed it matched this codebase's conventions. User's explicit choice among three options. |
-| 2026-07-27 | Build authorization as `role` middleware **and** Policies, with row filtering in query scopes. | PRD §9.4 requires both role-level and record-level access; a Policy cannot filter a collection. Sets the pattern for ~40 future endpoints. ADR 0008. |
-| 2026-07-27 | Use the existing XAMPP MariaDB 10.4.32 instead of an isolated MySQL 8.4 instance. | User's explicit choice after four review rounds on 2,628 lines of never-executed lifecycle PowerShell. ADR 0007. |
-| 2026-07-26 | Use Laravel 12.64 as a short-lived bridge. | PHP 8.2.12 cannot run Laravel 13; production planning must upgrade PHP and re-evaluate. ADR 0002. |
+| Date       | Decision                                                                                                                                                                                                                                           | Reason                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-31 | Recompute Row 10 (verification & deployment) from 25% to 35%, moving overall completion from 73% to 74%. Row 8 (nine role portals) stays at 73% pending merge.                                                                                     | Phase 8a, 8b, and 8c are all now merged to `main` (`6d1745b` for 8c); Row 10's bump reflects Phase 8c's E2E foundation specifically. Row 8's 4 newly-connected Phase 7c modules (→83%) are not counted until `phase-7c-dashboards` merges, per the table's own "merged, not written or planned" rule.                                                                                                                      |
+| 2026-07-31 | Build Phase 7c as factual-only dashboards plus a flagged dwell-time threshold, rather than treating the whole slice as blocked.                                                                                                                    | User's explicit choice via `AskUserQuestion`, after a full PRD audit found only the "stuck" threshold and the report-content modules were genuinely undecided — the dashboards' row counts are arithmetic over PRD-authoritative status enums, not institutional judgment. Follows the project's own established mechanism-implemented/value-flagged pattern (`max_regular_units`, `sections.viability_threshold`).        |
+| 2026-07-31 | Give Dean and Executive Director aggregate-only dashboard endpoints (counts, never rows) instead of widening `Enrollment::scopeVisibleTo`/`EnrollmentPolicy::viewAny()` to include them.                                                           | Both roles currently have zero read access to enrollment records. Widening the existing scope would hand both roles row-level access to every student's enrollment, which PRD §3.6 ("cannot alter detailed student academic records unless separately authorized") and §9.4 constrain against. New `DashboardPolicy`-gated `DB::table(...)` aggregation Actions avoid touching the existing authorization boundary at all. |
+| 2026-07-31 | Scope `stuck-students` to `Draft`/`PendingRegistrarApproval`/`PendingPayment`, not `Enrollment::scopeActive()`.                                                                                                                                    | Live-data inspection against the dev database showed `active()` (which also includes `Enrolled`) surfaced already-enrolled students as "stuck" candidates — semantically wrong, since they've completed the process. The narrower scope is derived directly from the PRD-authoritative lifecycle order, not a new institutional definition; the threshold that labels dwell time "stuck" stays separately §17-flagged.     |
+| 2026-07-31 | Ship `policy-settings` read-only, backed by a hardcoded list of `PolicyValueState` entries rather than a settings table.                                                                                                                           | Making it writable requires deciding which values are Registrar-editable at runtime — an unmade institutional decision — and every value today is env-var-only with no settings-table schema. The module's own description already promised "see where confirmed values will eventually be configured," not edit them.                                                                                                     |
+| 2026-07-31 | Correct ADR 0016 decision 8's claim that no module id reaches `ScheduleDecisionWorkspace` for `executive_director`, and fix the real bug found tracing it.                                                                                         | User's explicit choice via `AskUserQuestion` ("fix both"). Direct re-verification against the component tree showed the claim was false (`MasterScheduleWorkspace` already embeds the same controls); the actual defect was both cards sharing one `AsyncBoundary` gated on `published.length === 0`, hiding the Executive Director's approval controls whenever no section was yet published.                             |
+| 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 70% to 95%, and Row 8 (nine role portals) from 58% to 73%, moving overall completion from 67% to 73%.                                                                                                   | Row 5: all 5 of Process 3.0's subprocesses complete except the tail forwarding attrition events to Process 4.0, deferred to Phase 9. Row 8: 29/40 modules connected. No other row's weight or Done% changed.                                                                                                                                                                                                               |
+| 2026-07-30 | Split the remainder of Phase 7b again: deliver withdrawal/transferee-credit/class-roster APIs plus the Registrar Staff and Faculty portal modules ("records core") this session; defer the Dean/Executive Director dashboards to a new "Phase 7c". | User's explicit scope choice via `AskUserQuestion`. The dashboards are the only part of the original Phase 7b scope with no PRD-specified content (FR-ANL-003 is the sole substantive requirement, deferred to Phase 9/Process 4.0) — building them now would mean inventing institutional definitions, which `AGENTS.md` forbids.                                                                                         |
+| 2026-07-30 | Gate withdrawal seat release behind `config('enrollment.withdrawal.releases_seats')`, default `true`; drop the `enrollment_subjects` row unconditionally either way.                                                                               | User's explicit choice via `AskUserQuestion`. Seats are reserved immediately and permanently on submission today, so _not_ releasing them on withdrawal would permanently inflate `enrolled_count` and wrongly block other students — but whether release is the confirmed institutional policy is still §17-open, so it's mechanism-implemented, value-flagged, the same shape as `max_regular_units`.                    |
+| 2026-07-30 | `TransfereeCredit` approval never feeds `BuildEligibleSubjectPool`; the pool keeps reading only locked `academic_grades`.                                                                                                                          | User's explicit choice via `AskUserQuestion`. Cross-institution grade equivalence is an open PRD §17 decision — a foreign "1.50" must not silently unlock a local subject's prerequisite. Proven live: approving a credit mapped to a subject's own prerequisite left the dependent subject's eligibility verdict unchanged.                                                                                               |
+| 2026-07-30 | Seed the "other actor's" data directly via Eloquent in `WithdrawalRequestsEndpointTest`/`TransfereeCreditsEndpointTest` rather than a second login+HTTP-submit within one test method.                                                             | Root-caused a 403-vs-200 test failure to a documented Sanctum gotcha: chaining `withToken()` for two different actors in one test silently reuses the first actor's cached guard resolution. `EnrollmentsEndpointTest.php` already recorded this fix (`makeEnrollment()`'s docblock); the new withdrawal/transferee-credit tests hadn't yet applied it.                                                                    |
+| 2026-07-30 | `RegistrarRecordsWorkspace` renders only the module matching `initialModuleId`, unlike `AccountingPaymentWorkspace`/`AdmissionProvisioningWorkspace` which always render every card.                                                               | Those two workspaces' modules are sequential steps of one flow; Registrar Staff's four (Credit Mappings, Drops & Withdrawals, Academic Records, Enrollment Documents) are unrelated record types — showing all four on every visit would cram four unrelated tables onto one screen. Every query hook is still called unconditionally per the Rules of Hooks; only the inactive ones are `enabled: false`.                 |
+| 2026-07-30 | `GradeSubmissionWorkspace` populates its per-section student list from the new class-roster read rather than a new student-search UI.                                                                                                              | No student-directory endpoint exists anywhere in this API; the roster already returns exactly the (student_id, student_number) pairs a section needs, and Faculty already reads it for the Class Rosters module.                                                                                                                                                                                                           |
+| 2026-07-30 | Split Phase 7 into 7a (money path: grade encoding → approval → payment → COM) and 7b (transferee credits, withdrawal, remaining portals), and deliver only 7a this session.                                                                        | User's explicit choice via `AskUserQuestion` when the phase-7 plan was scoped, given the full phase's size (5 DFD subprocesses, 10 FR-FIN requirements, 16 modules across 7 roles).                                                                                                                                                                                                                                        |
+| 2026-07-30 | Scope Registrar Head's `void` action to `pending_payment` only, not any pre-`enrolled` state.                                                                                                                                                      | PRD §3.7's "authorized edge cases" has no further definition. A narrow, documented scope avoids overlapping `registrar_reject` (pre-approval) or the Phase 7b withdrawal flow (post-`enrolled`), and avoids asserting an unconfirmed institutional policy as fact.                                                                                                                                                         |
+| 2026-07-30 | `ConfirmPayment` checks for an existing `Payment` row _before_ checking the enrollment's current status.                                                                                                                                           | A repeat confirmation call naturally arrives after the enrollment has already moved to `enrolled` — checking status first would incorrectly reject a call FR-FIN-009 requires to succeed idempotently. Proven live: a second call with different, contradictory input returned the original record unchanged.                                                                                                              |
+| 2026-07-30 | Update `docs/data-dictionary/enrollment-records.md`'s existing scope note rather than create a new Process-3.0 data-dictionary page.                                                                                                               | All 6 tables Phase 7a gave an API to were already fully documented there as schema-only groundwork from an earlier phase; a new page would have duplicated that schema documentation.                                                                                                                                                                                                                                      |
+| 2026-07-30 | Recompute Row 5 (Process 3.0 backend) from 15% to 70%, and Row 8 (nine role portals) from 38% to 58%, moving overall completion from 55% to 67%.                                                                                                   | Row 5: 4 of Process 3.0's 5 subprocesses complete, only transferee credits/withdrawal (3.2) deferred to Phase 7b. Row 8: 23/40 modules connected. No other row's weight or Done% changed.                                                                                                                                                                                                                                  |
+| 2026-07-30 | Merge `phase-7-process-3` into local `main` **and** push to `origin/main`.                                                                                                                                                                         | Explicit user authorization given at the start of this session ("yes proceed to pushed to origin") — unlike every prior phase, this was a direct instruction, not an extrapolation from a general merge authorization.                                                                                                                                                                                                     |
+| 2026-07-30 | Ingest only `code`/`title`/`units` from the user's two real CCS block-section spreadsheets, as an additive seeder alongside the existing synthetic catalog.                                                                                        | User's explicit choice among three CSV-scope options. Schedule/room/faculty/modality columns were out of Phase 6's DFD 2.2/2.4 scope; replacing the synthetic catalog would have broken 500+ existing tests and 4 demo student lifecycles for no Phase 6 benefit.                                                                                                                                                          |
+| 2026-07-30 | Pre-populate `config/enrollment.php`'s grading comparison with the user's explicit direction (3.00 passing / 5.00 failing, lower-is-better, INC/NC) rather than leaving it null by default.                                                        | User's explicit Phase 6 planning direction, distinct from formal GRC §17 sign-off — recorded as such in the config file's own docblock. Makes the system demonstrable end to end while keeping `PrerequisiteEvaluator`'s `needs_verification` fallback real, tested, and reachable by clearing the value.                                                                                                                  |
+| 2026-07-30 | Use a documented placeholder string (`'irregular'`) for FR-ENR-011's block-section comparison rather than inventing a confirmed regular/irregular enum.                                                                                            | The approved schema (`is_block_exclusive` bool, `enrollment_category` free string) gives no reference value to compare against. Matches the existing `CurriculumSeeder::PLACEHOLDER_MINIMUM_GRADE` pattern — demonstrable and testable without asserting GRC's real vocabulary.                                                                                                                                            |
+| 2026-07-30 | Defer FR-ENR-003's cross-section conflict exclusion from the eligible-pool endpoint (Task 4) to the submission endpoint (Task 5).                                                                                                                  | The acceptance criterion is "cannot be _submitted_ together" — there is no draft-selection state at pool-view time for two sections to conflict against. `SectionConflictDetector` (reused unchanged from Phase 2) runs pairwise across the submitted set at submission instead.                                                                                                                                           |
+| 2026-07-30 | Recompute Row 4 (Process 2.0 backend) from 25% to 80%, and Row 8 (nine role portals) from 33% to 38%, moving overall completion from 48% to 55%.                                                                                                   | Row 4: 3 of DFD 2.1–2.4's four subprocesses are complete, the 4th (ML recommendation) deliberately deferred to Phase 9 — the same shape already recorded for Row 3. Row 8: 15/40 modules connected. No other row's weight or Done% changed.                                                                                                                                                                                |
+| 2026-07-30 | Merge `phase-6-process-2` into local `main` without pushing to `origin/main`.                                                                                                                                                                      | Same user-scoped authorization pattern as every prior phase: finish the task, commit, merge locally; push needs separate explicit authorization.                                                                                                                                                                                                                                                                           |
+| 2026-07-29 | Retire `HANDOFF.md`; fold its verified content into `PROGRESS.md` and delete it.                                                                                                                                                                   | Two competing handoff documents had drifted — `main`'s said Phase 4 was the active objective, the branch's said "stopped, do not resume Task 9" — while `PROGRESS.md` was three phases stale on `main`. `AGENTS.md` already designates `PROGRESS.md` as the update target at every milestone; a second file undermines that. User's explicit choice among three options offered at takeover.                               |
+| 2026-07-29 | Recompute Portal-row (row 8) Done% from 5% to 33% (13/40 modules), moving overall completion from 41% to 48%.                                                                                                                                      | Phase 5 landed 13 of 40 modules fully wired to live APIs, not scaffolding. No other row's weight or Done% changed; per the standing recompute rule, only a closed phase's own row moves.                                                                                                                                                                                                                                   |
+| 2026-07-29 | Merge `phase-5-portal-workspaces` into local `main` without pushing to `origin/main`.                                                                                                                                                              | User-scoped authorization at takeover: finish Task 9, commit, merge locally; push requires separate explicit authorization not given in this session.                                                                                                                                                                                                                                                                      |
+| 2026-07-29 | Document the Vitest full-parallel-worker flakiness as an Operational Caution rather than changing `vitest.config.ts`.                                                                                                                              | Five full-suite runs failed a different 2–27-test subset each time on this ~6 GB-free machine; every failing test passed alone, and `--no-file-parallelism` passed clean twice. The cause is machine memory pressure, not the tests or the code; CI is unaffected. Changing shared test-runner defaults for a local-machine artifact would slow every future run for no correctness benefit.                               |
+| 2026-07-29 | Give every local/testing synthetic login the shared password `password`; retain the production-environment refusal and hashed storage.                                                                                                             | Explicit user direction to make switching among all nine role portals easy during development. The full dataset applies the same password to its additional student scenarios.                                                                                                                                                                                                                                             |
+| 2026-07-28 | Extract `demoRoles`, the session/credential/gateway types and `DemoAuthError` out of the `demo-*` modules **before** deleting them.                                                                                                                | They were not demo-only despite the naming: `demoRoles` is the runtime enum validating _real_ API responses in `auth-schema.ts`, and `DemoAuthError`/`DemoSession` were used by the live API gateway. Deleting the files first would have broken production code.                                                                                                                                                          |
+| 2026-07-28 | Assert routing in tests via the mocked router's calls rather than a rendered URL.                                                                                                                                                                  | The App Router has no `MemoryRouter`, so real URL changes are not observable in jsdom. Guards are asserted on the redirect they _request_; true end-to-end routing moves to Playwright in Phase 8, which PRD §14.3 requires anyway.                                                                                                                                                                                        |
+| 2026-07-28 | Pin `postcss` and `sharp` through `overrides` instead of accepting Next's pinned versions.                                                                                                                                                         | Next 16.2.12 ships versions with advisories that fail CI's `npm audit --audit-level=moderate`; npm's suggested fix is a downgrade to `next@9.3.3`. Both patches are semver-compatible and already elsewhere in the tree.                                                                                                                                                                                                   |
+| 2026-07-28 | Do not adopt `eslint-config-next`.                                                                                                                                                                                                                 | It bundles `eslint-plugin-react@7.37.5`, which has no ESLint 10 support and crashes the lint run. The existing type-checked `typescript-eslint` + `react-hooks` rules are stricter than what it would have added.                                                                                                                                                                                                          |
+| 2026-07-28 | Reorganise the roadmap into 11 execution phases, moving all machine learning to Phase 9.                                                                                                                                                           | User direction: make the whole system functional first. Each earlier phase now carries an explicit ML data-capture obligation so Phase 9 builds models, not plumbing.                                                                                                                                                                                                                                                      |
+| 2026-07-28 | Migrate the frontend from Vite/React to Next.js, and amend PRD §1.2/§6.1/§7/§7.3 accordingly (PRD → v3.2).                                                                                                                                         | User direction. Realigns with the manuscript's original architecture diagram, which the PRD had deliberately overridden. PRD §18 requires the document be updated when architecture changes. Also touched `README.md`'s architecture block — one line, same decision, forward-pointing note only since the migration has not run yet. See ADR 0013.                                                                        |
+| 2026-07-28 | Use Next.js as a client-rendered application only — no SSR of authorized data, no server session, no API proxying.                                                                                                                                 | Preserves ADR 0001's independently-runnable service boundary and PRD §9.1's bearer-token rule. Next.js is adopted for routing and build pipeline, not to move computation to a Node server.                                                                                                                                                                                                                                |
+| 2026-07-28 | Keep the bearer token in `localStorage` under Next.js rather than moving to an httpOnly cookie.                                                                                                                                                    | Preserves the proven Sanctum flow and stays compliant with PRD §9.1's explicit no-cookie/no-`withCredentials` rule. Server-side route protection is given up knowingly; guards stay client-side.                                                                                                                                                                                                                           |
+| 2026-07-28 | Delete the frontend demo auth mode rather than porting it.                                                                                                                                                                                         | It predates real authentication; nine seeded database identities now cover the same need. Vite's `MODE === "test"` guard has no exact Next equivalent, and porting it wrong would make a committed password a valid production login.                                                                                                                                                                                      |
+| 2026-07-28 | Build portals for backend-ready roles (Phase 5) before completing Process 2.0.                                                                                                                                                                     | 22 endpoints are merged with no UI. Five portals can become functional with zero new backend work — the fastest path to a demonstrably working system.                                                                                                                                                                                                                                                                     |
+| 2026-07-28 | Archive the session log and failure record to `docs/history/` instead of deleting or keeping them inline.                                                                                                                                          | 1,350 of 2,255 lines were historical narrative, making `PROGRESS.md` unusable as a tracker. Nothing is lost; the detail is one link away.                                                                                                                                                                                                                                                                                  |
+| 2026-07-28 | Score completion with a published weighting table rather than asserting a single number.                                                                                                                                                           | The percentage must be auditable and challengeable, and recomputable as each phase closes.                                                                                                                                                                                                                                                                                                                                 |
+| 2026-07-28 | `StudentProfilePolicy::view()` gets no broader role visibility — own-record only.                                                                                                                                                                  | Nothing in PRD §3 grants any role read access to _other_ students' profiles; inventing one would be scope creep beyond DFD 2.1.                                                                                                                                                                                                                                                                                            |
+| 2026-07-28 | Provision `User` + `StudentProfile` together in one transaction.                                                                                                                                                                                   | PRD §3.2 makes it one Admission Staff responsibility, and no `POST /users` endpoint exists to support a two-step flow.                                                                                                                                                                                                                                                                                                     |
+| 2026-07-28 | Pause the `ml-service` CI investigation.                                                                                                                                                                                                           | Explicit user direction after two hypotheses were ruled out. Resumes in Phase 9.                                                                                                                                                                                                                                                                                                                                           |
+| 2026-07-28 | Scope `SectionConflictDetector` to same-professor double-booking only.                                                                                                                                                                             | Neither the schema nor the seed data evidences room or availability matching as a hard rule; inventing either would repeat the §17 mistake. ADR 0010.                                                                                                                                                                                                                                                                      |
+| 2026-07-28 | Adopt rather than discard the 43-file untracked scaffold found in the working tree.                                                                                                                                                                | A full read-through confirmed it matched this codebase's conventions. User's explicit choice among three options.                                                                                                                                                                                                                                                                                                          |
+| 2026-07-27 | Build authorization as `role` middleware **and** Policies, with row filtering in query scopes.                                                                                                                                                     | PRD §9.4 requires both role-level and record-level access; a Policy cannot filter a collection. Sets the pattern for ~40 future endpoints. ADR 0008.                                                                                                                                                                                                                                                                       |
+| 2026-07-27 | Use the existing XAMPP MariaDB 10.4.32 instead of an isolated MySQL 8.4 instance.                                                                                                                                                                  | User's explicit choice after four review rounds on 2,628 lines of never-executed lifecycle PowerShell. ADR 0007.                                                                                                                                                                                                                                                                                                           |
+| 2026-07-26 | Use Laravel 12.64 as a short-lived bridge.                                                                                                                                                                                                         | PHP 8.2.12 cannot run Laravel 13; production planning must upgrade PHP and re-evaluate. ADR 0002.                                                                                                                                                                                                                                                                                                                          |
 
 ---
 
@@ -3904,32 +4127,33 @@ Newest first. Full reasoning for older entries is in
 
 Full detail in **`docs/history/2026-07-session-log.md`**.
 
-| Date | Slice | Outcome |
-|---|---|---|
-| 2026-07-26 | Repository, PRD canonicalisation, three service shells | Merged |
-| 2026-07-26 | Landing, login, demo portal (nine roles) | Merged |
-| 2026-07-27 | MySQL 8.4 isolated-instance plan | **Abandoned** → ADR 0007 |
-| 2026-07-27 | MariaDB identity foundation + Sanctum auth | Merged |
-| 2026-07-27 | Authorization foundation and reference data | Merged (ADR 0008) |
-| 2026-07-27 | Curriculum catalog + prerequisite cycle rejection | Merged (ADR 0009) |
-| 2026-07-28 | Untracked 43-file scaffold audited and adopted | Merged |
-| 2026-07-28 | Schedule + enrollment schema foundation (13 tables) | Merged |
-| 2026-07-28 | Faculty input API | Merged |
-| 2026-07-28 | Section planning API | Merged (ADR 0010) |
-| 2026-07-28 | Schedule approval workflow API | Merged (ADR 0011) |
-| 2026-07-28 | CI quality gates | Merged (ADR 0012); ml-service job fails, paused |
-| 2026-07-28 | Student profile foundation (DFD 2.1) | Merged; CI-confirmed green |
-| 2026-07-28 | Roadmap replan, Next.js decision, PROGRESS restructure | Merged (ADR 0013); PRD → v3.2 |
-| 2026-07-28 | Phase 3 — Next.js migration | Merged; 145/145 tests, live proof 17/17 |
-| 2026-07-28 | Phase 4 — Cross-cutting backend & ML substrate | Merged; 503/503 backend tests |
-| 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint) | Merged; backend 519/519, frontend 216/216 |
-| 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog) | Merged; live-verified; backend 563/563, frontend 224/224 |
-| 2026-07-30 | Phase 7a — Process 3.0 money path (9 tasks, 8 modules, 8 new endpoints, idempotent payment confirmation) | Merged `fc56148`; live-verified; backend 605/605, frontend 243/243 |
-| 2026-07-30 | Phase 7b — Transferee credits, withdrawal, Registrar Staff portal (8 tasks, 6 modules, 7 new endpoints, idempotent withdrawal seat release) | Merged; live-verified; backend 641/641, frontend 243/243 |
-| 2026-07-31 | Phase 8a — Accessibility & required states (PRD §12.3–§12.5) | Merged `8bb7e66` |
-| 2026-07-31 | Phase 8b — Portal UI coherence & motion (shared header, form control migration, `motion` library) | Merged `2da5501` (ADR 0015) |
-| 2026-07-31 | Phase 8c — Playwright E2E foundation (13 of 15 critical journeys, `@axe-core/playwright`, 2 real defects found and fixed) | Merged `6d1745b` (ADR 0016) |
-| 2026-07-31 | Phase 7c — Factual dashboards, dwell-time signals, policy visibility (4 modules connected, ADR 0016 correction + real bug fix) | This entry; live-verified; backend 656/656, frontend 376/376, E2E 20/21 (1 skipped) |
+| Date       | Slice                                                                                                                                       | Outcome                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 2026-07-26 | Repository, PRD canonicalisation, three service shells                                                                                      | Merged                                                                              |
+| 2026-07-26 | Landing, login, demo portal (nine roles)                                                                                                    | Merged                                                                              |
+| 2026-07-27 | MySQL 8.4 isolated-instance plan                                                                                                            | **Abandoned** → ADR 0007                                                            |
+| 2026-07-27 | MariaDB identity foundation + Sanctum auth                                                                                                  | Merged                                                                              |
+| 2026-07-27 | Authorization foundation and reference data                                                                                                 | Merged (ADR 0008)                                                                   |
+| 2026-07-27 | Curriculum catalog + prerequisite cycle rejection                                                                                           | Merged (ADR 0009)                                                                   |
+| 2026-07-28 | Untracked 43-file scaffold audited and adopted                                                                                              | Merged                                                                              |
+| 2026-07-28 | Schedule + enrollment schema foundation (13 tables)                                                                                         | Merged                                                                              |
+| 2026-07-28 | Faculty input API                                                                                                                           | Merged                                                                              |
+| 2026-07-28 | Section planning API                                                                                                                        | Merged (ADR 0010)                                                                   |
+| 2026-07-28 | Schedule approval workflow API                                                                                                              | Merged (ADR 0011)                                                                   |
+| 2026-07-28 | CI quality gates                                                                                                                            | Merged (ADR 0012); ml-service job fails, paused                                     |
+| 2026-07-28 | Student profile foundation (DFD 2.1)                                                                                                        | Merged; CI-confirmed green                                                          |
+| 2026-07-28 | Roadmap replan, Next.js decision, PROGRESS restructure                                                                                      | Merged (ADR 0013); PRD → v3.2                                                       |
+| 2026-07-28 | Phase 3 — Next.js migration                                                                                                                 | Merged; 145/145 tests, live proof 17/17                                             |
+| 2026-07-28 | Phase 4 — Cross-cutting backend & ML substrate                                                                                              | Merged; 503/503 backend tests                                                       |
+| 2026-07-29 | Phase 5 — Portals over existing APIs (9 tasks, 6 roles, 13 modules, 1 new endpoint)                                                         | Merged; backend 519/519, frontend 216/216                                           |
+| 2026-07-30 | Phase 6 — Process 2.0 + Student Portal (9 tasks, 2 modules, 3 new endpoints, real GRC CCS catalog)                                          | Merged; live-verified; backend 563/563, frontend 224/224                            |
+| 2026-07-30 | Phase 7a — Process 3.0 money path (9 tasks, 8 modules, 8 new endpoints, idempotent payment confirmation)                                    | Merged `fc56148`; live-verified; backend 605/605, frontend 243/243                  |
+| 2026-07-30 | Phase 7b — Transferee credits, withdrawal, Registrar Staff portal (8 tasks, 6 modules, 7 new endpoints, idempotent withdrawal seat release) | Merged; live-verified; backend 641/641, frontend 243/243                            |
+| 2026-07-31 | Phase 8a — Accessibility & required states (PRD §12.3–§12.5)                                                                                | Merged `8bb7e66`                                                                    |
+| 2026-07-31 | Phase 8b — Portal UI coherence & motion (shared header, form control migration, `motion` library)                                           | Merged `2da5501` (ADR 0015)                                                         |
+| 2026-07-31 | Phase 8c — Playwright E2E foundation (13 of 15 critical journeys, `@axe-core/playwright`, 2 real defects found and fixed)                   | Merged `6d1745b` (ADR 0016)                                                         |
+| 2026-07-31 | Phase 7c — Factual dashboards, dwell-time signals, policy visibility (4 modules connected, ADR 0016 correction + real bug fix)              | This entry; live-verified; backend 656/656, frontend 376/376, E2E 20/21 (1 skipped) |
+
 ## 2026-08-02 — Registrar close option removed
 
 - Removed the visible `Close` action from the Registrar Enrollment workspace;
@@ -4081,7 +4305,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
   published sections, or enrolled students. Such a reduction returns a clear
   validation error instead of deleting active scheduling data.
 - Empty year tabs now show the saved block count plus `Generate subjects for
-  <year>`; release accepts an optional year-level target so one year can be
+<year>`; release accepts an optional year-level target so one year can be
   generated without rerunning the other three.
 - Verification: all 35 portal test files pass (153 tests), backend unit tests
   pass (153 tests, 327 assertions), and `git diff --check` passes.
@@ -4147,7 +4371,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
   composition. A valid save must retain the existing close-on-success behavior.
 - The invalid-time regression failed first because the dialog contained no
   explanation. The modal now marks both time controls invalid and shows `End
-  time must be after start time.` directly below the end time; it does not send
+time must be after start time.` directly below the end time; it does not send
   a PATCH until the ordering is corrected.
 - Added a second red/green regression for API-side validation. Field-specific
   conflict messages from the API now render in a destructive Alert inside the
@@ -4218,7 +4442,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
   and COA/CBAE pending Executive; CCS remains without a proposal for manual
   testing.
 - Program Chairs now see the reviewer remarks in a prominent `Returned for
-  correction` alert. Direct proposal schedule access is also college-scoped,
+correction` alert. Direct proposal schedule access is also college-scoped,
   so a Program Chair cannot inspect another department's proposal.
 - Updated the OpenAPI contract for proposal metadata and the submitted-schedule
   endpoint. Redocly validation passes; the four schedule-proposal routes are
@@ -4268,6 +4492,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
   refreshes; surface Dean and Executive reviewer identities and notes to the
   Program Chair; and expose the review queue from each reviewer's Enrollment
   portal without changing the already-submitted CCS proposal state.
+
 ### Investigation note — 2026-08-02
 
 - Initial targeted read used an outdated frontend feature path and failed without changing files. Located the current schema/service paths under `frontend/src/features/schemas` and `frontend/src/features/services`; continuing there.
@@ -4297,6 +4522,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 - Live API verification returned all 442 subjects (including three zero-unit catalog placeholders) and the new `decided_by_name` / `decision_history` fields. Existing seeded decisions returned their actor history.
 - A first final-state Tinker read used PowerShell-sensitive `$` syntax and failed before executing; the corrected read-only query succeeded. CCS proposal `#4` remains `draft`, with no decider or decision reason, so the user's Dean/Executive test state was not advanced.
 - Backend feature execution remains blocked by the documented `grc_test` MariaDB CREATE privilege issue; it was not misreported as passing.
+
 ## 2026-08-02 — Dean and Executive enrollment review redesign
 
 - Starting a frontend-only redesign of the Dean and Executive Director review experience after the current wide schedule dialog was shown to be difficult to scan and taller than the viewport.
@@ -4381,7 +4607,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
   the same-vintage `2026_08_02_000006_create_room_catalog_entries_table`
   already pending too, but running `php artisan migrate --database=mariadb_migrator`
   fails: `CREATE command denied to user 'grc_migrator'@'localhost' for
-  table `room_catalog_entries``. `SHOW GRANTS FOR CURRENT_USER()` confirms
+table `room_catalog_entries``. `SHOW GRANTS FOR CURRENT_USER()` confirms
   the access model is **per-table, not database-wide** — `grc_migrator` has
   an individual `GRANT ... ON grc_enrollment.<table>` line for every table
   that currently exists, and nothing for a table that doesn't exist yet.
@@ -4389,7 +4615,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
   just now also blocking the **dev** database for any brand-new table. No
   privilege was self-granted and no destructive action was taken. **A user
   with root/admin MariaDB access needs to either `GRANT CREATE ON
-  grc_enrollment.* TO grc_migrator@127.0.0.1` (and the equivalent for
+grc_enrollment.* TO grc_migrator@127.0.0.1` (and the equivalent for
   `grc_test`) or pre-create the two pending tables and grant per-table
   access on them,** before this migration (or the also-pending
   `room_catalog_entries` one) can run or before any Part 3 feature/live-API
@@ -4436,6 +4662,7 @@ privilege issue above** and are explicitly not claimed as passing — see ADR
 0019 for the full design rationale.
 
 **Part 3 (Registrar enrollment windows), completed after the blocker above:**
+
 - `academic_term_year_level_windows` migration + `AcademicTermYearLevelWindow`
   model; `CreateAcademicTerm` seeds one row per year level (1–4) from the
   term-wide dates.
@@ -4480,6 +4707,7 @@ privilege issue above** and are explicitly not claimed as passing — see ADR
   6, plus 1 new case in `enrollment-workspace.test.tsx`), all passing.
 
 **Final verification, this session:**
+
 - Backend: Pint and file-scoped PHPStan (level 8) clean on every new/changed
   file (pre-existing debt in three untouched-by-logic files —
   `SaveSectionPlan.php`, `CreateAcademicTerm.php`, `TransitionAcademicTerm.php`
@@ -4527,6 +4755,7 @@ capacity → regular students enrol by block → irregular students enrol per
 subject → Registrar archives and opens the next term.
 
 **Three compounding root causes found and fixed first:**
+
 1. `grc_migrator`/`grc_test` held only table-by-table grants, not
    database-level — two migrations (`academic_term_enrollment_windows`,
    `room_catalog_entries`) had silently never applied anywhere. Fixed with a
@@ -4588,6 +4817,7 @@ exactly) before the timeout fix.
 now-non-empty clean-seed term list.
 
 **Final verification, this session:**
+
 - Backend: Pint clean (`--dirty`, i.e. every uncommitted file — 16 files had
   pre-existing style drift unrelated to this slice's logic, fixed
   mechanically); PHPStan level 8 found 24 pre-existing errors across files
@@ -4675,19 +4905,21 @@ the previously-nonexistent Grade Approvals lock UI (mandatory, permanent,
 confirmation-gated) and Academic Transcripts module; `QueueTicket` creation
 moved from submission to Registrar Staff approval (`EnrollmentPolicy` and
 `Enrollment::scopeVisibleTo` updated accordingly); `enrollment_change_requests`
-+ `AddDropWindowResolver` giving `add_drop_deadline_at` its first real
-behavior — window opens only once enrollment has closed and before the
-deadline, student submits with a required reason, Registrar Head decides,
-Registrar Staff sees the result; an 8-student demo roster
-(`BSIT-DEMO`/"BSIT Grade History Demo 2026", a deliberately collegeless
-program so the real CCS catalog importer can't contaminate it) with real
-locked grade history proving the classifier's own derivation, spanning 8
-terms (`2023-2024` through `2026-2027`, the last as the current
-`semester_ongoing` term).
+
+- `AddDropWindowResolver` giving `add_drop_deadline_at` its first real
+  behavior — window opens only once enrollment has closed and before the
+  deadline, student submits with a required reason, Registrar Head decides,
+  Registrar Staff sees the result; an 8-student demo roster
+  (`BSIT-DEMO`/"BSIT Grade History Demo 2026", a deliberately collegeless
+  program so the real CCS catalog importer can't contaminate it) with real
+  locked grade history proving the classifier's own derivation, spanning 8
+  terms (`2023-2024` through `2026-2027`, the last as the current
+  `semester_ongoing` term).
 
 **Three bugs found only by a live Playwright-MCP walkthrough, not by the
 automated suites, because none of them exercised the real cross-role
 sequence a live user does:**
+
 1. `ConfirmPayment` transitioned the parent `Enrollment` to `Enrolled` but
    never transitioned its `EnrollmentSubject` rows off `Selected` —
    `EnrollmentSubjectStatus::Enrolled` was defined but referenced nowhere
@@ -4701,7 +4933,7 @@ sequence a live user does:**
    test suite.
 2. `enrollment_change_requests` (new in this slice) never received its
    `grc_app` database grant — every add/drop list call 500'd with `SELECT
-   command denied`. Same class of gap `docs/runbooks/mariadb-local.md`
+command denied`. Same class of gap `docs/runbooks/mariadb-local.md`
    already documented for the original four tables; fixed with the same
    table-level `GRANT` pattern (verified safe per the runbook's own
    crash-history notes — only wildcard grants have ever crashed this
@@ -4726,6 +4958,7 @@ component this slice added. All three now have regression coverage
 run is unreliable under concurrent PHPStan/backend-suite/browser-automation
 load — it showed 76 false-positive timeout failures that vanished once
 re-run alone with `--no-file-parallelism`):
+
 - `portal-module-page.test.tsx`'s `workspaceHeadings` fixture map was never
   updated with this slice's four new module IDs
   (`grade-approvals`/`academic-transcripts`/`add-drop-requests`/
@@ -4739,6 +4972,7 @@ re-run alone with `--no-file-parallelism`):
   `getAllByText("1.50")` expecting both occurrences.
 
 **Final verification, this session:**
+
 - Backend: Pint clean (`--dirty`); PHPStan level 8 clean on this slice's
   files (23 pre-existing errors remain elsewhere, unrelated to this slice,
   same baseline an earlier session already documented); full suite passing,
@@ -4766,6 +5000,7 @@ re-run alone with `--no-file-parallelism`):
   window with the specific reason surfaced in the UI after the fix above.
 
 **Discovered but explicitly not fixed — flagged follow-ups:**
+
 - The Playwright E2E suite's `SEED_STUDENT_SCENARIOS` fixture model predates
   this slice's 8-student/grade-history seed redesign; several specs need
   rewriting against the new fixture shape. Not attempted here — its own
@@ -4836,7 +5071,7 @@ GRC-approved" config convention — see `config/fees.php`):**
   integer — 1.5-unit Leadership subjects would silently truncate);
   `AssessEnrollment` called once, idempotently, inside
   `TransitionEnrollment`'s `registrar_approve` branch, folded into the
-  *same* audit row and notification (no second `AuditRecorder::record()`
+  _same_ audit row and notification (no second `AuditRecorder::record()`
   call — `EnrollmentsEndpointTest`'s `->sole()` assertions require this);
   a new nullable `assessment` key on `EnrollmentResource`, visible to every
   role that can already see the enrollment; `ConfirmPayment` now defaults an
@@ -4864,8 +5099,8 @@ GRC-approved" config convention — see `config/fees.php`):**
   then regular-tickets-ahead) lets a student see "3 students are ahead of
   you" without ever exposing the full queue.
 - **Unit cap + overload approval (FR-ENR-004).** `OverloadEvaluator` (pure
-  static) evaluates a submission's total units against the two *already
-  existing* but previously-unenforced `max_regular_units`/
+  static) evaluates a submission's total units against the two _already
+  existing_ but previously-unenforced `max_regular_units`/
   `overload_max_units` config keys: within cap → unaffected; over cap but
   within the overload ceiling → permitted but flagged
   (`requires_overload_approval`, Registrar Staff must tick an
@@ -4892,7 +5127,7 @@ GRC-approved" config convention — see `config/fees.php`):**
 **One real bug found by the new seeder test, not by the implementation
 itself:** the first draft of
 `test_each_connected_professor_owns_every_block_section_of_their_subject`
-queried *every* `is_block_exclusive` section for a subject code, and failed
+queried _every_ `is_block_exclusive` section for a subject code, and failed
 on `LEAD8` — `ProgramChairScheduleSampleSeeder` (a separate, pre-existing
 fixture seeder) also generates its own block-exclusive sections for a
 synthetic BSIT curriculum that happens to reuse the `LEAD8` subject code
@@ -4920,6 +5155,7 @@ mismatch, not just test-breaking). `docs/api/openapi.yaml` and
 `@redocly/cli lint` clean.
 
 **Full-repo verification, completed after the above:**
+
 - Backend: `vendor/bin/pint --dirty` clean; `vendor/bin/phpstan analyse`
   (full repo) at the same 23 pre-existing baseline errors, zero new; full
   `php artisan test` — **1045 passed, 3779 assertions, 0 failures**
@@ -5002,7 +5238,7 @@ explicitly when that should happen.
   request to remove the "Final approve" step entirely. Followed the
   established "keep the enum case, retire the action" pattern (ADR 0022
   precedent for `QueueTicketStatus::Cancelled`): `ScheduleProposalStatus::
-  ExecutiveApproved` stays defined for historical rows and old audit
+ExecutiveApproved` stays defined for historical rows and old audit
   entries, but `ScheduleProposalTransitionRules` no longer lists
   `executive_approve` as reachable and `publish` now requires
   `DeanApproved` directly. `ScheduleProposalStatus`'s own docblock — which
@@ -6617,6 +6853,7 @@ commits ahead of `origin/main`; `PROGRESS.md`, the unrelated grade screenshot,
 and root `node_modules/` remain uncommitted, and nothing was pushed.
 
 ## 2026-08-12 — Design-spec end-to-end checklist, continued (Claude,
+
 ## resuming from Codex's claude-handoff.md)
 
 Ran the privileged fresh seed for real: 385.0s (over the plan's <5min
@@ -6679,6 +6916,7 @@ five-plan program is not yet complete; do not run
 (plus the UI leg of 3-5) are verified.
 
 ## 2026-08-12 (continued) — Checklist items 6, 7, 8 completed; 9 real
+
 ## defects found and fixed via TDD this session
 
 Kept digging into the `FacultyLoadPlanner` finding by tracing one exact
@@ -6689,7 +6927,7 @@ first, zero new Pint/PHPStan findings each time):
 
 - `GenerateSectionDemandForecasts` and `ApplyDemandForecastToDraft` both
   had no curriculum-status filter, so the automation forecast against
-  *every* curriculum matching semester+college — including retired
+  _every_ curriculum matching semester+college — including retired
   ones (e.g. a program's 2012-2017 archived catalog) that share subject
   codes with the active 2024-2029 catalog and have zero real students.
   Of 39 "curricula" the automation was attempting per run, only 12 were
@@ -6735,7 +6973,7 @@ professor or class time the source CSV genuinely never recorded for
 that exact subject — no reasonable default exists for an invented
 class time.
 
-Ran the rest of the six-step automation on what *did* complete: dean
+Ran the rest of the six-step automation on what _did_ complete: dean
 approval, executive publish, then Registrar Head opened enrollment on
 the term (now had a published schedule to satisfy that gate), students
 auto-enroll (660 of 3,220 — exactly the students under the 2 completed
@@ -6832,6 +7070,7 @@ ESLint clean on every changed file. Committed as `cd869e2` and pushed
 to `origin/main`.
 
 ## 2026-08-13 (continued) — Demand Forecast dialog redesign (Phase 1 of a
+
 ## planned Demand Forecast + Analytics rework)
 
 Root-cause investigation (2 parallel Explore agents, then a Plan agent,
@@ -6886,6 +7125,7 @@ deferred Phase 3 pipeline-fix brief) saved outside the repo at the
 user's Claude Code plans directory, file `frolicking-chasing-river.md`.
 
 ## 2026-08-13 (continued) — Submit-for-approval UX fix, room/professor
+
 ## stays editable through Dean/Executive Director review
 
 User live-tested Phase 1 against real term data and reported the
@@ -8369,6 +8609,7 @@ Cashier COR-history workspace are still in progress. The attempted combined
 frontend focused Vitest process produced only its runner banner for over a
 minute and was safely stopped after identifying it as this task's child
 process; it recorded no test result. No commit or push occurred.
+
 ## 2026-08-25 — COR implementation verification note
 
 - The combined root-level frontend/backend check was not runnable because this repository intentionally keeps `frontend/` and `backend/` independently runnable. No code or data changed from that command; subsequent checks are being run from their respective directories.
@@ -8534,7 +8775,7 @@ process; it recorded no test result. No commit or push occurred.
 - Verified the rest of the new/changed Student Records UI already satisfies the accessibility/loading/error/retry/keyboard/responsive/unsaved-input checklist via existing shared primitives it correctly reuses: `AsyncBoundary` (loading/error/retry/empty, `role="status"`), `Table` (`overflow-x-auto` wrapper), `Field` (`aria-invalid` wiring), and Radix `Dialog`/`Tabs`/`Select` keyboard behavior — all already audited elsewhere in the app. Forms preserve valid input on a failed submission (no `reset()` on error) and dialogs are responsive (`max-h-[90vh] overflow-y-auto`, `md:grid-cols-2`).
 - A fresh migration test that rolled back and re-applied the two new migrations initially left the `migrations` bookkeeping table out of sync (called `up()` directly instead of `artisan('migrate')`), which risked corrupting a later, unrelated migration-reversibility test's view of what's "applied." Fixed by re-applying through `artisan('migrate')` instead — confirmed cross-test isolation by rerunning it alongside sibling migration tests.
 - **New pre-existing baseline bug found and documented (not fixed, out of scope):** `migrate:rollback` with no `--step` fails with MariaDB error 1553 (`Cannot drop index 'queue_tickets_queue_cycle_id_ticket_sequence_unique': needed in a foreign key constraint`) — a `down()` ordering defect in one of the 2026-08-23 queue-cycle migrations, reproduced in isolation on `main` with zero Student Records involvement, and recurring across five `tests/Feature/Database/*` files in the full-suite run below.
-- Ran the complete backend suite once (sequentially, ~69 minutes): **1519 passed / 40 failed / 40912 assertions**. Of the 40 failures, 39 are pre-existing and unrelated to this slice — the already-documented `ProgramVisibilityTest`/cascaded `GrcSubjectCatalogSeederCurriculumIntegrationTest` bug, the newly-found queue_tickets migration-reversibility bug (5 instances), and separate unrelated defects in IT Control automation, analytics-substrate migrations, `SectionAuditTest`'s `schedule_days` format, and `DemoEnrollmentSeederTest` duplicate records. Exactly one failure, `StudentProfilePolicyTest > no planning role has broad view access`, was a real regression from this slice's intentional Policy widening (Admission Staff now has directory read access) against a test written before that change — fixed by splitting it into a negative case (no *other* role gets broad access) and a new positive case asserting the Admission Staff exception; reran and confirmed passing.
+- Ran the complete backend suite once (sequentially, ~69 minutes): **1519 passed / 40 failed / 40912 assertions**. Of the 40 failures, 39 are pre-existing and unrelated to this slice — the already-documented `ProgramVisibilityTest`/cascaded `GrcSubjectCatalogSeederCurriculumIntegrationTest` bug, the newly-found queue_tickets migration-reversibility bug (5 instances), and separate unrelated defects in IT Control automation, analytics-substrate migrations, `SectionAuditTest`'s `schedule_days` format, and `DemoEnrollmentSeederTest` duplicate records. Exactly one failure, `StudentProfilePolicyTest > no planning role has broad view access`, was a real regression from this slice's intentional Policy widening (Admission Staff now has directory read access) against a test written before that change — fixed by splitting it into a negative case (no _other_ role gets broad access) and a new positive case asserting the Admission Staff exception; reran and confirmed passing.
 - Final consolidated verification (single sequential run): backend **60 tests / 643 assertions** across `StudentProfilesEndpointTest`, `AdmissionStudentRecordsEndpointTest`, `StudentProfileChangeRequestsEndpointTest`, `ApiSurfaceTest`, `BuildCorSnapshotTest`, `StudentRecordAccountSetupMigrationTest`, and `StudentProfilePolicyTest`. Scoped Pint over every changed/new PHP file (40 files) and scoped PHPStan/Larastan over every changed `app`/`database`/`routes` file both pass clean.
 - Frontend: Prettier, TypeScript (`tsc --noEmit`), ESLint (`--max-warnings=0`), and Oxlint all pass clean over the full changed-file list (19 files); focused Vitest passed **74 tests / 7 files**, single-worker; the production `next build` (Turbopack) succeeds, including the `/account-setup` route. One environment note, not a source defect: `.next/dev/types/routes.d.ts` (gitignored, owned by the live `next dev` process on port 3000) was found corrupted by a concurrent write mid-session; regenerated with `next typegen` without touching or restarting the dev server, which stayed responsive throughout.
 - Redocly, `git diff --check`, and a full `git status --short` all pass/are clean. No secrets, `.env` (only the already-safe `.env.example`), `node_modules`, `vendor`, or `.next` output appear in the diff.
@@ -8553,7 +8794,7 @@ process; it recorded no test result. No commit or push occurred.
 - `php artisan migrate --database=mariadb_migrator` (applying the two pending Student Records migrations plus the older, still-pending `2026_08_25_000001_convert_com_documents_to_cor_and_add_snapshot`) ran for 17+ minutes before MariaDB itself crashed — confirmed via `mysqladmin ping` (connection refused) and no clean-shutdown log line, unrelated to this session's own code.
 - Diagnosed via `mysql_error.log`: InnoDB crash-recovered cleanly (all application data, including all 7 unrelated local projects sharing this instance, verified intact by row count), but the Aria-engine `mysql.db` privilege table came back with a corrupted header (`Incorrect file format 'db'`) — `aria_chk -r`/`-z` (the documented recovery path in the runbook) couldn't repair it because the file's header was unreadable, not just mis-stamped. This is the same class of incident as the memory-recorded 2026-08-05 and 2026-08-25 events, but a new, more severe variant.
 - Recovery performed: backed up `mysql/` before touching anything; swapped the corrupted `db.MAI`/`db.MAD`/`db.frm` for XAMPP's pristine empty template at `C:\xampp\mysql\backup\mysql\` (the same "restore from template" technique the runbook uses for full rebuilds, applied surgically to one table); force-repaired three other tables (`proxies_priv`, `columns_priv`, `help_topic`) that separately failed with the already-documented "sort_buffer_size is too small" signature; re-applied the exact schema-level grants from the runbook for the only three project-specific DB users (`grc_app`, `grc_migrator`, `grc_test` — confirmed via the (intact) `global_priv` table that no other local project has its own dedicated user, so nothing else needed re-granting). Verified: zero `[ERROR]` lines on restart, `grc_app` reads correctly, DDL-denial still holds, `grc_migrator` retains full DDL rights. Corrupted files and the pre-repair backup preserved (not deleted) at `C:\xampp\db_recovery_20260826\`, outside the datadir.
-- The interrupted COM→COR migration had left 4,911 of 14,617 `enrollment_documents` rows converted and the rest stuck — Laravel re-ran the migration from scratch on retry and hit `Duplicate column name 'snapshot'` (the schema half had already committed). Guarded the `Schema::table` call with `Schema::hasColumn`. Root-caused *why* it stopped partway even with a healthy server: `->where('document_type','com')->each(...)` flips each row's `document_type` out of its own WHERE filter mid-iteration, and `each()`/`chunk()` page by OFFSET, so already-converted rows shift not-yet-converted ones out of range — a real, previously undiscovered bug in that migration, not merely a crash artifact. Fixed by switching both `up()` and `down()` to `chunkById` (cursor-based, immune to self-modifying WHERE clauses). Finished the remaining 4,706 rows by re-invoking the now-idempotent, now-correct `up()` directly; final state verified: all 14,617 rows are `cor`, all 14,617 document numbers unique. All three migrations then applied cleanly to the dev database.
+- The interrupted COM→COR migration had left 4,911 of 14,617 `enrollment_documents` rows converted and the rest stuck — Laravel re-ran the migration from scratch on retry and hit `Duplicate column name 'snapshot'` (the schema half had already committed). Guarded the `Schema::table` call with `Schema::hasColumn`. Root-caused _why_ it stopped partway even with a healthy server: `->where('document_type','com')->each(...)` flips each row's `document_type` out of its own WHERE filter mid-iteration, and `each()`/`chunk()` page by OFFSET, so already-converted rows shift not-yet-converted ones out of range — a real, previously undiscovered bug in that migration, not merely a crash artifact. Fixed by switching both `up()` and `down()` to `chunkById` (cursor-based, immune to self-modifying WHERE clauses). Finished the remaining 4,706 rows by re-invoking the now-idempotent, now-correct `up()` directly; final state verified: all 14,617 rows are `cor`, all 14,617 document numbers unique. All three migrations then applied cleanly to the dev database.
 - Real mail delivery was also set up at the user's request: Mailtrap sandbox first (to prove the setup email itself renders correctly — confirmed via screenshot), then real Gmail SMTP with an App Password so setup emails land in an actual inbox; both verified with a live test send before handing back.
 
 ### Structured name fields (first/middle initial/last/suffix), database-wide
@@ -8584,13 +8825,13 @@ process; it recorded no test result. No commit or push occurred.
 ## 2026-08-27 — Prospectus label position and a tighter irregular add-subject rule
 
 - Prospectus: moved each semester's "Year N · Nth Semester" label from below its subject table (the shadcn `Table`/`TableCaption` default is `caption-bottom`) to above it, scoped to `ProspectusDocument`'s `SemesterTable` only (`className="caption-top"` on that one `Table`, plus restyled the caption to read as a section header) — the shared `Table`/`TableCaption` primitives, used by several other tables app-wide, were left untouched.
-- Tightened the prior irregular-student `BuildEligibleSubjectPool` scoping (2026-08-26) after live-testing against a real manually-created test account (`westragma@gmail.com`, Year 1, irregular, enrolling into the 2026-2027 2nd semester) showed 27 pool entries spanning both 1st and 2nd semester of Year 1 — the ordinal `<=` current-standing rule from the previous fix still included every not-yet-passed backlog subject, even the 8 with no offered section this term. Per explicit user decision (asked directly, since the alternative reading risked breaking backlog catch-up entirely): an irregular student's pool is now bounded to *exactly* the term they are enrolling into (`===` current ordinal, not `<=`), full stop — no earlier-semester backlog, regardless of whether it has an open section. A subject offered either semester (the composite `'1st|2nd'` placement string) still matches correctly, by checking all of `SemesterCoverage::parse()`'s ordinals rather than only the primary one. Verified against the same real account: 13 entries, all Year 1 2nd semester, matching what was asked.
+- Tightened the prior irregular-student `BuildEligibleSubjectPool` scoping (2026-08-26) after live-testing against a real manually-created test account (`westragma@gmail.com`, Year 1, irregular, enrolling into the 2026-2027 2nd semester) showed 27 pool entries spanning both 1st and 2nd semester of Year 1 — the ordinal `<=` current-standing rule from the previous fix still included every not-yet-passed backlog subject, even the 8 with no offered section this term. Per explicit user decision (asked directly, since the alternative reading risked breaking backlog catch-up entirely): an irregular student's pool is now bounded to _exactly_ the term they are enrolling into (`===` current ordinal, not `<=`), full stop — no earlier-semester backlog, regardless of whether it has an open section. A subject offered either semester (the composite `'1st|2nd'` placement string) still matches correctly, by checking all of `SemesterCoverage::parse()`'s ordinals rather than only the primary one. Verified against the same real account: 13 entries, all Year 1 2nd semester, matching what was asked.
 - Rewrote the now-invalid "irregular student still sees backlog" test into one proving backlog is excluded even with an open section, and added a new test for the offered-either-semester composite-placement case. Full `EligibleSubjectsEndpointTest` (33 tests, 75 assertions) and the broader enrollment/standing regression suite (`EnrollmentsEndpointTest`, `EnrollmentChangeRequestsEndpointTest`, `SubmitEnrollmentCapacityTest`, `ClassifyEnrollmentStandingTest`, `ReclassifyStudentEnrollmentCategoriesTest` — 73 tests, 258 assertions) all pass. PHPStan and Pint clean on every touched file. Frontend TypeScript, ESLint, and `prospectus-document.test.tsx` (7 tests) pass.
 - No commit or push made; working tree remains on `main` per standing instructions.
 
 ## 2026-08-27 — Add-subject picker: an "advance" (next-year) window for irregular students
 
-- Follow-up correction after live-testing the exact-current-semester-only rule above against the actual "Add subject" screen: the user clarified the real intended design is two separate windows, not one. The **main/default list** should automatically include the student's current-term subjects *plus* any not-yet-taken backlog from an earlier semester (reversing the exact-match tightening from the entry just above) — a `westragma@gmail.com` (Year 2, 2nd semester) live check now correctly shows CS101-style backlog from Year 1 alongside the current term. Separately, the **"Add subject" combobox** — previously grayed out because it only ever offered to restore rows the student had just removed — now also offers subjects exactly one year ahead, same semester slot (e.g., a Year 1 2nd-semester student's Add button offers Year 2 2nd-semester subjects; a Year 2 student's offers Year 3), so a caught-up irregular student can choose to get ahead. Nothing two or more years ahead is ever offered, in either window.
+- Follow-up correction after live-testing the exact-current-semester-only rule above against the actual "Add subject" screen: the user clarified the real intended design is two separate windows, not one. The **main/default list** should automatically include the student's current-term subjects _plus_ any not-yet-taken backlog from an earlier semester (reversing the exact-match tightening from the entry just above) — a `westragma@gmail.com` (Year 2, 2nd semester) live check now correctly shows CS101-style backlog from Year 1 alongside the current term. Separately, the **"Add subject" combobox** — previously grayed out because it only ever offered to restore rows the student had just removed — now also offers subjects exactly one year ahead, same semester slot (e.g., a Year 1 2nd-semester student's Add button offers Year 2 2nd-semester subjects; a Year 2 student's offers Year 3), so a caught-up irregular student can choose to get ahead. Nothing two or more years ahead is ever offered, in either window.
 - `BuildEligibleSubjectPool` now filters an irregular student's placements to ordinal `<= current` (backlog + current, restored) `OR ordinal === current + 2` (exactly one year ahead) — verified live: the same test account now returns 42 pool entries (14 Year-1 1st-sem backlog, 13 Year-1 2nd-sem current, 15 Year-2 2nd-sem advance; nothing beyond Year 2).
 - `EligibleSubjectTable` (frontend) draws the line between the two windows using a new `isAdvanceSubject` helper in `curriculum-ordinal.ts` (mirrors `isBacklogSubject`, ordinal `=== current + 2`). Advance subjects are hidden from the main table by default — exactly like a student-removed row — and share the same "Add subject" combobox and "Show all" mechanism to bring either kind back into view; an added advance subject is tagged "Next year" the same way a backlog one is tagged "Backlog". This is why the combobox reads as clickable/enabled again the moment an irregular student has any advance subjects available, without requiring them to remove anything first — the user's literal complaint.
 - Verification: rewrote the now-invalid "backlog excluded" test back to asserting backlog inclusion, added tests for the advance window and the two-years-ahead exclusion (`EligibleSubjectsEndpointTest`, 34 tests / 77 assertions) plus the broader enrollment submission suite (41 tests / 169 assertions); `EligibleSubjectTable`'s tests updated for the renamed "not shown" copy and extended with advance-subject hide/reveal/tag coverage (25 tests); `curriculum-ordinal.test.ts` extended for `isAdvanceSubject` (12 tests). PHPStan and Pint clean on every touched backend file; TypeScript and ESLint clean on every touched frontend file.
@@ -8599,7 +8840,7 @@ process; it recorded no test result. No commit or push occurred.
 ## 2026-08-27 — Lecture/laboratory subjects are always taken together
 
 - User request: a subject's LEC and LAB components must never be selectable separately — choosing one should automatically include the other. No pairing concept existed anywhere in the schema before this (confirmed via investigation): `code` naming (`{code}`/`{code}L`) is close but unreliable alone — several unrelated subjects legitimately end in "L" with no LEC counterpart (KOMFIL, RIZAL, ...), at least one genuine LAB-only pair shares no code convention at all (ITPLUS3/ITPLUS4, two standalone lab courses), and five real pairs collide on identical titles across two differently-coded catalog entries within the same college (e.g. both `DSTRUCT`/`DSTRUCTL` and `DSTRUC`/`DSTRUCL` are titled "Data Structures and Algorithms LEC"/"LAB").
-- Added `subjects.paired_subject_id` (nullable, self-referencing FK, migration `2026_08_27_000002_add_paired_subject_id_to_subjects.php`) with a one-time backfill combining both signals: for each subject whose title ends in " LEC", pair it with the same-college subject whose code is its own code plus a trailing "L" *and* whose own title ends in " LAB". Dry-run-verified against the live catalog before writing: all 34 real LEC/LAB pairs matched with zero misses and zero false positives, correctly leaving KOMFIL-style and ITPLUS3/ITPLUS4-style subjects unpaired. Applied to the dev database; `Subject::pairedSubject()` relation added.
+- Added `subjects.paired_subject_id` (nullable, self-referencing FK, migration `2026_08_27_000002_add_paired_subject_id_to_subjects.php`) with a one-time backfill combining both signals: for each subject whose title ends in " LEC", pair it with the same-college subject whose code is its own code plus a trailing "L" _and_ whose own title ends in " LAB". Dry-run-verified against the live catalog before writing: all 34 real LEC/LAB pairs matched with zero misses and zero false positives, correctly leaving KOMFIL-style and ITPLUS3/ITPLUS4-style subjects unpaired. Applied to the dev database; `Subject::pairedSubject()` relation added.
 - `EligibleSubjectResource`/`eligibleSubjectSchema` now expose `paired_subject_id`. `EligibleSubjectTable` (the irregular per-subject selection screen) auto-selects the pair's section sharing the same `section_code` — the convention block-generation already relies on — the moment either half is chosen, revealing the pair first if it was hidden (backlog/advance/removed); clearing or removing one half does the same to its pair, so the UI can never reach a state with only one half selected. Each half is tagged "Paired with {code}" so the auto-behavior is visible, not surprising.
 - `StoreEnrollmentRequest` enforces this server-side as the authoritative boundary (`rejectUnpairedLectureLabComponents`): a per-subject submission missing a paired half, or pairing it to a mismatched section code, is rejected. Block-code submissions are exempt, matching the existing trust boundary for Program Chair-authored blocks.
 - Verification: new `PairSubjectsMigrationTest` (backfill correctness, including the collision and cross-college cases, 13 assertions); 3 new `EnrollmentsEndpointTest` cases (missing pair rejected, mismatched section rejected, matched pair succeeds — full file 42 tests / 166 assertions) and 1 new `EligibleSubjectsEndpointTest` case exposing `paired_subject_id` (full file 35 tests / 80 assertions); `EligibleSubjectTable` extended with 4 new tests (auto-select, no-match-no-op, badge, cascading remove — full file 29 tests). PHPStan and Pint clean on every touched backend file (one pre-existing, unrelated Pint finding confirmed present before this change); TypeScript and ESLint clean on every touched frontend file. Live-verified against the real dev database (`westragma@gmail.com`'s PROG1/PROG1L and HCI/HCIL both correctly expose each other's id).

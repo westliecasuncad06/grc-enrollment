@@ -1874,7 +1874,8 @@
 }
 
 .cor-document__header {
-  padding-bottom: 0.9rem;
+  display: block !important;
+  padding-bottom: 0.8rem;
   text-align: center;
   border-bottom: 2px solid #111;
 }
@@ -1890,22 +1891,29 @@
 
 .cor-document__header p {
   font-family: "Newsreader Variable", Georgia, serif;
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #111;
 }
 
 .cor-document__header small {
   display: block;
   margin-top: 0.2rem;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
+  color: #444;
 }
+
 .cor-document__header h1 {
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  letter-spacing: 0.13em;
+  margin-top: 0.8rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #000;
 }
+
 .cor-document__header--compact h1 {
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
 }
 
 .cor-document__facts,
@@ -1917,28 +1925,37 @@
 }
 
 .cor-document__facts {
-  margin-block: 1.15rem;
-  font-size: 0.76rem;
+  margin-block: 1rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
+
 .cor-document__facts dl {
   display: grid;
-  grid-template-columns: 6rem minmax(0, 1fr);
-  gap: 0.32rem 0.5rem;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.35rem 0.5rem;
   margin: 0;
 }
+
 .cor-document__facts dt {
   font-weight: 700;
   text-transform: uppercase;
+  color: #222;
 }
+
 .cor-document__facts dd {
   margin: 0;
   overflow-wrap: anywhere;
+  color: #111;
 }
 
 .cor-document table {
-  margin-top: 0.8rem;
-  font-size: 0.67rem;
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.74rem;
 }
+
 .cor-document caption {
   position: absolute;
   width: 1px;
@@ -1947,99 +1964,181 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+.cor-document th,
+.cor-document td {
+  border: 1px solid #c5c8cc;
+  padding: 0.4rem 0.55rem;
+  vertical-align: middle;
+}
+
 .cor-document th {
-  background: #eeeeee;
-  font-size: 0.62rem;
+  background: #f1f3f5;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-align: left;
   text-transform: uppercase;
+  color: #111;
 }
+
+.cor-document th:nth-child(1),
+.cor-document td:nth-child(1),
+.cor-document th:nth-child(3),
+.cor-document td:nth-child(3),
+.cor-document th:nth-child(4),
+.cor-document td:nth-child(4),
+.cor-document th:nth-child(5),
+.cor-document td:nth-child(5) {
+  text-align: center;
+}
+
 .cor-document__total-row {
   font-weight: 700;
+  background: #f8f9fa;
 }
+
 .cor-document__admission,
 .cor-document__assessment,
 .cor-document__terms {
-  margin-top: 1.3rem;
+  margin-top: 1.1rem;
 }
+
 .cor-document h2 {
-  font-size: 0.76rem;
-  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-align: center;
-}
-.cor-document__admission p {
-  margin-top: 0.7rem;
-  font-size: 0.74rem;
-  line-height: 1.5;
-}
-.cor-document__assessment-grid {
-  margin-top: 0.75rem;
-  font-size: 0.72rem;
-}
-.cor-document h3 {
-  margin-bottom: 0.4rem;
-  font-size: 0.68rem;
   text-transform: uppercase;
 }
+
+.cor-document__admission {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #d1d5db;
+  background: #fafafa;
+  border-radius: 4px;
+}
+
+.cor-document__admission p {
+  margin-top: 0.35rem;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: justify;
+  color: #222;
+}
+
+.cor-document__assessment {
+  border: 1px solid #d1d5db;
+  padding: 0.75rem 0.9rem;
+  border-radius: 4px;
+}
+
+.cor-document__assessment h2 {
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.cor-document__assessment-grid {
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  gap: 1.25rem;
+}
+
+.cor-document h3 {
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.2rem;
+  color: #222;
+}
+
 .cor-document__fee-row,
 .cor-document__fee-total,
 .cor-document__grand-total {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.22rem 0;
+  padding: 0.18rem 0;
 }
+
 .cor-document__fee-total {
-  margin-top: 0.45rem;
-  border-top: 1px solid #111;
-}
-.cor-document__grand-total {
-  width: min(100%, 19rem);
-  margin: 1rem 0 0 auto;
-  border-top: 2px solid #111;
-  border-bottom: 4px double #111;
-  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid #333;
   font-weight: 700;
 }
+
+.cor-document__grand-total {
+  width: min(100%, 20rem);
+  margin: 0.85rem 0 0 auto;
+  padding: 0.35rem 0;
+  border-top: 2px solid #111;
+  border-bottom: 4px double #111;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
 .cor-document__reference {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   gap: 0.5rem 1.1rem;
-  padding: 0.75rem 0;
-  font-size: 0.7rem;
-  border-bottom: 1px solid #111;
+  padding: 0.65rem 0.8rem;
+  margin-top: 0.8rem;
+  background: #f8f9fa;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.76rem;
+  font-weight: 600;
 }
+
 .cor-document__terms ol {
   display: grid;
   gap: 0.55rem;
-  margin: 0.8rem 0 0;
-  padding-left: 1.2rem;
-  font-size: 0.7rem;
+  margin: 0.75rem 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 0.75rem;
   line-height: 1.45;
+  text-align: justify;
 }
+
 .cor-document__signatures {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 3.25rem;
+  gap: 1.5rem;
+  margin-top: 3.5rem;
   text-align: center;
-  font-size: 0.65rem;
 }
+
 .cor-document__signatures div {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 0.35rem;
-  border-top: 1px solid #111;
 }
+
 .cor-document__signatures span {
-  min-height: 1.2rem;
-  margin-top: -1.35rem;
-  font-size: 0.75rem;
+  width: 92%;
+  min-height: 1.4rem;
+  border-bottom: 1px solid #111;
+  padding-bottom: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
+
 .cor-document__signatures strong {
-  font-size: 0.57rem;
+  font-size: 0.62rem;
+  font-weight: 700;
   line-height: 1.25;
+  text-transform: uppercase;
 }
+
 .cor-document__footer {
-  margin-top: 2rem !important;
+  margin-top: 2.2rem !important;
   color: #555;
-  font-size: 0.58rem;
+  font-size: 0.65rem;
   text-align: right;
 }
 
@@ -2064,160 +2163,379 @@
 }
 
 @media print {
-  .portal-sidebar,
-  .portal-topbar,
-  .skip-link,
-  .portal-storage-alert {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body[data-printing="document"] {
+    background: #fff !important;
+  }
+
+  /* Unconditionally hide all portal navigation, sidebars, buttons, dialog chrome, but PRESERVE cor document header */
+  body[data-printing="document"] header:not(.cor-document__header),
+  body[data-printing="document"] nav,
+  body[data-printing="document"] aside,
+  body[data-printing="document"] footer:not(.cor-document__signatures),
+  body[data-printing="document"] .print\:hidden,
+  body[data-printing="document"] [data-slot="dialog-overlay"],
+  body[data-printing="document"] [data-slot="dialog-header"],
+  body[data-printing="document"] [data-slot="dialog-close"],
+  body[data-printing="document"] [data-slot="dialog-footer"],
+  body[data-printing="document"] button,
+  body[data-printing="document"] [role="button"],
+  body[data-printing="document"] .portal-sidebar,
+  body[data-printing="document"] .portal-topbar,
+  body[data-printing="document"] .workspace-page__header,
+  body[data-printing="document"] .workspace-page__description,
+  body[data-printing="document"] [data-slot="card"]:not(:has([data-print-region])) {
     display: none !important;
   }
 
-  .portal-app,
-  .portal-main-column,
-  .portal-content {
-    display: block;
-    margin: 0;
-    padding: 0;
-    background: #fff;
+  /* Reset all outer containers so the print flow is 100% natural static flow */
+  body[data-printing="document"] #root,
+  body[data-printing="document"] main,
+  body[data-printing="document"] [data-slot="dialog-portal"],
+  body[data-printing="document"] [data-slot="dialog-content"],
+  body[data-printing="document"] [data-slot="card"],
+  body[data-printing="document"] [data-slot="card-content"],
+  body[data-printing="document"] [data-print-region],
+  body[data-printing="document"] .print-document {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    transform: none !important;
   }
 
-  body[data-printing] * {
-    visibility: hidden;
+  body[data-printing="document"] .print-document {
+    color: #000 !important;
   }
 
-  body[data-printing] [data-print-region],
-  body[data-printing] [data-print-region] * {
-    visibility: visible;
+  body[data-printing="document"] .cor-document {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    color: #000 !important;
   }
 
-  body[data-printing] [data-print-region] {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+  body[data-printing="document"] .cor-document__page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 4mm 6mm !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
-  .print-document {
-    color: #000;
-    background: #fff;
-    font-size: 10pt;
+  body[data-printing="document"] .cor-document__page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 
-  .print-document table {
-    width: 100%;
-    border-collapse: collapse;
+  body[data-printing="document"] .cor-document__header {
+    display: block !important;
+    text-align: center !important;
+    padding-bottom: 4pt !important;
+    border-bottom: 1.5pt solid #000 !important;
+    margin-bottom: 5pt !important;
   }
 
-  .print-document th,
-  .print-document td {
-    border: 1px solid #000;
-    padding: 2pt 4pt;
+  body[data-printing="document"] .cor-document__header p {
+    font-family: "Newsreader Variable", Georgia, serif !important;
+    font-size: 13.5pt !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+    letter-spacing: 0.02em !important;
+    color: #000 !important;
   }
 
-  .print-document thead {
-    display: table-header-group;
+  body[data-printing="document"] .cor-document__header small {
+    display: block !important;
+    margin-top: 1.5pt !important;
+    font-size: 6.8pt !important;
+    color: #333 !important;
   }
 
-  .print-document tr {
-    break-inside: avoid;
+  body[data-printing="document"] .cor-document__header h1,
+  body[data-printing="document"] .cor-document__header--compact h1 {
+    margin-top: 4pt !important;
+    font-size: 9.5pt !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.13em !important;
+    color: #000 !important;
   }
 
-  .print-document .signature-cell {
-    min-width: 28mm;
+  body[data-printing="document"] .cor-document__facts {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 3pt 14pt !important;
+    margin-block: 4pt 5pt !important;
+    font-size: 7.5pt !important;
+    line-height: 1.28 !important;
   }
 
-  @page {
-    size: A4 portrait;
-    margin: 0;
+  body[data-printing="document"] .cor-document__facts dl {
+    display: grid !important;
+    grid-template-columns: 5.5rem 1fr !important;
+    gap: 1.5pt 4pt !important;
+    margin: 0 !important;
   }
 
-  .cor-document {
-    display: block;
+  body[data-printing="document"] .cor-document__facts dt {
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 7.2pt !important;
+    color: #111 !important;
   }
-  .cor-document__page {
-    width: 210mm;
-    height: 297mm;
-    min-height: 0;
-    margin: 0;
-    padding: 9mm 12mm;
-    box-sizing: border-box;
-    overflow: hidden;
-    border: 0;
-    box-shadow: none;
-    break-after: page;
+
+  body[data-printing="document"] .cor-document__facts dd {
+    margin: 0 !important;
+    font-size: 7.5pt !important;
+    color: #000 !important;
   }
-  .cor-document__page:last-child {
-    break-after: auto;
+
+  body[data-printing="document"] .cor-document table {
+    display: table !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 4pt !important;
+    font-size: 7.2pt !important;
+    line-height: 1.2 !important;
   }
-  .cor-document__header {
-    padding-bottom: 0.45rem;
+
+  body[data-printing="document"] .cor-document th,
+  body[data-printing="document"] .cor-document td {
+    border: 0.75pt solid #222 !important;
+    padding: 2.2pt 3.5pt !important;
+    vertical-align: middle !important;
   }
-  .cor-document__header p {
-    font-size: 1rem;
+
+  body[data-printing="document"] .cor-document th {
+    background: #e5e7eb !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 7pt !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    text-align: left !important;
+    color: #000 !important;
   }
-  .cor-document__header small {
-    margin-top: 0.1rem;
-    font-size: 6.5pt;
+
+  body[data-printing="document"] .cor-document th:nth-child(1),
+  body[data-printing="document"] .cor-document td:nth-child(1),
+  body[data-printing="document"] .cor-document th:nth-child(3),
+  body[data-printing="document"] .cor-document td:nth-child(3),
+  body[data-printing="document"] .cor-document th:nth-child(4),
+  body[data-printing="document"] .cor-document td:nth-child(4),
+  body[data-printing="document"] .cor-document th:nth-child(5),
+  body[data-printing="document"] .cor-document td:nth-child(5) {
+    text-align: center !important;
   }
-  .cor-document__header h1,
-  .cor-document__header--compact h1 {
-    margin-top: 0.4rem;
-    font-size: 8pt;
+
+  body[data-printing="document"] .cor-document__total-row {
+    font-weight: 700 !important;
+    background: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .cor-document__facts {
-    margin-block: 0.55rem;
-    font-size: 7.2pt;
+
+  body[data-printing="document"] .cor-document__admission {
+    margin-top: 5pt !important;
+    padding: 3.5pt 6pt !important;
+    border: 0.75pt solid #222 !important;
+    background: #fafafa !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .cor-document__facts dl {
-    gap: 0.17rem 0.35rem;
+
+  body[data-printing="document"] .cor-document__admission h2 {
+    font-size: 7.2pt !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-align: center !important;
+    margin: 0 !important;
   }
-  .cor-document table {
-    margin-top: 0.35rem;
-    font-size: 6.4pt;
+
+  body[data-printing="document"] .cor-document__admission p {
+    margin-top: 2pt !important;
+    font-size: 7pt !important;
+    line-height: 1.3 !important;
+    text-align: justify !important;
   }
-  .cor-document th,
-  .cor-document td {
-    padding: 1pt 2.5pt;
+
+  body[data-printing="document"] .cor-document__assessment {
+    margin-top: 5pt !important;
+    border: 0.75pt solid #222 !important;
+    padding: 4pt 6pt !important;
   }
-  .cor-document th {
-    font-size: 5.9pt;
+
+  body[data-printing="document"] .cor-document__assessment h2 {
+    font-size: 7.2pt !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-align: center !important;
+    margin: 0 0 3.5pt 0 !important;
+    border-bottom: 0.5pt solid #999 !important;
+    padding-bottom: 2pt !important;
   }
-  .cor-document__admission,
-  .cor-document__assessment {
-    margin-top: 0.6rem;
+
+  body[data-printing="document"] .cor-document__assessment-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10pt !important;
+    font-size: 7pt !important;
   }
-  .cor-document h2 {
-    font-size: 7pt;
+
+  body[data-printing="document"] .cor-document h3 {
+    margin: 0 0 2pt 0 !important;
+    font-size: 7pt !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    border-bottom: 0.5pt solid #ccc !important;
+    padding-bottom: 1.5pt !important;
   }
-  .cor-document__admission p {
-    margin-top: 0.35rem;
-    font-size: 6.8pt;
-    line-height: 1.25;
+
+  body[data-printing="document"] .cor-document__fee-row {
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 4pt !important;
+    padding: 0.8pt 0 !important;
+    font-size: 6.8pt !important;
   }
-  .cor-document__assessment-grid {
-    gap: 0.8rem;
-    margin-top: 0.4rem;
-    font-size: 6.7pt;
+
+  body[data-printing="document"] .cor-document__fee-total {
+    display: flex !important;
+    justify-content: space-between !important;
+    margin-top: 2.5pt !important;
+    padding-top: 1.5pt !important;
+    border-top: 0.75pt solid #222 !important;
+    font-weight: 700 !important;
+    font-size: 7pt !important;
   }
-  .cor-document h3 {
-    margin-bottom: 0.15rem;
-    font-size: 6.2pt;
+
+  body[data-printing="document"] .cor-document__grand-total {
+    display: flex !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    max-width: 18rem !important;
+    margin: 4pt 0 0 auto !important;
+    padding: 2pt 0 !important;
+    border-top: 1.5pt solid #000 !important;
+    border-bottom: 2.5pt double #000 !important;
+    font-size: 8.2pt !important;
+    font-weight: 700 !important;
   }
-  .cor-document__fee-row,
-  .cor-document__fee-total,
-  .cor-document__grand-total {
-    padding-block: 0.06rem;
+
+  /* Page 2: Terms and Conditions Governing Withdrawal */
+  body[data-printing="document"] .cor-document__reference {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: space-between !important;
+    padding: 3pt 5pt !important;
+    margin-top: 4pt !important;
+    margin-bottom: 5pt !important;
+    background: #f3f4f6 !important;
+    border: 0.75pt solid #333 !important;
+    font-size: 7.2pt !important;
+    font-weight: 600 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .cor-document__fee-total {
-    margin-top: 0.18rem;
+
+  body[data-printing="document"] .cor-document__terms {
+    margin-top: 5pt !important;
   }
-  .cor-document__grand-total {
-    margin-top: 0.4rem;
-    font-size: 7.5pt;
+
+  body[data-printing="document"] .cor-document__terms h2 {
+    font-size: 7.8pt !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    letter-spacing: 0.08em !important;
+    margin-bottom: 5pt !important;
   }
-  .cor-document__terms ol {
-    font-size: 7.3pt;
+
+  body[data-printing="document"] .cor-document__terms ol {
+    display: grid !important;
+    gap: 4pt !important;
+    margin: 0 !important;
+    padding-left: 0 !important;
+    list-style: none !important;
+    font-size: 7.4pt !important;
+    line-height: 1.38 !important;
+    text-align: justify !important;
+  }
+
+  body[data-printing="document"] .cor-document__signatures {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 12pt !important;
+    margin-top: 28pt !important;
+    text-align: center !important;
+  }
+
+  body[data-printing="document"] .cor-document__signatures div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 2pt !important;
+  }
+
+  body[data-printing="document"] .cor-document__signatures span {
+    width: 90% !important;
+    min-height: 12pt !important;
+    border-bottom: 0.75pt solid #000 !important;
+    padding-bottom: 1.5pt !important;
+    font-size: 7.5pt !important;
+    font-weight: 600 !important;
+  }
+
+  body[data-printing="document"] .cor-document__signatures strong {
+    font-size: 6.2pt !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    text-transform: uppercase !important;
+  }
+
+  body[data-printing="document"] .cor-document__footer {
+    margin-top: 18pt !important;
+    font-size: 6.2pt !important;
+    color: #555 !important;
+    text-align: right !important;
   }
 }
 

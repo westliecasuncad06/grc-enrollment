@@ -29,6 +29,7 @@ final class FacultyMemberResource extends JsonResource
             'employment_type' => $this->resource->employment_type?->value,
             'employment_type_label' => $this->resource->employment_type?->label(),
             'planning_unit_reference' => $this->resource->employment_type?->planningUnitReference(),
+            'deactivation_reason' => $this->resource->deactivation_reason,
             'is_assignable' => $this->resource->status->value === 'active',
         ];
     }

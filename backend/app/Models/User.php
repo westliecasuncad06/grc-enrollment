@@ -28,6 +28,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property ?CollegeCode $college
  * @property ?FacultyEmploymentType $employment_type
  * @property UserStatus $status
+ * @property ?string $deactivation_reason
  * @property ?CarbonImmutable $last_login_at
  * @property ?CarbonImmutable $account_setup_completed_at
  * @property ?CarbonImmutable $account_setup_invitation_sent_at
@@ -57,6 +58,7 @@ final class User extends Authenticatable implements CanResetPasswordContract
         'college',
         'employment_type',
         'status',
+        'deactivation_reason',
         'last_login_at',
         'account_setup_completed_at',
         'account_setup_invitation_sent_at',

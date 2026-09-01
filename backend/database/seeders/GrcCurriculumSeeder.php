@@ -47,34 +47,13 @@ use SplFileObject;
  */
 final class GrcCurriculumSeeder extends Seeder
 {
-    private const PLACEMENTS_CSV_PATH = __DIR__.'/data/curriculum-2024-2029-placements.csv';
-
     /**
-     * @var array{start: int, end: int, status: CurriculumStatus}[]
+     * @var array<string, array{start: int, end: int, status: CurriculumStatus, file: string}>
      */
     private const VERSIONS = [
-        '2024-2029' => ['start' => 2024, 'end' => 2029, 'status' => CurriculumStatus::Active],
-        '2018-2023' => ['start' => 2018, 'end' => 2023, 'status' => CurriculumStatus::Archived],
-        '2012-2017' => ['start' => 2012, 'end' => 2017, 'status' => CurriculumStatus::Archived],
-    ];
-
-    /**
-     * Illustrative-only per-program subject removals for the two archived
-     * versions, keyed by version label then program code. NOT real
-     * historical data — see the class docblock.
-     *
-     * @var array<string, array<string, list<string>>>
-     */
-    private const ARCHIVED_VARIATIONS = [
-        '2018-2023' => [
-            'BSIT' => ['IAS2', 'IAS2L'],
-            'BSA' => ['QM-TQM'],
-        ],
-        '2012-2017' => [
-            'BSIT' => ['IAS2', 'IAS2L', 'AVE', 'AVEL'],
-            'BSA' => ['QM-TQM', 'CONWRLD'],
-            'BEED' => ['ARTAPP'],
-        ],
+        '2024-2029' => ['start' => 2024, 'end' => 2029, 'status' => CurriculumStatus::Active, 'file' => __DIR__.'/data/curriculum-2024-2029-placements.csv'],
+        '2018-2023' => ['start' => 2018, 'end' => 2023, 'status' => CurriculumStatus::Archived, 'file' => __DIR__.'/data/curriculum-2018-2023-placements.csv'],
+        '2012-2017' => ['start' => 2012, 'end' => 2017, 'status' => CurriculumStatus::Archived, 'file' => __DIR__.'/data/curriculum-2012-2017-placements.csv'],
     ];
 
     /** @var list<string> */
@@ -86,19 +65,23 @@ final class GrcCurriculumSeeder extends Seeder
     {
         $this->guardEnvironment();
 
-        $rowsByProgram = $this->readPlacementsByProgram($this->csvPathOverride ?? self::PLACEMENTS_CSV_PATH);
-
-        DB::transaction(function () use ($rowsByProgram): void {
-            foreach ($rowsByProgram as $programCode => $rows) {
-                $program = Program::query()->where('code', $programCode)->first();
-
-                if ($program === null) {
-                    $this->warnings[] = "Program '{$programCode}' is not seeded — run ProgramSeeder first. Skipped its curriculum.";
-
-                    continue;
+        DB::transaction(function (): void {
+            foreach (self::VERSIONS as $schoolYear => $version) {
+                $filePath = $this->csvPathOverride ?? $version['file'];
+                if (! is_file($filePath)) {
+                    $filePath = __DIR__.'/data/curriculum-2024-2029-placements.csv';
                 }
+                $rowsByProgram = $this->readPlacementsByProgram($filePath);
 
-                foreach (self::VERSIONS as $schoolYear => $version) {
+                foreach ($rowsByProgram as $programCode => $rows) {
+                    $program = Program::query()->where('code', $programCode)->first();
+
+                    if ($program === null) {
+                        $this->warnings[] = "Program '{$programCode}' is not seeded — run ProgramSeeder first. Skipped its curriculum.";
+
+                        continue;
+                    }
+
                     $this->seedVersion($program, $programCode, $schoolYear, $version, $rows);
                 }
             }
@@ -151,17 +134,11 @@ final class GrcCurriculumSeeder extends Seeder
     }
 
     /**
-     * @param  array{start: int, end: int, status: CurriculumStatus}  $version
+     * @param  array{start: int, end: int, status: CurriculumStatus, file: string}  $version
      * @param  list<array{year_level: int, semester: string, subject_code: string, college: string}>  $rows
      */
     private function seedVersion(Program $program, string $programCode, string $schoolYear, array $version, array $rows): void
     {
-        $removed = self::ARCHIVED_VARIATIONS[$schoolYear][$programCode] ?? [];
-        $versionRows = array_values(array_filter(
-            $rows,
-            fn (array $row): bool => ! in_array($row['subject_code'], $removed, true),
-        ));
-
         $curriculum = Curriculum::updateOrCreate(
             ['program_id' => $program->id, 'effective_start_year' => $version['start']],
             [
@@ -172,7 +149,7 @@ final class GrcCurriculumSeeder extends Seeder
             ],
         );
 
-        $placements = $this->resolvePlacements($programCode, $versionRows);
+        $placements = $this->resolvePlacements($programCode, $rows);
 
         foreach ($placements as $subjectCode => $placement) {
             $subject = Subject::query()

@@ -61,7 +61,15 @@ export function RoomsOperationsWorkspace() {
   const termSelection = useAcademicTermSelection()
   const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } = termSelection
   const roomsQuery = useRoomOptionsQuery()
-  const roomOptions = roomsQuery.data ?? getLocalRoomOptions(session?.college)
+  const rawRoomOptions = roomsQuery.data ?? getLocalRoomOptions(session?.college)
+  const roomOptions = useMemo(() => {
+    const seen = new Set<string>()
+    return rawRoomOptions.filter((r) => {
+      if (seen.has(r.name)) return false
+      seen.add(r.name)
+      return true
+    })
+  }, [rawRoomOptions])
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null)
   const roomComboOptions = roomOptions.map((room) => ({ value: room.name, label: room.name }))
   const isProgramChair = session?.role === "program_chair"

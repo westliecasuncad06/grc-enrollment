@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
 use App\Http\Controllers\Api\V1\Auth\StaffAccountSetupController;
+use App\Http\Controllers\Api\V1\Billing\FeeScheduleController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
 use App\Http\Controllers\Api\V1\CashierTransactionController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
@@ -41,6 +42,7 @@ use App\Http\Controllers\Api\V1\FacultySpecializationController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
 use App\Http\Controllers\Api\V1\GradeSlipController;
+use App\Http\Controllers\Api\V1\GraduateController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\HonorsReportController;
 use App\Http\Controllers\Api\V1\ItControl\AutomationRunController;
@@ -137,6 +139,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
         Route::get('/room-occupancy', RoomOccupancyController::class)->name('room-occupancy.index');
+        Route::get('/fee-schedules', [FeeScheduleController::class, 'index'])->name('fee-schedules.index');
+        Route::put('/fee-schedules', [FeeScheduleController::class, 'update'])->name('fee-schedules.update');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
         Route::get('/sections/grade-submission', [SectionGradeController::class, 'index'])->name('sections.grade-submission.index');
         Route::get('/sections/{section}/grades', [SectionGradeController::class, 'show'])->name('sections.grades.show');
@@ -215,6 +219,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // history through EnrollmentDocument::scopeVisibleTo.
         Route::get('/enrollment-documents', [EnrollmentDocumentController::class, 'index'])->name('enrollment-documents.index');
         Route::get('/enrollment-documents/{enrollmentDocument}', [EnrollmentDocumentController::class, 'show'])->name('enrollment-documents.show');
+        Route::get('/enrollment-documents/{enrollmentDocument}/pdf', [EnrollmentDocumentController::class, 'downloadPdf'])->name('enrollment-documents.pdf');
 
         // Accounting Staff's own payment history, plus Registrar Head
         // oversight — a narrower read than widening Enrollment::scopeVisibleTo,
@@ -311,6 +316,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/prospectus', ProspectusController::class)->name('prospectus.show');
         Route::get('/grade-slip', GradeSlipController::class)->name('grade-slip.show');
         Route::get('/academic-record', AcademicRecordController::class)->name('academic-record.show');
+        Route::get('/graduates', GraduateController::class)->name('graduates.index');
 
         // First production consumer of the `role` middleware (ADR 0008):
         // only the Program Chair authors curricula, matching the frontend's

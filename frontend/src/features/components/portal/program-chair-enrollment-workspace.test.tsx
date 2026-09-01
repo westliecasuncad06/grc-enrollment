@@ -258,6 +258,7 @@ function mockAll({
   returnedRemark = "",
   proposal = null as null | Record<string, unknown>,
   restoredPlans = false,
+  restoredDraftPlans = false,
   latestGenerationRun = null as null | typeof completedGenerationRun,
 } = {}) {
   let scheduleSaved = false
@@ -393,17 +394,26 @@ function mockAll({
       return Promise.resolve(
         new Response(
           JSON.stringify(
-            restoredPlans
+            restoredDraftPlans
               ? {
                   data: plans.data.map((plan) => ({
                     ...plan,
                     section_count: 1,
-                    status: "submitted",
-                    status_label: "Submitted",
-                    submitted_at: "2026-08-02T05:00:00Z",
+                    status: "draft",
+                    status_label: "Draft",
                   })),
                 }
-              : plans,
+              : restoredPlans
+                ? {
+                    data: plans.data.map((plan) => ({
+                      ...plan,
+                      section_count: 1,
+                      status: "submitted",
+                      status_label: "Submitted",
+                      submitted_at: "2026-08-02T05:00:00Z",
+                    })),
+                  }
+                : plans,
           ),
         ),
       )
@@ -739,6 +749,39 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent("IT101")
     expect(screen.getByLabelText("Professor")).toBeInTheDocument()
     expect(screen.queryByText(/Google Classroom/i)).not.toBeInTheDocument()
+  })
+
+  it("opens weekly calendar dialog from a block section and displays the class timetable", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockAll())
+    renderWorkspace()
+    for (let year = 1; year <= 4; year++) {
+      await chooseCurriculum(user, year)
+      const input = await screen.findByLabelText("Number of block sections")
+      await user.clear(input)
+      await user.type(input, "1")
+      await user.click(
+        screen.getByRole("button", {
+          name: year === 4 ? "Continue to review" : "Save and continue",
+        }),
+      )
+    }
+    await user.click(
+      screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    const viewCalendarButton = await screen.findByRole("button", {
+      name: "View in calendar",
+    })
+    await user.click(viewCalendarButton)
+
+    const dialog = await screen.findByRole("dialog", { name: /IT101 Schedule/i })
+    expect(dialog).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole("radio", { name: "Calendar view" }),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole("radio", { name: "Table view" }),
+    ).toBeInTheDocument()
   })
 
   it("offers only the chair's seeded room options in the schedule dialog", async () => {
@@ -1233,6 +1276,36 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole("option", { name: /BSCS 2024.*Old curriculum/ }),
+    ).toBeInTheDocument()
+  })
+
+  it("displays the curriculum selector in the subjects view and allows switching curriculum", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockAll())
+    renderWorkspace()
+    for (let year = 1; year <= 4; year++) {
+      await chooseCurriculum(user, year)
+      const input = await screen.findByLabelText("Number of block sections")
+      await user.clear(input)
+      await user.type(input, "1")
+      await user.click(
+        screen.getByRole("button", {
+          name: year === 4 ? "Continue to review" : "Save and continue",
+        }),
+      )
+    }
+    await user.click(
+      screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    expect(
+      await screen.findByRole("combobox", { name: "Curriculum for 1st Year" }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("combobox", { name: "Curriculum for 1st Year" }))
+    expect(
+      await screen.findByRole("option", { name: /BSCS 2026/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("option", { name: /BSCS 2024/ }),
     ).toBeInTheDocument()
   })
 

@@ -6,7 +6,10 @@ import { FileCheck2 } from "lucide-react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { CertificateOfRegistrationDocument } from "@/features/components/portal/certificate-of-registration-document"
-import { PrintButton, PrintDocument } from "@/features/components/portal/print-document"
+import {
+  DownloadPdfButton,
+  PrintDocument,
+} from "@/features/components/portal/print-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Card,
@@ -40,7 +43,7 @@ export function StudentDigitalComWorkspace() {
   return (
     <WorkspacePage
       title="Certificate of Registration"
-      description="View and print your Certificate of Registration."
+      description="View and download your official Certificate of Registration."
       unauthorized={!authorized}
       lastUpdated={documentsQuery.dataUpdatedAt}
     >
@@ -51,7 +54,7 @@ export function StudentDigitalComWorkspace() {
         loadingLabel="Loading your Certificate of Registration…"
       >
         {(documents) => (
-          <Card className="print:shadow-none">
+          <Card className={selectedDocumentId !== null ? "print:hidden" : "print:shadow-none"}>
             <CardHeader className="flex items-center justify-between gap-2">
               <CardTitle level={2} className="flex items-center gap-2">
                 <FileCheck2 aria-hidden="true" className="size-5" />
@@ -71,15 +74,21 @@ export function StudentDigitalComWorkspace() {
                   <p className="text-sm text-muted-foreground">
                     Generated {new Date(document.generated_at).toLocaleString()}
                   </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="mt-2 w-fit"
-                    onClick={() => setSelectedDocumentId(document.id)}
-                  >
-                    View printable COR
-                  </Button>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedDocumentId(document.id)}
+                    >
+                      View COR
+                    </Button>
+                    <DownloadPdfButton
+                      documentId={document.id}
+                      documentNumber={document.document_number}
+                      label="Download COR"
+                    />
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -98,7 +107,13 @@ export function StudentDigitalComWorkspace() {
             cor.snapshot !== null && (
               <PrintDocument
                 title={cor.document_number}
-                actions={<PrintButton label="Print COR" />}
+                actions={
+                  <DownloadPdfButton
+                    documentId={cor.id}
+                    documentNumber={cor.document_number}
+                    label="Download COR (PDF)"
+                  />
+                }
               >
                 <CertificateOfRegistrationDocument
                   cor={{ ...cor, snapshot: cor.snapshot }}

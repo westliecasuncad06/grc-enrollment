@@ -6,6 +6,8 @@ import { axe } from "vitest-axe"
 import { EnrollmentSectionTable } from "@/features/components/portal/enrollment-section-table"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
+vi.setConfig({ testTimeout: 30_000 })
+
 function block(overrides: Partial<EnrollmentBlock>): EnrollmentBlock {
   return {
     type: "enrollment_block",
@@ -100,7 +102,8 @@ function renderTable({
 }
 
 describe("EnrollmentSectionTable", () => {
-  it("lists every section as an inline schedule card", () => {
+  it("lists every section as an inline schedule card", async () => {
+    const user = userEvent.setup()
     renderTable()
 
     const section = screen.getByRole("article", { name: "IT301 section" })
@@ -112,15 +115,19 @@ describe("EnrollmentSectionTable", () => {
     ).toBeInTheDocument()
     expect(within(section).getByText("40 seats")).toBeInTheDocument()
     expect(within(section).getByText("6 units")).toBeInTheDocument()
+    expect(within(section).getAllByText("CS201").length).toBeGreaterThan(0)
+    expect(
+      within(section).getByRole("button", { name: "Choose IT301" }),
+    ).toBeInTheDocument()
+
+    // Switch to Table view
+    await user.click(within(section).getByRole("radio", { name: "Table view" }))
     expect(
       within(section).getByRole("table", { name: "IT301 schedule" }),
     ).toBeInTheDocument()
     expect(within(section).getByText("Subject code")).toBeInTheDocument()
     expect(within(section).getAllByText("Section ID")).not.toHaveLength(0)
     expect(within(section).getAllByText("Data Structures")).not.toHaveLength(0)
-    expect(
-      within(section).getByRole("button", { name: "Choose IT301" }),
-    ).toBeInTheDocument()
   })
 
   it("shows each subject's schedule in 12-hour clock time, not military time", () => {

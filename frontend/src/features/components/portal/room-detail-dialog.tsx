@@ -114,7 +114,7 @@ export function RoomDetailDialog({
   const sectionsQuery = useSectionsQuery()
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
-  const [view, setView] = useState<"table" | "calendar">("table")
+  const [view, setView] = useState<"table" | "calendar">("calendar")
   const [assignOpen, setAssignOpen] = useState(false)
   const [editingSectionId, setEditingSectionId] = useState<number | null>(null)
   const [sectionMode, setSectionMode] = useState<"unscheduled" | "move">("unscheduled")
@@ -333,13 +333,13 @@ export function RoomDetailDialog({
                     size="sm"
                     aria-label="Room schedule layout"
                   >
-                    <ToggleGroupItem value="table" aria-label="Table view">
-                      <ListIcon data-icon="inline-start" aria-hidden="true" />
-                      Table
-                    </ToggleGroupItem>
                     <ToggleGroupItem value="calendar" aria-label="Calendar view">
                       <CalendarDays data-icon="inline-start" aria-hidden="true" />
                       Calendar
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="table" aria-label="Table view">
+                      <ListIcon data-icon="inline-start" aria-hidden="true" />
+                      Table
                     </ToggleGroupItem>
                   </ToggleGroup>
                   <div className="flex items-center gap-2">

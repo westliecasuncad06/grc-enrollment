@@ -31,6 +31,7 @@ import { EnrollmentDashboardWorkspace } from "@/features/components/portal/enrol
 import { InstitutionDashboardWorkspace } from "@/features/components/portal/institution-dashboard-workspace"
 import { StuckStudentsWorkspace } from "@/features/components/portal/stuck-students-workspace"
 import { PolicySettingsWorkspace } from "@/features/components/portal/policy-settings-workspace"
+import { FeeSettingsWorkspace } from "@/features/components/portal/fee-settings-workspace"
 import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-operations-workspace"
 import { FacultyInvitationWorkspace } from "@/features/components/portal/faculty-invitation-workspace"
 import { StaffInvitationWorkspace } from "@/features/components/portal/staff-invitation-workspace"
@@ -40,6 +41,7 @@ import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/port
 import { QueueKioskAccessWorkspace } from "@/features/components/portal/queue-kiosk-access-workspace"
 import { AttritionAnalyticsWorkspace } from "@/features/components/portal/attrition-analytics-workspace"
 import { HonorsWorkspace } from "@/features/components/portal/honors-workspace"
+import { GraduatesWorkspace } from "@/features/components/portal/graduates-workspace"
 import { CashierCorRecordsWorkspace } from "@/features/components/portal/cashier-cor-records-workspace"
 
 export type ConnectedModuleId =
@@ -84,12 +86,14 @@ export type ConnectedModuleId =
   | "institution-dashboard"
   | "stuck-students"
   | "policy-settings"
+  | "fee-settings"
   | "academic-terms"
   | "it-control-students"
   | "it-control-faculty"
   | "it-control-enrollment-override"
   | "attrition-analytics"
   | "honors"
+  | "graduates"
 
 export type PortalModuleComponent = ComponentType
 
@@ -135,12 +139,14 @@ export const connectedModuleIds = [
   "institution-dashboard",
   "stuck-students",
   "policy-settings",
+  "fee-settings",
   "academic-terms",
   "it-control-students",
   "it-control-faculty",
   "it-control-enrollment-override",
   "attrition-analytics",
   "honors",
+  "graduates",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const availabilityPreferencesWorkspace: PortalModuleComponent = () => (
@@ -246,12 +252,14 @@ export const connectedModuleRegistry: Readonly<
   "institution-dashboard": InstitutionDashboardWorkspace,
   "stuck-students": StuckStudentsWorkspace,
   "policy-settings": PolicySettingsWorkspace,
+  "fee-settings": FeeSettingsWorkspace,
   "academic-terms": academicTermWorkspace,
   "it-control-students": ItControlStudentsWorkspace,
   "it-control-faculty": ItControlFacultyWorkspace,
   "it-control-enrollment-override": enrollmentOverrideWorkspace,
   "attrition-analytics": AttritionAnalyticsWorkspace,
   honors: HonorsWorkspace,
+  graduates: GraduatesWorkspace,
 }
 
 export function isConnectedModuleId(

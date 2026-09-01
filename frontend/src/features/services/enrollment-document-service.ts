@@ -8,6 +8,7 @@ import {
 } from "@/features/schemas/enrollment-document-schema"
 import {
   ApiClientError,
+  getAuthenticatedBlob,
   getAuthenticatedJson,
 } from "@/features/services/api-client"
 
@@ -63,4 +64,23 @@ export async function getCertificateOfRegistration(
     await getAuthenticatedJson(`${ENROLLMENT_DOCUMENTS_PATH}/${id}`, signal),
     "Certificate of Registration",
   ).data
+}
+
+export async function downloadEnrollmentDocumentPdf(
+  id: number,
+  documentNumber: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const blob = await getAuthenticatedBlob(
+    `${ENROLLMENT_DOCUMENTS_PATH}/${id}/pdf`,
+    signal,
+  )
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = `COR-${documentNumber.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(url)
 }

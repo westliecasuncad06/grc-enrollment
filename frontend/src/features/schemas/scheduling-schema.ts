@@ -208,6 +208,7 @@ export const facultyMemberSchema = z
     employment_type: z.enum(["full_time", "part_time"]).nullable(),
     employment_type_label: z.string().min(1).nullable(),
     planning_unit_reference: z.number().int().positive().nullable(),
+    deactivation_reason: z.string().nullable().optional(),
     is_assignable: z.boolean(),
   })
   .strict()

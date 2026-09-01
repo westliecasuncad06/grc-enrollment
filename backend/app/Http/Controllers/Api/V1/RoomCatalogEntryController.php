@@ -32,6 +32,10 @@ final class RoomCatalogEntryController extends Controller
                 $actor->role === UserRole::ProgramChair,
                 fn ($query) => $query->where('college', $actor->college?->value),
             )
+            ->when(
+                $actor->role === UserRole::RegistrarHead,
+                fn ($query) => $query->selectRaw('MIN(id) as id, name, MIN(capacity) as capacity, MIN(room_type) as room_type, MIN(college) as college')->groupBy('name'),
+            )
             ->orderBy('name')
             ->orderBy('id')
             ->get();

@@ -18,7 +18,6 @@ import {
   NotebookText,
   ReceiptText,
   ScrollText,
-  Settings2,
   ShieldCheck,
   UserCheck,
   UserMinus,
@@ -173,7 +172,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       ),
       portalModule(
         "program-chair-analytics",
-        "Analytics",
+        "Enrollment Analytics",
         "Descriptive, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
         BarChart3,
       ),
@@ -286,6 +285,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         FileSearch,
       ),
       portalModule(
+        "graduates",
+        "Graduates",
+        "View and search the official register of graduated students across all programs and school years.",
+        GraduationCap,
+      ),
+      portalModule(
         "cor-records",
         "COR Records",
         "Find and print a student's confirmed Certificate of Registration history.",
@@ -311,7 +316,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       ),
       portalModule(
         "registrar-analytics",
-        "Analytics",
+        "Enrollment Analytics",
         "Review official enrollment trends across all departments or focus on one department.",
         BarChart3,
       ),
@@ -328,10 +333,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         FileText,
       ),
       portalModule(
-        "policy-settings",
-        "Policy Settings",
-        "See where confirmed institutional policy values will eventually be configured.",
-        Settings2,
+        "fee-settings",
+        "Fee Settings",
+        "Configure tuition fee rates and miscellaneous fee particulars for student assessments.",
+        ReceiptText,
       ),
       portalModule(
         "rooms",
@@ -380,6 +385,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Academic Records",
         "View every student's academic grade records across the institution.",
         FolderArchive,
+      ),
+      portalModule(
+        "graduates",
+        "Graduates",
+        "View and search the official register of graduated students across all programs and school years.",
+        GraduationCap,
       ),
       portalModule(
         "enrollment-change-requests",

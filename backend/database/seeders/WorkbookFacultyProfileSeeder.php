@@ -42,12 +42,32 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 
     private const FULL_TIME_PREFERENCE_THRESHOLD = 6;
 
-    /** @var array<string, list<string>> */
+    /** @var array<string, list<array{name: string, reason: string}>> */
     private const INACTIVE_PROFILES = [
-        'ccs' => ['Marian S. Villanueva', 'Jerome D. Aguilar', 'Liza P. Navarro'],
-        'coe' => ['Imelda R. Valdez', 'Noel P. Salvador', 'Rosalie T. Aquino'],
-        'cbae' => ['Oscar M. Fernandez', 'Celeste D. Aragon', 'Victor L. Ramos'],
-        'coa' => ['Teresita L. Cruz', 'Ramon C. de Leon', 'Sandra M. Bautista'],
+        'ccs' => [
+            ['name' => 'Marian S. Villanueva', 'reason' => 'resigned'],
+            ['name' => 'Jerome D. Aguilar', 'reason' => 'retired'],
+            ['name' => 'Liza P. Navarro', 'reason' => 'contract_ended'],
+            ['name' => 'Roberto K. Domingo', 'reason' => 'resigned'],
+        ],
+        'coe' => [
+            ['name' => 'Imelda R. Valdez', 'reason' => 'retired'],
+            ['name' => 'Noel P. Salvador', 'reason' => 'contract_ended'],
+            ['name' => 'Rosalie T. Aquino', 'reason' => 'resigned'],
+            ['name' => 'Danilo M. Cruz', 'reason' => 'retired'],
+        ],
+        'cbae' => [
+            ['name' => 'Oscar M. Fernandez', 'reason' => 'resigned'],
+            ['name' => 'Celeste D. Aragon', 'reason' => 'contract_ended'],
+            ['name' => 'Victor L. Ramos', 'reason' => 'retired'],
+            ['name' => 'Maricel G. Santos', 'reason' => 'resigned'],
+        ],
+        'coa' => [
+            ['name' => 'Teresita L. Cruz', 'reason' => 'retired'],
+            ['name' => 'Ramon C. de Leon', 'reason' => 'resigned'],
+            ['name' => 'Sandra M. Bautista', 'reason' => 'contract_ended'],
+            ['name' => 'Eduardo F. Mendoza', 'reason' => 'resigned'],
+        ],
     ];
 
     /** @var list<string> */
@@ -417,18 +437,19 @@ final class WorkbookFacultyProfileSeeder extends Seeder
 
     private function seedInactiveFacultyProfiles(): void
     {
-        foreach (self::INACTIVE_PROFILES as $collegeValue => $names) {
+        foreach (self::INACTIVE_PROFILES as $collegeValue => $profiles) {
             $college = CollegeCode::from($collegeValue);
-            foreach ($names as $index => $name) {
+            foreach ($profiles as $index => $profile) {
                 User::updateOrCreate(
                     ['email' => "inactive.{$collegeValue}.".($index + 1).'@grc.test'],
                     [
-                        'name' => $name,
+                        'name' => $profile['name'],
                         'password' => $this->localPasswordHash(),
                         'role' => UserRole::Faculty,
                         'college' => $college,
                         'employment_type' => FacultyEmploymentType::PartTime,
                         'status' => UserStatus::Disabled,
+                        'deactivation_reason' => $profile['reason'],
                     ],
                 );
             }

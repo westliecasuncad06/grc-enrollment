@@ -114,7 +114,7 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
         [, $term, $curriculum] = $this->termsAndCurriculum();
         $student = $this->student($curriculum, 'S-HONOR');
         $enrollment = $this->enrolled($student, $term);
-        $ordinary = Subject::create(['code' => 'CS101', 'title' => 'CS', 'units' => 3, 'status' => SubjectStatus::Active]);
+        $ordinary = Subject::create(['code' => 'CS101', 'title' => 'CS', 'units' => 18, 'status' => SubjectStatus::Active]);
         $pe = Subject::create(['code' => ' PE 2 ', 'title' => 'PE', 'units' => 2, 'status' => SubjectStatus::Active]);
         $professor = $this->user(UserRole::Faculty, 'prof@grc.test');
 
@@ -130,7 +130,7 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
         $response->assertOk()->assertHeader('Cache-Control', 'no-store, private')
             ->assertJsonPath('summary.qualifier_count', 1)
             ->assertJsonPath('data.0.gwa', '1.00')
-            ->assertJsonPath('data.0.gwa_units', 3)
+            ->assertJsonPath('data.0.gwa_units', 18)
             ->assertJsonPath('data.0.excluded_subject_count', 1);
     }
 

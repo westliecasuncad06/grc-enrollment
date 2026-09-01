@@ -341,7 +341,7 @@ describe("RoomsOperationsWorkspace", () => {
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
 
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
-    expect(within(dialog).getByText("ELEM101")).toBeInTheDocument()
+    expect(within(dialog).getAllByText("ELEM101")[0]).toBeInTheDocument()
     expect(within(dialog).queryByText(/Programming 1 LEC/)).not.toBeInTheDocument()
     expect(
       within(dialog).getByText(/IT lecture components are asynchronous/),
@@ -354,6 +354,7 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
+    await user.click(within(dialog).getByRole("radio", { name: "Table view" }))
 
     const row = within(dialog).getByText("ELEM101").closest("tr")
     expect(row).not.toBeNull()
@@ -366,7 +367,6 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
-    await user.click(within(dialog).getByRole("radio", { name: "Calendar view" }))
 
     for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
       expect(within(dialog).getByText(day)).toBeInTheDocument()
@@ -423,7 +423,6 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
-    await user.click(within(dialog).getByRole("radio", { name: "Calendar view" }))
 
     await user.click(within(dialog).getByRole("button", { name: /3 overlapping bookings/ }))
     const clusterDialog = await screen.findByRole("dialog", { name: "Friday bookings" })
@@ -442,6 +441,7 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
+    await user.click(within(dialog).getByRole("radio", { name: "Table view" }))
 
     await user.click(within(dialog).getByText("IT401A"))
     const editDialog = await screen.findByRole("dialog", {
@@ -516,6 +516,7 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
+    await user.click(within(dialog).getByRole("radio", { name: "Table view" }))
     await user.click(within(dialog).getByText("IT401A"))
     const editDialog = await screen.findByRole("dialog", {
       name: "Edit IT401A in LAB 1",

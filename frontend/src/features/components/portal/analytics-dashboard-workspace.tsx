@@ -345,7 +345,7 @@ export function AnalyticsDashboardWorkspace() {
   const runQuery = useLatestScheduleGenerationRunQuery(termId, isProgramChair)
   return (
     <WorkspacePage
-      title="Analytics"
+      title="Enrollment Analytics"
       description={
         isRegistrarHead
           ? "Official enrollment analytics across all departments, with an optional department filter."

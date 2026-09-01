@@ -5,10 +5,6 @@ import { useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
-import {
-  PrintButton,
-  PrintDocument,
-} from "@/features/components/portal/print-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
@@ -464,33 +460,28 @@ export function AccountingPaymentWorkspace() {
               {lastConfirmation.document.document_number ?? "pending"} is ready.
             </p>
             {lastConfirmation.document.document_number && (
-              <PrintDocument
-                title="Certificate of Registration"
-                actions={<PrintButton />}
-              >
-                <div className="grid gap-1 rounded-lg border p-4">
-                  <p className="font-medium">
-                    Certificate of Registration
-                  </p>
-                  <p className="font-mono text-sm text-muted-foreground">
-                    {lastConfirmation.document.document_number}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {lastConfirmation.enrollment.student_number}
-                    {lastConfirmation.enrollment.student_financial_status_label
-                      ? ` · ${lastConfirmation.enrollment.student_financial_status_label}`
-                      : ""}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Generated{" "}
-                    {lastConfirmation.document.generated_at
-                      ? new Date(
-                          lastConfirmation.document.generated_at,
-                        ).toLocaleString()
-                      : "—"}
-                  </p>
-                </div>
-              </PrintDocument>
+              <div className="grid gap-1 rounded-lg border bg-card p-4">
+                <p className="font-medium">
+                  Certificate of Registration
+                </p>
+                <p className="font-mono text-sm text-muted-foreground">
+                  {lastConfirmation.document.document_number}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {lastConfirmation.enrollment.student_number}
+                  {lastConfirmation.enrollment.student_financial_status_label
+                    ? ` · ${lastConfirmation.enrollment.student_financial_status_label}`
+                    : ""}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Generated{" "}
+                  {lastConfirmation.document.generated_at
+                    ? new Date(
+                        lastConfirmation.document.generated_at,
+                      ).toLocaleString()
+                    : "—"}
+                </p>
+              </div>
             )}
           </AlertDescription>
         </Alert>

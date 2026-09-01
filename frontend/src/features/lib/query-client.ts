@@ -28,10 +28,10 @@ export function createAppQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        gcTime: 5 * 60 * 1000,
+        gcTime: 15 * 60 * 1000,
         refetchOnWindowFocus: false,
         retry: shouldRetryQuery,
-        staleTime: 30 * 1000,
+        staleTime: 5 * 60 * 1000,
       },
     },
   })

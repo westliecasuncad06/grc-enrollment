@@ -90,7 +90,14 @@ function FeeRows({
 }) {
   return items.map((item) => (
     <div key={`${item.label}-${item.amount}`} className="cor-document__fee-row">
-      <span>{item.label}</span>
+      <span>
+        {item.label}
+        {item.quantity && item.unit_amount && Number(item.unit_amount) > 0 ? (
+          <small className="ml-1 opacity-80">
+            ({item.quantity} units @ {money(item.unit_amount, currency)})
+          </small>
+        ) : null}
+      </span>
       <span>{money(item.amount, currency)}</span>
     </div>
   ))
@@ -221,9 +228,15 @@ export function CertificateOfRegistrationDocument({
         <section className="cor-document__terms">
           <h2>TERMS AND CONDITIONS GOVERNING WITHDRAWAL</h2>
           <ol>
-            {snapshot.withdrawal_terms.map((termText) => (
-              <li key={termText}>{termText}</li>
-            ))}
+            {snapshot.withdrawal_terms.map((termText, index) => {
+              const cleanedText = termText.replace(/^\d+\.\s*/, "")
+              return (
+                <li key={`${index}-${cleanedText.slice(0, 15)}`}>
+                  <strong>{index + 1}. </strong>
+                  {cleanedText}
+                </li>
+              )
+            })}
           </ol>
         </section>
         <footer className="cor-document__signatures">

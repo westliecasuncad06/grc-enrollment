@@ -226,11 +226,18 @@ export function DemandForecastDialog({
                                 ? ` · ${group.subjectTitle}`
                                 : ""}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {group.yearLevel
-                                ? `Year ${group.yearLevel}`
-                                : "Year not set"}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>
+                                {group.yearLevel
+                                  ? `Year ${group.yearLevel}`
+                                  : "Year not set"}
+                              </span>
+                              {group.curriculumVersion && (
+                                <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-mono">
+                                  Curriculum {group.curriculumVersion}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           <Badge variant="secondary">
                             {group.sectionCount} section
@@ -288,19 +295,26 @@ export function DemandForecastDialog({
                     key={`${recommendation.program_code}-${recommendation.year_level}`}
                     className="rounded-lg border bg-muted/20 p-3"
                   >
-                    <p className="font-medium">
-                      {recommendation.program_code} · Year{" "}
-                      {recommendation.year_level}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium">
+                        {recommendation.program_code} · Year{" "}
+                        {recommendation.year_level}
+                      </p>
+                      {recommendation.curriculum_effective_school_year && (
+                        <Badge
+                          variant={recommendation.curriculum_effective_school_year === "2024-2029" ? "secondary" : "outline"}
+                          className="font-mono text-[11px]"
+                        >
+                          {recommendation.curriculum_effective_school_year}
+                        </Badge>
+                      )}
+                    </div>
                     {recommendation.curriculum_name && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {recommendation.curriculum_name}
-                        {recommendation.curriculum_effective_school_year
-                          ? ` · ${recommendation.curriculum_effective_school_year}`
-                          : ""}
                       </p>
                     )}
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1.5">
                       {recommendation.recommended_block_sections} blocks ·{" "}
                       {recommendation.students_per_block} seats each
                     </p>

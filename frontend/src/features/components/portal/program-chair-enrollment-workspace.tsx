@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import {
   ArrowUpRight,
   CalendarClockIcon,
+  CalendarDays,
   LayoutGridIcon,
   ListIcon,
   MinusIcon,
@@ -17,6 +18,10 @@ import Link from "next/link"
 import { useAuth } from "@/features/auth/use-auth"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { DemandForecastDialog } from "@/features/components/portal/demand-forecast-dialog"
+import {
+  SectionScheduleCalendarDialog,
+} from "@/features/components/portal/section-schedule-calendar-dialog"
+import type { SectionScheduleItem } from "@/features/components/portal/section-schedule-calendar"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -385,7 +390,7 @@ export function ProgramChairEnrollmentWorkspace({
   const selectableCurricula = useMemo(
     () =>
       Array.from(curriculaByProgramRecency.values()).flatMap((versions) =>
-        versions.slice(0, 2),
+        versions.slice(0, 3),
       ),
     [curriculaByProgramRecency],
   )
@@ -431,11 +436,17 @@ export function ProgramChairEnrollmentWorkspace({
     override_reason: "",
   })
   const [scheduleError, setScheduleError] = useState("")
+  const [calendarSection, setCalendarSection] = useState<{
+    blockCode: string
+    year: number
+    sections: Section[]
+  } | null>(null)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [error, setError] = useState("")
   const [forecastOpen, setForecastOpen] = useState(false)
+  const [isSwitchingCurriculum, setIsSwitchingCurriculum] = useState(false)
   const termId = currentTerm?.id ?? 0
   const latestGenerationRunQuery = useLatestScheduleGenerationRunQuery(termId)
   const generationRun = latestGenerationRunQuery.data ?? null
@@ -567,6 +578,38 @@ export function ProgramChairEnrollmentWorkspace({
     "—"
   const facultyNameFor = (professorId: number | null) =>
     directoryQuery.data?.find((member) => member.id === professorId)?.name
+  const calendarItems: SectionScheduleItem[] = useMemo(() => {
+    if (!calendarSection) return []
+    const currentSections = sectionsQuery.data ?? []
+    return calendarSection.sections.map((sec) => {
+      const section =
+        currentSections.find((candidate) => candidate.id === sec.id) ?? sec
+      const subject = subjectFor(section.subject_id)
+      const u = unitsFor(section.subject_id)
+      return {
+        id: section.id,
+        subject_code: subject?.code ?? `Subject #${section.subject_id}`,
+        subject_title: subject?.title ?? "Subject",
+        units: typeof u === "number" ? u : Number(u) || null,
+        section_code: section.section_code,
+        room: section.room,
+        professor_name: facultyNameFor(section.professor_id) ?? null,
+        schedule_days: section.schedule_days,
+        starts_at_time: section.starts_at_time,
+        ends_at_time: section.ends_at_time,
+        modality: section.modality ?? null,
+        capacity: section.capacity,
+        enrolled_count: section.enrolled_count,
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    calendarSection,
+    sectionsQuery.data,
+    subjects,
+    subjectsQuery.data,
+    directoryQuery.data,
+  ])
   const capableIds = selected
     ? (preferencesQuery.data ?? [])
         .filter(
@@ -769,11 +812,61 @@ export function ProgramChairEnrollmentWorkspace({
         curriculumId: selectedCurriculumId,
         yearLevel: year,
       })
+      await planMutations.autoAssign.mutateAsync({
+        curriculumId: selectedCurriculumId,
+        yearLevel: year,
+      })
       await sectionsQuery.refetch()
     } catch {
       setError(
         `Subjects for ${yearLabel(year)} could not be generated. Check the selected curriculum and saved section count.`,
       )
+    }
+  }
+  const handleCurriculumChange = async (year: number, newCurriculumId: number) => {
+    if (curriculumIds[year] === newCurriculumId) return
+    setIsSwitchingCurriculum(true)
+    setError("")
+
+    try {
+      const nextCurriculumIds = {
+        ...curriculumIds,
+        [year]: newCurriculumId,
+      }
+      setCurriculumIds(nextCurriculumIds)
+
+      const currentCount = Math.max(1, toNumber(counts[year], 1))
+      const currentCapacity = Math.max(1, toNumber(studentsPerBlock[year], 40))
+
+      await planMutations.save.mutateAsync({
+        academic_term_id: termId,
+        curriculum_id: newCurriculumId,
+        counts: {
+          [String(year)]: currentCount,
+        },
+        students_per_block: {
+          [String(year)]: currentCapacity,
+        },
+      })
+
+      await planMutations.release.mutateAsync({
+        curriculumId: newCurriculumId,
+        yearLevel: year,
+      })
+
+      await planMutations.autoAssign.mutateAsync({
+        curriculumId: newCurriculumId,
+        yearLevel: year,
+      })
+
+      await sectionsQuery.refetch()
+      await plansQuery.refetch()
+    } catch (caughtError) {
+      setError(
+        `Failed to update curriculum and auto-populate schedule for ${yearLabel(year)}. ${scheduleErrorMessage(caughtError)}`,
+      )
+    } finally {
+      setIsSwitchingCurriculum(false)
     }
   }
   const openEdit = (section: Section) => {
@@ -1186,13 +1279,26 @@ export function ProgramChairEnrollmentWorkspace({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <TabsList
                     aria-label="Generated section year filter"
-                    className="w-full sm:w-fit"
+                    className="h-auto w-full p-1 sm:w-fit group-data-horizontal/tabs:h-auto"
                   >
-                    {years.map((year) => (
-                      <TabsTrigger key={year} value={String(year)}>
-                        {yearLabel(year)}
-                      </TabsTrigger>
-                    ))}
+                    {years.map((year) => {
+                      const cur = selectedCurriculumForYear(year)
+                      return (
+                        <TabsTrigger
+                          key={year}
+                          value={String(year)}
+                          aria-label={yearLabel(year)}
+                          className="flex flex-col items-center justify-center gap-0.5 px-3.5 py-1.5 h-auto text-xs sm:text-sm data-active:shadow-sm"
+                        >
+                          <span className="font-semibold leading-tight">{yearLabel(year)}</span>
+                          {cur && (
+                            <span className="text-[10px] font-medium opacity-80 leading-tight" aria-hidden="true">
+                              {cur.effective_school_year}
+                            </span>
+                          )}
+                        </TabsTrigger>
+                      )
+                    })}
                   </TabsList>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -1202,6 +1308,7 @@ export function ProgramChairEnrollmentWorkspace({
                       onClick={() => void removeSection()}
                       disabled={
                         approvalLocked ||
+                        isSwitchingCurriculum ||
                         toNumber(counts[Number(activeYear)]) <= 0 ||
                         planMutations.save.isPending ||
                         planMutations.release.isPending
@@ -1217,6 +1324,7 @@ export function ProgramChairEnrollmentWorkspace({
                       onClick={() => void addSection()}
                       disabled={
                         approvalLocked ||
+                        isSwitchingCurriculum ||
                         planMutations.save.isPending ||
                         planMutations.release.isPending
                       }
@@ -1247,6 +1355,71 @@ export function ProgramChairEnrollmentWorkspace({
                   </div>
                 </div>
 
+                <div className="my-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-medium text-foreground whitespace-nowrap">
+                      Curriculum for {yearLabel(Number(activeYear))}:
+                    </span>
+                    <Select
+                      value={
+                        curriculumIds[Number(activeYear)]
+                          ? String(curriculumIds[Number(activeYear)])
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        void handleCurriculumChange(
+                          Number(activeYear),
+                          Number(value),
+                        )
+                      }
+                      disabled={approvalLocked || isSwitchingCurriculum}
+                    >
+                      <SelectTrigger
+                        id={`active-curriculum-${activeYear}`}
+                        aria-label={`Curriculum for ${yearLabel(Number(activeYear))}`}
+                        className="h-9 w-full sm:w-[380px] bg-background text-left truncate"
+                      >
+                        <SelectValue placeholder="Choose curriculum" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {selectableCurricula.map((curriculum) => (
+                            <SelectItem
+                              key={curriculum.id}
+                              value={String(curriculum.id)}
+                            >
+                              {curriculum.name} ({curriculumAgeLabel(
+                                curriculum,
+                                newestCurriculumIdByProgram,
+                              )})
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {selectedCurriculumForYear(Number(activeYear)) && (
+                      <Badge variant="secondary" className="font-normal text-xs whitespace-nowrap">
+                        Effectivity:{" "}
+                        {
+                          selectedCurriculumForYear(Number(activeYear))
+                            ?.effective_school_year
+                        }{" "}
+                        (
+                        {curriculumAgeLabel(
+                          selectedCurriculumForYear(Number(activeYear)),
+                          newestCurriculumIdByProgram,
+                        )}
+                        )
+                      </Badge>
+                    )}
+                  </div>
+                  {isSwitchingCurriculum && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground animate-pulse">
+                      <span>Applying curriculum & auto-populating schedule and faculty…</span>
+                    </div>
+                  )}
+                </div>
+
                 {years.map((year) => (
                   <TabsContent key={year} value={String(year)} className="mt-0">
                     {groupedSections.length === 0 ? (
@@ -1274,26 +1447,46 @@ export function ProgramChairEnrollmentWorkspace({
                         {groupedSections.map(({ blockCode, sections }) => (
                           <Card key={blockCode}>
                             <CardHeader className="border-b bg-muted/30">
-                              <CardTitle className="flex flex-wrap items-center gap-2">
-                                {blockCode}
-                                {sections.every(
-                                  (section) =>
-                                    section.capacity === sections[0].capacity,
-                                ) ? (
-                                  <Badge variant="secondary">
-                                    {sections[0].capacity} seats
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline">
-                                    Mixed seat counts
-                                  </Badge>
-                                )}
-                              </CardTitle>
-                              <CardDescription>
-                                {yearLabel(year)} block section ·{" "}
-                                {sections.length} subject
-                                {sections.length === 1 ? "" : "s"}
-                              </CardDescription>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <CardTitle className="flex flex-wrap items-center gap-2">
+                                    {blockCode}
+                                    {sections.every(
+                                      (section) =>
+                                        section.capacity === sections[0].capacity,
+                                    ) ? (
+                                      <Badge variant="secondary">
+                                        {sections[0].capacity} seats
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline">
+                                        Mixed seat counts
+                                      </Badge>
+                                    )}
+                                  </CardTitle>
+                                  <CardDescription>
+                                    {yearLabel(year)} block section ·{" "}
+                                    {sections.length} subject
+                                    {sections.length === 1 ? "" : "s"}
+                                  </CardDescription>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1.5"
+                                  onClick={() =>
+                                    setCalendarSection({
+                                      blockCode,
+                                      year,
+                                      sections,
+                                    })
+                                  }
+                                >
+                                  <CalendarDays className="size-4" aria-hidden="true" />
+                                  View in calendar
+                                </Button>
+                              </div>
                             </CardHeader>
                             <CardContent className="pt-0">
                               {view === "table" && (
@@ -1732,6 +1925,23 @@ export function ProgramChairEnrollmentWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SectionScheduleCalendarDialog
+        open={calendarSection !== null}
+        onOpenChange={(open) => !open && setCalendarSection(null)}
+        title={`${calendarSection?.blockCode ?? "Section"} Schedule`}
+        subtitle={`${yearLabel(calendarSection?.year ?? 1)} Block Section · ${calendarItems.length} subjects`}
+        items={calendarItems}
+        disabled={approvalLocked}
+        onSelectSubject={(item) => {
+          const targetSection =
+            (sectionsQuery.data ?? []).find((s) => s.id === item.id) ??
+            calendarSection?.sections.find((s) => s.id === item.id)
+          if (targetSection) {
+            openEdit(targetSection)
+          }
+        }}
+      />
     </WorkspacePage>
   )
 }

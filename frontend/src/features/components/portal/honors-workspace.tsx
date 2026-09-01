@@ -32,6 +32,21 @@ import {
   useProgramsQuery,
 } from "@/features/hooks/use-reference-data"
 
+function formatYearLevel(y: number): string {
+  switch (y) {
+    case 1:
+      return "1st Year"
+    case 2:
+      return "2nd Year"
+    case 3:
+      return "3rd Year"
+    case 4:
+      return "4th Year"
+    default:
+      return `${y}th Year`
+  }
+}
+
 export function HonorsWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "dean"
@@ -56,7 +71,7 @@ export function HonorsWorkspace() {
   return (
     <WorkspacePage
       title="Dean's list"
-      description="Live qualifications after all enrolled subjects have submitted or locked grades. GWA is 1.00 to 1.50; NSTP, PATHFIT, and PE do not affect it."
+      description="Live qualifications after all enrolled subjects have submitted or locked grades. GWA is 1.00 to 1.50 with a minimum of 16 units; NSTP, PATHFIT, and PE do not affect it."
       unauthorized={!authorized}
       lastUpdated={report.dataUpdatedAt}
     >
@@ -128,7 +143,7 @@ export function HonorsWorkspace() {
             <SelectItem value="all">All years</SelectItem>
             {[1, 2, 3, 4].map((y) => (
               <SelectItem key={y} value={String(y)}>
-                Year {y}
+                {formatYearLevel(y)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -155,27 +170,23 @@ export function HonorsWorkspace() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Student</TableHead>
-                    <TableHead>Program</TableHead>
                     <TableHead>Year</TableHead>
                     <TableHead>GWA</TableHead>
-                    <TableHead>GWA units</TableHead>
-                    <TableHead>Excluded</TableHead>
+                    <TableHead>Units</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.data.map((row) => (
                     <TableRow key={row.student_id}>
                       <TableCell>
-                        {row.student_number}
+                        <span className="font-medium">{row.student_name}</span>
                         <p className="text-xs text-muted-foreground">
-                          {row.student_name}
+                          {row.student_number}
                         </p>
                       </TableCell>
-                      <TableCell>{row.program_code}</TableCell>
-                      <TableCell>{row.year_level}</TableCell>
+                      <TableCell>{formatYearLevel(row.year_level)}</TableCell>
                       <TableCell>{row.gwa}</TableCell>
                       <TableCell>{row.gwa_units}</TableCell>
-                      <TableCell>{row.excluded_subject_count}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

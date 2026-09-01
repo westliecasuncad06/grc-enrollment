@@ -321,3 +321,52 @@ export function deleteAuthenticatedJson(
     signal,
   })
 }
+
+export async function getAuthenticatedBlob(
+  path: string,
+  signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
+): Promise<Blob> {
+  const headers: Record<string, string> = {
+    ...getCallerHeaders(options?.headers),
+    Accept: "application/pdf, application/octet-stream, */*",
+  }
+
+  const token = options?.token ?? provideToken()
+  if (token !== null) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  let response: Response
+  try {
+    response = await fetch(buildApiUrl(path), {
+      method: "GET",
+      headers,
+      credentials: "omit",
+      cache: "no-store",
+      signal,
+    })
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === "AbortError") {
+      throw cause
+    }
+    throw new ApiClientError({
+      kind: "connection",
+      message: "The public enrollment API could not be reached from this browser.",
+      cause,
+    })
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 && !options?.suppressUnauthorizedHandler) {
+      handleUnauthorized()
+    }
+    throw new ApiClientError({
+      kind: "http",
+      message: "Failed to download document from server.",
+      status: response.status,
+    })
+  }
+
+  return response.blob()
+}

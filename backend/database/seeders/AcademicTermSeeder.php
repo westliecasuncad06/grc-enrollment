@@ -39,6 +39,18 @@ final class AcademicTermSeeder extends Seeder
      * @var list<array{school_year: string, semester: string, status: AcademicTermStatus}>
      */
     private const TERMS = [
+        ['school_year' => '2017-2018', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2017-2018', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2018-2019', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2018-2019', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2019-2020', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2019-2020', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2020-2021', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2020-2021', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2021-2022', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2021-2022', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2022-2023', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
+        ['school_year' => '2022-2023', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
         ['school_year' => '2023-2024', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],
         ['school_year' => '2023-2024', 'semester' => '2nd', 'status' => AcademicTermStatus::Archived],
         ['school_year' => '2024-2025', 'semester' => '1st', 'status' => AcademicTermStatus::Archived],

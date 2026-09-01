@@ -1,15 +1,16 @@
-"use client"
-
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
+import { Download, Printer } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/features/components/ui/button"
 import { usePrintDocument } from "@/features/hooks/use-print-document"
+import { downloadEnrollmentDocumentPdf } from "@/features/services/enrollment-document-service"
 import { cn } from "@/features/lib/utils"
 
 /**
  * Wraps printable content in the `[data-print-region]`/`.print-document`
  * hooks `globals.css`'s `@media print` rules key on. `actions` (e.g. a
- * `PrintButton`) renders above the document and is hidden from print via
+ * `PrintButton` and `DownloadPdfButton`) renders above the document and is hidden from print via
  * `print:hidden` — same convention as everywhere else in the portal.
  */
 export function PrintDocument({
@@ -28,7 +29,7 @@ export function PrintDocument({
       {actions && (
         <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
           <h2 className="text-lg font-semibold">{title}</h2>
-          {actions}
+          <div className="flex items-center gap-2">{actions}</div>
         </div>
       )}
       <div data-print-region className={cn("print-document", className)}>
@@ -39,7 +40,7 @@ export function PrintDocument({
 }
 
 export function PrintButton({
-  label = "Print / download",
+  label = "Print COR",
 }: {
   label?: string
 }) {
@@ -47,7 +48,47 @@ export function PrintButton({
 
   return (
     <Button type="button" variant="outline" onClick={print} disabled={isPrinting}>
+      <Printer className="mr-1.5 size-4" />
       {label}
+    </Button>
+  )
+}
+
+export function DownloadPdfButton({
+  documentId,
+  documentNumber,
+  label = "Download PDF",
+}: {
+  documentId: number
+  documentNumber: string
+  label?: string
+}) {
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    try {
+      setDownloading(true)
+      await downloadEnrollmentDocumentPdf(documentId, documentNumber)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to download Certificate of Registration."
+      toast.error(message)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={handleDownload}
+      disabled={downloading}
+    >
+      <Download className="mr-1.5 size-4" />
+      {downloading ? "Downloading…" : label}
     </Button>
   )
 }

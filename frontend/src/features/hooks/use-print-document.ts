@@ -37,8 +37,13 @@ export function usePrintDocument(): { print: () => void; isPrinting: boolean } {
   const print = useCallback(() => {
     document.body.setAttribute("data-printing", "document")
     setIsPrinting(true)
-    window.print()
-    cleanupTimeout.current = setTimeout(clear, 0)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print()
+      })
+    })
+    if (cleanupTimeout.current) clearTimeout(cleanupTimeout.current)
+    cleanupTimeout.current = setTimeout(clear, 2000)
   }, [clear])
 
   return { print, isPrinting }
