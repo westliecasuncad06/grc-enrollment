@@ -59,3 +59,7 @@ Thumbs.db
 /.playwright-mcp/
 /.superpowers/
 /frontend/test-output.txt
+*.sql
+/backend/database/backups/
+/frontend/scripts/*.json
+

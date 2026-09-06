@@ -61,6 +61,7 @@ final class StudentAccountResource extends JsonResource
                 ],
                 $this->balance->entries,
             ),
+            'transactions' => $this->balance->transactions,
         ];
     }
 }

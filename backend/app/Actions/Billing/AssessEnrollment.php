@@ -54,8 +54,7 @@ final readonly class AssessEnrollment
         $assessment = Assessment::create([
             'enrollment_id' => $enrollment->id,
             'total_amount' => $computed->totalAmount,
-            'currency' => $currency,
-            'assessed_at' => now(),
+            'currency' => (string) config('fees.currency', 'PHP'),
         ]);
 
         foreach ($computed->lines as $line) {
@@ -77,6 +76,7 @@ final readonly class AssessEnrollment
      */
     private function resolveTuitionPerUnit(): string
     {
+        $key = 'fees.tuition_per_unit';
         $raw = config($key);
         $value = is_scalar($raw) ? (string) $raw : '';
 
@@ -94,7 +94,7 @@ final readonly class AssessEnrollment
     {
         $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
         $fees = [];
-
+        $raw = config('fees.miscellaneous');
         if (! is_array($raw)) {
             return $fees;
         }

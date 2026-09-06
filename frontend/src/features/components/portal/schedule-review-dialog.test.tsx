@@ -109,7 +109,7 @@ describe("ScheduleReviewDialog", () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it("groups subjects by block and shows one section at a time", async () => {
+  it("groups subjects by block, supports Calendar and Table view toggle, and shows one section at a time", async () => {
     const user = userEvent.setup()
     renderDialog()
 
@@ -117,7 +117,13 @@ describe("ScheduleReviewDialog", () => {
     expect(screen.getByText("3 subject schedules")).toBeInTheDocument()
     expect(screen.getByText("Programming 1")).toBeInTheDocument()
     expect(screen.queryByText("Data Structures")).not.toBeInTheDocument()
+
+    // Switch to Table view
+    await user.click(screen.getByRole("radio", { name: "Table view" }))
     expect(screen.getAllByText("Not assigned")).not.toHaveLength(0)
+
+    // Switch back to Calendar view
+    await user.click(screen.getByRole("radio", { name: "Calendar view" }))
 
     await user.click(screen.getByRole("tab", { name: "IT201" }))
     expect(screen.getByText("Data Structures")).toBeInTheDocument()

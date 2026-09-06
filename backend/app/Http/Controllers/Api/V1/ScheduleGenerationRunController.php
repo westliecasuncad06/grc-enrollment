@@ -40,7 +40,14 @@ final class ScheduleGenerationRunController extends Controller
                 ->first();
 
             if ($active !== null) {
-                return [$active, false];
+                if ($active->created_at !== null && $active->created_at->diffInMinutes(now()) >= 5) {
+                    $active->update([
+                        'status' => ScheduleGenerationStatus::Failed,
+                        'error_summary' => 'Previous schedule generation timed out.',
+                    ]);
+                } else {
+                    return [$active, false];
+                }
             }
 
             return [ScheduleGenerationRun::create([
@@ -52,7 +59,19 @@ final class ScheduleGenerationRunController extends Controller
         });
 
         if ($created) {
-            GenerateScheduleRecommendations::dispatch($run->id);
+            try {
+                GenerateScheduleRecommendations::dispatch($run->id);
+            } catch (\Throwable $e) {
+                $run->refresh();
+                if ($run->status === ScheduleGenerationStatus::Queued || $run->status === ScheduleGenerationStatus::Running) {
+                    $run->update([
+                        'status' => ScheduleGenerationStatus::Failed,
+                        'error_summary' => $e->getMessage(),
+                    ]);
+                }
+                report($e);
+            }
+            $run->refresh();
         }
 
         $response = (new ScheduleGenerationRunResource($run))->response($request);
@@ -86,6 +105,17 @@ final class ScheduleGenerationRunController extends Controller
         if ($run === null) {
             return response()->json(['data' => null]);
         }
+
+        if (in_array($run->status, [ScheduleGenerationStatus::Queued, ScheduleGenerationStatus::Running], true)) {
+            if ($run->created_at !== null && $run->created_at->diffInMinutes(now()) >= 5) {
+                $run->update([
+                    'status' => ScheduleGenerationStatus::Failed,
+                    'error_summary' => 'Schedule generation timed out.',
+                ]);
+                $run->refresh();
+            }
+        }
+
         $this->authorize('view', $run);
 
         return response()->json(['data' => array_merge(

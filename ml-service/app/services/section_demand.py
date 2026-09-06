@@ -62,16 +62,13 @@ class SectionDemandPredictor:
         second request-scoped Random Forest trained on the validated historic
         section counts.
         """
-        if len(observations) < self._MINIMUM_FOREST_OBSERVATIONS:
+        if not observations:
             return SectionDemandPredictionData(
                 model_version="section-demand-rf-v2",
                 feature_schema_version="v2",
                 strategy="historical_baseline",
-                metrics=self._metrics(len(observations)),
-                forecasts=[
-                    self._v2_baseline_forecast(observations[-1], target)
-                    for target in targets
-                ],
+                metrics=self._metrics(0),
+                forecasts=[],
             )
 
         features = [self._v2_observation_features(observation) for observation in observations]

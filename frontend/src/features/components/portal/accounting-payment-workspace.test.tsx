@@ -129,6 +129,7 @@ const studentAccount = {
       promissory_note_on_file: false,
     },
   ],
+  transactions: [],
 } as const
 
 const cashierPaymentCandidate = {

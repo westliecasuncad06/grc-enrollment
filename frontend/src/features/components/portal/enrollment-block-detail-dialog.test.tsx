@@ -59,7 +59,7 @@ describe("EnrollmentBlockDetailDialog", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 
-  it("is labelled by the section code and shows the full weekly schedule", async () => {
+  it("is labelled by the section code and shows the full weekly schedule defaulting to table view", async () => {
     const user = userEvent.setup()
     render(
       <EnrollmentBlockDetailDialog
@@ -70,11 +70,6 @@ describe("EnrollmentBlockDetailDialog", () => {
     )
 
     const dialog = await screen.findByRole("dialog", { name: /IT301/ })
-    expect(within(dialog).getAllByText("CS201").length).toBeGreaterThan(0)
-    expect(within(dialog).getAllByText("LAB-1").length).toBeGreaterThan(0)
-
-    // Switch to Table view
-    await user.click(within(dialog).getByRole("radio", { name: "Table view" }))
     const table = within(dialog).getByRole("table", {
       name: /weekly schedule/i,
     })
@@ -82,6 +77,11 @@ describe("EnrollmentBlockDetailDialog", () => {
       within(table).getByText("CS201 — Data Structures"),
     ).toBeInTheDocument()
     expect(within(table).getByText("LAB-1")).toBeInTheDocument()
+
+    // Switch to Calendar view
+    await user.click(within(dialog).getByRole("radio", { name: "Calendar view" }))
+    expect(within(dialog).getAllByText("CS201").length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText("LAB-1").length).toBeGreaterThan(0)
   })
 
   it("stages a choice without submitting anything", async () => {

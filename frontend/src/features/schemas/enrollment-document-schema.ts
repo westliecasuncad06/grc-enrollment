@@ -106,9 +106,15 @@ export const corSnapshotSchema = z
         total_tuition: z.string(),
         total_other_fees: z.string(),
         grand_total: z.string(),
-        payment_amount: z.string(),
+        payment_amount: z.union([z.string(), z.number()]).transform((val) => String(val)),
+        amount_paid: z.union([z.string(), z.number()]).transform((val) => String(val)).optional(),
+        remaining_balance: z.union([z.string(), z.number()]).transform((val) => String(val)).optional(),
+        payment_status: z.string().optional(),
+        payment_reference: z.string().nullable().optional(),
+        promissory_note_on_file: z.boolean().optional(),
+        confirmed_at: z.string().nullable().optional(),
       })
-      .strict(),
+      .passthrough(),
     signatories: z
       .object({ cashier: z.string().min(1), registrar: z.string().min(1) })
       .strict(),

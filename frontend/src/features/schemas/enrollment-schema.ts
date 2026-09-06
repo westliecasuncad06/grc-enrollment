@@ -244,6 +244,7 @@ const paymentConfirmationPaymentSchema = z
 
 const paymentConfirmationDocumentSchema = z
   .object({
+    id: z.number().nullable().optional(),
     document_type: z.literal("cor").nullable(),
     document_number: z.string().nullable(),
     generated_at: z.iso.datetime().nullable(),

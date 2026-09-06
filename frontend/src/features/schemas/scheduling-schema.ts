@@ -20,7 +20,7 @@ const sectionShape = {
   modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable(),
   capacity: z.number().int().min(1, "Capacity must be at least 1."),
   viability_threshold: z.number().int().min(1).nullable(),
-  status: z.enum(["planned", "published", "closed", "cancelled"]),
+  status: z.enum(["draft", "planned", "published", "closed", "cancelled"]),
   override_reason: z.string().trim().max(1000).nullable().optional(),
 }
 

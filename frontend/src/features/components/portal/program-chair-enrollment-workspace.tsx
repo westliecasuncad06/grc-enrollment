@@ -732,6 +732,13 @@ export function ProgramChairEnrollmentWorkspace({
     }))
   }, [programsQuery.data, curriculaQuery.data])
 
+  const hasMajorships = useMemo(() => {
+    // Only colleges with distinct majors (e.g. Education and Business Admin) use majorship grouping.
+    // Information Technology (CCS) and Accountancy (COA) do not have majorships.
+    if (session?.college === "ccs" || session?.college === "coa") return false
+    return availablePrograms.length > 1
+  }, [session?.college, availablePrograms.length])
+
   const [step, setStep] = useState<"year" | "review" | "subjects">("year")
   const [yearLevel, setYearLevel] = useState(1)
   const [activeYear, setActiveYear] = useState("1")
@@ -782,7 +789,10 @@ export function ProgramChairEnrollmentWorkspace({
   const latestGenerationRunQuery = useLatestScheduleGenerationRunQuery(termId)
   const generationRun = latestGenerationRunQuery.data ?? null
   const generationMutation = useMutation({
-    mutationFn: () => startScheduleGeneration(termId),
+    mutationFn: () => {
+      setError("")
+      return startScheduleGeneration(termId)
+    },
     onSuccess: (run) => {
       queryClient.setQueryData(
         latestScheduleGenerationRunQueryKey(session?.userId ?? null, termId),
@@ -797,10 +807,13 @@ export function ProgramChairEnrollmentWorkspace({
         queryKey: ["section-plans", session?.userId ?? null, termId],
       })
     },
-    onError: () =>
-      setError(
-        "The predictive schedule could not be started. Please try again.",
-      ),
+    onError: (err: unknown) => {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "The predictive schedule could not be started. Please try again."
+      setError(message)
+    },
   })
   useEffect(() => {
     if (
@@ -1835,7 +1848,7 @@ export function ProgramChairEnrollmentWorkspace({
                 </div>
 
                 {/* Majorship Filter Bar below 1st..4th year tabs */}
-                {availablePrograms.length > 1 && (
+                {hasMajorships && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
                       Majorship:
@@ -1932,7 +1945,7 @@ export function ProgramChairEnrollmentWorkspace({
                             </Button>
                           </Alert>
                         </div>
-                      ) : selectedMajorId !== "all" ? (
+                      ) : hasMajorships && selectedMajorId !== "all" ? (
                         <div className="grid gap-4">
                           {(() => {
                             const selectedProg = availablePrograms.find(
@@ -1988,7 +2001,7 @@ export function ProgramChairEnrollmentWorkspace({
                             ))
                           )}
                         </div>
-                      ) : groupsByProgram.length > 1 ? (
+                      ) : hasMajorships && groupsByProgram.length > 1 ? (
                         <div className="grid gap-6">
                           {groupsByProgram.map(({ program, groups }) => {
                             const curId =

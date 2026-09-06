@@ -38,6 +38,20 @@ const account: StudentAccount = {
       promissory_note_on_file: false,
     },
   ],
+  transactions: [
+    {
+      id: "enrollment_payment:9",
+      transaction_type: "enrollment_payment",
+      transaction_type_label: "Enrollment Confirmation Payment",
+      enrollment_id: 9,
+      academic_term_label: "2025-2026 · 2nd",
+      amount: "1000.00",
+      reference_number: "OR-EP000009",
+      cashier_name: "Cashier Staff",
+      promissory_note_on_file: true,
+      processed_at: "2026-08-01T08:00:00Z",
+    },
+  ],
 }
 
 describe("StudentAccountBalancePanel", () => {

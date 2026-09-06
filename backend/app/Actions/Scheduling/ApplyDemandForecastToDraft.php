@@ -3,6 +3,7 @@
 namespace App\Actions\Scheduling;
 
 use App\Domain\Curriculum\CurriculumStatus;
+use App\Domain\Organization\AcademicTermCollegeWorkflowStage;
 use App\Domain\Organization\CapacitySource;
 use App\Domain\Organization\SectionBlockCode;
 use App\Domain\Organization\SectionPlanStatus;
@@ -33,8 +34,12 @@ final class ApplyDemandForecastToDraft
     {
         $generationRun->loadMissing('academicTerm');
         $term = $generationRun->academicTerm;
+        $isDraftWorkflow = $term->collegeWorkflows()
+            ->where('college', $generationRun->college)
+            ->where('stage', AcademicTermCollegeWorkflowStage::SchedulePreparation)
+            ->exists();
 
-        return DB::transaction(function () use ($generationRun, $predictionRun, $term): array {
+        return DB::transaction(function () use ($generationRun, $predictionRun, $term, $isDraftWorkflow): array {
             $forecastRows = SectionDemandForecast::query()
                 ->where('prediction_run_id', $predictionRun->id)
                 ->where('academic_term_id', $term->id)
@@ -95,13 +100,20 @@ final class ApplyDemandForecastToDraft
                     ->first();
 
                 if ($plan !== null && $plan->status === SectionPlanStatus::Submitted) {
-                    $warnings[] = [
-                        'type' => ScheduleGenerationWarningType::SectionPlanSubmittedSkip->value,
-                        'message' => "Skipped submitted {$firstPlacement->year_level}th-year section plan.",
-                        'entity_id' => $firstPlacement->curriculum_id,
-                    ];
-
-                    continue;
+                    if ($isDraftWorkflow) {
+                        $plan->update([
+                            'status' => SectionPlanStatus::Draft,
+                            'submitted_by' => null,
+                            'submitted_at' => null,
+                        ]);
+                    } else {
+                        $warnings[] = [
+                            'type' => ScheduleGenerationWarningType::SectionPlanSubmittedSkip->value,
+                            'message' => "Skipped submitted {$firstPlacement->year_level}th-year section plan.",
+                            'entity_id' => $firstPlacement->curriculum_id,
+                        ];
+                        continue;
+                    }
                 }
 
                 if ($plan === null) {
@@ -126,19 +138,31 @@ final class ApplyDemandForecastToDraft
                         'recommendation_prediction_run_id' => $predictionRun->id,
                     ]);
                 } else {
-                    $plan->update([
-                        'recommendation_source' => 'predictive',
-                        'recommended_section_count' => $recommendedSectionCount,
-                        'recommendation_is_overridden' => true,
-                        'recommendation_prediction_run_id' => $predictionRun->id,
-                    ]);
-                    $warnings[] = [
-                        'type' => ScheduleGenerationWarningType::ManualSectionCountKept->value,
-                        'message' => "Kept the existing manual {$firstPlacement->year_level}th-year section count.",
-                        'entity_id' => $firstPlacement->curriculum_id,
-                    ];
+                    $hasExistingSections = Section::query()->where('section_plan_id', $plan->id)->exists();
 
-                    continue;
+                    if (! $hasExistingSections) {
+                        $plan->update([
+                            'section_count' => $recommendedSectionCount,
+                            'recommendation_source' => 'predictive',
+                            'recommended_section_count' => $recommendedSectionCount,
+                            'recommendation_is_overridden' => false,
+                            'recommendation_prediction_run_id' => $predictionRun->id,
+                        ]);
+                    } else {
+                        $plan->update([
+                            'recommendation_source' => 'predictive',
+                            'recommended_section_count' => $recommendedSectionCount,
+                            'recommendation_is_overridden' => true,
+                            'recommendation_prediction_run_id' => $predictionRun->id,
+                        ]);
+                        $warnings[] = [
+                            'type' => ScheduleGenerationWarningType::ManualSectionCountKept->value,
+                            'message' => "Kept the existing manual {$firstPlacement->year_level}th-year section count.",
+                            'entity_id' => $firstPlacement->curriculum_id,
+                        ];
+
+                        continue;
+                    }
                 }
 
                 $this->materializePredictiveBlocks(

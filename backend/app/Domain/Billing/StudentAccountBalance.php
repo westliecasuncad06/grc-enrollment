@@ -10,6 +10,7 @@ final readonly class StudentAccountBalance
      * @param  numeric-string  $priorBalance
      * @param  numeric-string  $outstandingBalance
      * @param  list<StudentAccountBalanceEntry>  $entries
+     * @param  list<array<string, mixed>>  $transactions
      */
     public function __construct(
         /** @var numeric-string */
@@ -22,5 +23,6 @@ final readonly class StudentAccountBalance
         public string $outstandingBalance,
         public bool $hasPromissoryNoteOnFile,
         public array $entries,
+        public array $transactions = [],
     ) {}
 }

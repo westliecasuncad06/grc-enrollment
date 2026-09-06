@@ -4,12 +4,15 @@ namespace App\Actions\Scheduling;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermCollegeWorkflowStage;
+use App\Domain\Organization\SectionPlanStatus;
 use App\Domain\Scheduling\FacultyLoadPlanner;
 use App\Domain\Scheduling\RoomConflictDetector;
 use App\Domain\Scheduling\ScheduleDayParser;
 use App\Domain\Scheduling\ScheduleGenerationWarningType;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionModality;
+use App\Models\AcademicTermSectionPlan;
 use App\Models\CurriculumSubject;
 use App\Models\FacultyAssignmentRecommendation;
 use App\Models\FacultyAvailability;
@@ -35,6 +38,24 @@ final class GenerateFacultyAssignmentRecommendations
     /** @return list<array{type: string, message: string, entity_id: ?int}> */
     public function execute(ScheduleGenerationRun $run): array
     {
+        $run->loadMissing('academicTerm');
+        $isDraftWorkflow = $run->academicTerm->collegeWorkflows()
+            ->where('college', $run->college)
+            ->where('stage', AcademicTermCollegeWorkflowStage::SchedulePreparation)
+            ->exists();
+
+        if ($isDraftWorkflow) {
+            AcademicTermSectionPlan::query()
+                ->where('academic_term_id', $run->academic_term_id)
+                ->where('college', $run->college)
+                ->where('status', SectionPlanStatus::Submitted)
+                ->update([
+                    'status' => SectionPlanStatus::Draft,
+                    'submitted_by' => null,
+                    'submitted_at' => null,
+                ]);
+        }
+
         $sections = Section::query()
             ->with(['sectionPlan', 'subject'])
             ->where('academic_term_id', $run->academic_term_id)
@@ -210,10 +231,12 @@ final class GenerateFacultyAssignmentRecommendations
         $isLegacyOnlineReference = $placement->reference_modality !== null
             && SectionModality::tryFrom(strtolower(str_replace(' ', '_', $placement->reference_modality))) === null;
 
+        $normalizedRefRoom = $this->normalizeRoomName($placement->reference_room);
+
         $changes = [];
         foreach ([
             'schedule_days' => $placement->reference_day,
-            'room' => $isLegacyOnlineReference ? null : $placement->reference_room,
+            'room' => $isLegacyOnlineReference ? null : $normalizedRefRoom,
         ] as $key => $value) {
             if ($section->{$key} === null && $value !== null) {
                 $changes[$key] = $value;
@@ -272,33 +295,40 @@ final class GenerateFacultyAssignmentRecommendations
      */
     private function assignConfiguredRoom(ScheduleGenerationRun $run, Section $section): ?array
     {
-        $preassignedRoom = $section->room;
+        $preassignedRoom = $this->normalizeRoomName($section->room);
+        if ($preassignedRoom !== null && $section->room !== $preassignedRoom) {
+            $section->update(['room' => $preassignedRoom]);
+            $section->refresh();
+        }
 
         if ($preassignedRoom !== null) {
-            $configured = RoomCatalogEntry::query()
+            $matchedRoom = RoomCatalogEntry::query()
                 ->where('college', $run->college)
-                ->where('name', $preassignedRoom)
+                ->where(function ($query) use ($preassignedRoom): void {
+                    $query->where('name', $preassignedRoom)
+                        ->orWhereRaw('UPPER(name) = ?', [strtoupper($preassignedRoom)]);
+                })
                 ->whereNotNull('capacity')
                 ->whereNotNull('room_type')
-                ->exists();
+                ->first();
 
-            if (! $configured) {
-                return [
-                    'type' => ScheduleGenerationWarningType::RoomMetadataIncomplete->value,
-                    'message' => "Room metadata is incomplete for section {$section->id}; review its room manually.",
-                    'entity_id' => $section->id,
-                ];
-            }
+            if ($matchedRoom !== null) {
+                if ($section->room !== $matchedRoom->name) {
+                    $section->update(['room' => $matchedRoom->name]);
+                    $section->refresh();
+                    $preassignedRoom = $matchedRoom->name;
+                }
 
-            // A room already on the section is NOT trusted on sight. It is
-            // usually `fillReferenceSchedule`'s verbatim copy of the
-            // curriculum's `reference_room`, and every block section of one
-            // subject carries the same reference room/day/time — so trusting
-            // it placed whole groups of sections in one room at one time.
-            // Keep it only when it is genuinely free; otherwise fall through
-            // and pick a real vacancy below.
-            if (! $this->roomIsOccupied($section, $preassignedRoom)) {
-                return null;
+                if (! $this->roomIsOccupied($section, $matchedRoom->name)) {
+                    return null;
+                }
+            } else {
+                // The preassigned room is not in the configured catalog (e.g. unknown room code).
+                // Rather than abandoning room placement, clear it so the catalog-matching fallback
+                // below can assign an available room of the subject's required room type.
+                $section->update(['room' => null]);
+                $section->refresh();
+                $preassignedRoom = null;
             }
         }
 
@@ -362,6 +392,42 @@ final class GenerateFacultyAssignmentRecommendations
             'message' => "No configured {$section->subject->room_requirement} room can accommodate section {$section->id}; assign a room manually.",
             'entity_id' => $section->id,
         ];
+    }
+
+    /**
+     * Normalizes room aliases and whitespace differences (e.g. LAB1 -> LAB 1, PE-ROOM -> PE ROOM)
+     * so reference data reliably matches room catalog entries.
+     */
+    private function normalizeRoomName(?string $room): ?string
+    {
+        if ($room === null) {
+            return null;
+        }
+
+        $trimmed = trim($room);
+        if ($trimmed === '' || strtoupper($trimmed) === 'ONLINE') {
+            return null;
+        }
+
+        $clean = strtoupper((string) (preg_replace('/\s+/', ' ', str_replace('-', ' ', $trimmed)) ?? $trimmed));
+
+        if (preg_match('/^LAB\s*(\d+)$/i', $clean, $matches)) {
+            return 'LAB '.$matches[1];
+        }
+
+        if (preg_match('/^COM\s*LAB\s*(\d+)$/i', $clean, $matches)) {
+            return 'COM LAB '.$matches[1];
+        }
+
+        if ($clean === 'SCIE LAB') {
+            return 'SCI LAB';
+        }
+
+        if (preg_match('/^PE\s*ROOM\s*(\d+)$/i', $clean, $matches)) {
+            return 'PE ROOM '.$matches[1];
+        }
+
+        return $clean;
     }
 
     /**

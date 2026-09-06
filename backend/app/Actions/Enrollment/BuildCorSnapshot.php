@@ -30,6 +30,17 @@ final class BuildCorSnapshot
             $items->filter(fn ($item): bool => $item->category === AssessmentItemCategory::Miscellaneous),
         );
 
+        $grandTotal = $assessment?->total_amount ?? '0.00';
+        $amountPaid = $payment?->amount ?? '0.00';
+        $diff = bcsub($grandTotal, $amountPaid, 2);
+        $remainingBalance = bccomp($diff, '0.00', 2) === -1 ? '0.00' : $diff;
+
+        $paymentStatus = match (true) {
+            $payment === null => 'unpaid',
+            bccomp($remainingBalance, '0.00', 2) === 0 => 'full_payment',
+            default => 'partial_payment',
+        };
+
         return [
             'document_title' => 'Certificate of Registration',
             'institution' => [
@@ -77,8 +88,14 @@ final class BuildCorSnapshot
                 'other_fees' => $otherFees,
                 'total_tuition' => $this->sum($tuition),
                 'total_other_fees' => $this->sum($otherFees),
-                'grand_total' => $assessment?->total_amount ?? '0.00',
-                'payment_amount' => $payment?->amount ?? '0.00',
+                'grand_total' => $grandTotal,
+                'payment_amount' => $amountPaid,
+                'amount_paid' => $amountPaid,
+                'remaining_balance' => $remainingBalance,
+                'payment_status' => $paymentStatus,
+                'payment_reference' => $payment?->external_reference,
+                'promissory_note_on_file' => (bool) ($payment?->promissory_note_on_file ?? false),
+                'confirmed_at' => $payment?->confirmed_at?->toIso8601String(),
             ],
             'signatories' => [
                 'cashier' => $payment?->confirmer?->name ?? 'Not provided',

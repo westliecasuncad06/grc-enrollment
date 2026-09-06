@@ -122,12 +122,13 @@ final class TransitionScheduleProposal
                 $sections = Section::query()
                     ->where('academic_term_id', $lockedProposal->academic_term_id)
                     ->when($lockedProposal->college !== null, fn ($query) => $query->whereHas('sectionPlan', fn ($plans) => $plans->where('college', $lockedProposal->college)))
-                    ->where('status', SectionStatus::Planned->value)
+                    ->whereIn('status', [SectionStatus::Planned->value, SectionStatus::Draft->value])
                     ->orderBy('id')
                     ->lockForUpdate()
                     ->get();
 
                 foreach ($sections as $section) {
+                    $priorStatus = $section->status->value;
                     $section->update(['status' => SectionStatus::Published]);
                     $section->refresh();
                     $publishedSectionIds[] = $section->id;
@@ -141,7 +142,7 @@ final class TransitionScheduleProposal
                         AuditAction::SECTION_PUBLISHED,
                         AuditableType::SECTION,
                         $section->id,
-                        ['status' => SectionStatus::Planned->value],
+                        ['status' => $priorStatus],
                         ['status' => SectionStatus::Published->value],
                         null,
                         $context,

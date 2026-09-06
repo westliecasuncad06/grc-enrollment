@@ -37,6 +37,7 @@ final class PaymentConfirmationResource extends JsonResource
                 'confirmed_at' => $payment?->confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             ],
             'document' => [
+                'id' => $document?->id,
                 'document_type' => $document?->document_type->value,
                 'document_number' => $document?->document_number,
                 'generated_at' => $document?->generated_at?->utc()->format('Y-m-d\TH:i:s\Z'),

@@ -91,6 +91,49 @@ final class BuildStudentAccountBalance
             );
         }
 
+        $transactions = [];
+
+        foreach ($enrollments as $enrollment) {
+            $termLabel = $enrollment->academicTerm
+                ? $enrollment->academicTerm->school_year.' · '.$enrollment->academicTerm->semester
+                : 'Current Term';
+
+            $payment = $enrollment->getRelation('payment');
+            if ($payment instanceof Payment && $payment->amount !== null) {
+                $payment->loadMissing('confirmer');
+                $transactions[] = [
+                    'id' => 'enrollment_payment:'.$payment->id,
+                    'transaction_type' => 'enrollment_payment',
+                    'transaction_type_label' => 'Enrollment Confirmation Payment',
+                    'enrollment_id' => $enrollment->id,
+                    'academic_term_label' => $termLabel,
+                    'amount' => $payment->amount,
+                    'reference_number' => $payment->external_reference ?: sprintf('OR-EP%06d', $payment->id),
+                    'cashier_name' => $payment->confirmer?->name ?? 'Cashier Staff',
+                    'promissory_note_on_file' => (bool) $payment->promissory_note_on_file,
+                    'processed_at' => $payment->confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z') ?? now()->utc()->format('Y-m-d\TH:i:s\Z'),
+                ];
+            }
+
+            foreach ($enrollment->accountPayments as $accountPayment) {
+                $accountPayment->loadMissing('receiver');
+                $transactions[] = [
+                    'id' => 'account_payment:'.$accountPayment->id,
+                    'transaction_type' => 'account_payment',
+                    'transaction_type_label' => 'Balance Settlement Payment',
+                    'enrollment_id' => $enrollment->id,
+                    'academic_term_label' => $termLabel,
+                    'amount' => $accountPayment->amount,
+                    'reference_number' => sprintf('OR-BP%06d', $accountPayment->id),
+                    'cashier_name' => $accountPayment->receiver?->name ?? 'Cashier Staff',
+                    'promissory_note_on_file' => false,
+                    'processed_at' => $accountPayment->received_at?->utc()->format('Y-m-d\TH:i:s\Z') ?? now()->utc()->format('Y-m-d\TH:i:s\Z'),
+                ];
+            }
+        }
+
+        usort($transactions, fn ($a, $b) => strcmp($b['processed_at'], $a['processed_at']));
+
         return new StudentAccountBalance(
             totalAssessed: $totalAssessed,
             totalPaid: $totalPaid,
@@ -98,6 +141,7 @@ final class BuildStudentAccountBalance
             outstandingBalance: $outstandingBalance,
             hasPromissoryNoteOnFile: $hasPromissoryNoteOnFile,
             entries: $entries,
+            transactions: $transactions,
         );
     }
 

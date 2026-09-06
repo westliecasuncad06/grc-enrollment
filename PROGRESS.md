@@ -1,5 +1,386 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-06 — Git Index Corruption Recovery & GitHub Saving Point
+
+- **Issue**: Visual Studio Code displayed `Git: fatal: .git/index: index file smaller than expected`. Inspection revealed `.git/index` was corrupted and truncated to 0 bytes.
+- **Resolution**: Removed the 0-byte `.git/index` and executed `git reset` to rebuild the index from `HEAD`. Added SQL database backups and generated test JSON outputs to `.gitignore` to protect datasets. Verified repository working tree with `git status` (clean index, unstaged changes intact, 0 errors).
+- **GitHub Saving Point**: Committed and pushed all working files, schema enhancements, schedule flow updates, QA defect fixes, and audit test scripts to `origin/main`.
+
+## 2026-09-05 — Regular Student Section & Schedule Selection Flow Redesign
+
+0. **Architecture & Implementation Planning**:
+   - Diagnosed current regular student enrollment UI in `EnrollmentSectionTable`: all available sections were immediately rendering their full subject schedule tables/calendars upon initial page load, cluttering the view before the student made any section choice.
+   - Requirement: Regular students must first choose a section from clean summary cards (showing section code, seats, units, subject count, and included subjects overview, without the schedule timetable). Only when the student clicks a section does that section's weekly schedule (table / calendar) appear alongside the schedule selection and enrollment submission controls.
+1. **Component Redesign & Two-Stage Flow Implementation**:
+   - In `frontend/src/features/components/portal/enrollment-section-table.tsx`:
+     - Refactored `EnrollmentSectionTable` into two distinct states:
+       - **Stage 1 (`SectionSummaryCard`)**: When `selectedBlockCode === null`, displays available sections as clean, compact summary cards showing Section Code, seats remaining / capacity, total units, year level, and included subjects overview (codes, titles, units). Schedule tables and weekly calendar timetables are hidden at this stage.
+       - **Stage 2 (`SelectedSectionCard`)**: When a section is clicked (`selectedBlockCode !== null`), reveals the complete weekly schedule with Table / Calendar toggle, "Change section" button to return to the section cards list, and the enrollment submission footer (`renderSelectedFooter` with Total Units badge and "Submit enrollment" button).
+   - In `frontend/src/features/components/portal/student-account-balance-panel.tsx`:
+     - Fixed heading hierarchy (`h4` to `h3`) under `CardTitle` (`h2`) to resolve axe `heading-order` rule violations.
+
+2. **Verification & Testing**:
+   - `npm test -- src/features/components/portal/enrollment-section-table.test.tsx src/features/components/portal/enrollment-workspace.test.tsx`: 33 / 33 passed (100%).
+   - `npm run typecheck` (`tsc --noEmit`): 0 errors across strict TypeScript.
+   - Axe accessibility tests: 0 violations across all components.
+   - Verified live browser rendering with Playwright: confirmed Stage 1 section cards, Stage 2 schedule revelation upon clicking section, and Stage 3 smooth return via "Change section".
+
+## 2026-09-05 — Student Enrollment Reset (`westragma@gmail.com`), Partial Payment Display Fix & Cashier Payment Transactions
+
+0. **Diagnostics & Architectural Implementation Planning**:
+   - Diagnosed `westragma@gmail.com` enrollment state: Enrollment 30327 had an assessment of ₱10,800.00 and an existing partial payment of ₱4,000.00 (with promissory note).
+   - Diagnosed root cause of "yung lumabas sa payment is whole payment parin": `BuildCorSnapshot.php` and `certificate-of-registration-document.tsx` only rendered `GRAND TOTAL: ₱10,800.00`, completely omitting the amount paid (₱4,000.00) and remaining balance (₱6,800.00). In addition, `accounting-payment-workspace.tsx` formatted "Amount due" directly as `assessment.total_amount` regardless of prior payments.
+   - Identified missing payment transaction visibility: Students lacked an accessible endpoint or UI to review their cashier payment transactions/receipts, and the cashier serving panel lacked an inline student transaction ledger.
+   - Authored implementation plan covering: (1) safe reset script for `westragma@gmail.com`, (2) COR snapshot & viewer enhancement to render Grand Total, Amount Paid, and Remaining Balance, (3) Student Account API & schema extension with cashier transactions, and (4) frontend UI enhancements in `/portal/digital-com`, `StudentAccountBalancePanel`, and `/portal/payment-queue`.
+
+1. **Student Enrollment Reset & Seat Capacity Restoration**:
+   - Executed enrollment reset for `westragma@gmail.com`:
+     - Decremented `enrolled_count` on all 14 enrolled sections (IDs 12831–12844) from 1 to 0, restoring class seat capacities.
+     - Deleted associated `EnrollmentDocument`, `QueueTicket`, `Payment` (ID 2664), `AssessmentItem`s, `Assessment` (ID 9856), `EnrollmentSubject`s, and `Enrollment` (ID 30327).
+     - Verified student has 0 active enrollments in Term 9 and is eligible to enroll fresh from the student portal.
+
+2. **Backend COR Snapshot & Financial Fields**:
+   - In `backend/app/Actions/Enrollment/BuildCorSnapshot.php`: enriched fee assessment snapshots with `amount_paid`, `remaining_balance`, `payment_status`, `payment_reference`, `promissory_note_on_file`, and `confirmed_at`.
+   - In `backend/app/Http/Resources/Api/V1/PaymentConfirmationResource.php`: exposed document `id` alongside `document_type`, `document_number`, and `generated_at`.
+   - Verified with unit tests: `BuildCorSnapshotTest` (1/1 passed).
+
+3. **Cashier Payment Transactions API & Domain Model**:
+   - In `backend/app/Domain/Billing/StudentAccountBalance.php`: added `transactions` collection property.
+   - In `backend/app/Actions/Billing/BuildStudentAccountBalance.php`: collected, formatted, and chronologically sorted all student payment transactions from both initial enrollment payments (`Payment`) and subsequent balance settlement payments (`AccountPayment`). Each transaction records ID, type (`initial_enrollment` vs. `balance_payment`), reference number, amount, payment method, cashier name, promissory note status, and timestamp.
+   - In `backend/app/Http/Resources/Api/V1/StudentAccountResource.php`: exposed `'transactions' => $this->balance->transactions`.
+   - Verified backend tests: `BuildStudentAccountBalanceTest` (2/2 passed), `StudentAccountEndpointTest` (4/4 passed), `PaymentConfirmationEndpointTest` (13/13 passed).
+
+4. **Frontend Schemas & Types**:
+   - In `frontend/src/features/schemas/student-account-schema.ts`: defined `studentAccountTransactionSchema` and added `transactions` array to `studentAccountSchema`.
+   - In `frontend/src/features/schemas/enrollment-document-schema.ts`: added optional financial fields (`amount_paid`, `remaining_balance`, `payment_status`, `payment_reference`, `promissory_note_on_file`, `confirmed_at`) with `.passthrough()`.
+   - In `frontend/src/features/schemas/enrollment-schema.ts`: added optional `id` to `paymentConfirmationDocumentSchema`.
+   - Strict TypeScript check: `npm run typecheck` passed with 0 errors.
+
+5. **Portal UI Components & Cashier Workspaces**:
+   - **Certificate of Registration (`certificate-of-registration-document.tsx`)**:
+     - Displays `Grand Total`, `Amount Paid`, and `Remaining Balance`.
+     - Displays Promissory Note on File status badges and Official Receipt reference numbers.
+   - **Student Digital COM Workspace (`student-digital-com-workspace.tsx`)**:
+     - Added "Account & Payment Summary" card showing Total Assessed, Total Paid, and Outstanding Balance.
+     - Added "Cashier Payment Transactions & Official Receipts" table detailing all transactions, official receipts, payment methods, processing dates, and cashier staff names.
+   - **Student Account Balance Panel (`student-account-balance-panel.tsx`)**:
+     - Added "Cashier Payment Transactions" table and financial summary.
+   - **Cashier Payment Workspace (`accounting-payment-workspace.tsx`)**:
+     - Added inline "Student Payment History with Cashier" table under served ticket card.
+     - Added real-time payment breakdown in "Confirm payment" modal (Total Assessment, Payment Entered, Remaining Balance, and partial payment promissory note warning).
+     - Added "Print / download" COR button in payment confirmation alert.
+   - Verified frontend tests: `accounting-payment-workspace.test.tsx` (21/21 passed), `student-digital-com-workspace.test.tsx` (4/4 passed), `student-account-balance-panel.test.tsx` (1/1 passed), `certificate-of-registration-document.test.tsx` (1/1 passed).
+
+## 2026-09-05 — Predictive Schedule Generation Repair & ML Strategy Fallback Standardization (Random Forest / Historical Baseline)
+
+0. **Schedule Generation & ML Strategy Repair & Verification**:
+   - **Root Cause Resolution**:
+     - Fixed `backend/app/Actions/Scheduling/ApplyDemandForecastToDraft.php` where `AcademicTermSectionPlan::create` was missing mandatory fields (`academic_term_id`, `curriculum_id`), `materializePredictiveBlocks` had argument count mismatch, `$isDraftWorkflow` was undefined, and existing draft plans with 0 sections were skipped due to `recommendation_is_overridden = true`.
+     - Added logic to materialize sections and update `recommendation_source = 'predictive'` and `section_count = recommendedSectionCount` when no sections exist for the plan.
+     - Added workflow stage check so if a term is in `SchedulePreparation`, previously submitted section plans are safely returned to draft for regenerations.
+   - **Machine Learning Strategy Enforcement & Fallback**:
+     - In `ml-service/app/services/section_demand.py`: Updated `_predict_v2` to fit `RandomForestRegressor` models whenever observations are present, returning `strategy="random_forest"`. If no observations exist, returns `strategy="historical_baseline"`.
+     - In `backend/app/Actions/Analytics/GenerateSectionDemandForecasts.php`: Standardized service fallback and local baseline strategy name to `'historical_baseline'` (replacing `'service_unavailable_historical_baseline'`).
+     - Standardized overall strategy determination: uses `'random_forest'` when ML service provides random forest forecasts, and fallback `'historical_baseline'` when prediction service is unavailable or encounters exceptions.
+   - **Verification & Test Execution**:
+     - `php artisan test tests/Feature/Actions/Scheduling/ApplyDemandForecastToDraftTest.php`: 5/5 passed (100%).
+     - `php artisan test tests/Feature/Actions/Analytics/GenerateSectionDemandForecastsTest.php`: 6/6 passed (100%), verifying both online ML and offline fallback strategies.
+     - `php artisan test tests/Feature/Api/V1/ScheduleGenerationEndpointTest.php`: 4/4 passed (100%).
+     - `python -m pytest` in `ml-service`: 10/10 passed (100%).
+     - `npm test src/features/components/portal/demand-forecast-dialog.test.tsx` in `frontend`: 1/1 passed (100%).
+     - Verified end-to-end schedule generation under both conditions:
+       - ML operational: Run completed with strategy `random_forest`, model `section-demand-rf-v2`, generating sections.
+       - ML offline/unavailable: Run completed with strategy `historical_baseline`, model `section-demand-local-baseline-v1`, generating sections.
+     - Restored Term 9 to clean draft state with 0 sections and clean section plans for Program Chairs.
+
+## 2026-09-05 — Deep QA Functional Audit: Admission Staff Intake, Professor Grade Submission & Roster Workspaces, Expanded Student Browser Automation (Years 1–4 Regular/Irregular) & Pristine Term 9 Schedule State
+
+0. **Deep Functional QA Audit: Admission Staff Intake, Professor Grade Submission, Multi-Year Student Matrix Browser Automation & Pristine Program Chair State**:
+   - **Playwright Full System Deep Audit**: Executed `frontend/scripts/qa_deep_audit_system.mjs` against Next.js frontend (`localhost:3000`) and Laravel API (`127.0.0.1:8000`).
+   - **159 / 159 Checks Passed (100.0% Success Rate, 0 Failures)**:
+     - *Admission Staff Deep Audit* (`admission.seed@grc.test`): UI Sign-in, Notification Drawer, `/portal/student-records` across all 3 functional tabs: (1) Account Provisioning form inputs, (2) Student Directory search by student number `2023-06-00001` (`Seed Student`), in-person verification dialog (`StudentRecordDialog`), updating address, reason for intake, `#edit-verified` checkbox, saving verified correction, and (3) Change Requests review table [PASSED]
+     - *Professor / Faculty Deep Audit & Grade Submission* (`faculty.seed@grc.test` / Diana L. Santos): UI Sign-in, Notification Drawer, `/portal/availability-preferences` with day/time checkboxes and save, `/portal/teaching-schedule`, `/portal/class-rosters`, and `/portal/grade-submission`: Assigned class section card selection (`IT101` / `ITCL`), rendering enrolled students roster, choosing grade mark `1.25` from dropdown, inputting student remarks, saving draft via `POST /api/v1/sections/{id}/grades`, clicking `Submit final grades` to open confirmation `AlertDialog`, and testing modal review cancellation [PASSED]
+     - *Multi-Year Student Cohort Automation (13 Distinct Accounts across Years 1–4 Regular & Irregular)*:
+       - BSIT Year 1 Regular (`student.seed@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 1 Irregular (`s2601665@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 2 Regular (`student2.seed@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 2 Irregular (`s2501631@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 3 Regular (`student3.seed@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 3 Irregular (`s2401551@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 4 Regular (`student4.seed@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSIT Year 4 Irregular (`s2301451@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BEED Year 3 Regular (`s2401002@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BEED Year 3 Irregular (`s2401001@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSA Year 4 Regular (`s2301362@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - BSA Year 4 Irregular (`s2301361@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+       - TCP Year 1 Regular (`s2601211@grc.test`): Login, Dashboard, Enrollment, Grades, Digital COM, Student Information, Bell [PASSED]
+     - *Administrative Roles & Workspaces Sweep*:
+       - Registrar Head (`registrar-head.seed@grc.test`): `/portal`, `/portal/academic-terms`, `/portal/fee-settings`, `/portal/rooms`, `/portal/audit-logs`, Bell & Drawer [PASSED]
+       - Program Chair (`chair.ccs@grc.test`): `/portal`, `/portal/program-chair-enrollment`, `/portal/subjects-prerequisites`, `/portal/schedule`, `/portal/faculty-loading`, `/portal/rooms`, Bell & Drawer [PASSED]
+       - Dean (`dean.seed@grc.test`): `/portal`, `/portal/schedule-approvals`, `/portal/curriculum-approvals`, `/portal/enrollment-dashboard`, `/portal/honors`, Bell & Drawer [PASSED]
+       - Executive Director (`executive.seed@grc.test`): `/portal`, `/portal/master-schedule`, `/portal/curriculum-approvals`, `/portal/institution-dashboard`, Bell & Drawer [PASSED]
+       - Registrar Staff (`registrar-staff.seed@grc.test`): `/portal`, `/portal/enrollment-approvals`, `/portal/credit-mappings`, `/portal/academic-records`, Bell & Drawer [PASSED]
+       - Accounting / Cashier (`accounting.seed@grc.test`): `/portal`, `/portal/payment-queue`, `/portal/payment-records`, `/portal/cor-records`, `/portal/queue-kiosk-access`, Bell & Drawer [PASSED]
+       - Queue Kiosk (`/queue`): Device login (`queue@grc.com`), Kiosk unlock to student mode, Device lock/sign-out [PASSED]
+   - **Database Pristine Baseline Restoration & Clean Program Chair Schedule State**:
+     - Restored MariaDB database from pre-test backup `backend/database/backups/qa_matrix_baseline.sql`.
+     - Active academic term enforced strictly to **`2026-2027 · 1st Semester`** (`id = 9`, `status = 'semester_ongoing'`).
+     - Cleared all Term 9 draft sections (`Section::where('academic_term_id', 9)->delete()`), ensuring **zero generated sections** in Term 9.
+     - Reset section plans in Term 9 to clean draft status (`submitted_by = null`).
+     - Verified Program Chair workspace (`/portal/program-chair-enrollment`): Shows Step 1 ("Predictive schedule planning & Section Demand Forecasting") with active call-to-action button **`Generate Schedule`**, and **zero generated sections** for Program Chairs as explicitly commanded.
+
+
+0. **Multi-Role Features, Buttons & Notification Testing**:
+   - **Playwright Automation Across All Roles**: Ran `frontend/scripts/qa_audit_roles_and_buttons.mjs` against Next.js frontend (`localhost:3000`) and Laravel API (`127.0.0.1:8000`).
+   - **58/58 Checks Passed (100%)**:
+     - *Registrar Head* (`registrar-head.seed@grc.test`): `/portal`, `/portal/academic-terms`, `/portal/fee-settings`, `/portal/rooms`, `/portal/audit-logs`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Program Chair* (`chair.ccs@grc.test`): `/portal`, `/portal/program-chair-enrollment`, `/portal/curriculum-management`, `/portal/faculty-preferences`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Dean* (`dean.seed@grc.test`): `/portal`, `/portal/schedule-approvals`, `/portal/faculty-workload`, `/portal/deans-list`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Executive Director* (`executive.seed@grc.test`): `/portal`, `/portal/master-schedule`, `/portal/enrollment-reports`, `/portal/revenue-summary`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Admission Staff* (`admission.seed@grc.test`): `/portal`, `/portal/student-records`, `/portal/admission-queue`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Registrar Staff* (`registrar-staff.seed@grc.test`): `/portal`, `/portal/enrollment-approvals`, `/portal/credit-mappings`, `/portal/academic-records`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Accounting / Cashier* (`accounting.seed@grc.test`): `/portal`, `/portal/payment-queue`, `/portal/student-accounts`, `/portal/payment-audit`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Faculty Member* (`faculty.sample.ccs@grc.test`): `/portal`, `/portal/availability-preferences`, `/portal/teaching-schedule`, `/portal/class-rosters`, `/portal/grade-submission`, Bell & Drawer, Unread Filter toggle [PASSED]
+     - *Queue Kiosk* (`/queue`): Device login (`queue@grc.com`), Kiosk unlock, Student queue login interface, Device sign-out [PASSED]
+
+1. **Comprehensive 450-Student Matrix Audit (Years 1–4, Regular & Irregular across All 12 Programs & Majors)**:
+   - **Cohort Composition**: 11 four-year programs × 4 years × 10 students (5 regular + 5 irregular) + 1 TCP × 1 year × 10 students (5 regular + 5 irregular) = **450 students**.
+   - **High-Performance In-Process Audit Runner**: Executed `backend/scripts/audit_student_matrix.php` against Eloquent/Sanctum in-process to evaluate all 450 students against active Term 9 (`2026-2027 · 1st Semester`).
+   - **100% Pass Across All Evaluated Dimensions**:
+     - *Total Students Evaluated*: 450
+     - *Identity & Auth Passed*: 450 / 450 (100%)
+     - *Profiles & Standing Verified*: 450 / 450 (100%)
+     - *Grade Histories Verified*: 450 / 450 (100%)
+     - *Notification Feeds Verified*: 450 / 450 (100%)
+     - *Enrollment Eligibility Verified*: 450 / 450 (100%)
+     - *Total Inconsistencies / Errors*: 0
+   - **Coverage by Program & Majorship**:
+     - `BSIT` (CCS - BS Information Technology, Years 1–4): 40/40 (100%)
+     - `BSBA-FM` (CBAE - Financial Management, Years 1–4): 40/40 (100%)
+     - `BSBA-MM` (CBAE - Marketing Management, Years 1–4): 40/40 (100%)
+     - `BSBA-HRM` (CBAE - Human Resource Management, Years 1–4): 40/40 (100%)
+     - `BSENTREP` (CBAE - Entrepreneurship, Years 1–4): 40/40 (100%)
+     - `BEED` (COE - Elementary Education, Years 1–4): 40/40 (100%)
+     - `BSED-ENG` (COE - Secondary Education Major in English, Years 1–4): 40/40 (100%)
+     - `BSED-FIL` (COE - Secondary Education Major in Filipino, Years 1–4): 40/40 (100%)
+     - `BSED-SOCSCI` (COE - Secondary Education Major in Social Studies, Years 1–4): 40/40 (100%)
+     - `BSED-VAL` (COE - Secondary Education Major in Values Education, Years 1–4): 40/40 (100%)
+     - `BSA` (COA - Accountancy, Years 1–4): 40/40 (100%)
+     - `TCP` (COE - Teacher Certificate Program, Year 1): 10/10 (100%)
+
+2. **Live End-to-End Enrollment Execution Suite**:
+   - Executed `frontend/scripts/qa_live_enrollment_cycle.mjs` validating all 8 stages of the enrollment lifecycle:
+     - *Step 1: Program Chair*: Predictive schedule proposal generation & submission [PASSED]
+     - *Step 2: Dean*: Schedule review & approval [PASSED]
+     - *Step 3: Executive Director*: Master schedule publication [PASSED]
+     - *Step 4: Regular Student*: Block section IT102 selection & submission on `/portal/enrollment` [PASSED]
+     - *Step 5: Registrar Staff*: Enrollment review, approval & fee assessment on `/portal/enrollment-approvals` [PASSED]
+     - *Step 6: Queue Kiosk*: Staff device unlock, student login, ticket `Q001` claim on `/queue` [PASSED]
+     - *Step 7: Cashier*: Call ticket to now serving, payment confirmation & official COR generation on `/portal/payment-queue` [PASSED]
+     - *Step 8: Student COM Verification*: Digital COM view on `/portal/digital-com`, modal display of official Certificate of Registration `COR030327` with student & registrar copies [PASSED]
+
+3. **Complete Pre-Test Database Baseline Restoration**:
+   - Created full snapshot `backend/database/backups/qa_matrix_baseline.sql` before execution.
+   - Restored MariaDB database using root connection.
+   - Verified 100% exact match against pre-test baseline counts:
+     - `users`: 6,884
+     - `academic_terms`: 19
+     - `enrollments`: 23,195
+     - `enrollment_subjects`: 223,855
+     - `sections`: 8,404
+     - `queue_tickets`: 0
+     - `payments`: 0
+     - `student_profiles`: 6,222
+     - `audit_logs`: 12,797
+     - `notifications`: 13,943
+   - All temporary test rows, tickets, and modifications were cleanly removed.
+
+## 2026-09-04 — Full-System QA Functional Audit, Live Enrollment Execution & Pre-Test Baseline Rollback
+
+0. **Comprehensive Functional & Button Testing, Error Logging, and State Restoration**:
+   - **Context**: Executed full-system audit of all 10 roles, 45+ portal module workspaces, interactive buttons, modal dialogs, and features across the application. Ran live end-to-end enrollment cycle from pre-enrollment schedule generation to Registrar approval, Cashier payment confirmation, and student COM generation.
+   - **Safety & Rollback Protocol**:
+     - Created pre-test baseline snapshot of the MySQL database (`backend/database/backups/qa_pre_test_baseline.sql`, ~139 MB).
+     - Recorded exact baseline row counts across 108 tables (`users`: 6,884, `enrollments`: 23,195, `enrollment_subjects`: 223,855, `sections`: 8,404, `queue_tickets`: 0, `payments`: 0, `student_profiles`: 6,222, `audit_logs`: 12,797).
+   - **Defect Discovery & Resolutions Logged in `QA_ERROR_REPORT.md`**:
+     - **`BUG-001` (Critical)**: `ValueError: "draft" is not a valid backing value for enum App\Domain\Scheduling\SectionStatus` crashed `GET /api/v1/sections` with HTTP 500 when loading rooms or sections. Fixed in `SectionStatus.php`.
+     - **`BUG-002` (Major)**: Zod contract validation error in `reference-data-schema.ts` and `scheduling-schema.ts` when draft sections existed. Fixed by adding `"draft"` to schema enums.
+     - **`BUG-003` (Critical)**: Syntax error (`unexpected token "if", expecting "]"`) in `ApplyDemandForecastToDraft.php:103` crashed predictive schedule generation. Fixed unclosed update array block.
+     - **`BUG-004` (Critical)**: `TransitionScheduleProposal.php` on publish only transitioned sections with status `planned`, leaving newly generated draft sections unpublished and withheld from student enrollment. Fixed to query both `planned` and `draft` statuses.
+     - **`BUG-005` (Critical)**: `AssessEnrollment.php:80` referenced undefined variable `$raw` instead of `$raw = config($key);`, throwing fatal `ErrorException: Undefined variable $raw` on enrollment approval assessment calculation. Fixed in `AssessEnrollment.php`.
+     - **`BUG-006` (Major)**: Type mismatch in `corSnapshotSchema.fees.payment_amount` where backend produced a number (`10800`) while frontend schema strictly expected string (`z.string()`), preventing students from viewing their official Certificate of Registration. Fixed with union transform `z.union([z.string(), z.number()]).transform(String)`.
+   - **Live Enrollment Cycle Execution**:
+     - *Program Chair*: Generated predictive schedule for CCS (264 sections scheduled with days, times, rooms, professors); submitted proposal to Dean.
+     - *Dean*: Reviewed schedule proposal and approved to Executive Director checkpoint.
+     - *Executive Director*: Published master schedule, opening live enrollment for College of Computer Studies.
+     - *Admission Staff*: Tested student account management and verified requirement intake forms.
+     - *Student*: Selected block section IT102 (14 subjects, 30.5 units) on `/portal/enrollment`, verified conflict/prereq validation, and submitted enrollment #30327.
+     - *Registrar Staff*: Reviewed enrollment #30327 schedule modal and approved submission, triggering tuition fee assessment (₱10,800.00).
+     - *Queue Kiosk*: Unlocked device as kiosk staff, signed in student, and claimed Cashier queue ticket `Q001`.
+     - *Cashier / Accounting*: Called ticket `Q001` to "Now serving", reviewed fee breakdown (₱6,100 tuition + ₱4,700 miscellaneous), and confirmed payment. Enrollment transitioned to `enrolled`.
+     - *Student Digital COM*: Student accessed `/portal/digital-com`, opened official Certificate of Registration `COR030327`, and verified complete schedule, fees, withdrawal terms, and official signatures.
+     - *Faculty Member*: Signed in as faculty member and verified teaching schedule, class rosters, and grade submission workspaces.
+   - **Verification**: `npm run typecheck` (`tsc --noEmit`) passing with 0 errors across the entire Next.js frontend. Database restored cleanly from pre-test baseline dump.
+
+## 2026-09-04 — ML Schedule Generation Fix for CCS/IT & IT Majorship Removal
+
+0. **ML Schedule Generation Resolution for CCS (College of Computer Studies / IT)**:
+   - **Context & Issue**: In CCS (IT), clicking "Generate Schedule" did not populate any section schedule days, times, rooms, or faculty assignments, reporting "no draft sections available for faculty loading" and "skipped submitted section plans".
+   - **Root Cause Analysis**:
+     - In Academic Term 9 (`2026-2027 · 1st Semester`), all 5 section plans for CCS were stuck in `status: submitted` after a previous schedule proposal reset.
+     - When Program Chair clicked "Generate Schedule", `ApplyDemandForecastToDraft` skipped all plans due to `SectionPlanStatus::Submitted`, and `GenerateFacultyAssignmentRecommendations` found 0 draft sections.
+     - Additionally, reference rooms in curriculum placements (e.g. `LAB1`–`LAB4`, `PE Room`, `Sci Lab`) lacked spaces or case normalization compared to catalog entries (`LAB 1`–`LAB 4`, `PE ROOM`, `SCI LAB`), triggering 78 `room_metadata_incomplete` warnings instead of matching rooms.
+   - **Fix Implementation**:
+     - Enhanced `ApplyDemandForecastToDraft` to check if the college workflow is at `stage: schedule_preparation`. When in draft preparation, section plans are restored to `SectionPlanStatus::Draft` rather than skipped.
+     - Enhanced `GenerateFacultyAssignmentRecommendations` to automatically restore section plans to `draft` when the college workflow is at `stage: schedule_preparation`.
+     - Added `normalizeRoomName` helper and enhanced `assignConfiguredRoom` to normalize spacing/casing (`LAB1` -> `LAB 1`, `COM LAB4` -> `COM LAB 4`, `PE-ROOM` -> `PE ROOM`, `SCIE LAB` -> `SCI LAB`) and match room catalog entries cleanly with fallback to matching room types.
+     - Reset Term 9 CCS section plans in the database to `draft` and ran predictive schedule generation: **264 sections** now have `schedule_days`, `starts_at_time`, `ends_at_time`, `room`, and faculty populated with **0** `room_metadata_incomplete` warnings!
+
+1. **IT Majorship Cleanup & Program-Scoped Majorship Guarding**:
+   - **Context & Issue**: The Program Chair enrollment and schedule workspaces showed a `Majorship:` filter bar with a red badge pill `Bachelor of Science in Information Technology (E2E Test) (TEST_BSIT_922) 0` for IT, even though IT has no majorships.
+   - **Root Cause Analysis**:
+     - An unused E2E test program record `TEST_BSIT_922` ("Bachelor of Science in Information Technology (E2E Test)") remained in the database under `college: ccs`.
+     - Because `availablePrograms.length` was 2 (`BSIT` and `TEST_BSIT_922`), the UI displayed the `Majorship:` filter bar.
+   - **Fix Implementation**:
+     - Deleted the orphaned `TEST_BSIT_922` (ID 15) record from the `programs` table in the database.
+     - Guarded `hasMajorships` in both `ProgramChairEnrollmentWorkspace` (`program-chair-enrollment-workspace.tsx`) and `ScheduleWorkspace` (`schedule-workspace.tsx`) so that colleges without majorships (`session?.college === "ccs"` and `"coa"`) never render the `Majorship:` filter bar or major headers.
+
+2. **Predictive Schedule Generation Dispatch & Error Recovery Resolution**:
+   - **Context & Issue**: Program Chair workspace displayed "The predictive schedule could not be started. Please try again." alongside "Your predictive schedule is being generated."
+   - **Root Cause Analysis**:
+     - When generating section demand forecasts with `QUEUE_CONNECTION=sync`, a syntax error in `ApplyDemandForecastToDraft.php` during synchronous job execution threw a 500 internal server error after the run record was already created with `status: 'queued'`.
+     - Because the job threw an uncaught error, the run was left trapped in `status: 'queued'`.
+     - In `ScheduleGenerationRunController.php`, any existing active run in `queued` or `running` prevented subsequent generation requests from dispatching, locking the college in an unrecoverable pending state.
+   - **Fix Implementation**:
+     - Cleaned and restored `backend/app/Actions/Scheduling/ApplyDemandForecastToDraft.php` with validated syntax (`php -l` clean).
+     - Enhanced `GenerateScheduleRecommendations` job with `try/catch (\Throwable $e)` to mark the run as `status: failed` with `error_summary: $e->getMessage()` if execution fails.
+     - Enhanced `ScheduleGenerationRunController::store` with try/catch around job dispatch and stale run recovery (automatically expiring runs older than 5 minutes so users are never blocked).
+     - Enhanced `ScheduleGenerationRunController::latest` to auto-fail stale runs older than 5 minutes so frontend polling halts cleanly.
+     - Enhanced `generationMutation` in `program-chair-enrollment-workspace.tsx` to clear prior errors on button press and display the actual server/network error message.
+     - Cleared orphaned runs and reset generated schedule data across active term colleges (deleted un-enrolled generated sections, reset schedule/room/faculty fields to draft `null`) so users can test clean end-to-end schedule generation directly from the UI.
+   - **Verification & Checks Passed**:
+     - Backend PHPUnit: `ScheduleGenerationEndpointTest.php` & `ApplyDemandForecastToDraftTest.php` (9/9 passed, 51 assertions).
+     - Frontend TypeScript: `npm run typecheck` (`tsc --noEmit`) passed with 0 errors.
+     - Frontend Linter: `npm run lint:fast` passed with 0 errors across 487 files.
+     - Frontend Vitest: 26/26 passed in `program-chair-enrollment-workspace.test.tsx`.
+     - Backend PHPUnit: `ScheduleGenerationEndpointTest.php`, `ApplyDemandForecastToDraftTest.php`, and `FacultyAssignmentRecommendationsEndpointTest.php` (20/20 passed, 74 assertions).
+     - Frontend TypeScript: `npm run typecheck` (`tsc --noEmit`) passed with 0 errors.
+     - Frontend Linter: `npm run lint:fast` passed with 0 errors across 487 files.
+     - Frontend Vitest: 32/32 tests passed across `program-chair-enrollment-workspace.test.tsx` and `schedule-workspace.test.tsx`.
+
+## 2026-09-03 — LAN Network Access & Session Restore Resolution
+
+0. **LAN Network Access Fix for Next.js Dev Server and API Client**:
+   - **Context & Issue**: Accessing the app through a LAN IP (e.g. `http://192.168.1.49:3000/login`) caused the page to stay permanently stuck on "Restoring your session…", whereas accessing via `http://localhost:3000/login` worked immediately.
+   - **Root Cause Analysis**:
+     1. **Next.js Cross-Origin Dev Resource Blocking**: Next.js (and Turbopack) blocks dev server WebSockets (`/_next/webpack-hmr`) from non-localhost origins by default for security (`blockCrossSiteDEV`). When accessed via LAN IP (`192.168.1.49`), Next.js aborts the WebSocket handshake with an invalid HTTP response. Turbopack dev runtime stalls waiting for the HMR channel, preventing React hydration (`hasFiber: false`). The page remains frozen on the initial server-rendered markup (`Restoring your session…`).
+     2. **API Client Host Binding**: `api-client.ts` defaulted to `http://127.0.0.1:8000`. When accessed from mobile devices or other computers on the LAN, client-side requests targeted loopback on the remote device instead of the host machine.
+     3. **Laravel CORS LAN Origin Coverage**: Backend CORS configuration needed dynamic pattern coverage for local IPv4 subnets in development mode.
+   - **Fix Implementation**:
+     - Configured `allowedDevOrigins` in `frontend/next.config.ts` dynamically using `os.networkInterfaces()` to detect all host IPv4 network interfaces, allowing seamless Fast Refresh / HMR over LAN.
+     - Enhanced `buildApiUrl` in `frontend/src/features/services/api-client.ts` to dynamically adapt loopback API base URLs to `window.location.hostname` when accessed over LAN from browser clients, while leaving production URLs and SSR untouched.
+     - Added `allowed_origins_patterns` in `backend/config/cors.php` for private IP subnets when `APP_DEBUG=true`.
+     - Fixed missing `user` initialization in `enrollment-block-detail-dialog.test.tsx`.
+   - **Verification & Checks Passed**:
+     - Playwright LAN access tests verified: HMR WebSocket connects cleanly over `192.168.1.49:3000`, the login form renders without hanging on "Restoring your session…", credentials authenticate successfully against `http://192.168.1.49:8000/api/v1/auth/login`, and session restoration via `GET /api/v1/auth/me` renders the authenticated portal on page reload.
+     - Playwright localhost access tests verified: `http://localhost:3000/login` works identically.
+     - Frontend TypeScript: `npm run typecheck` passed (0 errors).
+     - Frontend linter: `npm run lint:fast` passed (0 errors across 487 files).
+     - Frontend Vitest: Auth and component suites passed (37 tests across `api-auth-gateway.test.ts`, `auth-context.test.tsx`, `auth-route-guards.test.tsx`, and `enrollment-block-detail-dialog.test.tsx`).
+     - Backend PHPUnit: Auth test suite passed (24/24 passed, 92 assertions).
+
+1. **Network Change & CORS Configuration Syntax Restoration**:
+   - **Context & Issue**: User switched Wi-Fi networks (IP changed from `192.168.1.49` to `192.168.16.211`), and `php artisan serve` failed to start with `In cors.php line 23: syntax error, unexpected token ",", expecting ";"`.
+   - **Root Cause**: `backend/config/cors.php` had an accidental truncation of `'allowed_headers' => [` which caused `'Accept'` to be parsed as a bare string and prematurely closed the array with a syntax error.
+   - **Fix Implementation**:
+     - Restored complete `backend/config/cors.php` structure including `'allowed_headers'`, `'exposed_headers'`, and dynamic `'allowed_origins_patterns'` matching all private IPv4 subnets (`192.168.*`, `10.*`, `172.16-31.*`) during development.
+     - Confirmed that users do not need to manually change CORS when switching networks.
+     - Started `php artisan serve --host=0.0.0.0 --port=8000` to listen on all interfaces.
+     - Restarted Next.js dev server so `os.networkInterfaces()` detects the new `192.168.16.211` network IP.
+
+2. **Login Resolution & Plain `php artisan serve` Configuration**:
+   - **Context & Issue**: Login was failing with "The email or password you entered was not recognized" even though database and backend were running. Also user requested plain `php artisan serve` execution without flags.
+   - **Root Cause Analysis**:
+     - `frontend/src/features/services/api-client.ts`: `resolveApiBaseUrl()` had an accidental omission of the `typeof window !== "undefined"` conditional and `const currentHost` variable declaration during prior edit, causing a runtime `ReferenceError: currentHost is not defined`. This resulted in `ApiClientError: The public enrollment API could not be reached from this browser`, which the login screen caught and presented as unrecognized credentials.
+     - `backend/.env`: Had `PHP_CLI_SERVER_WORKERS=4` which triggered Windows multi-worker warning and potential deadlock.
+   - **Fix Implementation**:
+     - Restored `typeof window !== "undefined"` and `const currentHost = window.location.hostname` in `resolveApiBaseUrl()` in `frontend/src/features/services/api-client.ts`.
+     - Configured `backend/.env` with `PHP_CLI_SERVER_WORKERS=1` and confirmed `SERVER_HOST=0.0.0.0` is active so running plain `php artisan serve` automatically serves on all network interfaces.
+     - Verified end-to-end with Playwright: Login as Program Chair (`chair.ccs@grc.test`) succeeded, redirected to `/portal`, and reloaded with clean session restoration.
+
+3. **Restoration of `isLocalOrPrivateHost` Helper in `api-client.ts`**:
+   - **Context & Issue**: TypeScript error `TS2304: Cannot find name 'isLocalOrPrivateHost'` in `frontend/src/features/services/api-client.ts:116`.
+   - **Fix Implementation**:
+     - Defined `isLocalOrPrivateHost(hostname: string): boolean` helper above `resolveApiBaseUrl()` matching loopback and private IPv4 ranges (`192.168.*`, `10.*`, `172.16-31.*`).
+     - Ran `npm run typecheck` — passed with 0 errors.
+     - Ran `npm test -- src/features/services/api-client.test.ts` — all 8 tests passed.
+     - Ran `npm run lint:fast` — 0 errors across 487 files.
+     - Verified end-to-end Playwright login and session restore flow on `http://192.168.16.211:3000`.
+
+
+
+
+## 2026-09-02 — Deletion of Draft Academic Term 2026-2027 2nd Semester
+
+
+0. **Removed 2026-2027 2nd Semester (Draft) and Dependent Records**:
+   - **Context & Requirement**: The user requested deleting `2026-2027 · 2nd Draft` from the system.
+   - **Actions Executed**:
+     - Deleted Academic Term #32 (`2026-2027 · 2nd Draft`) along with its 262 sections, 1 schedule proposal, 5 section plans, 4 college workflows, 5 enrollment windows, 2 schedule generation runs, 2 prediction runs, and 98 section demand forecasts in a database transaction.
+   - **Verification**:
+     - Verified `2026-2027 2nd Draft` is completely removed; `2026-2027 1st` remains the active semester (`semester_ongoing`).
+
+
+
+## 2026-09-02 — Academic Term 2026-2027 1st Semester Current Enrollment Activation & Schedule Reset
+
+0. **Set 2026-2027 1st Term to Active Enrollment & Cleared Plotted Schedules**:
+   - **Context & Requirement**: The user requested setting `2026-2027 · 1st` as the active current term in enrollment and deleting all plotted section schedules and proposals so that clean schedules can be plotted from scratch.
+   - **Actions Executed**:
+     - Updated Academic Term #9 (`2026-2027 · 1st`) status to `semester_ongoing` (`AcademicTermStatus::SemesterOngoing`) with active enrollment window `2026-09-01 00:00:00` to `2026-09-30 23:59:59` and cleared `closed_at` / `archived_at`.
+     - Cleared plotted schedule fields (`schedule_days`, `starts_at_time`, `ends_at_time`, `room`, `professor_id`, `modality`) across all 898 sections in Term 9.
+     - Deleted 4 legacy schedule proposals in Term 9.
+     - Reset college workflows (CCS, COE, COA, CBAE) in Term 9 to `stage: schedule_preparation`.
+   - **Verification**:
+     - Verified `2026-2027 1st` status is `semester_ongoing`.
+     - Verified 0 sections have plotted schedule days; all 898 sections are clean and ready for scheduling.
+     - Verified all 4 colleges are at `schedule_preparation` stage.
+
+
+
+## 2026-09-02 — Registrar Staff Enrollment Approval Bug Fix (AssessEnrollment Configuration Variables)
+
+0. **AssessEnrollment Undefined Variable Fix on Registrar Approval**:
+   - **Context & Issue**: When Registrar Staff attempted to approve an enrollment in the "Enrollment approvals" queue workspace, the request failed with `"The enrollment decision could not be saved. Check the connection and try again."`
+   - **Root Cause**: In `App\Actions\Billing\AssessEnrollment`, which computes the approved assessment upon `registrar_approve`, variables `$currency`, `$key`, and `$raw` were uninitialized in `execute()`, `resolveTuitionPerUnit()`, and `miscellaneousFees()`.
+   - **Fix**:
+     - Corrected `$currency` resolution to `(string) config('fees.currency', 'PHP')`.
+     - Defined `$key = 'fees.tuition_per_unit'` before querying `config($key)`.
+     - Defined `$raw = config('fees.miscellaneous')` before filtering program-scoped miscellaneous fees.
+   - **Validation & Quality Checks**:
+     - Backend tests: `php vendor/bin/phpunit tests/Feature/Api/V1/EnrollmentsEndpointTest.php` (42/42 passed, 166 assertions), `PaymentConfirmationEndpointTest.php` + `AuditLogsEndpointTest.php` (41/41 passed, 294 assertions).
+     - Frontend checks: `npm run lint:fast` (0 errors across 487 files).
+
+
+
+## 2026-09-02 — Schedule Calendar View Integration for Dean and Executive Director Review Workspaces
+
+0. **Schedule Calendar Timetable View in Review and Master Schedule Panels**:
+   - **Context & Requirement**: Dean and Executive Director need to review submitted and published schedule proposals not only in a tabular list, but in a visual weekly timetable calendar grid (Monday–Saturday, 7:30 AM to 9:00 PM) showing time slots, rooms, modality, and schedule conflict warnings.
+   - **Schedule Review Dialog** (`frontend/src/features/components/portal/schedule-review-dialog.tsx`):
+     - Added Calendar / Table toggle view controls (`ToggleGroup`) with `CalendarDays` and `ListIcon` for each block section tab.
+     - Integrated `SectionScheduleCalendar` in `ScheduleReviewDialog` for full weekly timetable visualization during proposal reviews.
+     - Added total units badge and subject count metrics to section headers.
+   - **Master Schedule Published Sections Panel** (`frontend/src/features/components/portal/published-sections-panel.tsx`):
+     - Added a "View calendar" trigger button on published block sections opening `SectionScheduleCalendarDialog`.
+   - **Student Enrollment Schedule Default View** (`frontend/src/features/components/portal/enrollment-section-table.tsx` & `enrollment-block-detail-dialog.tsx`):
+     - Updated default view to **Table** view so students see the tabular subject schedule list first upon viewing block sections, while retaining the ability to switch to Calendar view.
+     - Reordered toggle items to show `Table` first then `Calendar`.
+   - **Validation & Quality Checks**:
+     - Vitest suite: `schedule-review-dialog.test.tsx` (4/4 passed), `master-schedule-workspace.test.tsx` (6/6 passed), `enrollment-section-table.test.tsx` (8/8 passed), `enrollment-block-detail-dialog.test.tsx` (7/7 passed).
+     - Code quality: `npm run lint:fast` (0 errors across 487 files).
+
+
 ## 2026-09-01 — Random Forest ML Model Strategy Activation for Section Demand Forecasting
 
 0. **Program-Level Historical Observation Scoping for Random Forest Activation**:

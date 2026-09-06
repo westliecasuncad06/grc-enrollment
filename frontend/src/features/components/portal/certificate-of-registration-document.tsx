@@ -208,6 +208,37 @@ export function CertificateOfRegistrationDocument({
             <span>GRAND TOTAL</span>
             <strong>{money(fees.grand_total, fees.currency)}</strong>
           </div>
+          <div className="mt-3 grid gap-2 rounded border bg-muted/20 p-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider">Amount Paid</span>
+              <strong className="text-sm font-semibold text-foreground">
+                {money(fees.amount_paid ?? fees.payment_amount, fees.currency)}
+              </strong>
+            </div>
+            {fees.remaining_balance !== undefined && fees.remaining_balance !== "0.00" ? (
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-destructive uppercase tracking-wider">Remaining Balance</span>
+                <strong className="text-sm font-bold text-destructive">
+                  {money(fees.remaining_balance, fees.currency)}
+                </strong>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-emerald-700 uppercase tracking-wider">Payment Status</span>
+                <strong className="text-xs font-bold text-emerald-700">PAID IN FULL</strong>
+              </div>
+            )}
+            {fees.promissory_note_on_file && (
+              <p className="text-[11px] font-medium text-amber-800">
+                * Note: Promissory note on file for remaining balance.
+              </p>
+            )}
+            {fees.payment_reference && (
+              <p className="text-[11px] text-muted-foreground">
+                Official Reference: {fees.payment_reference}
+              </p>
+            )}
+          </div>
         </section>
       </section>
 

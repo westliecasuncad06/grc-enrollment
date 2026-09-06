@@ -315,6 +315,16 @@
                                 <td>GRAND TOTAL:</td>
                                 <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['grand_total'], 2) }}</td>
                             </tr>
+                            @if (isset($snapshot['fees']['amount_paid']))
+                            <tr style="color: #047857; font-weight: bold;">
+                                <td>AMOUNT PAID:</td>
+                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['amount_paid'], 2) }}</td>
+                            </tr>
+                            <tr style="color: {{ (float)($snapshot['fees']['remaining_balance'] ?? 0) > 0 ? '#b91c1c' : '#047857' }}; font-weight: bold;">
+                                <td>REMAINING BALANCE:</td>
+                                <td class="text-right">&#8369;{{ number_format((float) ($snapshot['fees']['remaining_balance'] ?? 0), 2) }}</td>
+                            </tr>
+                            @endif
                         </table>
                     </td>
                 </tr>

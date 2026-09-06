@@ -15,6 +15,21 @@ const studentAccountEntrySchema = z
   })
   .strict()
 
+export const studentAccountTransactionSchema = z
+  .object({
+    id: z.string().min(1),
+    transaction_type: z.enum(["enrollment_payment", "account_payment"]),
+    transaction_type_label: z.string().min(1),
+    enrollment_id: z.number().int().positive(),
+    academic_term_label: z.string().min(1),
+    amount: moneySchema,
+    reference_number: z.string().min(1),
+    cashier_name: z.string().min(1),
+    promissory_note_on_file: z.boolean(),
+    processed_at: z.string().min(1),
+  })
+  .passthrough()
+
 export const studentAccountSchema = z
   .object({
     type: z.literal("student_account"),
@@ -29,6 +44,7 @@ export const studentAccountSchema = z
     outstanding_balance: moneySchema,
     has_promissory_note_on_file: z.boolean(),
     entries: z.array(studentAccountEntrySchema),
+    transactions: z.array(studentAccountTransactionSchema).default([]),
   })
   .strict()
 
@@ -42,6 +58,9 @@ export const recordStudentAccountPaymentInputSchema = z
   })
   .strict()
 
+export type StudentAccountTransaction = z.infer<
+  typeof studentAccountTransactionSchema
+>
 export type StudentAccount = z.infer<typeof studentAccountSchema>
 export type RecordStudentAccountPaymentInput = z.infer<
   typeof recordStudentAccountPaymentInputSchema

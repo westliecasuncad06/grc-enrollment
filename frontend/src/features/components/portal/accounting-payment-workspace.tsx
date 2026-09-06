@@ -1,10 +1,17 @@
 "use client"
 
 import { useState } from "react"
+import { Printer } from "lucide-react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { CertificateOfRegistrationDocument } from "@/features/components/portal/certificate-of-registration-document"
 import { DataTable } from "@/features/components/portal/data-table"
+import {
+  DownloadPdfButton,
+  PrintButton,
+  PrintDocument,
+} from "@/features/components/portal/print-document"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
@@ -15,6 +22,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/features/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -48,6 +62,7 @@ import {
   useQueueCycleQuery,
   useResumeQueueMutation,
 } from "@/features/hooks/use-queue-cycle"
+import { useCertificateOfRegistrationQuery } from "@/features/hooks/use-enrollment-documents"
 import { useCashierPaymentCandidateQuery } from "@/features/hooks/use-cashier-transactions"
 import type {
   Enrollment,
@@ -207,6 +222,12 @@ export function AccountingPaymentWorkspace() {
   const [balancePaymentAmount, setBalancePaymentAmount] = useState("")
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
+  const [viewingCorDocumentId, setViewingCorDocumentId] = useState<
+    number | null
+  >(null)
+  const corQuery = useCertificateOfRegistrationQuery(viewingCorDocumentId, {
+    enabled: viewingCorDocumentId !== null,
+  })
   const [processedEnrollmentId, setProcessedEnrollmentId] = useState<
     number | null
   >(null)
@@ -481,6 +502,28 @@ export function AccountingPaymentWorkspace() {
                       ).toLocaleString()
                     : "—"}
                 </p>
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <DownloadPdfButton
+                    documentId={lastConfirmation.document.id ?? 1}
+                    documentNumber={lastConfirmation.document.document_number}
+                    label="Print / download"
+                  />
+                  {lastConfirmation.document.id && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setViewingCorDocumentId(
+                          lastConfirmation.document.id ?? null,
+                        )
+                      }
+                    >
+                      <Printer className="mr-1.5 size-4" />
+                      View &amp; Print COR
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </AlertDescription>
@@ -688,18 +731,64 @@ export function AccountingPaymentWorkspace() {
                           <dt className="text-muted-foreground">
                             Total outstanding
                           </dt>
-                          <dd className="font-medium">
+                          <dd className={`font-semibold ${accountQuery.data.outstanding_balance !== "0.00" ? "text-destructive" : "text-emerald-600"}`}>
                             {formatPhp(accountQuery.data.outstanding_balance)}
                           </dd>
                         </div>
                         {accountQuery.data.has_promissory_note_on_file && (
                           <div className="sm:col-span-2">
-                            <Badge variant="outline">
+                            <Badge variant="outline" className="border-amber-600/40 text-amber-800 bg-amber-50 dark:bg-amber-950/20">
                               Promissory note on file
                             </Badge>
                           </div>
                         )}
                       </dl>
+                    )}
+                    {accountQuery.data?.transactions && accountQuery.data.transactions.length > 0 && (
+                      <div className="grid gap-2 pt-2 border-t">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Student Payment History with Cashier
+                        </h4>
+                        <div className="overflow-x-auto rounded-lg border">
+                          <table className="w-full text-left text-xs" aria-label="Student payment history">
+                            <thead className="bg-muted/50 text-muted-foreground">
+                              <tr>
+                                <th className="p-2">Date & Time</th>
+                                <th className="p-2">Type</th>
+                                <th className="p-2">Ref / OR</th>
+                                <th className="p-2">Cashier</th>
+                                <th className="p-2 text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {accountQuery.data.transactions.map((tx) => (
+                                <tr key={tx.id} className="hover:bg-muted/30">
+                                  <td className="p-2 text-muted-foreground">
+                                    {new Date(tx.processed_at).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 font-medium">
+                                    {tx.transaction_type_label}
+                                    {tx.promissory_note_on_file && (
+                                      <Badge variant="secondary" className="ml-1 text-[9px] py-0">
+                                        Promissory
+                                      </Badge>
+                                    )}
+                                  </td>
+                                  <td className="p-2 font-mono">
+                                    {tx.reference_number}
+                                  </td>
+                                  <td className="p-2 text-muted-foreground">
+                                    {tx.cashier_name}
+                                  </td>
+                                  <td className="p-2 text-right font-semibold">
+                                    {formatPhp(tx.amount)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     )}
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -999,6 +1088,45 @@ export function AccountingPaymentWorkspace() {
                 disabled={paymentMutation.isPending}
               />
             </Field>
+            {nowServingEnrollment?.assessment?.total_amount && (
+              <div className="grid gap-1.5 rounded-lg border bg-muted/20 p-3 text-xs">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Total Assessment:</span>
+                  <span className="font-semibold text-foreground">
+                    {formatPhp(nowServingEnrollment.assessment.total_amount)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Payment Entered:</span>
+                  <span className="font-semibold text-primary">
+                    {formatPhp(String((Number(amount) || 0).toFixed(2)))}
+                  </span>
+                </div>
+                {(() => {
+                  const assessed = Number(nowServingEnrollment.assessment.total_amount)
+                  const entered = Number(amount) || 0
+                  const remaining = Math.max(0, assessed - entered)
+                  const isPartial = entered > 0 && entered < assessed
+                  return (
+                    <>
+                      <div className="flex justify-between border-t pt-1.5 font-medium">
+                        <span className={isPartial ? "text-destructive font-semibold" : "text-muted-foreground"}>
+                          Remaining Balance:
+                        </span>
+                        <span className={isPartial ? "font-bold text-destructive" : "font-bold text-emerald-600"}>
+                          {formatPhp(String(remaining.toFixed(2)))}
+                        </span>
+                      </div>
+                      {isPartial && (
+                        <p className="text-[11px] text-amber-800 font-medium pt-1">
+                          * Note: Partial payment detected. Ensure a promissory note is on file for the remaining balance.
+                        </p>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
             <Field>
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -1109,6 +1237,50 @@ export function AccountingPaymentWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={viewingCorDocumentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingCorDocumentId(null)
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] sm:max-w-6xl print:max-h-none print:w-full print:max-w-none print:p-0 print:border-none print:shadow-none print:overflow-visible">
+          <DialogHeader className="pr-8 print:hidden">
+            <DialogTitle>Certificate of Registration</DialogTitle>
+            <DialogDescription>
+              Review or print the official Certificate of Registration.
+            </DialogDescription>
+          </DialogHeader>
+          <AsyncBoundary
+            query={{ ...corQuery, data: corQuery.data }}
+            isEmpty={(cor) => cor.snapshot === null}
+            emptyMessage="This COR is being loaded. Please try again shortly."
+            loadingLabel="Loading official COR…"
+          >
+            {(cor) =>
+              cor.snapshot !== null && (
+                <PrintDocument
+                  title={cor.document_number}
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <PrintButton label="Print COR" />
+                      <DownloadPdfButton
+                        documentId={cor.id}
+                        documentNumber={cor.document_number}
+                        label="Download PDF"
+                      />
+                    </div>
+                  }
+                >
+                  <CertificateOfRegistrationDocument
+                    cor={{ ...cor, snapshot: cor.snapshot }}
+                  />
+                </PrintDocument>
+              )
+            }
+          </AsyncBoundary>
+        </DialogContent>
+      </Dialog>
     </WorkspacePage>
   )
 }

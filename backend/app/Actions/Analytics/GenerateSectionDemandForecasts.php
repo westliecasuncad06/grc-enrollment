@@ -100,7 +100,7 @@ final class GenerateSectionDemandForecasts
                 } catch (Throwable $exception) {
                     report($exception);
                     $response = $this->localBaselineResponse($observations, $target);
-                    $strategy = 'service_unavailable_historical_baseline';
+                    $strategy = 'historical_baseline';
                     $serviceFallbackCount++;
                     $warnings[] = [
                         'type' => ScheduleGenerationWarningType::PredictionServiceUnavailable->value,
@@ -173,9 +173,7 @@ final class GenerateSectionDemandForecasts
             });
 
             $hasRandomForest = collect($forecastByCohort)->contains(fn (array $res): bool => $res['strategy'] === 'random_forest');
-            $overallStrategy = $hasRandomForest
-                ? 'random_forest'
-                : ($serviceFallbackCount === count($forecastByCohort) ? 'service_unavailable_historical_baseline' : 'historical_baseline');
+            $overallStrategy = $hasRandomForest ? 'random_forest' : 'historical_baseline';
 
             $predictionRun->update([
                 'status' => PredictionRunStatus::Succeeded,
@@ -305,7 +303,7 @@ final class GenerateSectionDemandForecasts
         return [
             'model_version' => 'section-demand-local-baseline-v1',
             'feature_schema_version' => 'v2',
-            'strategy' => 'service_unavailable_historical_baseline',
+            'strategy' => 'historical_baseline',
             'forecasts' => array_map(function (array $target) use ($latest): array {
                 $enrollmentRate = $latest['enrolled_count'] / max($latest['cohort_size'], 1);
                 $predictedDemand = round(max(0, $target['cohort_size'] * $enrollmentRate), 2);

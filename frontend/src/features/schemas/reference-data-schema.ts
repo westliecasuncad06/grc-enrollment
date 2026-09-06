@@ -103,7 +103,7 @@ export const sectionSchema = z
     // Null on rows created before block generation set the flag; the
     // enrollment pool treats null as "open to everyone".
     is_block_exclusive: z.boolean().nullable(),
-    status: z.enum(["planned", "published", "closed", "cancelled"]),
+    status: z.enum(["draft", "planned", "published", "closed", "cancelled"]),
     status_label: z.string().min(1),
   })
   .strict()

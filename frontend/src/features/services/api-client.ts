@@ -96,9 +96,49 @@ export function isApiClientError(error: unknown): error is ApiClientError {
   return error instanceof ApiClientError
 }
 
+function isLocalOrPrivateHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    /^192\.168\.\d+\.\d+$/.test(hostname) ||
+    /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(hostname)
+  )
+}
+
+function resolveApiBaseUrl(): string {
+  const configuredBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
+
+  // When loaded in a browser on a local network device (e.g. phone/tablet or other PC
+  // reaching http://192.168.x.x:3000), adapt a loopback or local development API base URL
+  // so requests target the current host machine rather than loopback or a stale IP.
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    const currentHost = window.location.hostname
+    const isLoopback =
+      currentHost === "localhost" ||
+      currentHost === "127.0.0.1" ||
+      currentHost === "::1"
+
+    if (!isLoopback) {
+      try {
+        const parsed = new URL(configuredBaseUrl)
+        if (isLocalOrPrivateHost(parsed.hostname)) {
+          parsed.hostname = currentHost
+          return parsed.toString().replace(/\/+$/, "")
+        }
+      } catch {
+        // Fall back to configuredBaseUrl if URL parsing fails
+      }
+    }
+  }
+
+  return configuredBaseUrl
+}
+
 function buildApiUrl(path: string): string {
-  const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim()
-  const baseUrl = configuredBaseUrl ?? DEFAULT_API_BASE_URL
+  const baseUrl = resolveApiBaseUrl()
 
   try {
     return new URL(path, baseUrl).toString()

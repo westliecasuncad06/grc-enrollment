@@ -13,6 +13,7 @@ namespace App\Domain\Scheduling;
  */
 enum SectionStatus: string
 {
+    case Draft = 'draft';
     case Planned = 'planned';
     case Published = 'published';
     case Closed = 'closed';
@@ -21,6 +22,7 @@ enum SectionStatus: string
     public function label(): string
     {
         return match ($this) {
+            self::Draft => 'Draft',
             self::Planned => 'Planned',
             self::Published => 'Published',
             self::Closed => 'Closed',
@@ -47,7 +49,7 @@ enum SectionStatus: string
     {
         return match ($this) {
             self::Published, self::Closed => true,
-            self::Planned, self::Cancelled => false,
+            self::Draft, self::Planned, self::Cancelled => false,
         };
     }
 }

@@ -406,6 +406,13 @@ export function ScheduleWorkspace() {
     }))
   }, [programsQuery.data, curriculaQuery.data])
 
+  const hasMajorships = useMemo(() => {
+    // Only colleges with distinct majors (e.g. Education and Business Admin) use majorship grouping.
+    // Information Technology (CCS) and Accountancy (COA) do not have majorships.
+    if (session?.college === "ccs" || session?.college === "coa") return false
+    return availablePrograms.length > 1
+  }, [session?.college, availablePrograms.length])
+
   const newestCurriculumIdByProgram = useMemo(() => {
     const map = new Map<number, number>()
     const sorted = [...(curriculaQuery.data ?? [])].sort(
@@ -838,7 +845,7 @@ export function ScheduleWorkspace() {
                   </div>
 
                   {/* Majorship Filter Bar below 1st..4th year tabs */}
-                  {availablePrograms.length > 1 && (
+                  {hasMajorships && (
                     <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
                       <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
                         Majorship:
@@ -894,7 +901,7 @@ export function ScheduleWorkspace() {
                               No generated schedule rows for {yearLabel(year)}.
                             </AlertDescription>
                           </Alert>
-                        ) : selectedMajorId !== "all" ? (
+                        ) : hasMajorships && selectedMajorId !== "all" ? (
                           <div className="grid gap-4">
                             {(() => {
                               const selectedProg = availablePrograms.find(
@@ -955,7 +962,7 @@ export function ScheduleWorkspace() {
                               ))
                             )}
                           </div>
-                        ) : groupsByProgram.length > 1 ? (
+                        ) : hasMajorships && groupsByProgram.length > 1 ? (
                           <div className="grid gap-6">
                             {groupsByProgram.map(({ program, groups }) => {
                               const progCurriculum =

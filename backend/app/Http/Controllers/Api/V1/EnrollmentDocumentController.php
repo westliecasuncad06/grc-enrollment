@@ -11,9 +11,11 @@ use App\Http\Resources\Api\V1\EnrollmentDocumentDetailResource;
 use App\Http\Resources\Api\V1\EnrollmentDocumentResource;
 use App\Models\EnrollmentDocument;
 use App\Models\User;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 final class EnrollmentDocumentController extends Controller
 {
@@ -48,6 +50,34 @@ final class EnrollmentDocumentController extends Controller
         return $this->cachePrivateResponse(
             EnrollmentDocumentDetailResource::make($enrollmentDocument)->response($request),
         );
+    }
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function downloadPdf(
+        Request $request,
+        EnrollmentDocument $enrollmentDocument,
+        BuildCorSnapshot $buildCorSnapshot,
+    ): Response {
+        $this->authenticatedUser($request);
+        $this->authorize('view', $enrollmentDocument);
+
+        $this->hydrateLegacyCorSnapshot($enrollmentDocument, $buildCorSnapshot);
+
+        $pdf = Pdf::loadView('pdf.certificate-of-registration', [
+            'document' => $enrollmentDocument,
+            'snapshot' => $enrollmentDocument->snapshot,
+        ])->setPaper('a4', 'portrait');
+
+        $documentNumber = $enrollmentDocument->certificateNumber();
+        $fileName = sprintf('COR-%s.pdf', preg_replace('/[^a-zA-Z0-9_-]/', '_', $documentNumber));
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     /**

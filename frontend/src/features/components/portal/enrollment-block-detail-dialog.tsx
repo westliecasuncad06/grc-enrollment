@@ -49,7 +49,7 @@ export function EnrollmentBlockDetailDialog({
   onChoose: (blockCode: string) => void
   disabled?: boolean
 }) {
-  const [view, setView] = useState<"calendar" | "table">("calendar")
+  const [view, setView] = useState<"calendar" | "table">("table")
   const isSelectable = block !== null && block.is_selectable && !disabled
 
   const calendarItems: SectionScheduleItem[] = useMemo(() => {
@@ -118,13 +118,13 @@ export function EnrollmentBlockDetailDialog({
                   size="sm"
                   aria-label="Section schedule layout view"
                 >
-                  <ToggleGroupItem value="calendar" aria-label="Calendar view">
-                    <CalendarDays data-icon="inline-start" aria-hidden="true" />
-                    Calendar
-                  </ToggleGroupItem>
                   <ToggleGroupItem value="table" aria-label="Table view">
                     <ListIcon data-icon="inline-start" aria-hidden="true" />
                     Table
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="calendar" aria-label="Calendar view">
+                    <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                    Calendar
                   </ToggleGroupItem>
                 </ToggleGroup>
                 <span className="text-xs text-muted-foreground">

@@ -1,9 +1,10 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ClipboardListIcon } from "lucide-react"
+import { CalendarDays, ClipboardListIcon, ListIcon } from "lucide-react"
 
 import type { UserRole } from "@/features/auth/roles"
+import { SectionScheduleCalendar } from "@/features/components/portal/section-schedule-calendar"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -38,6 +39,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/features/components/ui/table"
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/features/components/ui/toggle-group"
 import { useScheduleReviewSectionsQuery } from "@/features/hooks/use-scheduling"
 import { scheduleProposalPresentation } from "@/features/lib/schedule-status"
 import { programCodeFromSection } from "@/features/lib/section-program-code"
@@ -190,6 +195,7 @@ function ScheduleSectionTabs({
   const [activeSection, setActiveSection] = useState(
     groupedPrograms[0]?.sectionGroups[0]?.sectionCode ?? "",
   )
+  const [view, setView] = useState<"calendar" | "table">("calendar")
 
   if (groupedPrograms.length === 0)
     return (
@@ -249,17 +255,55 @@ function ScheduleSectionTabs({
                 ))}
               </TabsList>
             </div>
-            {sectionGroups.map(({ sectionCode, subjects }) => (
-              <TabsContent key={sectionCode} value={sectionCode}>
-                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-heading text-xl font-medium">{sectionCode}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {subjects.length} subject{subjects.length === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <ScheduleSubjectsTable subjects={subjects} />
-              </TabsContent>
-            ))}
+            {sectionGroups.map(({ sectionCode, subjects }) => {
+              const totalUnits = subjects.reduce((sum, s) => sum + (s.units ?? 0), 0)
+
+              return (
+                <TabsContent key={sectionCode} value={sectionCode} className="grid gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-heading text-xl font-medium">{sectionCode}</h3>
+                      <Badge variant="secondary">
+                        {subjects.length} {subjects.length === 1 ? "subject" : "subjects"}
+                      </Badge>
+                      {totalUnits > 0 && (
+                        <Badge variant="outline">{totalUnits} units</Badge>
+                      )}
+                    </div>
+
+                    <ToggleGroup
+                      type="single"
+                      value={view}
+                      onValueChange={(val) => {
+                        if (val === "calendar" || val === "table") setView(val)
+                      }}
+                      variant="outline"
+                      size="sm"
+                      aria-label="Schedule layout view"
+                    >
+                      <ToggleGroupItem value="calendar" aria-label="Calendar view">
+                        <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                        Calendar
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="table" aria-label="Table view">
+                        <ListIcon data-icon="inline-start" aria-hidden="true" />
+                        Table
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+
+                  {view === "calendar" ? (
+                    <SectionScheduleCalendar
+                      items={subjects}
+                      disabled={true}
+                      emptyMessage="No scheduled classes found for this section."
+                    />
+                  ) : (
+                    <ScheduleSubjectsTable subjects={subjects} />
+                  )}
+                </TabsContent>
+              )
+            })}
           </Tabs>
         </TabsContent>
       ))}

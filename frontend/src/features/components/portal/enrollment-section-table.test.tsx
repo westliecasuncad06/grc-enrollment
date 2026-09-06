@@ -102,9 +102,9 @@ function renderTable({
 }
 
 describe("EnrollmentSectionTable", () => {
-  it("lists every section as an inline schedule card", async () => {
+  it("lists sections as summary cards first, then reveals schedule upon selection with table and calendar views", async () => {
     const user = userEvent.setup()
-    renderTable()
+    const { rerender } = renderTable()
 
     const section = screen.getByRole("article", { name: "IT301 section" })
     expect(
@@ -120,18 +120,40 @@ describe("EnrollmentSectionTable", () => {
       within(section).getByRole("button", { name: "Choose IT301" }),
     ).toBeInTheDocument()
 
-    // Switch to Table view
-    await user.click(within(section).getByRole("radio", { name: "Table view" }))
+    // Schedule table is NOT rendered yet before a section is selected
     expect(
-      within(section).getByRole("table", { name: "IT301 schedule" }),
+      screen.queryByRole("table", { name: "IT301 schedule" }),
+    ).not.toBeInTheDocument()
+
+    // Once a section is selected, its schedule table and calendar appear
+    rerender(
+      <EnrollmentSectionTable
+        blocks={blocks}
+        selectedBlockCode="IT301"
+        onChoose={vi.fn()}
+        onChangeSection={vi.fn()}
+        disabled={false}
+        renderSelectedFooter={() => <span>Selected section actions</span>}
+      />,
+    )
+
+    const selectedSection = screen.getByRole("article", {
+      name: "IT301 section",
+    })
+    expect(
+      within(selectedSection).getByRole("table", { name: "IT301 schedule" }),
     ).toBeInTheDocument()
-    expect(within(section).getByText("Subject code")).toBeInTheDocument()
-    expect(within(section).getAllByText("Section ID")).not.toHaveLength(0)
-    expect(within(section).getAllByText("Data Structures")).not.toHaveLength(0)
+    expect(within(selectedSection).getByText("Subject code")).toBeInTheDocument()
+    expect(within(selectedSection).getAllByText("Section ID")).not.toHaveLength(0)
+    expect(within(selectedSection).getAllByText("Data Structures")).not.toHaveLength(0)
+
+    // Can switch to Calendar view
+    await user.click(within(selectedSection).getByRole("radio", { name: "Calendar view" }))
+    expect(within(selectedSection).getAllByText("CS201").length).toBeGreaterThan(0)
   })
 
   it("shows each subject's schedule in 12-hour clock time, not military time", () => {
-    renderTable()
+    renderTable({ selectedBlockCode: "IT301" })
 
     const section = screen.getByRole("article", { name: "IT301 section" })
     expect(
@@ -220,7 +242,7 @@ describe("EnrollmentSectionTable", () => {
     const { container } = render(
       <EnrollmentSectionTable
         blocks={[outOfOrder]}
-        selectedBlockCode={null}
+        selectedBlockCode="IT304"
         onChoose={vi.fn()}
         onChangeSection={vi.fn()}
         renderSelectedFooter={() => <span>Selected section actions</span>}

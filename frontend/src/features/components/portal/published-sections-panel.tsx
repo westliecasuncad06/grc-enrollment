@@ -1,11 +1,13 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { CalendarDays } from "lucide-react"
 
 import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import { SectionScheduleCalendarDialog } from "@/features/components/portal/section-schedule-calendar-dialog"
 import { StatusRegion } from "@/features/components/portal/status-region"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -150,6 +152,11 @@ export function PublishedSectionsPanel({
   const [college, setCollege] = useState<string>(ALL_VALUE)
   const [yearLevel, setYearLevel] = useState<string>(ALL_VALUE)
   const [major, setMajor] = useState<string>(ALL_VALUE)
+  const [calendarSection, setCalendarSection] = useState<{
+    sectionCode: string
+    rows: PublishedSectionRow[]
+    majorName?: string
+  } | null>(null)
 
   const rows = useMemo(() => {
     const planById = new Map(sectionPlans.map((plan) => [plan.id, plan]))
@@ -337,14 +344,31 @@ export function PublishedSectionsPanel({
         <div className="grid gap-5">
           {groups.map(({ sectionCode, rows: groupRows, major: groupMajor }) => (
             <div key={sectionCode} className="grid gap-2">
-              <div className="flex flex-wrap items-baseline gap-2">
-                <h3 className="font-heading text-lg font-medium">{sectionCode}</h3>
-                <span className="text-sm text-muted-foreground">
-                  {groupRows.length} subject{groupRows.length === 1 ? "" : "s"}
-                </span>
-                {groupMajor && (
-                  <Badge variant="outline">{majorLabel(groupMajor.name)}</Badge>
-                )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <h3 className="font-heading text-lg font-medium">{sectionCode}</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {groupRows.length} subject{groupRows.length === 1 ? "" : "s"}
+                  </span>
+                  {groupMajor && (
+                    <Badge variant="outline">{majorLabel(groupMajor.name)}</Badge>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setCalendarSection({
+                      sectionCode,
+                      rows: groupRows,
+                      majorName: groupMajor?.name,
+                    })
+                  }
+                >
+                  <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                  View calendar
+                </Button>
               </div>
               <DataTable
                 caption={`${sectionCode} schedule`}
@@ -356,6 +380,33 @@ export function PublishedSectionsPanel({
           ))}
         </div>
       )}
+
+      <SectionScheduleCalendarDialog
+        open={calendarSection !== null}
+        onOpenChange={(open) => {
+          if (!open) setCalendarSection(null)
+        }}
+        title={`${calendarSection?.sectionCode ?? ""} Schedule`}
+        subtitle={
+          calendarSection?.majorName
+            ? `${majorLabel(calendarSection.majorName)} · Published Block Section`
+            : "Published Block Section"
+        }
+        items={(calendarSection?.rows ?? []).map((row) => ({
+          id: row.section.id,
+          subject_code: row.subject?.code ?? `Section #${row.section.id}`,
+          subject_title: row.subject?.title ?? null,
+          units: row.subject?.units ?? null,
+          section_code: row.section.section_code,
+          room: row.section.room ?? null,
+          professor_name: null,
+          schedule_days: row.section.schedule_days,
+          starts_at_time: row.section.starts_at_time,
+          ends_at_time: row.section.ends_at_time,
+          modality: row.section.modality ?? null,
+        }))}
+        disabled={true}
+      />
     </div>
   )
 }

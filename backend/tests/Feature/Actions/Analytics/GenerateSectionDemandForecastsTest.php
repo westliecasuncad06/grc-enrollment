@@ -202,6 +202,7 @@ final class GenerateSectionDemandForecastsTest extends TestCase
         $this->assertSame(ScheduleGenerationStatus::Succeeded, $run->status);
         $this->assertDatabaseHas('section_demand_forecasts', ['academic_term_id' => $targetTerm->id, 'subject_id' => $subject->id, 'suggested_section_count' => 3]);
         $this->assertSame('section-demand-local-baseline-v1', $run->predictionRun->model_version);
+        $this->assertSame('historical_baseline', $run->predictionRun->metrics['strategy']);
         $this->assertContains('prediction_service_unavailable', array_column($run->warnings, 'type'));
     }
 
