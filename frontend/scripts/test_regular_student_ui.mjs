@@ -1,78 +1,90 @@
 import { chromium } from 'playwright';
+import path from 'path';
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const BASE_URL = 'http://localhost:3000';
 const ARTIFACT_DIR = 'C:/Users/Westlie Casuncad/.gemini/antigravity/brain/3b8a0109-e2e7-46a5-bff7-6a89cfc626a2';
 
-async function main() {
+async function run() {
+  console.log('Launching browser...');
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 900 }
+  });
   const page = await context.newPage();
 
-  console.log('1. Navigating to login page...');
-  await page.goto(`${BASE_URL}/login`);
-  await page.waitForLoadState('domcontentloaded');
-
+  console.log('Logging in as student.seed@grc.test...');
+  await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('input[type="email"]', { timeout: 10000 });
   await page.locator('input[type="email"]').fill('student.seed@grc.test');
   await page.locator('input[type="password"]').fill('password');
   await page.locator('button[type="submit"]').click();
+
   await page.waitForURL('**/portal**', { timeout: 15000 });
-  console.log('   ✓ Logged in as student.seed@grc.test');
+  console.log('Logged in successfully!');
 
-  console.log('2. Navigating to /portal/enrollment...');
+  console.log('Navigating to /portal/enrollment...');
   await page.goto(`${BASE_URL}/portal/enrollment`);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(2000);
 
-  // Check state 1: Section summary cards visible
-  const sectionCards = page.locator('div[role="article"]');
-  const cardCount = await sectionCards.count();
-  console.log(`   Found ${cardCount} section card(s)`);
+  // Wait for section cards or enrollment page
+  await page.waitForSelector('article[aria-label$="section"], button:has-text("Choose")', { timeout: 15000 });
+  console.log('Found section options on enrollment page!');
 
-  const initialTables = await page.locator('table').count();
-  console.log(`   Schedule tables visible initially: ${initialTables} (expected 0 or only enrollments table at bottom)`);
+  // Take Screenshot 1: Thumbnail section grid
+  const shot1Path = path.join(ARTIFACT_DIR, 'state1_section_cards.png');
+  await page.screenshot({ path: shot1Path, fullPage: true });
+  console.log(`Saved screenshot 1: ${shot1Path}`);
 
-  await page.screenshot({ path: `${ARTIFACT_DIR}/state1_section_cards.png`, fullPage: true });
-  console.log('   ✓ Screenshot saved: state1_section_cards.png');
+  // Find a selectable section button (e.g., "Choose IT101" or first available)
+  const chooseButtons = await page.$$('button:has-text("Choose")');
+  console.log(`Found ${chooseButtons.length} section buttons`);
+  if (chooseButtons.length > 0) {
+    const firstButton = chooseButtons[0];
+    const buttonText = await firstButton.innerText();
+    console.log(`Clicking button: ${buttonText}...`);
+    await firstButton.click();
 
-  // Check if there is a Choose section button
-  const chooseBtn = page.locator('button:has-text("Choose")').first();
-  if (await chooseBtn.isVisible()) {
-    const btnText = await chooseBtn.textContent();
-    console.log(`3. Clicking "${btnText?.trim()}"...`);
-    await chooseBtn.click();
-    await page.waitForTimeout(1000);
+    // Wait for the schedule list / toggle group to appear
+    await page.waitForSelector('button:has-text("Schedule list"), button:has-text("View in calendar")', { timeout: 10000 });
+    console.log('Schedule and layout toggle revealed!');
 
-    // Check state 2: Schedule table is now visible!
-    const scheduleTable = page.locator('table[aria-label*="schedule"]').first();
-    const isScheduleVisible = await scheduleTable.isVisible();
-    console.log(`   Schedule table visible now: ${isScheduleVisible} (expected true)`);
+    // Take Screenshot 2: Schedule revealed
+    const shot2Path = path.join(ARTIFACT_DIR, 'state2_schedule_revealed.png');
+    await page.screenshot({ path: shot2Path, fullPage: true });
+    console.log(`Saved screenshot 2: ${shot2Path}`);
 
-    const changeSectionBtn = page.locator('button:has-text("Change section")');
-    console.log(`   "Change section" button visible: ${await changeSectionBtn.isVisible()}`);
+    // Click "View in calendar"
+    const calendarToggle = await page.$('button:has-text("View in calendar")');
+    if (calendarToggle) {
+      console.log('Clicking "View in calendar"...');
+      await calendarToggle.click();
+      await page.waitForTimeout(500);
 
-    const submitBtn = page.locator('button:has-text("Submit enrollment")');
-    console.log(`   "Submit enrollment" button visible: ${await submitBtn.isVisible()}`);
+      // Take Screenshot 3: Calendar view
+      const shot3Path = path.join(ARTIFACT_DIR, 'state3_calendar_view.png');
+      await page.screenshot({ path: shot3Path, fullPage: true });
+      console.log(`Saved screenshot 3: ${shot3Path}`);
+    }
 
-    await page.screenshot({ path: `${ARTIFACT_DIR}/state2_schedule_revealed.png`, fullPage: true });
-    console.log('   ✓ Screenshot saved: state2_schedule_revealed.png');
+    // Click "Change section"
+    const changeSectionBtn = await page.$('button:has-text("Change section")');
+    if (changeSectionBtn) {
+      console.log('Clicking "Change section"...');
+      await changeSectionBtn.click();
+      await page.waitForSelector('button:has-text("Choose")', { timeout: 10000 });
+      console.log('Returned to section thumbnail cards!');
 
-    // Test clicking "Change section"
-    console.log('4. Testing "Change section" button...');
-    await changeSectionBtn.click();
-    await page.waitForTimeout(800);
-    const returnCardCount = await page.locator('div[role="article"]').count();
-    console.log(`   Section cards returned: ${returnCardCount > 1 || returnCardCount === cardCount}`);
-    await page.screenshot({ path: `${ARTIFACT_DIR}/state3_returned_to_sections.png`, fullPage: true });
-    console.log('   ✓ Screenshot saved: state3_returned_to_sections.png');
-  } else {
-    console.log('   Note: Student may already have an active enrollment or term is not open.');
+      // Take Screenshot 4: Returned to section thumbnail cards
+      const shot4Path = path.join(ARTIFACT_DIR, 'state4_returned_to_sections.png');
+      await page.screenshot({ path: shot4Path, fullPage: true });
+      console.log(`Saved screenshot 4: ${shot4Path}`);
+    }
   }
 
   await browser.close();
-  console.log('\nAll checks completed successfully!');
+  console.log('Browser test complete!');
 }
 
-main().catch(err => {
-  console.error('Test error:', err);
+run().catch((err) => {
+  console.error('Error running test:', err);
   process.exit(1);
 });

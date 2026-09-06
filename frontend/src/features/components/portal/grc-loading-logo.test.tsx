@@ -12,4 +12,23 @@ describe("GrcLoadingLogo", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("GRC")).toHaveAttribute("aria-hidden", "true")
   })
+
+  it("supports vertical stacked layout with custom size and fullPage container", () => {
+    render(
+      <GrcLoadingLogo
+        layout="vertical"
+        size="lg"
+        fullPage
+        label="Restoring your session…"
+      />,
+    )
+
+    const statusEl = screen.getByRole("status", {
+      name: "Restoring your session…",
+    })
+    expect(statusEl).toBeInTheDocument()
+    expect(statusEl).toHaveClass("flex-col", "text-center", "min-h-svh")
+    expect(screen.getByText("Restoring your session…")).toBeInTheDocument()
+    expect(screen.getByText("GRC")).toHaveAttribute("aria-hidden", "true")
+  })
 })

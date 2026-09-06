@@ -14,14 +14,15 @@ import {
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import { Card } from "@/features/components/ui/card"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/features/components/ui/card"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
 import { formatTimeRange } from "@/features/lib/format-time"
 import { compareBySchedule } from "@/features/lib/schedule-order"
@@ -89,10 +90,11 @@ function seatLabel(block: EnrollmentBlock) {
 }
 
 /**
- * Step 1: Section Summary Card.
- * Regular students choose a section first without the schedule timetable expanded.
+ * Step 1: Section Thumbnail Card / Button.
+ * Displays compact thumbnail options (e.g. IT101, IT102) with basic badges
+ * and a direct choice button. Schedule list and calendar are hidden until chosen.
  */
-function SectionSummaryCard({
+function SectionThumbnailCard({
   block,
   onChoose,
   disabled,
@@ -107,97 +109,76 @@ function SectionSummaryCard({
     <Card
       role="article"
       aria-label={`${block.block_code} section`}
-      className={`flex flex-col justify-between transition-all duration-200 ${
+      className={`group flex flex-col justify-between rounded-xl border p-4 text-center transition-all duration-200 ${
         isSelectable
-          ? "hover:border-primary/60 hover:shadow-sm"
-          : "opacity-85"
+          ? "hover:border-primary/80 hover:shadow-md hover:bg-muted/10 cursor-pointer"
+          : "opacity-60 cursor-not-allowed"
       }`}
+      onClick={() => {
+        if (isSelectable) onChoose(block.block_code)
+      }}
     >
-      <CardHeader className="gap-2 border-b pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <CardTitle level={2} className="text-xl font-bold">
-              {block.block_code}
-            </CardTitle>
-            <Badge variant="secondary">{seatLabel(block)}</Badge>
-            <Badge variant="outline">{block.total_units} units</Badge>
-          </div>
+      <div className="flex flex-col items-center gap-2">
+        <div className="text-2xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+          {block.block_code}
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <Badge variant="secondary">{seatLabel(block)}</Badge>
+          <Badge variant="outline">{block.total_units} units</Badge>
           <Badge variant="outline">Year {block.year_level}</Badge>
         </div>
-        <CardDescription>
-          {block.subjects.length} subject
-          {block.subjects.length === 1 ? "" : "s"} included in this section
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="grid gap-3 pt-3">
-        <div className="grid gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Included subjects
-          </span>
-          <ul className="grid gap-1.5 sm:grid-cols-2">
-            {block.subjects.map((subject) => (
-              <li
-                key={subject.section_id}
-                className="flex items-center justify-between rounded border border-border/60 bg-muted/20 px-2.5 py-1 text-xs"
-              >
-                <span className="truncate font-medium text-foreground">
-                  <span>{subject.code}</span>
-                  <span className="font-normal text-muted-foreground"> · </span>
-                  <span className="font-normal text-muted-foreground">
-                    {subject.title}
-                  </span>
-                </span>
-                <span className="ml-2 shrink-0 font-mono text-muted-foreground">
-                  {subject.units}u
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <span className="text-xs text-muted-foreground">
+          {block.subjects.length} subject{block.subjects.length === 1 ? "" : "s"}
+        </span>
 
         {block.preference_reasons.length > 0 && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             {block.preference_reasons[0]}
           </p>
         )}
 
         {!block.is_selectable && (
-          <Alert variant="destructive">
-            <AlertDescription>
+          <Alert variant="destructive" className="mt-2 text-left">
+            <AlertDescription className="text-xs">
               {block.reasons[0]?.message ??
                 "This section is not currently available for selection."}
             </AlertDescription>
           </Alert>
         )}
-      </CardContent>
+      </div>
 
-      <CardFooter className="flex justify-end border-t pt-3">
+      <div className="mt-4 border-t pt-3">
         <Button
           type="button"
           disabled={!isSelectable}
-          onClick={() => onChoose(block.block_code)}
+          className="w-full"
+          onClick={(e) => {
+            e.stopPropagation()
+            onChoose(block.block_code)
+          }}
         >
           Choose {block.block_code}
         </Button>
-      </CardFooter>
+      </div>
     </Card>
   )
 }
 
 /**
- * Step 2: Selected Section Weekly Schedule & Enrollment Submission.
- * Displayed once a student chooses a section. Renders the full timetable/table
- * and enables schedule selection & enrollment submission.
+ * Step 2: Selected Section Weekly Schedule & Enrollment Submission Modal.
+ * Opens as a responsive dialog when a student chooses a section thumbnail.
+ * Renders the full schedule (table/calendar view) and submission controls.
  */
-function SelectedSectionCard({
+function SelectedSectionModal({
   block,
-  onChangeSection,
+  open,
+  onOpenChange,
   disabled,
   renderSelectedFooter,
 }: {
   block: EnrollmentBlock
-  onChangeSection: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   disabled: boolean
   renderSelectedFooter: (block: EnrollmentBlock) => ReactNode
 }) {
@@ -222,62 +203,86 @@ function SelectedSectionCard({
   }, [block])
 
   return (
-    <Card role="article" aria-label={`${block.block_code} section`}>
-      <CardHeader className="gap-3 border-b">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <CardTitle level={2}>{block.block_code}</CardTitle>
-            <Badge variant="secondary">{seatLabel(block)}</Badge>
-            <Badge variant="outline">{block.total_units} units</Badge>
-          </div>
-          <ToggleGroup
-            type="single"
-            value={view}
-            onValueChange={(val) => {
-              if (val === "table" || val === "calendar") setView(val)
-            }}
-            variant="outline"
-            size="sm"
-            aria-label="Section schedule layout"
-          >
-            <ToggleGroupItem value="table" aria-label="Table view">
-              <ListIcon data-icon="inline-start" aria-hidden="true" />
-              Table
-            </ToggleGroupItem>
-            <ToggleGroupItem value="calendar" aria-label="Calendar view">
-              <CalendarDays data-icon="inline-start" aria-hidden="true" />
-              Calendar
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-        <CardDescription>
-          Year {block.year_level} block section · {block.subjects.length}{" "}
-          subject
-          {block.subjects.length === 1 ? "" : "s"} · Review the weekly schedule below before submitting enrollment.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4 pt-4">
-        {view === "calendar" ? (
-          <SectionScheduleCalendar items={calendarItems} disabled={disabled} />
-        ) : (
-          <SectionSchedule block={block} />
-        )}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[92dvh] max-w-5xl overflow-y-auto sm:max-w-5xl"
+        aria-describedby="selected-section-description"
+      >
+        <div role="article" aria-label={`${block.block_code} section`} className="grid gap-4">
+          <DialogHeader className="gap-3 border-b pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <DialogTitle className="text-xl font-bold">
+                  Section {block.block_code}
+                </DialogTitle>
+                <Badge variant="secondary">{seatLabel(block)}</Badge>
+                <Badge variant="outline">{block.total_units} units</Badge>
+                <Badge variant="outline">Year {block.year_level}</Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ToggleGroup
+                  type="single"
+                  value={view}
+                  onValueChange={(val) => {
+                    if (val === "table" || val === "calendar") setView(val)
+                  }}
+                  variant="outline"
+                  size="sm"
+                  aria-label="Section schedule layout"
+                >
+                  <ToggleGroupItem value="table" aria-label="Schedule list">
+                    <ListIcon data-icon="inline-start" aria-hidden="true" />
+                    Schedule list
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="calendar" aria-label="View in calendar">
+                    <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                    View in calendar
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            </div>
+            <DialogDescription id="selected-section-description">
+              Year {block.year_level} block section · {block.subjects.length}{" "}
+              subject{block.subjects.length === 1 ? "" : "s"} ·{" "}
+              {view === "calendar"
+                ? "Weekly visual timetable across Monday to Saturday."
+                : 'List of scheduled subjects with day, time, and room details. Click "View in calendar" to see the timetable.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">
-          <Button type="button" variant="outline" onClick={onChangeSection}>
-            Change section
-          </Button>
-          {renderSelectedFooter(block)}
+          <div className="grid gap-4 py-1">
+            {view === "calendar" ? (
+              <SectionScheduleCalendar items={calendarItems} disabled={disabled} />
+            ) : (
+              <SectionSchedule block={block} />
+            )}
+          </div>
+
+          <DialogFooter className="mt-2 flex-wrap items-center justify-between gap-3 border-t pt-4 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Change section
+            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="outline" className="text-sm font-semibold px-3 py-1">
+                Total units: <span className="ml-1 text-primary">{block.total_units}</span>
+              </Badge>
+              {renderSelectedFooter(block)}
+            </div>
+          </DialogFooter>
         </div>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 /**
  * Regular-student section and schedule selection.
- * Step 1: Student picks a section from available section summary cards (schedules are hidden).
- * Step 2: Clicking a section reveals its weekly schedule (table / calendar) and schedule submission controls.
+ * Step 1: Student picks a section from thumbnail boxed buttons (schedules are hidden).
+ * Step 2: Clicking a section reveals its schedule modal with table/calendar views and submission controls.
  */
 export function EnrollmentSectionTable({
   blocks,
@@ -298,27 +303,30 @@ export function EnrollmentSectionTable({
     (block) => block.block_code === selectedBlockCode,
   )
 
-  if (selectedBlock) {
-    return (
-      <SelectedSectionCard
-        block={selectedBlock}
-        onChangeSection={onChangeSection}
-        disabled={disabled}
-        renderSelectedFooter={renderSelectedFooter}
-      />
-    )
-  }
-
   return (
-    <div className="grid gap-4">
-      {blocks.map((block) => (
-        <SectionSummaryCard
-          key={block.block_code}
-          block={block}
-          onChoose={onChoose}
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {blocks.map((block) => (
+          <SectionThumbnailCard
+            key={block.block_code}
+            block={block}
+            onChoose={onChoose}
+            disabled={disabled}
+          />
+        ))}
+      </div>
+
+      {selectedBlock && (
+        <SelectedSectionModal
+          block={selectedBlock}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) onChangeSection()
+          }}
           disabled={disabled}
+          renderSelectedFooter={renderSelectedFooter}
         />
-      ))}
-    </div>
+      )}
+    </>
   )
 }

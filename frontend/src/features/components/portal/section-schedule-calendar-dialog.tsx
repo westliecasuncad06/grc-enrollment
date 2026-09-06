@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CalendarDays, ListIcon } from "lucide-react"
+import { CalendarDays, ListIcon, PencilLine } from "lucide-react"
 
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -36,6 +36,11 @@ interface SectionScheduleCalendarDialogProps {
   items: readonly SectionScheduleItem[]
   onSelectSubject?: (item: SectionScheduleItem) => void
   disabled?: boolean
+  defaultView?: "calendar" | "table"
+  /** Custom label for subject action button, e.g. "Edit" or a function */
+  actionLabel?: string | ((item: SectionScheduleItem) => string)
+  /** Callback to check if a specific item's action button should be disabled */
+  isItemDisabled?: (item: SectionScheduleItem) => boolean
   /** Optional action button rendered in the footer (e.g. Choose Section button for students) */
   footerAction?: React.ReactNode
 }
@@ -48,9 +53,12 @@ export function SectionScheduleCalendarDialog({
   items,
   onSelectSubject,
   disabled = false,
+  defaultView = "table",
+  actionLabel,
+  isItemDisabled,
   footerAction,
 }: SectionScheduleCalendarDialogProps) {
-  const [view, setView] = useState<"calendar" | "table">("calendar")
+  const [view, setView] = useState<"calendar" | "table">(defaultView)
 
   const totalUnits = useMemo(
     () => items.reduce((sum, item) => sum + (item.units ?? 0), 0),
@@ -81,20 +89,20 @@ export function SectionScheduleCalendarDialog({
               size="sm"
               aria-label="Schedule layout view"
             >
-              <ToggleGroupItem value="calendar" aria-label="Calendar view">
-                <CalendarDays data-icon="inline-start" aria-hidden="true" />
-                Calendar
-              </ToggleGroupItem>
               <ToggleGroupItem value="table" aria-label="Table view">
                 <ListIcon data-icon="inline-start" aria-hidden="true" />
-                Table
+                Schedule list
+              </ToggleGroupItem>
+              <ToggleGroupItem value="calendar" aria-label="Calendar view">
+                <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                View in calendar
               </ToggleGroupItem>
             </ToggleGroup>
 
             <span className="text-xs text-muted-foreground">
               {view === "calendar"
-                ? "Click any class card to inspect or adjust schedule."
-                : "Weekly class list in tabular format."}
+                ? "Weekly visual timetable across Monday to Saturday."
+                : "Weekly class list in tabular format. Click \"View in calendar\" to see the timetable."}
             </span>
           </div>
 
@@ -112,6 +120,7 @@ export function SectionScheduleCalendarDialog({
                     <TableHead>Subject code</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Units</TableHead>
+                    <TableHead>Sched ID</TableHead>
                     <TableHead>Day(s)</TableHead>
                     <TableHead>Time</TableHead>
                     <TableHead>Room</TableHead>
@@ -121,40 +130,60 @@ export function SectionScheduleCalendarDialog({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-semibold">{item.subject_code}</TableCell>
-                      <TableCell>{item.subject_title ?? "—"}</TableCell>
-                      <TableCell>{item.units ?? "—"}</TableCell>
-                      <TableCell>{item.schedule_days ?? "—"}</TableCell>
-                      <TableCell>
-                        {item.starts_at_time && item.ends_at_time
-                          ? formatTimeRange12(item.starts_at_time, item.ends_at_time)
-                          : "—"}
-                      </TableCell>
-                      <TableCell>{item.room ?? "—"}</TableCell>
-                      <TableCell>{item.professor_name ?? "Unassigned"}</TableCell>
-                      <TableCell>
-                        {item.modality ? modalityLabel[item.modality] ?? item.modality : "—"}
-                      </TableCell>
-                      {onSelectSubject && (
-                        <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={disabled}
-                            onClick={() => onSelectSubject(item)}
-                          >
-                            Assign schedule
-                          </Button>
+                  {items.map((item) => {
+                    const itemDisabled = disabled || (isItemDisabled ? isItemDisabled(item) : false)
+                    const label = typeof actionLabel === "function" ? actionLabel(item) : (actionLabel ?? "Assign schedule")
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-semibold">{item.subject_code}</TableCell>
+                        <TableCell>{item.subject_title ?? "—"}</TableCell>
+                        <TableCell>{item.units ?? "—"}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{item.id}</TableCell>
+                        <TableCell>{item.schedule_days ?? "—"}</TableCell>
+                        <TableCell>
+                          {item.starts_at_time && item.ends_at_time
+                            ? formatTimeRange12(item.starts_at_time, item.ends_at_time)
+                            : "—"}
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        <TableCell>{item.room ?? "—"}</TableCell>
+                        <TableCell>
+                          {item.professor_name ? (
+                            item.professor_name
+                          ) : (
+                            <Badge variant="destructive" className="text-xs font-normal">
+                              Unassigned
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.modality ? (
+                            <Badge variant="secondary" className="text-xs font-normal">
+                              {modalityLabel[item.modality] ?? item.modality.toUpperCase()}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        {onSelectSubject && (
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={itemDisabled}
+                              onClick={() => onSelectSubject(item)}
+                            >
+                              <PencilLine data-icon="inline-start" className="size-3.5" />
+                              {label}
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    )
+                  })}
                   {items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={onSelectSubject ? 10 : 9} className="py-8 text-center text-muted-foreground">
                         No subjects found for this section.
                       </TableCell>
                     </TableRow>

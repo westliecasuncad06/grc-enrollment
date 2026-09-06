@@ -256,9 +256,13 @@ describe("MasterScheduleWorkspace", () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(/ENG101/)).not.toBeInTheDocument()
     await user.click(screen.getByRole("tab", { name: "Published" }))
-    const table = await screen.findByRole("table", { name: "A schedule" })
-    expect(within(table).getByText(/ENG101/)).toBeInTheDocument()
+    const sectionCard = await screen.findByRole("article", { name: "A section" })
+    expect(sectionCard).toBeInTheDocument()
+    await user.click(within(sectionCard).getByRole("button", { name: "View schedule" }))
+    const dialog = await screen.findByRole("dialog", { name: /A Schedule/i })
+    expect(within(dialog).getByText(/ENG101/)).toBeInTheDocument()
     expect(screen.queryByText("B")).not.toBeInTheDocument()
+    await user.click(within(dialog).getAllByRole("button", { name: "Close" })[0])
   })
 
   it("filters published sections by College and Year buttons", async () => {
@@ -275,16 +279,16 @@ describe("MasterScheduleWorkspace", () => {
       },
     })
     await user.click(await screen.findByRole("tab", { name: "Published" }))
-    within(await screen.findByRole("table", { name: "A schedule" })).getByText(/ENG101/)
-    within(await screen.findByRole("table", { name: "C schedule" })).getByText(/ACC101/)
+    expect(await screen.findByRole("article", { name: "A section" })).toBeInTheDocument()
+    expect(await screen.findByRole("article", { name: "C section" })).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "COA" }))
-    expect(screen.queryByRole("table", { name: "A schedule" })).not.toBeInTheDocument()
-    within(await screen.findByRole("table", { name: "C schedule" })).getByText(/ACC101/)
+    expect(screen.queryByRole("article", { name: "A section" })).not.toBeInTheDocument()
+    expect(await screen.findByRole("article", { name: "C section" })).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "CCS" }))
-    within(await screen.findByRole("table", { name: "A schedule" })).getByText(/ENG101/)
-    expect(screen.queryByRole("table", { name: "C schedule" })).not.toBeInTheDocument()
+    expect(await screen.findByRole("article", { name: "A section" })).toBeInTheDocument()
+    expect(screen.queryByRole("article", { name: "C section" })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "4th Year" }))
     expect(
@@ -292,7 +296,7 @@ describe("MasterScheduleWorkspace", () => {
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "1st Year" }))
-    within(await screen.findByRole("table", { name: "A schedule" })).getByText(/ENG101/)
+    expect(await screen.findByRole("article", { name: "A section" })).toBeInTheDocument()
   })
 
   it("shows executive decision controls even when no sections are published yet", async () => {

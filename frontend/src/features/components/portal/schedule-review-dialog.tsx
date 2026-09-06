@@ -1,13 +1,14 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CalendarDays, ClipboardListIcon, ListIcon } from "lucide-react"
+import { CalendarDays, ClipboardListIcon } from "lucide-react"
 
 import type { UserRole } from "@/features/auth/roles"
-import { SectionScheduleCalendar } from "@/features/components/portal/section-schedule-calendar"
+import { SectionScheduleCalendarDialog } from "@/features/components/portal/section-schedule-calendar-dialog"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import { Card } from "@/features/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -31,18 +32,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/features/components/ui/tabs"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/features/components/ui/toggle-group"
 import { useScheduleReviewSectionsQuery } from "@/features/hooks/use-scheduling"
 import { scheduleProposalPresentation } from "@/features/lib/schedule-status"
 import { programCodeFromSection } from "@/features/lib/section-program-code"
@@ -78,72 +67,6 @@ function isReturnAction(action: ScheduleAction) {
   return action === "dean_return" || action === "executive_return"
 }
 
-function valueOrNotAssigned(value: string | null) {
-  const normalized = value?.trim()
-  if (!normalized) return "Not assigned"
-
-  return normalized
-}
-
-function formatMeeting(section: ScheduleReviewSection) {
-  if (
-    !section.schedule_days ||
-    !section.starts_at_time ||
-    !section.ends_at_time
-  )
-    return "Not assigned"
-
-  return `${section.schedule_days} · ${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
-}
-
-function modalityLabel(modality: ScheduleReviewSection["modality"]) {
-  if (!modality) return "Not assigned"
-
-  return modality.replaceAll("_", " ").toUpperCase()
-}
-
-function ScheduleSubjectsTable({
-  subjects,
-}: {
-  subjects: readonly ScheduleReviewSection[]
-}) {
-  return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Subject</TableHead>
-            <TableHead>Modality</TableHead>
-            <TableHead>Professor</TableHead>
-            <TableHead>Units</TableHead>
-            <TableHead>Schedule</TableHead>
-            <TableHead>Room</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {subjects.map((section) => (
-            <TableRow key={section.id}>
-              <TableCell>
-                <div className="font-medium">{section.subject_code}</div>
-                <div className="text-muted-foreground">{section.subject_title}</div>
-              </TableCell>
-              <TableCell>
-                <Badge variant={section.modality ? "secondary" : "outline"}>
-                  {modalityLabel(section.modality)}
-                </Badge>
-              </TableCell>
-              <TableCell>{valueOrNotAssigned(section.professor_name)}</TableCell>
-              <TableCell>{section.units}</TableCell>
-              <TableCell>{formatMeeting(section)}</TableCell>
-              <TableCell>{valueOrNotAssigned(section.room)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
-
 function ScheduleReviewLoading() {
   return (
     <div className="grid gap-3" role="status" aria-label="Loading submitted schedule">
@@ -161,9 +84,11 @@ function ScheduleReviewLoading() {
 function ScheduleSectionTabs({
   proposalId,
   sections,
+  collegeLabel,
 }: {
   proposalId: number
   sections: readonly ScheduleReviewSection[]
+  collegeLabel?: string
 }) {
   const groupedPrograms = useMemo(() => {
     const bySection = new Map<string, ScheduleReviewSection[]>()
@@ -189,13 +114,14 @@ function ScheduleSectionTabs({
       .sort(([left], [right]) => collator.compare(left, right))
       .map(([program, sectionGroups]) => ({ program, sectionGroups }))
   }, [sections])
+
   const [activeProgram, setActiveProgram] = useState(
     groupedPrograms[0]?.program ?? "",
   )
-  const [activeSection, setActiveSection] = useState(
-    groupedPrograms[0]?.sectionGroups[0]?.sectionCode ?? "",
-  )
-  const [view, setView] = useState<"calendar" | "table">("calendar")
+  const [viewingSection, setViewingSection] = useState<{
+    sectionCode: string
+    subjects: readonly ScheduleReviewSection[]
+  } | null>(null)
 
   if (groupedPrograms.length === 0)
     return (
@@ -216,98 +142,90 @@ function ScheduleSectionTabs({
     )
 
   return (
-    <Tabs
-      key={proposalId}
-      value={activeProgram}
-      onValueChange={(program) => {
-        setActiveProgram(program)
-        setActiveSection(
-          groupedPrograms.find((group) => group.program === program)
-            ?.sectionGroups[0]?.sectionCode ?? "",
-        )
-      }}
-      className="min-w-0 gap-4"
-    >
-      <div className="overflow-x-auto pb-1">
-        <TabsList aria-label="Programs" className="min-w-max">
-          {groupedPrograms.map(({ program, sectionGroups }) => (
-            <TabsTrigger key={program} value={program}>
-              {program}
-              <Badge variant="outline" aria-hidden="true">
-                {sectionGroups.length}
-              </Badge>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </div>
-      {groupedPrograms.map(({ program, sectionGroups }) => (
-        <TabsContent key={program} value={program}>
-          <Tabs value={activeSection} onValueChange={setActiveSection} className="min-w-0 gap-4">
-            <div className="overflow-x-auto pb-1">
-              <TabsList aria-label={`${program} block sections`} className="min-w-max">
-                {sectionGroups.map(({ sectionCode, subjects }) => (
-                  <TabsTrigger key={sectionCode} value={sectionCode}>
-                    {sectionCode}
-                    <Badge variant="outline" aria-hidden="true">
-                      {subjects.length}
-                    </Badge>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-            {sectionGroups.map(({ sectionCode, subjects }) => {
-              const totalUnits = subjects.reduce((sum, s) => sum + (s.units ?? 0), 0)
+    <>
+      <Tabs
+        key={proposalId}
+        value={activeProgram}
+        onValueChange={setActiveProgram}
+        className="min-w-0 gap-4"
+      >
+        <div className="overflow-x-auto pb-1">
+          <TabsList aria-label="Programs" className="min-w-max">
+            {groupedPrograms.map(({ program, sectionGroups }) => (
+              <TabsTrigger key={program} value={program}>
+                {program}
+                <Badge variant="outline" aria-hidden="true">
+                  {sectionGroups.length}
+                </Badge>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+        {groupedPrograms.map(({ program, sectionGroups }) => (
+          <TabsContent key={program} value={program} className="grid gap-4 pt-1">
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {sectionGroups.map(({ sectionCode, subjects }) => {
+                const totalUnits = subjects.reduce((sum, s) => sum + (s.units ?? 0), 0)
 
-              return (
-                <TabsContent key={sectionCode} value={sectionCode} className="grid gap-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-heading text-xl font-medium">{sectionCode}</h3>
-                      <Badge variant="secondary">
-                        {subjects.length} {subjects.length === 1 ? "subject" : "subjects"}
-                      </Badge>
-                      {totalUnits > 0 && (
-                        <Badge variant="outline">{totalUnits} units</Badge>
-                      )}
+                return (
+                  <Card
+                    key={sectionCode}
+                    role="article"
+                    aria-label={`${sectionCode} section`}
+                    className="group flex flex-col justify-between rounded-xl border p-4 text-center transition-all duration-200 hover:border-primary/80 hover:shadow-md hover:bg-muted/10 cursor-pointer active:scale-[0.99]"
+                    onClick={() => setViewingSection({ sectionCode, subjects })}
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="text-2xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                        {sectionCode}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-1.5">
+                        <Badge variant="secondary">
+                          {subjects.length} {subjects.length === 1 ? "subject" : "subjects"}
+                        </Badge>
+                        {totalUnits > 0 && (
+                          <Badge variant="outline">{totalUnits} units</Badge>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {subjects.length} subject{subjects.length === 1 ? "" : "s"}
+                      </span>
                     </div>
 
-                    <ToggleGroup
-                      type="single"
-                      value={view}
-                      onValueChange={(val) => {
-                        if (val === "calendar" || val === "table") setView(val)
-                      }}
-                      variant="outline"
-                      size="sm"
-                      aria-label="Schedule layout view"
-                    >
-                      <ToggleGroupItem value="calendar" aria-label="Calendar view">
+                    <div className="mt-4 border-t pt-3">
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="w-full gap-1.5"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setViewingSection({ sectionCode, subjects })
+                        }}
+                      >
                         <CalendarDays data-icon="inline-start" aria-hidden="true" />
-                        Calendar
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="table" aria-label="Table view">
-                        <ListIcon data-icon="inline-start" aria-hidden="true" />
-                        Table
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                  </div>
+                        View schedule
+                      </Button>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
 
-                  {view === "calendar" ? (
-                    <SectionScheduleCalendar
-                      items={subjects}
-                      disabled={true}
-                      emptyMessage="No scheduled classes found for this section."
-                    />
-                  ) : (
-                    <ScheduleSubjectsTable subjects={subjects} />
-                  )}
-                </TabsContent>
-              )
-            })}
-          </Tabs>
-        </TabsContent>
-      ))}
-    </Tabs>
+      <SectionScheduleCalendarDialog
+        open={viewingSection !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingSection(null)
+        }}
+        title={`${viewingSection?.sectionCode ?? ""} Schedule`}
+        subtitle={`${collegeLabel ?? "Department"} · Proposal Review`}
+        items={viewingSection?.subjects ?? []}
+        disabled={true}
+        defaultView="table"
+      />
+    </>
   )
 }
 
@@ -391,6 +309,7 @@ export function ScheduleReviewDialog({
               key={proposal.id}
               proposalId={proposal.id}
               sections={sections}
+              collegeLabel={proposal.college_label ?? proposal.college?.toUpperCase()}
             />
           ) : null}
         </div>

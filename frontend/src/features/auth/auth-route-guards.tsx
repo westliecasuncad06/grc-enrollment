@@ -4,14 +4,17 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, type ReactNode } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { GrcLoadingLogo } from "@/features/components/portal/grc-loading-logo"
 import { getSafeReturnPath } from "@/features/router/safe-return-path"
 
 function SessionRestoreState() {
   return (
-    <main className="grid min-h-svh place-items-center px-6">
-      <p role="status" className="text-sm text-muted-foreground">
-        Restoring your session…
-      </p>
+    <main className="grid min-h-svh place-items-center bg-background px-6">
+      <GrcLoadingLogo
+        layout="vertical"
+        size="lg"
+        label="Restoring your session…"
+      />
     </main>
   )
 }

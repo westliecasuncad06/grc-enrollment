@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   ArrowUpRight,
-  CalendarClockIcon,
   CalendarDays,
-  LayoutGridIcon,
-  ListIcon,
   MinusIcon,
   PlusIcon,
   UndoDot,
@@ -71,23 +68,11 @@ import {
   SelectValue,
 } from "@/features/components/ui/select"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/features/components/ui/table"
-import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/features/components/ui/tabs"
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/features/components/ui/toggle-group"
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import { useFacultySubjectPreferencesQuery } from "@/features/hooks/use-faculty-input"
 import {
@@ -178,20 +163,6 @@ function scheduleErrorMessage(error: unknown) {
   }
 
   return "Schedule could not be saved. Check the professor availability and time range."
-}
-
-function scheduleSummary(section: Section, facultyName: string | undefined) {
-  const time =
-    section.starts_at_time && section.ends_at_time
-      ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
-      : "Not set"
-
-  return [
-    section.schedule_days ?? "Day not set",
-    time,
-    section.room ?? "Room not set",
-    facultyName ?? "Professor not set",
-  ].join(" · ")
 }
 
 // A program's curriculum is "new" only relative to its own other versions —
@@ -302,82 +273,13 @@ function ApprovalStatusCard({
   )
 }
 
-function MobileScheduleCard({
-  section,
-  code,
-  title,
-  units,
-  facultyName,
-  approvalLocked,
-  onAssign,
-}: {
-  section: Section
-  code: string
-  title: string
-  units: string | number
-  facultyName: string | undefined
-  approvalLocked: boolean
-  onAssign: (section: Section) => void
-}) {
-  return (
-    <Card
-      role="article"
-      aria-label={`${code} schedule`}
-      size="sm"
-      className="program-chair-schedule-card"
-    >
-      <CardHeader>
-        <CardTitle level={3}>{code}</CardTitle>
-        <CardDescription>
-          {title} · {units} units
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <dl className="grid gap-2 text-sm">
-          <div className="grid gap-1">
-            <dt className="text-muted-foreground">Schedule</dt>
-            <dd>
-              Sched ID {section.id} · {scheduleSummary(section, facultyName)}
-            </dd>
-          </div>
-          <div className="grid gap-1">
-            <dt className="text-muted-foreground">Modality</dt>
-            <dd>
-              <Badge variant="secondary">
-                {section.modality
-                  ? modalityLabels[section.modality]
-                  : "Modality not set"}
-              </Badge>
-            </dd>
-          </div>
-        </dl>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={approvalLocked}
-          onClick={() => onAssign(section)}
-          className="w-full"
-        >
-          <CalendarClockIcon data-icon="inline-start" />
-          Set schedule
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
 function BlockSectionCard({
   blockCode,
   sections,
   year,
   curriculum,
   program,
-  view,
-  approvalLocked,
-  subjectFor,
   unitsFor,
-  facultyNameFor,
-  openEdit,
   setCalendarSection,
 }: {
   blockCode: string
@@ -385,176 +287,91 @@ function BlockSectionCard({
   year: number
   curriculum?: Curriculum | null
   program?: { id: number; code: string; name: string } | null
-  view: "table" | "tiles"
-  approvalLocked: boolean
-  subjectFor: (subjectId: number) => { code: string; title: string } | undefined
   unitsFor: (subjectId: number) => number | string
-  facultyNameFor: (professorId: number | null) => string | undefined
-  openEdit: (section: Section) => void
   setCalendarSection: (val: {
     blockCode: string
     year: number
     sections: Section[]
   }) => void
 }) {
+  const totalUnits = sections.reduce((sum, s) => {
+    const u = unitsFor(s.subject_id)
+    return sum + (typeof u === "number" ? u : Number(u) || 0)
+  }, 0)
+  const capacity = sections[0]?.capacity ?? 40
+
+  const handleOpen = () => {
+    setCalendarSection({
+      blockCode,
+      year,
+      sections,
+    })
+  }
+
   return (
-    <Card key={blockCode}>
-      <CardHeader className="border-b bg-muted/30">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="grid gap-1">
-            <CardTitle className="flex flex-wrap items-center gap-2">
-              <span>{blockCode}</span>
-              {sections.every(
-                (section) => section.capacity === sections[0].capacity,
-              ) ? (
-                <Badge variant="secondary">
-                  {sections[0].capacity} seats
-                </Badge>
-              ) : (
-                <Badge variant="outline">Mixed seat counts</Badge>
-              )}
-              {curriculum && (
-                <Badge
-                  variant="outline"
-                  className="text-xs font-normal border-primary/30 text-primary bg-primary/5"
-                >
-                  Curriculum: {curriculum.name.replace(/\s*Curriculum\s*/i, " ")} (
-                  {curriculum.effective_school_year})
-                </Badge>
-              )}
-            </CardTitle>
-            <CardDescription className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span>
-                {yearLabel(year)} block section · {sections.length} subject
-                {sections.length === 1 ? "" : "s"}
-              </span>
-              {program && (
-                <span className="font-medium text-foreground/75">
-                  · {program.name}
-                </span>
-              )}
-            </CardDescription>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() =>
-              setCalendarSection({
-                blockCode,
-                year,
-                sections,
-              })
-            }
-          >
-            <CalendarDays className="size-4" aria-hidden="true" />
-            View in calendar
-          </Button>
+    <Card
+      key={blockCode}
+      role="article"
+      aria-label={`${blockCode} section`}
+      className="group flex flex-col justify-between rounded-xl border p-4 text-center transition-all duration-200 hover:border-primary/80 hover:shadow-md hover:bg-muted/10 cursor-pointer active:scale-[0.99]"
+      onClick={handleOpen}
+    >
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex items-center justify-center">
+          <span className="font-heading text-2xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+            {blockCode}
+          </span>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {view === "table" && (
-          <div className="program-chair-schedule-cards">
-            {sections.map((section) => (
-              <MobileScheduleCard
-                key={section.id}
-                section={section}
-                code={
-                  subjectFor(section.subject_id)?.code ??
-                  `Subject #${section.subject_id}`
-                }
-                title={subjectFor(section.subject_id)?.title ?? "Subject"}
-                units={unitsFor(section.subject_id)}
-                facultyName={facultyNameFor(section.professor_id)}
-                approvalLocked={approvalLocked}
-                onAssign={openEdit}
-              />
-            ))}
-          </div>
-        )}
-        {view === "table" ? (
-          <Table className="program-chair-schedule-table">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Subject code</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Units</TableHead>
-                <TableHead>Sched ID</TableHead>
-                <TableHead>Day</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Room</TableHead>
-                <TableHead>Professor</TableHead>
-                <TableHead>Modality</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sections.map((section) => {
-                const subject = subjectFor(section.subject_id)
-                const facultyName = facultyNameFor(section.professor_id)
-                return (
-                  <TableRow key={section.id}>
-                    <TableCell className="font-medium">
-                      {subject?.code ?? `Subject #${section.subject_id}`}
-                    </TableCell>
-                    <TableCell>{subject?.title ?? "Subject"}</TableCell>
-                    <TableCell>{unitsFor(section.subject_id)}</TableCell>
-                    <TableCell>{section.id}</TableCell>
-                    <TableCell>{section.schedule_days ?? "—"}</TableCell>
-                    <TableCell>
-                      {section.starts_at_time && section.ends_at_time
-                        ? `${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell>{section.room ?? "—"}</TableCell>
-                    <TableCell>{facultyName ?? "—"}</TableCell>
-                    <TableCell>
-                      {section.modality ? (
-                        <Badge variant="secondary">
-                          {modalityLabels[section.modality]}
-                        </Badge>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={approvalLocked}
-                        onClick={() => openEdit(section)}
-                      >
-                        <CalendarClockIcon data-icon="inline-start" />
-                        Assign schedule
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        ) : (
-          <div className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-3">
-            {sections.map((section) => (
-              <MobileScheduleCard
-                key={section.id}
-                section={section}
-                code={
-                  subjectFor(section.subject_id)?.code ??
-                  `Subject #${section.subject_id}`
-                }
-                title={subjectFor(section.subject_id)?.title ?? "Subject"}
-                units={unitsFor(section.subject_id)}
-                facultyName={facultyNameFor(section.professor_id)}
-                approvalLocked={approvalLocked}
-                onAssign={openEdit}
-              />
-            ))}
-          </div>
-        )}
-      </CardContent>
+
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <Badge variant="secondary" className="text-xs">
+            {sections.every((s) => s.capacity === sections[0].capacity)
+              ? `${capacity} seats`
+              : "Mixed seats"}
+          </Badge>
+          {totalUnits > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {totalUnits} units
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-xs">
+            {yearLabel(year)}
+          </Badge>
+          {curriculum && (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-normal border-primary/30 text-primary bg-primary/5 max-w-[200px] truncate"
+              title={curriculum.name}
+            >
+              {curriculum.name.replace(/\s*Curriculum\s*/i, " ")} ({curriculum.effective_school_year})
+            </Badge>
+          )}
+          {program && (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+              {program.code}
+            </Badge>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {sections.length} subject{sections.length === 1 ? "" : "s"}
+        </p>
+      </div>
+
+      <div className="mt-4 pt-3 border-t">
+        <Button
+          type="button"
+          size="sm"
+          className="w-full gap-1.5"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleOpen()
+          }}
+        >
+          <CalendarDays className="size-4" aria-hidden="true" />
+          View schedule & assign
+        </Button>
+      </div>
     </Card>
   )
 }
@@ -650,11 +467,9 @@ function MajorshipCurriculumBar({
 export function ProgramChairEnrollmentWorkspace({
   workspaceTitle = "Enrollment",
   workspaceDescription = "Build block sections, then assign each subject schedule from its section table.",
-  initialView = "table",
 }: {
   workspaceTitle?: string
   workspaceDescription?: string
-  initialView?: "table" | "tiles"
 } = {}) {
   const { session } = useAuth()
   const queryClient = useQueryClient()
@@ -743,7 +558,6 @@ export function ProgramChairEnrollmentWorkspace({
   const [yearLevel, setYearLevel] = useState(1)
   const [activeYear, setActiveYear] = useState("1")
   const [selectedMajorId, setSelectedMajorId] = useState<"all" | number>("all")
-  const [view, setView] = useState<"table" | "tiles">(initialView)
   const [counts, setCounts] = useState<Record<number, number | "">>({
     1: 0,
     2: 0,
@@ -1824,26 +1638,6 @@ export function ProgramChairEnrollmentWorkspace({
                       <PlusIcon data-icon="inline-start" />
                       Add section
                     </Button>
-                    <ToggleGroup
-                      type="single"
-                      value={view}
-                      onValueChange={(value) => {
-                        if (value === "table" || value === "tiles")
-                          setView(value)
-                      }}
-                      variant="outline"
-                      size="sm"
-                      aria-label="Generated section layout"
-                    >
-                      <ToggleGroupItem value="table" aria-label="Table view">
-                        <ListIcon data-icon="inline-start" />
-                        Table
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="tiles" aria-label="Tile view">
-                        <LayoutGridIcon data-icon="inline-start" />
-                        Tiles
-                      </ToggleGroupItem>
-                    </ToggleGroup>
                   </div>
                 </div>
 
@@ -1982,23 +1776,20 @@ export function ProgramChairEnrollmentWorkspace({
                               </AlertDescription>
                             </Alert>
                           ) : (
-                            displayedGroups.map((block) => (
-                              <BlockSectionCard
-                                key={block.blockCode}
-                                blockCode={block.blockCode}
-                                sections={block.sections}
-                                year={currentYearNum}
-                                curriculum={block.curriculum}
-                                program={block.program}
-                                view={view}
-                                approvalLocked={approvalLocked}
-                                subjectFor={subjectFor}
-                                unitsFor={unitsFor}
-                                facultyNameFor={facultyNameFor}
-                                openEdit={openEdit}
-                                setCalendarSection={setCalendarSection}
-                              />
-                            ))
+                            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                              {displayedGroups.map((block) => (
+                                <BlockSectionCard
+                                  key={block.blockCode}
+                                  blockCode={block.blockCode}
+                                  sections={block.sections}
+                                  year={currentYearNum}
+                                  curriculum={block.curriculum}
+                                  program={block.program}
+                                  unitsFor={unitsFor}
+                                  setCalendarSection={setCalendarSection}
+                                />
+                              ))}
+                            </div>
                           )}
                         </div>
                       ) : hasMajorships && groupsByProgram.length > 1 ? (
@@ -2037,7 +1828,7 @@ export function ProgramChairEnrollmentWorkspace({
                                   newestIdByProgram={newestCurriculumIdByProgram}
                                 />
 
-                                <div className="grid gap-4">
+                                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                                   {groups.map((block) => (
                                     <BlockSectionCard
                                       key={block.blockCode}
@@ -2046,12 +1837,7 @@ export function ProgramChairEnrollmentWorkspace({
                                       year={currentYearNum}
                                       curriculum={block.curriculum}
                                       program={block.program}
-                                      view={view}
-                                      approvalLocked={approvalLocked}
-                                      subjectFor={subjectFor}
                                       unitsFor={unitsFor}
-                                      facultyNameFor={facultyNameFor}
-                                      openEdit={openEdit}
                                       setCalendarSection={setCalendarSection}
                                     />
                                   ))}
@@ -2085,23 +1871,20 @@ export function ProgramChairEnrollmentWorkspace({
                             />
                           )}
 
-                          {displayedGroups.map((block) => (
-                            <BlockSectionCard
-                              key={block.blockCode}
-                              blockCode={block.blockCode}
-                              sections={block.sections}
-                              year={currentYearNum}
-                              curriculum={block.curriculum}
-                              program={block.program}
-                              view={view}
-                              approvalLocked={approvalLocked}
-                              subjectFor={subjectFor}
-                              unitsFor={unitsFor}
-                              facultyNameFor={facultyNameFor}
-                              openEdit={openEdit}
-                              setCalendarSection={setCalendarSection}
-                            />
-                          ))}
+                          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                            {displayedGroups.map((block) => (
+                              <BlockSectionCard
+                                key={block.blockCode}
+                                blockCode={block.blockCode}
+                                sections={block.sections}
+                                year={currentYearNum}
+                                curriculum={block.curriculum}
+                                program={block.program}
+                                unitsFor={unitsFor}
+                                setCalendarSection={setCalendarSection}
+                              />
+                            ))}
+                          </div>
                         </div>
                       )}
                     </TabsContent>
@@ -2437,11 +2220,13 @@ export function ProgramChairEnrollmentWorkspace({
         subtitle={`${yearLabel(calendarSection?.year ?? 1)} Block Section · ${calendarItems.length} subjects`}
         items={calendarItems}
         disabled={approvalLocked}
+        actionLabel="Assign schedule"
         onSelectSubject={(item) => {
           const targetSection =
             (sectionsQuery.data ?? []).find((s) => s.id === item.id) ??
             calendarSection?.sections.find((s) => s.id === item.id)
           if (targetSection) {
+            setCalendarSection(null)
             openEdit(targetSection)
           }
         }}

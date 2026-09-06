@@ -1,5 +1,53 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-06 — Branded GRC Loading Logo for "Restoring your session…" (Auth Route Guards)
+
+0. **Requirement & Architecture Execution**:
+   - Added branded animated GRC Loading Logo to the full-page session restoration screen (`SessionRestoreState`) used by `RequireSession` (`/portal/*`) and `AnonymousOnly` (`/login`).
+   - Extended `GrcLoadingLogo` component (`frontend/src/features/components/portal/grc-loading-logo.tsx`) with:
+     - `layout`: `"horizontal"` (default) or `"vertical"` (stacked layout for splash screens / full-page states).
+     - `size`: `"sm"`, `"md"` (default), `"lg"` (prominent session restoration screen with `size-14` crimson badge, spinning institutional gold ring, and bold GRC monogram).
+     - `motion-safe:animate-pulse` on the loading label for breathing feedback, automatically disabled when `prefers-reduced-motion` is active (WCAG 2.1 AA compliant).
+   - In `frontend/src/features/auth/auth-route-guards.tsx`:
+     - Updated `SessionRestoreState` to render `<GrcLoadingLogo layout="vertical" size="lg" label="Restoring your session…" />` within semantic `<main className="grid min-h-svh place-items-center bg-background px-6">`.
+   - **Verification & Test Execution**:
+     - `src/features/auth/auth-route-guards.test.tsx`: 11 / 11 tests passed (100%), asserting presence of the GRC monogram and status text across `RequireSession` and `AnonymousOnly`.
+     - `src/features/components/portal/grc-loading-logo.test.tsx`: 2 / 2 tests passed (100%), testing horizontal, vertical, and size configurations.
+     - `src/features/components/portal/async-boundary.test.tsx`: 7 / 7 tests passed (100%).
+     - Strict typecheck: `npm run typecheck` passed with 0 errors.
+     - Fast linter: `npm run lint:fast` passed with 0 errors across 499 files.
+     - Playwright live browser automation (`frontend/scripts/test_session_restore_loading.mjs`):
+       - Intercepted `/api/v1/auth/me` with pre-seeded bearer token, holding in restoring mode.
+       - Captured `session_restore_loading_logo.png` verifying the centered crimson badge with rotating gold ring and "Restoring your session…" pulsing text.
+
+## 2026-09-06 — Modal Section Schedule Viewer & Unified Boxed Thumbnail Cards (Student, Program Chair, Dean, Executive Director)
+
+0. **Requirement & Architecture Execution**:
+   - **Regular Student Section Selection (`/portal/enrollment`)**:
+     - Regular students initially see only compact boxed thumbnail buttons for sections (`IT101`, `IT102`, etc.) in a responsive 4-column grid (`grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4`).
+     - Clicking a section card or `Choose <Section>` opens a modal `Dialog` (`SelectedSectionModal`) displaying the chosen section's schedule table by default, along with the `Schedule list` / `View in calendar` `ToggleGroup`, total units counter, "Change section", and "Submit enrollment" button.
+   - **Unified Schedule & Section Modal Across All 4 Roles**:
+     - Built and shared `SectionScheduleCalendarDialog` (`frontend/src/features/components/portal/section-schedule-calendar-dialog.tsx`) with dual view toggle (`table` list and `calendar` timetable), badge indicators (seats, units, year, subject count), 12-hour formatted time ranges, room tags, professor badges ("Unassigned" badge when empty), modality badges, and configurable item actions.
+     - **Program Chair Workspaces** (`schedule-workspace.tsx` & `program-chair-enrollment-workspace.tsx`): Replaced expansive inline block lists with compact boxed thumbnail cards. Clicking card or `View schedule & assign` opens the modal dialog. Clicking `Assign schedule` closes the view modal and opens the `EditScheduleDialog`.
+     - **Dean Review Dialog** (`schedule-review-dialog.tsx`): Replaced nested tables with Program tabs and compact boxed thumbnail cards. Clicking card or `View schedule` opens `SectionScheduleCalendarDialog` with actions disabled.
+     - **Executive Director Master Schedule** (`published-sections-panel.tsx`): Under the "Published" tab in `master-schedule-workspace.tsx`, renders compact boxed thumbnail cards (`IT101`–`IT405`) in a responsive grid with College, Year, and Major filters. Clicking card or `View schedule` opens the modal viewer.
+   - **Verification & Test Execution**:
+     - Vitest suite (8 / 8 files, 80 / 80 tests passed, 100%):
+       - `enrollment-section-table.test.tsx` (8/8 passed)
+       - `enrollment-workspace.test.tsx` (25/25 passed)
+       - `section-schedule-calendar.test.tsx` (5/5 passed)
+       - `master-schedule-workspace.test.tsx` (5/5 passed)
+       - `schedule-workspace.test.tsx` (6/6 passed)
+       - `program-chair-enrollment-workspace.test.tsx` (26/26 passed)
+       - `schedule-review-dialog.test.tsx` (4/4 passed)
+     - Strict typecheck: `npm run typecheck` passed with 0 errors.
+     - Linter: `npm run lint:fast` passed with 0 errors across 497 files.
+     - Live Playwright E2E Verification (`frontend/scripts/test_all_unified_roles.mjs`):
+       - Role 1 (Regular Student): `role1_student_schedule_modal.png`
+       - Role 2 (Program Chair): `role2_program_chair_schedule_modal.png`
+       - Role 3 (Dean): `role3_dean_schedule_modal.png`
+       - Role 4 (Executive Director): `role4_executive_director_schedule_modal.png`
+
 ## 2026-09-06 — Git Index Corruption Recovery & GitHub Saving Point
 
 - **Issue**: Visual Studio Code displayed `Git: fatal: .git/index: index file smaller than expected`. Inspection revealed `.git/index` was corrupted and truncated to 0 bytes.

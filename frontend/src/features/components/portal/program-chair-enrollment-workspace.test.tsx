@@ -683,18 +683,19 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       await screen.findByRole("tab", { name: "1st Year" }),
     ).toBeInTheDocument()
     expect(screen.getByText("IT101")).toBeInTheDocument()
-    expect(screen.getByText("3")).toBeInTheDocument()
-    expect(
-      screen.getByRole("columnheader", { name: "Professor" }),
-    ).toBeInTheDocument()
     expect(screen.queryByText("IT201")).not.toBeInTheDocument()
     expect(screen.queryByText("2A")).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: "1. 1st Year" }),
     ).not.toBeInTheDocument()
+
+    // Open the IT101 schedule modal to inspect the subject table
+    await user.click(screen.getByRole("button", { name: "View schedule & assign" }))
+    expect(screen.getByRole("columnheader", { name: "Professor" })).toBeInTheDocument()
+    expect(screen.getByText("3")).toBeInTheDocument()
   })
 
-  it("provides every generated subject as a phone-friendly schedule card", async () => {
+  it("provides generated subjects inside the modal schedule viewer with schedule assignment", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockAll())
     renderWorkspace()
@@ -713,15 +714,19 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       screen.getByRole("button", { name: "Generate subject list" }),
     )
 
-    const card = await screen.findByRole("article", {
-      name: "CS101 schedule",
+    const sectionCard = await screen.findByRole("article", {
+      name: "IT101 section",
     })
+    expect(sectionCard).toBeInTheDocument()
+
+    await user.click(within(sectionCard).getByRole("button", { name: "View schedule & assign" }))
+
+    const modal = screen.getByRole("dialog", { name: /IT101 Schedule/i })
+    expect(modal).toBeInTheDocument()
+    expect(within(modal).getByText("Programming 1")).toBeInTheDocument()
+    expect(within(modal).getByText("21")).toBeInTheDocument()
     expect(
-      within(card).getByText("Programming 1 · 3 units"),
-    ).toBeInTheDocument()
-    expect(within(card).getByText(/Sched ID 21/)).toBeInTheDocument()
-    expect(
-      within(card).getByRole("button", { name: "Set schedule" }),
+      within(modal).getByRole("button", { name: "Assign schedule" }),
     ).toBeInTheDocument()
   })
 
@@ -742,6 +747,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     }
     await user.click(
       screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "View schedule & assign" }),
     )
     await user.click(
       await screen.findByRole("button", { name: "Assign schedule" }),
@@ -773,7 +781,7 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       screen.getByRole("button", { name: "Generate subject list" }),
     )
     const viewCalendarButton = await screen.findByRole("button", {
-      name: "View in calendar",
+      name: "View schedule & assign",
     })
     await user.click(viewCalendarButton)
 
@@ -806,6 +814,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       screen.getByRole("button", { name: "Generate subject list" }),
     )
     await user.click(
+      await screen.findByRole("button", { name: "View schedule & assign" }),
+    )
+    await user.click(
       await screen.findByRole("button", { name: "Assign schedule" }),
     )
     await user.click(screen.getByPlaceholderText("Search room"))
@@ -832,6 +843,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
       screen.getByRole("button", { name: "Generate subject list" }),
     )
     await user.click(
+      await screen.findByRole("button", { name: "View schedule & assign" }),
+    )
+    await user.click(
       await screen.findByRole("button", { name: "Assign schedule" }),
     )
     await user.click(screen.getByPlaceholderText("Search professor"))
@@ -856,6 +870,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     }
     await user.click(
       screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "View schedule & assign" }),
     )
     await user.click(
       await screen.findByRole("button", { name: "Assign schedule" }),
@@ -896,6 +913,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     }
     await user.click(
       screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "View schedule & assign" }),
     )
     await user.click(
       await screen.findByRole("button", { name: "Assign schedule" }),
@@ -1169,6 +1189,9 @@ describe("ProgramChairEnrollmentWorkspace", () => {
     }
     await user.click(
       screen.getByRole("button", { name: "Generate subject list" }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: "View schedule & assign" }),
     )
     await user.click(
       await screen.findByRole("button", { name: "Assign schedule" }),

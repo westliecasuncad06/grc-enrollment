@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -336,19 +336,19 @@ describe("ScheduleWorkspace", () => {
     renderWorkspace()
 
     expect(
-      await screen.findByRole("cell", { name: "IT101" }),
+      await screen.findByRole("article", { name: "IT101 section" }),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole("cell", { name: "IT201" }),
+      screen.queryByRole("article", { name: "IT201 section" }),
     ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("tab", { name: "2nd Year" }))
 
     expect(
-      await screen.findByRole("cell", { name: "IT201" }),
+      await screen.findByRole("article", { name: "IT201 section" }),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole("cell", { name: "IT101" }),
+      screen.queryByRole("article", { name: "IT101 section" }),
     ).not.toBeInTheDocument()
   })
 
@@ -357,9 +357,10 @@ describe("ScheduleWorkspace", () => {
     renderWorkspace()
 
     await user.click(await screen.findByRole("tab", { name: "2nd Year" }))
-    await screen.findByRole("cell", { name: "IT201" })
+    const sectionCard = await screen.findByRole("article", { name: "IT201 section" })
+    await user.click(within(sectionCard).getByRole("button", { name: /View schedule & assign/ }))
 
-    const editButton = screen.getByRole("button", { name: "Edit" })
+    const editButton = await screen.findByRole("button", { name: "Edit" })
     expect(editButton).toBeEnabled()
 
     await user.click(editButton)
@@ -384,6 +385,9 @@ describe("ScheduleWorkspace", () => {
     const user = userEvent.setup()
     renderWorkspace()
 
+    const sectionCard = await screen.findByRole("article", { name: "IT101 section" })
+    await user.click(within(sectionCard).getByRole("button", { name: /View schedule & assign/ }))
+
     await user.click(await screen.findByRole("button", { name: "Edit" }))
     const dialog = screen.getByRole("dialog", {
       name: "Edit section assignment",
@@ -406,7 +410,7 @@ describe("ScheduleWorkspace", () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    await screen.findByRole("cell", { name: "IT101" })
+    expect(await screen.findByRole("article", { name: "IT101 section" })).toBeInTheDocument()
     expect(
       screen.getByText("Viewing the current term. Assignments are editable."),
     ).toBeInTheDocument()
@@ -419,15 +423,17 @@ describe("ScheduleWorkspace", () => {
     expect(
       await screen.findByText(/Viewing an archived schedule/),
     ).toBeInTheDocument()
-    expect(
-      await screen.findByRole("cell", { name: "OLD101" }),
-    ).toBeInTheDocument()
+    const archivedCard = await screen.findByRole("article", { name: "OLD101 section" })
+    await user.click(within(archivedCard).getByRole("button", { name: /View schedule & assign/ }))
     expect(screen.getByRole("button", { name: "Archived" })).toBeDisabled()
   })
 
   it("lets the Program Chair pick a room and an open calendar slot, then save with an override reason", async () => {
     const user = userEvent.setup()
     renderWorkspace()
+
+    const sectionCard = await screen.findByRole("article", { name: "IT101 section" })
+    await user.click(within(sectionCard).getByRole("button", { name: /View schedule & assign/ }))
 
     await user.click(await screen.findByRole("button", { name: "Edit" }))
     const dialog = screen.getByRole("dialog", { name: "Edit section assignment" })
@@ -464,20 +470,24 @@ describe("ScheduleWorkspace", () => {
     await user.type(within(dialog).getByLabelText("Override reason"), "Moved off a conflicting slot")
     await user.click(within(dialog).getByRole("button", { name: "Save changes" }))
 
-    await screen.findByRole("cell", { name: "IT101" })
-    expect(patchedBody).toMatchObject({
-      room: "LAB 1",
-      schedule_days: "M",
-      starts_at_time: "07:30:00",
-      ends_at_time: "09:00:00",
-      modality: "f2f",
-      override_reason: "Moved off a conflicting slot",
+    await waitFor(() => {
+      expect(patchedBody).toMatchObject({
+        room: "LAB 1",
+        schedule_days: "M",
+        starts_at_time: "07:30:00",
+        ends_at_time: "09:00:00",
+        modality: "f2f",
+        override_reason: "Moved off a conflicting slot",
+      })
     })
   })
 
   it("caps the picker's meeting days at two, disabling a third", async () => {
     const user = userEvent.setup()
     renderWorkspace()
+
+    const sectionCard = await screen.findByRole("article", { name: "IT101 section" })
+    await user.click(within(sectionCard).getByRole("button", { name: /View schedule & assign/ }))
 
     await user.click(await screen.findByRole("button", { name: "Edit" }))
     const dialog = screen.getByRole("dialog", { name: "Edit section assignment" })

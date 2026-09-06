@@ -1225,17 +1225,17 @@ describe("EnrollmentWorkspace", () => {
       name: "IT201 section",
     })
     expect(screen.queryByText("Schedule preference")).not.toBeInTheDocument()
-    // Schedule table is hidden initially before choosing the section
+    // In thumbnail card, schedule table is hidden initially
     expect(
       within(section).queryByRole("table", { name: "IT201 schedule" }),
     ).not.toBeInTheDocument()
-    expect(within(section).getAllByText("Data Structures")).not.toHaveLength(0)
+    expect(within(section).getByText("2 subjects")).toBeInTheDocument()
 
     await user.click(
       within(section).getByRole("button", { name: "Choose IT201" }),
     )
 
-    // Schedule table appears upon section selection
+    // Schedule list appears upon selection
     const selectedSection = await screen.findByRole("article", {
       name: "IT201 section",
     })
@@ -1243,11 +1243,12 @@ describe("EnrollmentWorkspace", () => {
       within(selectedSection).getByRole("table", { name: "IT201 schedule" }),
     ).toBeInTheDocument()
     expect(within(selectedSection).getAllByText("Section ID")).not.toHaveLength(0)
+    expect(within(selectedSection).getAllByText("Data Structures")).not.toHaveLength(0)
     expect(within(selectedSection).getAllByText("LAB-1")).not.toHaveLength(0)
 
     expect(
-      screen.queryByRole("dialog", { name: /IT201/i }),
-    ).not.toBeInTheDocument()
+      screen.getByRole("dialog"),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Change section" }),
     ).toBeInTheDocument()

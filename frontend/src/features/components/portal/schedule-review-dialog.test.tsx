@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -115,17 +115,31 @@ describe("ScheduleReviewDialog", () => {
 
     expect(await screen.findByText("2 block sections")).toBeInTheDocument()
     expect(screen.getByText("3 subject schedules")).toBeInTheDocument()
+
+    const it101Card = screen.getByRole("article", { name: "IT101 section" })
+    const it201Card = screen.getByRole("article", { name: "IT201 section" })
+    expect(it101Card).toBeInTheDocument()
+    expect(it201Card).toBeInTheDocument()
+
+    // Click "View schedule" on IT101 card to open the schedule modal
+    await user.click(within(it101Card).getByRole("button", { name: "View schedule" }))
+
     expect(screen.getByText("Programming 1")).toBeInTheDocument()
     expect(screen.queryByText("Data Structures")).not.toBeInTheDocument()
 
-    // Switch to Table view
-    await user.click(screen.getByRole("radio", { name: "Table view" }))
-    expect(screen.getAllByText("Not assigned")).not.toHaveLength(0)
-
-    // Switch back to Calendar view
+    // Switch to Calendar view
     await user.click(screen.getByRole("radio", { name: "Calendar view" }))
 
-    await user.click(screen.getByRole("tab", { name: "IT201" }))
+    // Switch back to Table view
+    await user.click(screen.getByRole("radio", { name: "Table view" }))
+    expect(screen.getAllByText("Unassigned")).not.toHaveLength(0)
+
+    // Close the IT101 modal
+    const scheduleModal = screen.getByRole("dialog", { name: /IT101 Schedule/i })
+    await user.click(within(scheduleModal).getAllByRole("button", { name: "Close" })[0])
+
+    // Open IT201 modal
+    await user.click(within(it201Card).getByRole("button", { name: "View schedule" }))
     expect(screen.getByText("Data Structures")).toBeInTheDocument()
     expect(screen.queryByText("Programming 1 LAB")).not.toBeInTheDocument()
   })
@@ -156,7 +170,7 @@ describe("ScheduleReviewDialog", () => {
 
   it("has no detectable accessibility violations after the schedule loads", async () => {
     const { container } = renderDialog()
-    await screen.findByText("Programming 1")
+    await screen.findByRole("article", { name: "IT101 section" })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

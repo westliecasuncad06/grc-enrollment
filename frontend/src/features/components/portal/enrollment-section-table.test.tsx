@@ -102,7 +102,7 @@ function renderTable({
 }
 
 describe("EnrollmentSectionTable", () => {
-  it("lists sections as summary cards first, then reveals schedule upon selection with table and calendar views", async () => {
+  it("lists sections as thumbnail cards, then reveals schedule upon selection with table and calendar views", async () => {
     const user = userEvent.setup()
     const { rerender } = renderTable()
 
@@ -115,7 +115,7 @@ describe("EnrollmentSectionTable", () => {
     ).toBeInTheDocument()
     expect(within(section).getByText("40 seats")).toBeInTheDocument()
     expect(within(section).getByText("6 units")).toBeInTheDocument()
-    expect(within(section).getAllByText("CS201").length).toBeGreaterThan(0)
+    expect(within(section).getByText("2 subjects")).toBeInTheDocument()
     expect(
       within(section).getByRole("button", { name: "Choose IT301" }),
     ).toBeInTheDocument()
@@ -125,7 +125,7 @@ describe("EnrollmentSectionTable", () => {
       screen.queryByRole("table", { name: "IT301 schedule" }),
     ).not.toBeInTheDocument()
 
-    // Once a section is selected, its schedule table and calendar appear
+    // Once a section is selected, its schedule table and View in calendar option appear
     rerender(
       <EnrollmentSectionTable
         blocks={blocks}
@@ -147,8 +147,8 @@ describe("EnrollmentSectionTable", () => {
     expect(within(selectedSection).getAllByText("Section ID")).not.toHaveLength(0)
     expect(within(selectedSection).getAllByText("Data Structures")).not.toHaveLength(0)
 
-    // Can switch to Calendar view
-    await user.click(within(selectedSection).getByRole("radio", { name: "Calendar view" }))
+    // Can switch to Calendar view using "View in calendar"
+    await user.click(within(selectedSection).getByRole("radio", { name: "View in calendar" }))
     expect(within(selectedSection).getAllByText("CS201").length).toBeGreaterThan(0)
   })
 
@@ -239,7 +239,7 @@ describe("EnrollmentSectionTable", () => {
         },
       ],
     })
-    const { container } = render(
+    render(
       <EnrollmentSectionTable
         blocks={[outOfOrder]}
         selectedBlockCode="IT304"
@@ -249,7 +249,7 @@ describe("EnrollmentSectionTable", () => {
       />,
     )
 
-    const text = container.textContent ?? ""
+    const text = document.body.textContent ?? ""
     expect(text.indexOf("MONSUBJ")).toBeLessThan(text.indexOf("FRISUBJ"))
   })
 

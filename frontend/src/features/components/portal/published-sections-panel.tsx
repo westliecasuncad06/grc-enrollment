@@ -3,14 +3,11 @@
 import { useMemo, useState } from "react"
 import { CalendarDays } from "lucide-react"
 
-import {
-  DataTable,
-  type DataTableColumn,
-} from "@/features/components/portal/data-table"
 import { SectionScheduleCalendarDialog } from "@/features/components/portal/section-schedule-calendar-dialog"
 import { StatusRegion } from "@/features/components/portal/status-region"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import { Card } from "@/features/components/ui/card"
 import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import type {
@@ -64,13 +61,6 @@ function majorLabel(programName: string) {
   return index === -1 ? programName : programName.slice(index + marker.length)
 }
 
-function meetingLabel(section: Section) {
-  if (!section.schedule_days || !section.starts_at_time || !section.ends_at_time)
-    return "Not assigned"
-
-  return `${section.schedule_days} · ${section.starts_at_time.slice(0, 5)}–${section.ends_at_time.slice(0, 5)}`
-}
-
 function matchesSearch(row: PublishedSectionRow, search: string) {
   const needle = search.trim().toLocaleLowerCase()
   if (needle === "") return true
@@ -82,45 +72,6 @@ function matchesSearch(row: PublishedSectionRow, search: string) {
   )
 }
 
-function subjectColumns(): DataTableColumn<PublishedSectionRow>[] {
-  return [
-    {
-      key: "subject",
-      header: "Subject",
-      render: ({ subject, section }) => (
-        <div>
-          <div className="font-medium">
-            {subject?.code ?? `Section #${section.id}`}
-          </div>
-          {subject && (
-            <div className="text-muted-foreground">{subject.title}</div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "modality",
-      header: "Modality",
-      render: ({ section }) =>
-        section.modality ? section.modality.replaceAll("_", " ").toUpperCase() : "Not assigned",
-    },
-    {
-      key: "units",
-      header: "Units",
-      render: ({ subject }) => subject?.units ?? "—",
-    },
-    {
-      key: "meeting",
-      header: "Meeting",
-      render: ({ section }) => meetingLabel(section),
-    },
-    {
-      key: "room",
-      header: "Room",
-      render: ({ section }) => section.room ?? "Not assigned",
-    },
-  ]
-}
 
 /**
  * The Executive Director's published-sections view spans every college
@@ -341,43 +292,75 @@ export function PublishedSectionsPanel({
           No published sections match the current filters.
         </p>
       ) : (
-        <div className="grid gap-5">
-          {groups.map(({ sectionCode, rows: groupRows, major: groupMajor }) => (
-            <div key={sectionCode} className="grid gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <h3 className="font-heading text-lg font-medium">{sectionCode}</h3>
-                  <span className="text-sm text-muted-foreground">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {groups.map(({ sectionCode, rows: groupRows, major: groupMajor }) => {
+            const totalUnits = groupRows.reduce(
+              (sum, r) => sum + (r.subject?.units ?? 0),
+              0,
+            )
+            const yearLevel = groupRows[0]?.plan?.year_level
+            const capacity = groupRows[0]?.section.capacity
+
+            return (
+              <Card
+                key={sectionCode}
+                role="article"
+                aria-label={`${sectionCode} section`}
+                className="group flex flex-col justify-between rounded-xl border p-4 text-center transition-all duration-200 hover:border-primary/80 hover:shadow-md hover:bg-muted/10 cursor-pointer active:scale-[0.99]"
+                onClick={() =>
+                  setCalendarSection({
+                    sectionCode,
+                    rows: groupRows,
+                    majorName: groupMajor?.name,
+                  })
+                }
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-2xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                    {sectionCode}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    {capacity != null && (
+                      <Badge variant="secondary">{capacity} seats</Badge>
+                    )}
+                    {totalUnits > 0 && (
+                      <Badge variant="outline">{totalUnits} units</Badge>
+                    )}
+                    {yearLevel != null && (
+                      <Badge variant="outline">{YEAR_LABELS[yearLevel]}</Badge>
+                    )}
+                    {groupMajor && (
+                      <Badge variant="outline" className="text-xs">
+                        {majorLabel(groupMajor.name)}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
                     {groupRows.length} subject{groupRows.length === 1 ? "" : "s"}
                   </span>
-                  {groupMajor && (
-                    <Badge variant="outline">{majorLabel(groupMajor.name)}</Badge>
-                  )}
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setCalendarSection({
-                      sectionCode,
-                      rows: groupRows,
-                      majorName: groupMajor?.name,
-                    })
-                  }
-                >
-                  <CalendarDays data-icon="inline-start" aria-hidden="true" />
-                  View calendar
-                </Button>
-              </div>
-              <DataTable
-                caption={`${sectionCode} schedule`}
-                rowKey={(row) => row.section.id}
-                rows={groupRows}
-                columns={subjectColumns()}
-              />
-            </div>
-          ))}
+
+                <div className="mt-4 border-t pt-3">
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="w-full gap-1.5"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCalendarSection({
+                        sectionCode,
+                        rows: groupRows,
+                        majorName: groupMajor?.name,
+                      })
+                    }}
+                  >
+                    <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                    View schedule
+                  </Button>
+                </div>
+              </Card>
+            )
+          })}
         </div>
       )}
 

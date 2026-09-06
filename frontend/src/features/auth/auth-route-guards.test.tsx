@@ -30,6 +30,7 @@ describe("RequireSession", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Restoring your session…",
     )
+    expect(screen.getByText("GRC")).toHaveAttribute("aria-hidden", "true")
     expect(screen.queryByText("portal content")).not.toBeInTheDocument()
     expect(routerMock.replace).not.toHaveBeenCalled()
   })
@@ -115,6 +116,21 @@ describe("AnonymousOnly", () => {
     })
 
     expect(screen.getByText("login form")).toBeInTheDocument()
+    expect(routerMock.replace).not.toHaveBeenCalled()
+  })
+
+  it("shows the session restore loading logo while authentication settles on login", () => {
+    renderWithSession(<AnonymousOnly>login form</AnonymousOnly>, {
+      route: "/login",
+      session: null,
+      status: "restoring",
+    })
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Restoring your session…",
+    )
+    expect(screen.getByText("GRC")).toHaveAttribute("aria-hidden", "true")
+    expect(screen.queryByText("login form")).not.toBeInTheDocument()
     expect(routerMock.replace).not.toHaveBeenCalled()
   })
 
