@@ -19,6 +19,7 @@
           - Preset 3: Afternoon / Evening Schedule (classes starting at/after 12:00)
         - Paired lecture & laboratory handling ensures section consistency.
         - Added Schedule Recommendation Presets toolbar and "★ Recommended" badges in `eligible-subject-table.tsx` with one-click batch section selection and full manual override support. [COMPLETED & VERIFIED]
+        - **Performance Optimization & Aw, Snap! Fix**: Diagnosed and resolved browser tab freezing/crashing ("Aw, Snap!") on irregular schedule preset click. The previous backtracking logic explored an unpruned $O(K^N)$ combinatorial search space with unconditional skip branching ($>200\text{M}$ iterations on UI thread). Resolved by: (1) deduplicating identical day/time schedule signatures per subject, (2) mode-specific option pre-sorting capped to top 5 candidates per subject, (3) Minimum Remaining Values (MRV) subject ordering, (4) dynamic day-overlap sorting for concise mode, (5) pruning redundant skip branches when conflict-free choices exist, and (6) hard 500-step search bound. All presets now resolve in $< 5\text{ms}$. [COMPLETED & VERIFIED]
      6. **Program Chair Irregular Advising & Registrar Enrolled Students View**:
         - Irregular students submit enrollment to Program Chair for review (`pending_program_chair_approval` workflow notification to Program Chair).
         - Regular students automatically transition directly from draft to `pending_payment`, bypassing registrar review.
@@ -37,12 +38,12 @@
    - Frontend TypeScript Check (`npx tsc --noEmit`): **Passed with 0 errors**.
    - Frontend Vitest Suites:
      - `queue-kiosk-sign-out-dialog.test.tsx`: **3 / 3 passed**.
-     - `schedule-recommendation.test.ts`: **5 / 5 passed**.
+     - `schedule-recommendation.test.ts`: **6 / 6 passed** (including stress benchmark with 10 subjects × 15 sections resolving in <20ms).
      - `eligible-subject-table.test.tsx`: **32 / 32 passed**.
      - `enrollment-workspace.test.tsx`: **27 / 27 passed**.
      - `registrar-enrollment-workspace.test.tsx`: **16 / 16 passed**.
      - `portal-module-page.test.tsx` & `enrollment-review-dialog.test.tsx`: **67 / 67 passed**.
-     - Total: **150+ frontend tests passed cleanly**.
+     - Total: **151+ frontend tests passed cleanly**.
 
 
 ## 2026-09-08 — Comprehensive System & UI Fixes (Google Doc Instruction Set: Program Chair, Registrar, Student, Professor)

@@ -211,5 +211,47 @@ describe("schedule-recommendation", () => {
     expect(result.recommendations[10]).toBe(401)
     expect(result.recommendations[11]).toBe(402)
   })
+
+  it("resolves quickly without hanging or crashing on large realistic irregular subject pools", () => {
+    const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"]
+    const largeSubjectPool: EligibleSubject[] = []
+
+    for (let subjIdx = 1; subjIdx <= 10; subjIdx++) {
+      const sections = []
+      for (let secIdx = 1; secIdx <= 15; secIdx++) {
+        const day = days[(subjIdx + secIdx) % days.length]
+        const hour = 7 + (secIdx % 10)
+        sections.push(
+          makeSection({
+            id: subjIdx * 100 + secIdx,
+            subject_id: subjIdx,
+            section_code: `SEC-${subjIdx}-${secIdx}`,
+            schedule_days: day,
+            starts_at_time: `${String(hour).padStart(2, "0")}:00:00`,
+            ends_at_time: `${String(hour + 2).padStart(2, "0")}:00:00`,
+          }),
+        )
+      }
+      largeSubjectPool.push(
+        makeSubject({
+          subject_id: subjIdx,
+          code: `SUBJ-${subjIdx}`,
+          available_sections: sections,
+        }),
+      )
+    }
+
+    const start = performance.now()
+    const resultConcise = generateScheduleRecommendation(largeSubjectPool, "concise")
+    const resultMorning = generateScheduleRecommendation(largeSubjectPool, "morning")
+    const resultAfternoon = generateScheduleRecommendation(largeSubjectPool, "afternoon")
+    const elapsed = performance.now() - start
+
+    expect(resultConcise.matchedSubjects).toBeGreaterThan(0)
+    expect(resultMorning.matchedSubjects).toBeGreaterThan(0)
+    expect(resultAfternoon.matchedSubjects).toBeGreaterThan(0)
+    expect(elapsed).toBeLessThan(100)
+  })
 })
+
 

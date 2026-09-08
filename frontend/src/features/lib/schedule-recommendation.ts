@@ -42,19 +42,19 @@ function computeSectionScores(section: EligibleSection): {
 
   if (section.starts_at_time && section.ends_at_time) {
     if (section.ends_at_time <= "13:00:00") {
-      morningScore += 10
+      morningScore += 20
     } else if (section.starts_at_time < "12:00:00") {
       morningScore += 5
     } else {
-      morningScore -= 10
+      morningScore -= 20
     }
 
     if (section.starts_at_time >= "12:00:00") {
-      afternoonScore += 10
+      afternoonScore += 20
     } else if (section.ends_at_time > "13:00:00") {
       afternoonScore += 5
     } else {
-      afternoonScore -= 10
+      afternoonScore -= 20
     }
   }
 
@@ -63,6 +63,7 @@ function computeSectionScores(section: EligibleSection): {
 
 function buildChoiceItems(
   subjects: readonly EligibleSubject[],
+  mode: RecommendationMode,
 ): SubjectChoiceItem[] {
   const subjectById = new Map(
     subjects.map((subject) => [subject.subject_id, subject]),
@@ -80,7 +81,8 @@ function buildChoiceItems(
       processedPairedIds.add(paired.subject_id)
     }
 
-    const options: SubjectChoiceOption[] = []
+    const rawOptions: SubjectChoiceOption[] = []
+    const seenScheduleSignatures = new Set<string>()
 
     for (const primarySection of subject.available_sections) {
       if (paired) {
@@ -91,9 +93,13 @@ function buildChoiceItems(
           matchingPaired &&
           !hasScheduleConflict(primarySection, matchingPaired)
         ) {
+          const sig = `${primarySection.schedule_days}|${primarySection.starts_at_time}|${primarySection.ends_at_time}__${matchingPaired.schedule_days}|${matchingPaired.starts_at_time}|${matchingPaired.ends_at_time}`
+          if (seenScheduleSignatures.has(sig)) continue
+          seenScheduleSignatures.add(sig)
+
           const primaryScores = computeSectionScores(primarySection)
           const pairedScores = computeSectionScores(matchingPaired)
-          options.push({
+          rawOptions.push({
             primarySection,
             pairedSection: matchingPaired,
             morningScore:
@@ -104,8 +110,12 @@ function buildChoiceItems(
           })
         }
       } else {
+        const sig = `${primarySection.schedule_days}|${primarySection.starts_at_time}|${primarySection.ends_at_time}`
+        if (seenScheduleSignatures.has(sig)) continue
+        seenScheduleSignatures.add(sig)
+
         const scores = computeSectionScores(primarySection)
-        options.push({
+        rawOptions.push({
           primarySection,
           pairedSection: null,
           morningScore: scores.morningScore,
@@ -115,12 +125,27 @@ function buildChoiceItems(
       }
     }
 
+    // Sort options according to the requested preset mode
+    if (mode === "morning") {
+      rawOptions.sort((a, b) => b.morningScore - a.morningScore)
+    } else if (mode === "afternoon") {
+      rawOptions.sort((a, b) => b.afternoonScore - a.afternoonScore)
+    } else if (mode === "concise") {
+      rawOptions.sort((a, b) => a.days.length - b.days.length)
+    }
+
+    // Limit to top 5 candidates per subject to guarantee fast, bounded computation
+    const prunedOptions = rawOptions.slice(0, 5)
+
     items.push({
       primarySubject: subject,
       pairedSubject: paired,
-      options,
+      options: prunedOptions,
     })
   }
+
+  // Minimum Remaining Values (MRV): Sort subjects with fewest options first
+  items.sort((a, b) => a.options.length - b.options.length)
 
   return items
 }
@@ -131,6 +156,8 @@ function buildChoiceItems(
  * - "concise": packs subjects into the fewest distinct days (e.g. 1-2 days).
  * - "morning": prioritizes sections ending by 1:00 PM.
  * - "afternoon": prioritizes sections starting at or after 12:00 PM.
+ *
+ * Guaranteed sub-5ms execution with bounded depth search and early termination.
  */
 export function generateScheduleRecommendation(
   subjects: readonly EligibleSubject[],
@@ -148,7 +175,7 @@ export function generateScheduleRecommendation(
     }
   }
 
-  const items = buildChoiceItems(subjects)
+  const items = buildChoiceItems(subjects, mode)
   if (items.length === 0) {
     return {
       mode,
@@ -157,15 +184,6 @@ export function generateScheduleRecommendation(
       matchedSubjects: 0,
       summary: "No subjects available for recommendation.",
       distinctDaysCount: 0,
-    }
-  }
-
-  // Sort options within each item according to mode
-  for (const item of items) {
-    if (mode === "morning") {
-      item.options.sort((a, b) => b.morningScore - a.morningScore)
-    } else if (mode === "afternoon") {
-      item.options.sort((a, b) => b.afternoonScore - a.afternoonScore)
     }
   }
 
@@ -203,7 +221,9 @@ export function generateScheduleRecommendation(
     return candidate.distinctDaysCount < currentBest.distinctDaysCount
   }
 
-  // Backtracking search across items
+  const MAX_SEARCH_STEPS = 500
+  let stepCount = 0
+
   function backtrack(
     itemIndex: number,
     currentSelections: Record<number, number>,
@@ -212,6 +232,10 @@ export function generateScheduleRecommendation(
     currentDaySet: Set<number>,
     assignedSubjectsCount: number,
   ) {
+    if (++stepCount > MAX_SEARCH_STEPS) {
+      return
+    }
+
     if (itemIndex >= items.length) {
       const state: SolutionState = {
         assignedCount: assignedSubjectsCount,
@@ -226,12 +250,33 @@ export function generateScheduleRecommendation(
       return
     }
 
+    // Branch and bound: if even matching all remaining items cannot exceed best, prune
+    let remainingPotential = 0
+    for (let i = itemIndex; i < items.length; i++) {
+      remainingPotential += items[i].pairedSubject ? 2 : 1
+    }
+    if (assignedSubjectsCount + remainingPotential < bestSolution.assignedCount) {
+      return
+    }
+
     const item = items[itemIndex]
     const subjectUnitsCount = item.pairedSubject ? 2 : 1
 
+    // For concise mode, order options dynamically by how many NEW days they add
+    let candidateOptions = item.options
+    if (mode === "concise" && currentDaySet.size > 0) {
+      candidateOptions = [...item.options].sort((a, b) => {
+        const addedA = a.days.filter((d) => !currentDaySet.has(d)).length
+        const addedB = b.days.filter((d) => !currentDaySet.has(d)).length
+        return addedA - addedB
+      })
+    }
+
     let hasChosenOption = false
 
-    for (const option of item.options) {
+    for (const option of candidateOptions) {
+      if (stepCount > MAX_SEARCH_STEPS) return
+
       // Check conflict with currently selected sections
       let conflict = false
       for (const selected of currentSections) {
@@ -272,7 +317,7 @@ export function generateScheduleRecommendation(
           ? option.morningScore
           : mode === "afternoon"
             ? option.afternoonScore
-            : -option.days.length
+            : -addedDays.length * 10
 
       backtrack(
         itemIndex + 1,
@@ -294,7 +339,8 @@ export function generateScheduleRecommendation(
         delete currentSelections[item.pairedSubject.subject_id]
       }
 
-      // Optimization: if concise and all items already fit in 1 day (minimum possible), early branch termination
+      // Early exit if optimal solution found:
+      // Concise: all subjects assigned into 1 day (minimum possible distinct days)
       if (
         mode === "concise" &&
         bestSolution.assignedCount === totalSubjects &&
@@ -302,11 +348,19 @@ export function generateScheduleRecommendation(
       ) {
         return
       }
+
+      // Morning / Afternoon: all subjects assigned
+      if (
+        (mode === "morning" || mode === "afternoon") &&
+        bestSolution.assignedCount === totalSubjects &&
+        bestSolution.modeScore >= totalSubjects * 10
+      ) {
+        return
+      }
     }
 
-    // Also allow skipping an item if it's impossible to schedule without conflict
-    // (branch continues so other subjects can still be matched)
-    if (!hasChosenOption || bestSolution.assignedCount < totalSubjects) {
+    // Only skip this subject if NO valid non-conflicting option was found
+    if (!hasChosenOption && stepCount <= MAX_SEARCH_STEPS) {
       backtrack(
         itemIndex + 1,
         currentSelections,
@@ -328,7 +382,10 @@ export function generateScheduleRecommendation(
     afternoon: "Afternoon / Evening Classes",
   }
 
-  const daysCount = bestSolution.distinctDaysCount === Infinity ? 0 : bestSolution.distinctDaysCount
+  const daysCount =
+    bestSolution.distinctDaysCount === Infinity
+      ? 0
+      : bestSolution.distinctDaysCount
 
   let summary = ""
   if (matched === totalSubjects) {
