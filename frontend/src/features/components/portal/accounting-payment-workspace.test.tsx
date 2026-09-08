@@ -106,6 +106,7 @@ const studentAccount = {
   total_paid: "1000.00",
   prior_balance: "3500.00",
   outstanding_balance: "8275.00",
+  advance_payment_balance: "0.00",
   has_promissory_note_on_file: true,
   entries: [
     {
@@ -745,11 +746,11 @@ describe("AccountingPaymentWorkspace", () => {
     })
 
     await user.click(
-      await screen.findByRole("button", { name: "Record balance payment" }),
+      await screen.findByRole("button", { name: /Record balance.*payment/i }),
     )
     const dialog = screen.getByRole("alertdialog")
     await user.type(
-      within(dialog).getByLabelText("Balance payment amount"),
+      within(dialog).getByLabelText(/Payment amount/i),
       "500",
     )
     await user.click(

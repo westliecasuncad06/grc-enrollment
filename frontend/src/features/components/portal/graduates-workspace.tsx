@@ -105,7 +105,7 @@ export function GraduatesWorkspace() {
           <SelectTrigger className="w-full sm:w-56" aria-label="Filter by program">
             <SelectValue placeholder="All programs" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto">
             <SelectItem value="all">All programs</SelectItem>
             {programs.data?.map((p) => (
               <SelectItem key={p.id} value={String(p.id)}>
@@ -124,7 +124,7 @@ export function GraduatesWorkspace() {
           <SelectTrigger className="w-full sm:w-48" aria-label="Filter by graduation school year">
             <SelectValue placeholder="All graduation years" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto">
             <SelectItem value="all">All graduation years</SelectItem>
             {GRADUATION_YEARS.map((sy) => (
               <SelectItem key={sy} value={sy}>
@@ -143,7 +143,7 @@ export function GraduatesWorkspace() {
           <SelectTrigger className="w-full sm:w-48" aria-label="Filter by curriculum version">
             <SelectValue placeholder="All curricula" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto">
             <SelectItem value="all">All curricula</SelectItem>
             {curricula.data?.map((c) => (
               <SelectItem key={c.id} value={String(c.id)}>

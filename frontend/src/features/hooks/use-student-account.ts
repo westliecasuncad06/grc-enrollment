@@ -27,6 +27,7 @@ export function useOwnStudentAccountQuery({
     queryFn: ({ signal }) => getOwnStudentAccount(signal),
     enabled: enabled && session?.role === "student",
     refetchOnWindowFocus: "always",
+    refetchInterval: 5_000,
   })
 }
 

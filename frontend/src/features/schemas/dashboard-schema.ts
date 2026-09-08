@@ -18,7 +18,7 @@ export const enrollmentSummaryEnvelopeSchema = z
   .object({ data: enrollmentSummarySchema })
   .strict()
 
-const yearOverYearCountSchema = z
+export const yearOverYearCountSchema = z
   .object({
     school_year: z.string().min(1),
     enrollment_count: z.number().int().nonnegative(),
@@ -144,3 +144,4 @@ export type StuckEnrollmentsResponse = z.infer<
 export type ProgramChairAnalyticsSummary = z.infer<
   typeof programChairAnalyticsSummarySchema
 >
+export type YearOverYearCount = z.infer<typeof yearOverYearCountSchema>

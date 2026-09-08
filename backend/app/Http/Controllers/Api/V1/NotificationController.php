@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Notifications\ListNotifications;
+use App\Actions\Notifications\MarkAllNotificationsRead;
 use App\Actions\Notifications\MarkNotificationRead;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Notification\IndexNotificationRequest;
@@ -52,6 +53,24 @@ final class NotificationController extends Controller
         return $this->cachePrivateResponse(
             NotificationResource::make($notification)->response($request),
         );
+    }
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function markAllRead(
+        Request $request,
+        MarkAllNotificationsRead $markAllNotificationsRead,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
+        $this->authorize('viewAny', Notification::class);
+
+        $markedCount = $markAllNotificationsRead->execute($user);
+
+        return response()->json([
+            'message' => "All {$markedCount} notifications marked as read.",
+            'marked_count' => $markedCount,
+        ]);
     }
 
     /**

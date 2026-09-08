@@ -1505,4 +1505,59 @@ describe("EnrollmentWorkspace", () => {
       screen.getAllByText("COE section — Programming 1").length,
     ).toBeGreaterThan(0)
   })
+
+  it("instructs students to claim queuing ticket at the campus Cashier kiosk upon confirmation", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+
+    expect(
+      await screen.findByText(
+        /proceed in person to the school Cashier kiosk on campus to claim your queuing ticket/i,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("disables submit button and shows exceeded badge when units exceed 30", async () => {
+    const user = userEvent.setup()
+    const heavySubject = {
+      ...eligibleSubject,
+      units: 31,
+    }
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [heavySubject] })),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+
+    expect(
+      screen.getByText("Exceeds 30.0 unit maximum"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Submit enrollment" }),
+    ).toBeDisabled()
+  })
 })

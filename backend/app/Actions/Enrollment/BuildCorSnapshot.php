@@ -5,6 +5,7 @@ namespace App\Actions\Enrollment;
 use App\Domain\Billing\AssessmentItemCategory;
 use App\Domain\Enrollment\CorTerms;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Models\AccountPayment;
 use App\Models\Enrollment;
 use App\Models\Payment;
 use Carbon\CarbonImmutable;
@@ -30,13 +31,23 @@ final class BuildCorSnapshot
             $items->filter(fn ($item): bool => $item->category === AssessmentItemCategory::Miscellaneous),
         );
 
+        $additionalPayments = '0.00';
+        if ($enrollment->exists) {
+            $sum = AccountPayment::query()->where('enrollment_id', $enrollment->id)->sum('amount');
+            $additionalPayments = number_format((float) $sum, 2, '.', '');
+        } elseif ($enrollment->relationLoaded('accountPayments')) {
+            $sum = $enrollment->accountPayments->sum(fn ($p): float => (float) $p->amount);
+            $additionalPayments = number_format((float) $sum, 2, '.', '');
+        }
+
         $grandTotal = $assessment?->total_amount ?? '0.00';
-        $amountPaid = $payment?->amount ?? '0.00';
-        $diff = bcsub($grandTotal, $amountPaid, 2);
+        $initialPayment = $payment?->amount ?? '0.00';
+        $totalPaid = bcadd($initialPayment, $additionalPayments, 2);
+        $diff = bcsub($grandTotal, $totalPaid, 2);
         $remainingBalance = bccomp($diff, '0.00', 2) === -1 ? '0.00' : $diff;
 
         $paymentStatus = match (true) {
-            $payment === null => 'unpaid',
+            $payment === null && bccomp($totalPaid, '0.00', 2) === 0 => 'unpaid',
             bccomp($remainingBalance, '0.00', 2) === 0 => 'full_payment',
             default => 'partial_payment',
         };
@@ -89,8 +100,10 @@ final class BuildCorSnapshot
                 'total_tuition' => $this->sum($tuition),
                 'total_other_fees' => $this->sum($otherFees),
                 'grand_total' => $grandTotal,
-                'payment_amount' => $amountPaid,
-                'amount_paid' => $amountPaid,
+                'initial_payment' => $initialPayment,
+                'additional_payments' => $additionalPayments,
+                'payment_amount' => $totalPaid,
+                'amount_paid' => $totalPaid,
                 'remaining_balance' => $remainingBalance,
                 'payment_status' => $paymentStatus,
                 'payment_reference' => $payment?->external_reference,

@@ -13,14 +13,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property int $id
  * @property int $student_id
- * @property int $enrollment_id
+ * @property ?int $enrollment_id
  * @property int $received_by
  * @property numeric-string $amount
  * @property CarbonImmutable $received_at
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read StudentProfile $student
- * @property-read Enrollment $enrollment
+ * @property-read ?Enrollment $enrollment
  * @property-read User $receiver
  */
 final class AccountPayment extends Model

@@ -60,11 +60,15 @@ export async function getEnrollmentSummary(
 }
 
 export async function getInstitutionSummary(
+  academicTermId?: number,
   signal?: AbortSignal,
 ): Promise<InstitutionSummary> {
   const envelope = parse(
     institutionSummaryEnvelopeSchema,
-    await getAuthenticatedJson(INSTITUTION_SUMMARY_PATH, signal),
+    await getAuthenticatedJson(
+      withTerm(INSTITUTION_SUMMARY_PATH, academicTermId),
+      signal,
+    ),
     "institution summary",
   )
   return envelope.data

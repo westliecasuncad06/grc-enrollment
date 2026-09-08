@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FileCheck2, ReceiptText } from "lucide-react"
+import { FileCheck2, ReceiptText, RefreshCw } from "lucide-react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -69,15 +69,31 @@ export function StudentDigitalComWorkspace() {
                 Summary of fees assessed and payments confirmed by the Cashier.
               </CardDescription>
             </div>
-            {accountQuery.data.outstanding_balance === "0.00" ? (
-              <Badge variant="outline" className="border-emerald-600/40 text-emerald-800 bg-emerald-50 dark:bg-emerald-950/20">
-                Paid in Full
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10">
-                Remaining Balance: {formatPhp(accountQuery.data.outstanding_balance)}
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {accountQuery.data.outstanding_balance === "0.00" ? (
+                <Badge variant="outline" className="border-emerald-600/40 text-emerald-800 bg-emerald-50 dark:bg-emerald-950/20">
+                  Paid in Full
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="border-destructive/40 text-destructive bg-destructive/10">
+                  Remaining Balance: {formatPhp(accountQuery.data.outstanding_balance)}
+                </Badge>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 text-xs"
+                onClick={() => void accountQuery.refetch()}
+                disabled={accountQuery.isFetching}
+              >
+                <RefreshCw
+                  className={`size-3.5 ${accountQuery.isFetching ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                Refresh
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-4">
             <dl className="grid gap-3 sm:grid-cols-3">

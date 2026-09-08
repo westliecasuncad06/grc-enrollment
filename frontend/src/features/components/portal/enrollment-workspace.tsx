@@ -17,7 +17,12 @@ import {
   StatusStepper,
   type StatusStepperStage,
 } from "@/features/components/portal/status-stepper"
+import { CalendarDays, ListIcon } from "lucide-react"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import {
+  SectionScheduleCalendar,
+  type SectionScheduleItem,
+} from "@/features/components/portal/section-schedule-calendar"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -30,6 +35,10 @@ import {
 } from "@/features/components/ui/alert-dialog"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/features/components/ui/toggle-group"
 import {
   Card,
   CardContent,
@@ -59,6 +68,8 @@ import { isApiClientError } from "@/features/services/api-client"
 import { createBrowserEnrollmentDraftStore } from "@/features/services/enrollment-draft-store"
 import { createEnrollment } from "@/features/services/enrollment-service"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
+import { formatTimeRange } from "@/features/lib/format-time"
+import { hasScheduleConflict } from "@/features/lib/schedule-order"
 
 const TERMINAL_STATUSES = new Set(["rejected", "cancelled", "withdrawn"])
 
@@ -190,6 +201,8 @@ export function EnrollmentWorkspace() {
     null,
   )
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [outstandingBalancePromptOpen, setOutstandingBalancePromptOpen] =
+    useState(false)
   const [submitError, setSubmitError] = useState("")
   const [fieldErrors, setFieldErrors] = useState<string[]>([])
   const [receipt, setReceipt] = useState(false)
@@ -288,12 +301,87 @@ export function EnrollmentWorkspace() {
   const hasActiveEnrollmentThisTerm = activeEnrollment !== undefined
   const addDrop = scheduleQuery.data?.add_drop
 
+  const [enrolledScheduleView, setEnrolledScheduleView] = useState<
+    "calendar" | "table"
+  >("table")
+
+  const activeEnrollmentCalendarItems: SectionScheduleItem[] = useMemo(() => {
+    if (!activeEnrollment) return []
+    return activeEnrollment.subjects.map((subj) => ({
+      id: subj.section_id,
+      subject_code: subj.subject_code,
+      subject_title: subj.subject_title,
+      units: subj.units,
+      section_code: subj.section_code,
+      room: subj.room,
+      professor_name: subj.professor_name,
+      schedule_days: subj.schedule_days ?? null,
+      starts_at_time: subj.starts_at_time ?? null,
+      ends_at_time: subj.ends_at_time ?? null,
+      modality: subj.modality ?? null,
+    }))
+  }, [activeEnrollment])
+
   const selectedEntries = buildSelectedEntries(effectiveSelections, subjects)
 
   const totalUnits = selectedEntries.reduce(
     (sum, entry) => sum + entry.subject.units,
     0,
   )
+
+  const scheduleConflict = useMemo(() => {
+    if (isRegularAudience) return null
+    for (let i = 0; i < selectedEntries.length; i++) {
+      for (let j = i + 1; j < selectedEntries.length; j++) {
+        const a = selectedEntries[i]
+        const b = selectedEntries[j]
+        if (hasScheduleConflict(a.section, b.section)) {
+          return { subjectA: a.subject, subjectB: b.subject }
+        }
+      }
+    }
+    return null
+  }, [isRegularAudience, selectedEntries])
+
+  const unpairedComponent = useMemo(() => {
+    if (isRegularAudience) return null
+    const sectionCodeBySubjectId = new Map<number, string>()
+    for (const entry of selectedEntries) {
+      sectionCodeBySubjectId.set(
+        entry.subject.subject_id,
+        entry.section.section_code,
+      )
+    }
+
+    for (const entry of selectedEntries) {
+      const pairedId = entry.subject.paired_subject_id
+      if (pairedId !== null) {
+        const pairedCode = sectionCodeBySubjectId.get(pairedId)
+        const pairedSubject = subjects.find((s) => s.subject_id === pairedId)
+        if (!pairedCode) {
+          return `${entry.subject.code} requires its paired component (${pairedSubject?.code ?? "paired component"}) to be selected together.`
+        }
+        if (pairedCode !== entry.section.section_code) {
+          return `${entry.subject.code} and ${pairedSubject?.code ?? "its paired component"} must be enrolled in the same section (${entry.section.section_code}).`
+        }
+      }
+    }
+    return null
+  }, [isRegularAudience, selectedEntries, subjects])
+
+  const validationError = useMemo(() => {
+    if (isRegularAudience) return null
+    if (totalUnits > 30.0) {
+      return `Total units (${totalUnits}) exceeds the maximum allowed limit of 30.0 units. Please remove some subjects before submitting.`
+    }
+    if (scheduleConflict) {
+      return `Schedule conflict detected: ${scheduleConflict.subjectA.code} conflicts with ${scheduleConflict.subjectB.code}. Please choose non-conflicting sections.`
+    }
+    if (unpairedComponent) {
+      return unpairedComponent
+    }
+    return null
+  }, [isRegularAudience, totalUnits, scheduleConflict, unpairedComponent])
 
   const mutation = useMutation({
     mutationFn: (payload: {
@@ -347,6 +435,10 @@ export function EnrollmentWorkspace() {
       return next
     })
   }
+  const batchChooseSections = (newSelections: Record<number, number>) => {
+    setReceipt(false)
+    setSelections(newSelections)
+  }
   const chooseBlock = (blockCode: string) => {
     setReceipt(false)
     setSelectedBlockCode(blockCode)
@@ -369,6 +461,12 @@ export function EnrollmentWorkspace() {
     setReceipt(false)
     setSubmitError("")
     setFieldErrors([])
+
+    if (validationError) {
+      setFieldErrors([validationError])
+      return
+    }
+
     try {
       let payload: { blockCode: string | null; sectionIds: readonly number[] }
 
@@ -436,11 +534,16 @@ export function EnrollmentWorkspace() {
       <Alert variant="destructive">
         <AlertDescription>{submitError}</AlertDescription>
       </Alert>
+    ) : validationError ? (
+      <Alert variant="destructive">
+        <AlertDescription>{validationError}</AlertDescription>
+      </Alert>
     ) : receipt ? (
       <Alert>
         <AlertDescription>
           Enrollment submitted and pending registrar approval. Its status is
-          shown below — you&apos;ll get a queue number once it&apos;s approved.
+          shown below — once approved, please proceed in person to the school
+          Cashier kiosk on campus to claim your queuing ticket for payment.
         </AlertDescription>
       </Alert>
     ) : null
@@ -448,24 +551,58 @@ export function EnrollmentWorkspace() {
   // Identical in both the block and per-subject review cards — only the
   // unit total differs — so both call sites share this instead of repeating
   // the total-units row and submit button twice.
-  const submitFooter = (totalUnitsValue: number) => (
-    <>
-      <div className="flex items-center justify-between rounded-lg border p-3">
-        <span className="text-sm font-medium text-muted-foreground">
-          Total units
-        </span>
-        <Badge className="text-base">{totalUnitsValue}</Badge>
+  const submitFooter = (totalUnitsValue: number) => {
+    const isExceeded = totalUnitsValue > 30.0
+    const isOverload = totalUnitsValue > 24.0 && totalUnitsValue <= 30.0
+    const hasBlocker =
+      totalUnitsValue === 0 ||
+      isExceeded ||
+      scheduleConflict !== null ||
+      unpairedComponent !== null
+
+    return (
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border p-2.5">
+            <span className="text-sm font-medium text-muted-foreground">
+              Total units
+            </span>
+            <Badge
+              variant={
+                isExceeded ? "destructive" : isOverload ? "warning" : "default"
+              }
+              className="text-base font-semibold"
+            >
+              {totalUnitsValue}
+            </Badge>
+          </div>
+          {isOverload && (
+            <Badge variant="warning">Overload (requires approval)</Badge>
+          )}
+          {isExceeded && (
+            <Badge variant="destructive">Exceeds 30.0 unit maximum</Badge>
+          )}
+        </div>
+        <Button
+          type="button"
+          className="w-full sm:w-auto"
+          onClick={() => {
+            const balance = Number(
+              studentAccountQuery.data?.outstanding_balance ?? "0",
+            )
+            if (balance > 10000) {
+              setOutstandingBalancePromptOpen(true)
+            } else {
+              setConfirmOpen(true)
+            }
+          }}
+          disabled={mutation.isPending || enrollmentWindowClosed || hasBlocker}
+        >
+          {mutation.isPending ? "Submitting enrollment" : "Submit enrollment"}
+        </Button>
       </div>
-      <Button
-        type="button"
-        className="w-full sm:w-auto"
-        onClick={() => setConfirmOpen(true)}
-        disabled={mutation.isPending || enrollmentWindowClosed}
-      >
-        {mutation.isPending ? "Submitting enrollment" : "Submit enrollment"}
-      </Button>
-    </>
-  )
+    )
+  }
 
   return (
     <WorkspacePage
@@ -565,6 +702,7 @@ export function EnrollmentWorkspace() {
                       selections={effectiveSelections}
                       onChoose={chooseSection}
                       onClear={clearSection}
+                      onBatchChoose={batchChooseSections}
                       disabled={enrollmentWindowClosed}
                       currentYearLevel={currentYearLevel}
                       currentSemester={currentSemester}
@@ -611,8 +749,9 @@ export function EnrollmentWorkspace() {
                   )
                 : "the selected term"}
               . This action is recorded in the operational audit log and sent
-              for registrar approval — your queue number is issued once
-              it&apos;s approved.
+              for registrar approval — once approved, please proceed in person to
+              the school Cashier kiosk on campus to claim your queuing ticket for
+              payment.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="[&_button]:w-full sm:[&_button]:w-auto">
@@ -625,6 +764,40 @@ export function EnrollmentWorkspace() {
               onClick={() => void submit()}
             >
               {mutation.isPending ? "Submitting" : "Confirm submission"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={outstandingBalancePromptOpen}
+        onOpenChange={(open) => {
+          if (!open) setOutstandingBalancePromptOpen(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Outstanding balance notice</AlertDialogTitle>
+            <AlertDialogDescription>
+              You currently have an outstanding balance exceeding ₱10,000.00
+              ({studentAccountQuery.data?.outstanding_balance ? `₱${studentAccountQuery.data.outstanding_balance}` : ""}).
+              Are you willing to pay your remaining balance?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="[&_button]:w-full sm:[&_button]:w-auto">
+            <AlertDialogCancel
+              onClick={() => setOutstandingBalancePromptOpen(false)}
+            >
+              No, cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => {
+                setOutstandingBalancePromptOpen(false)
+                setConfirmOpen(true)
+              }}
+            >
+              Yes, proceed
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -648,6 +821,128 @@ export function EnrollmentWorkspace() {
 
       {activeEnrollment && (
         <EnrollmentQueuePaymentPanel enrollment={activeEnrollment} />
+      )}
+
+      {activeEnrollment && activeEnrollment.subjects.length > 0 && (
+        <Card role="region" aria-label="Enrolled class schedule">
+          <CardHeader className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle
+                level={2}
+                className="flex items-center gap-2 text-lg font-bold"
+              >
+                <CalendarDays
+                  className="size-5 text-primary"
+                  aria-hidden="true"
+                />
+                Enrolled Class Schedule
+              </CardTitle>
+              <CardDescription>
+                Weekly class timetable and professor assignments for{" "}
+                {selectedTerm
+                  ? formatAcademicTerm(selectedTerm)
+                  : "the selected term"}
+                .
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{activeEnrollment.status_label}</Badge>
+              <Badge variant="outline">
+                {activeEnrollment.total_units} units
+              </Badge>
+              <ToggleGroup
+                type="single"
+                value={enrolledScheduleView}
+                onValueChange={(val) => {
+                  if (val === "table" || val === "calendar")
+                    setEnrolledScheduleView(val)
+                }}
+                variant="outline"
+                size="sm"
+                aria-label="Enrolled schedule layout"
+              >
+                <ToggleGroupItem value="table" aria-label="Schedule list">
+                  <ListIcon data-icon="inline-start" aria-hidden="true" />
+                  Schedule list
+                </ToggleGroupItem>
+                <ToggleGroupItem value="calendar" aria-label="View in calendar">
+                  <CalendarDays data-icon="inline-start" aria-hidden="true" />
+                  View in calendar
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {enrolledScheduleView === "calendar" ? (
+              <SectionScheduleCalendar
+                items={activeEnrollmentCalendarItems}
+                disabled={true}
+                emptyMessage="No timetable slots found for enrolled subjects."
+              />
+            ) : (
+              <DataTable
+                caption="Enrolled subjects schedule"
+                rowKey={(subj) => subj.section_id}
+                rows={activeEnrollment.subjects}
+                columns={[
+                  {
+                    key: "code",
+                    header: "Subject code",
+                    render: (subj) => subj.subject_code,
+                  },
+                  {
+                    key: "title",
+                    header: "Description",
+                    render: (subj) => subj.subject_title,
+                  },
+                  {
+                    key: "units",
+                    header: "Units",
+                    render: (subj) => subj.units ?? "—",
+                  },
+                  {
+                    key: "section",
+                    header: "Section",
+                    render: (subj) => subj.section_code ?? "—",
+                  },
+                  {
+                    key: "day",
+                    header: "Day",
+                    render: (subj) => subj.schedule_days ?? "To be confirmed",
+                  },
+                  {
+                    key: "time",
+                    header: "Time",
+                    render: (subj) =>
+                      subj.starts_at_time && subj.ends_at_time
+                        ? formatTimeRange(
+                            subj.starts_at_time,
+                            subj.ends_at_time,
+                          )
+                        : "To be confirmed",
+                  },
+                  {
+                    key: "room",
+                    header: "Room",
+                    render: (subj) => subj.room ?? "To be confirmed",
+                  },
+                  {
+                    key: "professor",
+                    header: "Professor",
+                    render: (subj) => subj.professor_name ?? "To be confirmed",
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (subj) => (
+                      <Badge variant="outline">{subj.status_label}</Badge>
+                    ),
+                  },
+                ]}
+              />
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {activeEnrollment?.status === "enrolled" && (

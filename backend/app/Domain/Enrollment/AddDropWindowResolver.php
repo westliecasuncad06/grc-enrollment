@@ -22,6 +22,14 @@ use Carbon\CarbonImmutable;
  * `ArchiveAndCreateNextTerm` just created (not yet configured) — silently
  * opening add/drop for an unconfigured term would be a worse failure mode
  * than blocking it.
+ *
+ * The optional `$studentAlreadyEnrolled` flag bypasses the
+ * `EnrollmentStillOpen` check for students who are already enrolled in the
+ * term. `StoreEnrollmentChangeRequestRequest` gates on
+ * `EnrollmentStatus::Enrolled` before calling this, so passing `true` here
+ * is safe: the student is definitively enrolled and the only relevant
+ * constraints are whether the term is ongoing and whether the add/drop
+ * deadline has passed.
  */
 final class AddDropWindowResolver
 {
@@ -30,6 +38,7 @@ final class AddDropWindowResolver
         ?CarbonImmutable $enrollmentClosesAt,
         ?CarbonImmutable $addDropDeadlineAt,
         CarbonImmutable $now,
+        bool $studentAlreadyEnrolled = false,
     ): AddDropAvailability {
         if ($status !== AcademicTermStatus::SemesterOngoing) {
             return new AddDropAvailability(
@@ -40,13 +49,19 @@ final class AddDropWindowResolver
             );
         }
 
-        if ($enrollmentClosesAt === null || $now->lt($enrollmentClosesAt)) {
-            return new AddDropAvailability(
-                false,
-                AddDropAvailabilityReason::EnrollmentStillOpen,
-                $enrollmentClosesAt,
-                $addDropDeadlineAt,
-            );
+        // When the student is already enrolled, skip the enrollment-window
+        // check: the window being open for new submissions is irrelevant —
+        // the student has already enrolled and only needs the add/drop
+        // deadline to not have passed yet.
+        if (! $studentAlreadyEnrolled) {
+            if ($enrollmentClosesAt === null || $now->lt($enrollmentClosesAt)) {
+                return new AddDropAvailability(
+                    false,
+                    AddDropAvailabilityReason::EnrollmentStillOpen,
+                    $enrollmentClosesAt,
+                    $addDropDeadlineAt,
+                );
+            }
         }
 
         if ($addDropDeadlineAt === null) {

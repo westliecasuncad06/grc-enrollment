@@ -81,6 +81,7 @@ export const sectionSchema = z
     subject_id: z.number().int().positive(),
     section_code: z.string().min(1),
     professor_id: z.number().int().positive().nullable(),
+    professor_name: z.string().nullable().optional(),
     schedule_days: z.string().min(1).nullable(),
     starts_at_time: z.string().min(1).nullable(),
     ends_at_time: z.string().min(1).nullable(),

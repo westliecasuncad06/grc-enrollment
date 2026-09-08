@@ -217,7 +217,7 @@ final class StudentAccountEndpointTest extends TestCase
         $this->assertDatabaseCount('account_payments', 2);
     }
 
-    public function test_an_account_payment_cannot_exceed_the_student_outstanding_balance(): void
+    public function test_an_account_payment_exceeding_outstanding_balance_is_recorded_as_advance_payment(): void
     {
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum, 'student.overpayment@grc.test', '2026-0001');
@@ -228,12 +228,29 @@ final class StudentAccountEndpointTest extends TestCase
         );
 
         $response = $this->withToken($this->accountingToken())
-            ->postJson("/api/v1/students/{$student->id}/account-payments", ['amount' => 500.01]);
+            ->postJson("/api/v1/students/{$student->id}/account-payments", ['amount' => 700.00]);
 
-        $response->assertUnprocessable()->assertJsonPath(
-            'error.errors.amount.0',
-            'Account payment amount cannot exceed the outstanding balance.',
-        );
-        $this->assertDatabaseCount('account_payments', 0);
+        $response->assertCreated()
+            ->assertJsonPath('data.outstanding_balance', '0.00')
+            ->assertJsonPath('data.advance_payment_balance', '200.00');
+        $this->assertDatabaseCount('account_payments', 2);
+    }
+
+    public function test_an_account_payment_can_be_recorded_when_student_has_no_outstanding_balance(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.advance@grc.test', '2026-0002');
+
+        $response = $this->withToken($this->accountingToken())
+            ->postJson("/api/v1/students/{$student->id}/account-payments", ['amount' => 1000.00]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.outstanding_balance', '0.00')
+            ->assertJsonPath('data.advance_payment_balance', '1000.00');
+        $this->assertDatabaseHas('account_payments', [
+            'student_id' => $student->id,
+            'enrollment_id' => null,
+            'amount' => '1000.00',
+        ]);
     }
 }

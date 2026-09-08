@@ -1,8 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import { LogOutIcon } from "lucide-react"
 
 import { QueueKioskDeviceLogin } from "@/features/components/kiosk/queue-kiosk-device-login"
+import { QueueKioskSignOutDialog } from "@/features/components/kiosk/queue-kiosk-sign-out-dialog"
 import { QueueKioskStudentLogin } from "@/features/components/kiosk/queue-kiosk-student-login"
 import { QueueKioskStudentSession } from "@/features/components/kiosk/queue-kiosk-student-session"
 import { Button } from "@/features/components/ui/button"
@@ -15,9 +17,14 @@ import {
 } from "@/features/components/ui/card"
 import { useQueueKioskSession } from "@/features/hooks/use-queue-kiosk-session"
 
-export function QueueKioskPage() {
+export function QueueKioskPage({
+  requirePassword = true,
+}: {
+  requirePassword?: boolean
+} = {}) {
   const { state, finishStudent, signInDevice, signInStudent, signOutDevice } =
     useQueueKioskSession()
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false)
 
   if (state.status === "restoring-device") {
     return (
@@ -33,6 +40,19 @@ export function QueueKioskPage() {
     )
   }
 
+  const kioskEmail =
+    state.status === "student-login" || state.status === "student-active"
+      ? state.kioskUser.email
+      : "queue@grc.com"
+
+  const handleSignOutClick = () => {
+    if (requirePassword) {
+      setConfirmingSignOut(true)
+    } else {
+      signOutDevice()
+    }
+  }
+
   const deviceHeader = (
     <header className="queue-kiosk-header">
       <div>
@@ -40,14 +60,22 @@ export function QueueKioskPage() {
         <h1>Cashier Queue Kiosk</h1>
       </div>
       {state.status !== "device-login" && (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void signOutDevice()}
-        >
-          <LogOutIcon data-icon="inline-start" />
-          Sign out device
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSignOutClick}
+          >
+            <LogOutIcon data-icon="inline-start" />
+            Sign out device
+          </Button>
+          <QueueKioskSignOutDialog
+            open={confirmingSignOut}
+            onOpenChange={setConfirmingSignOut}
+            onConfirmSignOut={signOutDevice}
+            kioskEmail={kioskEmail}
+          />
+        </>
       )}
     </header>
   )
@@ -104,6 +132,7 @@ export function QueueKioskPage() {
       state={state}
       finishStudent={finishStudent}
       signOutDevice={signOutDevice}
+      requirePassword={requirePassword}
     />
   )
 }

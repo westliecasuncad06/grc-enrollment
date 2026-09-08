@@ -533,7 +533,7 @@ export function AccountingPaymentWorkspace() {
         <CardHeader>
           <CardTitle level={2}>Find student</CardTitle>
           <CardDescription>
-            Search a student number before serving an eligible payment ticket.
+            Search a student number, student name, or email before serving an eligible payment ticket.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -546,12 +546,13 @@ export function AccountingPaymentWorkspace() {
           >
             <Field className="min-w-52 flex-1">
               <FieldLabel htmlFor="cashier-student-number">
-                Find student number
+                Student number, name, or email
               </FieldLabel>
               <Input
                 id="cashier-student-number"
                 value={studentNumberInput}
                 onChange={(event) => setStudentNumberInput(event.target.value)}
+                placeholder="e.g. 2024-06-01091, student name, or email"
               />
             </Field>
             <Button type="submit" disabled={!studentNumberInput.trim()}>
@@ -565,7 +566,7 @@ export function AccountingPaymentWorkspace() {
           )}
           {candidateQuery.isError && submittedStudentNumber && (
             <p className="text-sm text-destructive">
-              No eligible payment ticket was found for this student number.
+              No eligible payment ticket was found for this student number, name, or email.
             </p>
           )}
           {candidateQuery.data && (
@@ -735,6 +736,14 @@ export function AccountingPaymentWorkspace() {
                             {formatPhp(accountQuery.data.outstanding_balance)}
                           </dd>
                         </div>
+                        <div className="grid gap-1">
+                          <dt className="text-muted-foreground">
+                            Advance credit
+                          </dt>
+                          <dd className={`font-semibold ${accountQuery.data.advance_payment_balance !== "0.00" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                            {formatPhp(accountQuery.data.advance_payment_balance)}
+                          </dd>
+                        </div>
                         {accountQuery.data.has_promissory_note_on_file && (
                           <div className="sm:col-span-2">
                             <Badge variant="outline" className="border-amber-600/40 text-amber-800 bg-amber-50 dark:bg-amber-950/20">
@@ -817,12 +826,11 @@ export function AccountingPaymentWorkspace() {
                         variant="outline"
                         disabled={
                           accountPaymentMutation.isPending ||
-                          accountQuery.data === undefined ||
-                          accountQuery.data.outstanding_balance === "0.00"
+                          accountQuery.data === undefined
                         }
                         onClick={openBalancePayment}
                       >
-                        Record balance payment
+                        Record balance / advance payment
                       </Button>
                       <Button
                         type="button"
@@ -1170,16 +1178,17 @@ export function AccountingPaymentWorkspace() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Record balance payment</AlertDialogTitle>
+            <AlertDialogTitle>Record balance or advance payment</AlertDialogTitle>
             <AlertDialogDescription>
-              This is applied to the oldest outstanding enrollment and does not
-              confirm the current enrollment or change the queue ticket.
+              {accountQuery.data?.outstanding_balance === "0.00"
+                ? "This student currently has no outstanding balance. The payment will be credited as an advance payment on their student account."
+                : "This payment settles the student's oldest outstanding balances first. Any excess is credited as an advance payment on their account."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="balance-payment-amount">
-                Balance payment amount
+                Payment amount (PHP)
               </FieldLabel>
               <Input
                 id="balance-payment-amount"
@@ -1189,6 +1198,7 @@ export function AccountingPaymentWorkspace() {
                   setBalancePaymentAmount(event.target.value)
                 }
                 disabled={accountPaymentMutation.isPending}
+                placeholder="0.00"
               />
             </Field>
           </FieldGroup>

@@ -218,7 +218,7 @@ final class FacultyInvitationsEndpointTest extends TestCase
         });
         DB::table('password_reset_tokens')
             ->where('email', 'expiring.professor@grc.test')
-            ->update(['created_at' => now()->subMinutes(61)]);
+            ->update(['created_at' => now()->subMinutes((int) config('auth.passwords.users.expire') + 1)]);
 
         foreach ([$setupCode, 'definitely-not-the-code'] as $code) {
             $this->postJson('/api/v1/auth/faculty-account-setup', [

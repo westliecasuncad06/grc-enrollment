@@ -381,21 +381,17 @@ describe("PortalNotificationSheet", () => {
 
   it("marks every unread notification read in one action", async () => {
     const user = userEvent.setup()
-    const patchedIds: number[] = []
+    let bulkReadCalled = false
     fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
 
-      if (init?.method === "PATCH") {
-        const id = Number(url.split("/").at(-2))
-        patchedIds.push(id)
+      if (init?.method === "PATCH" && url.includes("/notifications/read-all")) {
+        bulkReadCalled = true
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: {
-                ...notificationEnvelope.data[0],
-                id,
-                read_at: "2026-07-29T10:03:00Z",
-              },
+              message: "All 2 notifications marked as read.",
+              marked_count: 2,
             }),
             { status: 200 },
           ),
@@ -426,7 +422,7 @@ describe("PortalNotificationSheet", () => {
       await screen.findByRole("button", { name: "Mark all as read" }),
     )
 
-    expect(patchedIds.sort()).toEqual([7, 8])
+    expect(bulkReadCalled).toBe(true)
   })
 
   it("navigates to the relevant module and closes the sheet when a routable notification is clicked", async () => {

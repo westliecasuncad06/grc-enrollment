@@ -11,6 +11,7 @@ import {
   FolderArchive,
   Gauge,
   GraduationCap,
+  IdCard,
   ListChecks,
   Lock,
   Medal,
@@ -61,6 +62,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Enrollment",
         "Select sections and submit your enrollment for the term.",
         GraduationCap,
+      ),
+      portalModule(
+        "schedule",
+        "Schedule",
+        "View your weekly class timetable, professor assignments, and room allocations.",
+        CalendarDays,
       ),
       portalModule(
         "grades",
@@ -122,6 +129,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Encode, edit, and submit grades for students in your assigned sections.",
         ClipboardCheck,
       ),
+      portalModule(
+        "professor-information",
+        "My Information",
+        "View your official faculty profile, department, and teaching load details.",
+        IdCard,
+      ),
     ],
   },
   program_chair: {
@@ -165,16 +178,22 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         Building2,
       ),
       portalModule(
-        "schedule-proposals",
-        "Schedule Proposals",
-        "Prepare schedule drafts for authorized review.",
-        FileText,
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "View enrollment funnel metrics and submission status counts for the current term.",
+        Gauge,
       ),
       portalModule(
         "program-chair-analytics",
         "Enrollment Analytics",
         "Descriptive, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
         BarChart3,
+      ),
+      portalModule(
+        "irregular-enrollments",
+        "Irregular Advising",
+        "Check irregular student subject schedules, review student curriculum prospectus, and approve enrollments.",
+        FileCheck2,
       ),
       portalModule(
         "faculty-invitations",

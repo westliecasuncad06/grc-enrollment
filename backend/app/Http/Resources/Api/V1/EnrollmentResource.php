@@ -50,7 +50,21 @@ final class EnrollmentResource extends JsonResource
      *     registrar_decided_at: ?string,
      *     payment_confirmed_at: ?string,
      *     enrolled_at: ?string,
-     *     subjects: list<array{section_id: int, subject_code: string, subject_title: string, status: string, status_label: string}>,
+     *     subjects: list<array{
+     *         section_id: int,
+     *         section_code: string,
+     *         subject_code: string,
+     *         subject_title: string,
+     *         units: float,
+     *         schedule_days: ?string,
+     *         starts_at_time: ?string,
+     *         ends_at_time: ?string,
+     *         room: ?string,
+     *         modality: ?string,
+     *         professor_name: ?string,
+     *         status: string,
+     *         status_label: string
+     *     }>,
      *     queue_ticket: ?array{ticket_number: string, queue_date: string, status: string, status_label: string, priority: string, priority_label: string, position: ?int},
      *     assessment: ?array{
      *         total_amount: ?string,
@@ -68,6 +82,8 @@ final class EnrollmentResource extends JsonResource
         $mayViewStudentContext = $actor instanceof User && in_array($actor->role, [
             UserRole::RegistrarHead,
             UserRole::RegistrarStaff,
+            UserRole::Dean,
+            UserRole::ExecutiveDirector,
         ], true);
         $student = $this->resource->student;
 
@@ -93,8 +109,16 @@ final class EnrollmentResource extends JsonResource
                 $this->resource->enrollmentSubjects
                     ->map(fn (EnrollmentSubject $enrollmentSubject): array => [
                         'section_id' => $enrollmentSubject->section_id,
+                        'section_code' => $enrollmentSubject->section->section_code,
                         'subject_code' => $enrollmentSubject->section->subject->code,
                         'subject_title' => $enrollmentSubject->section->subject->title,
+                        'units' => (float) $enrollmentSubject->section->subject->units,
+                        'schedule_days' => $enrollmentSubject->section->schedule_days,
+                        'starts_at_time' => $enrollmentSubject->section->starts_at_time,
+                        'ends_at_time' => $enrollmentSubject->section->ends_at_time,
+                        'room' => $enrollmentSubject->section->room,
+                        'modality' => $enrollmentSubject->section->modality?->value,
+                        'professor_name' => $enrollmentSubject->section->professor?->name,
                         'status' => $enrollmentSubject->status->value,
                         'status_label' => $enrollmentSubject->status->label(),
                     ])

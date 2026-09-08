@@ -1,11 +1,13 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
 import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import { ProspectusDocument } from "@/features/components/portal/prospectus-document"
+import { Button } from "@/features/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +20,7 @@ import {
   useSectionsQuery,
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
+import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 
 type EnrollmentReviewRow = Enrollment["subjects"][number] & {
@@ -89,6 +92,7 @@ export function EnrollmentReviewDialog({
   enrollment: Enrollment | null
   onOpenChange: (open: boolean) => void
 }) {
+  const [prospectusOpen, setProspectusOpen] = useState(false)
   const sectionsQuery = useSectionsQuery({ enabled: enrollment !== null })
   const subjectsQuery = useSubjectsQuery({ enabled: enrollment !== null })
   const isLoading = sectionsQuery.isPending || subjectsQuery.isPending
@@ -118,16 +122,29 @@ export function EnrollmentReviewDialog({
   const totalUnits = rows.reduce((sum, row) => sum + (row.units ?? 0), 0)
 
   return (
-    <Dialog open={enrollment !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-6xl">
-        <DialogHeader>
-          <DialogTitle>
-            Review enrollment{enrollment ? ` #${enrollment.id}` : ""}
-          </DialogTitle>
-          <DialogDescription>
-            {enrollment ? `${enrollment.total_units} total units` : ""}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={enrollment !== null} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-6xl">
+          <DialogHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <DialogTitle>
+                Review enrollment{enrollment ? ` #${enrollment.id}` : ""}
+              </DialogTitle>
+              <DialogDescription>
+                {enrollment ? `${enrollment.total_units} total units` : ""}
+              </DialogDescription>
+            </div>
+            {enrollment?.student_id && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setProspectusOpen(true)}
+              >
+                View Prospectus
+              </Button>
+            )}
+          </DialogHeader>
         <dl className="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-3">
           <div className="grid gap-1">
             <dt className="text-muted-foreground">Name</dt>
@@ -136,9 +153,7 @@ export function EnrollmentReviewDialog({
           <div className="grid gap-1">
             <dt className="text-muted-foreground">Year</dt>
             <dd className="font-medium">
-              {enrollment?.student_year_level
-                ? `Year ${enrollment.student_year_level}`
-                : "—"}
+              {formatYearLevelOrdinal(enrollment?.student_year_level)}
             </dd>
           </div>
           <div className="grid gap-1">
@@ -176,5 +191,18 @@ export function EnrollmentReviewDialog({
         )}
       </DialogContent>
     </Dialog>
+    <Dialog open={prospectusOpen} onOpenChange={setProspectusOpen}>
+      <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>
+            Student Prospectus — {enrollment?.student_name ?? enrollment?.student_number}
+          </DialogTitle>
+        </DialogHeader>
+        {enrollment?.student_id && (
+          <ProspectusDocument studentId={enrollment.student_id} />
+        )}
+      </DialogContent>
+    </Dialog>
+  </>
   )
 }

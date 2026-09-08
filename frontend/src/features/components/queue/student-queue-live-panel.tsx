@@ -39,14 +39,14 @@ function getStageGuidance(queue: StudentQueueView): string {
     case "no_active_enrollment":
       return "You do not have an active enrollment for the current term."
     case "pending_registrar_approval":
-      return "Registrar approval is required before a queue number can be issued."
+      return "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk."
     case "pending_payment":
       if (!queue.ticket && queue.can_claim) {
-        return "Claim your number at the Cashier kiosk."
+        return "Your enrollment is approved! Claim your queuing ticket in person at the school Cashier kiosk."
       }
       return queue.ticket
         ? "Your queue ticket is active."
-        : "Your queue number is not available yet."
+        : "Your queue number is not available yet. Claim it in person at the school Cashier kiosk."
     case "enrolled":
       return "Payment has been confirmed and your enrollment is complete."
   }
@@ -144,10 +144,15 @@ export function StudentQueueLivePanel({
               </p>
             )}
             {isAwaitingRegistrarApproval && (
-              <p className="queue-live-panel__approval-status">
-                <Clock3Icon aria-hidden="true" />
-                Waiting for Registrar approval
-              </p>
+              <div className="space-y-1">
+                <p className="queue-live-panel__approval-status">
+                  <Clock3Icon aria-hidden="true" />
+                  Waiting for Registrar approval
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Once approved, go in person to the school Cashier kiosk on campus to claim your queuing ticket.
+                </p>
+              </div>
             )}
             {ticket && (
               <div className="flex flex-wrap gap-2">

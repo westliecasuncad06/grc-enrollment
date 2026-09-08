@@ -402,4 +402,102 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('Content-Type'));
     }
+
+    public function test_registrar_staff_can_search_enrollment_documents_by_multi_field_and_number(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $studentA = $this->makeStudent($curriculum, 'student.search_a@grc.test', '2026-9001');
+        $studentA->user->update(['name' => 'Searchable Alpha']);
+        $studentB = $this->makeStudent($curriculum, 'student.search_b@grc.test', '2026-9002');
+        $studentB->user->update(['name' => 'Other Beta']);
+
+        $docA = $this->makeDocument($studentA, $term);
+        $docB = $this->makeDocument($studentB, $term);
+
+        $registrarToken = $this->tokenForNewUser(UserRole::RegistrarStaff, 'registrar.searchtest@grc.test');
+
+        // Search by document number
+        $this->withToken($registrarToken)
+            ->getJson("/api/v1/enrollment-documents?document_number={$docA->document_number}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $docA->id);
+
+        // Multi-field search by student number
+        $this->withToken($registrarToken)
+            ->getJson('/api/v1/enrollment-documents?search=2026-9001')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $docA->id);
+
+        // Multi-field search by student name
+        $this->withToken($registrarToken)
+            ->getJson('/api/v1/enrollment-documents?search=Alpha')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $docA->id);
+    }
+
+    public function test_cor_snapshot_reflects_additional_account_payments(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.additionalpay@grc.test', '2026-9003');
+
+        $enrollment = Enrollment::create([
+            'student_id' => $student->id,
+            'academic_term_id' => $term->id,
+            'status' => EnrollmentStatus::Enrolled,
+            'total_units' => 3,
+            'submitted_at' => now(),
+            'enrolled_at' => now(),
+        ]);
+
+        \App\Models\Assessment::create([
+            'enrollment_id' => $enrollment->id,
+            'total_amount' => '5000.00',
+            'currency' => 'PHP',
+        ]);
+
+        \App\Models\Payment::create([
+            'enrollment_id' => $enrollment->id,
+            'confirmed_by' => $student->user->id,
+            'amount' => '1500.00',
+            'confirmed_at' => now(),
+        ]);
+
+        $document = EnrollmentDocument::create([
+            'enrollment_id' => $enrollment->id,
+            'document_type' => EnrollmentDocumentType::Cor,
+            'document_number' => sprintf('COR%06d', $enrollment->id),
+            'generated_at' => now(),
+            'snapshot' => app(\App\Actions\Enrollment\BuildCorSnapshot::class)->execute($enrollment, $enrollment->payment),
+        ]);
+
+        // Prior to additional payment, remaining balance is 3500.00
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.snapshot.fees.amount_paid', '1500.00')
+            ->assertJsonPath('data.snapshot.fees.remaining_balance', '3500.00');
+
+        // Cashier records an additional account payment of 1000.00
+        \App\Models\AccountPayment::create([
+            'student_id' => $student->id,
+            'enrollment_id' => $enrollment->id,
+            'received_by' => $student->user->id,
+            'amount' => '1000.00',
+            'received_at' => now(),
+        ]);
+
+        // Re-fetching COR now dynamically reflects total paid of 2500.00 and balance 2500.00
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->assertJsonPath('data.snapshot.fees.initial_payment', '1500.00')
+            ->assertJsonPath('data.snapshot.fees.additional_payments', '1000.00')
+            ->assertJsonPath('data.snapshot.fees.amount_paid', '2500.00')
+            ->assertJsonPath('data.snapshot.fees.remaining_balance', '2500.00');
+    }
 }

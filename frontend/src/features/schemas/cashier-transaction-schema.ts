@@ -10,7 +10,7 @@ export const cashierTransactionSchema = z
     student_id: z.number().int().positive(),
     student_name: z.string().min(1),
     student_number: z.string().min(1),
-    enrollment_id: z.number().int().positive(),
+    enrollment_id: z.number().int().positive().nullable(),
     amount: moneySchema,
     processed_at: z.iso.datetime(),
   })

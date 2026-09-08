@@ -4,6 +4,7 @@ import {
   decideProfileChangeRequest,
   listStudentProfiles,
   provisionStudent,
+  requestStudentAccountSetupResend,
   setupStudentAccount,
   type ProvisionStudentInput,
 } from "@/features/services/admission-service"
@@ -172,5 +173,38 @@ describe("admission-service", () => {
     expect(fetchMock.mock.calls[1]?.[0]).toContain(
       "/api/v1/student-profile-change-requests/7/decision",
     )
+  })
+
+  it("requests student account setup resend without authorization header", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            type: "resend-student-account-setup",
+            status: "sent",
+            message:
+              "If a pending student account exists for this email, a new setup invitation has been sent.",
+          },
+        }),
+      ),
+    )
+
+    const response = await requestStudentAccountSetupResend(profile.email)
+    expect(response).toEqual({
+      type: "resend-student-account-setup",
+      status: "sent",
+      message:
+        "If a pending student account exists for this email, a new setup invitation has been sent.",
+    })
+
+    const request = fetchMock.mock.calls[0]?.[1]
+    const headers = new Headers(request?.headers)
+    expect(headers.has("Authorization")).toBe(false)
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/api/v1/auth/resend-student-account-setup",
+    )
+    expect(JSON.parse(request?.body as string)).toEqual({
+      email: profile.email,
+    })
   })
 })

@@ -28,6 +28,7 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Field, FieldLabel } from "@/features/components/ui/field"
+import { Input } from "@/features/components/ui/input"
 import { Textarea } from "@/features/components/ui/textarea"
 import {
   useEnrollmentsListQuery,
@@ -143,7 +144,7 @@ function EnrollmentQueueCard({
           variant="outline"
           onClick={() => onReview(enrollment)}
         >
-          Review
+          {enrollment.status === "enrolled" ? "Check Schedule & Info" : "Review"}
         </Button>
         {actions.map((action) => (
           <Button
@@ -183,6 +184,10 @@ export function RegistrarEnrollmentWorkspace({
   const [reason, setReason] = useState("")
   const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
   const [error, setError] = useState("")
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<
+    "pending_registrar_approval" | "pending_payment" | "enrolled" | "rejected" | "all"
+  >("pending_registrar_approval")
   const heading =
     workspaceHeadings[initialModuleId] ??
     workspaceHeadings["enrollment-approvals"]
@@ -190,12 +195,17 @@ export function RegistrarEnrollmentWorkspace({
     workspaceDescriptions[initialModuleId] ??
     workspaceDescriptions["enrollment-approvals"]
 
+  const queryStatus =
+    initialModuleId === "overrides-voids"
+      ? "pending_payment"
+      : statusFilter === "all"
+        ? undefined
+        : statusFilter
+
   const enrollmentsQuery = useEnrollmentsListQuery(
     {
-      status:
-        initialModuleId === "overrides-voids"
-          ? "pending_payment"
-          : "pending_registrar_approval",
+      status: queryStatus,
+      search: search.trim() || undefined,
       page,
       per_page: 20,
     },
@@ -245,10 +255,96 @@ export function RegistrarEnrollmentWorkspace({
         </Alert>
       )}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle level={2}>Enrollment queue</CardTitle>
+          {initialModuleId === "enrollment-approvals" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={statusFilter === "pending_registrar_approval" ? "default" : "outline"}
+                onClick={() => {
+                  setStatusFilter("pending_registrar_approval")
+                  setPage(1)
+                }}
+              >
+                Pending review
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={statusFilter === "pending_payment" ? "default" : "outline"}
+                onClick={() => {
+                  setStatusFilter("pending_payment")
+                  setPage(1)
+                }}
+              >
+                Approved
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={statusFilter === "enrolled" ? "default" : "outline"}
+                onClick={() => {
+                  setStatusFilter("enrolled")
+                  setPage(1)
+                }}
+              >
+                Enrolled students
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={statusFilter === "rejected" ? "default" : "outline"}
+                onClick={() => {
+                  setStatusFilter("rejected")
+                  setPage(1)
+                }}
+              >
+                Rejected
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={statusFilter === "all" ? "default" : "outline"}
+                onClick={() => {
+                  setStatusFilter("all")
+                  setPage(1)
+                }}
+              >
+                All
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="w-full max-w-sm">
+              <Input
+                type="search"
+                placeholder="Search by student number, name, or email…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }}
+                aria-label="Search enrollments"
+              />
+            </div>
+            {search && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearch("")
+                  setPage(1)
+                }}
+              >
+                Clear search
+              </Button>
+            )}
+          </div>
           <AsyncBoundary
             query={{ ...enrollmentsQuery, data: enrollmentsQuery.data?.data }}
             isEmpty={(rows) => rows.length === 0}
@@ -326,7 +422,7 @@ export function RegistrarEnrollmentWorkspace({
                           variant="outline"
                           onClick={() => setReviewingEnrollment(enrollment)}
                         >
-                          Review
+                          {enrollment.status === "enrolled" ? "Check Schedule & Info" : "Review"}
                         </Button>
                         {availableActions(enrollment, initialModuleId).map((action) => (
                           <Button

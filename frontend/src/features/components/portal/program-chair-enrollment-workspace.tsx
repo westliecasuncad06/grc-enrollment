@@ -2191,10 +2191,12 @@ export function ProgramChairEnrollmentWorkspace({
               Submit this schedule for approval?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Your section plans and faculty schedules will go to the Dean
-              review queue, then the Executive Director checkpoint.
+              The schedule proposal can be submitted with unassigned
+              professors, rooms, or timetable schedules. These incomplete
+              assignments will pass into submission and remain visible for Dean
+              and Executive Director review.
               {incompleteScheduleCount > 0
-                ? ` ${incompleteScheduleCount} incomplete schedule assignment${incompleteScheduleCount === 1 ? "" : "s"} will remain visible for review.`
+                ? ` (${incompleteScheduleCount} incomplete schedule assignment${incompleteScheduleCount === 1 ? "" : "s"} currently recorded).`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>

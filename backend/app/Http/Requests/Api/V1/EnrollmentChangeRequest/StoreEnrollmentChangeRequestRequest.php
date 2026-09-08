@@ -89,6 +89,7 @@ final class StoreEnrollmentChangeRequestRequest extends FormRequest
                 $term->enrollment_closes_at,
                 $term->add_drop_deadline_at,
                 now()->toImmutable(),
+                true, // student is already enrolled; skip EnrollmentStillOpen check
             );
 
             if (! $availability->isOpen) {

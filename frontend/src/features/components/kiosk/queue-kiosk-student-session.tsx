@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { LogOutIcon, TicketCheckIcon } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 
+import { QueueKioskSignOutDialog } from "@/features/components/kiosk/queue-kiosk-sign-out-dialog"
 import { StudentQueueLivePanel } from "@/features/components/queue/student-queue-live-panel"
 import {
   Alert,
@@ -32,16 +33,19 @@ export function QueueKioskStudentSession({
   state,
   finishStudent,
   signOutDevice,
+  requirePassword = true,
 }: {
   state: ActiveState
   finishStudent: () => void
   signOutDevice: () => void
+  requirePassword?: boolean
 }) {
   const queryClient = useQueryClient()
   const generation = useRef(0)
   const claimLock = useRef(false)
   const controller = useRef<AbortController | null>(null)
   const [claimError, setClaimError] = useState<string | null>(null)
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false)
   const viewerId = String(state.studentUser.id)
   const queueQuery = useStudentQueueQuery({
     viewerId,
@@ -143,10 +147,20 @@ export function QueueKioskStudentSession({
           <p className="queue-kiosk-eyebrow">Global Reciprocal Colleges</p>
           <h1>Cashier Queue Kiosk</h1>
         </div>
-        <Button type="button" variant="outline" onClick={() => void signOut()}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => (requirePassword ? setConfirmingSignOut(true) : void signOut())}
+        >
           <LogOutIcon data-icon="inline-start" />
           Sign out device
         </Button>
+        <QueueKioskSignOutDialog
+          open={confirmingSignOut}
+          onOpenChange={setConfirmingSignOut}
+          onConfirmSignOut={() => void signOut()}
+          kioskEmail={state.kioskUser.email}
+        />
       </header>
       <section
         className="queue-kiosk-student"

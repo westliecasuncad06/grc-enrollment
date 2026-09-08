@@ -9,6 +9,7 @@ final readonly class StudentAccountBalance
      * @param  numeric-string  $totalPaid
      * @param  numeric-string  $priorBalance
      * @param  numeric-string  $outstandingBalance
+     * @param  numeric-string  $advancePaymentBalance
      * @param  list<StudentAccountBalanceEntry>  $entries
      * @param  list<array<string, mixed>>  $transactions
      */
@@ -21,6 +22,8 @@ final readonly class StudentAccountBalance
         public string $priorBalance,
         /** @var numeric-string */
         public string $outstandingBalance,
+        /** @var numeric-string */
+        public string $advancePaymentBalance,
         public bool $hasPromissoryNoteOnFile,
         public array $entries,
         public array $transactions = [],

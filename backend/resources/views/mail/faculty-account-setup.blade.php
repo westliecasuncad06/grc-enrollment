@@ -65,7 +65,7 @@
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                                 <tr>
                                     <td style="border-radius:6px; background-color:#c8102e;">
-                                        <a href="{{ $setupUrl }}" style="display:inline-block; padding:13px 28px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:15px; font-weight:bold; text-decoration:none; border-radius:6px;">
+                                        <a href="{{ $setupUrl }}{{ !empty($facultyEmail) ? '?email='.urlencode($facultyEmail).'&code='.urlencode($setupCode) : '?code='.urlencode($setupCode) }}" style="display:inline-block; padding:13px 28px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:15px; font-weight:bold; text-decoration:none; border-radius:6px;">
                                             Open the account setup page
                                         </a>
                                     </td>

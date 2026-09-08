@@ -18,7 +18,7 @@ final class DashboardPolicy
 {
     public function viewEnrollmentSummary(User $user): bool
     {
-        return in_array($user->role, [UserRole::Dean, UserRole::ExecutiveDirector], true);
+        return in_array($user->role, [UserRole::Dean, UserRole::ExecutiveDirector, UserRole::ProgramChair], true);
     }
 
     public function viewInstitutionSummary(User $user): bool

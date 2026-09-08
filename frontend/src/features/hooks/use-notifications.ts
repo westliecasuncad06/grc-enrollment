@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/features/auth/use-auth"
 import {
   getNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
   type NotificationListOptions,
 } from "@/features/services/notification-service"
@@ -78,31 +79,39 @@ export function useMarkNotificationReadMutation() {
 }
 
 /**
- * There is no bulk mark-read endpoint, so this reads up to the API's max
- * page size of unread notifications and marks each one individually. A user
- * with more than 100 unread notifications will need to run this more than
- * once — an acceptable bound given how rarely that happens in practice.
+ * Calls the bulk read-all endpoint in one request and optimistically
+ * clears unread notification counts and badges immediately.
  */
 export function useMarkAllNotificationsReadMutation() {
   const queryClient = useQueryClient()
   const { session } = useAuth()
 
   return useMutation({
-    mutationFn: async () => {
-      const envelope = await getNotifications({
-        unread: true,
-        page: 1,
-        perPage: 100,
-      })
-      await Promise.all(
-        envelope.data.map((notification) =>
-          markNotificationRead(notification.id),
-        ),
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => {
+      queryClient.setQueriesData(
+        { queryKey: ["notifications", session?.userId ?? null] },
+        (old: unknown) => {
+          if (!old || typeof old !== "object") return old
+          const envelope = old as { meta?: { total?: number }; data?: Array<{ read_at: string | null }> }
+          if (envelope.meta) {
+            return {
+              ...envelope,
+              meta: { ...envelope.meta, total: 0 },
+              data: envelope.data
+                ? envelope.data.map((n) => ({
+                    ...n,
+                    read_at: n.read_at ?? new Date().toISOString(),
+                  }))
+                : [],
+            }
+          }
+          return old
+        },
       )
-    },
-    onSuccess: () =>
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ["notifications", session?.userId ?? null],
-      }),
+      })
+    },
   })
 }

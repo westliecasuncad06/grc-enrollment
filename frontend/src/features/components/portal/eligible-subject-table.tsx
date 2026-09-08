@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 import {
   DataTable,
@@ -25,6 +25,10 @@ import {
   compareBySchedule,
   hasScheduleConflict,
 } from "@/features/lib/schedule-order"
+import {
+  generateScheduleRecommendation,
+  type RecommendationMode,
+} from "@/features/lib/schedule-recommendation"
 import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
 
 type EligibleSection = EligibleSubject["available_sections"][number]
@@ -38,11 +42,18 @@ function otherSelectedSections(
   subjects: readonly EligibleSubject[],
   selections: Record<number, number>,
   excludeSubjectId: number,
+  excludePairedSubjectId?: number | null,
 ): { section: EligibleSection; subjectCode: string }[] {
   const others: { section: EligibleSection; subjectCode: string }[] = []
 
   for (const subject of subjects) {
-    if (subject.subject_id === excludeSubjectId) continue
+    if (
+      subject.subject_id === excludeSubjectId ||
+      (excludePairedSubjectId != null &&
+        subject.subject_id === excludePairedSubjectId)
+    ) {
+      continue
+    }
     const sectionId = selections[subject.subject_id]
     if (sectionId === undefined) continue
     const section = subject.available_sections.find(
@@ -114,14 +125,16 @@ function columns(
   disabled: boolean,
   isBacklog: (subject: EligibleSubject) => boolean,
   isAdvance: (subject: EligibleSubject) => boolean,
-  pairedCodeOf: (subject: EligibleSubject) => string | null,
+  pairOf: (subject: EligibleSubject) => EligibleSubject | null,
+  recommendedSections: Record<number, number> = {},
 ): DataTableColumn<EligibleSubject>[] {
   return [
     {
       key: "subject",
       header: "Subject",
       render: (subject) => {
-        const pairedCode = pairedCodeOf(subject)
+        const paired = pairOf(subject)
+        const pairedCode = paired?.code ?? null
 
         return (
           <div>
@@ -151,10 +164,17 @@ function columns(
       render: (subject) => {
         const selectedSectionId = selections[subject.subject_id]
         const selectedSection = selectedSectionOf(subject, selections)
+        const recommendedSectionId = recommendedSections[subject.subject_id]
+        const isRecommendedSelected =
+          selectedSection !== undefined &&
+          recommendedSectionId !== undefined &&
+          selectedSection.id === recommendedSectionId
+        const paired = pairOf(subject)
         const others = otherSelectedSections(
           subjects,
           selections,
           subject.subject_id,
+          paired?.subject_id,
         )
 
         return (
@@ -178,7 +198,26 @@ function columns(
               </SelectTrigger>
               <SelectContent>
                 {subject.available_sections.map((option) => {
-                  const conflictsWith = conflictingSubjectCode(option, others)
+                  let conflictsWith = conflictingSubjectCode(option, others)
+
+                  if (!conflictsWith && paired) {
+                    const matchingPaired = paired.available_sections.find(
+                      (p) => p.section_code === option.section_code,
+                    )
+                    if (matchingPaired) {
+                      const pairedConflict = conflictingSubjectCode(
+                        matchingPaired,
+                        others,
+                      )
+                      if (pairedConflict) {
+                        conflictsWith = `${pairedConflict} (via ${paired.code})`
+                      }
+                    }
+                  }
+
+                  const isOptionRecommended =
+                    recommendedSectionId !== undefined &&
+                    option.id === recommendedSectionId
 
                   return (
                     <SelectItem
@@ -186,10 +225,13 @@ function columns(
                       value={String(option.id)}
                       disabled={conflictsWith !== null}
                     >
+                      {isOptionRecommended ? "★ Recommended · " : ""}
                       Section {option.section_code}
                       {option.schedule_days
                         ? ` · ${scheduleLabel(option)}`
                         : ""}{" "}
+                      {option.room ? ` · ${option.room}` : ""}
+                      {option.professor_name ? ` · Prof. ${option.professor_name}` : ""}
                       · {seatsLabel(option)}
                       {option.is_own_department
                         ? ""
@@ -202,6 +244,14 @@ function columns(
                 })}
               </SelectContent>
             </Select>
+            {isRecommendedSelected && (
+              <Badge
+                variant="outline"
+                className="w-fit border-primary/40 bg-primary/5 text-primary text-xs font-semibold"
+              >
+                ★ Recommended Section
+              </Badge>
+            )}
             {selectedSection && !selectedSection.is_own_department && (
               <Badge variant="outline" className="w-fit">
                 {`${collegeLabel(selectedSection.college)} section — ${selectedSection.subject_title}`}
@@ -216,6 +266,14 @@ function columns(
       header: "Schedule",
       render: (subject) =>
         scheduleLabel(selectedSectionOf(subject, selections)),
+    },
+    {
+      key: "professor",
+      header: "Professor",
+      render: (subject) => {
+        const selected = selectedSectionOf(subject, selections)
+        return selected?.professor_name ?? "To be confirmed"
+      },
     },
     {
       key: "remove",
@@ -266,6 +324,7 @@ export function EligibleSubjectTable({
   selections,
   onChoose,
   onClear,
+  onBatchChoose,
   disabled = false,
   currentYearLevel = null,
   currentSemester = null,
@@ -274,6 +333,7 @@ export function EligibleSubjectTable({
   selections: Record<number, number>
   onChoose: (subjectId: number, sectionId: number) => void
   onClear: (subjectId: number) => void
+  onBatchChoose?: (newSelections: Record<number, number>) => void
   disabled?: boolean
   /** The student's own current standing — see `curriculum-ordinal.ts`. Unknown (null) tags nothing Backlog rather than guessing. */
   currentYearLevel?: number | null
@@ -291,6 +351,8 @@ export function EligibleSubjectTable({
   )
   const [arrangedBySchedule, setArrangedBySchedule] = useState(false)
   const [addSubjectValue, setAddSubjectValue] = useState("")
+  const [recommendationMode, setRecommendationMode] =
+    useState<RecommendationMode>("manual")
 
   const isBacklog = (subject: EligibleSubject): boolean =>
     currentYearLevel !== null &&
@@ -367,6 +429,16 @@ export function EligibleSubjectTable({
     )
     if (!matchingPairedSection) return
 
+    const others = otherSelectedSections(
+      subjects,
+      selections,
+      subjectId,
+      paired.subject_id,
+    )
+    if (conflictingSubjectCode(matchingPairedSection, others) !== null) {
+      return
+    }
+
     reveal(paired.subject_id)
     if (selections[paired.subject_id] !== matchingPairedSection.id) {
       onChoose(paired.subject_id, matchingPairedSection.id)
@@ -411,6 +483,34 @@ export function EligibleSubjectTable({
   const hiddenSubjects = subjects.filter(isHidden)
   const hiddenCount = hiddenSubjects.length
   const visibleSubjects = subjects.filter((subject) => !isHidden(subject))
+  const selectedUnits = subjects.reduce((sum, subject) => {
+    if (selections[subject.subject_id] !== undefined) {
+      return sum + subject.units
+    }
+    return sum
+  }, 0)
+
+  const recommendation = useMemo(
+    () => generateScheduleRecommendation(visibleSubjects, recommendationMode),
+    [visibleSubjects, recommendationMode],
+  )
+
+  const handleSelectRecommendationMode = (mode: RecommendationMode) => {
+    setRecommendationMode(mode)
+    if (mode === "manual") return
+
+    const result = generateScheduleRecommendation(visibleSubjects, mode)
+    if (onBatchChoose) {
+      onBatchChoose({ ...selections, ...result.recommendations })
+    } else {
+      for (const [subjectIdStr, sectionId] of Object.entries(
+        result.recommendations,
+      )) {
+        choose(Number(subjectIdStr), sectionId)
+      }
+    }
+  }
+
   const rows = arrangedBySchedule
     ? [...visibleSubjects].sort((a, b) =>
         compareBySchedule(
@@ -430,6 +530,84 @@ export function EligibleSubjectTable({
 
   return (
     <div className="grid min-w-0 gap-3">
+      <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Schedule Presets:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                variant={recommendationMode === "manual" ? "default" : "outline"}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleSelectRecommendationMode("manual")}
+                disabled={disabled}
+              >
+                Manual
+              </Button>
+              <Button
+                type="button"
+                variant={recommendationMode === "concise" ? "default" : "outline"}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleSelectRecommendationMode("concise")}
+                disabled={disabled}
+              >
+                ⚡ Concise (1–2 Days)
+              </Button>
+              <Button
+                type="button"
+                variant={recommendationMode === "morning" ? "default" : "outline"}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleSelectRecommendationMode("morning")}
+                disabled={disabled}
+              >
+                🌅 Morning
+              </Button>
+              <Button
+                type="button"
+                variant={recommendationMode === "afternoon" ? "default" : "outline"}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => handleSelectRecommendationMode("afternoon")}
+                disabled={disabled}
+              >
+                🌆 Afternoon / Evening
+              </Button>
+            </div>
+          </div>
+          {recommendationMode !== "manual" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={() => handleSelectRecommendationMode("manual")}
+            >
+              Reset to Manual
+            </Button>
+          )}
+        </div>
+        {recommendationMode !== "manual" && (
+          <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">
+              {recommendationMode === "concise"
+                ? "⚡ Concise Schedule:"
+                : recommendationMode === "morning"
+                  ? "🌅 Morning Schedule:"
+                  : "🌆 Afternoon/Evening Schedule:"}
+            </span>
+            <span>{recommendation.summary}</span>
+            <span className="italic text-foreground/70">
+              (You can manually override any section in the table below)
+            </span>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -469,6 +647,26 @@ export function EligibleSubjectTable({
             </Button>
           </div>
         )}
+        <div className="ml-auto flex items-center gap-2">
+          <Badge
+            variant={
+              selectedUnits > 30.0
+                ? "destructive"
+                : selectedUnits > 24.0
+                  ? "warning"
+                  : selectedUnits > 0
+                    ? "secondary"
+                    : "outline"
+            }
+            className="text-xs font-semibold"
+          >
+            {selectedUnits > 30.0
+              ? `${selectedUnits} / 30.0 Max Units (Exceeded)`
+              : selectedUnits > 24.0
+                ? `${selectedUnits} / 30.0 Max Units (Overload)`
+                : `${selectedUnits} / 24.0 Regular Units`}
+          </Badge>
+        </div>
       </div>
       <DataTable
         caption="Eligible subjects"
@@ -483,7 +681,8 @@ export function EligibleSubjectTable({
           disabled,
           isBacklog,
           isAdvance,
-          (subject) => pairOf(subject)?.code ?? null,
+          pairOf,
+          recommendation.recommendations,
         )}
         emptyMessage={
           hiddenCount > 0

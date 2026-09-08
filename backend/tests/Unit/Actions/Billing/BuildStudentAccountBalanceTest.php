@@ -165,4 +165,61 @@ final class BuildStudentAccountBalanceTest extends TestCase
         self::assertFalse($balance->hasPromissoryNoteOnFile);
         self::assertSame([], $balance->entries);
     }
+
+    public function test_it_calculates_advance_payment_balance_when_payments_exceed_assessment(): void
+    {
+        $student = $this->makeStudent();
+        $enrollment = $this->assessedEnrollment(
+            $student,
+            $this->makeTerm('2025-2026', '2nd', '2026-01-05 00:00:00'),
+            '1000.00',
+        );
+        $cashier = $this->cashier();
+        Payment::create([
+            'enrollment_id' => $enrollment->id,
+            'confirmed_by' => $cashier->id,
+            'amount' => '1000.00',
+            'promissory_note_on_file' => false,
+            'confirmed_at' => now(),
+        ]);
+        AccountPayment::create([
+            'student_id' => $student->id,
+            'enrollment_id' => null,
+            'received_by' => $cashier->id,
+            'amount' => '500.00',
+            'received_at' => now()->addMinute(),
+        ]);
+
+        $balance = app(BuildStudentAccountBalance::class)->execute($student);
+
+        self::assertSame('1000.00', $balance->totalAssessed);
+        self::assertSame('1500.00', $balance->totalPaid);
+        self::assertSame('0.00', $balance->outstandingBalance);
+        self::assertSame('500.00', $balance->advancePaymentBalance);
+        self::assertSame([], $balance->entries);
+        self::assertCount(2, $balance->transactions);
+        self::assertSame('Advance Payment / Credit', $balance->transactions[0]['transaction_type_label']);
+    }
+
+    public function test_unallocated_advance_payment_without_enrollment_shows_as_credit(): void
+    {
+        $student = $this->makeStudent();
+        $cashier = $this->cashier();
+        AccountPayment::create([
+            'student_id' => $student->id,
+            'enrollment_id' => null,
+            'received_by' => $cashier->id,
+            'amount' => '750.00',
+            'received_at' => now(),
+        ]);
+
+        $balance = app(BuildStudentAccountBalance::class)->execute($student);
+
+        self::assertSame('0.00', $balance->totalAssessed);
+        self::assertSame('750.00', $balance->totalPaid);
+        self::assertSame('0.00', $balance->outstandingBalance);
+        self::assertSame('750.00', $balance->advancePaymentBalance);
+        self::assertSame([], $balance->entries);
+        self::assertCount(1, $balance->transactions);
+    }
 }

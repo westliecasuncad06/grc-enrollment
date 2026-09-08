@@ -610,6 +610,159 @@ describe("EligibleSubjectTable", () => {
     expect(arrangeButton).toHaveAttribute("data-variant", "default")
   })
 
+  it("disables a section when its paired component conflicts with an already selected section", async () => {
+    const user = userEvent.setup()
+    const lecture = subject({
+      subject_id: 1,
+      code: "CS101",
+      paired_subject_id: 2,
+      available_sections: [
+        section({
+          id: 1,
+          subject_id: 1,
+          section_code: "A",
+          schedule_days: "MWF",
+          starts_at_time: "08:00:00",
+          ends_at_time: "09:00:00",
+        }),
+      ],
+    })
+    const lab = subject({
+      subject_id: 2,
+      code: "CS101L",
+      paired_subject_id: 1,
+      available_sections: [
+        section({
+          id: 2,
+          subject_id: 2,
+          section_code: "A",
+          schedule_days: "TTh",
+          starts_at_time: "10:00:00",
+          ends_at_time: "12:00:00",
+        }),
+      ],
+    })
+    const other = subject({
+      subject_id: 3,
+      code: "MATH101",
+      available_sections: [
+        section({
+          id: 3,
+          subject_id: 3,
+          section_code: "M1",
+          schedule_days: "TTh",
+          starts_at_time: "10:30:00",
+          ends_at_time: "11:30:00",
+        }),
+      ],
+    })
+    renderTable({
+      subjects: [lecture, lab, other],
+      selections: { 3: 3 }, // MATH101 is already selected
+    })
+
+    await user.click(screen.getAllByLabelText("CS101 section")[0])
+
+    const conflicting = await screen.findByRole("option", {
+      name: /Section A.*Conflicts with MATH101 \(via CS101L\)/,
+    })
+    expect(conflicting).toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("displays the total selected units badge in the toolbar", () => {
+    const cs101 = subject({ subject_id: 1, code: "CS101", units: 3 })
+    const cs102 = subject({
+      subject_id: 2,
+      code: "CS102",
+      units: 23,
+      available_sections: [section({ id: 2, subject_id: 2 })],
+    })
+    const { rerender } = renderTable({
+      subjects: [cs101, cs102],
+      selections: { 1: 1 },
+    })
+
+    expect(screen.getByText("3 / 24.0 Regular Units")).toBeInTheDocument()
+
+    // Overload: 26 units
+    rerender(
+      <EligibleSubjectTable
+        subjects={[cs101, cs102]}
+        selections={{ 1: 1, 2: 2 }}
+        onChoose={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    )
+    expect(screen.getByText("26 / 30.0 Max Units (Overload)")).toBeInTheDocument()
+  })
+
+  it("renders schedule recommendation presets and applies recommendations on click", async () => {
+    const user = userEvent.setup()
+    const onChoose = vi.fn()
+    const onBatchChoose = vi.fn()
+
+    const morningSec = section({
+      id: 10,
+      section_code: "AM",
+      schedule_days: "MON",
+      starts_at_time: "08:00:00",
+      ends_at_time: "11:00:00",
+    })
+    const afternoonSec = section({
+      id: 20,
+      section_code: "PM",
+      schedule_days: "MON",
+      starts_at_time: "13:00:00",
+      ends_at_time: "16:00:00",
+    })
+
+    const subj = subject({
+      subject_id: 1,
+      available_sections: [afternoonSec, morningSec],
+    })
+
+    const { rerender } = render(
+      <EligibleSubjectTable
+        subjects={[subj]}
+        selections={{}}
+        onChoose={onChoose}
+        onClear={vi.fn()}
+        onBatchChoose={onBatchChoose}
+      />,
+    )
+
+    expect(screen.getByRole("button", { name: /Manual/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Concise \(1–2 Days\)/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Morning/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Afternoon \/ Evening/i }),
+    ).toBeInTheDocument()
+
+    // Click Morning Preset
+    await user.click(screen.getByRole("button", { name: /Morning/i }))
+
+    expect(onBatchChoose).toHaveBeenCalledWith({ 1: 10 })
+    expect(screen.getByText(/Morning Schedule:/i)).toBeInTheDocument()
+
+    // Re-render with recommended section selected
+    rerender(
+      <EligibleSubjectTable
+        subjects={[subj]}
+        selections={{ 1: 10 }}
+        onChoose={onChoose}
+        onClear={vi.fn()}
+        onBatchChoose={onBatchChoose}
+      />,
+    )
+
+    // Should display recommended section badge (table + mobile responsive render)
+    expect(
+      screen.getAllByText("★ Recommended Section").length,
+    ).toBeGreaterThan(0)
+  })
+
   it("has no detectable accessibility violations", async () => {
     const { container } = renderTable()
 

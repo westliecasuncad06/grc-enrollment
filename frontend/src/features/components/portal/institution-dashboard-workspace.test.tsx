@@ -76,4 +76,52 @@ describe("InstitutionDashboardWorkspace", () => {
     await screen.findByText(/Enrolled: 12/)
     expect(await axe(container)).toHaveNoViolations()
   })
+
+  it("opens enrollment status dialog when status button is clicked", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(summary))),
+    )
+    renderWithSession(<InstitutionDashboardWorkspace />, {
+      session: {
+        userId: "6",
+        displayName: "Executive",
+        role: "executive_director",
+        signedInAt: "2026-07-31T00:00:00Z",
+      },
+    })
+
+    const enrolledBtn = await screen.findByRole("button", {
+      name: /Enrolled: 12/,
+    })
+    enrolledBtn.click()
+
+    expect(
+      await screen.findByRole("dialog", { name: "Students · Enrolled" }),
+    ).toBeInTheDocument()
+  })
+
+  it("opens year-over-year report dialog when View & Print Report is clicked", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(summary))),
+    )
+    renderWithSession(<InstitutionDashboardWorkspace />, {
+      session: {
+        userId: "6",
+        displayName: "Executive",
+        role: "executive_director",
+        signedInAt: "2026-07-31T00:00:00Z",
+      },
+    })
+
+    const reportBtn = await screen.findByRole("button", {
+      name: "View & Print Report",
+    })
+    reportBtn.click()
+
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Year-over-Year Enrollment Report",
+      }),
+    ).toBeInTheDocument()
+  })
 })

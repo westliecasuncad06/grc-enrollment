@@ -23,6 +23,12 @@ final class AcademicRecordPolicy
             return $student->user_id === $user->id;
         }
 
-        return in_array($user->role, [UserRole::RegistrarHead, UserRole::RegistrarStaff], true);
+        return in_array($user->role, [
+            UserRole::RegistrarHead,
+            UserRole::RegistrarStaff,
+            UserRole::ProgramChair,
+            UserRole::Dean,
+            UserRole::ExecutiveDirector,
+        ], true);
     }
 }

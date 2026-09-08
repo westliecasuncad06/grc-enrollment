@@ -18,9 +18,10 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class BuildInstitutionSummary
 {
-    public function execute(): InstitutionSummary
+    public function execute(?int $academicTermId = null): InstitutionSummary
     {
         $statusRows = DB::table('enrollments')
+            ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
             ->select('status')
             ->selectRaw('count(*) as aggregate')
             ->groupBy('status')

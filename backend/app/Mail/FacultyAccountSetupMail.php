@@ -16,6 +16,7 @@ final class FacultyAccountSetupMail extends Mailable
     public function __construct(
         public readonly string $setupUrl,
         public readonly string $setupCode,
+        public readonly string $facultyEmail = '',
     ) {}
 
     public function envelope(): Envelope

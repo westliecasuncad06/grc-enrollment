@@ -293,4 +293,36 @@ final class DashboardEndpointsTest extends TestCase
         $response->assertJsonPath('data.year_over_year.0.school_year', '2026-2027');
         $response->assertJsonPath('data.year_over_year.0.enrollment_count', 1);
     }
+
+    public function test_institution_summary_filters_status_counts_by_academic_term(): void
+    {
+        $term1 = $this->makeActiveTerm();
+        $term2 = \App\Models\AcademicTerm::create([
+            'school_year' => '2025-2026',
+            'semester' => '2nd',
+            'status' => 'semester_closed',
+            'is_active' => false,
+            'starts_at' => now()->subYear(),
+            'ends_at' => now()->subMonths(6),
+        ]);
+        $curriculum = $this->makeProgramAndCurriculum();
+        $s1 = $this->makeStudent($curriculum, 'STU-4001');
+        $s2 = $this->makeStudent($curriculum, 'STU-4002');
+        $this->makeEnrollment($s1, $term1, EnrollmentStatus::PendingRegistrarApproval);
+        $this->makeEnrollment($s2, $term2, EnrollmentStatus::Enrolled);
+
+        $token = $this->tokenFor($this->makeUser(UserRole::ExecutiveDirector, 'exec3'));
+
+        // Without term filter: all statuses
+        $allResponse = $this->withToken($token)->getJson('/api/v1/dashboards/institution-summary');
+        $allResponse->assertOk();
+        $allResponse->assertJsonPath('data.status_counts.pending_registrar_approval', 1);
+        $allResponse->assertJsonPath('data.status_counts.enrolled', 1);
+
+        // With term1 filter: only term1's pending_registrar_approval
+        $term1Response = $this->withToken($token)->getJson("/api/v1/dashboards/institution-summary?academic_term_id={$term1->id}");
+        $term1Response->assertOk();
+        $term1Response->assertJsonPath('data.status_counts.pending_registrar_approval', 1);
+        $term1Response->assertJsonPath('data.status_counts.enrolled', 0);
+    }
 }

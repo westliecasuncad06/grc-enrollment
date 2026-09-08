@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  formatYearLevelOrdinal,
   isAdvanceSubject,
   isBacklogSubject,
   semesterOrdinal,
@@ -57,5 +58,17 @@ describe("isAdvanceSubject", () => {
 
   it("is not advance when two or more years ahead", () => {
     expect(isAdvanceSubject(3, "2nd", 1, "2nd")).toBe(false)
+  })
+})
+
+describe("formatYearLevelOrdinal", () => {
+  it("formats year levels as institutional ordinals", () => {
+    expect(formatYearLevelOrdinal(1)).toBe("1ST YEAR")
+    expect(formatYearLevelOrdinal(2)).toBe("2ND YEAR")
+    expect(formatYearLevelOrdinal(3)).toBe("3RD YEAR")
+    expect(formatYearLevelOrdinal(4)).toBe("4TH YEAR")
+    expect(formatYearLevelOrdinal(5)).toBe("YEAR 5")
+    expect(formatYearLevelOrdinal(null)).toBe("—")
+    expect(formatYearLevelOrdinal(undefined)).toBe("—")
   })
 })

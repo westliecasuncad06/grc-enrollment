@@ -29,7 +29,10 @@ final class EnrollmentPolicy
             UserRole::Student,
             UserRole::RegistrarHead,
             UserRole::RegistrarStaff,
+            UserRole::ProgramChair,
             UserRole::AccountingStaff,
+            UserRole::Dean,
+            UserRole::ExecutiveDirector,
         ], true);
     }
 
@@ -39,15 +42,16 @@ final class EnrollmentPolicy
     }
 
     /**
-     * Covers `registrar_approve` and `registrar_reject` — Registrar Staff's
-     * single decision at the approval-queue checkpoint. Approval is what
-     * issues the Cashier queue ticket (`TransitionEnrollment`), so this
-     * checkpoint deliberately sits with the same role that works the
-     * academic-records/enrollment-documents queues, not the Registrar Head.
+     * Covers `registrar_approve` and `registrar_reject` — worked by Registrar Staff
+     * and Program Chair (for irregular student schedule checking). Approval issues
+     * the assessment and transitions to pending payment.
      */
     public function decideApproval(User $user): bool
     {
-        return $user->role === UserRole::RegistrarStaff;
+        return in_array($user->role, [
+            UserRole::RegistrarStaff,
+            UserRole::ProgramChair,
+        ], true);
     }
 
     /**

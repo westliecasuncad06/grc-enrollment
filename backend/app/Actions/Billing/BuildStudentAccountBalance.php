@@ -34,9 +34,26 @@ final class BuildStudentAccountBalance
             ->values()
             ->all();
 
+        $allAccountPayments = $student->accountPayments()
+            ->with(['receiver', 'enrollment.academicTerm'])
+            ->orderBy('received_at')
+            ->get();
+
+        $accountPaymentsByEnrollment = [];
+        $totalAccountPayments = '0.00';
+        foreach ($allAccountPayments as $accountPayment) {
+            $totalAccountPayments = bcadd($totalAccountPayments, $accountPayment->amount, 2);
+            if ($accountPayment->enrollment_id !== null) {
+                $accountPaymentsByEnrollment[$accountPayment->enrollment_id] = bcadd(
+                    $accountPaymentsByEnrollment[$accountPayment->enrollment_id] ?? '0.00',
+                    $accountPayment->amount,
+                    2,
+                );
+            }
+        }
+
         $totalAssessed = '0.00';
-        $totalPaid = '0.00';
-        $outstandingBalance = '0.00';
+        $totalConfirmedPayments = '0.00';
         $priorBalance = '0.00';
         $hasPromissoryNoteOnFile = false;
         $entries = [];
@@ -54,11 +71,8 @@ final class BuildStudentAccountBalance
             $confirmedPaymentAmount = $payment instanceof Payment && $payment->amount !== null
                 ? $payment->amount
                 : '0.00';
-            $accountPaymentAmount = '0.00';
+            $accountPaymentAmount = $accountPaymentsByEnrollment[$enrollment->id] ?? '0.00';
 
-            foreach ($enrollment->accountPayments as $accountPayment) {
-                $accountPaymentAmount = bcadd($accountPaymentAmount, $accountPayment->amount, 2);
-            }
             $paidForEnrollment = bcadd($confirmedPaymentAmount, $accountPaymentAmount, 2);
             $computedOutstanding = bcsub($assessmentAmount, $paidForEnrollment, 2);
             $entryOutstanding = bccomp($computedOutstanding, '0.00', 2) === -1
@@ -66,8 +80,7 @@ final class BuildStudentAccountBalance
                 : $computedOutstanding;
 
             $totalAssessed = bcadd($totalAssessed, $assessmentAmount, 2);
-            $totalPaid = bcadd($totalPaid, $paidForEnrollment, 2);
-            $outstandingBalance = bcadd($outstandingBalance, $entryOutstanding, 2);
+            $totalConfirmedPayments = bcadd($totalConfirmedPayments, $confirmedPaymentAmount, 2);
 
             if ($enrollment->id !== $currentEnrollmentId) {
                 $priorBalance = bcadd($priorBalance, $entryOutstanding, 2);
@@ -90,6 +103,14 @@ final class BuildStudentAccountBalance
                 promissoryNoteOnFile: $promissoryNoteOnFile,
             );
         }
+
+        $totalPaid = bcadd($totalConfirmedPayments, $totalAccountPayments, 2);
+        $outstandingBalance = bccomp($totalAssessed, $totalPaid, 2) === 1
+            ? bcsub($totalAssessed, $totalPaid, 2)
+            : '0.00';
+        $advancePaymentBalance = bccomp($totalPaid, $totalAssessed, 2) === 1
+            ? bcsub($totalPaid, $totalAssessed, 2)
+            : '0.00';
 
         $transactions = [];
 
@@ -114,22 +135,25 @@ final class BuildStudentAccountBalance
                     'processed_at' => $payment->confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z') ?? now()->utc()->format('Y-m-d\TH:i:s\Z'),
                 ];
             }
+        }
 
-            foreach ($enrollment->accountPayments as $accountPayment) {
-                $accountPayment->loadMissing('receiver');
-                $transactions[] = [
-                    'id' => 'account_payment:'.$accountPayment->id,
-                    'transaction_type' => 'account_payment',
-                    'transaction_type_label' => 'Balance Settlement Payment',
-                    'enrollment_id' => $enrollment->id,
-                    'academic_term_label' => $termLabel,
-                    'amount' => $accountPayment->amount,
-                    'reference_number' => sprintf('OR-BP%06d', $accountPayment->id),
-                    'cashier_name' => $accountPayment->receiver?->name ?? 'Cashier Staff',
-                    'promissory_note_on_file' => false,
-                    'processed_at' => $accountPayment->received_at?->utc()->format('Y-m-d\TH:i:s\Z') ?? now()->utc()->format('Y-m-d\TH:i:s\Z'),
-                ];
-            }
+        foreach ($allAccountPayments as $accountPayment) {
+            $termLabel = $accountPayment->enrollment?->academicTerm
+                ? $accountPayment->enrollment->academicTerm->school_year.' · '.$accountPayment->enrollment->academicTerm->semester
+                : 'Advance Payment / Credit';
+
+            $transactions[] = [
+                'id' => 'account_payment:'.$accountPayment->id,
+                'transaction_type' => 'account_payment',
+                'transaction_type_label' => $accountPayment->enrollment_id === null ? 'Advance Payment / Credit' : 'Balance Settlement Payment',
+                'enrollment_id' => $accountPayment->enrollment_id,
+                'academic_term_label' => $termLabel,
+                'amount' => $accountPayment->amount,
+                'reference_number' => sprintf('OR-BP%06d', $accountPayment->id),
+                'cashier_name' => $accountPayment->receiver?->name ?? 'Cashier Staff',
+                'promissory_note_on_file' => false,
+                'processed_at' => $accountPayment->received_at?->utc()->format('Y-m-d\TH:i:s\Z') ?? now()->utc()->format('Y-m-d\TH:i:s\Z'),
+            ];
         }
 
         usort($transactions, fn ($a, $b) => strcmp($b['processed_at'], $a['processed_at']));
@@ -139,6 +163,7 @@ final class BuildStudentAccountBalance
             totalPaid: $totalPaid,
             priorBalance: $priorBalance,
             outstandingBalance: $outstandingBalance,
+            advancePaymentBalance: $advancePaymentBalance,
             hasPromissoryNoteOnFile: $hasPromissoryNoteOnFile,
             entries: $entries,
             transactions: $transactions,

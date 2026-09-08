@@ -76,6 +76,15 @@ final readonly class AssessEnrollment
      */
     private function resolveTuitionPerUnit(): string
     {
+        $activeTuition = \App\Models\FeeSchedule::query()
+            ->where('category', 'tuition')
+            ->where('is_active', true)
+            ->first();
+
+        if ($activeTuition !== null && is_numeric($activeTuition->amount)) {
+            return (string) $activeTuition->amount;
+        }
+
         $key = 'fees.tuition_per_unit';
         $raw = config($key);
         $value = is_scalar($raw) ? (string) $raw : '';
@@ -94,6 +103,26 @@ final readonly class AssessEnrollment
     {
         $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
         $fees = [];
+
+        $dbFees = \App\Models\FeeSchedule::query()
+            ->where('category', 'miscellaneous')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        if ($dbFees->isNotEmpty()) {
+            foreach ($dbFees as $entry) {
+                $programCodes = $entry->program_codes;
+                if (is_array($programCodes) && ! in_array('ALL', $programCodes, true) && ! in_array($programCode, $programCodes, true)) {
+                    continue;
+                }
+
+                $fees[] = ['label' => $entry->label, 'amount' => (string) $entry->amount];
+            }
+
+            return $fees;
+        }
+
         $raw = config('fees.miscellaneous');
         if (! is_array($raw)) {
             return $fees;

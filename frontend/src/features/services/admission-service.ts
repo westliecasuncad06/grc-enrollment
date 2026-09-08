@@ -7,6 +7,8 @@ import {
   profileChangeRequestEnvelopeSchema,
   profileChangeRequestFiltersSchema,
   provisionStudentSchema,
+  resendStudentAccountSetupEnvelopeSchema,
+  resendStudentAccountSetupSchema,
   storeProfileChangeRequestSchema,
   studentProfileEnvelopeSchema,
   studentProfileFiltersSchema,
@@ -17,6 +19,8 @@ import {
   type ProfileChangeRequest,
   type ProfileChangeRequestFilters,
   type ProvisionStudentInput,
+  type ResendStudentAccountSetupInput,
+  type ResendStudentAccountSetupResponse,
   type StoreProfileChangeRequestInput,
   type StudentProfile,
   type StudentProfileFilters,
@@ -36,6 +40,8 @@ export const OWN_STUDENT_PROFILE_PATH = "/api/v1/student-profile"
 export const PROFILE_CHANGE_REQUESTS_PATH =
   "/api/v1/student-profile-change-requests"
 export const ACCOUNT_SETUP_PATH = "/api/v1/auth/account-setup"
+export const RESEND_STUDENT_ACCOUNT_SETUP_PATH =
+  "/api/v1/auth/resend-student-account-setup"
 
 function parse<T>(
   schema: {
@@ -235,12 +241,30 @@ export async function setupStudentAccount(
   return envelope.data.status
 }
 
+export async function requestStudentAccountSetupResend(
+  email: string,
+): Promise<ResendStudentAccountSetupResponse> {
+  const parsed = parse(
+    resendStudentAccountSetupSchema,
+    { email },
+    "account setup resend request",
+  )
+  const envelope = parse(
+    resendStudentAccountSetupEnvelopeSchema,
+    await postJson(RESEND_STUDENT_ACCOUNT_SETUP_PATH, parsed),
+    "account setup resend response",
+  )
+  return envelope.data
+}
+
 export type {
   AccountSetupInput,
   DecideProfileChangeRequestInput,
   ProfileChangeRequest,
   ProfileChangeRequestFilters,
   ProvisionStudentInput,
+  ResendStudentAccountSetupInput,
+  ResendStudentAccountSetupResponse,
   StoreProfileChangeRequestInput,
   StudentProfile,
   StudentProfileFilters,

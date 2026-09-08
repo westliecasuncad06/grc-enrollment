@@ -32,11 +32,20 @@ final readonly class FindCashierPaymentCandidate
             ->where('status', AcademicTermStatus::SemesterOngoing)
             ->firstOrFail();
 
+        $search = trim($studentNumber);
+
         $enrollment = Enrollment::query()
             ->with(['student.user', 'queueTicket'])
             ->where('academic_term_id', $term->id)
             ->where('status', EnrollmentStatus::PendingPayment)
-            ->whereHas('student', fn (Builder $query) => $query->where('student_number', $studentNumber))
+            ->whereHas('student', function (Builder $query) use ($search): void {
+                $query->where('student_number', $search)
+                    ->orWhereHas('user', function (Builder $userQuery) use ($search): void {
+                        $userQuery->where('email', $search)
+                            ->orWhere('name', 'like', "%{$search}%")
+                            ->orWhereRaw("CONCAT_WS(' ', first_name, last_name) LIKE ?", ["%{$search}%"]);
+                    });
+            })
             ->where(function (Builder $query) {
                 $query->whereDoesntHave('queueTicket')
                     ->orWhereHas('queueTicket', fn (Builder $query) => $query->whereIn('status', [

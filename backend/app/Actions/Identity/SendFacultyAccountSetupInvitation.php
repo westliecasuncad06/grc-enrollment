@@ -36,10 +36,32 @@ final class SendFacultyAccountSetupInvitation
 
         $setupCode = Password::broker()->createToken($faculty);
 
+        $origin = request()?->header('Origin');
+        $referer = request()?->header('Referer');
+        $baseUrl = null;
+        if (is_string($origin) && filter_var($origin, FILTER_VALIDATE_URL)) {
+            $parsed = parse_url($origin);
+            if (isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
+                $baseUrl = $parsed['scheme'].'://'.$parsed['host'].$port;
+            }
+        } elseif (is_string($referer) && filter_var($referer, FILTER_VALIDATE_URL)) {
+            $parsed = parse_url($referer);
+            if (isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
+                $baseUrl = $parsed['scheme'].'://'.$parsed['host'].$port;
+            }
+        }
+
+        if ($baseUrl === null) {
+            $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
+        }
+
         try {
             Mail::to($faculty->email)->send(new FacultyAccountSetupMail(
-                rtrim((string) config('app.frontend_url'), '/').'/faculty-account-setup',
+                rtrim($baseUrl, '/').'/faculty-account-setup',
                 $setupCode,
+                $faculty->email,
             ));
 
             $faculty->forceFill([

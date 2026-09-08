@@ -71,3 +71,11 @@ export async function markNotificationRead(id: number): Promise<Notification> {
   )
   return parseResponse(notificationResponseSchema, payload, "notification").data
 }
+
+export async function markAllNotificationsRead(): Promise<{ message: string; marked_count: number }> {
+  const payload = await patchAuthenticatedJson(
+    `/api/v1/notifications/read-all`,
+    {},
+  )
+  return payload as { message: string; marked_count: number }
+}

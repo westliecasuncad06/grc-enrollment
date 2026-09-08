@@ -223,9 +223,12 @@ describe("StudentQueueLivePanel", () => {
       ],
       [
         "pending_registrar_approval",
-        "Registrar approval is required before a queue number can be issued.",
+        "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
       ],
-      ["pending_payment", "Claim your number at the Cashier kiosk."],
+      [
+        "pending_payment",
+        "Your enrollment is approved! Claim your queuing ticket in person at the school Cashier kiosk.",
+      ],
       [
         "enrolled",
         "Payment has been confirmed and your enrollment is complete.",

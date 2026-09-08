@@ -51,6 +51,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/enrollment-change-requests',
             'GET|HEAD api/v1/enrollment-documents',
             'GET|HEAD api/v1/enrollment-documents/{enrollmentDocument}',
+            'GET|HEAD api/v1/enrollment-documents/{enrollmentDocument}/pdf',
             'GET|HEAD api/v1/enrollments',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-curriculum-subject-preferences',
@@ -60,7 +61,9 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/faculty-specializations',
             'GET|HEAD api/v1/faculty-subject-preferences',
             'GET|HEAD api/v1/faculty-teaching-history',
+            'GET|HEAD api/v1/fee-schedules',
             'GET|HEAD api/v1/grade-slip',
+            'GET|HEAD api/v1/graduates',
             'GET|HEAD api/v1/health',
             'GET|HEAD api/v1/it-control/automation-runs',
             'GET|HEAD api/v1/it-control/automation-runs/{run}',
@@ -111,6 +114,7 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/faculty-availabilities/{facultyAvailability}',
             'PATCH api/v1/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}',
             'PATCH api/v1/faculty-members/{facultyMember}/workforce-profile',
+            'PATCH api/v1/faculty-specializations/{facultySpecialization}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'PATCH api/v1/notifications/{notification}/read',
             'PATCH api/v1/queue-tickets/{queueTicket}',
@@ -132,6 +136,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/auth/faculty-account-setup',
             'POST api/v1/auth/login',
             'POST api/v1/auth/logout',
+            'POST api/v1/auth/resend-student-account-setup',
             'POST api/v1/auth/staff-account-setup',
             'POST api/v1/curricula',
             'POST api/v1/curricula/{curriculum}/migrations',
@@ -163,6 +168,7 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-threshold',
+            'PUT api/v1/fee-schedules',
             'PUT api/v1/queue-kiosk-credential',
             'PUT api/v1/student-schedule-preferences',
         ], $routes);
@@ -522,7 +528,7 @@ final class ApiSurfaceTest extends TestCase
         $route = Route::getRoutes()->getByName('api.v1.faculty-members.index');
 
         $this->assertNotNull($route);
-        $this->assertContains('role:program_chair', $route->gatherMiddleware());
+        $this->assertContains('role:program_chair,registrar_head', $route->gatherMiddleware());
     }
 
     /**

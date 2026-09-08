@@ -17,6 +17,7 @@ final class StudentAccountSetupMail extends Mailable
         public readonly string $studentName,
         public readonly string $setupUrl,
         public readonly string $setupCode,
+        public readonly string $studentEmail = '',
     ) {}
 
     public function envelope(): Envelope

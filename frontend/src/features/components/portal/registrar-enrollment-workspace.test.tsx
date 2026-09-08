@@ -294,7 +294,7 @@ describe("RegistrarEnrollmentWorkspace", () => {
     expect(within(dialog).getByText("Name")).toBeInTheDocument()
     expect(within(dialog).getByText("Test Student")).toBeInTheDocument()
     expect(within(dialog).getByText("Year")).toBeInTheDocument()
-    expect(within(dialog).getByText("Year 1")).toBeInTheDocument()
+    expect(within(dialog).getByText("1ST YEAR")).toBeInTheDocument()
     expect(within(dialog).getByText("Student number")).toBeInTheDocument()
     expect(within(dialog).getByText("2026-0001")).toBeInTheDocument()
     expect(
@@ -557,6 +557,181 @@ describe("RegistrarEnrollmentWorkspace", () => {
     expect(
       within(card).getByRole("button", { name: "Reject" }),
     ).toBeInTheDocument()
+  })
+
+  it("supports switching between status filter tabs (Pending review, Approved, Rejected, All)", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [pendingApprovalEnrollment],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    expect(await screen.findByRole("button", { name: "Pending review" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Approved" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Enrolled students" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Rejected" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Approved" }))
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("status=pending_payment"),
+      expect.anything(),
+    )
+
+    await user.click(screen.getByRole("button", { name: "Enrolled students" }))
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("status=enrolled"),
+      expect.anything(),
+    )
+
+    await user.click(screen.getByRole("button", { name: "Rejected" }))
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("status=rejected"),
+      expect.anything(),
+    )
+
+    await user.click(screen.getByRole("button", { name: "All" }))
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.not.stringContaining("status="),
+      expect.anything(),
+    )
+  })
+
+  it("filters enrollments by student number or name via search input", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [pendingApprovalEnrollment],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const searchInput = await screen.findByRole("searchbox", {
+      name: "Search enrollments",
+    })
+    await user.type(searchInput, "2026-0001")
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("search=2026-0001"),
+      expect.anything(),
+    )
+  })
+
+  it("lets Registrar Staff view enrolled students and check schedule and info", async () => {
+    const user = userEvent.setup()
+    const enrolledRecord = {
+      ...pendingApprovalEnrollment,
+      id: 25,
+      status: "enrolled",
+      status_label: "Enrolled",
+      student_number: "2026-9999",
+      student_name: "Enrolled Student",
+      subjects: [
+        {
+          section_id: 88,
+          subject_code: "IT101",
+          subject_title: "Intro to IT",
+          status: "selected",
+          status_label: "Selected",
+        },
+      ],
+    }
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/sections")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "section",
+                  id: 88,
+                  academic_term_id: 2,
+                  subject_id: 12,
+                  section_code: "B",
+                  professor_id: null,
+                  schedule_days: "TTH",
+                  starts_at_time: "10:00:00",
+                  ends_at_time: "11:30:00",
+                  room: "RM-202",
+                  capacity: 40,
+                  capacity_source: "manual",
+                  viability_threshold: null,
+                  enrolled_count: 20,
+                  remaining_seats: 20,
+                  is_block_exclusive: null,
+                  status: "published",
+                  status_label: "Published",
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      if (target.includes("/subjects")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "subject",
+                  id: 12,
+                  code: "IT101",
+                  title: "Intro to IT",
+                  units: 3,
+                  status: "active",
+                  status_label: "Active",
+                  is_completion_only: false,
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [enrolledRecord],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    const checkBtn = within(table).getByRole("button", {
+      name: "Check Schedule & Info",
+    })
+    expect(checkBtn).toBeInTheDocument()
+
+    await user.click(checkBtn)
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText("Enrolled Student")).toBeInTheDocument()
+    expect(within(dialog).getByText("2026-9999")).toBeInTheDocument()
+    expect(within(dialog).getAllByText("IT101").length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText("TTH").length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText("10:00–11:30").length).toBeGreaterThan(0)
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

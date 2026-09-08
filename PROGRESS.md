@@ -1,5 +1,304 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-08 — System Fixes & Enhancements (Google Doc 1cnBMrgLV2TYxIg2UG9yBy34OYNZDMkQlOAW9f7Xu27E: Profile Approval, Kiosk Logout Password, Cashier Student Search, COR Real-time Payments/Fees, Irregular Schedule Recommendations, Program Chair Irregular Advising & Prospectus, Registrar Enrolled Students)
+
+0. **Architecture & Implementation Completed**:
+   - Diagnosed and implemented all 6 requirements specified in user prompt and Google Doc (`1cnBMrgLV2TYxIg2UG9yBy34OYNZDMkQlOAW9f7Xu27E`):
+     1. **Student Profile Change Approval Error**: MySQL `timestamp` schema defaulted `base_profile_updated_at` with `ON UPDATE CURRENT_TIMESTAMP`, causing optimistic locking equality check to fail with "The decision was not saved. The request may be stale; reload and review it again." Added reversible migration `2026_09_08_000002_fix_base_profile_updated_at_in_student_profile_change_requests.php` removing automatic timestamp update on modification, and refined concurrency guard in `DecideStudentProfileChangeRequest`. [COMPLETED & VERIFIED]
+     2. **Queue Kiosk Sign-Out Password Protection**: Created `queue-kiosk-sign-out-dialog.tsx` requiring password verification (`queue@grc.com` credentials) before signing out device on queue kiosk. [COMPLETED & VERIFIED]
+     3. **Cashier Payment Queue Multi-Field Student Search**: In `backend/app/Actions/Billing/FindCashierPaymentCandidate.php` and `accounting-payment-workspace.tsx`, expanded student search to match student number, first/last/full name, or user email address. [COMPLETED & VERIFIED]
+     4. **Real-time Payment & Fee Reflection on COR**:
+        - `AssessEnrollment`: Evaluates active `FeeSchedule` database records (custom miscellaneous fees and tuition rate) instead of static config so newly added/edited fees reflect on student assessments.
+        - `BuildCorSnapshot`: Factors all student `AccountPayment` records allocated to the enrollment into total payments, paid balance, and remaining balance.
+        - `RecordAccountPayment`: Automatically refreshes affected `EnrollmentDocument` COR snapshots and recomputes document checksums upon recording payment.
+        - `EnrollmentDocumentController`: Hydrates and persists latest COR snapshot on `show` and `downloadPdf` to guarantee real-time reflection of fees and payments. [COMPLETED & VERIFIED]
+     5. **Irregular Student Schedule Recommendations**:
+        - Created `schedule-recommendation.ts` implementing 3 conflict-free recommendation modes for irregular students:
+          - Preset 1: Concise Schedule (packed into 1-2 days)
+          - Preset 2: Morning Schedule (classes ending by 13:00)
+          - Preset 3: Afternoon / Evening Schedule (classes starting at/after 12:00)
+        - Paired lecture & laboratory handling ensures section consistency.
+        - Added Schedule Recommendation Presets toolbar and "★ Recommended" badges in `eligible-subject-table.tsx` with one-click batch section selection and full manual override support. [COMPLETED & VERIFIED]
+     6. **Program Chair Irregular Advising & Registrar Enrolled Students View**:
+        - Irregular students submit enrollment to Program Chair for review (`pending_program_chair_approval` workflow notification to Program Chair).
+        - Regular students automatically transition directly from draft to `pending_payment`, bypassing registrar review.
+        - Authorized Program Chair in `AcademicRecordPolicy::view` to view student academic records / curriculum prospectus.
+        - Added `irregular-enrollments` ("Irregular Advising") module to `program_chair` in `role-capabilities.ts` and `module-registry.tsx`.
+        - Created `program-chair-irregular-enrollments-workspace.tsx`: enables Program Chair to review irregular students' schedule submissions, inspect full curriculum prospectus via `ProspectusDocument`, and approve or reject submissions.
+        - Added "View Prospectus" button inside `EnrollmentReviewDialog` for deep prospectus inspection.
+        - In `registrar-enrollment-workspace.tsx`: added "Enrolled students" tab (`status="enrolled"`), multi-field search input (student number, name, email) connected to backend `IndexEnrollmentRequest` and `ListEnrollments`, and "Check Schedule & Info" review button to inspect student info and full schedule. [COMPLETED & VERIFIED]
+
+1. **Verification**:
+   - Backend PHPUnit Tests:
+     - `StudentProfileChangeRequestsEndpointTest`: **6 / 6 passed**.
+     - `CashierPaymentCandidateEndpointTest`: **9 / 9 passed**.
+     - `ProspectusEndpointTest`: **1 / 1 passed** (`test_a_program_chair_can_view_a_students_prospectus`).
+     - `EnrollmentsEndpointTest`: **46 / 46 passed** (including `test_a_program_chair_can_approve_an_irregular_enrollment` and `test_registrar_staff_can_search_enrollments_by_student_number_and_name`).
+   - Frontend TypeScript Check (`npx tsc --noEmit`): **Passed with 0 errors**.
+   - Frontend Vitest Suites:
+     - `queue-kiosk-sign-out-dialog.test.tsx`: **3 / 3 passed**.
+     - `schedule-recommendation.test.ts`: **5 / 5 passed**.
+     - `eligible-subject-table.test.tsx`: **32 / 32 passed**.
+     - `enrollment-workspace.test.tsx`: **27 / 27 passed**.
+     - `registrar-enrollment-workspace.test.tsx`: **16 / 16 passed**.
+     - `portal-module-page.test.tsx` & `enrollment-review-dialog.test.tsx`: **67 / 67 passed**.
+     - Total: **150+ frontend tests passed cleanly**.
+
+
+## 2026-09-08 — Comprehensive System & UI Fixes (Google Doc Instruction Set: Program Chair, Registrar, Student, Professor)
+
+0. **Architecture & All Tasks Completed (B1–B4 Backend & F1–F10 Frontend)**:
+   - **Backend**:
+     - B1: Regular Student Auto-Approval in `SubmitEnrollment` — auto-transitions regular block students directly to `PendingPayment` with immediate fee assessment via `AssessEnrollment`; conditional notification message directs students to Cashier kiosk.
+     - B2: Add/Drop Window Fix in `AddDropWindowResolver` & `StoreEnrollmentChangeRequestRequest` — enrolled students can submit Add/Drop change requests during active term before deadline.
+     - B3: Program Chair Dashboard Policy in `DashboardPolicy` — authorized `UserRole::ProgramChair` for `viewEnrollmentSummary`.
+     - B4: Professor Section Assignment Notification in `UpdateSection` — creates notification on initial section assignment to faculty.
+   - **Frontend**:
+     - F1: Removed redundant `schedule-proposals` and added `enrollment-dashboard` to `program_chair` in `role-capabilities.ts`.
+     - F2 & F8: Added `professor-information` ("My Information") module to `faculty` in `role-capabilities.ts`, `module-registry.tsx`, and created `professor-information-workspace.tsx`.
+     - F3: Room Navigator accordions in `rooms-operations-workspace.tsx` — wrapped "Find a room" and "Awaiting a room" in responsive `Collapsible` sections to eliminate page crowding.
+     - F4: Analytics filters layout in `analytics-dashboard-workspace.tsx` — inline horizontal dropdowns on top, full-width school year range slider below.
+     - F5: Real-time balance polling in `use-student-account.ts` (`refetchInterval: 5_000`), invalidated `["student-account"]` in `useInvalidateEnrollmentQueries`, and added manual refresh button to `student-digital-com-workspace.tsx`.
+     - F6: Outstanding Balance Modal in `enrollment-workspace.tsx` — prompts students with outstanding balance > ₱10,000 with Yes/No question before submitting.
+     - F7: Student grades layout in `academic-record-view.tsx` — moved school years box to upper-left header row; full-width grade slip table below.
+     - F9: Authorized `program_chair` in `enrollment-dashboard-workspace.tsx`.
+     - F10: Updated `program-chair-enrollment-workspace.tsx` schedule proposal submission dialog description to reassure that incomplete assignments pass into review.
+
+1. **Verification**:
+   - Backend PHPUnit tests: **73 / 73 passed** across 4 test suites (100%).
+   - Frontend TypeScript check (`tsc --noEmit`): **Passed with 0 errors**.
+   - Frontend Vitest suites:
+     - `role-capabilities.test.ts`: **5 / 5 passed**.
+     - `module-registry.test.tsx`: **4 / 4 passed** (including `professor-information` dispatch).
+     - `rooms-operations-workspace.test.tsx`: **10 / 10 passed**.
+     - `enrollment-workspace.test.tsx`: **27 / 27 passed**.
+     - `analytics-dashboard-workspace.test.tsx`: **7 / 7 passed**.
+     - Total: **53 / 53 frontend tests passed** across all modified workspaces.
+
+## 2026-09-08 — Comprehensive System & UI Fixes (Google Doc Instruction Set: Program Chair, Registrar, Student, Professor)
+
+0. **Architecture & Implementation Planning**:
+   - Diagnosed 15 issues/tasks specified in user instruction document (Google Doc `1XtiDHkIGtH54AfHEvWlql5pHh-aHLJNOKoB1xYHnE-A`):
+     1. Schedule Proposal Incomplete Submission: Ensure Program Chair schedule proposals pass in submission even with unassigned professors, rooms, and schedule times, with reassuring dialog copy and non-blocking backend validation.
+     2. Schedule Planning Clickable Year Levels: In generating schedule / section planning, show interactive clickable year levels before expanding manual information input.
+     3. Program Chair Small Screen Responsiveness: Fix grid and table overflow across Program Chair views (`analytics`, `rooms`, `schedule`).
+     4. Program Chair Enrollment Progress Navigation: Provide Program Chair with an Enrollment Progress / Dashboard navigation view showing general funnel metrics to specific status lists.
+     5. Professor Assignment Notifications: Notify professors when assigned to sections so they can review and acknowledge.
+     6. Room Navigator Accordion (Images 2 & 3): Turn "Find a room" (search + 35 room buttons) and "Awaiting a room" (57-subject table) into expandable accordions to prevent page crowding.
+     7. Faculty Invitation Dynamic URL (Images 4 & 5): Fix broken `localhost:3000` links in invitation emails by dynamically detecting request `Origin`/`Referer` headers and appending encoded `email` and `code` parameters.
+     8. Analytics Filters Inline Layout (Images 1 & 6): Make all dropdowns inline horizontally in the upper part, with the school-year range slider below across full width.
+     9. Remove Redundant Schedule Proposals (Image 7): Traced reason why AI added it (early standalone controller endpoint redundant with main Enrollment / Section Planning flow). Remove from Program Chair sidebar.
+     10. Registrar Staff Regular Student Auto-Approval: Regular students choosing approved block sections automatically transition to `pending_payment` with immediate fee assessment, removing manual registrar approval bottlenecks.
+     11. Enrolled Student Add/Drop Fix (Image 8): Remove `AddDropAvailabilityReason::EnrollmentStillOpen` blocking so enrolled students can submit Add/Drop change requests while term is ongoing.
+     12. Real-Time Balance & Payment Summary (Image 9): Add 5-second polling to `useOwnStudentAccountQuery`, invalidate `["student-account"]` on payment confirmations/adjustments, and add instant refresh action.
+     13. Student Outstanding Balance Modal (> ₱10k): Prompt students with outstanding balance > ₱10,000 with Yes/No choice on whether they are willing to pay remaining balance before submission proceeds.
+     14. Student Grades School Years Box (Image 10): Move school years box to upper left above grade slip, eliminating wasted vertical space and allowing the grade table to span full width.
+     15. Professor Information Navbar: Add "Professor Information" module to Professor role capabilities with comprehensive faculty profile workspace.
+   - Authored comprehensive `implementation_plan.md` artifact and awaiting user review.
+
+## 2026-09-08 — System Fixes (Queue Ticket Guidance, Advance Payment, Responsiveness, & Irregular Student Limits)
+
+0. **Architecture & Implementation Planning**:
+   - Diagnosed 4 issues specified in user instruction document (Google Doc `1GM4nvYDJFV3HBCshca0OazApa1d96ZcdRi_K0Ltjx1w`):
+     1. Queue Ticket On-Site Guidance: "walang instruction na pupunta na student sa school na kukuha na ng queuing ticket." Added explicit guidance across confirmation modal, post-submission receipt banner, queue live panel, and enrollment notifications that approved students must proceed in person to the school Cashier kiosk on campus to claim their queuing ticket for payment.
+     2. Student Advance Payment: "wala pang advance payment sa student." Added backend support to record and track advance payments/credit balances (`RecordAccountPayment`, `BuildStudentAccountBalance`, `StudentAccountResource`), exposed an Advance Payment metric card on `StudentAccountBalancePanel`, and enabled the Cashier to record balance/advance payments in `AccountingPaymentWorkspace` even when outstanding balance is 0.00.
+     3. Responsiveness (Horizontal Overflow & Sidebar Cut-off): On `/portal/grades` and wide document tables at 100% viewport zoom, missing `min-w-0` on CSS grid columns and tables forced window-level horizontal scrollbars and cut off the sidebar; added `min-w-0` to grid tracks and isolated scrolling with `min-w-0 overflow-x-auto` on tables and print preview wrappers.
+     4. Irregular Student Subject Selection Limit & Below-30 Units Submission: "walang limit ang pag pili ng subject. Di makapagsubmit kahit below 30 units nalang. nakapag pending sya nung 12 units nalang." Enforced standard unit limits (24.0 regular, 30.0 max overload) in `config/enrollment.php`, added live load badges in `EligibleSubjectTable` and `EnrollmentWorkspace`, blocked submission when units exceed 30.0, prevented silent schedule conflicts when auto-selecting paired sections, and provided explicit client-side conflict and unpaired component warnings.
+   - Authored comprehensive `implementation_plan.md` artifact.
+
+1. **Backend Implementation**:
+   - `backend/config/enrollment.php`: Configured standard defaults: `max_regular_units => env('ENROLLMENT_MAX_REGULAR_UNITS', 24.0)`, `overload_max_units => env('ENROLLMENT_OVERLOAD_MAX_UNITS', 30.0)`.
+   - `backend/database/migrations/2026_09_08_000001_make_enrollment_id_nullable_in_account_payments_table.php`: Created reversible migration making `account_payments.enrollment_id` nullable (verified with rollback and re-migrate).
+   - `backend/app/Models/AccountPayment.php`: Updated `@property ?int $enrollment_id` and `@property-read ?Enrollment $enrollment`.
+   - `backend/app/Domain/Billing/StudentAccountBalance.php`: Added `public string $advancePaymentBalance` to value object.
+   - `backend/app/Actions/Billing/BuildStudentAccountBalance.php`: Calculates `advance_payment_balance` (when `totalPaid > totalAssessed`), processes all account payments including unallocated advance payments with `enrollment_id = null`, and labels advance credit transactions as `"Advance Payment / Credit"`.
+   - `backend/app/Actions/Billing/RecordAccountPayment.php`: Allows payments when outstanding balance is 0 or payment exceeds balance, allocating excess as an advance payment record with `enrollment_id = null`.
+   - `backend/app/Http/Resources/Api/V1/StudentAccountResource.php`: Exposes `advance_payment_balance`.
+   - `backend/app/Actions/Billing/ListCashierTransactions.php`: Uses `leftJoin('enrollments')` so advance account payments appear in the Cashier transaction history ledger.
+   - `backend/app/Http/Resources/Api/V1/CashierTransactionResource.php`: Supports nullable `enrollment_id`.
+   - `backend/app/Actions/Enrollment/SubmitEnrollment.php`: Updated submission notification message to instruct students to claim their queuing ticket in person at the school Cashier kiosk on campus once approved.
+
+2. **Frontend Implementation**:
+   - `frontend/src/features/schemas/student-account-schema.ts`: Added `advance_payment_balance: moneySchema.default("0.00")` and nullable `enrollment_id` on transactions.
+   - `frontend/src/features/schemas/cashier-transaction-schema.ts`: Made `enrollment_id` nullable.
+   - `frontend/src/features/components/portal/student-account-balance-panel.tsx`: Added Advance payment credit card and green callout banner for positive credit balances.
+   - `frontend/src/features/components/portal/accounting-payment-workspace.tsx`: Added Advance credit metric to dl, updated "Record balance / advance payment" button (enabled when balance is 0), and updated dialog description.
+   - `frontend/src/features/components/queue/student-queue-live-panel.tsx`: Updated stage guidance and added explicit on-campus Cashier kiosk claim instructions under `Waiting for Registrar approval` and `Pending payment`.
+   - `frontend/src/app/globals.css`: Added `min-width: 0; width: 100%;` to `.portal-content` and `min-width: 0;` to `.portal-workspace`.
+   - `frontend/src/features/components/portal/academic-record-view.tsx`: Updated grid column layout to `min-w-0 lg:grid-cols-[16rem_minmax(0,1fr)]` and added `min-w-0` to the right content column.
+   - `frontend/src/features/components/portal/grade-slip-document.tsx`: Wrapped table in `<div className="w-full min-w-0 overflow-x-auto rounded-lg border">` with `whitespace-nowrap` on compact columns to prevent viewport blowout.
+   - `frontend/src/features/components/portal/print-document.tsx`: Added `min-w-0` to the outer grid and `overflow-x-auto` to `.print-document`.
+   - `frontend/src/features/components/portal/eligible-subject-table.tsx`: Added paired conflict checking in `columns` and `choose()` before auto-selecting paired sections; added live selected units badge in toolbar (`X / 24.0 Regular Units`, `X / 30.0 Max Units (Overload)`, `X / 30.0 Max Units (Exceeded)`).
+   - `frontend/src/features/components/portal/enrollment-workspace.tsx`: Added client-side conflict, pairing, and unit validations (`scheduleConflict`, `unpairedComponent`, `validationError`); updated `submitFooter` with Overload / Exceeded badges and disabled button when > 30 units; updated submission receipt alert and confirmation dialog with on-campus kiosk claim instructions.
+
+3. **Verification & Test Execution**:
+   - Backend PHPUnit Tests: 58 / 58 passed across 4 test suites (252 assertions, 100%):
+     - `StudentAccountEndpointTest`: 5 / 5 passed.
+     - `BuildStudentAccountBalanceTest`: 4 / 4 passed.
+     - `CashierTransactionsEndpointTest`: 5 / 5 passed.
+     - `EnrollmentsEndpointTest`: 44 / 44 passed.
+   - Frontend Vitest Suite: 94 / 94 passed across 5 test suites (100%):
+     - `student-account-balance-panel.test.tsx`: 2 / 2 passed.
+     - `accounting-payment-workspace.test.tsx`: 21 / 21 passed.
+     - `eligible-subject-table.test.tsx`: 31 / 31 passed.
+     - `enrollment-workspace.test.tsx`: 27 / 27 passed.
+     - `student-queue-live-panel.test.tsx`: 13 / 13 passed.
+   - TypeScript Check: `npm run typecheck` (`tsc --noEmit`) passed with 0 errors.
+   - Fast Linter: `npm run lint:fast` (`oxlint`) passed with 0 errors.
+
+## 2026-09-08 — System Fixes & Enhancements (Registrar Staff, Notifications, Dean & Executive Director Workspaces)
+
+0. **Architecture & Implementation Planning**:
+   - Diagnosed 10 issues specified in user instruction document (Google Doc `1_S5kbMimoYjf9jFAeAYHWxyeMra_1uqAgyZ7t9z2sdY`):
+     1. Graduates Directory Error ("Unexpected API response"): `graduateListResponseSchema` strictly rejected Laravel pagination `links` and extra `meta` fields (`from`, `to`, `path`, `links`). [RESOLVED]
+     2. "BS ENTREP (NOT VISIBLE if 100% screen)": Radix `SelectContent` max height of 384px extended beyond standard viewport, cutting off bottom items; requires viewport-clamped height and smooth scrolling. [RESOLVED]
+     3. Search bar for Enrollment Documents (`/portal/enrollment-documents`): Missing search/filter bar; adding multi-field search for Student ID, Document Type, Document Number, and Generated Date. [RESOLVED]
+     4. Year Level Ordinal Display: Review modal displayed "Year 1" instead of institutional standard "1ST YEAR" (and 2ND, 3RD, 4TH YEAR). [RESOLVED]
+     5. Notifications Bulk Mark as Read & Badge Reset: User with 2,506 unread notifications could not clear them because frontend only looped 100 items with single PATCH calls without a bulk backend endpoint. [RESOLVED]
+     6. Decision History for Registrar Staff & Dean/Executive Director: "NO HISTORY IF (APPROVED, RETURN, ETC)" — schedule decisions and enrollment approvals filtered out items once decided; adding history tabs with decision records.
+     7. Enrollment Status Discrepancy (Dean vs. Executive Director): Dean viewed active term while Executive Director viewed all terms; aligning active term default with term toggle.
+     8. Functional Clickable Status Badges: Enrollment status badges on Dean & Executive Director dashboards must be clickable buttons that reveal the student roster for that status.
+     9. Executive Director Year-over-Year Report: Year-over-year section must be clickable and generate an official printable comparative report file.
+
+1. **Backend Implementation**:
+   - `backend/app/Actions/Notifications/MarkAllNotificationsRead.php`: Added atomic action updating all unread notifications for the authenticated user to `read_at = now()`.
+   - `backend/app/Http/Controllers/Api/V1/NotificationController.php` & `backend/routes/api.php`: Registered `PATCH /api/v1/notifications/read-all`.
+   - `backend/app/Actions/Enrollment/ListEnrollmentDocuments.php` & `IndexEnrollmentDocumentRequest.php`: Added multi-field search (`search`) and document number filtering (`document_number`).
+   - `backend/app/Policies/EnrollmentPolicy.php` & `backend/app/Models/Enrollment.php`: Authorized Dean and Executive Director roles for `viewAny` and `scopeVisibleTo` with student context.
+   - `backend/app/Http/Resources/Api/V1/EnrollmentResource.php`: Included `student_name` and `student_year_level` in the API resource output.
+   - `backend/app/Actions/Dashboard/BuildInstitutionSummary.php` & `InstitutionSummaryController.php`: Added optional `?int $academicTermId = null` filtering to `build()`.
+
+2. **Frontend Implementation**:
+   - `frontend/src/features/schemas/graduate-schema.ts`: Relaxed `.strict()` to `.passthrough()` and added `paginationLinksSchema`.
+   - `frontend/src/features/components/ui/select.tsx`: Constrained `SelectContent` max height (`max-h-[min(24rem,var(--radix-select-content-available-height,24rem))]`) with collision padding and scroll buttons.
+   - `frontend/src/features/schemas/enrollment-document-schema.ts` & `registrar-records-workspace.tsx`: Added search input bar filtering across student ID, document type, document number, and generation date.
+   - `frontend/src/features/lib/curriculum-ordinal.ts`: Added and exported `formatYearLevelOrdinal(year)` (`1ST YEAR`, `2ND YEAR`, `3RD YEAR`, `4TH YEAR`).
+   - `frontend/src/features/components/portal/enrollment-review-dialog.tsx`: Updated review dialog header to display institutional year ordinals.
+   - `frontend/src/features/services/notification-service.ts` & `use-notifications.ts`: Added `markAllNotificationsRead()` mutation with optimistic cache updates setting unread count to 0.
+   - `frontend/src/features/components/portal/portal-notification-sheet.tsx`: Wired "Mark all as read" button to trigger the atomic bulk read mutation.
+   - `frontend/src/features/components/portal/registrar-enrollment-workspace.tsx`: Added status decision filter tabs ("Pending review", "Approved", "Rejected", "All") with decision timestamps and reasons.
+   - `frontend/src/features/services/dashboard-service.ts` & `use-dashboard.ts`: Added `academicTermId` parameter to `getInstitutionSummary` and `useInstitutionSummaryQuery`.
+   - `frontend/src/features/components/portal/enrollment-status-students-dialog.tsx`: Built dialog with student roster table, pagination, status badges, ordinal year levels, and dates.
+   - `frontend/src/features/components/portal/year-over-year-report-dialog.tsx`: Built official printable report dialog using `usePrintDocument()` with comparative enrollment metrics.
+   - `frontend/src/features/components/portal/enrollment-dashboard-workspace.tsx` & `institution-dashboard-workspace.tsx`: Wired clickable status buttons and term switcher.
+
+3. **Verification & Test Execution**:
+   - Backend Feature Tests: 84 / 84 passed across `EnrollmentsEndpointTest`, `DashboardEndpointsTest`, `NotificationsEndpointTest`, and `EnrollmentDocumentsEndpointTest` (404 assertions, 100%).
+   - Frontend Vitest Suite: 52 / 52 passed across 8 test suites (100%):
+     - `enrollment-review-dialog.test.tsx`: 2 / 2 passed.
+     - `enrollment-status-students-dialog.test.tsx`: 3 / 3 passed.
+     - `year-over-year-report-dialog.test.tsx`: 3 / 3 passed.
+     - `enrollment-dashboard-workspace.test.tsx`: 4 / 4 passed.
+     - `institution-dashboard-workspace.test.tsx`: 5 / 5 passed.
+     - `registrar-enrollment-workspace.test.tsx`: 14 / 14 passed.
+     - `schedule-decision-workspace.test.tsx`: 8 / 8 passed.
+     - `curriculum-ordinal.test.ts`: 13 / 13 passed.
+   - TypeScript Check: `npm run typecheck` (`tsc --noEmit`) passed with 0 errors.
+   - Fast Linter: `npm run lint:fast` (`oxlint`) passed with 0 errors.
+
+## 2026-09-08 — Enrollment Schedule (Calendar View & Professor Name) and Student Schedule Navigation Bar
+
+0. **Architecture & Implementation Planning**:
+   - Diagnosed user requirements: (1) On `http://192.168.1.101:3000/portal/enrollment`, include the enrollment schedule with the calendar view and professor names; (2) Create an additional navigation bar item for student schedule (`/portal/schedule`) displaying the weekly class timetable, professor assignments, room details, and calendar view.
+   - Identified data layer gaps:
+     - `EnrollmentResource.php`: Enrolled subjects array returned only basic columns (`section_id`, `subject_code`, `subject_title`, `status`, `status_label`), omitting section code, units, day, time, room, modality, and professor name.
+     - `SectionResource.php`: Missing `professor_name` for irregular student section options.
+     - `EnrollmentSectionTable.tsx`: Omitted Professor column in the schedule table view.
+     - `EnrollmentWorkspace.tsx`: Active/enrolled students were missing their enrolled class schedule card and calendar view once enrolled or submitted.
+     - `role-capabilities.ts`: `student` role lacked a direct `Schedule` module navigation link.
+   - Designed solution:
+     - Enrich `EnrollmentResource.php` and `SectionResource.php` with section schedule and professor name fields, and eager load `enrollmentSubjects.section.professor`.
+     - Add Professor column to `EnrollmentSectionTable` and `EligibleSubjectTable`.
+     - Add interactive `Enrolled Class Schedule` card with dual Table / Calendar view toggle (`SectionScheduleCalendar`) to `EnrollmentWorkspace`.
+     - Add `Schedule` to student role navigation in `role-capabilities.ts`, mapped to a new `StudentScheduleWorkspace` component in `module-registry.tsx`.
+
+1. **Backend Implementation**:
+   - `backend/app/Http/Resources/Api/V1/EnrollmentResource.php`: Enriched `subjects` array with `section_code`, `units`, `schedule_days`, `starts_at_time`, `ends_at_time`, `room`, `modality`, and `professor_name`.
+   - `backend/app/Actions/Enrollment/ListEnrollments.php`, `SubmitEnrollment.php`, `TransitionEnrollment.php`: Eager loaded `enrollmentSubjects.section.professor` and `enrollmentSubjects.section.subject`.
+   - `backend/app/Http/Resources/Api/V1/SectionResource.php`: Added `professor_name => $this->resource->professor?->name`.
+   - `backend/app/Actions/Enrollment/BuildEligibleSubjectPool.php`: Eager loaded `professor` on `Section::query()`.
+   - `docs/api/openapi.yaml`: Documented the new subject schedule and professor properties for `EnrollmentResource`.
+   - `backend/tests/Feature/Api/V1/EnrollmentsEndpointTest.php`: Updated `test_the_enrollment_resource_has_the_exact_key_set` with the new keys in exact order.
+
+2. **Frontend Implementation**:
+   - `frontend/src/features/schemas/enrollment-schema.ts`: Extended `enrollmentSubjectSchema` with `section_code`, `units` (nullable optional), `schedule_days`, `starts_at_time`, `ends_at_time`, `room`, `modality`, and `professor_name`.
+   - `frontend/src/features/schemas/reference-data-schema.ts`: Added `professor_name: z.string().nullable().optional()` to `sectionSchema`.
+   - `frontend/src/features/components/portal/enrollment-section-table.tsx`: Added "Professor" column to `scheduleColumns()` and visual cue on `SectionThumbnailCard`.
+   - `frontend/src/features/components/portal/eligible-subject-table.tsx`: Added professor name in section picker options and added dedicated "Professor" table column.
+   - `frontend/src/features/components/portal/enrollment-workspace.tsx`: Added interactive "Enrolled Class Schedule" card for active/enrolled students with dual Table / Calendar view toggle (`SectionScheduleCalendar`) and professor names.
+   - `frontend/src/features/portal/role-capabilities.ts`: Added `schedule` module to `rolePortalDefinitions.student.modules`.
+   - `frontend/src/features/portal/module-registry.tsx`: Dispatched `schedule` dynamically via `ScheduleModuleRouter`: if `session?.role === "student"`, renders `<StudentScheduleWorkspace />`; otherwise renders `<ScheduleWorkspace />`.
+   - `frontend/src/features/components/portal/student-schedule-workspace.tsx`: Built student schedule workspace with term selector, overview metric cards (Section, Total Units, Subjects, Status), dual Table / Calendar view toggle (`SectionScheduleCalendar`), professor details, and empty state with link to `/portal/enrollment`.
+
+3. **Verification & Test Execution**:
+   - Backend Feature Tests: 42 / 42 passed in `EnrollmentsEndpointTest` (166 assertions, 100%) and 35 / 35 passed in `EligibleSubjectsEndpointTest` (80 assertions, 100%).
+   - Frontend Vitest Suite: 40 / 40 passed across 4 files (100%):
+     - `student-schedule-workspace.test.tsx`: 3 / 3 passed (renders title, empty state, and dual-view schedule with professor names).
+     - `role-capabilities.test.ts`: 5 / 5 passed (asserting exact student navigation modules including `schedule`).
+     - `module-registry.test.tsx`: 4 / 4 passed (connected module routing).
+     - `enrollment-section-table.test.tsx`: 8 / 8 passed (section cards and schedule views).
+     - `enrollment-workspace.test.tsx`: 25 / 25 passed.
+   - TypeScript Check: `npm run typecheck` (`tsc --noEmit`) passed with 0 errors.
+   - Fast Linter: `npm run lint:fast` (`oxlint`) passed with 0 errors across 501 files.
+   - Live Browser End-to-End Automation (`frontend/scripts/verify_student_schedule_and_enrollment.mjs`):
+     - Verified student sidebar navigation includes "Schedule" with `CalendarDays` icon.
+     - Verified `/portal/enrollment`: section selection modal displays Schedule table with "Professor" column and Timetable calendar view with professor badges.
+     - Verified `/portal/enrollment`: enrolled student view renders "Enrolled Class Schedule" card with dual-view toggle, displaying professor names and rooms.
+     - Verified `/portal/schedule`: dedicated student schedule workspace renders term switcher, overview metric cards, Weekly Class Timetable (Calendar view), and Schedule list (Table view) with professor names.
+     - Captured artifacts: `student_section_schedule_modal_table.png`, `student_section_schedule_modal_calendar.png`, `enrolled_student_enrollment_calendar.png`, `enrolled_student_schedule_page_calendar.png`, `enrolled_student_schedule_page_table.png`, and `student_schedule_portal_calendar.png`.
+
+## 2026-09-07 — Student Account Creation Link Fix & 24-Hour Resend Option
+
+0. **Architecture & Implementation Planning**:
+   - Diagnosed broken student setup links: when Admission creates an account, the invitation email was using a hardcoded `localhost:3000` base URL without dynamic request origin detection, causing connection failures (`ERR_CONNECTION_REFUSED`) for students accessing on external devices or over LAN.
+   - Identified manual 64-character hash code friction: the email CTA button lacked URL query parameters (`?email=...&code=...`), and the `/account-setup` page lacked `searchParams` parsing to automatically pre-fill student email and setup code.
+   - Diagnosed 60-minute token expiration limit and missing resend capabilities: password broker expiration was set to 60 minutes, Admission receipt panel only allowed resending if initial mail delivery failed, directory lacked a direct resend button, and students had no self-service resend mechanism for expired links.
+   - Designed and delivered: (1) dynamic frontend URL resolution via incoming request `Origin`/`Referer` headers and query-parameter-enabled email setup links (`?email=...&code=...`), (2) 24-hour (1,440-minute) setup token validity across backend and frontend copy, (3) automatic pre-filling on `/account-setup`, (4) public throttled student setup resend endpoint for expired links, and (5) Admission workspace resend buttons in creation receipt, edit dialog, and directory table.
+
+1. **Backend Implementation**:
+   - `backend/config/auth.php`: Extended password broker token expiration from 60 minutes to 24 hours (`'expire' => env('AUTH_PASSWORD_RESET_EXPIRE', 1440)`).
+   - `backend/app/Mail/StudentAccountSetupMail.php`: Added `$studentEmail` property and injected into Mailable view data.
+   - `backend/resources/views/mail/student-account-setup.blade.php`:
+     - Updated CTA action button URL to append encoded parameters: `{{ $setupUrl }}{{ !empty($studentEmail) ? '?email='.urlencode($studentEmail).'&code='.urlencode($setupCode) : '?code='.urlencode($setupCode) }}`.
+     - Updated email copy to reflect the 24-hour expiration window ("This code expires in 24 hours and can be used only once.").
+   - `backend/app/Actions/Identity/SendStudentAccountSetupInvitation.php`: Dynamically resolved base frontend application URL from incoming request `Origin` or `Referer` headers (falling back to `config('app.frontend_url')`), ensuring links generated during LAN or multi-device testing point to the correct reachable host.
+   - `backend/app/Http/Requests/Api/V1/Auth/ResendStudentAccountSetupRequest.php`: Form request validating student email format.
+   - `backend/app/Http/Controllers/Api/V1/Auth/ResendStudentAccountSetupController.php`: Public controller (`POST /api/v1/auth/resend-student-account-setup`) that verifies pending disabled student status and triggers a fresh setup code invitation, returning safe generic responses for security.
+   - `backend/routes/api.php`: Registered endpoint under strict rate limiter (`throttle:5,1`).
+
+2. **Frontend Implementation**:
+   - `frontend/src/features/schemas/admission-schema.ts`: Added `resendStudentAccountSetupSchema`, `resendStudentAccountSetupEnvelopeSchema`, and exported `ResendStudentAccountSetupInput` and `ResendStudentAccountSetupResponse` types.
+   - `frontend/src/features/services/admission-service.ts`: Exported `RESEND_STUDENT_ACCOUNT_SETUP_PATH = "/api/v1/auth/resend-student-account-setup"` and `requestStudentAccountSetupResend(email: string)`.
+   - `frontend/src/features/components/pages/account-setup-page.tsx`:
+     - Used `useSearchParams()` to read `email` and `code` / `token` query parameters, pre-populating form state on mount.
+     - Updated copy across trust badges and field descriptions from "60 minutes" to "24 hours".
+     - Added student self-service resend block ("Did your setup code expire or did you not receive it?") and resend button within error alerts when setup fails.
+     - Displayed reassuring success feedback in `text-success` when a new invitation is requested.
+   - `frontend/src/features/components/portal/student-records-workspace.tsx`:
+     - Enabled "Resend setup email" in the `CreateAccountPanel` receipt card for any student whose `account_setup_status === "pending"`, not only failed deliveries.
+     - Added toast feedback (`toast.success` / `toast.error`) when resending setup emails from the creation panel, student edit dialog, and directory table.
+     - Added a direct "Resend email" secondary action button to each pending student row in the `StudentDirectoryPanel` table with per-row loading states.
+
+3. **Verification & Test Execution**:
+   - Backend Feature Tests: 48 passed (511 assertions, 100%):
+     - `ResendStudentAccountSetupTest.php`: 4 / 4 passed (pending student resend, safe generic response for unknown/active email, validation failure).
+     - `StudentProfilesEndpointTest.php`: 19 / 19 passed (asserting updated 1,440-minute token expiration).
+     - `ApiSurfaceTest.php`: 25 / 25 passed (verifying exact route surface and throttle gates).
+   - Frontend Vitest Suite: 15 / 15 passed across 3 files (100%):
+     - `src/features/components/pages/account-setup-page.test.tsx`: 7 / 7 passed (including query parameter prefill and self-service resend).
+     - `src/features/components/portal/admission-provisioning-workspace.test.tsx`: 4 / 4 passed (including creation receipt resend and directory table resend button).
+     - `src/features/services/admission-service.test.ts`: 4 / 4 passed (including `requestStudentAccountSetupResend`).
+   - TypeScript Check: `npm run typecheck` passed with 0 errors.
+   - Fast Linter: `npm run lint:fast` passed with 0 errors across 499 files.
+   - Live End-to-End Browser Automation (`frontend/scripts/capture_status.mjs`):
+     - Verified pre-population of `email` and `code` from query parameters (`baluyotdandan@gmail.com` and setup token).
+     - Verified clicking "Resend setup email" invokes the public endpoint and renders the success confirmation message.
+     - Captured artifacts: `account_setup_prefilled.png` and `account_setup_resent_success.png`.
+
+4. **Database Test Accounts Cleanup**:
+   - Safely purged test accounts from the database via atomic transactions: `westliecasuncad06@gmail.com`, `baluyotdandan@gmail.com`, `westragma@gmail.com`, and `derickboado1@gmail.com` (Faculty User ID `6932`).
+   - Cleared associated foreign records across `audit_logs`, `notifications`, `password_reset_tokens`, `student_profiles`, and `users`. Verified 0 remaining records.
+
 ## 2026-09-06 — Branded GRC Loading Logo for "Restoring your session…" (Auth Route Guards)
 
 0. **Requirement & Architecture Execution**:

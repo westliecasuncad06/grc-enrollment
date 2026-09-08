@@ -103,7 +103,20 @@ final class Enrollment extends Model
             return $query->where('status', EnrollmentStatus::PendingPayment->value);
         }
 
-        if ($user->role === UserRole::RegistrarHead || $user->role === UserRole::RegistrarStaff) {
+        if (
+            $user->role === UserRole::RegistrarHead
+            || $user->role === UserRole::RegistrarStaff
+            || $user->role === UserRole::Dean
+            || $user->role === UserRole::ExecutiveDirector
+        ) {
+            return $query;
+        }
+
+        if ($user->role === UserRole::ProgramChair) {
+            if ($user->college !== null) {
+                return $query->whereHas('student.program', fn ($programQuery) => $programQuery->where('college', $user->college->value));
+            }
+
             return $query;
         }
 

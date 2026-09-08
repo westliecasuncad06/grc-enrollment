@@ -149,63 +149,64 @@ function AcademicRecordBody({
   const schoolYears = groupBySchoolYear(record.terms)
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle>School years</CardTitle>
-          <CardDescription>Latest school year first</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {schoolYears.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No terms recorded yet.
-            </p>
-          )}
-          {schoolYears.map(([schoolYear, terms]) => {
-            const isActiveYear = terms.some(
-              (term) => term.academic_term_id === selectedTermId,
-            )
+    <div className="grid min-w-0 gap-4">
+      {/* Top bar: school years selector on the left, Prospectus + view toggle on the right */}
+      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
+        <Card className="h-fit flex-1 min-w-0 max-w-sm">
+          <CardHeader className="py-3">
+            <CardTitle>School years</CardTitle>
+            <CardDescription>Latest school year first</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 pb-3">
+            {schoolYears.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No terms recorded yet.
+              </p>
+            )}
+            {schoolYears.map(([schoolYear, terms]) => {
+              const isActiveYear = terms.some(
+                (term) => term.academic_term_id === selectedTermId,
+              )
 
-            return (
-              <div
-                key={schoolYear}
-                className="grid gap-1.5 border-b border-border/60 pb-4 last:border-b-0 last:pb-0"
-              >
-                <p
-                  className={
-                    isActiveYear
-                      ? "text-sm font-semibold text-foreground"
-                      : "text-sm font-medium text-muted-foreground"
-                  }
+              return (
+                <div
+                  key={schoolYear}
+                  className="grid gap-1.5 border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
                 >
-                  {schoolYear}
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {terms.map((term) => (
-                    <Button
-                      key={term.academic_term_id}
-                      type="button"
-                      size="sm"
-                      variant={
-                        term.academic_term_id === selectedTermId
-                          ? "default"
-                          : "outline"
-                      }
-                      aria-pressed={term.academic_term_id === selectedTermId}
-                      onClick={() => setSelectedTermId(term.academic_term_id)}
-                    >
-                      {term.semester}
-                    </Button>
-                  ))}
+                  <p
+                    className={
+                      isActiveYear
+                        ? "text-sm font-semibold text-foreground"
+                        : "text-sm font-medium text-muted-foreground"
+                    }
+                  >
+                    {schoolYear}
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {terms.map((term) => (
+                      <Button
+                        key={term.academic_term_id}
+                        type="button"
+                        size="sm"
+                        variant={
+                          term.academic_term_id === selectedTermId
+                            ? "default"
+                            : "outline"
+                        }
+                        aria-pressed={term.academic_term_id === selectedTermId}
+                        onClick={() => setSelectedTermId(term.academic_term_id)}
+                      >
+                        {term.semester}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </CardContent>
-      </Card>
+              )
+            })}
+          </CardContent>
+        </Card>
 
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -233,24 +234,25 @@ function AcademicRecordBody({
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
-
-        {selectedTerm ? (
-          view === "table" ? (
-            <GradeSlipDocument slip={toGradeSlip(record, selectedTerm)} />
-          ) : (
-            <GradeTiles slip={toGradeSlip(record, selectedTerm)} />
-          )
-        ) : schoolYears.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No grades have been recorded yet. Open the Prospectus above to
-            see the subjects you still need to take.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Select a school year and semester to view its grades.
-          </p>
-        )}
       </div>
+
+      {/* Grade slip — full width below the header bar */}
+      {selectedTerm ? (
+        view === "table" ? (
+          <GradeSlipDocument slip={toGradeSlip(record, selectedTerm)} />
+        ) : (
+          <GradeTiles slip={toGradeSlip(record, selectedTerm)} />
+        )
+      ) : schoolYears.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No grades have been recorded yet. Open the Prospectus above to
+          see the subjects you still need to take.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Select a school year and semester to view its grades.
+        </p>
+      )}
 
       <Dialog open={prospectusOpen} onOpenChange={setProspectusOpen}>
         <DialogContent className="grid max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-5xl">

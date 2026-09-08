@@ -158,7 +158,7 @@ final class TransitionEnrollment
             ]);
 
             return $lockedEnrollment->refresh()->load([
-                'student', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items',
+                'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items',
             ]);
         });
     }

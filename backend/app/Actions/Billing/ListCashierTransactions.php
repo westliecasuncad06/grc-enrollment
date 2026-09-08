@@ -48,7 +48,7 @@ final readonly class ListCashierTransactions
 
         $accountPayments = $this->applyFilters(
             DB::table('account_payments')
-                ->join('enrollments', 'enrollments.id', '=', 'account_payments.enrollment_id')
+                ->leftJoin('enrollments', 'enrollments.id', '=', 'account_payments.enrollment_id')
                 ->join('student_profiles', 'student_profiles.id', '=', 'account_payments.student_id')
                 ->join('users', 'users.id', '=', 'student_profiles.user_id')
                 ->select([

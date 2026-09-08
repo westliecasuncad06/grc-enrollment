@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\Auth\FacultyAccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
+use App\Http\Controllers\Api\V1\Auth\ResendStudentAccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\StaffAccountSetupController;
 use App\Http\Controllers\Api\V1\Billing\FeeScheduleController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
@@ -86,6 +87,10 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             ->middleware('throttle:10,1')
             ->name('account-setup');
 
+        Route::post('/resend-student-account-setup', ResendStudentAccountSetupController::class)
+            ->middleware('throttle:5,1')
+            ->name('resend-student-account-setup');
+
         Route::post('/faculty-account-setup', FacultyAccountSetupController::class)
             ->middleware('throttle:10,1')
             ->name('faculty-account-setup');
@@ -149,6 +154,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/schedule-proposals', [ScheduleProposalController::class, 'index'])->name('schedule-proposals.index');
         Route::get('/schedule-proposals/{scheduleProposal}/sections', [ScheduleProposalController::class, 'sections'])->name('schedule-proposals.sections');
         Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
         Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
         // Every transition (dean_approve, dean_return, executive_approve,

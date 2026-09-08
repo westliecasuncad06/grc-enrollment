@@ -90,6 +90,7 @@ export function RegistrarRecordsWorkspace({
   const [withdrawalsPage, setWithdrawalsPage] = useState(1)
   const [gradesPage, setGradesPage] = useState(1)
   const [documentsPage, setDocumentsPage] = useState(1)
+  const [documentsSearch, setDocumentsSearch] = useState("")
 
   const [decision, setDecision] = useState<DecisionTarget | null>(null)
   const [reason, setReason] = useState("")
@@ -122,7 +123,11 @@ export function RegistrarRecordsWorkspace({
   )
 
   const documentsQuery = useEnrollmentDocumentsQuery(
-    { page: documentsPage, per_page: 20 },
+    {
+      page: documentsPage,
+      per_page: 20,
+      search: documentsSearch.trim() || undefined,
+    },
     { enabled: showDocuments },
   )
 
@@ -582,8 +587,21 @@ export function RegistrarRecordsWorkspace({
 
       {showDocuments && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <CardTitle level={2}>Enrollment documents</CardTitle>
+            <div className="w-full sm:w-96">
+              <Input
+                type="search"
+                placeholder="Search by Student ID, Document Type, Document Number, or Date..."
+                aria-label="Search enrollment documents"
+                value={documentsSearch}
+                onChange={(e) => {
+                  setDocumentsSearch(e.target.value)
+                  setDocumentsPage(1)
+                }}
+                className="w-full"
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <AsyncBoundary

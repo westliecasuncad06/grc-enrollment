@@ -249,6 +249,22 @@ export const accountSetupEnvelopeSchema = z
   })
   .strict()
 
+export const resendStudentAccountSetupSchema = z
+  .object({
+    email: z.email("Enter a valid email address."),
+  })
+  .strict()
+
+export const resendStudentAccountSetupEnvelopeSchema = z
+  .object({
+    data: z.object({
+      type: z.literal("resend-student-account-setup"),
+      status: z.literal("sent"),
+      message: z.string().optional(),
+    }),
+  })
+  .strict()
+
 export type ProvisionStudentInput = z.infer<typeof provisionStudentSchema>
 export type StudentProfile = z.infer<typeof studentProfileSchema>
 export type StudentProfileFilters = z.input<typeof studentProfileFiltersSchema>
@@ -266,8 +282,15 @@ export type DecideProfileChangeRequestInput = z.infer<
   typeof decideProfileChangeRequestSchema
 >
 export type AccountSetupInput = z.infer<typeof accountSetupSchema>
+export type ResendStudentAccountSetupInput = z.infer<
+  typeof resendStudentAccountSetupSchema
+>
+export type ResendStudentAccountSetupResponse = z.infer<
+  typeof resendStudentAccountSetupEnvelopeSchema
+>["data"]
 export interface Paginated<T> {
   data: readonly T[]
   links: z.infer<typeof paginationLinksSchema>
   meta: z.infer<typeof paginationMetaSchema>
 }
+

@@ -6434,17 +6434,45 @@ components:
             additionalProperties: false
             required:
               - section_id
+              - section_code
               - subject_code
               - subject_title
+              - units
+              - schedule_days
+              - starts_at_time
+              - ends_at_time
+              - room
+              - modality
+              - professor_name
               - status
               - status_label
             properties:
               section_id:
                 type: integer
+              section_code:
+                type: string
               subject_code:
                 type: string
               subject_title:
                 type: string
+              units:
+                type: number
+              schedule_days:
+                type: ["string", "null"]
+              starts_at_time:
+                type: ["string", "null"]
+              ends_at_time:
+                type: ["string", "null"]
+              room:
+                type: ["string", "null"]
+              modality:
+                type: ["string", "null"]
+                enum:
+                  - hyflex_a
+                  - hyflex_b
+                  - f2f
+              professor_name:
+                type: ["string", "null"]
               status:
                 type: string
                 enum:

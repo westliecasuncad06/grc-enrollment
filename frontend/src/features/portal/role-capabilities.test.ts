@@ -7,13 +7,20 @@ import {
 } from "@/features/portal/role-capabilities"
 
 const expectedModuleIds = {
-  student: ["enrollment", "grades", "digital-com", "student-information"],
+  student: [
+    "enrollment",
+    "schedule",
+    "grades",
+    "digital-com",
+    "student-information",
+  ],
   admission_staff: ["student-records"],
   faculty: [
     "availability-preferences",
     "teaching-schedule",
     "class-rosters",
     "grade-submission",
+    "professor-information",
   ],
   program_chair: [
     "program-chair-enrollment",
@@ -22,7 +29,7 @@ const expectedModuleIds = {
     "faculty-loading",
     "faculty-workforce",
     "rooms",
-    "schedule-proposals",
+    "enrollment-dashboard",
     "program-chair-analytics",
     "faculty-invitations",
   ],
@@ -45,6 +52,7 @@ const expectedModuleIds = {
     "academic-terms",
     "grade-approvals",
     "academic-transcripts",
+    "graduates",
     "cor-records",
     "overrides-voids",
     "enrollment-change-requests",
@@ -52,7 +60,7 @@ const expectedModuleIds = {
     "registrar-analytics",
     "compliance-reports",
     "audit-logs",
-    "policy-settings",
+    "fee-settings",
     "rooms",
     "faculty-workforce",
     "staff-invitations",
@@ -62,6 +70,7 @@ const expectedModuleIds = {
     "credit-mappings",
     "drops-withdrawals",
     "academic-records",
+    "graduates",
     "enrollment-change-requests",
     "enrollment-documents",
   ],

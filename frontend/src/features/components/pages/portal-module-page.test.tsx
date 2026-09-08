@@ -93,6 +93,9 @@ const workspaceHeadings: Record<string, string> = {
   "it-control-students": "IT Control student accounts",
   "it-control-faculty": "IT Control faculty accounts",
   "it-control-enrollment-override": "Enrollment overrides",
+  "irregular-enrollments": "Irregular Student Advising & Approvals",
+  graduates: "Graduates directory",
+  "professor-information": "My Information",
 }
 
 describe("PortalModulePage", () => {

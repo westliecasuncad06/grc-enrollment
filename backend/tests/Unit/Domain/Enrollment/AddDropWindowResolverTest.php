@@ -120,4 +120,70 @@ final class AddDropWindowResolverTest extends TestCase
         self::assertTrue($atClose->isOpen);
         self::assertTrue($atDeadline->isOpen);
     }
+
+    public function test_already_enrolled_student_can_access_add_drop_while_enrollment_still_open(): void
+    {
+        $now = CarbonImmutable::parse(self::NOW);
+
+        // Enrollment window is still open (closes in the future) — normally blocked
+        $availability = AddDropWindowResolver::resolve(
+            AcademicTermStatus::SemesterOngoing,
+            $now->addDay(),         // enrollment still open
+            $now->addDays(30),      // add/drop deadline in future
+            $now,
+            true,                   // student is already enrolled
+        );
+
+        self::assertTrue($availability->isOpen);
+        self::assertSame(AddDropAvailabilityReason::Open, $availability->reason);
+    }
+
+    public function test_already_enrolled_student_with_null_enrollment_close_date_is_still_open(): void
+    {
+        $now = CarbonImmutable::parse(self::NOW);
+
+        // enrollment_closes_at is null — normally would block with EnrollmentStillOpen
+        $availability = AddDropWindowResolver::resolve(
+            AcademicTermStatus::SemesterOngoing,
+            null,
+            $now->addDays(30),
+            $now,
+            true,
+        );
+
+        self::assertTrue($availability->isOpen);
+        self::assertSame(AddDropAvailabilityReason::Open, $availability->reason);
+    }
+
+    public function test_already_enrolled_student_is_blocked_after_add_drop_deadline_passes(): void
+    {
+        $now = CarbonImmutable::parse(self::NOW);
+
+        $availability = AddDropWindowResolver::resolve(
+            AcademicTermStatus::SemesterOngoing,
+            $now->addDay(),     // enrollment still open (irrelevant for enrolled student)
+            $now->subDay(),     // add/drop deadline already passed
+            $now,
+            true,
+        );
+
+        self::assertFalse($availability->isOpen);
+        self::assertSame(AddDropAvailabilityReason::DeadlinePassed, $availability->reason);
+    }
+
+    public function test_already_enrolled_student_is_blocked_when_term_is_not_ongoing(): void
+    {
+        $now = CarbonImmutable::parse(self::NOW);
+
+        $availability = AddDropWindowResolver::resolve(
+            AcademicTermStatus::SemesterClosed,
+            $now->subDay(),
+            $now->addDay(),
+            $now,
+            true,
+        );
+
+        self::assertFalse($availability->isOpen);
+        self::assertSame(AddDropAvailabilityReason::TermNotOngoing, $availability->reason);
+    }
 }

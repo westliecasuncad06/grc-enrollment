@@ -34,7 +34,7 @@ export function StudentAccountBalancePanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <dl className="grid gap-3 sm:grid-cols-4">
+        <dl className="grid gap-3 sm:grid-cols-2 md:grid-cols-5">
           <div className="rounded-lg border p-3">
             <dt className="text-xs text-muted-foreground">Total assessed</dt>
             <dd className="text-xl font-semibold">
@@ -54,12 +54,25 @@ export function StudentAccountBalancePanel({
             </dd>
           </div>
           <div className="rounded-lg border p-3">
+            <dt className="text-xs text-muted-foreground">Advance payment credit</dt>
+            <dd className={`text-xl font-semibold ${account.advance_payment_balance !== "0.00" ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted-foreground"}`}>
+              {formatPhp(account.advance_payment_balance)}
+            </dd>
+          </div>
+          <div className="rounded-lg border p-3">
             <dt className="text-xs text-muted-foreground">Prior balance</dt>
             <dd className="text-xl font-semibold">
               {formatPhp(account.prior_balance)}
             </dd>
           </div>
         </dl>
+        {account.advance_payment_balance !== "0.00" && (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+            <span>
+              <strong>Advance Credit:</strong> You have an advance payment balance of {formatPhp(account.advance_payment_balance)}. This credit is recorded on your student ledger and will apply towards your upcoming assessments or fees.
+            </span>
+          </div>
+        )}
         {account.has_promissory_note_on_file && (
           <Badge variant="outline" className="w-fit border-amber-600/40 text-amber-800 bg-amber-50 dark:bg-amber-950/20">
             Promissory note on file

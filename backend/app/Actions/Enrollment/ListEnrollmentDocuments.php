@@ -23,6 +23,8 @@ final readonly class ListEnrollmentDocuments
         $studentNumber = isset($filters['student_number']) ? trim((string) $filters['student_number']) : null;
         $studentName = isset($filters['student_name']) ? trim((string) $filters['student_name']) : null;
         $documentType = isset($filters['document_type']) ? (string) $filters['document_type'] : null;
+        $documentNumber = isset($filters['document_number']) ? trim((string) $filters['document_number']) : null;
+        $search = isset($filters['search']) ? trim((string) $filters['search']) : null;
         $page = isset($filters['page']) ? (int) $filters['page'] : 1;
         $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 20;
 
@@ -43,6 +45,17 @@ final readonly class ListEnrollmentDocuments
                 );
             })
             ->when($documentType !== null, fn ($query) => $query->where('document_type', $documentType))
+            ->when($documentNumber !== null && $documentNumber !== '', fn ($query) => $query->where('document_number', 'like', "%{$documentNumber}%"))
+            ->when($search !== null && $search !== '', function ($query) use ($search) {
+                $escaped = addcslashes($search, '\\%_');
+                $query->where(function ($sub) use ($escaped) {
+                    $sub->where('document_number', 'like', "%{$escaped}%")
+                        ->orWhere('document_type', 'like', "%{$escaped}%")
+                        ->orWhere('generated_at', 'like', "%{$escaped}%")
+                        ->orWhereHas('enrollment.student', fn ($sq) => $sq->where('student_number', 'like', "%{$escaped}%"))
+                        ->orWhereHas('enrollment.student.user', fn ($uq) => $uq->where('name', 'like', "%{$escaped}%"));
+                });
+            })
             ->orderByDesc('generated_at')
             ->orderByDesc('id')
             ->paginate($perPage, ['*'], 'page', $page)

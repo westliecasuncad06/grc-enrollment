@@ -170,7 +170,7 @@ final readonly class BuildEligibleSubjectPool
             $sectionsThisTerm = Section::query()
                 ->where('academic_term_id', $term->id)
                 ->whereIn('subject_id', $siblingSubjectIds)
-                ->with(['sectionPlan', 'subject'])
+                ->with(['sectionPlan', 'subject', 'professor'])
                 ->get();
 
             $openSections = $sectionsThisTerm

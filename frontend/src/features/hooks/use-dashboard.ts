@@ -31,14 +31,22 @@ export function useEnrollmentSummaryQuery(
   })
 }
 
-export const institutionSummaryQueryKey = (userId: string | null) =>
-  ["institution-summary", userId] as const
+export const institutionSummaryQueryKey = (
+  userId: string | null,
+  academicTermId?: number,
+) => ["institution-summary", userId, academicTermId ?? null] as const
 
-export function useInstitutionSummaryQuery(enabled = true) {
+export function useInstitutionSummaryQuery(
+  academicTermId?: number,
+  enabled = true,
+) {
   const { session } = useAuth()
   return useQuery({
-    queryKey: institutionSummaryQueryKey(session?.userId ?? null),
-    queryFn: ({ signal }) => getInstitutionSummary(signal),
+    queryKey: institutionSummaryQueryKey(
+      session?.userId ?? null,
+      academicTermId,
+    ),
+    queryFn: ({ signal }) => getInstitutionSummary(academicTermId, signal),
     enabled: enabled && session !== null,
   })
 }

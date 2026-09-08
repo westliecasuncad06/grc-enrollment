@@ -62,8 +62,16 @@ export const eligibleSubjectsEnvelopeSchema = z
 const enrollmentSubjectSchema = z
   .object({
     section_id: z.number().int().positive(),
+    section_code: z.string().optional(),
     subject_code: z.string().min(1),
     subject_title: z.string().min(1),
+    units: z.number().nullable().optional(),
+    schedule_days: z.string().nullable().optional(),
+    starts_at_time: z.string().nullable().optional(),
+    ends_at_time: z.string().nullable().optional(),
+    room: z.string().nullable().optional(),
+    modality: z.enum(["hyflex_a", "hyflex_b", "f2f"]).nullable().optional(),
+    professor_name: z.string().nullable().optional(),
     status: z.enum(["selected", "enrolled", "dropped"]),
     status_label: z.string().min(1),
   })
@@ -170,6 +178,7 @@ export const enrollmentFiltersSchema = z
   .object({
     status: z.enum(enrollmentStatusValues).optional(),
     academic_term_id: z.number().int().positive().optional(),
+    search: z.string().trim().optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })

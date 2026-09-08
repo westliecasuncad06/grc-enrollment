@@ -119,65 +119,209 @@ export function ScheduleDecisionControls({
       )
     }
   }
+
+  const [activeTab, setActiveTab] = useState<"pending" | "history">("pending")
   const selectable = proposals.filter(
     (proposal) => availableScheduleActions(actorRole, proposal).length > 0,
   )
-  if (selectable.length === 0)
-    return <p>No schedule decisions are currently available.</p>
+  const history = proposals.filter(
+    (proposal) => availableScheduleActions(actorRole, proposal).length === 0,
+  )
+
   return (
-    <>
+    <div className="space-y-4">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <ul className="grid gap-3 md:grid-cols-2">
-        {selectable.map((proposal) => {
-          const presentation = scheduleProposalPresentation(proposal)
-          const priorReturn = [...(proposal.decision_history ?? [])]
-            .reverse()
-            .find((decision) => decision.action === "dean_return" || decision.action === "executive_return")
 
-          return (
-            <li key={proposal.id}>
-              <Card size="sm" className="h-full">
-                <CardHeader>
-                  <CardTitle>{proposal.college_label ?? proposal.college?.toUpperCase() ?? `Proposal #${proposal.id}`}</CardTitle>
-                  <CardDescription>{proposal.academic_term_label ?? `Academic term #${proposal.academic_term_id}`}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  <p>Submitted by {proposal.submitted_by_name ?? `Program Chair #${proposal.submitted_by}`}</p>
-                  <Badge variant={presentation.badgeVariant}>{presentation.label}</Badge>
-                  {priorReturn && (
-                    <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Previously returned</span> by {priorReturn.actor_name}
-                      {priorReturn.notes ? `: ${priorReturn.notes}` : "."}
-                    </p>
-                  )}
-                  <Button type="button" variant="outline" onClick={() => setReviewingProposal(proposal)}>Review schedule</Button>
-                  <div className="flex flex-wrap gap-2">
-                    {availableScheduleActions(actorRole, proposal).map((action) => (
+      <div className="flex flex-wrap items-center gap-2 border-b pb-3">
+        <Button
+          type="button"
+          size="sm"
+          variant={activeTab === "pending" ? "default" : "outline"}
+          onClick={() => setActiveTab("pending")}
+        >
+          Pending decisions ({selectable.length})
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={activeTab === "history" ? "default" : "outline"}
+          onClick={() => setActiveTab("history")}
+        >
+          Decision history ({history.length})
+        </Button>
+      </div>
+
+      {activeTab === "pending" && (
+        selectable.length === 0 ? (
+          <p className="py-6 text-center text-muted-foreground">
+            No schedule decisions are currently available.
+          </p>
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2">
+            {selectable.map((proposal) => {
+              const presentation = scheduleProposalPresentation(proposal)
+              const priorReturn = [...(proposal.decision_history ?? [])]
+                .reverse()
+                .find(
+                  (decision) =>
+                    decision.action === "dean_return" ||
+                    decision.action === "executive_return",
+                )
+
+              return (
+                <li key={proposal.id}>
+                  <Card size="sm" className="h-full">
+                    <CardHeader>
+                      <CardTitle>
+                        {proposal.college_label ??
+                          proposal.college?.toUpperCase() ??
+                          `Proposal #${proposal.id}`}
+                      </CardTitle>
+                      <CardDescription>
+                        {proposal.academic_term_label ??
+                          `Academic term #${proposal.academic_term_id}`}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
+                      <p>
+                        Submitted by{" "}
+                        {proposal.submitted_by_name ??
+                          `Program Chair #${proposal.submitted_by}`}
+                      </p>
+                      <Badge variant={presentation.badgeVariant}>
+                        {presentation.label}
+                      </Badge>
+                      {priorReturn && (
+                        <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            Previously returned
+                          </span>{" "}
+                          by {priorReturn.actor_name}
+                          {priorReturn.notes ? `: ${priorReturn.notes}` : "."}
+                        </p>
+                      )}
                       <Button
-                        key={action}
                         type="button"
-                        variant={requiresReason(action) ? "outline" : "default"}
-                        disabled={mutation.isPending}
-                        onClick={() => {
-                          setPending({ proposal, action })
-                          setReason("")
-                          setError("")
-                        }}
+                        variant="outline"
+                        onClick={() => setReviewingProposal(proposal)}
                       >
-                        {actionLabel[action]}
+                        Review schedule
                       </Button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </li>
-          )
-        })}
-      </ul>
+                      <div className="flex flex-wrap gap-2">
+                        {availableScheduleActions(actorRole, proposal).map(
+                          (action) => (
+                            <Button
+                              key={action}
+                              type="button"
+                              variant={
+                                requiresReason(action) ? "outline" : "default"
+                              }
+                              disabled={mutation.isPending}
+                              onClick={() => {
+                                setPending({ proposal, action })
+                                setReason("")
+                                setError("")
+                              }}
+                            >
+                              {actionLabel[action]}
+                            </Button>
+                          ),
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </li>
+              )
+            })}
+          </ul>
+        )
+      )}
+
+      {activeTab === "history" && (
+        history.length === 0 ? (
+          <p className="py-6 text-center text-muted-foreground">
+            No schedule decision history is currently available.
+          </p>
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2">
+            {history.map((proposal) => {
+              const presentation = scheduleProposalPresentation(proposal)
+              const decisions = [...(proposal.decision_history ?? [])].reverse()
+
+              return (
+                <li key={proposal.id}>
+                  <Card size="sm" className="h-full">
+                    <CardHeader>
+                      <CardTitle>
+                        {proposal.college_label ??
+                          proposal.college?.toUpperCase() ??
+                          `Proposal #${proposal.id}`}
+                      </CardTitle>
+                      <CardDescription>
+                        {proposal.academic_term_label ??
+                          `Academic term #${proposal.academic_term_id}`}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
+                      <p>
+                        Submitted by{" "}
+                        {proposal.submitted_by_name ??
+                          `Program Chair #${proposal.submitted_by}`}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={presentation.badgeVariant}>
+                          {presentation.label}
+                        </Badge>
+                        {proposal.decided_at && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(proposal.decided_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {proposal.decision_reason && (
+                        <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            Remarks:
+                          </span>{" "}
+                          {proposal.decision_reason}
+                        </p>
+                      )}
+                      {decisions.length > 0 && (
+                        <div className="rounded-md border bg-muted/20 p-2 text-xs space-y-1">
+                          <p className="font-semibold text-muted-foreground uppercase text-[10px]">
+                            Decision history
+                          </p>
+                          {decisions.slice(0, 3).map((d, i) => (
+                            <p key={i}>
+                              <span className="font-medium">
+                                {d.action_label}
+                              </span>{" "}
+                              by {d.actor_name} on{" "}
+                              {new Date(d.decided_at).toLocaleDateString()}
+                              {d.notes ? ` — "${d.notes}"` : ""}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setReviewingProposal(proposal)}
+                      >
+                        View schedule
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </li>
+              )
+            })}
+          </ul>
+        )
+      )}
       <ScheduleReviewDialog
         actorRole={actorRole}
         proposal={reviewingProposal}
@@ -234,7 +378,7 @@ export function ScheduleDecisionControls({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   )
 }
 

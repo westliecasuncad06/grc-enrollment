@@ -33,4 +33,5 @@ enum NotificationType: string
     case StudentProfileChangeRejected = 'student_profile_change_rejected';
     case FacultySpecializationApproved = 'faculty_specialization_approved';
     case FacultySpecializationRejected = 'faculty_specialization_rejected';
+    case SectionAssigned = 'section_assigned';
 }

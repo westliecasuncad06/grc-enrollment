@@ -2,9 +2,11 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Billing\AssessEnrollment;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\OverloadEvaluator;
@@ -30,11 +32,15 @@ use Illuminate\Validation\ValidationException;
  * against a freshly built eligible pool before this executes — this action
  * only writes.
  *
- * The queue ticket is deliberately NOT created here — it is issued only once
- * Registrar Staff approves (`TransitionEnrollment`'s `registrar_approve`),
- * so a student sees "waiting for approval" with no queue number until then.
- * See ADR 0011/Phase 6 notes: this moved the Cashier queue ticket from
- * submission-time to approval-time.
+ * The queue ticket is deliberately NOT created here for irregular/overload
+ * students — it is issued only once Registrar Staff approves
+ * (`TransitionEnrollment`'s `registrar_approve`), so a student sees "waiting
+ * for approval" with no queue number until then.
+ *
+ * For regular students (enrollment_category = 'regular') who do NOT require
+ * overload approval, the enrollment is automatically transitioned to
+ * `pending_payment` with an immediate fee assessment, bypassing the manual
+ * registrar approval step.
  *
  * All writes happen in one transaction (FR-ENR-007's "submit atomically" and
  * its acceptance criterion: exactly one enrollment, the selected enrollment
@@ -58,6 +64,7 @@ final readonly class SubmitEnrollment
     public function __construct(
         private AuditRecorder $auditRecorder,
         private NotificationRecorder $notificationRecorder,
+        private AssessEnrollment $assessEnrollment,
     ) {}
 
     /**
@@ -129,6 +136,22 @@ final readonly class SubmitEnrollment
 
             Section::query()->whereIn('id', $sectionIds)->increment('enrolled_count');
 
+            // Regular students (enrollment_category = 'regular') who do not
+            // require overload approval are automatically approved: their
+            // enrollment transitions directly to pending_payment and an
+            // assessment is computed immediately, removing the manual
+            // registrar approval bottleneck for the common case.
+            $isRegular = $student->enrollment_category === EnrollmentCategory::Regular->value
+                && $overloadVerdict !== OverloadVerdict::RequiresApproval;
+
+            if ($isRegular) {
+                $enrollment->update([
+                    'status' => EnrollmentStatus::PendingPayment,
+                    'registrar_decided_at' => now(),
+                ]);
+                $this->assessEnrollment->execute($enrollment->refresh());
+            }
+
             $this->auditRecorder->record(
                 $actor,
                 AuditAction::ENROLLMENT_SUBMITTED,
@@ -147,28 +170,40 @@ final readonly class SubmitEnrollment
                 $context,
             );
 
-            Notification::create([
-                'user_id' => $actor->id,
-                'type' => NotificationType::EnrollmentSubmitted,
-                'message' => sprintf(
-                    'Your enrollment for %s %s has been submitted and is pending registrar approval. A queue number will be issued once it is approved.',
-                    $term->school_year,
-                    $term->semester,
-                ),
-            ]);
+            if ($isRegular) {
+                Notification::create([
+                    'user_id' => $actor->id,
+                    'type' => NotificationType::EnrollmentSubmitted,
+                    'message' => sprintf(
+                        'Your enrollment for %s %s has been submitted and assessed. Please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
+                        $term->school_year,
+                        $term->semester,
+                    ),
+                ]);
+            } else {
+                Notification::create([
+                    'user_id' => $actor->id,
+                    'type' => NotificationType::EnrollmentSubmitted,
+                    'message' => sprintf(
+                        'Your enrollment for %s %s has been submitted and is pending Program Chair schedule review. Once approved, please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
+                        $term->school_year,
+                        $term->semester,
+                    ),
+                ]);
 
-            $this->notificationRecorder->recordManyForRole(
-                UserRole::RegistrarStaff,
-                NotificationType::EnrollmentSubmitted,
-                sprintf(
-                    '%s submitted an enrollment for %s %s and is awaiting approval.',
-                    $student->student_number,
-                    $term->school_year,
-                    $term->semester,
-                ),
-            );
+                $this->notificationRecorder->recordManyForRole(
+                    UserRole::ProgramChair,
+                    NotificationType::EnrollmentSubmitted,
+                    sprintf(
+                        'Irregular student %s submitted an enrollment for %s %s and is awaiting Program Chair schedule checking.',
+                        $student->student_number,
+                        $term->school_year,
+                        $term->semester,
+                    ),
+                );
+            }
 
-            return $enrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'queueTicket', 'assessment.items']);
+            return $enrollment->refresh()->load(['student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items']);
         });
     }
 

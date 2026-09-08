@@ -1289,6 +1289,8 @@
 }
 
 .portal-content {
+  width: 100%;
+  min-width: 0;
   max-width: 92rem;
   margin-inline: auto;
   padding: clamp(2rem, 4vw, 4.5rem) clamp(1.25rem, 3vw, 3rem);
@@ -1489,6 +1491,7 @@
 
 .portal-workspace {
   width: 100%;
+  min-width: 0;
   max-width: 76rem;
 }
 

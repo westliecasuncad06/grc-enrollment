@@ -5,8 +5,10 @@ namespace App\Actions\Scheduling;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\CapacitySource;
 use App\Domain\Scheduling\CanonicalScheduleDays;
+use App\Models\Notification;
 use App\Models\Section;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -80,6 +82,27 @@ final class UpdateSection
                 'manual_override_reason' => $validatedData['override_reason'] ?? $section->manual_override_reason,
             ]);
             $section->refresh();
+
+            // Notify a professor the first time they are assigned to a
+            // section (previous professor_id was null, new one is not).
+            // A reassignment from one professor to another is intentionally
+            // not notified here — only the initial assignment is treated as
+            // a meaningful event that warrants a notification.
+            $previousProfessorId = $beforeValues['professor_id'];
+            $newProfessorId = $section->professor_id;
+            if ($previousProfessorId === null && $newProfessorId !== null) {
+                $assignedProfessor = User::find($newProfessorId);
+                if ($assignedProfessor !== null) {
+                    Notification::create([
+                        'user_id' => $assignedProfessor->id,
+                        'type' => NotificationType::SectionAssigned,
+                        'message' => sprintf(
+                            'You have been assigned to teach section %s. Please check your teaching schedule.',
+                            $section->section_code,
+                        ),
+                    ]);
+                }
+            }
 
             $this->auditRecorder->record(
                 $actor,

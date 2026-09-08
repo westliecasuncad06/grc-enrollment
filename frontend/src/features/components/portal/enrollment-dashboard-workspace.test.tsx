@@ -165,4 +165,25 @@ describe("EnrollmentDashboardWorkspace", () => {
     await screen.findByText(/Enrolled: 5/)
     expect(await axe(container)).toHaveNoViolations()
   })
+
+  it("opens enrollment status students dialog when a status button is clicked", async () => {
+    mockDashboardFetch(fetchMock)
+    renderWithSession(<EnrollmentDashboardWorkspace />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-31T00:00:00Z",
+      },
+    })
+
+    const enrolledBtn = await screen.findByRole("button", {
+      name: /Enrolled: 5/,
+    })
+    enrolledBtn.click()
+
+    expect(
+      await screen.findByRole("dialog", { name: "Students · Enrolled" }),
+    ).toBeInTheDocument()
+  })
 })

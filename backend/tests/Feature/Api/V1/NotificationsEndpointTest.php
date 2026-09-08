@@ -291,6 +291,28 @@ final class NotificationsEndpointTest extends TestCase
             ->assertJsonPath('error.request_id', 'notification-not-found');
     }
 
+    public function test_user_can_mark_all_unread_notifications_as_read_in_bulk(): void
+    {
+        $user = $this->makeUser('bulk-read-user');
+        $otherUser = $this->makeUser('bulk-read-other');
+        $token = $this->tokenFor($user);
+
+        $notif1 = $this->makeNotification($user, 'Notif 1');
+        $notif2 = $this->makeNotification($user, 'Notif 2');
+        $notifOther = $this->makeNotification($otherUser, 'Other user notif');
+
+        $response = $this
+            ->withToken($token)
+            ->patchJson('/api/v1/notifications/read-all');
+
+        $response->assertOk()
+            ->assertJsonPath('marked_count', 2);
+
+        self::assertNotNull($notif1->refresh()->read_at);
+        self::assertNotNull($notif2->refresh()->read_at);
+        self::assertNull($notifOther->refresh()->read_at);
+    }
+
     private function makeUser(string $handle): User
     {
         return User::create([

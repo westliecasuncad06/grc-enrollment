@@ -45,6 +45,8 @@ export const enrollmentDocumentFiltersSchema = z
     student_number: z.string().trim().min(1).max(100).optional(),
     student_name: z.string().trim().min(1).max(100).optional(),
     document_type: z.literal("cor").optional(),
+    document_number: z.string().trim().min(1).max(100).optional(),
+    search: z.string().trim().max(100).optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })

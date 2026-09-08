@@ -65,7 +65,7 @@
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                                 <tr>
                                     <td style="border-radius:6px; background-color:#c8102e;">
-                                        <a href="{{ $setupUrl }}" style="display:inline-block; padding:13px 28px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:15px; font-weight:bold; text-decoration:none; border-radius:6px;">
+                                        <a href="{{ $setupUrl }}{{ !empty($studentEmail) ? '?email='.urlencode($studentEmail).'&code='.urlencode($setupCode) : '?code='.urlencode($setupCode) }}" style="display:inline-block; padding:13px 28px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:15px; font-weight:bold; text-decoration:none; border-radius:6px;">
                                             Open the account setup page
                                         </a>
                                     </td>
@@ -96,7 +96,7 @@
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff7ed; border:1px solid #fde3cb; border-radius:6px;">
                                 <tr>
                                     <td style="padding:14px 18px; color:#9a5b13; font-family:Arial, Helvetica, sans-serif; font-size:13px; line-height:1.6;">
-                                        This code expires in {{ config('auth.passwords.users.expire') }} minutes and can be used only once. If you did not request a GRC student account, you can safely ignore this email.
+                                        This code expires in 24 hours and can be used only once. If you did not request a GRC student account, you can safely ignore this email.
                                     </td>
                                 </tr>
                             </table>

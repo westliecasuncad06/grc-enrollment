@@ -47,11 +47,10 @@ return [
     ],
 
     // FR-ENR-004: maximum regular units and the overload approval workflow.
-    // Null means "no cap enforced" — informational only until GRC sets a
-    // value, the same mechanism-implemented/value-flagged pattern already
-    // used for sections.viability_threshold (see ADR history, Phase 2).
-    'max_regular_units' => env('ENROLLMENT_MAX_REGULAR_UNITS'),
-    'overload_max_units' => env('ENROLLMENT_OVERLOAD_MAX_UNITS'),
+    // Standard defaults: 24.0 regular unit limit; up to 30.0 units overload
+    // requiring Dean/Registrar approval; >30.0 units strictly rejected.
+    'max_regular_units' => env('ENROLLMENT_MAX_REGULAR_UNITS', 24.0),
+    'overload_max_units' => env('ENROLLMENT_OVERLOAD_MAX_UNITS', 30.0),
 
     // FR-FIN-004 / PRD §17: "Enrollment reservation timeout and seat-release
     // rules" is an open institutional decision — seats have been reserved

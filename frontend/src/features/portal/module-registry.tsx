@@ -11,6 +11,8 @@ import { ProgramChairEnrollmentWorkspace } from "@/features/components/portal/pr
 import { AcademicTermWorkspace } from "@/features/components/portal/academic-term-workspace"
 import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
 import { ScheduleWorkspace } from "@/features/components/portal/schedule-workspace"
+import { StudentScheduleWorkspace } from "@/features/components/portal/student-schedule-workspace"
+import { useAuth } from "@/features/auth/use-auth"
 import { FacultyLoadingWorkspace } from "@/features/components/portal/faculty-loading-workspace"
 import { FacultyWorkforceWorkspace } from "@/features/components/portal/faculty-workforce-workspace"
 import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
@@ -43,9 +45,12 @@ import { AttritionAnalyticsWorkspace } from "@/features/components/portal/attrit
 import { HonorsWorkspace } from "@/features/components/portal/honors-workspace"
 import { GraduatesWorkspace } from "@/features/components/portal/graduates-workspace"
 import { CashierCorRecordsWorkspace } from "@/features/components/portal/cashier-cor-records-workspace"
+import { ProfessorInformationWorkspace } from "@/features/components/portal/professor-information-workspace"
+import { ProgramChairIrregularEnrollmentsWorkspace } from "@/features/components/portal/program-chair-irregular-enrollments-workspace"
 
 export type ConnectedModuleId =
   | "student-records"
+  | "irregular-enrollments"
   | "student-information"
   | "availability-preferences"
   | "teaching-schedule"
@@ -94,11 +99,13 @@ export type ConnectedModuleId =
   | "attrition-analytics"
   | "honors"
   | "graduates"
+  | "professor-information"
 
 export type PortalModuleComponent = ComponentType
 
 export const connectedModuleIds = [
   "student-records",
+  "irregular-enrollments",
   "student-information",
   "availability-preferences",
   "teaching-schedule",
@@ -147,6 +154,7 @@ export const connectedModuleIds = [
   "attrition-analytics",
   "honors",
   "graduates",
+  "professor-information",
 ] as const satisfies readonly ConnectedModuleId[]
 
 const availabilityPreferencesWorkspace: PortalModuleComponent = () => (
@@ -167,7 +175,15 @@ const academicTermWorkspace: PortalModuleComponent = () => (
 const enrollmentOverrideWorkspace: PortalModuleComponent = () => (
   <ItControlEnrollmentOverrideWorkspace />
 )
-const scheduleWorkspace: PortalModuleComponent = () => <ScheduleWorkspace />
+function ScheduleModuleRouter() {
+  const { session } = useAuth()
+  if (session?.role === "student") {
+    return <StudentScheduleWorkspace />
+  }
+  return <ScheduleWorkspace />
+}
+
+const scheduleWorkspace: PortalModuleComponent = () => <ScheduleModuleRouter />
 const facultyLoadingWorkspace: PortalModuleComponent = () => (
   <FacultyLoadingWorkspace />
 )
@@ -260,6 +276,8 @@ export const connectedModuleRegistry: Readonly<
   "attrition-analytics": AttritionAnalyticsWorkspace,
   honors: HonorsWorkspace,
   graduates: GraduatesWorkspace,
+  "professor-information": ProfessorInformationWorkspace,
+  "irregular-enrollments": ProgramChairIrregularEnrollmentsWorkspace,
 }
 
 export function isConnectedModuleId(

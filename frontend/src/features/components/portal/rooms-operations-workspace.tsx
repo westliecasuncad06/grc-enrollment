@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { DoorOpen, Search } from "lucide-react"
+import { ChevronDown, DoorOpen, Search } from "lucide-react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AcademicTermSelector } from "@/features/components/portal/academic-term-selector"
@@ -17,6 +17,11 @@ import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/features/components/ui/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/features/components/ui/collapsible"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import {
@@ -78,6 +83,8 @@ export function RoomsOperationsWorkspace() {
   const subjectsQuery = useSubjectsQuery()
   const facultyQuery = useFacultyDirectoryQuery()
   const [assigningSection, setAssigningSection] = useState<Section | null>(null)
+  const [findRoomOpen, setFindRoomOpen] = useState(true)
+  const [awaitingRoomOpen, setAwaitingRoomOpen] = useState(true)
 
   const subjectMap = useMemo(
     () => new Map((subjectsQuery.data ?? []).map((subject) => [subject.id, subject])),
@@ -173,79 +180,105 @@ export function RoomsOperationsWorkspace() {
               onSelectTerm={setSelectedTermId}
             />
 
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <CardTitle level={2}>Find a room</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      A shared campus room may already carry another college&apos;s booking —
-                      opening it shows every booking in it this term, not just your own.
-                    </p>
-                  </div>
-                  <Badge variant="outline">{roomOptions.length} rooms</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="room-picker">Room</FieldLabel>
-                    <SearchableCombobox
-                      id="room-picker"
-                      label="Room"
-                      options={roomComboOptions}
-                      value={selectedRoom ?? ""}
-                      onValueChange={(value) => setSelectedRoom(value || null)}
-                      placeholder="Search room, e.g. LAB 1, 3A"
-                      emptyMessage="No room matches."
-                    />
-                  </Field>
-                </FieldGroup>
-                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-                  {roomOptions.map((room) => (
-                    <button
-                      key={room.id}
-                      type="button"
-                      onClick={() => setSelectedRoom(room.name)}
-                      className="flex items-center gap-2 rounded-lg border p-3 text-left text-sm font-medium transition-colors hover:border-primary hover:bg-primary/5 focus-visible:border-primary focus-visible:outline-none"
-                    >
-                      <DoorOpen className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                      {room.name}
-                    </button>
-                  ))}
-                </div>
-                {roomOptions.length === 0 && (
-                  <div className="grid place-items-center gap-2 border-t py-10 text-center">
-                    <Search className="size-5 text-muted-foreground" aria-hidden="true" />
-                    <p className="font-medium">No rooms are configured for your college yet.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {isProgramChair && (
+            <Collapsible open={findRoomOpen} onOpenChange={setFindRoomOpen}>
               <Card>
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <CardTitle level={2}>Awaiting a room</CardTitle>
+                      <CardTitle level={2}>Find a room</CardTitle>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Sections in this term that don&apos;t have a room yet.
+                        A shared campus room may already carry another college&apos;s booking —
+                        opening it shows every booking in it this term, not just your own.
                       </p>
                     </div>
-                    <Badge variant={unassignedSections.length > 0 ? "destructive" : "outline"}>
-                      {unassignedSections.length} subject{unassignedSections.length === 1 ? "" : "s"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{roomOptions.length} rooms</Badge>
+                      <CollapsibleTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" aria-label="Toggle Find a room">
+                          <ChevronDown
+                            className={`size-4 transition-transform duration-200 ${findRoomOpen ? "rotate-180" : ""}`}
+                            aria-hidden="true"
+                          />
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="grid gap-4">
-                  {assignSectionMutation.isError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>
-                        {assignErrorMessage(assignSectionMutation.error)}
-                      </AlertDescription>
-                    </Alert>
-                  )}
+                <CollapsibleContent>
+                  <CardContent className="grid gap-4">
+                    <FieldGroup>
+                      <Field>
+                        <FieldLabel htmlFor="room-picker">Room</FieldLabel>
+                        <SearchableCombobox
+                          id="room-picker"
+                          label="Room"
+                          options={roomComboOptions}
+                          value={selectedRoom ?? ""}
+                          onValueChange={(value) => setSelectedRoom(value || null)}
+                          placeholder="Search room, e.g. LAB 1, 3A"
+                          emptyMessage="No room matches."
+                        />
+                      </Field>
+                    </FieldGroup>
+                    <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                      {roomOptions.map((room) => (
+                        <button
+                          key={room.id}
+                          type="button"
+                          onClick={() => setSelectedRoom(room.name)}
+                          className="flex items-center gap-2 rounded-lg border p-3 text-left text-sm font-medium transition-colors hover:border-primary hover:bg-primary/5 focus-visible:border-primary focus-visible:outline-none"
+                        >
+                          <DoorOpen className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                          {room.name}
+                        </button>
+                      ))}
+                    </div>
+                    {roomOptions.length === 0 && (
+                      <div className="grid place-items-center gap-2 border-t py-10 text-center">
+                        <Search className="size-5 text-muted-foreground" aria-hidden="true" />
+                        <p className="font-medium">No rooms are configured for your college yet.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {isProgramChair && (
+              <Collapsible open={awaitingRoomOpen} onOpenChange={setAwaitingRoomOpen}>
+                <Card>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <CardTitle level={2}>Awaiting a room</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Sections in this term that don&apos;t have a room yet.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={unassignedSections.length > 0 ? "destructive" : "outline"}>
+                          {unassignedSections.length} subject{unassignedSections.length === 1 ? "" : "s"}
+                        </Badge>
+                        <CollapsibleTrigger asChild>
+                          <Button type="button" variant="ghost" size="sm" aria-label="Toggle Awaiting a room">
+                            <ChevronDown
+                              className={`size-4 transition-transform duration-200 ${awaitingRoomOpen ? "rotate-180" : ""}`}
+                              aria-hidden="true"
+                            />
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="grid gap-4">
+                      {assignSectionMutation.isError && (
+                        <Alert variant="destructive">
+                          <AlertDescription>
+                            {assignErrorMessage(assignSectionMutation.error)}
+                          </AlertDescription>
+                        </Alert>
+                      )}
                   <div className="overflow-x-auto rounded-lg border">
                     <Table>
                       <TableHeader>
@@ -293,9 +326,11 @@ export function RoomsOperationsWorkspace() {
                         )}
                       </TableBody>
                     </Table>
-                  </div>
-                </CardContent>
-              </Card>
+                    </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             )}
           </div>
         )}

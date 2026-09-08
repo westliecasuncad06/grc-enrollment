@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { KeyRound, MailCheck, ShieldCheck } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { useForm, type Resolver } from "react-hook-form"
 
@@ -25,7 +25,10 @@ import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { accountSetupSchema } from "@/features/schemas/admission-schema"
 import { facultyAccountSetupSchema } from "@/features/schemas/faculty-invitation-schema"
 import { staffAccountSetupSchema } from "@/features/schemas/staff-invitation-schema"
-import { setupStudentAccount } from "@/features/services/admission-service"
+import {
+  requestStudentAccountSetupResend,
+  setupStudentAccount,
+} from "@/features/services/admission-service"
 import { setupFacultyAccount } from "@/features/services/faculty-invitation-service"
 import { setupStaffAccount } from "@/features/services/staff-invitation-service"
 
@@ -46,7 +49,7 @@ const COPY = {
   student: {
     eyebrow: "Student account",
     inviterLine:
-      "Use the one-time code delivered separately in your Admission account-setup email.",
+      "Use the link or one-time code delivered separately in your Admission account-setup email.",
     enterLine: "Enter the email and one-time code from your Admission message.",
     nameHint: "",
   },
@@ -72,15 +75,26 @@ const COPY = {
 
 export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const emailParam = searchParams.get("email") ?? ""
+  const codeParam = searchParams.get("code") ?? searchParams.get("token") ?? ""
+
   const needsName = variant !== "student"
   const copy = COPY[variant]
   const [completed, setCompleted] = useState(false)
   const [requestError, setRequestError] = useState("")
+  const [resendStatus, setResendStatus] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle")
+  const [resendMessage, setResendMessage] = useState("")
+
   const {
     formState: { errors, isSubmitting },
+    getValues,
     handleSubmit,
     register,
     setError,
+    setValue,
   } = useForm<AccountSetupFormValues>({
     resolver: zodResolver(
       variant === "faculty"
@@ -90,13 +104,22 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
           : accountSetupSchema,
     ) as Resolver<AccountSetupFormValues>,
     defaultValues: {
-      email: "",
-      code: "",
+      email: emailParam,
+      code: codeParam,
       ...(needsName ? { name: "" } : {}),
       password: "",
       password_confirmation: "",
     },
   })
+
+  useEffect(() => {
+    if (emailParam) {
+      setValue("email", emailParam)
+    }
+    if (codeParam) {
+      setValue("code", codeParam)
+    }
+  }, [emailParam, codeParam, setValue])
 
   useEffect(() => {
     if (!completed) return
@@ -106,6 +129,33 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
     )
     return () => window.clearTimeout(redirectTimer)
   }, [completed, router])
+
+  const handleResend = async () => {
+    const currentEmail = getValues("email")?.trim()
+    if (!currentEmail) {
+      setError("email", {
+        message: "Enter your email address to request a new setup email.",
+      })
+      return
+    }
+    setResendStatus("sending")
+    setResendMessage("")
+    try {
+      const response = await requestStudentAccountSetupResend(currentEmail)
+      setResendStatus("sent")
+      setResendMessage(
+        response.message ??
+          "If a pending student account exists for this email, a new setup invitation has been sent.",
+      )
+    } catch (error) {
+      setResendStatus("error")
+      setResendMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to send setup email. Please try again or contact Admission.",
+      )
+    }
+  }
 
   const submit = async (values: AccountSetupFormValues) => {
     setRequestError("")
@@ -173,7 +223,11 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
             <MailCheck aria-hidden="true" />
             <div>
               <strong>Separate setup code</strong>
-              <span>The code never appears in the page link.</span>
+              <span>
+                {variant === "student"
+                  ? "Use the link or enter the one-time code delivered to your email."
+                  : "The code never appears in the page link."}
+              </span>
             </div>
           </li>
           <li>
@@ -181,7 +235,9 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
             <div>
               <strong>One use only</strong>
               <span>
-                The code expires after 60 minutes and cannot be reused.
+                {variant === "student"
+                  ? "The code expires after 24 hours and cannot be reused."
+                  : "The code expires after 60 minutes and cannot be reused."}
               </span>
             </div>
           </li>
@@ -230,7 +286,24 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
               {requestError && (
                 <Alert variant="destructive">
                   <AlertTitle>Setup not completed</AlertTitle>
-                  <AlertDescription>{requestError}</AlertDescription>
+                  <AlertDescription className="space-y-2">
+                    <p>{requestError}</p>
+                    {variant === "student" && (
+                      <div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={resendStatus === "sending"}
+                          onClick={handleResend}
+                        >
+                          {resendStatus === "sending"
+                            ? "Sending new setup email…"
+                            : "Resend setup email"}
+                        </Button>
+                      </div>
+                    )}
+                  </AlertDescription>
                 </Alert>
               )}
               <form
@@ -260,7 +333,9 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
                       {...register("code")}
                     />
                     <FieldDescription>
-                      Codes expire 60 minutes after the latest invitation.
+                      {variant === "student"
+                        ? "Codes expire 24 hours after the latest invitation."
+                        : "Codes expire 60 minutes after the latest invitation."}
                     </FieldDescription>
                     <FieldError>{errors.code?.message}</FieldError>
                   </Field>
@@ -317,6 +392,36 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
                     : "Create password and activate"}
                 </Button>
               </form>
+              {variant === "student" && (
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-4 text-center text-sm space-y-2">
+                  <p className="text-muted-foreground">
+                    Did your setup code expire or did you not receive it?
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={resendStatus === "sending"}
+                    onClick={handleResend}
+                  >
+                    {resendStatus === "sending"
+                      ? "Sending new setup email…"
+                      : "Resend setup email"}
+                  </Button>
+                  {resendMessage && (
+                    <p
+                      className={
+                        resendStatus === "sent"
+                          ? "text-xs font-medium text-success"
+                          : "text-xs text-destructive"
+                      }
+                      role="status"
+                    >
+                      {resendMessage}
+                    </p>
+                  )}
+                </div>
+              )}
               <Button asChild variant="ghost">
                 <Link href="/login">Return to sign in</Link>
               </Button>

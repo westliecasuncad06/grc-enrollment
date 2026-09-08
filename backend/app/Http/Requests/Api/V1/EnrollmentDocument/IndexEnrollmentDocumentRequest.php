@@ -26,6 +26,8 @@ final class IndexEnrollmentDocumentRequest extends FormRequest
                 fn (EnrollmentDocumentType $type): string => $type->value,
                 EnrollmentDocumentType::cases(),
             ))],
+            'document_number' => ['sometimes', 'string', 'max:100'],
+            'search' => ['sometimes', 'string', 'max:100'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];

@@ -175,6 +175,28 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_accounting_staff_finds_candidate_by_student_email_and_name(): void
+    {
+        [$student, $enrollment, $ticket] = $this->makeCandidate('2026-06-01099');
+        $token = $this->tokenFor(UserRole::AccountingStaff, 'accounting.multisearch@grc.test');
+
+        // Search by exact email
+        $responseByEmail = $this->withToken($token)->getJson(
+            '/api/v1/cashier-payment-candidates?student_number='.$student->user->email,
+        );
+        $responseByEmail->assertOk()
+            ->assertJsonPath('data.student_id', $student->id)
+            ->assertJsonPath('data.enrollment_id', $enrollment->id);
+
+        // Search by student name
+        $responseByName = $this->withToken($token)->getJson(
+            '/api/v1/cashier-payment-candidates?student_number='.$student->user->name,
+        );
+        $responseByName->assertOk()
+            ->assertJsonPath('data.student_id', $student->id)
+            ->assertJsonPath('data.enrollment_id', $enrollment->id);
+    }
+
     /**
      * @return array{StudentProfile, Enrollment, ?QueueTicket}
      */

@@ -15,6 +15,7 @@ const account: StudentAccount = {
   total_paid: "1000.00",
   prior_balance: "3500.00",
   outstanding_balance: "5000.00",
+  advance_payment_balance: "0.00",
   has_promissory_note_on_file: true,
   entries: [
     {
@@ -68,5 +69,21 @@ describe("StudentAccountBalancePanel", () => {
     expect(
       screen.queryByRole("button", { name: /record.*payment/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it("shows the advance credit card and notice when the student has advance balance", () => {
+    render(
+      <StudentAccountBalancePanel
+        account={{
+          ...account,
+          outstanding_balance: "0.00",
+          advance_payment_balance: "850.00",
+        }}
+      />,
+    )
+
+    expect(screen.getByText("Advance payment credit")).toBeInTheDocument()
+    expect(screen.getAllByText("₱850.00").length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/You have an advance payment balance of/i)).toBeInTheDocument()
   })
 })

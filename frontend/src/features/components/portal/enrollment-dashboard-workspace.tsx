@@ -1,11 +1,15 @@
 "use client"
 
+import { useState } from "react"
+
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { EnrollmentFunnelChart } from "@/features/components/portal/enrollment-funnel-chart"
+import { EnrollmentStatusStudentsDialog } from "@/features/components/portal/enrollment-status-students-dialog"
 import { StuckEnrollmentStatusChart } from "@/features/components/portal/stuck-enrollment-status-chart"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
+import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
@@ -46,7 +50,7 @@ const funnelStageOrder = [
 
 export function EnrollmentDashboardWorkspace() {
   const { session } = useAuth()
-  const authorized = session?.role === "dean"
+  const authorized = session?.role === "dean" || session?.role === "program_chair"
   const termsQuery = useAcademicTermsQuery({ enabled: authorized })
   const activeTerm = getActiveAcademicTerm(termsQuery.data)
   const summaryQuery = useEnrollmentSummaryQuery(
@@ -57,6 +61,10 @@ export function EnrollmentDashboardWorkspace() {
     activeTerm?.id,
     authorized && termsQuery.isSuccess,
   )
+  const [selectedStatus, setSelectedStatus] = useState<{
+    status: string
+    label: string
+  } | null>(null)
   const combinedQuery = {
     isPending: termsQuery.isPending || summaryQuery.isPending || stuckQuery.isPending,
     isError: termsQuery.isError || summaryQuery.isError || stuckQuery.isError,
@@ -108,9 +116,23 @@ export function EnrollmentDashboardWorkspace() {
                 <CardContent className="flex flex-wrap gap-2">
                   {Object.entries(summary.status_counts).map(
                     ([status, count]) => (
-                      <Badge key={status} variant="outline">
-                        {humanize(status)}: {count}
-                      </Badge>
+                      <Button
+                        key={status}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 cursor-pointer hover:bg-muted font-normal text-xs"
+                        onClick={() =>
+                          setSelectedStatus({
+                            status,
+                            label: humanize(status),
+                          })
+                        }
+                      >
+                        <span>
+                          {humanize(status)}: {count}
+                        </span>
+                      </Button>
                     ),
                   )}
                 </CardContent>
@@ -148,6 +170,18 @@ export function EnrollmentDashboardWorkspace() {
           </div>
         )}
       </AsyncBoundary>
+      <EnrollmentStatusStudentsDialog
+        open={selectedStatus !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedStatus(null)
+        }}
+        status={selectedStatus?.status ?? null}
+        statusLabel={selectedStatus?.label ?? ""}
+        academicTermId={activeTerm?.id}
+        academicTermLabel={
+          activeTerm ? formatAcademicTerm(activeTerm) : undefined
+        }
+      />
     </WorkspacePage>
   )
 }

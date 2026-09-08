@@ -52,3 +52,25 @@ export function isAdvanceSubject(
     semesterOrdinal(currentYearLevel, currentSemester) + 2
   )
 }
+
+/**
+ * Format a student's year level integer (1..4) as the institutional ordinal string
+ * (e.g. 1 -> "1ST YEAR", 2 -> "2ND YEAR").
+ */
+export function formatYearLevelOrdinal(
+  year: number | null | undefined,
+): string {
+  if (!year) return "—"
+  switch (year) {
+    case 1:
+      return "1ST YEAR"
+    case 2:
+      return "2ND YEAR"
+    case 3:
+      return "3RD YEAR"
+    case 4:
+      return "4TH YEAR"
+    default:
+      return `YEAR ${year}`
+  }
+}

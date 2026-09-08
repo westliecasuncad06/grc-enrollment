@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { CheckCircle2, MailWarning, Search, UserRoundPlus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
+import { toast } from "sonner"
 import { z } from "zod"
 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -450,13 +451,21 @@ function CreateAccountPanel() {
                 {created.student_number}
               </p>
               <InvitationStatus profile={created} />
-              {created.invitation_delivery_status === "failed" && (
+              {created.account_setup_status === "pending" && (
                 <Button
                   type="button"
                   variant="outline"
                   disabled={resend.isPending}
                   onClick={() =>
-                    void resend.mutateAsync(created.id).then(setCreated)
+                    void resend
+                      .mutateAsync(created.id)
+                      .then((updated) => {
+                        setCreated(updated)
+                        toast.success(`Setup email resent to ${updated.email}`)
+                      })
+                      .catch(() => {
+                        toast.error("Failed to resend setup email.")
+                      })
                   }
                 >
                   {resend.isPending ? "Resending…" : "Resend setup email"}
@@ -794,9 +803,18 @@ function StudentRecordDialog({
                   type="button"
                   variant="outline"
                   disabled={resend.isPending}
-                  onClick={() => void resend.mutateAsync(profile.id)}
+                  onClick={() =>
+                    void resend
+                      .mutateAsync(profile.id)
+                      .then((updated) => {
+                        toast.success(`Setup email resent to ${updated.email}`)
+                      })
+                      .catch(() => {
+                        toast.error("Failed to resend setup email.")
+                      })
+                  }
                 >
-                  Resend setup email
+                  {resend.isPending ? "Resending…" : "Resend setup email"}
                 </Button>
               )}
             </div>
@@ -811,7 +829,9 @@ function StudentDirectoryPanel() {
   const [draftSearch, setDraftSearch] = useState("")
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState<StudentProfile | null>(null)
+  const [resendingId, setResendingId] = useState<number | null>(null)
   const query = useStudentDirectoryQuery({ search, page: 1, per_page: 50 })
+  const resend = useResendAccountSetupInvitationMutation()
 
   return (
     <Card>
@@ -877,14 +897,45 @@ function StudentDirectoryPanel() {
                       <InvitationStatus profile={profile} />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelected(profile)}
-                      >
-                        View / edit
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelected(profile)}
+                        >
+                          View / edit
+                        </Button>
+                        {profile.account_setup_status === "pending" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={
+                              resendingId === profile.id || resend.isPending
+                            }
+                            onClick={async () => {
+                              setResendingId(profile.id)
+                              try {
+                                const updated = await resend.mutateAsync(
+                                  profile.id,
+                                )
+                                toast.success(
+                                  `Setup email resent to ${updated.email}`,
+                                )
+                              } catch {
+                                toast.error("Failed to resend setup email.")
+                              } finally {
+                                setResendingId(null)
+                              }
+                            }}
+                          >
+                            {resendingId === profile.id
+                              ? "Resending…"
+                              : "Resend email"}
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

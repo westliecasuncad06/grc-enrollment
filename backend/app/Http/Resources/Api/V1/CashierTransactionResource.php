@@ -23,7 +23,7 @@ final class CashierTransactionResource extends JsonResource
             'student_id' => (int) $this->resource->student_id,
             'student_name' => $this->resource->student_name,
             'student_number' => $this->resource->student_number,
-            'enrollment_id' => (int) $this->resource->enrollment_id,
+            'enrollment_id' => $this->resource->enrollment_id !== null ? (int) $this->resource->enrollment_id : null,
             'amount' => $this->resource->amount,
             'processed_at' => CarbonImmutable::parse($this->resource->processed_at)->utc()->format('Y-m-d\TH:i:s\Z'),
         ];

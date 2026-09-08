@@ -38,11 +38,35 @@ final class SendStudentAccountSetupInvitation
 
         $setupCode = Password::broker()->createToken($student);
 
+        $origin = request()?->header('Origin');
+        $referer = request()?->header('Referer');
+        $baseUrl = null;
+        if (is_string($origin) && filter_var($origin, FILTER_VALIDATE_URL)) {
+            $parsed = parse_url($origin);
+            if (isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
+                $baseUrl = $parsed['scheme'].'://'.$parsed['host'].$port;
+            }
+        } elseif (is_string($referer) && filter_var($referer, FILTER_VALIDATE_URL)) {
+            $parsed = parse_url($referer);
+            if (isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
+                $baseUrl = $parsed['scheme'].'://'.$parsed['host'].$port;
+            }
+        }
+
+        if ($baseUrl === null) {
+            $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
+        }
+
+        $setupUrl = rtrim($baseUrl, '/').'/account-setup';
+
         try {
             Mail::to($student->email)->send(new StudentAccountSetupMail(
                 $student->name,
-                rtrim((string) config('app.frontend_url'), '/').'/account-setup',
+                $setupUrl,
                 $setupCode,
+                $student->email,
             ));
 
             $student->forceFill([

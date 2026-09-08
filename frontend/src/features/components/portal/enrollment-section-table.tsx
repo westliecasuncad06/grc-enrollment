@@ -66,6 +66,11 @@ function scheduleColumns(): DataTableColumn<
       header: "Room",
       render: (subject) => subject.room ?? "To be confirmed",
     },
+    {
+      key: "professor",
+      header: "Professor",
+      render: (subject) => subject.professor_name ?? "To be confirmed",
+    },
   ]
 }
 
@@ -129,6 +134,10 @@ function SectionThumbnailCard({
         </div>
         <span className="text-xs text-muted-foreground">
           {block.subjects.length} subject{block.subjects.length === 1 ? "" : "s"}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+          <CalendarDays className="size-3" aria-hidden="true" />
+          Schedule, calendar & professors
         </span>
 
         {block.preference_reasons.length > 0 && (

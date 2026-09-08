@@ -183,13 +183,14 @@ describe("ScheduleDecisionWorkspace", () => {
     expect(screen.getByText("Submitted by CCS Program Chair")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Review schedule" }))
     expect(await screen.findByRole("dialog", { name: "Review schedule · College of Computer Studies" })).toBeInTheDocument()
-    expect(screen.getByRole("tab", { name: "IT101" })).toBeInTheDocument()
-    const subjectCard = screen.getByRole("article", {
-      name: "PSPEAK schedule review",
-    })
-    expect(subjectCard).toHaveTextContent("Public Speaking")
-    expect(within(subjectCard).getByText("ALONZO")).toBeInTheDocument()
-    expect(within(subjectCard).getByText("5F")).toBeInTheDocument()
+    const it101Card = await screen.findByRole("article", { name: "IT101 section" })
+    expect(it101Card).toBeInTheDocument()
+    await user.click(within(it101Card).getByRole("button", { name: "View schedule" }))
+
+    expect(await screen.findByRole("dialog", { name: /IT101 Schedule/i })).toBeInTheDocument()
+    expect(screen.getByText("Public Speaking")).toBeInTheDocument()
+    expect(screen.getByText("ALONZO")).toBeInTheDocument()
+    expect(screen.getByText("5F")).toBeInTheDocument()
   })
 
   it("invalidates both proposal and section caches after a successful transition", async () => {

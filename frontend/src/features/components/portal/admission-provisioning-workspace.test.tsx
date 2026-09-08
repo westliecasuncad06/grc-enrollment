@@ -213,6 +213,22 @@ describe("Student Records workspace", () => {
     await user.click(submit)
 
     expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+    const resendBtn = screen.getByRole("button", {
+      name: "Resend setup email",
+    })
+    expect(resendBtn).toBeInTheDocument()
+    await user.click(resendBtn)
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            urlOf(input).includes(
+              `/api/v1/student-profiles/${profile.id}/account-setup-invitations`,
+            ) && init?.method === "POST",
+        ),
+      ).toBe(true)
+    })
+
     const provisioningCall = fetchMock.mock.calls.find(
       ([input, init]) =>
         urlOf(input).endsWith("/api/v1/student-profiles") &&
@@ -244,6 +260,9 @@ describe("Student Records workspace", () => {
         screen.getByRole("button", { name: profile.name }),
       ).toBeInTheDocument(),
     )
+    expect(
+      screen.getByRole("button", { name: "Resend email" }),
+    ).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: profile.name }))
 
     expect(

@@ -109,6 +109,60 @@ describe("AccountSetupPage", () => {
     expect(screen.getByText("Student account")).toBeInTheDocument()
   })
 
+  it("pre-populates email and code from URL search parameters and shows 24-hour expiration", () => {
+    renderWithAuthProvider(<AccountSetupPage />, {
+      route:
+        "/account-setup?email=baluyotdandan%40gmail.com&code=sample-setup-token-123",
+    })
+
+    expect(screen.getByLabelText("Email address")).toHaveValue(
+      "baluyotdandan@gmail.com",
+    )
+    expect(screen.getByLabelText("One-time setup code")).toHaveValue(
+      "sample-setup-token-123",
+    )
+    expect(
+      screen.getByText("Codes expire 24 hours after the latest invitation."),
+    ).toBeInTheDocument()
+  })
+
+  it("allows requesting a new setup email if the code expired", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            type: "resend-student-account-setup",
+            status: "sent",
+            message:
+              "If a pending student account exists for this email, a new setup invitation has been sent.",
+          },
+        }),
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const user = userEvent.setup()
+    renderWithAuthProvider(<AccountSetupPage />, {
+      route: "/account-setup?email=student%40grc.test",
+    })
+
+    const resendBtn = screen.getByRole("button", {
+      name: "Resend setup email",
+    })
+    await user.click(resendBtn)
+
+    expect(
+      await screen.findByText(
+        "If a pending student account exists for this email, a new setup invitation has been sent.",
+      ),
+    ).toBeInTheDocument()
+    const requestUrl = fetchMock.mock.calls[0]?.[0]
+    expect(requestUrl ? urlOf(requestUrl) : "").toContain(
+      "/api/v1/auth/resend-student-account-setup",
+    )
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)
+    expect(body).toEqual({ email: "student@grc.test" })
+  })
+
   it("lets a professor supply their name and posts to the faculty setup endpoint", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

@@ -361,10 +361,11 @@ export function AnalyticsDashboardWorkspace() {
               <CardHeader>
                 <CardTitle level={2}>Analytics filters</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,1.35fr)]">
-                <div className="grid gap-3 md:grid-cols-3">
+              <CardContent className="grid gap-4">
+                {/* Dropdowns — inline, wrap on small screens */}
+                <div className="flex flex-wrap gap-3">
                   {isRegistrarHead ? (
-                    <label className="grid gap-1 text-sm font-medium">
+                    <label className="grid min-w-[11rem] flex-1 gap-1 text-sm font-medium">
                       Department
                       <Select
                         value={selectedDepartment ?? "all"}
@@ -389,7 +390,7 @@ export function AnalyticsDashboardWorkspace() {
                       </Select>
                     </label>
                   ) : null}
-                  <label className="grid gap-1 text-sm font-medium">
+                  <label className="grid min-w-[9rem] flex-1 gap-1 text-sm font-medium">
                     School year
                     <Select
                       value={selectedTerm?.school_year ?? ""}
@@ -424,7 +425,7 @@ export function AnalyticsDashboardWorkspace() {
                       </SelectContent>
                     </Select>
                   </label>
-                  <label className="grid gap-1 text-sm font-medium">
+                  <label className="grid min-w-[9rem] flex-1 gap-1 text-sm font-medium">
                     Semester
                     <Select
                       value={selectedTerm?.semester ?? ""}
@@ -455,7 +456,7 @@ export function AnalyticsDashboardWorkspace() {
                       </SelectContent>
                     </Select>
                   </label>
-                  <label className="grid gap-1 text-sm font-medium">
+                  <label className="grid min-w-[9rem] flex-1 gap-1 text-sm font-medium">
                     Student year level
                     <Select
                       value={
@@ -482,7 +483,7 @@ export function AnalyticsDashboardWorkspace() {
                       </SelectContent>
                     </Select>
                   </label>
-                  <label className="grid gap-1 text-sm font-medium">
+                  <label className="grid min-w-[9rem] flex-1 gap-1 text-sm font-medium">
                     Trend semester
                     <Select
                       value={trendSemester ?? "all"}
@@ -510,6 +511,7 @@ export function AnalyticsDashboardWorkspace() {
                     </Select>
                   </label>
                 </div>
+                {/* Range slider — full width below the dropdowns */}
                 <SchoolYearRangeSlider
                   schoolYears={schoolYears}
                   startSchoolYear={rangeStartSchoolYear ?? null}

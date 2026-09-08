@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Enrollment\BuildCorSnapshot;
 use App\Actions\Enrollment\ListEnrollmentDocuments;
+use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\EnrollmentDocument\IndexEnrollmentDocumentRequest;
 use App\Http\Requests\Api\V1\EnrollmentDocument\ShowEnrollmentDocumentRequest;
@@ -106,10 +107,6 @@ final class EnrollmentDocumentController extends Controller
         EnrollmentDocument $document,
         BuildCorSnapshot $buildCorSnapshot,
     ): void {
-        if ($document->snapshot !== null) {
-            return;
-        }
-
         $document->loadMissing([
             'enrollment.student.user',
             'enrollment.student.program',
@@ -118,10 +115,30 @@ final class EnrollmentDocumentController extends Controller
             'enrollment.assessment.items',
             'enrollment.payment.confirmer',
         ]);
-        $document->setAttribute(
-            'snapshot',
-            $buildCorSnapshot->execute($document->enrollment, $document->enrollment->payment),
-        );
+
+        if ($document->document_type === EnrollmentDocumentType::Cor && $document->enrollment !== null) {
+            $freshSnapshot = $buildCorSnapshot->execute($document->enrollment, $document->enrollment->payment);
+            $document->setAttribute('snapshot', $freshSnapshot);
+
+            if ($document->exists && $document->content_hash !== $buildCorSnapshot->hash($freshSnapshot)) {
+                $document->snapshot = $freshSnapshot;
+                $document->content_hash = $buildCorSnapshot->hash($freshSnapshot);
+                $document->save();
+            }
+
+            return;
+        }
+
+        if ($document->snapshot !== null) {
+            return;
+        }
+
+        if ($document->enrollment !== null) {
+            $document->setAttribute(
+                'snapshot',
+                $buildCorSnapshot->execute($document->enrollment, $document->enrollment->payment),
+            );
+        }
     }
 
     /**

@@ -25,14 +25,14 @@ export function PrintDocument({
   className?: string
 }) {
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {actions && (
         <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
           <h2 className="text-lg font-semibold">{title}</h2>
           <div className="flex items-center gap-2">{actions}</div>
         </div>
       )}
-      <div data-print-region className={cn("print-document", className)}>
+      <div data-print-region className={cn("print-document min-w-0 overflow-x-auto", className)}>
         {children}
       </div>
     </div>

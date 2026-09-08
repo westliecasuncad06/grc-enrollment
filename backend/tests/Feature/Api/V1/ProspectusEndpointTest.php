@@ -264,6 +264,18 @@ final class ProspectusEndpointTest extends TestCase
             ->assertOk();
     }
 
+    public function test_a_program_chair_can_view_a_students_prospectus(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $chairToken = $this->tokenForNewUser(UserRole::ProgramChair, 'chair.prospectus@grc.test');
+
+        $this->withToken($chairToken)
+            ->getJson('/api/v1/prospectus?student_id='.$student->id)
+            ->assertOk()
+            ->assertJsonPath('data.student_id', $student->id);
+    }
+
     public function test_a_grade_for_a_subject_outside_the_curriculum_is_surfaced_as_unplaced(): void
     {
         $term = $this->makeTerm();

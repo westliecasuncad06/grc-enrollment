@@ -293,7 +293,11 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertJsonPath('data.student_name', null);
         $response->assertJsonPath('data.student_year_level', null);
         self::assertSame(
-            ['section_id', 'subject_code', 'subject_title', 'status', 'status_label'],
+            [
+                'section_id', 'section_code', 'subject_code', 'subject_title',
+                'units', 'schedule_days', 'starts_at_time', 'ends_at_time',
+                'room', 'modality', 'professor_name', 'status', 'status_label',
+            ],
             array_keys($response->json('data.subjects.0')),
         );
     }
@@ -755,7 +759,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $student = $this->makeStudent($curriculum);
         $token = $this->tokenFor($student);
 
-        config(['enrollment.max_regular_units' => 2]);
+        config(['enrollment.max_regular_units' => 2, 'enrollment.overload_max_units' => null]);
 
         $overLimit = $this->withToken($token)->postJson('/api/v1/enrollments', [
             'academic_term_id' => $term->id,
@@ -765,7 +769,7 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertArrayHasKey('sections', $overLimit->json('error.errors'));
         $this->assertDatabaseCount('enrollments', 0);
 
-        config(['enrollment.max_regular_units' => null]);
+        config(['enrollment.max_regular_units' => null, 'enrollment.overload_max_units' => null]);
 
         $unconfigured = $this->withToken($token)->postJson('/api/v1/enrollments', [
             'academic_term_id' => $term->id,
@@ -965,6 +969,29 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertJsonPath('data.0.student_year_level', 1);
     }
 
+    public function test_registrar_staff_can_search_enrollments_by_student_number_and_name(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+
+        $studentA = $this->makeStudent($curriculum);
+        $this->makeEnrollment($studentA, $term);
+
+        $studentB = $this->makeStudentWithEmail($curriculum, 'maria.santos@grc.test', '2026-9999');
+        $studentB->user->update(['name' => 'Maria Santos']);
+        $this->makeEnrollment($studentB, $term);
+
+        $staffToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.search@grc.test');
+
+        $byNumber = $this->withToken($staffToken)->getJson('/api/v1/enrollments?search=2026-9999');
+        $byNumber->assertOk()->assertJsonCount(1, 'data');
+        $byNumber->assertJsonPath('data.0.student_number', '2026-9999');
+
+        $byName = $this->withToken($staffToken)->getJson('/api/v1/enrollments?search=Maria');
+        $byName->assertOk()->assertJsonCount(1, 'data');
+        $byName->assertJsonPath('data.0.student_number', '2026-9999');
+    }
+
     public function test_accounting_staff_sees_only_pending_payment_enrollments_regardless_of_status_filter(): void
     {
         $term = $this->makeTerm();
@@ -987,6 +1014,38 @@ final class EnrollmentsEndpointTest extends TestCase
         $stillFiltered = $this->withToken($accountingToken)
             ->getJson('/api/v1/enrollments?status=pending_registrar_approval');
         $stillFiltered->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_dean_can_list_enrollments_and_receives_student_name_and_year(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makeEnrollment($student, $term);
+        $deanToken = $this->tokenForNewStaff(UserRole::Dean, 'dean.enroll@grc.test');
+
+        $response = $this->withToken($deanToken)->getJson('/api/v1/enrollments');
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.student_name', 'Test Student');
+        $response->assertJsonPath('data.0.student_year_level', 1);
+    }
+
+    public function test_executive_director_can_list_enrollments_and_receives_student_name_and_year(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $this->makeEnrollment($student, $term);
+        $execToken = $this->tokenForNewStaff(UserRole::ExecutiveDirector, 'exec.enroll@grc.test');
+
+        $response = $this->withToken($execToken)->getJson('/api/v1/enrollments');
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.student_name', 'Test Student');
+        $response->assertJsonPath('data.0.student_year_level', 1);
     }
 
     public function test_registrar_approve_transitions_a_pending_approval_enrollment_to_pending_payment(): void
@@ -1157,5 +1216,21 @@ final class EnrollmentsEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         self::assertSame('pending_payment', $enrollment->refresh()->status->value);
+    }
+
+    public function test_a_program_chair_can_approve_an_irregular_enrollment(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $chairToken = $this->tokenForNewStaff(UserRole::ProgramChair, 'chair.approve@grc.test');
+
+        $response = $this->withToken($chairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
+        self::assertNotNull($enrollment->refresh()->registrar_decided_at);
+        $this->assertDatabaseCount('assessments', 1);
     }
 }

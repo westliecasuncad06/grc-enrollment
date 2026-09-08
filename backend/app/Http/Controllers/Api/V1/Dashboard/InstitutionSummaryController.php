@@ -16,7 +16,8 @@ final class InstitutionSummaryController extends Controller
     ): JsonResponse {
         $this->authorize('view-institution-summary');
 
-        $summary = $buildInstitutionSummary->execute();
+        $academicTermId = $request->filled('academic_term_id') ? (int) $request->query('academic_term_id') : null;
+        $summary = $buildInstitutionSummary->execute($academicTermId);
 
         $response = InstitutionSummaryResource::make($summary)->response($request);
         $response->headers->set('Cache-Control', 'no-store, private');

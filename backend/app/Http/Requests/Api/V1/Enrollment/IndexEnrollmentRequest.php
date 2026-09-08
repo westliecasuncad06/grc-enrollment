@@ -24,6 +24,7 @@ final class IndexEnrollmentRequest extends FormRequest
                 EnrollmentStatus::cases(),
             ))],
             'academic_term_id' => ['sometimes', 'integer', 'exists:academic_terms,id'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];

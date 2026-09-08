@@ -135,6 +135,9 @@ function useInvalidateEnrollmentQueries() {
         queryKey: enrollmentsQueryKey(session?.userId ?? null),
         exact: true,
       }),
+      queryClient.invalidateQueries({
+        queryKey: ["student-account"],
+      }),
     ])
 }
 

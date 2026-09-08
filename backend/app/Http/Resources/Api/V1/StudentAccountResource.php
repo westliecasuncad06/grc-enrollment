@@ -30,6 +30,7 @@ final class StudentAccountResource extends JsonResource
      *     total_paid: string,
      *     prior_balance: string,
      *     outstanding_balance: string,
+     *     advance_payment_balance: string,
      *     has_promissory_note_on_file: bool,
      *     entries: list<array{enrollment_id: int, academic_term_id: int, academic_term_label: string, assessment_amount: string, confirmed_payment_amount: string, account_payment_amount: string, outstanding_balance: string, promissory_note_on_file: bool}>
      * }
@@ -47,6 +48,7 @@ final class StudentAccountResource extends JsonResource
             'total_paid' => $this->balance->totalPaid,
             'prior_balance' => $this->balance->priorBalance,
             'outstanding_balance' => $this->balance->outstandingBalance,
+            'advance_payment_balance' => $this->balance->advancePaymentBalance,
             'has_promissory_note_on_file' => $this->balance->hasPromissoryNoteOnFile,
             'entries' => array_map(
                 static fn (StudentAccountBalanceEntry $entry): array => [
