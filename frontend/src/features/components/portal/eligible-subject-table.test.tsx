@@ -763,6 +763,131 @@ describe("EligibleSubjectTable", () => {
     ).toBeGreaterThan(0)
   })
 
+  it("toggles between Table view and Calendar view and displays selected schedule items", async () => {
+    const user = userEvent.setup()
+    const sec = section({
+      id: 101,
+      section_code: "IT301",
+      schedule_days: "MON",
+      starts_at_time: "09:00:00",
+      ends_at_time: "11:00:00",
+      room: "Lab 1",
+      professor_name: "Dr. Smith",
+    })
+    const subj1 = subject({
+      subject_id: 1,
+      code: "IT101",
+      title: "Programming 1",
+      available_sections: [sec],
+    })
+    const subj2 = subject({
+      subject_id: 2,
+      code: "IT102",
+      title: "Data Structures",
+      available_sections: [section({ id: 102, section_code: "IT102-A" })],
+    })
+
+    const onChoose = vi.fn()
+    render(
+      <EligibleSubjectTable
+        subjects={[subj1, subj2]}
+        selections={{ 1: 101 }}
+        onChoose={onChoose}
+        onClear={vi.fn()}
+      />,
+    )
+
+    // Initially in Table view: table caption / name is present
+    expect(
+      screen.getByRole("table", { name: "Eligible subjects" }),
+    ).toBeInTheDocument()
+
+    // Toggle to Calendar view
+    const calendarToggle = screen.getByRole("radio", { name: /Calendar view/i })
+    await user.click(calendarToggle)
+
+    // Table view is replaced by calendar view
+    expect(
+      screen.queryByRole("table", { name: "Eligible subjects" }),
+    ).not.toBeInTheDocument()
+
+    // Unselected banner informs that IT102 does not have a section chosen yet
+    expect(screen.getByText("1 of 2 subjects")).toBeInTheDocument()
+    expect(
+      screen.getByText(/do not have a section chosen yet/i),
+    ).toBeInTheDocument()
+
+    // Scheduled subject block on Monday column
+    expect(screen.getByText("IT101")).toBeInTheDocument()
+    expect(screen.getByText("Programming 1")).toBeInTheDocument()
+
+    // Clicking "Pick in Table View" button switches back to Table view
+    await user.click(screen.getByRole("button", { name: /Pick in Table View/i }))
+    expect(
+      screen.getByRole("table", { name: "Eligible subjects" }),
+    ).toBeInTheDocument()
+  })
+
+  it("opens subject inspection dialog when clicking a calendar item and allows changing section", async () => {
+    const user = userEvent.setup()
+    const sec1 = section({
+      id: 101,
+      section_code: "IT301",
+      schedule_days: "MON",
+      starts_at_time: "09:00:00",
+      ends_at_time: "11:00:00",
+      room: "Lab 1",
+      professor_name: "Dr. Smith",
+    })
+    const sec2 = section({
+      id: 102,
+      section_code: "IT302",
+      schedule_days: "TUE",
+      starts_at_time: "13:00:00",
+      ends_at_time: "15:00:00",
+      room: "Lab 2",
+      professor_name: "Prof. Jones",
+    })
+    const subj = subject({
+      subject_id: 1,
+      code: "IT101",
+      title: "Programming 1",
+      available_sections: [sec1, sec2],
+    })
+
+    const onChoose = vi.fn()
+    const onClear = vi.fn()
+    render(
+      <EligibleSubjectTable
+        subjects={[subj]}
+        selections={{ 1: 101 }}
+        onChoose={onChoose}
+        onClear={onClear}
+      />,
+    )
+
+    // Switch to Calendar view
+    await user.click(screen.getByRole("radio", { name: /Calendar view/i }))
+
+    // Click on the scheduled subject card in the calendar
+    const subjectCard = screen.getByRole("button", {
+      name: /IT101.*Programming 1/i,
+    })
+    await user.click(subjectCard)
+
+    // Inspection dialog appears with details
+    expect(
+      screen.getByRole("heading", { name: /IT101 — Programming 1/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Section IT301")).toBeInTheDocument()
+    expect(screen.getAllByText("Lab 1").length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText("Dr. Smith").length).toBeGreaterThanOrEqual(1)
+
+    // Test clear selection
+    await user.click(screen.getByRole("button", { name: /Clear Selection/i }))
+    expect(onClear).toHaveBeenCalledWith(1)
+  })
+
   it("has no detectable accessibility violations", async () => {
     const { container } = renderTable()
 

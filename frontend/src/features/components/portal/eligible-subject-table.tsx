@@ -1,13 +1,26 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { CalendarDays, Info, ListIcon } from "lucide-react"
 
 import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import {
+  SectionScheduleCalendar,
+  type SectionScheduleItem,
+} from "@/features/components/portal/section-schedule-calendar"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -16,6 +29,10 @@ import {
   SelectValue,
 } from "@/features/components/ui/select"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/features/components/ui/toggle-group"
 import {
   isAdvanceSubject,
   isBacklogSubject,
@@ -353,6 +370,11 @@ export function EligibleSubjectTable({
   const [addSubjectValue, setAddSubjectValue] = useState("")
   const [recommendationMode, setRecommendationMode] =
     useState<RecommendationMode>("manual")
+  const [view, setView] = useState<"table" | "calendar">("table")
+  const [inspectingSubject, setInspectingSubject] = useState<{
+    subject: EligibleSubject
+    section: EligibleSection
+  } | null>(null)
 
   const isBacklog = (subject: EligibleSubject): boolean =>
     currentYearLevel !== null &&
@@ -511,6 +533,52 @@ export function EligibleSubjectTable({
     }
   }
 
+  const selectedCalendarItems: SectionScheduleItem[] = useMemo(() => {
+    const items: SectionScheduleItem[] = []
+    for (const subject of visibleSubjects) {
+      const sectionId = selections[subject.subject_id]
+      if (sectionId === undefined) continue
+      const section = subject.available_sections.find(
+        (candidate) => candidate.id === sectionId,
+      )
+      if (!section) continue
+      items.push({
+        id: section.id,
+        subject_code: subject.code,
+        subject_title: subject.title,
+        units: subject.units,
+        section_code: section.section_code,
+        room: section.room ?? null,
+        professor_name: section.professor_name ?? null,
+        schedule_days: section.schedule_days ?? null,
+        starts_at_time: section.starts_at_time ?? null,
+        ends_at_time: section.ends_at_time ?? null,
+        modality: null,
+        capacity: section.remaining_seats,
+      })
+    }
+    return items
+  }, [visibleSubjects, selections])
+
+  const unselectedSubjects = useMemo(
+    () => visibleSubjects.filter((s) => selections[s.subject_id] === undefined),
+    [visibleSubjects, selections],
+  )
+
+  const handleSelectCalendarSubject = (item: SectionScheduleItem) => {
+    const matchingSubject = visibleSubjects.find(
+      (s) =>
+        selections[s.subject_id] === item.id ||
+        s.available_sections.some((sec) => sec.id === item.id),
+    )
+    if (!matchingSubject) return
+    const matchingSection = matchingSubject.available_sections.find(
+      (sec) => sec.id === item.id,
+    )
+    if (!matchingSection) return
+    setInspectingSubject({ subject: matchingSubject, section: matchingSection })
+  }
+
   const rows = arrangedBySchedule
     ? [...visibleSubjects].sort((a, b) =>
         compareBySchedule(
@@ -609,15 +677,37 @@ export function EligibleSubjectTable({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="default"
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(val) => {
+            if (val === "table" || val === "calendar") setView(val)
+          }}
+          variant="outline"
           size="sm"
-          aria-pressed={arrangedBySchedule}
-          onClick={() => setArrangedBySchedule(true)}
+          aria-label="Schedule layout view"
         >
-          Arrange by schedule
-        </Button>
+          <ToggleGroupItem value="table" aria-label="Table view">
+            <ListIcon className="size-4 mr-1.5" />
+            Table view
+          </ToggleGroupItem>
+          <ToggleGroupItem value="calendar" aria-label="Calendar view">
+            <CalendarDays className="size-4 mr-1.5" />
+            Calendar view
+          </ToggleGroupItem>
+        </ToggleGroup>
+
+        {view === "table" && (
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            aria-pressed={arrangedBySchedule}
+            onClick={() => setArrangedBySchedule(true)}
+          >
+            Arrange by schedule
+          </Button>
+        )}
         <div className="w-56">
           <SearchableCombobox
             id="add-subject"
@@ -668,28 +758,166 @@ export function EligibleSubjectTable({
           </Badge>
         </div>
       </div>
-      <DataTable
-        caption="Eligible subjects"
-        rowKey={(subject) => subject.subject_id}
-        rows={rows}
-        columns={columns(
-          subjects,
-          selections,
-          choose,
-          clear,
-          remove,
-          disabled,
-          isBacklog,
-          isAdvance,
-          pairOf,
-          recommendation.recommendations,
-        )}
-        emptyMessage={
-          hiddenCount > 0
-            ? "Every subject in view is hidden. Use Show all above to bring them back."
-            : undefined
-        }
-      />
+
+      {view === "calendar" ? (
+        <div className="grid gap-3">
+          {unselectedSubjects.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+              <div className="flex items-center gap-2">
+                <Info className="size-4 shrink-0" />
+                <span>
+                  <strong>{unselectedSubjects.length} of {visibleSubjects.length} subjects</strong> do not have a section chosen yet ({unselectedSubjects.map((s) => s.code).join(", ")}).
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs bg-background"
+                onClick={() => setView("table")}
+              >
+                Pick in Table View
+              </Button>
+            </div>
+          )}
+
+          <SectionScheduleCalendar
+            items={selectedCalendarItems}
+            disabled={disabled}
+            onSelectSubject={handleSelectCalendarSubject}
+            emptyMessage="No subjects have sections selected yet. Pick sections in the table or apply a schedule preset above to populate your weekly timetable."
+          />
+        </div>
+      ) : (
+        <DataTable
+          caption="Eligible subjects"
+          rowKey={(subject) => subject.subject_id}
+          rows={rows}
+          columns={columns(
+            subjects,
+            selections,
+            choose,
+            clear,
+            remove,
+            disabled,
+            isBacklog,
+            isAdvance,
+            pairOf,
+            recommendation.recommendations,
+          )}
+          emptyMessage={
+            hiddenCount > 0
+              ? "Every subject in view is hidden. Use Show all above to bring them back."
+              : undefined
+          }
+        />
+      )}
+
+      <Dialog
+        open={inspectingSubject !== null}
+        onOpenChange={(open) => {
+          if (!open) setInspectingSubject(null)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {inspectingSubject?.subject.code} — {inspectingSubject?.subject.title}
+            </DialogTitle>
+            <DialogDescription>
+              {inspectingSubject?.subject.units} Units · Section {inspectingSubject?.section.section_code}
+            </DialogDescription>
+          </DialogHeader>
+
+          {inspectingSubject && (
+            <div className="grid gap-4 py-2">
+              <div className="grid gap-1.5 rounded-lg border bg-muted/40 p-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Current Section:</span>
+                  <span className="font-semibold">Section {inspectingSubject.section.section_code}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Schedule:</span>
+                  <span className="font-medium">{scheduleLabel(inspectingSubject.section)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Room:</span>
+                  <span>{inspectingSubject.section.room ?? "TBA"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Professor:</span>
+                  <span>{inspectingSubject.section.professor_name ?? "TBA"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Seats Available:</span>
+                  <span>{seatsLabel(inspectingSubject.section)}</span>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Switch Section:
+                </span>
+                <Select
+                  value={String(selections[inspectingSubject.subject.subject_id] ?? "")}
+                  onValueChange={(value) => {
+                    const sectionId = Number(value)
+                    if (sectionId) {
+                      choose(inspectingSubject.subject.subject_id, sectionId)
+                      const newSec = inspectingSubject.subject.available_sections.find(
+                        (s) => s.id === sectionId,
+                      )
+                      if (newSec) {
+                        setInspectingSubject({
+                          subject: inspectingSubject.subject,
+                          section: newSec,
+                        })
+                      }
+                    }
+                  }}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {inspectingSubject.subject.available_sections.map((option) => (
+                      <SelectItem key={option.id} value={String(option.id)}>
+                        Section {option.section_code} · {scheduleLabel(option)} · {seatsLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-wrap items-center justify-between gap-2 sm:justify-between">
+            {inspectingSubject && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  clear(inspectingSubject.subject.subject_id)
+                  setInspectingSubject(null)
+                }}
+              >
+                Clear Selection
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setInspectingSubject(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

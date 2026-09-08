@@ -1,5 +1,20 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-08 — Irregular Student Calendar View & Enhancements
+
+0. **Architecture & Implementation Completed**:
+   - **Calendar View for Irregular Students**: Implemented an interactive weekly timetable grid (Monday–Saturday, 7:30 AM – 9:00 PM) for irregular students in `EligibleSubjectTable`:
+     - Added `Table view` / `Calendar view` toggle group on the action toolbar.
+     - Integrated `SectionScheduleCalendar` to render selected sections on weekly time lanes with conflict indicators and room/professor tags.
+     - Synchronized live preset switching (Concise, Morning, Afternoon/Evening, Manual) with instant timetable updates on the calendar.
+     - Added unscheduled subject alert banner indicating how many subjects still require section selection with a quick jump back to table view.
+     - Added interactive subject inspection dialog on calendar card click for inspecting subject details, switching sections, or clearing selections directly from the calendar. [COMPLETED & VERIFIED]
+
+1. **Verification**:
+   - Frontend TypeScript Check (`npx tsc --noEmit`): **Passed with 0 errors**.
+   - `eligible-subject-table.test.tsx`: **34 / 34 passed**.
+   - `enrollment-workspace.test.tsx` suite: **69 / 69 passed**.
+
 ## 2026-09-08 — System Fixes & Enhancements (Google Doc 1cnBMrgLV2TYxIg2UG9yBy34OYNZDMkQlOAW9f7Xu27E: Profile Approval, Kiosk Logout Password, Cashier Student Search, COR Real-time Payments/Fees, Irregular Schedule Recommendations, Program Chair Irregular Advising & Prospectus, Registrar Enrolled Students)
 
 0. **Architecture & Implementation Completed**:
