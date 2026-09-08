@@ -8,7 +8,8 @@
      - Integrated `SectionScheduleCalendar` to render selected sections on weekly time lanes with conflict indicators and room/professor tags.
      - Synchronized live preset switching (Concise, Morning, Afternoon/Evening, Manual) with instant timetable updates on the calendar.
      - Added unscheduled subject alert banner indicating how many subjects still require section selection with a quick jump back to table view.
-     - Added interactive subject inspection dialog on calendar card click for inspecting subject details, switching sections, or clearing selections directly from the calendar. [COMPLETED & VERIFIED]
+     - Added interactive subject inspection dialog on calendar card click for inspecting subject details, switching sections, or clearing selections directly from the calendar.
+     - **UI Refinement (Frontend Design)**: Expanded modal width (`sm:max-w-xl md:max-w-2xl`) to eliminate cramped horizontal scrollbars; redesigned into modern 2-column icon tile grid (Current Section, Schedule, Room, Professor, Capacity) with status badges and spacious section switcher dropdown. [COMPLETED & VERIFIED]
 
 1. **Verification**:
    - Frontend TypeScript Check (`npx tsc --noEmit`): **Passed with 0 errors**.

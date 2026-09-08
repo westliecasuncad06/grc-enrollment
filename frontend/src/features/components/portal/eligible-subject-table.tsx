@@ -1,7 +1,16 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CalendarDays, Info, ListIcon } from "lucide-react"
+import {
+  CalendarDays,
+  Clock,
+  Info,
+  Layers,
+  ListIcon,
+  MapPin,
+  User,
+  Users,
+} from "lucide-react"
 
 import {
   DataTable,
@@ -819,45 +828,108 @@ export function EligibleSubjectTable({
           if (!open) setInspectingSubject(null)
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="w-full p-6 sm:max-w-xl md:max-w-2xl overflow-hidden">
+          <DialogHeader className="gap-2 border-b pb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="font-mono text-xs font-semibold px-2 py-0.5">
+                {inspectingSubject?.subject.code}
+              </Badge>
+              {inspectingSubject && isBacklog(inspectingSubject.subject) && (
+                <Badge variant="warning">Backlog</Badge>
+              )}
+              {inspectingSubject && isAdvance(inspectingSubject.subject) && (
+                <Badge variant="outline">Next year</Badge>
+              )}
+              {inspectingSubject && (
+                <Badge variant="outline" className="text-xs">
+                  {inspectingSubject.subject.units} Units
+                </Badge>
+              )}
+            </div>
+            <DialogTitle className="text-lg font-bold leading-snug">
               {inspectingSubject?.subject.code} — {inspectingSubject?.subject.title}
             </DialogTitle>
-            <DialogDescription>
-              {inspectingSubject?.subject.units} Units · Section {inspectingSubject?.section.section_code}
+            <DialogDescription className="text-xs text-muted-foreground">
+              Review current class details or switch to another section for this subject.
             </DialogDescription>
           </DialogHeader>
 
           {inspectingSubject && (
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-1.5 rounded-lg border bg-muted/40 p-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Current Section:</span>
-                  <span className="font-semibold">Section {inspectingSubject.section.section_code}</span>
+            <div className="grid gap-5 py-1">
+              <div className="grid gap-3.5 rounded-xl border bg-muted/20 p-4 sm:grid-cols-2">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Layers className="size-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground">Current Section</span>
+                    <p className="text-sm font-semibold truncate">
+                      Section {inspectingSubject.section.section_code}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Schedule:</span>
-                  <span className="font-medium">{scheduleLabel(inspectingSubject.section)}</span>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Clock className="size-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground">Class Schedule</span>
+                    <p className="text-sm font-medium">
+                      {scheduleLabel(inspectingSubject.section)}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Room:</span>
-                  <span>{inspectingSubject.section.room ?? "TBA"}</span>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <MapPin className="size-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground">Room</span>
+                    <p className="text-sm font-medium">
+                      {inspectingSubject.section.room ?? "To be confirmed"}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Professor:</span>
-                  <span>{inspectingSubject.section.professor_name ?? "TBA"}</span>
+
+                <div className="flex items-start gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <User className="size-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground">Professor</span>
+                    <p className="text-sm font-medium truncate">
+                      {inspectingSubject.section.professor_name ?? "To be confirmed"}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Seats Available:</span>
-                  <span>{seatsLabel(inspectingSubject.section)}</span>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 sm:col-span-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span className="text-muted-foreground">Class Capacity:</span>
+                    <Badge variant="secondary" className="text-xs font-semibold">
+                      {seatsLabel(inspectingSubject.section)}
+                    </Badge>
+                  </div>
+                  {!inspectingSubject.section.is_own_department && (
+                    <Badge variant="outline" className="text-xs">
+                      {collegeLabel(inspectingSubject.section.college)} section
+                    </Badge>
+                  )}
                 </div>
               </div>
 
               <div className="grid gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Switch Section:
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Switch Section:
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {inspectingSubject.subject.available_sections.length} available section{inspectingSubject.subject.available_sections.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 <Select
                   value={String(selections[inspectingSubject.subject.subject_id] ?? "")}
                   onValueChange={(value) => {
@@ -877,10 +949,10 @@ export function EligibleSubjectTable({
                   }}
                   disabled={disabled}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full text-left truncate">
                     <SelectValue placeholder="Select section" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-64">
                     {inspectingSubject.subject.available_sections.map((option) => (
                       <SelectItem key={option.id} value={String(option.id)}>
                         Section {option.section_code} · {scheduleLabel(option)} · {seatsLabel(option)}
@@ -892,7 +964,7 @@ export function EligibleSubjectTable({
             </div>
           )}
 
-          <DialogFooter className="flex-wrap items-center justify-between gap-2 sm:justify-between">
+          <DialogFooter className="flex-wrap items-center justify-between gap-3 border-t pt-4 sm:justify-between">
             {inspectingSubject && (
               <Button
                 type="button"
@@ -907,14 +979,16 @@ export function EligibleSubjectTable({
                 Clear Selection
               </Button>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setInspectingSubject(null)}
-            >
-              Close
-            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setInspectingSubject(null)}
+              >
+                Close
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
