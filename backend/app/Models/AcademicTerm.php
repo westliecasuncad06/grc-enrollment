@@ -69,6 +69,44 @@ final class AcademicTerm extends Model
     }
 
     /**
+     * Computes the next chronological academic term in sequence:
+     * - {SY} 1st sem -> {SY} 2nd sem
+     * - {SY} 2nd sem -> {SY+1} 1st sem
+     *
+     * @return array{school_year: string, semester: string}
+     */
+    public function nextSequence(): array
+    {
+        return self::computeNextSequence($this->school_year, $this->semester);
+    }
+
+    /**
+     * @return array{school_year: string, semester: string}
+     */
+    public static function computeNextSequence(string $schoolYear, string $semester): array
+    {
+        if ($semester === '1st') {
+            return [
+                'school_year' => $schoolYear,
+                'semester' => '2nd',
+            ];
+        }
+
+        if (preg_match('/^(\d{4})-(\d{4})$/', $schoolYear, $matches)) {
+            $nextStart = (int) $matches[1] + 1;
+            $nextEnd = (int) $matches[2] + 1;
+            $nextSchoolYear = "{$nextStart}-{$nextEnd}";
+        } else {
+            $nextSchoolYear = $schoolYear;
+        }
+
+        return [
+            'school_year' => $nextSchoolYear,
+            'semester' => '1st',
+        ];
+    }
+
+    /**
      * @return HasMany<AcademicTermCollegeWorkflow, $this>
      */
     public function collegeWorkflows(): HasMany

@@ -20,6 +20,18 @@ final class ArchiveAndCreateNextRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $term = $this->route('academicTerm');
+        if ($term instanceof AcademicTerm) {
+            $next = $term->nextSequence();
+            $this->merge([
+                'school_year' => $this->filled('school_year') ? (string) $this->input('school_year') : $next['school_year'],
+                'semester' => $this->filled('semester') ? (string) $this->input('semester') : $next['semester'],
+            ]);
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */

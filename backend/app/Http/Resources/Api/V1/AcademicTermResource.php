@@ -29,7 +29,8 @@ final class AcademicTermResource extends JsonResource
      *     archived_at: ?string,
      *     status: string,
      *     status_label: string,
-     *     is_actionable_current: bool
+     *     is_actionable_current: bool,
+     *     next_term_sequence: array{school_year: string, semester: string}
      * }
      */
     public function toArray(Request $request): array
@@ -50,6 +51,7 @@ final class AcademicTermResource extends JsonResource
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
             'is_actionable_current' => $this->resource->isActionableCurrent(),
+            'next_term_sequence' => $this->resource->nextSequence(),
         ];
     }
 }

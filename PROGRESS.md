@@ -1,6 +1,56 @@
 # GRC Enrollment System — Development Progress
 
-## 2026-09-08 — Irregular Student Calendar View & Enhancements
+## 2026-09-12 — Master Schedule Workspace: For Review & Decision History Restructuring
+
+0. **Architecture & Implementation Completed**:
+   - **Tab Restructuring**: Renamed the top-level tab from "Published" to "Decision History" in `MasterScheduleWorkspace` (`master-schedule-workspace.tsx`).
+   - **Elimination of Inner Toggle**: Removed the inner sub-navigation toggle buttons from the "For review" view by introducing `viewMode?: "all" | "review_only" | "history_only"` in `ScheduleDecisionControls`.
+   - **"For review" View (`viewMode="review_only"`)**:
+     - Actionable proposals (`status === "dean_approved"`): displays actionable review controls (Publish schedule, Return with notes, Review schedule).
+     - Returned proposals (`status === "draft"` with `executive_return` in decision history): remains visible under "For review" with a `Returned for revision` badge, return notes, and a "Waiting for Program Chair revision and Dean resubmission" notice so the Executive Director can actively track revisions.
+   - **"Decision History" View (`viewMode="history_only"`)**:
+     - Displays all schedule proposals submitted to the Executive Director or approved by the Dean.
+     - Differentiates statuses clearly: `Pending Decision` (warning badge for `dean_approved` proposals waiting for Executive decision), `Published` (default badge for published schedules), `Returned` (destructive badge for returned schedules with notes and actor details), or `Closed`.
+     - Preserved the finalized `Published sections` (`PublishedSectionsPanel`) under the history card within the same "Decision History" tab.
+
+1. **Verification**:
+   - Frontend TypeScript Check (`npx tsc --noEmit`): **Passed with 0 errors**.
+   - Unit Tests (`vitest`):
+     - `master-schedule-workspace.test.tsx`: **6 / 6 passed** (including tab renaming to Decision History, filter buttons, pending decision badge, and visibility of returned proposals across both tabs).
+     - `schedule-decision-workspace.test.tsx`: **8 / 8 passed** (verified return reasons, proposal inspections, and decision permissions).
+   - Fast Linter (`npm run lint:fast` / `oxlint`): **Passed with 0 errors**.
+   - Formatting and whitespace checks: **Clean**.
+
+## 2026-09-12 — Academic Term Reset & Automatic Next-Semester Archiving Sequence
+
+0. **Architecture & Implementation Completed**:
+   - **Database Reset**: Restored Academic Term 6 (`2025-2026 · 2nd semester`) as active and current (`status = 'semester_ongoing'`, `closed_at = null`, `archived_at = null`, `academic_term_current_slots.academic_term_id = 6`).
+   - **Data Purge**: Cleanly purged all test and produced data belonging to Term 9 (`2026-2027 · 1st semester`) in proper foreign-key cascade order:
+     - `faculty_assignment_recommendations`, `enrollment_subjects`, `assessment_items`, `assessments`, `payments`, `account_payments`, `enrollment_documents`, `queue_tickets`, `enrollment_change_requests`, `withdrawal_requests`, `enrollments` (21 rows), `sections` (869 rows), `schedule_proposals` (4 rows), `academic_term_section_plans` (41 rows), `section_demand_forecasts` (3,574 rows), `section_demand_observations` (258 rows), `schedule_generation_runs` (7 rows), `prediction_runs` (45 rows), `academic_term_college_workflows` (4 rows), `academic_term_enrollment_windows` (5 rows), `audit_logs` (5 rows), and deleted `academic_terms` row for ID 9.
+   - **Automatic Next-Semester Sequencing**:
+     - Backend (`AcademicTerm.php`): Added `computeNextSequence(schoolYear, semester)` and `nextSequence()` implementing the institutional sequence:
+       - `{SY} 1st sem` -> `{SY} 2nd sem`
+       - `{SY} 2nd sem` -> `{SY+1} 1st sem` (e.g. `2025-2026 2nd sem` -> `2026-2027 1st sem` -> `2026-2027 2nd sem` -> `2027-2028 1st sem`...)
+     - `ArchiveAndCreateNextRequest.php`: Added `prepareForValidation` to automatically resolve default school year and semester from `$academicTerm->nextSequence()` if omitted, with duplicate detection preserved.
+     - `AcademicTermResource.php` & `reference-data-schema.ts`: Exposed `next_term_sequence` in API response and Zod schema.
+     - Frontend (`reference-data-service.ts`): Added `getNextAcademicTermSequence(term)` helper.
+     - `archive-term-dialog.tsx`: Redesigned archive dialog to eliminate manual text `<Input>` and `<Select>` controls. The dialog automatically displays the next semester in sequence and lets the Registrar Head confirm with a single click (`Archive and open [Next Semester]`), creating and opening the draft semester seamlessly.
+
+1. **Verification**:
+   - Backend PHPUnit Tests:
+     - `ArchiveAndCreateNextTermTest`: **8 / 8 passed** (including auto-sequencing for 1st sem, auto-sequencing for 2nd sem, and compute rules).
+     - `AcademicTermsEndpointTest`: **24 / 24 passed** (including `assertExactJson` envelope with `next_term_sequence`).
+     - Scoped Pint formatting: **Passed cleanly**.
+   - Frontend Verification:
+     - `tsc --noEmit`: **Passed with 0 errors**.
+     - `academic-term-workspace.test.tsx`: **7 / 7 passed** (updated to verify automated dialog confirmation without typing).
+     - `npm run lint:fast` (`oxlint`): **Passed with 0 errors**.
+     - `git diff --check`: **Clean with 0 whitespace issues**.
+   - Dev Database Verification:
+     - Term 6 confirmed active (`semester_ongoing`, current slot pointing to 6).
+     - Term 9 confirmed purged (0 records).
+
+
 
 0. **Architecture & Implementation Completed**:
    - **Calendar View for Irregular Students**: Implemented an interactive weekly timetable grid (Monday–Saturday, 7:30 AM – 9:00 PM) for irregular students in `EligibleSubjectTable`:

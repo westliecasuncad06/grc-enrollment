@@ -32,8 +32,9 @@ export const archiveAndCreateNextInputSchema = z
     school_year: z
       .string()
       .trim()
-      .regex(/^\d{4}-\d{4}$/, "Use the YYYY-YYYY format."),
-    semester: z.enum(["1st", "2nd"]),
+      .regex(/^\d{4}-\d{4}$/, "Use the YYYY-YYYY format.")
+      .optional(),
+    semester: z.enum(["1st", "2nd"]).optional(),
   })
   .strict()
 

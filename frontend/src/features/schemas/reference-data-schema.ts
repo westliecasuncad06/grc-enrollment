@@ -40,6 +40,12 @@ export const academicTermSchema = z
     ]),
     status_label: z.string().min(1),
     is_actionable_current: z.boolean().optional(),
+    next_term_sequence: z
+      .object({
+        school_year: z.string(),
+        semester: z.enum(["1st", "2nd"]),
+      })
+      .optional(),
   })
   .strict()
 

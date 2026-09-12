@@ -72,6 +72,10 @@ final class AcademicTermsEndpointTest extends TestCase
                     'status' => 'semester_closed',
                     'status_label' => 'Semester Closed',
                     'is_actionable_current' => false,
+                    'next_term_sequence' => [
+                        'school_year' => '2026-2027',
+                        'semester' => '1st',
+                    ],
                 ],
             ],
         ]);

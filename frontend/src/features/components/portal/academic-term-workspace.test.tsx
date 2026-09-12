@@ -217,7 +217,7 @@ describe("AcademicTermWorkspace", () => {
     ).toBeGreaterThan(0)
   })
 
-  it("archives the current term and opens the next one through the dialog", async () => {
+  it("archives the current term and automatically opens the next sequential term through the dialog", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((input, init) => {
       if (
@@ -230,7 +230,7 @@ describe("AcademicTermWorkspace", () => {
               data: {
                 type: "academic-term",
                 id: 2,
-                school_year: "2027-2028",
+                school_year: "2023-2024",
                 semester: "1st",
                 starts_at: null,
                 ends_at: null,
@@ -253,12 +253,14 @@ describe("AcademicTermWorkspace", () => {
       await screen.findByRole("button", { name: "Archive current semester" }),
     )
     expect(
-      await screen.findByText(/Archiving 2022-2023 · 2nd\. What comes next\?/),
+      await screen.findByText(/Archive 2022-2023 · 2nd/),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText("2023-2024 · 1st Semester"),
     ).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText("Next school year"), "2027-2028")
     await user.click(
-      screen.getByRole("button", { name: "Archive and open next term" }),
+      screen.getByRole("button", { name: "Archive and open 2023-2024 · 1st Sem" }),
     )
 
     await waitFor(() =>
@@ -266,7 +268,7 @@ describe("AcademicTermWorkspace", () => {
         expect.stringContaining("/academic-terms/1/archive-and-create-next"),
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ school_year: "2027-2028", semester: "1st" }),
+          body: JSON.stringify({ school_year: "2023-2024", semester: "1st" }),
         }),
       ),
     )

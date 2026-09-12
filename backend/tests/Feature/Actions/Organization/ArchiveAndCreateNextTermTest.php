@@ -149,4 +149,68 @@ final class ArchiveAndCreateNextTermTest extends TestCase
         self::assertSame($before, AcademicTerm::query()->count());
         self::assertSame(AcademicTermStatus::Draft, $current->refresh()->status);
     }
+
+    public function test_archiving_without_payload_automatically_determines_next_sequence_for_2nd_semester(): void
+    {
+        $current = AcademicTerm::create([
+            'school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        DB::table('academic_term_current_slots')->where('id', 1)->update(['academic_term_id' => $current->id]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar.archive-auto-2nd@grc.test');
+
+        $response = $this->withToken($token)->postJson(
+            "/api/v1/academic-terms/{$current->id}/archive-and-create-next",
+            [],
+        );
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.school_year', '2026-2027');
+        $response->assertJsonPath('data.semester', '1st');
+        $response->assertJsonPath('data.status', 'draft');
+
+        $current->refresh();
+        self::assertSame(AcademicTermStatus::Archived, $current->status);
+    }
+
+    public function test_archiving_without_payload_automatically_determines_next_sequence_for_1st_semester(): void
+    {
+        $current = AcademicTerm::create([
+            'school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        DB::table('academic_term_current_slots')->where('id', 1)->update(['academic_term_id' => $current->id]);
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar.archive-auto-1st@grc.test');
+
+        $response = $this->withToken($token)->postJson(
+            "/api/v1/academic-terms/{$current->id}/archive-and-create-next",
+            [],
+        );
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.school_year', '2026-2027');
+        $response->assertJsonPath('data.semester', '2nd');
+        $response->assertJsonPath('data.status', 'draft');
+
+        $current->refresh();
+        self::assertSame(AcademicTermStatus::Archived, $current->status);
+    }
+
+    public function test_compute_next_sequence_rules(): void
+    {
+        self::assertSame(
+            ['school_year' => '2025-2026', 'semester' => '2nd'],
+            AcademicTerm::computeNextSequence('2025-2026', '1st'),
+        );
+        self::assertSame(
+            ['school_year' => '2026-2027', 'semester' => '1st'],
+            AcademicTerm::computeNextSequence('2025-2026', '2nd'),
+        );
+        self::assertSame(
+            ['school_year' => '2026-2027', 'semester' => '2nd'],
+            AcademicTerm::computeNextSequence('2026-2027', '1st'),
+        );
+        self::assertSame(
+            ['school_year' => '2027-2028', 'semester' => '1st'],
+            AcademicTerm::computeNextSequence('2026-2027', '2nd'),
+        );
+    }
 }

@@ -85,7 +85,7 @@ export function MasterScheduleWorkspace() {
       <Tabs defaultValue="review" className="gap-4">
         <TabsList aria-label="Executive enrollment review views">
           <TabsTrigger value="review">For review</TabsTrigger>
-          <TabsTrigger value="published">Published</TabsTrigger>
+          <TabsTrigger value="history">Decision History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="review">
@@ -93,7 +93,7 @@ export function MasterScheduleWorkspace() {
             <CardHeader>
               <CardTitle level={2}>Schedules for review</CardTitle>
               <CardDescription>
-                Department plans waiting for an Executive Director decision.
+                Department plans waiting for an Executive Director decision or revision.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -105,6 +105,7 @@ export function MasterScheduleWorkspace() {
                   <ScheduleDecisionControls
                     actorRole="executive_director"
                     proposals={proposals}
+                    viewMode="review_only"
                   />
                 )}
               </AsyncBoundary>
@@ -112,7 +113,30 @@ export function MasterScheduleWorkspace() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="published">
+        <TabsContent value="history" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle level={2}>Schedule decision history</CardTitle>
+              <CardDescription>
+                Status and review history for submitted department schedules.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AsyncBoundary
+                query={proposalsQuery}
+                loadingLabel="Loading schedule decision history…"
+              >
+                {(proposals) => (
+                  <ScheduleDecisionControls
+                    actorRole="executive_director"
+                    proposals={proposals}
+                    viewMode="history_only"
+                  />
+                )}
+              </AsyncBoundary>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle level={2}>Published sections</CardTitle>

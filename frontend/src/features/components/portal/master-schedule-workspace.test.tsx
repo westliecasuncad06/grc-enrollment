@@ -255,7 +255,7 @@ describe("MasterScheduleWorkspace", () => {
       await screen.findByRole("tab", { name: "For review", selected: true }),
     ).toBeInTheDocument()
     expect(screen.queryByText(/ENG101/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole("tab", { name: "Published" }))
+    await user.click(screen.getByRole("tab", { name: "Decision History" }))
     const sectionCard = await screen.findByRole("article", { name: "A section" })
     expect(sectionCard).toBeInTheDocument()
     await user.click(within(sectionCard).getByRole("button", { name: "View schedule" }))
@@ -278,7 +278,7 @@ describe("MasterScheduleWorkspace", () => {
         signedInAt: "2026-07-29T12:00:00Z",
       },
     })
-    await user.click(await screen.findByRole("tab", { name: "Published" }))
+    await user.click(await screen.findByRole("tab", { name: "Decision History" }))
     expect(await screen.findByRole("article", { name: "A section" })).toBeInTheDocument()
     expect(await screen.findByRole("article", { name: "C section" })).toBeInTheDocument()
 
@@ -337,10 +337,83 @@ describe("MasterScheduleWorkspace", () => {
       screen.getByRole("button", { name: "Return with notes" }),
     ).toBeInTheDocument()
     expect(screen.getByText("College of Accountancy")).toBeInTheDocument()
-    await user.click(screen.getByRole("tab", { name: "Published" }))
+    await user.click(screen.getByRole("tab", { name: "Decision History" }))
+    expect(
+      await screen.findByText("Pending Decision"),
+    ).toBeInTheDocument()
     expect(
       await screen.findByText("No published sections are available."),
     ).toBeInTheDocument()
+  })
+
+  it("shows returned proposals in both For review and Decision History tabs", async () => {
+    const user = userEvent.setup()
+    const returnedProposal = {
+      data: [
+        {
+          type: "schedule_proposal",
+          id: 11,
+          academic_term_id: 2,
+          submitted_by: 4,
+          submitted_by_name: "COA Program Chair",
+          college: "coa",
+          college_label: "College of Accountancy",
+          academic_term_label: "2026-2027 · 1st",
+          is_submitted: false,
+          status: "draft",
+          status_label: "Draft",
+          decided_by: 6,
+          decided_at: "2026-07-29T14:00:00Z",
+          decision_reason: "Please balance Friday lab schedules.",
+          decision_history: [
+            {
+              action: "executive_return",
+              action_label: "Executive return",
+              actor_name: "Executive Director",
+              actor_role: "executive_director",
+              decided_at: "2026-07-29T14:00:00Z",
+              notes: "Please balance Friday lab schedules.",
+            },
+          ],
+        },
+      ],
+    }
+
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("schedule-proposals")
+              ? returnedProposal
+              : routeFixtures(input),
+          ),
+        ),
+      ),
+    )
+
+    renderWithSession(<MasterScheduleWorkspace />, {
+      session: {
+        userId: "6",
+        displayName: "Executive",
+        role: "executive_director",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    // On "For review" tab: should see "Returned for revision" and return notes
+    expect(
+      await screen.findByText("Returned for revision"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Please balance Friday lab schedules/),
+    ).toBeInTheDocument()
+
+    // On "Decision History" tab: should see "Returned" badge and notes
+    await user.click(screen.getByRole("tab", { name: "Decision History" }))
+    expect(await screen.findByText("Returned")).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/Please balance Friday lab schedules/).length,
+    ).toBeGreaterThanOrEqual(1)
   })
 
   it("withholds the master schedule from non-executive roles", () => {

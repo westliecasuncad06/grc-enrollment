@@ -253,3 +253,35 @@ export function getActiveAcademicTerm(
 export function formatAcademicTerm(term: AcademicTerm): string {
   return `${term.school_year} · ${term.semester}`
 }
+
+/**
+ * Computes the next chronological academic term in sequence:
+ * - 1st sem -> 2nd sem of same school year
+ * - 2nd sem -> 1st sem of next school year
+ */
+export function getNextAcademicTermSequence(term: {
+  school_year: string
+  semester: string
+}): { school_year: string; semester: "1st" | "2nd" } {
+  if (term.semester === "1st") {
+    return {
+      school_year: term.school_year,
+      semester: "2nd",
+    }
+  }
+
+  const match = /^(\d{4})-(\d{4})$/.exec(term.school_year.trim())
+  if (match) {
+    const nextStart = parseInt(match[1], 10) + 1
+    const nextEnd = parseInt(match[2], 10) + 1
+    return {
+      school_year: `${nextStart}-${nextEnd}`,
+      semester: "1st",
+    }
+  }
+
+  return {
+    school_year: term.school_year,
+    semester: "1st",
+  }
+}

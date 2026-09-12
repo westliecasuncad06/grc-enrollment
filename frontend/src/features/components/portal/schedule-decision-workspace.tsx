@@ -58,9 +58,11 @@ function requiresReason(action: ScheduleAction) {
 export function ScheduleDecisionControls({
   actorRole,
   proposals,
+  viewMode = "all",
 }: {
   actorRole: UserRole
   proposals: readonly ScheduleProposal[]
+  viewMode?: "all" | "review_only" | "history_only"
 }) {
   const { session } = useAuth()
   const queryClient = useQueryClient()
@@ -121,12 +123,52 @@ export function ScheduleDecisionControls({
   }
 
   const [activeTab, setActiveTab] = useState<"pending" | "history">("pending")
+  const isExecutive = actorRole === "executive_director"
+
+  // Proposals where the current role can perform an action
   const selectable = proposals.filter(
     (proposal) => availableScheduleActions(actorRole, proposal).length > 0,
   )
-  const history = proposals.filter(
-    (proposal) => availableScheduleActions(actorRole, proposal).length === 0,
-  )
+
+  // Proposals returned by Executive Director that are in draft state
+  const returnedForReview = isExecutive
+    ? proposals.filter(
+        (proposal) =>
+          proposal.status === "draft" &&
+          (proposal.decision_history ?? []).some(
+            (decision) => decision.action === "executive_return",
+          ),
+      )
+    : []
+
+  // Items to show under "For review":
+  const reviewItems = isExecutive
+    ? [...selectable, ...returnedForReview]
+    : selectable
+
+  // Proposals to show under "Decision History":
+  // For Executive Director: all proposals that Dean has approved or that reached Executive
+  const historyItems = isExecutive
+    ? proposals.filter(
+        (proposal) =>
+          proposal.status === "dean_approved" ||
+          proposal.status === "published" ||
+          proposal.status === "closed" ||
+          (proposal.decision_history ?? []).some(
+            (decision) =>
+              decision.action === "dean_approve" ||
+              decision.action === "executive_return" ||
+              decision.action === "executive_approve",
+          ),
+      )
+    : proposals.filter(
+        (proposal) => availableScheduleActions(actorRole, proposal).length === 0,
+      )
+
+  const showReviewList =
+    viewMode === "all" ? activeTab === "pending" : viewMode === "review_only"
+  const showHistoryList =
+    viewMode === "all" ? activeTab === "history" : viewMode === "history_only"
 
   return (
     <div className="space-y-4">
@@ -136,33 +178,37 @@ export function ScheduleDecisionControls({
         </Alert>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 border-b pb-3">
-        <Button
-          type="button"
-          size="sm"
-          variant={activeTab === "pending" ? "default" : "outline"}
-          onClick={() => setActiveTab("pending")}
-        >
-          Pending decisions ({selectable.length})
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={activeTab === "history" ? "default" : "outline"}
-          onClick={() => setActiveTab("history")}
-        >
-          Decision history ({history.length})
-        </Button>
-      </div>
+      {viewMode === "all" && (
+        <div className="flex flex-wrap items-center gap-2 border-b pb-3">
+          <Button
+            type="button"
+            size="sm"
+            variant={activeTab === "pending" ? "default" : "outline"}
+            onClick={() => setActiveTab("pending")}
+          >
+            Pending decisions ({reviewItems.length})
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={activeTab === "history" ? "default" : "outline"}
+            onClick={() => setActiveTab("history")}
+          >
+            Decision history ({historyItems.length})
+          </Button>
+        </div>
+      )}
 
-      {activeTab === "pending" && (
-        selectable.length === 0 ? (
+      {showReviewList && (
+        reviewItems.length === 0 ? (
           <p className="py-6 text-center text-muted-foreground">
             No schedule decisions are currently available.
           </p>
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
-            {selectable.map((proposal) => {
+            {reviewItems.map((proposal) => {
+              const actions = availableScheduleActions(actorRole, proposal)
+              const isActionable = actions.length > 0
               const presentation = scheduleProposalPresentation(proposal)
               const priorReturn = [...(proposal.decision_history ?? [])]
                 .reverse()
@@ -192,45 +238,50 @@ export function ScheduleDecisionControls({
                         {proposal.submitted_by_name ??
                           `Program Chair #${proposal.submitted_by}`}
                       </p>
-                      <Badge variant={presentation.badgeVariant}>
-                        {presentation.label}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={isActionable ? presentation.badgeVariant : "destructive"}>
+                          {isActionable ? presentation.label : "Returned for revision"}
+                        </Badge>
+                      </div>
                       {priorReturn && (
                         <p className="rounded-md bg-muted p-2 text-sm text-muted-foreground">
                           <span className="font-medium text-foreground">
-                            Previously returned
+                            {isActionable ? "Previously returned" : "Returned"}
                           </span>{" "}
                           by {priorReturn.actor_name}
                           {priorReturn.notes ? `: ${priorReturn.notes}` : "."}
                         </p>
                       )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setReviewingProposal(proposal)}
-                      >
-                        Review schedule
-                      </Button>
+                      {!isActionable && (
+                        <p className="text-xs text-muted-foreground">
+                          Waiting for Program Chair revision and Dean resubmission.
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2">
-                        {availableScheduleActions(actorRole, proposal).map(
-                          (action) => (
-                            <Button
-                              key={action}
-                              type="button"
-                              variant={
-                                requiresReason(action) ? "outline" : "default"
-                              }
-                              disabled={mutation.isPending}
-                              onClick={() => {
-                                setPending({ proposal, action })
-                                setReason("")
-                                setError("")
-                              }}
-                            >
-                              {actionLabel[action]}
-                            </Button>
-                          ),
-                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setReviewingProposal(proposal)}
+                        >
+                          Review schedule
+                        </Button>
+                        {actions.map((action) => (
+                          <Button
+                            key={action}
+                            type="button"
+                            variant={
+                              requiresReason(action) ? "outline" : "default"
+                            }
+                            disabled={mutation.isPending}
+                            onClick={() => {
+                              setPending({ proposal, action })
+                              setReason("")
+                              setError("")
+                            }}
+                          >
+                            {actionLabel[action]}
+                          </Button>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>
@@ -241,16 +292,39 @@ export function ScheduleDecisionControls({
         )
       )}
 
-      {activeTab === "history" && (
-        history.length === 0 ? (
+      {showHistoryList && (
+        historyItems.length === 0 ? (
           <p className="py-6 text-center text-muted-foreground">
             No schedule decision history is currently available.
           </p>
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
-            {history.map((proposal) => {
+            {historyItems.map((proposal) => {
               const presentation = scheduleProposalPresentation(proposal)
               const decisions = [...(proposal.decision_history ?? [])].reverse()
+
+              let badgeVariant = presentation.badgeVariant
+              let statusLabel = presentation.label
+
+              if (proposal.status === "dean_approved") {
+                badgeVariant = "warning"
+                statusLabel = "Pending Decision"
+              } else if (proposal.status === "published") {
+                badgeVariant = "default"
+                statusLabel = "Published"
+              } else if (
+                proposal.status === "draft" &&
+                decisions.some(
+                  (d) =>
+                    d.action === "executive_return" || d.action === "dean_return",
+                )
+              ) {
+                badgeVariant = "destructive"
+                statusLabel = "Returned"
+              } else if (proposal.status === "closed") {
+                badgeVariant = "secondary"
+                statusLabel = "Closed"
+              }
 
               return (
                 <li key={proposal.id}>
@@ -273,8 +347,8 @@ export function ScheduleDecisionControls({
                           `Program Chair #${proposal.submitted_by}`}
                       </p>
                       <div className="flex items-center gap-2">
-                        <Badge variant={presentation.badgeVariant}>
-                          {presentation.label}
+                        <Badge variant={badgeVariant}>
+                          {statusLabel}
                         </Badge>
                         {proposal.decided_at && (
                           <span className="text-xs text-muted-foreground">
