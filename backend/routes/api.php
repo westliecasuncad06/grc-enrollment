@@ -332,6 +332,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::patch('/faculty-members/{facultyMember}/workforce-profile', [FacultyMemberController::class, 'updateWorkforceProfile'])->name('faculty-members.workforce-profile.update');
             Route::post('/curricula', [CurriculumController::class, 'store'])->name('curricula.store');
             Route::patch('/curricula/{curriculum}', [CurriculumController::class, 'update'])->name('curricula.update');
+            Route::put('/curricula/{curriculum}/max-units', [CurriculumController::class, 'updateMaxUnits'])->name('curricula.max-units.update');
             Route::get('/programs/{program}/current-curriculum-subjects', CurrentCurriculumSubjectController::class)->name('programs.current-curriculum-subjects.index');
             Route::post('/curricula/{curriculum}/subject-placements', CurriculumSubjectPlacementController::class)->name('curricula.subject-placements.store');
             Route::get('/curricula/{curriculum}/migration-preview', [CurriculumMigrationController::class, 'preview'])->name('curricula.migrations.preview');

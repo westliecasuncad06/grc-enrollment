@@ -63,6 +63,7 @@ import {
 } from "@/features/hooks/use-curriculum-authoring"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import {
+  curriculumReplacementSchema,
   storeCurriculumInputSchema,
   type CurriculumSubjectInput,
   type StoreCurriculumInput,
@@ -73,6 +74,7 @@ import {
   replaceCurriculum,
   toCurriculumReplacement,
   transitionCurriculum,
+  updateCurriculumMaxUnits,
 } from "@/features/services/curriculum-service"
 import { CurriculumView } from "@/features/components/portal/curriculum-view"
 import { CurriculumCreationWizard } from "@/features/components/portal/curriculum-creation-wizard"
@@ -84,7 +86,7 @@ type CurriculumWorkspaceValues = StoreCurriculumInput
 
 const fresh: CurriculumWorkspaceValues = {
   program_id: 0,
-  equivalency_source_curriculum_id: 0,
+  equivalency_source_curriculum_id: null,
   name: "",
   subjects: [],
 }
@@ -95,7 +97,7 @@ function valuesFromCurriculum(
   return {
     program_id: curriculum.program_id,
     equivalency_source_curriculum_id:
-      curriculum.equivalency_source_curriculum_id ?? 0,
+      curriculum.equivalency_source_curriculum_id ?? null,
     name: curriculum.name,
     subjects: curriculum.subjects.map(
       ({ subject_id, year_level, semester, is_required, prerequisites }) => ({
@@ -259,6 +261,37 @@ export function CurriculumWorkspace() {
       )
     },
   })
+  const [customMaxUnits, setCustomMaxUnits] = useState<string>("")
+  const [maxUnitsFeedback, setMaxUnitsFeedback] = useState<string>("")
+
+  const selectedCurriculumId = selectedCurriculum?.id
+  const maxUnitsValue = selectedCurriculum?.max_units
+
+  useEffect(() => {
+    if (selectedCurriculumId) {
+      setCustomMaxUnits(
+        maxUnitsValue != null ? String(maxUnitsValue) : "",
+      )
+      setMaxUnitsFeedback("")
+    }
+  }, [selectedCurriculumId, maxUnitsValue])
+
+  const maxUnitsMutation = useMutation({
+    mutationFn: (val: number | null) =>
+      updateCurriculumMaxUnits(selectedId, val),
+    onSuccess: (updated) => {
+      invalidate()
+      queryClient.setQueryData<Curriculum[]>(curriculaQueryKey(userId), (old) =>
+        (old ?? []).map((item) => (item.id === updated.id ? updated : item)),
+      )
+      setMaxUnitsFeedback("Maximum unit limit saved successfully.")
+    },
+    onError: (err: unknown) => {
+      setMaxUnitsFeedback(
+        err instanceof Error ? err.message : "Failed to update maximum units.",
+      )
+    },
+  })
   const save = useCallback(
     async (input: CurriculumWorkspaceValues) => {
       setRequestError("")
@@ -342,7 +375,12 @@ export function CurriculumWorkspace() {
   // POST until its header fields are filled in, so autosave stays quiet until
   // the whole form is a valid create/replace request.
   const autosaveReady =
-    storeCurriculumInputSchema.safeParse(watchedValues).success
+    selectedId > 0
+      ? curriculumReplacementSchema.safeParse({
+          name: watchedValues.name,
+          subjects: watchedValues.subjects,
+        }).success
+      : storeCurriculumInputSchema.safeParse(watchedValues).success
   useEffect(() => {
     if (
       !selectedCurriculum ||
@@ -494,6 +532,99 @@ export function CurriculumWorkspace() {
                       </FieldError>
                     </Field>
                   </FieldGroup>
+                  <div className="rounded-xl border bg-card p-4 shadow-sm">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">
+                          Maximum Student Unit Limit
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Configures the maximum units for students enrolled under this curriculum.
+                          Defaults to the heaviest semester load prescribed across 1st to 4th year ({selectedCurriculum.default_max_units ?? 30.0} units).
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="w-fit font-mono text-xs">
+                        Effective: {selectedCurriculum.effective_max_units ?? selectedCurriculum.default_max_units ?? 30.0} units
+                      </Badge>
+                    </div>
+
+                    {selectedCurriculum.year_level_max_units && (
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {([1, 2, 3, 4] as const).map((yr) => {
+                          const yrRecord = selectedCurriculum.year_level_max_units as Record<string, number> | undefined
+                          const peak = yrRecord?.[String(yr)] ?? 0
+                          return (
+                            <div
+                              key={yr}
+                              className="rounded-lg border bg-muted/30 px-3 py-2 text-xs"
+                            >
+                              <span className="text-muted-foreground">
+                                {yearLabel(yr)} Peak:
+                              </span>{" "}
+                              <span className="font-semibold text-foreground">
+                                {Number(peak).toFixed(1)} units
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor="curriculum-max-units"
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          Custom Maximum:
+                        </label>
+                        <Input
+                          id="curriculum-max-units"
+                          type="number"
+                          step="0.5"
+                          min="1"
+                          max="60"
+                          className="h-8 w-28 text-sm"
+                          placeholder={String(selectedCurriculum.default_max_units ?? 30.0)}
+                          value={customMaxUnits}
+                          onChange={(e) => setCustomMaxUnits(e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={maxUnitsMutation.isPending}
+                        onClick={async () => {
+                          const parsed =
+                            customMaxUnits.trim() === ""
+                              ? null
+                              : Number(customMaxUnits)
+                          await maxUnitsMutation.mutateAsync(parsed)
+                        }}
+                      >
+                        {maxUnitsMutation.isPending ? "Saving…" : "Save Limit"}
+                      </Button>
+                      {selectedCurriculum.max_units != null && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={maxUnitsMutation.isPending}
+                          onClick={async () => {
+                            setCustomMaxUnits("")
+                            await maxUnitsMutation.mutateAsync(null)
+                          }}
+                        >
+                          Reset to Default ({selectedCurriculum.default_max_units ?? 30.0})
+                        </Button>
+                      )}
+                      {maxUnitsFeedback && (
+                        <span className="text-xs text-muted-foreground">
+                          {maxUnitsFeedback}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   {selectedCurriculum?.last_decision_reason &&
                     selectedCurriculum.status === "draft" && (
                       <Alert variant="destructive">

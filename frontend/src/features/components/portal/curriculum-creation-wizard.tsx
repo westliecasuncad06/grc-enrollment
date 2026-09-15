@@ -71,10 +71,17 @@ export function CurriculumCreationWizard({
     setEquivalencySourceCurriculumId(0)
     setRequestError("")
   }
+  const availableSources = curricula.filter(
+    (curriculum) =>
+      curriculum.program_id === programId &&
+      ["active", "archived"].includes(curriculum.status),
+  )
+  const hasSources = availableSources.length > 0
+
   const proceed = async () => {
     if (
       programId <= 0 ||
-      equivalencySourceCurriculumId <= 0 ||
+      (hasSources && equivalencySourceCurriculumId <= 0) ||
       !name.trim() ||
       isPending
     )
@@ -84,7 +91,9 @@ export function CurriculumCreationWizard({
     try {
       await onProceed({
         program_id: programId,
-        equivalency_source_curriculum_id: equivalencySourceCurriculumId,
+        ...(equivalencySourceCurriculumId > 0
+          ? { equivalency_source_curriculum_id: equivalencySourceCurriculumId }
+          : {}),
         name: name.trim(),
         subjects: [],
       })
@@ -175,38 +184,31 @@ export function CurriculumCreationWizard({
               </>
             ) : (
               <>
-                <Field data-invalid={equivalencySourceCurriculumId <= 0}>
-                  <FieldLabel htmlFor="equivalency-source-curriculum">
-                    Old curriculum source
-                  </FieldLabel>
-                  <Select
-                    value={
-                      equivalencySourceCurriculumId > 0
-                        ? String(equivalencySourceCurriculumId)
-                        : ""
-                    }
-                    onValueChange={(value) =>
-                      setEquivalencySourceCurriculumId(Number(value))
-                    }
-                    disabled={isPending}
-                  >
-                    <SelectTrigger
-                      id="equivalency-source-curriculum"
-                      aria-invalid={equivalencySourceCurriculumId <= 0}
+                {hasSources && (
+                  <Field data-invalid={equivalencySourceCurriculumId <= 0}>
+                    <FieldLabel htmlFor="equivalency-source-curriculum">
+                      Old curriculum source
+                    </FieldLabel>
+                    <Select
+                      value={
+                        equivalencySourceCurriculumId > 0
+                          ? String(equivalencySourceCurriculumId)
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        setEquivalencySourceCurriculumId(Number(value))
+                      }
+                      disabled={isPending}
                     >
-                      <SelectValue placeholder="Select old curriculum" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {curricula
-                          .filter(
-                            (curriculum) =>
-                              curriculum.program_id === programId &&
-                              ["active", "archived"].includes(
-                                curriculum.status,
-                              ),
-                          )
-                          .map((curriculum) => (
+                      <SelectTrigger
+                        id="equivalency-source-curriculum"
+                        aria-invalid={equivalencySourceCurriculumId <= 0}
+                      >
+                        <SelectValue placeholder="Select old curriculum" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {availableSources.map((curriculum) => (
                             <SelectItem
                               key={curriculum.id}
                               value={String(curriculum.id)}
@@ -214,15 +216,16 @@ export function CurriculumCreationWizard({
                               {curriculum.name}
                             </SelectItem>
                           ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FieldError>
-                    {equivalencySourceCurriculumId <= 0
-                      ? "Select the old curriculum source."
-                      : null}
-                  </FieldError>
-                </Field>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldError>
+                      {equivalencySourceCurriculumId <= 0
+                        ? "Select the old curriculum source."
+                        : null}
+                    </FieldError>
+                  </Field>
+                )}
                 <Field data-invalid={!name.trim()}>
                   <FieldLabel htmlFor="curriculum-creation-name">
                     Curriculum name
@@ -274,7 +277,7 @@ export function CurriculumCreationWizard({
                 type="button"
                 disabled={
                   !name.trim() ||
-                  equivalencySourceCurriculumId <= 0 ||
+                  (hasSources && equivalencySourceCurriculumId <= 0) ||
                   isPending
                 }
                 onClick={() => void proceed()}

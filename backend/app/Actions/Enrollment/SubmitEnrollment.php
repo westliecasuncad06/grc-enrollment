@@ -111,6 +111,20 @@ final readonly class SubmitEnrollment
                 self::numericConfigValue('enrollment.max_regular_units'),
                 self::numericConfigValue('enrollment.overload_max_units'),
             );
+            // Regular students taking their prescribed curriculum block sections are
+            // enrolling in their official load and are exempt from overload rejection.
+            $isBlockSubmission = $blockCode !== null;
+            $isRegularCategory = $student->enrollment_category === EnrollmentCategory::Regular->value;
+
+            $maxRegularUnits = $student->curriculum?->effectiveRegularUnits()
+                ?? self::numericConfigValue('enrollment.max_regular_units');
+            $overloadMaxUnits = $student->curriculum?->effectiveMaxUnits()
+                ?? self::numericConfigValue('enrollment.overload_max_units');
+
+            $overloadVerdict = ($isBlockSubmission || $isRegularCategory)
+                ? OverloadVerdict::WithinRegular
+                : OverloadEvaluator::evaluate($totalUnits, $maxRegularUnits, $overloadMaxUnits);
+
             if ($overloadVerdict === OverloadVerdict::Rejected) {
                 throw ValidationException::withMessages([
                     'sections' => "This selection totals {$totalUnits} units, exceeding the maximum allowed load. Refresh and try again.",
@@ -136,12 +150,11 @@ final readonly class SubmitEnrollment
 
             Section::query()->whereIn('id', $sectionIds)->increment('enrolled_count');
 
-            // Regular students (enrollment_category = 'regular') who do not
-            // require overload approval are automatically approved: their
-            // enrollment transitions directly to pending_payment and an
-            // assessment is computed immediately, removing the manual
-            // registrar approval bottleneck for the common case.
-            $isRegular = $student->enrollment_category === EnrollmentCategory::Regular->value
+            // Regular students enrolling in a prescribed block or regular category students
+            // who do not require overload approval are automatically approved: their
+            // enrollment transitions directly to pending_payment and an assessment is
+            // computed immediately, removing the manual registrar approval bottleneck.
+            $isRegular = ($isBlockSubmission || $isRegularCategory)
                 && $overloadVerdict !== OverloadVerdict::RequiresApproval;
 
             if ($isRegular) {

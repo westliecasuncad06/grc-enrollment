@@ -354,6 +354,8 @@ export function EligibleSubjectTable({
   disabled = false,
   currentYearLevel = null,
   currentSemester = null,
+  maxUnits = 30.0,
+  regularUnits = 24.0,
 }: {
   subjects: readonly EligibleSubject[]
   selections: Record<number, number>
@@ -364,6 +366,8 @@ export function EligibleSubjectTable({
   /** The student's own current standing — see `curriculum-ordinal.ts`. Unknown (null) tags nothing Backlog rather than guessing. */
   currentYearLevel?: number | null
   currentSemester?: string | null
+  maxUnits?: number
+  regularUnits?: number
 }) {
   // Subjects the student explicitly removed from view this session.
   const [removedIds, setRemovedIds] = useState<ReadonlySet<number>>(new Set())
@@ -749,9 +753,9 @@ export function EligibleSubjectTable({
         <div className="ml-auto flex items-center gap-2">
           <Badge
             variant={
-              selectedUnits > 30.0
+              selectedUnits > maxUnits
                 ? "destructive"
-                : selectedUnits > 24.0
+                : selectedUnits > regularUnits
                   ? "warning"
                   : selectedUnits > 0
                     ? "secondary"
@@ -759,11 +763,11 @@ export function EligibleSubjectTable({
             }
             className="text-xs font-semibold"
           >
-            {selectedUnits > 30.0
-              ? `${selectedUnits} / 30.0 Max Units (Exceeded)`
-              : selectedUnits > 24.0
-                ? `${selectedUnits} / 30.0 Max Units (Overload)`
-                : `${selectedUnits} / 24.0 Regular Units`}
+            {selectedUnits > maxUnits
+              ? `${selectedUnits} / ${maxUnits.toFixed(1)} Max Units (Exceeded)`
+              : selectedUnits > regularUnits
+                ? `${selectedUnits} / ${maxUnits.toFixed(1)} Max Units (Overload)`
+                : `${selectedUnits} / ${regularUnits.toFixed(1)} Regular Units`}
           </Badge>
         </div>
       </div>

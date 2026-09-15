@@ -75,6 +75,8 @@ final class StudentProfileResource extends JsonResource
             'entry_year' => $this->resource->entry_year,
             'curriculum_name' => $curriculum->name,
             'curriculum_effective_school_year' => $curriculum->effective_school_year,
+            'curriculum_max_units' => $curriculum->effectiveMaxUnits(),
+            'curriculum_default_max_units' => $curriculum->defaultMaxUnits(),
             'year_level' => $this->resource->year_level,
             'enrollment_category' => $this->resource->enrollment_category,
             'student_type' => $this->resource->student_type?->value,

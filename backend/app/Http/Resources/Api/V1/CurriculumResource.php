@@ -30,6 +30,10 @@ final class CurriculumResource extends JsonResource
      *     effective_school_year: string,
      *     status: string,
      *     status_label: string,
+     *     max_units: ?float,
+     *     default_max_units: float,
+     *     effective_max_units: float,
+     *     year_level_max_units: array<int, float>,
      *     decided_at: ?string,
      *     last_decision_reason: ?string,
      *     subjects: list<array<string, mixed>>
@@ -47,6 +51,10 @@ final class CurriculumResource extends JsonResource
             'effective_school_year' => $this->resource->effective_school_year,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
+            'max_units' => $this->resource->max_units !== null ? (float) $this->resource->max_units : null,
+            'default_max_units' => $this->resource->defaultMaxUnits(),
+            'effective_max_units' => $this->resource->effectiveMaxUnits(),
+            'year_level_max_units' => $this->resource->yearLevelMaxUnits(),
             'decided_at' => $this->resource->decided_at?->toIso8601String(),
             'last_decision_reason' => $this->resource->last_decision_reason,
             'subjects' => array_values($this->resource->subjectPlacements

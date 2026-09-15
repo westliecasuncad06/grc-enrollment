@@ -1,5 +1,56 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-15 — Regular Student Max Unit Limit Fix & Program Chair Max Unit Configuration
+
+0. **Architecture & Implementation Completed**:
+   - **Root Cause Resolution**:
+     - Regular students submitting official prescribed block sections (such as BSA Year 1 Semester 1 with 30.5 units) were previously blocked by a hardcoded 30.0 unit check in `enrollment-workspace.tsx` and rejected by backend overload checks in `StoreEnrollmentRequest.php`.
+     - Prescribed blocks authored by Program Chairs represent the official curriculum requirement for that year level and semester; regular students taking their assigned blocks are now exempt from overload rejection and auto-transition directly to `pending_payment`.
+   - **Database & Model Architecture**:
+     - Created reversible migration `2026_09_15_000001_add_max_units_to_curricula_table.php` adding nullable `decimal('max_units', 4, 1)` to `curricula` table.
+     - Backfilled all existing curricula with their respective `defaultMaxUnits()`.
+     - `Curriculum.php`:
+       - `yearLevelMaxUnits()`: Computes peak semester unit loads across 1st Year to 4th Year placements.
+       - `defaultMaxUnits()`: Dynamically calculates the highest semester unit load across 1st to 4th year (e.g., 30.5 for BSA, 27.0 for BSCS, minimum 30.0).
+       - `effectiveMaxUnits()`: Returns custom `max_units` if configured, or falls back to `defaultMaxUnits()`.
+       - `effectiveRegularUnits()`: Returns regular load ceiling (24.0 units).
+     - `GrcCurriculumSeeder.php`: Updated to seed `max_units` automatically from `defaultMaxUnits()`.
+   - **API & Backend Layer**:
+     - `CurriculumResource.php`: Exposed `max_units`, `default_max_units`, `effective_max_units`, and `year_level_max_units`.
+     - `StudentProfileResource.php`: Exposed `curriculum_max_units` and `curriculum_default_max_units`.
+     - `CurriculumController.php`: Added `updateMaxUnits(UpdateCurriculumMaxUnitsRequest, Curriculum)` recording `AuditAction::CURRICULUM_UPDATED`.
+     - `routes/api.php`: Added `PUT /api/v1/curricula/{curriculum}/max-units`.
+     - `StoreEnrollmentRequest.php`: Exempted block submissions from overload checks, removed duplicate validator calls, and evaluated individual section submissions against `$student?->curriculum?->effectiveMaxUnits()`.
+     - `SubmitEnrollment.php`: Set `$overloadVerdict = OverloadVerdict::WithinRegular` and auto-approved regular block submissions to `pending_payment`.
+   - **Frontend & UI Layer**:
+     - `reference-data-schema.ts`: Added `max_units`, `default_max_units`, `effective_max_units`, and `year_level_max_units` to `curriculumSchema`.
+     - `admission-schema.ts`: Added `curriculum_max_units` and `curriculum_default_max_units` to `studentProfileSchema`.
+     - `curriculum-service.ts`: Added `updateCurriculumMaxUnits(curriculumId, maxUnits)`.
+     - `enrollment-workspace.tsx`:
+       - Query student's profile via `useOwnStudentProfileQuery()`.
+       - For regular students (`isRegularAudience`), `isExceeded` and `isOverload` are set to `false`, removing false blockers and warning badges.
+       - For irregular students, `effectiveMaxUnits` is derived from student's curriculum (fallback 30.0).
+       - Passed `maxUnits={effectiveMaxUnits}` to `EligibleSubjectTable`.
+     - `eligible-subject-table.tsx`: Added `maxUnits` and `regularUnits` props, dynamically displaying current limits in toolbar badge.
+     - `curriculum-workspace.tsx`: Added "Maximum Student Unit Limit" card for Program Chair, showing effective limit, default derived from 1st-4th year placements, year level peak breakdown, custom input, Save button, and Reset to Default button. Resolved autosave validation by correctly evaluating `curriculumReplacementSchema` when modifying existing curricula and making `equivalency_source_curriculum_id` optional/nullable.
+     - `curriculum-creation-wizard.tsx`: Updated old curriculum source field to be conditionally required only when active or archived source curricula exist for the program.
+     - `curriculum-view.tsx`: Displayed max units badge beside curriculum name in preview header.
+
+1. **Verification**:
+   - Backend PHPUnit Tests:
+     - `CurriculumSubjectAuthoringEndpointTest`: **10 / 10 passed** (including `test_program_chair_can_update_curriculum_max_units` and `test_program_chair_can_reset_curriculum_max_units_to_null`).
+     - `EnrollmentsEndpointTest`: **47 / 47 passed** (including `test_a_regular_student_submitting_a_prescribed_block_with_heavy_units_succeeds_and_auto_approves` verifying 30.5 units auto-approves to `pending_payment`).
+   - Frontend Unit Tests:
+     - `vitest run eligible-subject-table.test.tsx`: **34 / 34 passed**.
+     - `vitest run enrollment-workspace.test.tsx`: **27 / 27 passed**.
+     - `vitest run curriculum-workspace.test.tsx`: **23 / 23 passed**.
+     - `vitest run curriculum-creation-wizard.test.tsx`: **2 / 2 passed**.
+     - `vitest run program-chair-enrollment-workspace.test.tsx`: **26 / 26 passed**.
+     - `vitest run registrar-enrollment-workspace.test.tsx`: **16 / 16 passed**.
+   - Frontend Typecheck (`npx tsc --noEmit`): **Passed with 0 errors**.
+   - Frontend Fast Linter (`npm run lint:fast` / `oxlint`): **Passed with 0 errors**.
+   - Frontend Next.js Turbopack Build (`npm run build`): **Passed in 25.2s**. Resolved `Failed to open database: Loading persistence directory failed: invalid digit found in string` by clearing corrupted `.next/dev` cache, purging stray Windows `desktop.ini` files that disrupted Turbopack directory enumeration, and ignoring `desktop.ini` in both root and frontend `.gitignore`.
+
 ## 2026-09-12 — Master Schedule Workspace: For Review & Decision History Restructuring
 
 0. **Architecture & Implementation Completed**:
@@ -5535,6 +5586,8 @@ privilege issue above** and are explicitly not claimed as passing — see ADR
   model; `CreateAcademicTerm` seeds one row per year level (1–4) from the
   term-wide dates.
 - `App\Domain\Enrollment\EnrollmentWindowResolver` (pure, DB-free) plus
+  `EnrollmentAvailability`/`En
+... [truncated for diff preview]
   `EnrollmentAvailability`/`EnrollmentAvailabilityReason`/`YearLevelAvailability`/
   `EnrollmentScheduleSummary` value objects. 10/10 unit tests
   (`EnrollmentWindowResolverTest`) covering every reason and boundary

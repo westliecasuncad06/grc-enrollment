@@ -23,6 +23,8 @@ next-env.d.ts
 !.vscode/extensions.json
 .idea
 .DS_Store
+desktop.ini
+[Dd]esktop.ini
 *.suo
 *.ntvs*
 *.njsproj

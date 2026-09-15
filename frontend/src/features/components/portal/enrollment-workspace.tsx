@@ -58,6 +58,7 @@ import {
   useEnrollmentsQuery,
 } from "@/features/hooks/use-enrollment"
 import { useOwnStudentAccountQuery } from "@/features/hooks/use-student-account"
+import { useOwnStudentProfileQuery } from "@/features/hooks/use-student-records"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 import type {
@@ -180,6 +181,7 @@ export function EnrollmentWorkspace() {
   const studentAccountQuery = useOwnStudentAccountQuery({
     enabled: session?.role === "student",
   })
+  const studentProfileQuery = useOwnStudentProfileQuery()
   const scheduleQuery = useEnrollmentScheduleQuery(selectedTermId)
   const viewer = scheduleQuery.data?.viewer
   const selectedTerm = termsQuery.data?.find(
@@ -187,6 +189,8 @@ export function EnrollmentWorkspace() {
   )
   const currentYearLevel = studentAccountQuery.data?.year_level ?? null
   const currentSemester = selectedTerm?.semester ?? null
+  const effectiveMaxUnits =
+    studentProfileQuery.data?.curriculum_max_units ?? 30.0
   // Only a resolved "closed" reads as closed — an unresolved fetch (still
   // loading, or no viewer block for a non-student session) must not block
   // the workspace by default.
@@ -552,8 +556,11 @@ export function EnrollmentWorkspace() {
   // unit total differs — so both call sites share this instead of repeating
   // the total-units row and submit button twice.
   const submitFooter = (totalUnitsValue: number) => {
-    const isExceeded = totalUnitsValue > 30.0
-    const isOverload = totalUnitsValue > 24.0 && totalUnitsValue <= 30.0
+    const isExceeded = !isRegularAudience && totalUnitsValue > effectiveMaxUnits
+    const isOverload =
+      !isRegularAudience &&
+      totalUnitsValue > 24.0 &&
+      totalUnitsValue <= effectiveMaxUnits
     const hasBlocker =
       totalUnitsValue === 0 ||
       isExceeded ||
@@ -580,7 +587,9 @@ export function EnrollmentWorkspace() {
             <Badge variant="warning">Overload (requires approval)</Badge>
           )}
           {isExceeded && (
-            <Badge variant="destructive">Exceeds 30.0 unit maximum</Badge>
+            <Badge variant="destructive">
+              Exceeds {effectiveMaxUnits.toFixed(1)} unit maximum
+            </Badge>
           )}
         </div>
         <Button
@@ -706,6 +715,7 @@ export function EnrollmentWorkspace() {
                       disabled={enrollmentWindowClosed}
                       currentYearLevel={currentYearLevel}
                       currentSemester={currentSemester}
+                      maxUnits={effectiveMaxUnits}
                     />
                     {selectedEntries.length > 0 && (
                       <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">

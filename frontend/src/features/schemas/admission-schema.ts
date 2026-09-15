@@ -73,6 +73,8 @@ export const studentProfileSchema = z
     entry_year: z.number().int().nullable(),
     curriculum_name: z.string().min(1),
     curriculum_effective_school_year: z.string().min(1),
+    curriculum_max_units: z.number().nullable().optional(),
+    curriculum_default_max_units: z.number().nullable().optional(),
     year_level: z.number().int().positive(),
     enrollment_category: enrollmentCategorySchema.nullable(),
     student_type: studentTypeSchema.nullable(),

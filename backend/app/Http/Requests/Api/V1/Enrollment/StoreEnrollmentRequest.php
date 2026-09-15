@@ -102,7 +102,7 @@ final class StoreEnrollmentRequest extends FormRequest
             $this->rejectScheduleConflicts($validator, $sectionIds, $sections);
             $this->rejectIneligibleSections($validator, $student, $term, $sectionIds);
             $this->rejectUnpairedLectureLabComponents($validator, $sectionIds, $sections);
-            $this->rejectOverload($validator, $sections);
+            $this->rejectOverload($validator, $sections, $student);
         });
     }
 
@@ -130,6 +130,8 @@ final class StoreEnrollmentRequest extends FormRequest
      * not rechecked as though the student had assembled those individual
      * sections: schedule validation belongs to generation and publication.
      * Overload checks still apply here.
+     * Regular block submissions are prescribed curriculum loads and are
+     * exempt from individual overload rejection.
      */
     private function validateBlockSubmission(Validator $validator, StudentProfile $student, AcademicTerm $term, string $blockCode): void
     {
@@ -150,9 +152,6 @@ final class StoreEnrollmentRequest extends FormRequest
 
         $sectionIds = array_map(fn (Section $section): int => $section->id, $block->sections);
         $this->resolvedBlockSectionIds = $sectionIds;
-
-        $sections = Section::query()->whereIn('id', $sectionIds)->with('subject')->get()->keyBy('id');
-        $this->rejectOverload($validator, $sections);
     }
 
     private function resolveStudent(): ?StudentProfile
@@ -373,11 +372,13 @@ final class StoreEnrollmentRequest extends FormRequest
      *
      * @param  Collection<int, Section>  $sections
      */
-    private function rejectOverload(Validator $validator, Collection $sections): void
+    private function rejectOverload(Validator $validator, Collection $sections, ?StudentProfile $student = null): void
     {
         $totalUnits = (float) $sections->sum(fn (Section $section): float => $section->subject->units);
-        $maxRegularUnits = $this->numericConfigValue('enrollment.max_regular_units');
-        $overloadMaxUnits = $this->numericConfigValue('enrollment.overload_max_units');
+        $maxRegularUnits = $student?->curriculum?->effectiveRegularUnits()
+            ?? $this->numericConfigValue('enrollment.max_regular_units');
+        $overloadMaxUnits = $student?->curriculum?->effectiveMaxUnits()
+            ?? $this->numericConfigValue('enrollment.overload_max_units');
 
         $verdict = OverloadEvaluator::evaluate($totalUnits, $maxRegularUnits, $overloadMaxUnits);
 

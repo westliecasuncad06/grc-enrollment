@@ -181,6 +181,11 @@ final class GrcCurriculumSeeder extends Seeder
                 ],
             );
         }
+
+        $defaultMax = $curriculum->unsetRelation('subjectPlacements')->defaultMaxUnits();
+        if ($defaultMax > 0) {
+            $curriculum->update(['max_units' => $defaultMax]);
+        }
     }
 
     /**

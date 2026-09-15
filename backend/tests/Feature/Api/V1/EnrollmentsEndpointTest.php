@@ -326,6 +326,29 @@ final class EnrollmentsEndpointTest extends TestCase
         }
     }
 
+    public function test_a_regular_student_submitting_a_prescribed_block_with_heavy_units_succeeds_and_auto_approves(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum('BSA');
+        // 10 subjects of 3.0 units + 1 subject of 0.5 units = 30.5 units (exact BSA Year 1 Sem 1 curriculum load)
+        $codes = ['ACT101', 'ACT102', 'ACT103', 'ACT104', 'ACT105', 'ACT106', 'ACT107', 'ACT108', 'ACT109', 'ACT110', 'ACT111'];
+        [, $sections] = $this->makeBlock($term, $curriculum, 'BSA101', $codes);
+        $sections[10]->subject->update(['units' => 0.5]);
+
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'BSA101',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.status', 'pending_payment');
+        $response->assertJsonPath('data.total_units', 30.5);
+        $response->assertJsonPath('data.requires_overload_approval', false);
+    }
+
     public function test_a_server_resolved_block_submission_is_not_rejected_for_a_schedule_conflict_between_its_own_subjects(): void
     {
         $term = $this->makeTerm();

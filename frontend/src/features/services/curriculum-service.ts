@@ -27,6 +27,7 @@ import {
   getAuthenticatedJson,
   patchAuthenticatedJson,
   postAuthenticatedJson,
+  putAuthenticatedJson,
 } from "@/features/services/api-client"
 
 export const CURRICULA_PATH = "/api/v1/curricula"
@@ -164,6 +165,17 @@ export async function applyCurriculumMigration(
     payload,
     "curriculum migration result",
   ).data
+}
+
+export async function updateCurriculumMaxUnits(
+  curriculumId: number,
+  maxUnits: number | null,
+): Promise<Curriculum> {
+  const payload = await putAuthenticatedJson(
+    `${CURRICULA_PATH}/${curriculumId}/max-units`,
+    { max_units: maxUnits },
+  )
+  return parse(zEnvelope, payload, "updated curriculum").data
 }
 
 const curriculumEnvelopeSchema = z.object({ data: curriculumSchema }).strict()

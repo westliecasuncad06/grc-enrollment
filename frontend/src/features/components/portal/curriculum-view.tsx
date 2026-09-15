@@ -274,7 +274,14 @@ export function CurriculumView({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Curriculum</p>
-            <p className="font-medium">{curriculum.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{curriculum.name}</p>
+              {curriculum.effective_max_units && (
+                <Badge variant="outline" className="text-xs">
+                  Max: {curriculum.effective_max_units} units
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       )}

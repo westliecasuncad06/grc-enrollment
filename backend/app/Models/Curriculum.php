@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?int $effective_start_year
  * @property ?int $effective_end_year
  * @property CurriculumStatus $status
+ * @property ?float $max_units
  * @property ?int $decided_by
  * @property ?CarbonImmutable $decided_at
  * @property ?string $last_decision_reason
@@ -40,6 +41,7 @@ final class Curriculum extends Model
         'effective_start_year',
         'effective_end_year',
         'status',
+        'max_units',
         'decided_by',
         'decided_at',
         'last_decision_reason',
@@ -52,6 +54,7 @@ final class Curriculum extends Model
     {
         return [
             'status' => CurriculumStatus::class,
+            'max_units' => 'float',
             'decided_at' => 'immutable_datetime',
         ];
     }
@@ -144,5 +147,78 @@ final class Curriculum extends Model
         return $query
             ->where('effective_start_year', '<=', $entryYear)
             ->orderByDesc('effective_start_year');
+    }
+
+    /**
+     * Computes the maximum semester unit total for each year level (1 to 4)
+     * based on the curriculum's subject placements.
+     *
+     * @return array<int, float>
+     */
+    public function yearLevelMaxUnits(): array
+    {
+        $byYear = [1 => 0.0, 2 => 0.0, 3 => 0.0, 4 => 0.0];
+
+        $placements = $this->relationLoaded('subjectPlacements')
+            ? $this->subjectPlacements
+            : $this->subjectPlacements()->with('subject')->get();
+
+        $groups = $placements
+            ->filter(fn (CurriculumSubject $p): bool => $p->year_level >= 1 && $p->year_level <= 4)
+            ->groupBy(fn (CurriculumSubject $p): string => $p->year_level.'-'.$p->semester);
+
+        foreach ($groups as $key => $items) {
+            $yearLevel = (int) explode('-', (string) $key)[0];
+            $totalUnits = (float) $items->sum(fn (CurriculumSubject $p): float => (float) ($p->subject?->units ?? 0));
+            if ($totalUnits > $byYear[$yearLevel]) {
+                $byYear[$yearLevel] = $totalUnits;
+            }
+        }
+
+        return $byYear;
+    }
+
+    /**
+     * Derives the institutional default maximum unit limit for students from
+     * the highest semester load set across 1st Year to 4th Year in this curriculum.
+     */
+    public function defaultMaxUnits(): float
+    {
+        $yearMaxes = $this->yearLevelMaxUnits();
+        $highest = count($yearMaxes) > 0 ? max($yearMaxes) : 0.0;
+
+        return $highest > 0.0
+            ? (float) $highest
+            : (float) (config('enrollment.overload_max_units') ?? 30.0);
+    }
+
+    /**
+     * The active maximum unit limit in force: the explicit Program Chair cap if
+     * set, falling back to the configured institutional cap.
+     */
+    public function effectiveMaxUnits(): ?float
+    {
+        if ($this->max_units !== null) {
+            return (float) $this->max_units;
+        }
+
+        $configCap = config('enrollment.overload_max_units');
+
+        return $configCap !== null ? (float) $configCap : null;
+    }
+
+    /**
+     * The regular (non-overload) unit limit for this curriculum.
+     */
+    public function effectiveRegularUnits(): ?float
+    {
+        $configuredRegular = config('enrollment.max_regular_units');
+        if ($configuredRegular === null) {
+            return null;
+        }
+
+        $effectiveMax = $this->effectiveMaxUnits();
+
+        return $effectiveMax !== null ? min($effectiveMax, (float) $configuredRegular) : (float) $configuredRegular;
     }
 }

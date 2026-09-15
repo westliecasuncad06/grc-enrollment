@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Curriculum\CreateCurriculum;
 use App\Actions\Curriculum\TransitionCurriculum;
 use App\Actions\Curriculum\UpdateCurriculum;
+use App\Domain\Audit\AuditAction;
+use App\Domain\Audit\AuditableType;
 use App\Domain\Identity\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Curriculum\StoreCurriculumRequest;
@@ -13,6 +15,7 @@ use App\Http\Resources\Api\V1\CurriculumResource;
 use App\Models\Curriculum;
 use App\Models\Program;
 use App\Models\User;
+use App\Support\Audit\AuditRecorder;
 use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
@@ -98,6 +101,44 @@ final class CurriculumController extends Controller
         ], $request->subjects(), $curriculum, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(CurriculumResource::make($curriculum)->response($request));
+    }
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function updateMaxUnits(
+        Request $request,
+        Curriculum $curriculum,
+        AuditRecorder $auditRecorder,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
+        $this->authorize('update', $curriculum);
+
+        $validated = $request->validate([
+            'max_units' => ['nullable', 'numeric', 'gt:0', 'max:99'],
+        ]);
+
+        $before = $curriculum->max_units !== null ? (float) $curriculum->max_units : null;
+        $maxUnits = isset($validated['max_units']) && $validated['max_units'] !== null && $validated['max_units'] !== ''
+            ? (float) $validated['max_units']
+            : null;
+
+        $curriculum->update(['max_units' => $maxUnits]);
+        $curriculum->refresh();
+
+        $auditRecorder->record(
+            $user,
+            AuditAction::CURRICULUM_UPDATED,
+            AuditableType::CURRICULUM,
+            $curriculum->id,
+            ['max_units' => $before],
+            ['max_units' => $curriculum->max_units !== null ? (float) $curriculum->max_units : null],
+            null,
+            $contextFactory->fromRequest($request),
+        );
+
+        return $this->cachePrivateResponse(CurriculumResource::make($curriculum->loadMissing(self::EAGER_LOAD))->response($request));
     }
 
     /**

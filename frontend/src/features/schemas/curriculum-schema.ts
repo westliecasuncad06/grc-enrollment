@@ -87,7 +87,9 @@ export const storeCurriculumInputSchema = z
     equivalency_source_curriculum_id: z
       .number()
       .int()
-      .positive("Select the old curriculum source."),
+      .positive("Select the old curriculum source.")
+      .nullable()
+      .optional(),
     ...replacementShape,
   })
   .strict()

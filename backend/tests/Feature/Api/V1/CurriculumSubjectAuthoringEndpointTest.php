@@ -229,6 +229,47 @@ final class CurriculumSubjectAuthoringEndpointTest extends TestCase
         self::assertSame(0, CurriculumSubject::query()->where('curriculum_id', $pending->id)->count());
     }
 
+    public function test_program_chair_can_update_curriculum_max_units(): void
+    {
+        $token = $this->chairToken(CollegeCode::Ccs);
+        $program = $this->program('BSCS', CollegeCode::Ccs);
+        $curriculum = $this->curriculum($program, '2026-2027', CurriculumStatus::Active, 'BSCS Curriculum');
+        $subject = $this->subject('CS101', CollegeCode::Ccs);
+        $this->place($curriculum, $subject);
+
+        $response = $this->withToken($token)
+            ->putJson("/api/v1/curricula/{$curriculum->id}/max-units", [
+                'max_units' => 33.5,
+            ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.max_units', 33.5);
+        $response->assertJsonPath('data.effective_max_units', 33.5);
+        $curriculum->refresh();
+        self::assertSame('33.5', (string) $curriculum->max_units);
+        self::assertSame(AuditAction::CURRICULUM_UPDATED, AuditLog::query()->latest('id')->first()->action);
+    }
+
+    public function test_program_chair_can_reset_curriculum_max_units_to_null(): void
+    {
+        $token = $this->chairToken(CollegeCode::Ccs);
+        $program = $this->program('BSCS', CollegeCode::Ccs);
+        $curriculum = $this->curriculum($program, '2026-2027', CurriculumStatus::Active, 'BSCS Curriculum');
+        $curriculum->update(['max_units' => 35.0]);
+        $subject = $this->subject('CS101', CollegeCode::Ccs);
+        $this->place($curriculum, $subject);
+
+        $response = $this->withToken($token)
+            ->putJson("/api/v1/curricula/{$curriculum->id}/max-units", [
+                'max_units' => null,
+            ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.max_units', null);
+        $curriculum->refresh();
+        self::assertNull($curriculum->max_units);
+    }
+
     private function chairToken(CollegeCode $college): string
     {
         $email = strtolower($college->value).'.chair@grc.test';
