@@ -1,5 +1,57 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-16 — Professor Email Standardization (`firstname.lastname.department@grc.com`) & Directory Accuracy Fix
+
+0. **Architecture & Scope Analysis**:
+   - Diagnosed inaccuracy between `Subject And Prerequisuite/Professor_Department_List.md` and live database faculty accounts:
+     - 86 of 145 faculty accounts in `users` table had names scrambled by an earlier script (e.g. User 425 was `Jay N. Tanael` instead of `Henry Nieva Corrales`, User 444 was `Sandra R. Asia` instead of `Ricky R. Amparado`), causing a mismatch when logging in with credentials from the markdown file.
+     - Professor emails previously used hash-appended format (`faculty.list.<college>.<slug>.<hash>@grc.test`).
+   - Standardizing all professor email addresses to the clean institutional format: `firstname.lastname.department@grc.com` (e.g. `henry.corales.coe@grc.com`, `arnel.peralta.coe@grc.com`, `maria.delossantos.ccs@grc.com`).
+   - Resolving all 10 Coaches and 40 previously Unidentified professors into their verified academic college departments (`COE`, `CCS`, `CBAE`, `COA`) based on curriculum workbook teaching evidence.
+1. **Standardization & Directory Refactoring**:
+   - Cleaned all 145 professor records in `Subject And Prerequisuite/Professor_Department_List.md`:
+     - Removed honorifics and titles (e.g. `Coach Jude Salonga` -> `Jude Salonga`, `Coach Juvelyn Ticag` -> `Juvelyn Ticag`).
+     - Fixed incomplete surname-only records (e.g. `Delos Santos` -> `Maria Delos Santos`).
+     - Cleaned duplicated token entries (e.g. `Jonas Jonas Dela Cruz` -> `Jonas Dela Cruz`, `Adrian Mara Bautista` -> `Adrian M. Bautista`).
+   - Mapped all 10 Coaches and 40 previously Unidentified professors to verified academic departments based on curriculum schedule data:
+     - Resulting college distribution: COE: 51, CCS: 42, CBAE: 43, COA: 9.
+   - Standardized all email addresses to institutional `firstname.lastname.department@grc.com`:
+     - `Henry Nieva Corrales` (COE) -> `henry.corales.coe@grc.com` (with `henry.corrales.coe@grc.com` alias supported).
+     - `Maria Delos Santos` (CCS) -> `maria.delossantos.ccs@grc.com`.
+     - `Teodoro Canay` (CBAE) -> `teodoro.canay.cbae@grc.com`.
+     - `Roderick R. Ronidel` (COA) -> `roderick.ronidel.coa@grc.com`.
+   - Updated `WorkbookFacultyProfileSeeder.php`:
+     - Allowed `@grc.com` domain in `readProfessorDirectory`.
+     - Generated `firstname.lastname.department@grc.com` in `professorDirectoryEmail`.
+     - Protected `@grc.com` addresses in `ensureLocalFacultyAccounts`.
+   - Synchronized all 145 faculty accounts (IDs 411–555) in MariaDB `users` table:
+     - Aligned `name`, `first_name`, `middle_initial`, `last_name`, `suffix`, `email`, `college`, and unified password `password`.
+   - Re-exported complete database dump to `DATABASE/grc_enrollment.sql` (140.4 MB) and updated `DATABASE/prompt.md`.
+
+2. **Automated & Manual Verification**:
+   - Automated Database & Directory Audit (`verify_faculty_list.php`):
+     - 145 of 145 rows matched 100% between `Professor_Department_List.md` and MariaDB (0 mismatches, 100% active, 100% verified bcrypt password hashes).
+   - Test Suite Execution:
+     - `vendor/bin/phpunit tests/Feature/Database/WorkbookFacultyProfileSeederTest.php`: Passed (6/6 tests, 38,978 assertions).
+   - Live Browser Playwright Automation:
+     - Logged in as `henry.corales.coe@grc.com` / `password` -> verified `Henry Nieva Corrales` (COE) rendered in portal.
+     - Logged in as `maria.delossantos.ccs@grc.com` / `password` -> verified `Maria Delos Santos` (CCS) rendered in portal.
+
+## 2026-09-16 — Reset Test Cohort Data for User Manual Testing in Term 2025-2026 · 2nd
+
+0. **Architecture & Scope Analysis**:
+   - Cleanly restored the database to **Academic Term 2025-2026 · 2nd semester** (`status = 'semester_ongoing'`, Term ID 6) for manual user testing and institutional archiving.
+   - Purged all automated test data produced during previous test runs in Term 6:
+     - 160 test student enrollments, 1,168 enrollment subjects, 160 assessments, 350 assessment items, 40 payments, 160 Certificate of Registration (COR) documents, 2 queue tickets, and 1,160 Term 6 academic grades deleted cleanly in foreign-key cascade order.
+   - Preserved all 160 test student user accounts (`users`, `student_profiles`), authentic Filipino identities, `firstname.lastname@grc.com` emails, and unified `password` credentials.
+   - Aligned curriculum placements and seeded historical prerequisite grades in Term 5 so that:
+     - All 80 Regular students across CCS, COA, COE, and CBAE evaluate as `regular` with active, selectable block sections (e.g. `IT101..IT401`, `ACC101..ACC401`, `HR101..HR401`, `ELEM101..ELEM401`).
+     - All 80 Irregular students across CCS, COA, COE, and CBAE evaluate as `irregular` with full eligible subject pools, timetable presets (Concise, Morning, Afternoon/Evening), and calendar view.
+   - Verified via Playwright live browser sessions:
+     - Regular Student (`carlos.santos@grc.com` / `password`): Clean enrollment portal showing open window, regular status, and selectable block sections (`IT101`..`IT106`) with 0 uncommitted assessments/payments.
+     - Irregular Student (`anthony.ramos@grc.com` / `password`): Clean enrollment portal showing irregular status, 42 eligible subjects, schedule presets, and interactive weekly calendar timetable.
+   - Re-exported active database dump to `DATABASE/grc_enrollment.sql` (133 MB).
+
 ## 2026-09-16 — Student Email Standardization (`firstname.lastname@grc.com`) & Team Synchronization
 
 0. **Architecture & Scope Analysis**:

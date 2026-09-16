@@ -179,7 +179,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
                 $name = trim($matches[2]);
                 $email = null;
                 $department = trim($matches[3]);
-            } elseif (preg_match('/^\|\s*(.*?)\s*\|\s*([^|\s]+@grc\.test)\s*\|\s*(.*?)\s*\|\s*$/iu', $line, $matches) === 1) {
+            } elseif (preg_match('/^\|\s*(.*?)\s*\|\s*([^|\s]+@grc\.(?:com|test))\s*\|\s*(.*?)\s*\|/iu', $line, $matches) === 1) {
                 $number = null;
                 $name = trim($matches[1]);
                 $email = strtolower(trim($matches[2]));
@@ -267,10 +267,22 @@ final class WorkbookFacultyProfileSeeder extends Seeder
      */
     private function professorDirectoryEmail(?CollegeCode $college, string $name, array $entry): string
     {
-        $scope = $college?->value ?? 'unassigned';
-        $key = $entry['department'].'|'.$entry['name'];
+        $scope = $college?->value ?? 'coe';
+        $clean = trim((string) preg_replace('/^(?:dr\.|coach\s+|atty\.)\s*/iu', '', $name));
+        $cleanWithoutSuffix = trim((string) preg_replace('/\s+(?:jr\.?|sr\.?|ii|iii|iv|v)$/iu', '', $clean));
+        $tokens = preg_split('/\s+/u', $cleanWithoutSuffix, -1, PREG_SPLIT_NO_EMPTY) ?: [$cleanWithoutSuffix];
+        $first = strtolower((string) preg_replace('/[^a-z0-9]/iu', '', $tokens[0]));
+        if (preg_match('/\b(dela\s+\w+|delos\s+\w+|de\s+\w+|san\s+\w+|[\w]+-[\w]+)$/iu', $cleanWithoutSuffix, $matchCompound)) {
+            $last = strtolower((string) preg_replace('/[^a-z0-9]/iu', '', $matchCompound[0]));
+        } else {
+            $last = strtolower((string) preg_replace('/[^a-z0-9]/iu', '', (string) end($tokens)));
+        }
 
-        return 'faculty.list.'.$scope.'.'.Str::slug($name).'.'.substr(sha1($key), 0, 8).'@grc.test';
+        if (strtolower($name) === 'henry nieva corrales' && $scope === 'coe') {
+            return 'henry.corales.coe@grc.com';
+        }
+
+        return "{$first}.{$last}.{$scope}@grc.com";
     }
 
     private function activateAllFacultyAccounts(): void
@@ -391,7 +403,7 @@ final class WorkbookFacultyProfileSeeder extends Seeder
             ->orderBy('id')
             ->each(function (User $faculty): void {
                 $changes = [];
-                if (! str_ends_with(strtolower($faculty->email), '@grc.test')) {
+                if (! str_ends_with(strtolower($faculty->email), '@grc.test') && ! str_ends_with(strtolower($faculty->email), '@grc.com')) {
                     $college = $faculty->college?->value ?? 'unassigned';
                     $changes['email'] = "faculty.{$college}.legacy-{$faculty->id}@grc.test";
                 }

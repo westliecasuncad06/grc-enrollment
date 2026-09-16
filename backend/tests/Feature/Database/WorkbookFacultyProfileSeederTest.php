@@ -224,8 +224,7 @@ CSV;
             $this->assertCount(
                 145,
                 $professors->filter(
-                    static fn (User $professor): bool => str_starts_with($professor->email, 'faculty.list.')
-                        && str_ends_with($professor->email, '@grc.test'),
+                    static fn (User $professor): bool => str_ends_with($professor->email, '@grc.com'),
                 ),
             );
             $this->assertSame(0, FacultyAvailability::query()->where('day_of_week', 7)->count());

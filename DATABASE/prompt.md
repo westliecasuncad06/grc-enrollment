@@ -24,7 +24,8 @@ Mga hakbang na dapat mong gawin:
    `php artisan cache:clear`
 5. I-verify ang database status sa pamamagitan ng tinker:
    - Siguraduhin na si Academic Term ID 6 (`2025-2026 · 2nd`) ay naka-set sa `semester_ongoing`.
-   - Siguraduhin na ang format ng mga student emails ay `Firstname.lastname@grc.com` (halimbawa: `ramon.castillo@grc.com`, `carlos.santos@grc.com`, `eduardo.santos@grc.com`, `remedios.reyes@grc.com`).
+   - Siguraduhin na ang format ng mga student emails ay `Firstname.lastname@grc.com` (halimbawa: `ramon.castillo@grc.com`, `carlos.santos@grc.com`).
+   - Siguraduhin na ang format ng mga professor emails ay `firstname.lastname.department@grc.com` (halimbawa: `henry.corales.coe@grc.com`, `maria.delossantos.ccs@grc.com`, `teodoro.canay.cbae@grc.com`, `roderick.ronidel.coa@grc.com`).
    - Siguraduhin na mayroong 2,300+ active enrollments at 27,000+ locked academic grades.
 6. I-confirm na ang password para sa lahat ng users (Students, Professors, Program Chairs, Cashier, Registrar) ay: `password`.
 ```
@@ -88,12 +89,14 @@ Lahat ng accounts ay may unified development password:
 | **Program Chair (COA)** | Seed Program Chair COA | `chair.coa@grc.test` | `password` |
 | **Program Chair (CBAE)** | Seed Program Chair CBAE | `chair.cbae@grc.test` | `password` |
 | **Program Chair (COE)** | Seed Program Chair COE | `chair.coe@grc.test` | `password` |
-| **Faculty (CCS)** | Diana L. Santos | `faculty.seed@grc.test` / `faculty.ccs@grc.test` | `password` |
-| **Faculty (COA)** | Vivian C. Acosta | `faculty.coa@grc.test` | `password` |
-| **Faculty (CBAE)** | Wendy Layos | `faculty.cbae@grc.test` | `password` |
-| **Faculty (COE)** | Ricky R. Amparado | `faculty.coe@grc.test` | `password` |
+| **Faculty (COE)** | Henry Nieva Corrales | `henry.corales.coe@grc.com` | `password` |
+| **Faculty (CCS)** | Maria Delos Santos | `maria.delossantos.ccs@grc.com` | `password` |
+| **Faculty (CBAE)** | Teodoro Canay | `teodoro.canay.cbae@grc.com` | `password` |
+| **Faculty (COA)** | Roderick R. Ronidel | `roderick.ronidel.coa@grc.com` | `password` |
 | **Cashier / Accounting** | Seed Accounting Staff | `accounting.seed@grc.test` | `password` |
 | **Registrar Head** | Seed Registrar Head | `registrar-head.seed@grc.test` | `password` |
+
+*(Para sa kumpletong listahan ng 145 mga propesor sa bawat kolehiyo, sumangguni sa `Subject And Prerequisuite/Professor_Department_List.md`). Lahat ay gumagamit ng format na `firstname.lastname.department@grc.com` at password na `password`.*
 
 ### Sample Student Accounts (Format: `firstname.lastname@grc.com`)
 | College | Year Level | Category | Pangalan | Email Address | Password |
@@ -108,3 +111,4 @@ Lahat ng accounts ay may unified development password:
 | **COE** | Year 1 | Irregular | Rolando S. Mendoza | `rolando.mendoza@grc.com` | `password` |
 
 *(Para sa kumpletong listahan ng lahat ng 160 estudyante sa 4 na kolehiyo, sumangguni sa `TESTING_AUDIT_REPORT_2025_2026_2ND.md`).*
+
