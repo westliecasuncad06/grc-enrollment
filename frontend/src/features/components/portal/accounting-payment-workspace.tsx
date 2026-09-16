@@ -289,6 +289,11 @@ export function AccountingPaymentWorkspace() {
     ticketMutation.mutate({ id: next.id, action: "serve" })
   }
 
+  const completeCurrent = () => {
+    if (!nowServing) return
+    ticketMutation.mutate({ id: nowServing.id, action: "complete" })
+  }
+
   const skipCurrent = () => {
     if (!nowServing) return
     ticketMutation.mutate({ id: nowServing.id, action: "skip" })
@@ -381,7 +386,14 @@ export function AccountingPaymentWorkspace() {
       setProcessedEnrollmentId(result.enrollment.id)
       setConfirming(false)
       setAmount("")
-      void accountQuery.refetch()
+      if (nowServingEnrollment?.student_id) {
+        void accountQuery.refetch()
+      }
+      try {
+        await ticketMutation.mutateAsync({ id: nowServing.id, action: "complete" })
+      } catch {
+        // Ticket completion failure shouldn't mask successful payment
+      }
     } catch {
       setError(
         "The payment could not be confirmed. Check the connection and try again.",
@@ -550,6 +562,7 @@ export function AccountingPaymentWorkspace() {
               </FieldLabel>
               <Input
                 id="cashier-student-number"
+                aria-label="Find student number"
                 value={studentNumberInput}
                 onChange={(event) => setStudentNumberInput(event.target.value)}
                 placeholder="e.g. 2024-06-01091, student name, or email"
@@ -754,11 +767,19 @@ export function AccountingPaymentWorkspace() {
                       </dl>
                     )}
                     {accountQuery.data?.transactions && accountQuery.data.transactions.length > 0 && (
-                      <div className="grid gap-2 pt-2 border-t">
-                        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Student Payment History with Cashier
-                        </h4>
-                        <div className="overflow-x-auto rounded-lg border">
+                      <details className="group rounded-lg border bg-muted/20 p-2.5 transition-colors">
+                        <summary className="flex cursor-pointer select-none items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                          <span className="flex items-center gap-2">
+                            <span>Payment History with Cashier</span>
+                            <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-normal">
+                              {accountQuery.data.transactions.length} record{accountQuery.data.transactions.length === 1 ? "" : "s"}
+                            </Badge>
+                          </span>
+                          <span className="text-[11px] font-normal text-muted-foreground group-open:hidden">
+                            Click to view past payments
+                          </span>
+                        </summary>
+                        <div className="overflow-x-auto rounded-md border bg-card mt-2.5">
                           <table className="w-full text-left text-xs" aria-label="Student payment history">
                             <thead className="bg-muted/50 text-muted-foreground">
                               <tr>
@@ -797,7 +818,7 @@ export function AccountingPaymentWorkspace() {
                             </tbody>
                           </table>
                         </div>
-                      </div>
+                      </details>
                     )}
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -831,6 +852,14 @@ export function AccountingPaymentWorkspace() {
                         onClick={openBalancePayment}
                       >
                         Record balance / advance payment
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="default"
+                        disabled={ticketMutation.isPending}
+                        onClick={completeCurrent}
+                      >
+                        Complete
                       </Button>
                       <Button
                         type="button"

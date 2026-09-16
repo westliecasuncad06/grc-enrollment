@@ -95,14 +95,17 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       enrollmentId,
       action,
       decisionReason,
+      overloadAcknowledged,
     }: {
       enrollmentId: number
       action: DecisionAction
       decisionReason?: string
+      overloadAcknowledged?: boolean
     }) => {
       return updateEnrollment(enrollmentId, {
         action,
         reason: decisionReason,
+        overload_acknowledged: overloadAcknowledged,
       })
     },
     onSuccess: async () => {
@@ -153,6 +156,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       enrollmentId: pendingDecision.enrollment.id,
       action: pendingDecision.action,
       decisionReason: reason.trim() ? reason.trim() : undefined,
+      overloadAcknowledged,
     })
   }
 

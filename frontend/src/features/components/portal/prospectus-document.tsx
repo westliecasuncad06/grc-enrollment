@@ -1,5 +1,5 @@
 "use client"
-
+ 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import {
   PrintButton,
@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/features/components/ui/table"
 import { useProspectusQuery } from "@/features/hooks/use-academic-record"
+import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
 import {
   markTone,
   markToneBadgeVariant,
@@ -95,12 +96,67 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
             </div>
           )}
 
-          {prospectus.semesters.map((semester) => (
-            <SemesterTable
-              key={`${semester.year_level}-${semester.semester}`}
-              semester={semester}
-            />
-          ))}
+          {(() => {
+            const semestersByYear = new Map<number, ProspectusSemester[]>()
+            for (const sem of prospectus.semesters) {
+              const list = semestersByYear.get(sem.year_level) ?? []
+              list.push(sem)
+              semestersByYear.set(sem.year_level, list)
+            }
+
+            return [...semestersByYear.entries()]
+              .sort(([a], [b]) => a - b)
+              .map(([yearLevel, sems]) => {
+                const yearUnits = sems.reduce(
+                  (sum, s) =>
+                    sum +
+                    s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
+                  0,
+                )
+                const completedEntries = sems.reduce(
+                  (sum, s) =>
+                    sum + s.entries.filter((e) => e.mark !== null).length,
+                  0,
+                )
+                const totalEntries = sems.reduce(
+                  (sum, s) => sum + s.entries.length,
+                  0,
+                )
+
+                return (
+                  <details
+                    key={yearLevel}
+                    open
+                    className="group mb-4 rounded-xl border bg-card overflow-hidden print:border-none print:shadow-none print:mb-2"
+                  >
+                    <summary className="flex cursor-pointer select-none items-center justify-between p-3.5 bg-muted/25 hover:bg-muted/40 border-b transition-colors print:hidden">
+                      <div className="flex items-center gap-2 font-semibold text-sm">
+                        <span>Year {yearLevel}</span>
+                        <Badge variant="outline" className="text-xs font-normal">
+                          {formatYearLevelOrdinal(yearLevel)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {completedEntries} / {totalEntries} completed
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {yearUnits} units
+                        </Badge>
+                      </div>
+                    </summary>
+                    <div className="p-3">
+                      {sems.map((semester) => (
+                        <SemesterTable
+                          key={`${semester.year_level}-${semester.semester}`}
+                          semester={semester}
+                        />
+                      ))}
+                    </div>
+                  </details>
+                )
+              })
+          })()}
 
           {prospectus.unplaced_entries.length > 0 && (
             <div className="mt-4">

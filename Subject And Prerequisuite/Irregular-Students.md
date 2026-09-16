@@ -6,46 +6,11 @@ in the local database, derived by the real `ClassifyEnrollmentStanding` from act
 (`Database\Seeders\StudentRosterSeeder`). A student appears here only when the database itself derived them
 as Irregular — never a guess.
 
-**Total irregular students:** 39
+**Total irregular students:** 4
 
 | Student No. | Name | Email | Program | Section | Year |
 |---|---|---|---|---|---|
-| 2024-06-01091 | Mark Q. Pinlac | s2401091@grc.test | BSED-FIL | FIL301 | 3 |
-| 2024-06-01101 | Isagani C. Taylor | s2401101@grc.test | BSED-FIL | FIL301 | 3 |
-| 2024-06-01111 | Crisanto V. Sabado | s2401111@grc.test | BSED-FIL | FIL301 | 3 |
-| 2024-06-01121 | Nestor H. Evangelista | s2401121@grc.test | BSED-FIL | FIL302 | 3 |
-| 2024-06-01131 | Virginia J. Concepcion | s2401131@grc.test | BSED-FIL | FIL302 | 3 |
-| 2024-06-01141 | Queenie A. Bartolome | s2401141@grc.test | BSED-FIL | FIL302 | 3 |
-| 2024-06-01151 | Nicole T. Nepomuceno | s2401151@grc.test | BSED-SOCSCI | SOCSCI301 | 3 |
-| 2024-06-01161 | Earl H. Gatdula | s2401161@grc.test | BSED-SOCSCI | SOCSCI301 | 3 |
-| 2024-06-01171 | Juan J. Scott | s2401171@grc.test | BSED-SOCSCI | SOCSCI301 | 3 |
-| 2024-06-01181 | Gerald M. Sagun | s2401181@grc.test | BSED-VAL | VAL301 | 3 |
-| 2024-06-01191 | Romeo W. Sagum | s2401191@grc.test | BSED-VAL | VAL301 | 3 |
-| 2024-06-01201 | Virginia S. Katindig | s2401201@grc.test | BSED-VAL | VAL301 | 3 |
-| 2024-06-01241 | Christopher G. Umali | s2401241@grc.test | BSBA-FM | FM301 | 3 |
-| 2024-06-01251 | Cecilia Y. Dimaculangan | s2401251@grc.test | BSBA-FM | FM301 | 3 |
-| 2024-06-01261 | Herminia R. Marshall | s2401261@grc.test | BSBA-FM | FM301 | 3 |
-| 2024-06-01271 | Bernadette V. Villaruel | s2401271@grc.test | BSBA-FM | FM302 | 3 |
-| 2024-06-01281 | Federico S. Sarmiento | s2401281@grc.test | BSBA-FM | FM302 | 3 |
-| 2024-06-01291 | Rica B. Ronquillo | s2401291@grc.test | BSBA-FM | FM302 | 3 |
-| 2023-06-01451 | Rogelio C. Ortega | s2301451@grc.test | BSIT | IT401 | 4 |
-| 2023-06-01461 | Fernando H. Chua | s2301461@grc.test | BSIT | IT401 | 4 |
-| 2023-06-01471 | Amparo Q. Villaflor | s2301471@grc.test | BSIT | IT401 | 4 |
-| 2023-06-01481 | Ronnie U. Manalastas | s2301481@grc.test | BSIT | IT402 | 4 |
-| 2023-06-01491 | Elizabeth V. Tan | s2301491@grc.test | BSIT | IT402 | 4 |
-| 2023-06-01501 | Jericho N. Valencia | s2301501@grc.test | BSIT | IT402 | 4 |
-| 2023-06-01511 | Gregorio Z. Escobar | s2301511@grc.test | BSIT | IT403 | 4 |
-| 2023-06-01521 | Ernesto J. Sagun | s2301521@grc.test | BSIT | IT403 | 4 |
-| 2023-06-01531 | Virgilio F. Villaruel | s2301531@grc.test | BSIT | IT403 | 4 |
-| 2023-06-01541 | Nathaniel R. Matias | s2301541@grc.test | BSIT | IT404 | 4 |
-| 2023-06-01551 | Rey E. Salonga | s2301551@grc.test | BSIT | IT404 | 4 |
-| 2023-06-01561 | Jacinta Q. Pagulayan | s2301561@grc.test | BSIT | IT404 | 4 |
-| 2023-06-01571 | Julieta N. Sagun | s2301571@grc.test | BSIT | IT405 | 4 |
-| 2023-06-01581 | Louie J. Cabahug | s2301581@grc.test | BSIT | IT405 | 4 |
-| 2023-06-01591 | Felix B. Manansala | s2301591@grc.test | BSIT | IT405 | 4 |
-| 2023-06-01601 | Bayani P. David | s2301601@grc.test | BSIT | IT406 | 4 |
-| 2023-06-01611 | Dianne Z. Pascual | s2301611@grc.test | BSIT | IT406 | 4 |
-| 2023-06-01621 | Trinidad F. Buenaventura | s2301621@grc.test | BSIT | IT406 | 4 |
-| 2023-06-01631 | Guadalupe C. Arellano | s2301631@grc.test | BSIT | IT407 | 4 |
-| 2023-06-01641 | Warren W. Manlangit | s2301641@grc.test | BSIT | IT407 | 4 |
-| 2023-06-01651 | Tina H. Mangahas | s2301651@grc.test | BSIT | IT407 | 4 |
+| 2025-06-01253 | Jocelyn N. David | jocelyn.david@grc.com | BSENTREP | EN201 | 2 |
+| 2025-06-01667 | Quirino Y. Robles | quirino.robles@grc.com | BSIT | IT202 | 2 |
+| 2024-06-01541 | Divina V. Villaruel | divina.villaruel@grc.com | BSIT | IT301 | 3 |
+| 2024-06-01645 | Joshua B. Tuason | joshua.tuason@grc.com | BSIT | IT304 | 3 |

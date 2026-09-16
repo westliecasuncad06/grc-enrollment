@@ -12,7 +12,7 @@ class StudentIdentityGeneratorTest extends TestCase
         $first = StudentIdentityGenerator::forIndex(2023, 1001);
 
         $this->assertSame('2023-06-01001', $first['student_number']);
-        $this->assertSame('s2301001@grc.test', $first['email']);
+        $this->assertSame('jocelyn.guiao@grc.com', $first['email']);
         $this->assertMatchesRegularExpression('/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/', $first['student_number']);
         $this->assertSame($first, StudentIdentityGenerator::forIndex(2023, 1001));
     }

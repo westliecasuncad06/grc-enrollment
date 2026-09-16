@@ -16,7 +16,7 @@ final class GenerateStudentRosterFileTest extends TestCase
         $contents = file_get_contents($path);
         self::assertIsString($contents);
         $this->assertStringContainsString('| **Kabuuan** |  **107** |          **3,210** |', $contents);
-        $this->assertSame(3210, substr_count($contents, '@grc.test'));
+        $this->assertSame(3210, substr_count($contents, '@grc.com'));
         $this->assertStringContainsString('| 2023-06-01001 |', $contents);
     }
 

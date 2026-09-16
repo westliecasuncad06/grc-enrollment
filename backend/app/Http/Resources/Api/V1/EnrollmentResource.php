@@ -84,6 +84,7 @@ final class EnrollmentResource extends JsonResource
             UserRole::RegistrarStaff,
             UserRole::Dean,
             UserRole::ExecutiveDirector,
+            UserRole::ProgramChair,
         ], true);
         $student = $this->resource->student;
 

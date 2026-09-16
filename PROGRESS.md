@@ -1,5 +1,104 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-16 — Student Email Standardization (`firstname.lastname@grc.com`) & Team Synchronization
+
+0. **Architecture & Scope Analysis**:
+   - Replaced student ID email format (`s2401091@grc.test`, etc.) with authentic institutional `Firstname.lastname@grc.com` format across the entire database and reference files.
+   - Updated 160 test student accounts across 4 colleges to clean `firstname.lastname@grc.com` (e.g. `ramon.castillo@grc.com`, `carlos.santos@grc.com`).
+   - Updated 3,210 roster students in `users` table to deterministic `firstname.lastname@grc.com` (with duplicate handling `firstname.lastname2@grc.com`).
+   - Updated `Subject And Prerequisuite/Students-Profile.md` and `Subject And Prerequisuite/Irregular-Students.md` to reflect new `@grc.com` emails.
+   - Updated `StudentIdentityGenerator.php` and `GenerateStudentRosterFile.php` so all future roster file generation outputs the `@grc.com` format.
+   - Updated `TESTING_AUDIT_REPORT_2025_2026_2ND.md` with `@grc.com` student credentials.
+   - Re-exported active database to `DATABASE/grc_enrollment.sql` (139.6 MB).
+   - Created `DATABASE/prompt.md` with ready-to-use AI agent prompts and manual terminal import instructions for team synchronization.
+   - Verified Ramon B. Castillo login and grades display in browser via Playwright (`ramon.castillo@grc.com` / `password`).
+
+
+0. **Architecture & Scope Analysis**:
+   - Expanding end-to-end testing across all four institutional college departments:
+     - College of Computer Studies (CCS — BSIT): 40 students (already completed)
+     - College of Accountancy (COA — BSA): 40 students (5 regular + 5 irregular for Year 1, 2, 3, 4)
+     - College of Business Administration and Entrepreneurship (CBAE — BSBA-FM): 40 students (5 regular + 5 irregular for Year 1, 2, 3, 4)
+     - College of Education (COE — BEED): 40 students (5 regular + 5 irregular for Year 1, 2, 3, 4)
+     - Total student roster: 160 students with authentic Filipino names, institutional emails (`@grc.test`), and unified password `password`.
+   - Implementing UI progressive disclosure ("UI normalization") to prevent information overload across key screens:
+     - Cashier payment workspace: Collapsible payment history in "Now Serving".
+     - Program Chair advising review dialog: Normalized summary metrics (units, subjects, conflict check) and compact expandable subject schedules.
+     - Prospectus document: Year-level accordions with unit summaries to eliminate 50+ row continuous table dump.
+   - Performing browser automated verification with Playwright across departments.
+   - Updating `TESTING_AUDIT_REPORT_2025_2026_2ND.md` with complete rosters and audit findings.
+
+1. **Multi-Department Student Provisioning & Seeding**:
+   - Provisioned 120 new authentic Filipino student accounts across COA (`BSA`), CBAE (`BSBA-HRM`), and COE (`BEED`), bringing total test cohort to **160 students** across 4 colleges.
+   - All 160 students enrolled in Academic Term `2025-2026 · 2nd` (Term ID 6) with tuition/miscellaneous assessments and official COR documents.
+   - Enrolled all 160 students into their respective program sections (`ACC101..ACC401`, `HR101..HR401`, `ELEM101..ELEM401`, `IT101..IT401`).
+   - Recorded and permanently locked 100% of final academic grades (`mark`, `submitted_at`, `locked_at`, `encoded_by`), verified by respective college professors and locked by Registrar Head.
+   - Configured dedicated college faculty accounts: `faculty.coa@grc.test` (Vivian C. Acosta), `faculty.cbae@grc.test` (Wendy Layos), `faculty.coe@grc.test` (Ricky R. Amparado), `faculty.seed@grc.test` (Diana L. Santos).
+   - Unified passwords for all 160 students, faculty, program chairs, cashier, and registrar to `password`.
+
+2. **UI Simplification & Progressive Disclosure ("UI Normalization")**:
+   - **Cashier Workspace (`accounting-payment-workspace.tsx`)**: Replaced raw, cluttered 5-column past payments table with a collapsible `<details>` progressive disclosure element featuring record count badge and click hint.
+   - **Program Chair Advising Review Dialog (`enrollment-review-dialog.tsx`)**: Refactored wide raw table into normalized metric cards (Student Profile, Total Units & Subjects, Overload Status, Conflict Detection badge) and added a clean Table View vs. Interactive Calendar Timetable toggle.
+   - **Curriculum Prospectus (`prospectus-document.tsx`)**: Replaced flat 8-semester un-grouped dump with Year-level progressive disclosure accordions (1st to 4th Year) showing completed subject counts and units per year, with print styling preserved.
+
+3. **Automated Verification & Testing**:
+   - `vitest run accounting-payment-workspace.test.tsx`: Passed (21/21 tests).
+   - `vitest run enrollment-review-dialog.test.tsx`: Passed (2/2 tests).
+   - `vitest run prospectus-document.test.tsx`: Passed (7/7 tests).
+   - `npm run typecheck`: Passed (0 errors).
+   - `npm run lint:fast`: Passed (0 warnings, 0 errors).
+   - Playwright Browser Automation:
+     - Logged in as COA Program Chair (`chair.coa@grc.test`), verified submissions queue and Schedule Review Dialog with progressive disclosure and Calendar toggle.
+     - Logged in as Cashier (`accounting.seed@grc.test`), verified `#cashier-student-number` lookup and queue status.
+     - Logged in as CBAE Student (`lito.castro@grc.test`), verified locked grade slip and year-level collapsible prospectus dialog.
+     - Logged in as COE Student (`remedios.reyes@grc.test`), verified Section `ELEM101` weekly class timetable (30.5 units, 11 classes) and grade slip.
+     - Logged in as COE Faculty (`faculty.coe@grc.test` — Ricky R. Amparado), verified Section `ELEM101` grade sheet with 36 locked enrolled students.
+   - Updated `TESTING_AUDIT_REPORT_2025_2026_2ND.md` with complete 160-student directory, credentials, and architectural documentation.
+
+## 2026-09-16 — End-to-End System Testing & Academic Term 2025-2026 · 2nd Reset
+
+0. **Architecture & Scope Analysis**:
+   - Reset active academic term to `2025-2026 · 2nd semester` (Term ID 6) as active/current (`status = 'semester_ongoing'`), cleanly purging draft Term 33 and all foreign-key cascaded tables.
+   - Executed comprehensive Playwright browser end-to-end testing focused on College of Computer Studies (CCS — BSIT):
+     - Enrolled 5 regular students per year level (1st, 2nd, 3rd, 4th Year) = 20 regular students.
+     - Enrolled 5 irregular students per year level (1st, 2nd, 3rd, 4th Year) = 20 irregular students.
+     - Total roster: 40 students with complete enrollments (`status = enrolled`) and 350 final locked grades (`status = locked`) across all year levels.
+     - Full visual browser testing conducted via Playwright across all critical workflows:
+       1. Regular Student Enrollment & Timetable Selection (`test.reg.y1.1@grc.test`)
+       2. Irregular Student Schedule Presets & Conflict Checking (`test.irreg.y1.1@grc.test`)
+       3. Program Chair Advising & Overload Approval (`chair.ccs@grc.test`)
+       4. Cashier Live Payment Queue, Serving, & Payment Confirmation (`accounting.seed@grc.test`)
+       5. Student Official Certificate of Registration (COR) & Class Timetable (`test.reg.y1.1@grc.test`)
+       6. Faculty Grade Encoding, Draft Saving, & Section Final Grade Submission (`faculty.seed@grc.test` — Diana L. Santos)
+       7. Registrar Head Grade Approvals & Permanent Locking (`registrar-head.seed@grc.test` — Seed Registrar Head)
+       8. Student Official Grade Slip & GWA Verification (`test.reg.y1.1@grc.test`)
+   - Documented full account roster, test results, credentials, and bug fixes in `TESTING_AUDIT_REPORT_2025_2026_2ND.md`.
+
+1. **Bugs Discovered & Fixed**:
+   - **Bug 1: Program Chair Role Missing from Student Context Authorization in API Resource**:
+     - *File:* `backend/app/Http/Resources/Api/V1/EnrollmentResource.php` (Line 41).
+     - *Fix:* Added `UserRole::ProgramChair` to `$mayViewStudentContext` so student full names and ordinals render on the advising dashboard instead of placeholder dashes.
+   - **Bug 2: Missing `overload_acknowledged` Parameter in Advising Mutation**:
+     - *File:* `frontend/src/features/components/portal/program-chair-irregular-enrollments-workspace.tsx` (Lines 131, 154).
+     - *Fix:* Added `overload_acknowledged?: boolean` to mutation parameters and passed `overloadAcknowledged` when `decision === "approved"`, preventing 422 Unprocessable Content errors.
+   - **Bug 3: Cashier Queue Ticket Serving Deadlock & Unhandled Undefined `student_id`**:
+     - *File:* `frontend/src/features/components/portal/accounting-payment-workspace.tsx` (Lines 290, 391, 563, 858).
+     - *Fix:* Added auto-completion of serving ticket upon payment confirmation (`await ticketMutation.mutateAsync({ id: nowServing.id, action: "complete" })`), added manual "Complete" button, guarded `accountQuery.refetch()`, and preserved `aria-label="Find student number"` on the search input.
+2. **Verification & Testing**:
+   - Playwright Browser Automation: Executed all steps with live UI snapshots, network tracing, and visual inspection.
+   - Frontend Unit Tests: `vitest run accounting-payment-workspace.test.tsx` (**21 / 21 passed**).
+   - Frontend Typecheck: `npm run typecheck` (`tsc --noEmit`) (**Passed with 0 errors**).
+   - Database State: Verified via Eloquent:
+     - 40 / 40 test student profiles enrolled in Term 6.
+     - 350 / 350 grades recorded and locked in Term 6.
+     - Term 6 status: `semester_ongoing`, open, 100% prepped for archiving.
+
+3. **Realistic Student Identity & Credentials Update**:
+   - Transformed all 40 test student accounts from synthetic names (`Test Y1 Reg Student 1`) and dummy emails (`test.reg.y1.1@grc.test`) into authentic, realistic Filipino student names (e.g. `Juan Carlos M. Santos`, `Maria Angelica R. Reyes`) and institutional emails (`carlos.santos@grc.test`, etc.).
+   - Standardized every student password to `password` (hashed with bcrypt).
+   - Regenerated all Certificate of Registration (COR) documents in `enrollment_documents` to reflect the updated authentic student names, IDs, and cryptographic content hashes.
+   - Updated `TESTING_AUDIT_REPORT_2025_2026_2ND.md` with the full 40-student credential directory, including year level, status, student number, full name, institutional email, and password. Verified live student portal login with Playwright.
+
 ## 2026-09-15 — Regular Student Max Unit Limit Fix & Program Chair Max Unit Configuration
 
 0. **Architecture & Implementation Completed**:

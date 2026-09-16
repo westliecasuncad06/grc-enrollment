@@ -23,10 +23,13 @@ final class StudentIdentityGenerator
      */
     public static function forIndex(int $entryYear, int $sequence): array
     {
+        [$given, $surname, $middleInitial] = self::nameParts($entryYear, $sequence);
+        $name = sprintf('%s %s. %s', $given, $middleInitial, $surname);
+
         return [
             'student_number' => self::studentNumber($entryYear, $sequence),
-            'email' => self::email($entryYear, $sequence),
-            'name' => self::name($entryYear, $sequence),
+            'email' => self::email($given, $surname),
+            'name' => $name,
         ];
     }
 
@@ -35,26 +38,35 @@ final class StudentIdentityGenerator
         return sprintf('%d-06-%05d', $entryYear, $sequence);
     }
 
-    private static function email(int $entryYear, int $sequence): string
+    private static function email(string $given, string $surname): string
     {
-        return sprintf('s%02d%05d@grc.test', $entryYear % 100, $sequence);
+        $cleanGiven = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $given));
+        $cleanSurname = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $surname));
+
+        return sprintf('%s.%s@grc.com', $cleanGiven, $cleanSurname);
     }
 
-    private static function name(int $entryYear, int $sequence): string
+    /**
+     * @return array{0: string, 1: string, 2: string}
+     */
+    private static function nameParts(int $entryYear, int $sequence): array
     {
         [$given, $surname] = self::pools();
 
         $hash = crc32("{$entryYear}-{$sequence}");
 
-        // Decorrelate the three picks by deriving them from different bit
-        // ranges of the same hash: a direct modulo for the given name, a
-        // large-prime-divided modulo for the surname, and a different
-        // large-prime-divided modulo (mod 26) for the middle initial.
         $givenIndex = $hash % count($given);
         $surnameIndex = intdiv($hash, 97) % count($surname);
         $middleInitial = chr(65 + intdiv($hash, 9973) % 26);
 
-        return sprintf('%s %s. %s', $given[$givenIndex], $middleInitial, $surname[$surnameIndex]);
+        return [$given[$givenIndex], $surname[$surnameIndex], $middleInitial];
+    }
+
+    private static function name(int $entryYear, int $sequence): string
+    {
+        [$given, $surname, $middleInitial] = self::nameParts($entryYear, $sequence);
+
+        return sprintf('%s %s. %s', $given, $middleInitial, $surname);
     }
 
     /**
