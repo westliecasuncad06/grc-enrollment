@@ -176,6 +176,23 @@ export function notificationDestinationPath(
       if (role === "program_chair") return "/portal/program-chair-enrollment"
       if (role === "faculty") return "/portal/teaching-schedule"
       return null
+    case "enrollment_payment_confirmed":
+      return role === "student" ? "/portal/digital-com" : null
+    case "academic_grade_locked":
+      return role === "student" ? "/portal/grades" : null
+    case "enrollment_submitted":
+    case "enrollment_registrar_approved":
+    case "enrollment_registrar_rejected":
+    case "enrollment_voided":
+    case "enrollment_category_reclassified":
+      return role === "student" ? "/portal/enrollment" : null
+    case "enrollment_change_request_submitted":
+    case "enrollment_change_request_approved":
+    case "enrollment_change_request_rejected":
+      return role === "student" ? "/portal/enrollment-change-requests" : null
+    case "withdrawal_request_approved":
+    case "withdrawal_request_rejected":
+      return role === "student" ? "/portal/drops-withdrawals" : null
     default:
       return null
   }

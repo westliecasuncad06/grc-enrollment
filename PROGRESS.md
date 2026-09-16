@@ -1,5 +1,155 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-16 — Grade Submission "Assigned Classes" Navigation Redesign (Google Doc 1)
+
+0. **Goal**: Replace the flat "All Semesters" default with a School Year → Semester → Classes hierarchy, matching a Lalamove-style drill-down UX per the stakeholder spec.
+
+1. **Component Refactor — `grade-submission-workspace.tsx`**:
+   - Changed `selectedTermId` state type from `number | "all"` (default `"all"`) to `number | null` (default `null`).
+   - Added imports: `ArrowLeft`, `ChevronRight` from `lucide-react`. Removed unused `Folder`.
+   - Extracted a new `AssignedClassesContent` component (receives `sections`, `selectedTermId`, `sectionId`, `onSelectTerm`, `onSelectSection` props) to satisfy React Rules of Hooks — `useMemo` is now called at component top-level, not inside an `AsyncBoundary` render-prop callback.
+   - **Semester selection screen** (`selectedTermId === null`): groups terms by `school_year` (descending), lists `{semester} Semester` buttons with class count and a chevron. No class cards shown.
+   - **Classes list screen** (`selectedTermId !== null`): shows a "Filter by semester" banner with the selected term label and count badge, then the `GradeSectionCard` grid for that term only.
+   - **Back navigation**: CardHeader renders an `aria-label="Back to semester selection"` ghost button (`← Back`) when a semester is selected; clicking it resets both `selectedTermId` and `sectionId` to `null`.
+
+2. **Test Updates — `grade-submission-workspace.test.tsx`**:
+   - Added `selectSemester(user, label)` helper that finds and clicks the semester button.
+   - Updated `openClass(user, name, semesterLabel)` to call `selectSemester` first.
+   - Updated 4 tests to call `selectSemester` / `openClass` with the new helper flow:
+     - `"shows assigned class cards with subject, section, term, schedule, and progress"`
+     - `"retries the assigned-class list without losing the workspace"` (now asserts semester picker, not class button)
+     - `"opens an assigned class from the keyboard"`
+     - `"shows an empty roster without enabling submission"`
+   - Replaced `"filters assigned classes by semester folder"` with `"shows the semester selection screen and navigates into a semester then back"` — verifies school-year headings appear, classes hidden by default, drill-in shows only that semester's classes, Back resets, and picking a second semester shows only that semester's classes.
+   - Removed unused `within` import (then restored after confirming it was still used in class-card assertions).
+
+3. **Verification**:
+   - `npm run typecheck`: 0 errors ✅
+   - `npm run lint:fast`: 0 errors (9 pre-existing warnings, none from this change) ✅
+   - `grade-submission-workspace.test.tsx`: **17/17 tests passed** ✅
+
+
+
+0. **Revert & Database Restoration**:
+   - Per user request, deleted all test data produced for `2026-2027 · 2nd Semester` (Academic Term 35):
+     - Deleted 237 sections and 237 linked `faculty_assignment_recommendations`.
+     - Deleted 62 `section_demand_forecasts`, 1 `schedule_proposals`, 1 `schedule_generation_runs`, and 1 `prediction_runs`.
+     - Deleted 6 `academic_term_section_plans`, 5 `academic_term_enrollment_windows`, and 4 `academic_term_college_workflows`.
+     - Deleted Academic Term 35 (`2026-2027 · 2nd`) itself.
+   - Restored `2026-2027 · 1st Semester` (Academic Term 34) as the single active ongoing semester:
+     - Set status to `semester_ongoing`.
+     - Cleared `closed_at` and `archived_at`.
+     - Updated `academic_term_current_slots` pointer to term ID 34.
+     - Ensured enrollment windows are open (2026-09-01 to 2026-10-31).
+   - Verified with `php artisan test tests/Feature/Api/V1/AcademicTermsEndpointTest.php`: 24/24 tests passed.
+
+## 2026-09-16 — Faculty Teaching Schedule Enhancements & Class Rosters/Grades Consolidation (Google Doc 5)
+
+0. **Architecture & Scope Analysis**:
+   - Analyzed requirements from stakeholder Google Doc 5 (`12_avQH35BkLbKwhLr3j0MV_0Q9AGBxg1ukqRRFxaZ6c`):
+     1. **Teaching Schedule Workspace**:
+        - Provide Schedule History with the current semester shown by default.
+        - Add a weekly Calendar View for the schedule arranged from Monday to Saturday by day and time slots (7:30 AM to 9:00 PM).
+        - Prominently display and filter by assigned rooms.
+     2. **Class Rosters & Grade Submission Consolidation**:
+        - Consolidate class rosters and grade submission into a unified workspace where professors can see assigned classes, view student names in the roster, and enter/submit grades.
+        - Default to the published / current semester so active classes appear first.
+        - Include student names in class roster API responses and table presentations.
+   - Formulated technical implementation plan in `implementation_plan.md`.
+
+1. **Implementation & Refactoring Completed**:
+   - **Backend Class Roster Enhancement (`ListClassRoster.php`, `ClassRosterEntryResource.php`)**:
+     - Eager-loaded `enrollment.student.user` in `ListClassRoster` to prevent N+1 queries.
+     - Added `'student_name' => $this->resource->enrollment->student->user->name` to `ClassRosterEntryResource`.
+     - Verified with `php artisan test tests/Feature/Api/V1/ClassRostersEndpointTest.php`: 6/6 tests passed (15 assertions).
+   - **Frontend Schemas & Services (`class-roster-schema.ts`, `faculty-service.ts`)**:
+     - Extended `classRosterEntrySchema` with optional `student_name: z.string().min(1).optional()`.
+     - Enriched `TeachingScheduleRow` and `getFacultyTeachingSchedule` with structured scheduling fields: `termId`, `sectionCode`, `rawDays`, `startsAtTime`, `endsAtTime`, `room`, `modality`, `enrolledCount`, `capacity`.
+   - **Faculty Teaching Schedule Workspace (`teaching-schedule-workspace.tsx`)**:
+     - Added Current Semester filter as default, with interactive Schedule History selector for browsing past semesters and an "All Semesters" overview.
+     - Added dual view switcher: Table View vs Monday–Saturday Weekly Calendar (utilizing `SectionScheduleCalendar` with 30-minute intervals from 07:30 to 21:00).
+     - Prominently displayed assigned Room badges in table rows, mobile cards, and calendar blocks, plus an assigned Room filter and interactive Room detail dialog.
+     - Verified with `teaching-schedule-workspace.test.tsx`: 5/5 tests passed including calendar view, history filter, and axe accessibility.
+   - **Class Rosters & Grade Submission Consolidation (`class-rosters-workspace.tsx`, `grade-submission-workspace.tsx`)**:
+     - Exported `SectionGradeSheetPanel` from `grade-submission-workspace.tsx` for shared modular usage.
+     - Integrated `SectionGradeSheetPanel` as the second tab ("Grade Sheet & Submission") within `ClassRostersWorkspace` so faculty can inspect student rosters and encode/submit official grades without switching workspaces.
+     - Defaulted section dropdown sorting to published / active semester sections first.
+     - Added student name column to the official Roster table and mobile cards.
+     - Verified with `class-rosters-workspace.test.tsx`: 7/7 tests passed including tab switching and axe accessibility.
+   - **Portal Capabilities & Navigation (`role-capabilities.ts`, `role-capabilities.test.ts`)**:
+     - Retained dual entry points (`class-rosters` and `grade-submission`) for backward compatibility while empowering `class-rosters` with unified roster + grade sheet capabilities.
+     - Updated test expectations to match registered modules (`irregular-enrollments`). All 5 role capabilities tests passed.
+
+2. **Verification Suite Results**:
+   - `features/components/portal/teaching-schedule-workspace.test.tsx`: 5/5 passed.
+   - `features/components/portal/class-rosters-workspace.test.tsx`: 7/7 passed.
+   - `features/components/portal/grade-submission-workspace.test.tsx`: 17/17 passed.
+   - `features/portal/role-capabilities.test.ts`: 5/5 passed.
+   - `php artisan test tests/Feature/Api/V1/ClassRostersEndpointTest.php`: 6/6 passed.
+   - `npm run typecheck`: 0 errors.
+   - `npm run lint:fast`: 0 errors.
+
+## 2026-09-16 — System Error Resolutions & Institutional Workflow Enhancements (Google Docs 1-4)
+
+0. **Architecture & Scope Analysis**:
+   - Comprehensive audit of 4 Google Docs specifications provided by stakeholders:
+     1. **Program Chair Majorship Controls (Doc 1 & 4)**: Provide "+ Add section" and "- Remove section" controls directly on each majorship group (e.g. BEED, BSED-ENG in COE; FM, HRM, MM, BSENTREP in CBAE) rather than solely a single global button at the top.
+     2. **Irregular & Overload Enrollment Workflow (Doc 1 & 4)**:
+        - Program Chair is the final approval authority for irregular/overload student enrollments; upon chair approval, enrollment transitions directly to `pending_payment` (cashier).
+        - Registrar Staff view-only access: Registrar staff review table displays irregular students as view-only without an "Approve" button.
+        - Student Enrollment Timeline:
+          - Regular students: Remove "Registrar approved" step (auto-approved to payment).
+          - Irregular students: Display "Program chair approved" instead of "Registrar approved".
+     3. **Professor Account Semester Separation (Doc 1 & 2)**: Group assigned classes into School Year and Semester folders/tabs (e.g. "2026-2027 · 1st Semester", "2025-2026 · 2nd Semester") so professors can navigate per semester.
+     4. **Professor Roster & Account Consolidation (Doc 2)**:
+        - Resolved missing student "Mercedes C. Ramos" in professor view: identified legacy duplicate faculty accounts (`@grc.test`) retaining section assignments; mapped sections to active standardized faculty accounts (`@grc.com`).
+     5. **Student Clickable Notifications & COR Modal (Doc 2)**: Make student notifications clickable; clicking payment confirmation notification opens the official Certificate of Registration (COR) document modal directly.
+     6. **Academic Terms Management (Doc 3)**: Removed redundant "Edit draft term" button from the academic terms list as requested.
+     7. **Registrar Head Grade Approvals Hierarchy & History (Doc 3)**:
+        - Restructure Grade Approvals into a Department -> Professor -> Submitted Subjects hierarchy.
+        - Add a dedicated "Grade History" tab featuring student grades from 2017 to previous semesters plus current locked grades.
+     8. **Incomplete (INC) Grading Lifecycle (Doc 3)**:
+        - INC grades remain unlocked for professor editing upon section lock to allow encoding of final completion grade.
+        - If 3 semesters elapse without completion, INC permanently locks.
+
+1. **Implementation & Refactoring Completed**:
+   - **Database Faculty Consolidation (`consolidate_faculty_accounts.php`)**:
+     - Remapped 1,204 historical sections and 33,936 grades from orphaned `@grc.test` faculty IDs to active `@grc.com` users. Verified Mercedes C. Ramos (`2026-0036`) in section `ACC101` links directly to active professor Henry Nieva Corrales (`henry.corales.coe@grc.com`, ID 425).
+   - **Program Chair Section Controls per Major (`program-chair-enrollment-workspace.tsx`)**:
+     - Added scoped `+ Add section` and `- Remove section` buttons to each majorship header badge bar with live count enforcement.
+   - **Irregular Routing & Student Timeline (`EnrollmentResource.php`, `registrar-enrollment-workspace.tsx`, `enrollment-workspace.tsx`)**:
+     - Exposed `student_enrollment_category` and `is_irregular` in `EnrollmentResource`.
+     - Registrar review table renders irregular students with `Irregular · View only` badge and disables approval action (view only).
+     - Student timeline: regular students advance directly from `Submitted` to `Payment confirmed` (4 stages); irregular students display `Program chair approved` as step 3 (5 stages).
+   - **Clickable Notifications & Direct COR Modal (`portal-notification-sheet.tsx`, `notification-presentation.ts`)**:
+     - Implemented direct document modal launch for `enrollment_payment_confirmed` (opens official COR preview). Other notifications route dynamically to relevant portal paths.
+   - **Academic Terms Workspace (`academic-term-workspace.tsx`)**:
+     - Removed redundant "Edit draft term" button from both table actions and card list view.
+   - **Incomplete (INC) Grade Lifecycle (`AcademicTerm.php`, `UpdateAcademicGrade.php`, `UpdateAcademicGradeRequest.php`, `grade-submission-workspace.tsx`)**:
+     - Added chronological term index and elapsed term counter (`termsElapsedSince`).
+     - Allowed locked INC grades to be edited within 3 consecutive semesters; saving completion marks triggers automatic reclassification.
+     - Section grade sheet permits professors to enter completion marks on locked INC rows with dedicated `Save completion grade` action and status badge `INC · Awaiting completion`.
+   - **Assigned Classes Semester Folders (`grade-submission-workspace.tsx`)**:
+     - Grouped faculty assigned classes by School Year & Semester into interactive folder buttons with count badges, defaulting to all semesters.
+   - **Registrar Grade Approvals Hierarchy & History (`registrar-grades-workspace.tsx`, `AcademicGradeResource.php`, `ListAcademicGrades.php`, `IndexAcademicGradeRequest.php`)**:
+     - Restructured Grade Approvals into a Department (`All`, `CCS`, `CBAE`, `COE`, `COA`) -> Professor -> Submitted Subjects collapsible hierarchy.
+     - Added dedicated "Grade History" tab with student search and department filters for all locked academic grades from 2017 to present.
+
+2. **Automated & Test Verification**:
+   - `AcademicGradesEndpointTest.php`: Passed (21/21 tests, 61 assertions, including 3-semester grace period and INC completion).
+   - `SectionGradesEndpointTest.php`: Passed (13/13 tests, 79 assertions).
+   - `frontend/src/features/components/portal/grade-submission-workspace.test.tsx`: Passed (17/17 tests).
+   - `frontend/src/features/components/portal/registrar-grades-workspace.test.tsx`: Passed (7/7 tests).
+   - `frontend/src/features/components/portal/academic-term-workspace.test.tsx`: Passed (7/7 tests).
+   - `frontend/src/features/components/portal/portal-notification-sheet.test.tsx`: Passed (10/10 tests).
+   - `frontend/src/features/components/portal/program-chair-enrollment-workspace.test.tsx`: Passed (26/26 tests).
+   - `frontend/src/features/components/portal/registrar-enrollment-workspace.test.tsx`: Passed (16/16 tests).
+   - `frontend/src/features/components/portal/enrollment-workspace.test.tsx`: Passed (27/27 tests).
+   - Combined Workspace Vitest Run: 110/110 tests passed across all 7 workspace test suites.
+   - TypeScript Typecheck (`npm run typecheck`): 0 errors.
+   - Linter (`npm run lint:fast`): 0 errors.
+
+
 ## 2026-09-16 — Professor Email Standardization (`firstname.lastname.department@grc.com`) & Directory Accuracy Fix
 
 0. **Architecture & Scope Analysis**:

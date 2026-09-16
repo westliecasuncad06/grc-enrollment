@@ -207,10 +207,20 @@ function stubSectionGradeRoutes(
   })
 }
 
+async function selectSemester(
+  user: ReturnType<typeof userEvent.setup>,
+  label = /1st Semester/i,
+) {
+  const semesterBtn = await screen.findByRole("button", { name: label })
+  await user.click(semesterBtn)
+}
+
 async function openClass(
   user: ReturnType<typeof userEvent.setup>,
   name = /CS101.*Programming 1/i,
+  semesterLabel = /1st Semester/i,
 ) {
+  await selectSemester(user, semesterLabel)
   await user.click(await screen.findByRole("button", { name }))
   return screen.findByRole("table", { name: "Section grade sheet" })
 }
@@ -233,7 +243,11 @@ describe("GradeSubmissionWorkspace", () => {
 
   it("shows assigned class cards with subject, section, term, schedule, and progress", async () => {
     stubSectionGradeRoutes(fetchMock)
+    const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+
+    // First select the 2026-2027 semester picker
+    await user.click(await screen.findByRole("button", { name: /1st Semester/i }))
 
     const classCard = await screen.findByRole("button", {
       name: /CS101.*Programming 1/i,
@@ -274,8 +288,9 @@ describe("GradeSubmissionWorkspace", () => {
     expect(await screen.findByText("Conflict")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Try again" }))
 
+    // After retry, semester picker should appear
     expect(
-      await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
+      await screen.findByRole("button", { name: /1st Semester/i }),
     ).toBeInTheDocument()
   })
 
@@ -283,6 +298,8 @@ describe("GradeSubmissionWorkspace", () => {
     stubSectionGradeRoutes(fetchMock)
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+
+    await selectSemester(user)
 
     const classCard = await screen.findByRole("button", {
       name: /CS101.*Programming 1/i,
@@ -471,6 +488,7 @@ describe("GradeSubmissionWorkspace", () => {
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
 
+    await selectSemester(user)
     await user.click(
       await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
     )
@@ -480,6 +498,140 @@ describe("GradeSubmissionWorkspace", () => {
     expect(
       screen.queryByRole("button", { name: "Submit final grades" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("shows the semester selection screen and navigates into a semester then back", async () => {
+    const term2Summary: GradeSectionSummary = {
+      ...sectionSummary,
+      section_id: 46,
+      section_code: "CS102-B",
+      subject: {
+        id: 103,
+        code: "CS102",
+        title: "Data Structures",
+        is_completion_only: false,
+      },
+      academic_term: {
+        id: 2,
+        school_year: "2025-2026",
+        semester: "2nd",
+      },
+    }
+
+    stubSectionGradeRoutes(fetchMock, {
+      summaries: [sectionSummary, term2Summary],
+    })
+    const user = userEvent.setup()
+    renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+
+    // Default view: semester selection screen shows school years
+    expect(await screen.findByText("2026-2027")).toBeInTheDocument()
+    expect(screen.getByText("2025-2026")).toBeInTheDocument()
+
+    // Classes are NOT shown yet
+    expect(
+      screen.queryByRole("button", { name: /CS101.*Programming 1/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /CS102.*Data Structures/i }),
+    ).not.toBeInTheDocument()
+
+    // Select 2026-2027 · 1st Semester
+    await user.click(screen.getByRole("button", { name: /1st Semester/i }))
+
+    // Now only 2026-2027 classes appear
+    expect(
+      await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /CS102.*Data Structures/i }),
+    ).not.toBeInTheDocument()
+
+    // Go back to semester selection
+    await user.click(screen.getByRole("button", { name: "Back to semester selection" }))
+
+    // Semester picker is visible again; no class cards
+    expect(await screen.findByText("2026-2027")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /CS101.*Programming 1/i }),
+    ).not.toBeInTheDocument()
+
+    // Select 2025-2026 · 2nd Semester
+    await user.click(screen.getByRole("button", { name: /2nd Semester/i }))
+    expect(
+      await screen.findByRole("button", { name: /CS102.*Data Structures/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /CS101.*Programming 1/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("allows faculty to update and save completion grades for locked INC students", async () => {
+    const lockedSectionSummary: GradeSectionSummary = {
+      ...sectionSummary,
+      state: "locked",
+    }
+    const incRow: SectionGradeRow = {
+      ...adaRow,
+      grade_id: 88,
+      mark: "INC",
+      mark_label: "Incomplete",
+      status: "locked",
+      status_label: "Official / Locked",
+    }
+    const passingRow: SectionGradeRow = {
+      ...graceRow,
+      grade_id: 89,
+      mark: "1.50",
+      mark_label: "Very Good",
+      status: "locked",
+      status_label: "Official / Locked",
+    }
+
+    stubSectionGradeRoutes(fetchMock, {
+      summaries: [lockedSectionSummary],
+      sheets: {
+        44: gradeSheet(lockedSectionSummary, [incRow, passingRow]),
+      },
+      saveResponse: gradeSheet(lockedSectionSummary, [
+        { ...incRow, mark: "2.00", mark_label: "Good" },
+        passingRow,
+      ]),
+    })
+
+    const user = userEvent.setup()
+    renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+
+    const table = await openClass(user)
+
+    // Check INC badge
+    expect(
+      await within(table).findByText("INC · Awaiting completion"),
+    ).toBeInTheDocument()
+
+    // The passing row should be read-only text, not a select
+    expect(
+      within(table).queryByLabelText("Grade for Grace Hopper"),
+    ).not.toBeInTheDocument()
+    expect(within(table).getByText(/1.50 — Very Good/)).toBeInTheDocument()
+
+    // The INC row should have an editable Select
+    const incSelect = within(table).getByLabelText("Grade for Ada Lovelace")
+    await user.click(incSelect)
+    await user.click(screen.getByRole("option", { name: /2.00.*Good/ }))
+
+    // Save completion grade button appears
+    const saveButton = screen.getByRole("button", {
+      name: /Save completion grade/i,
+    })
+    expect(saveButton).toBeInTheDocument()
+    await user.click(saveButton)
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /Save completion grade/i }),
+      ).not.toBeInTheDocument()
+    })
   })
 
   it("has no detectable accessibility violations once a grade sheet is loaded", async () => {

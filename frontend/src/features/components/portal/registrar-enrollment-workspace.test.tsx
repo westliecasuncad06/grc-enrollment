@@ -291,11 +291,9 @@ describe("RegistrarEnrollmentWorkspace", () => {
     const scheduleTable = within(dialog).getByRole("table", {
       name: "Enrollment #9 schedule",
     })
-    expect(within(dialog).getByText("Name")).toBeInTheDocument()
+    expect(within(dialog).getByText("Student")).toBeInTheDocument()
     expect(within(dialog).getByText("Test Student")).toBeInTheDocument()
-    expect(within(dialog).getByText("Year")).toBeInTheDocument()
     expect(within(dialog).getByText("1ST YEAR")).toBeInTheDocument()
-    expect(within(dialog).getByText("Student number")).toBeInTheDocument()
     expect(within(dialog).getByText("2026-0001")).toBeInTheDocument()
     expect(
       within(scheduleTable)

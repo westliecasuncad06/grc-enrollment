@@ -72,13 +72,29 @@ final class UpdateAcademicGradeRequest extends FormRequest
                 return;
             }
 
+            $isIncCompletion = false;
             if (! $grade->status->isEditableByEncoder()) {
-                $validator->errors()->add(
-                    'mark',
-                    "This grade is '{$grade->status->value}' and can no longer be edited directly.",
-                );
+                if ($grade->mark === GradeMark::Incomplete) {
+                    $currentTerm = \App\Models\AcademicTerm::query()
+                        ->where('status', \App\Domain\Organization\AcademicTermStatus::SemesterOngoing)
+                        ->first();
+                    $gradeTerm = $grade->academicTerm;
+                    if ($currentTerm !== null && $gradeTerm !== null) {
+                        $elapsed = $currentTerm->termsElapsedSince($gradeTerm);
+                        if ($elapsed <= 3) {
+                            $isIncCompletion = true;
+                        }
+                    }
+                }
 
-                return;
+                if (! $isIncCompletion) {
+                    $validator->errors()->add(
+                        'mark',
+                        "This grade is '{$grade->status->value}' and can no longer be edited directly.",
+                    );
+
+                    return;
+                }
             }
 
             $this->rejectMarkNotAllowedForSubject($validator, $grade);

@@ -26,6 +26,7 @@ final class ClassRosterEntryResource extends JsonResource
      *     academic_term_id: int,
      *     student_id: int,
      *     student_number: string,
+     *     student_name: string,
      *     status: string,
      *     status_label: string
      * }
@@ -42,6 +43,7 @@ final class ClassRosterEntryResource extends JsonResource
             'academic_term_id' => $this->resource->section->academic_term_id,
             'student_id' => $this->resource->enrollment->student_id,
             'student_number' => $this->resource->enrollment->student->student_number,
+            'student_name' => $this->resource->enrollment->student->user->name,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
         ];

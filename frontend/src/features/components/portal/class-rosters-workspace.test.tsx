@@ -67,6 +67,7 @@ const rosterEntry = {
   academic_term_id: 1,
   student_id: 20,
   student_number: "2026-0001",
+  student_name: "Juan Dela Cruz",
   status: "enrolled",
   status_label: "Enrolled",
 }
@@ -136,6 +137,7 @@ describe("ClassRostersWorkspace", () => {
 
     const table = await screen.findByRole("table", { name: "Class roster" })
     expect(within(table).getByText("2026-0001")).toBeInTheDocument()
+    expect(within(table).getByText("Juan Dela Cruz")).toBeInTheDocument()
     expect(within(table).getByText("Enrolled")).toBeInTheDocument()
   })
 
@@ -159,6 +161,86 @@ describe("ClassRostersWorkspace", () => {
     expect(
       await screen.findByText("No students are enrolled in this section yet."),
     ).toBeInTheDocument()
+  })
+
+  it("allows switching between class roster and grade sheet tabs", async () => {
+    const sectionGradeSheet = {
+      type: "section_grade_sheet",
+      section: {
+        type: "grade_section_summary",
+        section_id: 44,
+        section_code: "CS101-A",
+        subject: {
+          id: 101,
+          code: "CS101",
+          title: "Programming 1",
+          is_completion_only: false,
+        },
+        academic_term: {
+          id: 1,
+          school_year: "2026-2027",
+          semester: "1st",
+        },
+        schedule: {
+          days: "MWF",
+          starts_at_time: "08:00:00",
+          ends_at_time: "09:30:00",
+        },
+        enrolled_count: 1,
+        recorded_count: 0,
+        submitted_count: 0,
+        locked_count: 0,
+        missing_count: 1,
+        state: "not_started",
+      },
+      rows: [
+        {
+          enrollment_subject_id: 501,
+          student_id: 20,
+          student_number: "2026-0001",
+          student_name: "Juan Dela Cruz",
+          grade_id: null,
+          mark: null,
+          mark_label: null,
+          remarks: null,
+          status: "not_recorded",
+          status_label: "Not recorded",
+        },
+      ],
+    }
+
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.includes("/grades")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: sectionGradeSheet })),
+        )
+      }
+      if (url.includes("/class-rosters")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(rosterResponse([rosterEntry]))),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [ownSection] })),
+      )
+    })
+    const user = userEvent.setup()
+    renderWithSession(<ClassRostersWorkspace />, { session: facultySession })
+
+    const trigger = await screen.findByLabelText("Section")
+    await user.click(trigger)
+    await user.click(screen.getByRole("option", { name: /CS101-A/ }))
+
+    expect(await screen.findByRole("table", { name: "Class roster" })).toBeInTheDocument()
+
+    const gradeTab = screen.getByRole("button", { name: /Grade Sheet & Submission/i })
+    await user.click(gradeTab)
+
+    expect(
+      await screen.findByRole("table", { name: "Section grade sheet" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Programming 1")).toBeInTheDocument()
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

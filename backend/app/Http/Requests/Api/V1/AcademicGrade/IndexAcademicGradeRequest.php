@@ -26,6 +26,8 @@ final class IndexAcademicGradeRequest extends FormRequest
                 fn (GradeStatus $status): string => $status->value,
                 GradeStatus::cases(),
             ))],
+            'search' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'college' => ['sometimes', 'nullable', 'string', 'max:50'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];

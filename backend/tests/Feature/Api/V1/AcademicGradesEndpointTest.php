@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
@@ -523,5 +524,84 @@ final class AcademicGradesEndpointTest extends TestCase
 
         $response = $this->withToken($registrarStaffToken)->getJson('/api/v1/academic-grades');
         $response->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_a_faculty_member_can_complete_an_inc_grade_within_three_semesters(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject();
+        $professor = User::create(['name' => 'Prof INC', 'email' => 'prof.inc@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $subject, $professor);
+        $student = $this->makeStudent($curriculum, 'student.inc@grc.test', '2026-9001');
+
+        // Create a locked grade with mark INC
+        $grade = AcademicGrade::create([
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+            'section_id' => $section->id,
+            'academic_term_id' => $term->id,
+            'mark' => GradeMark::Incomplete,
+            'final_grade' => null,
+            'status' => GradeStatus::Locked,
+            'encoded_by' => $professor->id,
+            'submitted_at' => now(),
+            'locked_at' => now(),
+        ]);
+
+        $token = $this->tokenFor($professor);
+
+        // Professor completes the INC with a final mark of 2.00
+        $response = $this->withToken($token)->patchJson("/api/v1/academic-grades/{$grade->id}", [
+            'mark' => '2.00',
+            'remarks' => 'Completed requirements',
+        ]);
+
+        $response->assertOk();
+        $this->assertEquals(GradeMark::Good, $grade->fresh()->mark);
+        $this->assertEquals(GradeStatus::Locked, $grade->fresh()->status);
+        $this->assertEquals('Completed requirements', $grade->fresh()->remarks);
+    }
+
+    public function test_an_inc_grade_older_than_three_semesters_cannot_be_edited(): void
+    {
+        // Current ongoing term is 2026-2027 1st
+        $this->makeTerm();
+
+        // Old term from 4 semesters ago: 2024-2025 1st
+        $oldTerm = AcademicTerm::create([
+            'school_year' => '2024-2025',
+            'semester' => '1st',
+            'status' => AcademicTermStatus::Archived,
+        ]);
+
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject();
+        $professor = User::create(['name' => 'Prof Expired', 'email' => 'prof.expired@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($oldTerm, $subject, $professor);
+        $student = $this->makeStudent($curriculum, 'student.expired@grc.test', '2024-9001');
+
+        $grade = AcademicGrade::create([
+            'student_id' => $student->id,
+            'subject_id' => $subject->id,
+            'section_id' => $section->id,
+            'academic_term_id' => $oldTerm->id,
+            'mark' => GradeMark::Incomplete,
+            'final_grade' => null,
+            'status' => GradeStatus::Locked,
+            'encoded_by' => $professor->id,
+            'submitted_at' => now(),
+            'locked_at' => now(),
+        ]);
+
+        $token = $this->tokenFor($professor);
+
+        // Attempting to edit an expired INC grade is rejected
+        $response = $this->withToken($token)->patchJson("/api/v1/academic-grades/{$grade->id}", [
+            'mark' => '1.75',
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('mark', $response->json('error.errors'));
     }
 }

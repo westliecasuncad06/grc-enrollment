@@ -26,7 +26,7 @@ final readonly class ListClassRoster
 
         return EnrollmentSubject::query()
             ->visibleTo($actor)
-            ->with(['enrollment.student', 'section.subject'])
+            ->with(['enrollment.student.user', 'section.subject'])
             ->when($sectionId !== null, fn ($query) => $query->where('section_id', $sectionId))
             ->when(
                 $academicTermId !== null,

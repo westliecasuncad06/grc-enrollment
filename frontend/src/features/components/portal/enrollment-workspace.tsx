@@ -152,17 +152,27 @@ function buildSelectedEntries(
 function overallStages(
   selectionLabel: string,
   enrollment: Enrollment | undefined,
+  isRegular: boolean,
 ): readonly StatusStepperStage[] {
   const submitted = enrollment !== undefined
   const approved = enrollment?.registrar_decided_at != null
   const paid = enrollment?.payment_confirmed_at != null
   const enrolled = enrollment?.enrolled_at != null
 
+  if (isRegular) {
+    return [
+      { label: selectionLabel, done: submitted, current: !submitted },
+      { label: "Submitted", done: submitted, current: submitted && !paid },
+      { label: "Payment confirmed", done: paid, current: paid && !enrolled },
+      { label: "Enrolled", done: enrolled, current: false },
+    ]
+  }
+
   return [
     { label: selectionLabel, done: submitted, current: !submitted },
     { label: "Submitted", done: submitted, current: submitted && !approved },
     {
-      label: "Registrar approved",
+      label: "Program chair approved",
       done: approved,
       current: approved && !paid,
     },
@@ -627,6 +637,11 @@ export function EnrollmentWorkspace() {
           stages={overallStages(
             isRegularAudience ? "Select section" : "Select subjects",
             activeEnrollment,
+            activeEnrollment?.is_irregular != null
+              ? !activeEnrollment.is_irregular
+              : (activeEnrollment?.student_enrollment_category != null
+                  ? activeEnrollment.student_enrollment_category === "regular"
+                  : isRegularAudience),
           )}
         />
       )}

@@ -17,6 +17,22 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/features/components/ui/sheet"
+import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { CertificateOfRegistrationDocument } from "@/features/components/portal/certificate-of-registration-document"
+import {
+  DownloadPdfButton,
+  PrintDocument,
+} from "@/features/components/portal/print-document"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
+import {
+  useCertificateOfRegistrationQuery,
+  useEnrollmentDocumentsQuery,
+} from "@/features/hooks/use-enrollment-documents"
 import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
@@ -155,6 +171,18 @@ export function PortalNotificationSheet() {
   const [open, setOpen] = useState(false)
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [page, setPage] = useState(1)
+  const [corDialogOpen, setCorDialogOpen] = useState(false)
+  const isStudent = session?.role === "student"
+
+  const documentsQuery = useEnrollmentDocumentsQuery(
+    { page: 1, per_page: 5 },
+    { enabled: isStudent && corDialogOpen },
+  )
+  const corDocumentId = documentsQuery.data?.data?.[0]?.id ?? null
+  const corQuery = useCertificateOfRegistrationQuery(corDocumentId, {
+    enabled: isStudent && corDialogOpen && corDocumentId !== null,
+  })
+
   const notificationsQuery = useNotificationsQuery(
     {
       unread: unreadOnly,
@@ -269,7 +297,18 @@ export function PortalNotificationSheet() {
                           )
                         : null
                     }
-                    onNavigate={(path) => router.push(path)}
+                    onNavigate={(path) => {
+                      if (
+                        notification.notification_type ===
+                          "enrollment_payment_confirmed" &&
+                        isStudent
+                      ) {
+                        setOpen(false)
+                        setCorDialogOpen(true)
+                      } else {
+                        router.push(path)
+                      }
+                    }}
                     onMarkRead={(id) => markReadMutation.mutate(id)}
                     markReadPending={markReadMutation.isPending}
                   />
@@ -307,6 +346,52 @@ export function PortalNotificationSheet() {
             )}
         </div>
       </SheetContent>
+
+      <Dialog open={corDialogOpen} onOpenChange={setCorDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Certificate of Registration (COR)</DialogTitle>
+          </DialogHeader>
+          <AsyncBoundary
+            query={{ ...corQuery, data: corQuery.data }}
+            isEmpty={(cor) => cor.snapshot === null}
+            emptyMessage="Your Certificate of Registration is being generated. Please check back shortly."
+            loadingLabel="Loading your Certificate of Registration…"
+          >
+            {(cor) =>
+              cor.snapshot !== null && (
+                <PrintDocument
+                  title={cor.document_number}
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <DownloadPdfButton
+                        documentId={cor.id}
+                        documentNumber={cor.document_number}
+                        label="Download COR"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setCorDialogOpen(false)
+                          router.push("/portal/digital-com")
+                        }}
+                      >
+                        Open in Full Page
+                      </Button>
+                    </div>
+                  }
+                >
+                  <CertificateOfRegistrationDocument
+                    cor={{ ...cor, snapshot: cor.snapshot }}
+                  />
+                </PrintDocument>
+              )
+            }
+          </AsyncBoundary>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   )
 }

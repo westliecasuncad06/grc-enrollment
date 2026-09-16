@@ -57,6 +57,14 @@ export const academicGradeSchema = z
     status_label: z.string().min(1),
     submitted_at: z.iso.datetime().nullable(),
     locked_at: z.iso.datetime().nullable(),
+    student_name: z.string().nullable().optional(),
+    subject_title: z.string().nullable().optional(),
+    section_code: z.string().nullable().optional(),
+    professor_id: z.number().int().nullable().optional(),
+    professor_name: z.string().nullable().optional(),
+    college: z.string().nullable().optional(),
+    school_year: z.string().nullable().optional(),
+    semester: z.string().nullable().optional(),
   })
   .strict()
 
@@ -95,6 +103,8 @@ export const academicGradeFiltersSchema = z
     subject_id: z.number().int().positive().optional(),
     academic_term_id: z.number().int().positive().optional(),
     status: z.enum(gradeStatusValues).optional(),
+    search: z.string().optional(),
+    college: z.string().optional(),
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(100).default(20),
   })

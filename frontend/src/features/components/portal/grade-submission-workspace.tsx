@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from "react"
 import {
+  ArrowLeft,
   BookOpenText,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   Clock3,
+  FolderOpen,
   Save,
   Send,
   ShieldCheck,
@@ -223,7 +226,7 @@ function rowBadgeVariant(
   return "outline"
 }
 
-function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
+export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
   const sheetQuery = useSectionGradeSheetQuery(sectionId)
   const saveMutation = useSaveSectionGradeDraftsMutation(sectionId)
   const submitMutation = useSubmitSectionGradesMutation(sectionId)
@@ -256,9 +259,10 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
 
     return sheet.rows.filter((row) => {
       const draft = drafts[row.student_id]
-      if (!draft || row.status === "submitted" || row.status === "locked") {
-        return false
-      }
+      const isLockedInc = row.status === "locked" && row.mark === "INC"
+      if (!draft) return false
+      if (row.status === "submitted") return false
+      if (row.status === "locked" && !isLockedInc) return false
 
       return (
         draft.mark !== (row.mark ?? "") ||
@@ -340,8 +344,10 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
       cellClassName: "min-w-48",
       render: (row) => {
         const draft = draftFor(row)
+        const isLockedInc = row.status === "locked" && row.mark === "INC"
         const editable =
-          !readOnly && row.status !== "submitted" && row.status !== "locked"
+          (!readOnly && row.status !== "submitted" && row.status !== "locked") ||
+          isLockedInc
 
         if (!editable) {
           return row.mark ? `${row.mark} — ${row.mark_label ?? ""}` : "—"
@@ -375,8 +381,10 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
       header: "Remarks",
       cellClassName: "min-w-56",
       render: (row) => {
+        const isLockedInc = row.status === "locked" && row.mark === "INC"
         const editable =
-          !readOnly && row.status !== "submitted" && row.status !== "locked"
+          (!readOnly && row.status !== "submitted" && row.status !== "locked") ||
+          isLockedInc
 
         if (!editable) return row.remarks ?? "—"
 
@@ -385,7 +393,7 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
             aria-label={`Remarks for ${row.student_name}`}
             value={draftFor(row).remarks}
             disabled={pending}
-            placeholder="Optional"
+            placeholder={isLockedInc ? "e.g. Completed via exam" : "Optional"}
             onChange={(event) => setDraft(row, { remarks: event.target.value })}
           />
         )
@@ -394,9 +402,19 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
     {
       key: "status",
       header: "Status",
-      render: (row) => (
-        <Badge variant={rowBadgeVariant(row.status)}>{row.status_label}</Badge>
-      ),
+      render: (row) => {
+        if (row.status === "locked" && row.mark === "INC") {
+          return (
+            <Badge
+              variant="outline"
+              className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            >
+              INC · Awaiting completion
+            </Badge>
+          )
+        }
+        return <Badge variant={rowBadgeVariant(row.status)}>{row.status_label}</Badge>
+      },
     },
   ]
 
@@ -452,7 +470,7 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
                   </AlertTitle>
                   <AlertDescription>
                     {loadedSheet.section.state === "locked"
-                      ? "This grade sheet is part of the official academic record and is read-only."
+                      ? "This grade sheet is part of the official academic record. Any students with an Incomplete (INC) grade remain editable to record completion grades."
                       : "This complete grade sheet is read-only while awaiting Registrar Head locking."}
                   </AlertDescription>
                 </Alert>
@@ -465,6 +483,23 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
                 emptyMessage="No enrolled students are in this section yet."
               />
             </CardContent>
+            {readOnly && savableRows.length > 0 && (
+              <CardFooter className="flex-col items-stretch justify-between gap-3 border-t pt-4 sm:flex-row sm:items-center">
+                <p className="text-xs text-muted-foreground">
+                  {savableRows.length} completion grade(s) ready to be saved.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void saveDraft()}
+                  >
+                    <Save aria-hidden />
+                    {saveMutation.isPending ? "Saving completion…" : "Save completion grade"}
+                  </Button>
+                </div>
+              </CardFooter>
+            )}
             {!readOnly && loadedSheet.rows.length > 0 && (
               <CardFooter className="flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
                 <p className="text-xs text-muted-foreground">
@@ -522,28 +557,205 @@ function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
   )
 }
 
+interface AssignedClassesContentProps {
+  sections: readonly GradeSectionSummary[]
+  selectedTermId: number | null
+  sectionId: number | null
+  onSelectTerm: (id: number) => void
+  onSelectSection: (id: number) => void
+}
+
+function AssignedClassesContent({
+  sections,
+  selectedTermId,
+  sectionId,
+  onSelectTerm,
+  onSelectSection,
+}: AssignedClassesContentProps) {
+  // Build a School Year → semesters map
+  const schoolYearMap = useMemo(() => {
+    const syMap = new Map<
+      string,
+      Map<number, { id: number; label: string; semester: string; count: number }>
+    >()
+    for (const s of sections) {
+      const term = s.academic_term
+      const sy = term.school_year
+      if (!syMap.has(sy)) syMap.set(sy, new Map())
+      const semMap = syMap.get(sy)!
+      const existing = semMap.get(term.id)
+      if (existing) {
+        existing.count += 1
+      } else {
+        semMap.set(term.id, {
+          id: term.id,
+          label: `${sy} · ${term.semester}`,
+          semester: term.semester,
+          count: 1,
+        })
+      }
+    }
+    // Sort school years descending
+    return Array.from(syMap.entries()).sort(([a], [b]) => b.localeCompare(a))
+  }, [sections])
+
+  const selectedTermLabel = useMemo(() => {
+    if (selectedTermId === null) return null
+    for (const [, semMap] of schoolYearMap) {
+      const found = semMap.get(selectedTermId)
+      if (found) return found.label
+    }
+    return null
+  }, [selectedTermId, schoolYearMap])
+
+  const filteredSections =
+    selectedTermId === null
+      ? []
+      : sections.filter((s) => s.academic_term.id === selectedTermId)
+
+  // === SEMESTER SELECTION SCREEN ===
+  if (selectedTermId === null) {
+    return (
+      <div
+        className="space-y-5"
+        role="list"
+        aria-label="Available school years and semesters"
+      >
+        {schoolYearMap.map(([schoolYear, semMap]) => {
+          const semesters = Array.from(semMap.values()).sort((a, b) =>
+            a.semester.localeCompare(b.semester),
+          )
+          return (
+            <div key={schoolYear} role="listitem">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {schoolYear}
+              </p>
+              <div className="flex flex-col gap-2">
+                {semesters.map((term) => (
+                  <button
+                    key={term.id}
+                    type="button"
+                    className="group flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3 text-left shadow-xs transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    onClick={() => onSelectTerm(term.id)}
+                  >
+                    <span className="flex items-center gap-3">
+                      <FolderOpen
+                        className="size-5 shrink-0 text-primary"
+                        aria-hidden
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-foreground">
+                          {term.semester} Semester
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {term.count}{" "}
+                          {term.count === 1 ? "class" : "classes"}
+                        </span>
+                      </span>
+                    </span>
+                    <ChevronRight
+                      className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                      aria-hidden
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // === CLASSES LIST FOR SELECTED SEMESTER ===
+  return (
+    <div className="space-y-4">
+      {selectedTermLabel && (
+        <div
+          className="flex items-center gap-2 rounded-lg border bg-primary/5 px-3 py-2"
+          aria-label="Filter by semester"
+          role="group"
+        >
+          <FolderOpen className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="text-sm font-semibold text-primary">
+            {selectedTermLabel}
+          </span>
+          <Badge
+            variant="secondary"
+            className="ml-auto px-1.5 py-0 text-[10px]"
+          >
+            {filteredSections.length}
+          </Badge>
+        </div>
+      )}
+
+      {filteredSections.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No classes found in this semester folder.
+        </p>
+      ) : (
+        <div className="grid gap-3 xl:grid-cols-2">
+          {filteredSections.map((section) => (
+            <GradeSectionCard
+              key={section.section_id}
+              section={section}
+              selected={section.section_id === sectionId}
+              onSelect={() => onSelectSection(section.section_id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function GradeSubmissionWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "faculty"
   const [sectionId, setSectionId] = useState<number | null>(null)
+  // null = semester selection screen; number = specific term selected
+  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
   const sectionsQuery = useGradeSubmissionSectionsQuery({
     enabled: authorized,
   })
 
-  const selectSection = (nextSectionId: number) => {
-    setSectionId(nextSectionId)
+  const handleSelectTerm = (id: number) => {
+    setSelectedTermId(id)
+    setSectionId(null)
+  }
+
+  const handleBack = () => {
+    setSelectedTermId(null)
+    setSectionId(null)
   }
 
   return (
     <WorkspacePage
       title="Grade submission"
-      description="Open an assigned class, save grades as a draft, then submit the complete section for Registrar review."
+      description="Open an assigned class, review enrolled students, save grades as a draft, and submit the section for Registrar review."
       unauthorized={!authorized}
       lastUpdated={sectionsQuery.dataUpdatedAt}
     >
       <Card>
-        <CardHeader>
-          <CardTitle level={2}>Assigned classes</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+          <div className="flex items-center gap-2">
+            {selectedTermId !== null && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                aria-label="Back to semester selection"
+                onClick={handleBack}
+              >
+                <ArrowLeft className="size-3.5" aria-hidden />
+                Back
+              </Button>
+            )}
+            <CardTitle level={2}>
+              {selectedTermId === null ? "Assigned classes" : "Classes"}
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <AsyncBoundary
@@ -553,16 +765,13 @@ export function GradeSubmissionWorkspace() {
             loadingLabel="Loading your assigned classes…"
           >
             {(sections) => (
-              <div className="grid gap-3 xl:grid-cols-2">
-                {sections.map((section) => (
-                  <GradeSectionCard
-                    key={section.section_id}
-                    section={section}
-                    selected={section.section_id === sectionId}
-                    onSelect={() => selectSection(section.section_id)}
-                  />
-                ))}
-              </div>
+              <AssignedClassesContent
+                sections={sections}
+                selectedTermId={selectedTermId}
+                sectionId={sectionId}
+                onSelectTerm={handleSelectTerm}
+                onSelectSection={setSectionId}
+              />
             )}
           </AsyncBoundary>
         </CardContent>

@@ -347,13 +347,24 @@ export async function deleteFacultySpecialization(id: number): Promise<void> {
 
 export interface TeachingScheduleRow {
   sectionId: number
+  termId: number
+  sectionCode: string
+  subjectId: number
   subjectCode: string
   subjectTitle: string
+  units?: number
   termLabel: string
   days: string
+  rawDays: string | null
   time: string
+  startsAtTime: string | null
+  endsAtTime: string | null
   room: string
+  status: Section["status"]
   statusLabel: string
+  modality?: Section["modality"]
+  enrolledCount: number
+  capacity: number
 }
 
 function formatTime(value: string | null): string {
@@ -378,16 +389,27 @@ export function getFacultyTeachingSchedule(
 
     return {
       sectionId: section.id,
+      termId: section.academic_term_id,
+      sectionCode: section.section_code,
+      subjectId: section.subject_id,
       subjectCode: subject?.code ?? "Subject unavailable",
       subjectTitle: subject?.title ?? "Subject details unavailable",
+      units: subject?.units,
       termLabel: term ? formatAcademicTerm(term) : "Term unavailable",
       days: section.schedule_days ?? "Days pending",
+      rawDays: section.schedule_days,
       time:
         section.starts_at_time && section.ends_at_time
           ? `${formatTime(section.starts_at_time)}–${formatTime(section.ends_at_time)}`
           : "Time pending",
+      startsAtTime: section.starts_at_time,
+      endsAtTime: section.ends_at_time,
       room: section.room ?? "Room pending",
+      status: section.status,
       statusLabel: section.status_label,
+      modality: section.modality,
+      enrolledCount: section.enrolled_count,
+      capacity: section.capacity,
     }
   })
 }

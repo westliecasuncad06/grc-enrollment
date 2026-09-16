@@ -31,6 +31,7 @@ const expectedModuleIds = {
     "rooms",
     "enrollment-dashboard",
     "program-chair-analytics",
+    "irregular-enrollments",
     "faculty-invitations",
   ],
   dean: [

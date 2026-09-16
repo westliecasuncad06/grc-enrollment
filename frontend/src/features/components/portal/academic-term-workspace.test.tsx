@@ -147,9 +147,8 @@ describe("AcademicTermWorkspace", () => {
     ).toBeGreaterThan(0)
   })
 
-  it("lets the Registrar Head correct a Draft term identity while keeping its enrollment dates intact", async () => {
-    const user = userEvent.setup()
-    let displayedTerms = {
+  it("does not display Edit draft term button in the terms table (Doc 3 requirement)", async () => {
+    const draftTerms = {
       data: [
         {
           type: "academic-term" as const,
@@ -168,53 +167,17 @@ describe("AcademicTermWorkspace", () => {
         },
       ],
     }
-    fetchMock.mockImplementation((input, init) => {
-      if (
-        url(input).includes("/academic-terms/2/draft-identity") &&
-        init?.method === "PATCH"
-      ) {
-        displayedTerms = {
-          data: [
-            {
-              ...displayedTerms.data[0],
-              school_year: "2026-2027",
-              semester: "1st",
-            },
-          ],
-        }
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: displayedTerms.data[0] })),
-        )
-      }
-
-      return Promise.resolve(new Response(JSON.stringify(displayedTerms)))
-    })
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(draftTerms))),
+    )
     renderWorkspace()
 
-    await user.click(
-      (await screen.findAllByRole("button", { name: "Edit draft term" }))[0],
-    )
-    expect(await screen.findByText("Correct draft term")).toBeInTheDocument()
-    expect(screen.getByLabelText("School year")).toHaveValue("2026-2028")
-
-    await user.clear(screen.getByLabelText("School year"))
-    await user.type(screen.getByLabelText("School year"), "2026-2027")
-    await user.click(screen.getByLabelText("Semester"))
-    await user.click(screen.getByRole("option", { name: "1st" }))
-    await user.click(screen.getByRole("button", { name: "Save changes" }))
-
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/academic-terms/2/draft-identity"),
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({ school_year: "2026-2027", semester: "1st" }),
-        }),
-      ),
-    )
     expect(
-      (await screen.findAllByText("2026-2027 · 1st")).length,
+      (await screen.findAllByText("2026-2028 · 2nd")).length,
     ).toBeGreaterThan(0)
+    expect(
+      screen.queryByRole("button", { name: "Edit draft term" }),
+    ).not.toBeInTheDocument()
   })
 
   it("archives the current term and automatically opens the next sequential term through the dialog", async () => {

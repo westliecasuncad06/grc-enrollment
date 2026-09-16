@@ -75,6 +75,14 @@ function availableActions(
     moduleId === "enrollment-approvals" &&
     enrollment.status === "pending_registrar_approval"
   ) {
+    // Irregular students: Program Chair is the final approval authority.
+    // Registrar Staff has view-only access without an approve button.
+    if (
+      enrollment.is_irregular ||
+      enrollment.student_enrollment_category === "irregular"
+    ) {
+      return []
+    }
     return ["registrar_approve", "registrar_reject"]
   }
   if (moduleId === "overrides-voids" && enrollment.status === "pending_payment") {
@@ -407,6 +415,12 @@ export function RegistrarEnrollmentWorkspace({
                         {enrollment.total_units}
                         {enrollment.requires_overload_approval && (
                           <Badge variant="outline">Overload</Badge>
+                        )}
+                        {(enrollment.is_irregular ||
+                          enrollment.student_enrollment_category === "irregular") && (
+                          <Badge variant="secondary" className="text-xs">
+                            Irregular · View only
+                          </Badge>
                         )}
                       </div>
                     ),

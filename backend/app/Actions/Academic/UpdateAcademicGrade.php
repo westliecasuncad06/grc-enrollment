@@ -149,10 +149,27 @@ final readonly class UpdateAcademicGrade
         return DB::transaction(function () use ($grade, $validated, $actor, $context): AcademicGrade {
             $lockedGrade = AcademicGrade::query()->whereKey($grade->id)->lockForUpdate()->firstOrFail();
 
+            $isIncCompletion = false;
             if (! $lockedGrade->status->isEditableByEncoder()) {
-                throw ValidationException::withMessages([
-                    'mark' => "This grade is '{$lockedGrade->status->value}' and can no longer be edited directly.",
-                ]);
+                // Incomplete (INC) grades remain editable by professors for up to 3 consecutive semesters
+                if ($lockedGrade->mark === GradeMark::Incomplete) {
+                    $currentTerm = AcademicTerm::query()
+                        ->where('status', AcademicTermStatus::SemesterOngoing)
+                        ->first();
+                    $gradeTerm = $lockedGrade->academicTerm;
+                    if ($currentTerm !== null && $gradeTerm !== null) {
+                        $elapsed = $currentTerm->termsElapsedSince($gradeTerm);
+                        if ($elapsed <= 3) {
+                            $isIncCompletion = true;
+                        }
+                    }
+                }
+
+                if (! $isIncCompletion) {
+                    throw ValidationException::withMessages([
+                        'mark' => "This grade is '{$lockedGrade->status->value}' and can no longer be edited directly.",
+                    ]);
+                }
             }
 
             $beforeValues = self::snapshot($lockedGrade);
@@ -163,7 +180,13 @@ final readonly class UpdateAcademicGrade
                 $mark = $lockedGrade->mark;
             }
 
+            $targetStatus = $lockedGrade->status;
+            if ($isIncCompletion && $mark !== null && $mark !== GradeMark::Incomplete) {
+                $targetStatus = GradeStatus::Locked;
+            }
+
             $lockedGrade->update([
+                'status' => $targetStatus,
                 'mark' => $mark,
                 'final_grade' => $mark?->numericValue(),
                 'remarks' => array_key_exists('remarks', $validated) ? $validated['remarks'] : $lockedGrade->remarks,
@@ -180,6 +203,16 @@ final readonly class UpdateAcademicGrade
                 null,
                 $context,
             );
+
+            if ($isIncCompletion && $mark !== null && $mark !== GradeMark::Incomplete) {
+                $currentTerm = AcademicTerm::query()
+                    ->where('status', AcademicTermStatus::SemesterOngoing)
+                    ->first();
+
+                if ($currentTerm !== null) {
+                    $this->reclassifier->execute($lockedGrade->student, $currentTerm, $actor, $context);
+                }
+            }
 
             return $lockedGrade->refresh()->load(['student', 'subject', 'section']);
         });

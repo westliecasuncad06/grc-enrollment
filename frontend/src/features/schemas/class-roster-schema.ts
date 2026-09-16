@@ -17,6 +17,7 @@ export const classRosterEntryResourceSchema = z
     academic_term_id: z.number().int().positive(),
     student_id: z.number().int().positive(),
     student_number: z.string().min(1),
+    student_name: z.string().min(1).optional(),
     status: z.enum(classRosterEntryStatusValues),
     status_label: z.string().min(1),
   })

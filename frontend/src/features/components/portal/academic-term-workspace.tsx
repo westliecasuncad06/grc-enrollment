@@ -8,7 +8,6 @@ import { useAuth } from "@/features/auth/use-auth"
 import { ArchiveTermDialog } from "@/features/components/portal/archive-term-dialog"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
-import { EditDraftAcademicTermDialog } from "@/features/components/portal/edit-draft-academic-term-dialog"
 import { EnrollmentScheduleCard } from "@/features/components/portal/enrollment-schedule-card"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
@@ -345,17 +344,8 @@ export function AcademicTermWorkspace() {
                 key: "lifecycle_action",
                 header: "Action",
                 render: (term) =>
-                  term.status === "draft" ? (
-                    <EditDraftAcademicTermDialog
-                      term={term}
-                      trigger={
-                        <Button type="button" size="sm" variant="outline">
-                          Edit draft term
-                        </Button>
-                      }
-                    />
-                  ) : term.status === "semester_ongoing" ||
-                    term.status === "semester_closed" ? (
+                  term.status === "semester_ongoing" ||
+                  term.status === "semester_closed" ? (
                     <ArchiveTermDialog
                       term={term}
                       trigger={
@@ -382,7 +372,6 @@ export function AcademicTermWorkspace() {
               const canArchive =
                 term.status === "semester_ongoing" ||
                 term.status === "semester_closed"
-              const canEditDraft = term.status === "draft"
               const enrollmentWindow =
                 term.enrollment_opens_at && term.enrollment_closes_at
                   ? `${term.enrollment_opens_at} – ${term.enrollment_closes_at}`
@@ -409,20 +398,6 @@ export function AcademicTermWorkspace() {
                         </dd>
                       </div>
                     </dl>
-                    {canEditDraft && (
-                      <EditDraftAcademicTermDialog
-                        term={term}
-                        trigger={
-                          <Button
-                            type="button"
-                            className="w-full"
-                            variant="outline"
-                          >
-                            Edit draft term
-                          </Button>
-                        }
-                      />
-                    )}
                     {canArchive && (
                       <ArchiveTermDialog
                         term={term}

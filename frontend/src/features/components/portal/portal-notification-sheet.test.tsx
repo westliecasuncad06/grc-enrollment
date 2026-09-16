@@ -475,4 +475,108 @@ describe("PortalNotificationSheet", () => {
       screen.queryByRole("dialog", { name: "Notifications" }),
     ).not.toBeInTheDocument()
   })
+
+  it("opens the Certificate of Registration (COR) dialog when a student clicks a payment confirmed notification", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.includes("/enrollment-documents/1")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "enrollment_document",
+                id: 1,
+                enrollment_id: 10,
+                student_id: 1,
+                document_type: "certificate_of_registration",
+                document_type_label: "Certificate of Registration",
+                document_number: "COR-2026-0001",
+                generated_at: "2026-07-29T10:00:00Z",
+                status: "issued",
+                status_label: "Issued",
+                snapshot: {
+                  student: {
+                    name: "Maria Santos",
+                    student_number: "2024-0001",
+                    program: "BSIT",
+                    year_level: 1,
+                  },
+                  enrollment: {
+                    academic_term: "2026-2027 · 1st",
+                    total_units: 18,
+                  },
+                  subjects: [],
+                  fees: {
+                    tuition_fee: "15000.00",
+                    other_fees: [],
+                    total_assessment: "15000.00",
+                    amount_paid: "15000.00",
+                    balance: "0.00",
+                  },
+                },
+              },
+            }),
+            { status: 200 },
+          ),
+        )
+      }
+      if (url.includes("/enrollment-documents")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "enrollment_document",
+                  id: 1,
+                  enrollment_id: 10,
+                  student_id: 1,
+                  document_type: "certificate_of_registration",
+                  document_type_label: "Certificate of Registration",
+                  document_number: "COR-2026-0001",
+                  generated_at: "2026-07-29T10:00:00Z",
+                  status: "issued",
+                  status_label: "Issued",
+                },
+              ],
+              meta: { current_page: 1, last_page: 1, total: 1 },
+            }),
+            { status: 200 },
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ...notificationEnvelope,
+            data: [
+              {
+                ...notificationEnvelope.data[0],
+                notification_type: "enrollment_payment_confirmed",
+                message: "Your payment has been confirmed. Your Certificate of Registration (COR) is ready.",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+
+    renderWithSession(<PortalNotificationSheet />, {
+      session: { ...testSession, role: "student" },
+    })
+    await user.click(screen.getByRole("button", { name: /notifications/i }))
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Your payment has been confirmed/,
+      }),
+    )
+
+    expect(
+      await screen.findByRole("dialog", {
+        name: /Certificate of Registration \(COR\)/i,
+      }),
+    ).toBeInTheDocument()
+  })
 })

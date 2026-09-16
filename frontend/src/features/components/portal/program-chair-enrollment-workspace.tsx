@@ -1086,6 +1086,72 @@ export function ProgramChairEnrollmentWorkspace({
       setError(scheduleErrorMessage(caughtError))
     }
   }
+  const addSectionForProgram = async (
+    programId: number,
+    curriculumId: number | null | undefined,
+    currentCount: number,
+  ) => {
+    const year = Number(activeYear)
+    const effectiveCurId =
+      curriculumId ?? newestCurriculumIdByProgram.get(programId)
+    if (!effectiveCurId) {
+      setError("Please select a curriculum for this majorship first.")
+      return
+    }
+    const nextCount = currentCount + 1
+    setError("")
+    try {
+      await planMutations.save.mutateAsync({
+        academic_term_id: termId,
+        curriculum_id: effectiveCurId,
+        counts: { [String(year)]: nextCount },
+        students_per_block: {
+          [String(year)]: Math.max(1, toNumber(studentsPerBlock[year], 40)),
+        },
+      })
+      await planMutations.release.mutateAsync({
+        curriculumId: effectiveCurId,
+        yearLevel: year,
+      })
+      await sectionsQuery.refetch()
+    } catch {
+      setError(
+        `The ${yearLabel(year)} section could not be added for this majorship. Please check the curriculum plan and retry.`,
+      )
+    }
+  }
+  const removeSectionForProgram = async (
+    programId: number,
+    curriculumId: number | null | undefined,
+    currentCount: number,
+  ) => {
+    const year = Number(activeYear)
+    const effectiveCurId =
+      curriculumId ?? newestCurriculumIdByProgram.get(programId)
+    if (!effectiveCurId) {
+      setError("Please select a curriculum for this majorship first.")
+      return
+    }
+    const nextCount = Math.max(0, currentCount - 1)
+    setError("")
+    try {
+      await planMutations.save.mutateAsync({
+        academic_term_id: termId,
+        curriculum_id: effectiveCurId,
+        counts: { [String(year)]: nextCount },
+        students_per_block: {
+          [String(year)]: Math.max(1, toNumber(studentsPerBlock[year], 40)),
+        },
+      })
+      await planMutations.release.mutateAsync({
+        curriculumId: effectiveCurId,
+        yearLevel: year,
+      })
+      await sectionsQuery.refetch()
+    } catch (caughtError) {
+      setError(scheduleErrorMessage(caughtError))
+    }
+  }
   const generateSubjectsForYear = async (year: number) => {
     const selectedCurriculumId = curriculumIds[year]
 
@@ -1750,7 +1816,51 @@ export function ProgramChairEnrollmentWorkspace({
                               curriculaByYearAndProgram[`${year}_${selectedProg.id}`] ??
                               curriculumIds[year]
                             return (
-                              <MajorshipCurriculumBar
+                              <>
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="text-base font-semibold text-foreground">
+                                      {selectedProg.name} ({selectedProg.code})
+                                    </h3>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {displayedGroups.length} block section{displayedGroups.length === 1 ? "" : "s"}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => void removeSectionForProgram(selectedProg.id, curId, displayedGroups.length)}
+                                      disabled={
+                                        approvalLocked ||
+                                        isSwitchingCurriculum ||
+                                        displayedGroups.length <= 0 ||
+                                        planMutations.save.isPending ||
+                                        planMutations.release.isPending
+                                      }
+                                    >
+                                      <MinusIcon data-icon="inline-start" />
+                                      Remove section
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => void addSectionForProgram(selectedProg.id, curId, displayedGroups.length)}
+                                      disabled={
+                                        approvalLocked ||
+                                        isSwitchingCurriculum ||
+                                        planMutations.save.isPending ||
+                                        planMutations.release.isPending
+                                      }
+                                    >
+                                      <PlusIcon data-icon="inline-start" />
+                                      Add section
+                                    </Button>
+                                  </div>
+                                </div>
+                                <MajorshipCurriculumBar
                                 program={selectedProg}
                                 yearLevel={currentYearNum}
                                 curricula={curriculaQuery.data ?? []}
@@ -1766,7 +1876,8 @@ export function ProgramChairEnrollmentWorkspace({
                                 isSwitching={isSwitchingCurriculum}
                                 newestIdByProgram={newestCurriculumIdByProgram}
                               />
-                            )
+                            </>
+                          )
                           })()}
 
                           {displayedGroups.length === 0 ? (
@@ -1808,6 +1919,39 @@ export function ProgramChairEnrollmentWorkspace({
                                     <Badge variant="secondary" className="text-xs">
                                       {groups.length} block section{groups.length === 1 ? "" : "s"}
                                     </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => void removeSectionForProgram(program.id, curId, groups.length)}
+                                      disabled={
+                                        approvalLocked ||
+                                        isSwitchingCurriculum ||
+                                        groups.length <= 0 ||
+                                        planMutations.save.isPending ||
+                                        planMutations.release.isPending
+                                      }
+                                    >
+                                      <MinusIcon data-icon="inline-start" />
+                                      Remove section
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => void addSectionForProgram(program.id, curId, groups.length)}
+                                      disabled={
+                                        approvalLocked ||
+                                        isSwitchingCurriculum ||
+                                        planMutations.save.isPending ||
+                                        planMutations.release.isPending
+                                      }
+                                    >
+                                      <PlusIcon data-icon="inline-start" />
+                                      Add section
+                                    </Button>
                                   </div>
                                 </div>
 

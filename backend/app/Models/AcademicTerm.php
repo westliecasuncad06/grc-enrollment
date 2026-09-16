@@ -106,6 +106,19 @@ final class AcademicTerm extends Model
         ];
     }
 
+    public function chronologicalIndex(): int
+    {
+        $startYear = (int) substr($this->school_year, 0, 4);
+        $semOffset = $this->semester === '1st' ? 0 : 1;
+
+        return ($startYear * 2) + $semOffset;
+    }
+
+    public function termsElapsedSince(AcademicTerm $other): int
+    {
+        return $this->chronologicalIndex() - $other->chronologicalIndex();
+    }
+
     /**
      * @return HasMany<AcademicTermCollegeWorkflow, $this>
      */

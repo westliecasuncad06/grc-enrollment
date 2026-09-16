@@ -211,6 +211,178 @@ describe("RegistrarGradesWorkspace", () => {
     expect(await screen.findByText("Enter a valid student ID.")).toBeInTheDocument()
   })
 
+  it("renders Department -> Professor -> Submitted Subjects hierarchy and filters by department", async () => {
+    const user = userEvent.setup()
+    const coeGrade = {
+      ...submittedGrade,
+      id: 10,
+      student_number: "2026-0100",
+      student_name: "Mercedes C. Ramos",
+      subject_code: "ACC101",
+      subject_title: "Accounting 1",
+      section_code: "ACC101-A",
+      professor_id: 425,
+      professor_name: "Henry Nieva Corrales",
+      college: "coe",
+    }
+    const ccsGrade = {
+      ...submittedGrade,
+      id: 11,
+      student_number: "2026-0200",
+      student_name: "Alan Turing",
+      subject_code: "CS201",
+      subject_title: "Object-Oriented Programming",
+      section_code: "CS201-A",
+      professor_id: 430,
+      professor_name: "Maria Delos Santos",
+      college: "ccs",
+    }
+
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-grades")) {
+        if (target.includes("college=ccs")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [ccsGrade],
+                links: paginationLinks,
+                meta: { ...paginationMeta, total: 1 },
+              }),
+            ),
+          )
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [coeGrade, ccsGrade],
+              links: paginationLinks,
+              meta: { ...paginationMeta, total: 2 },
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(
+      <RegistrarGradesWorkspace initialModuleId="grade-approvals" />,
+      { session: registrarHeadSession },
+    )
+
+    // Verify both professors render
+    expect(
+      await screen.findByText("Henry Nieva Corrales"),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Maria Delos Santos")).toBeInTheDocument()
+
+    // Verify subjects render
+    expect(screen.getByText(/ACC101 — Accounting 1/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/CS201 — Object-Oriented Programming/),
+    ).toBeInTheDocument()
+
+    // Filter by CCS department
+    const filterGroup = screen.getByRole("group", {
+      name: "Filter by department",
+    })
+    await user.click(within(filterGroup).getByRole("button", { name: "CCS" }))
+
+    // Only CCS professor remains
+    expect(await screen.findByText("Maria Delos Santos")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Henry Nieva Corrales"),
+    ).not.toBeInTheDocument()
+  })
+
+  it("switches to Grade History tab and searches historical locked records", async () => {
+    const user = userEvent.setup()
+    const historicalGrade = {
+      ...submittedGrade,
+      id: 99,
+      student_number: "2018-0055",
+      student_name: "Historical Student",
+      subject_code: "MATH101",
+      subject_title: "College Algebra",
+      section_code: "MATH101-A",
+      professor_id: 425,
+      professor_name: "Henry Nieva Corrales",
+      college: "cbae",
+      school_year: "2018-2019",
+      semester: "1st",
+      status: "locked",
+      status_label: "Official / Locked",
+    }
+
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-grades")) {
+        if (target.includes("status=locked")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [historicalGrade],
+                links: paginationLinks,
+                meta: { ...paginationMeta, total: 1 },
+              }),
+            ),
+          )
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [submittedGrade],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(
+      <RegistrarGradesWorkspace initialModuleId="grade-approvals" />,
+      { session: registrarHeadSession },
+    )
+
+    // Switch to Grade history tab
+    const viewGroup = screen.getByRole("group", { name: "Approvals view" })
+    await user.click(
+      within(viewGroup).getByRole("button", { name: /Grade history/i }),
+    )
+
+    expect(
+      await screen.findByRole("heading", { name: "Official Grade History" }),
+    ).toBeInTheDocument()
+
+    const historyTable = screen.getByRole("table", {
+      name: "Official Grade History",
+    })
+    expect(
+      within(historyTable).getByText("Historical Student"),
+    ).toBeInTheDocument()
+    expect(
+      within(historyTable).getByText("2018-2019 · 1st"),
+    ).toBeInTheDocument()
+    expect(
+      within(historyTable).getByText("College Algebra"),
+    ).toBeInTheDocument()
+
+    // Test search
+    const searchInput = screen.getByLabelText("Search grade history")
+    await user.type(searchInput, "2018-0055")
+    await user.click(screen.getByRole("button", { name: "Search" }))
+
+    expect(
+      url(
+        fetchMock.mock.calls.find((call) =>
+          url(call[0]).includes("search=2018-0055"),
+        )![0],
+      ),
+    ).toContain("status=locked")
+  })
+
   it("has no detectable accessibility violations on the grade-approvals list", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)

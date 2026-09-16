@@ -130,6 +130,8 @@ export const enrollmentSchema = z
     student_year_level: z.number().int().positive().nullable(),
     student_financial_status: z.enum(["scholar", "payee"]).nullable(),
     student_financial_status_label: z.string().min(1).nullable(),
+    student_enrollment_category: z.string().nullable().optional(),
+    is_irregular: z.boolean().optional(),
     academic_term_id: z.number().int().positive(),
     status: z.enum(enrollmentStatusValues),
     status_label: z.string().min(1),

@@ -23,16 +23,31 @@ final readonly class ListAcademicGrades
         $subjectId = isset($filters['subject_id']) ? (int) $filters['subject_id'] : null;
         $academicTermId = isset($filters['academic_term_id']) ? (int) $filters['academic_term_id'] : null;
         $status = isset($filters['status']) ? (string) $filters['status'] : null;
+        $search = isset($filters['search']) ? trim((string) $filters['search']) : null;
+        $college = isset($filters['college']) ? trim((string) $filters['college']) : null;
         $page = isset($filters['page']) ? (int) $filters['page'] : 1;
         $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 20;
 
         return AcademicGrade::query()
             ->visibleTo($actor)
-            ->with(['student', 'subject', 'section'])
+            ->with(['student.user', 'student.program', 'subject', 'section.professor', 'academicTerm', 'encoder'])
             ->when($studentId !== null, fn ($query) => $query->where('student_id', $studentId))
             ->when($subjectId !== null, fn ($query) => $query->where('subject_id', $subjectId))
             ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
             ->when($status !== null, fn ($query) => $query->where('status', $status))
+            ->when($search !== null && $search !== '', function ($query) use ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->whereHas('student', fn ($sq) => $sq->where('student_number', 'like', "%{$search}%")
+                        ->orWhereHas('user', fn ($uq) => $uq->where('name', 'like', "%{$search}%")))
+                    ->orWhereHas('subject', fn ($subq) => $subq->where('code', 'like', "%{$search}%")->orWhere('title', 'like', "%{$search}%"));
+                });
+            })
+            ->when($college !== null && $college !== '' && strtolower($college) !== 'all', function ($query) use ($college) {
+                $query->where(function ($q) use ($college) {
+                    $q->whereHas('section', fn ($secq) => $secq->where('college', $college))
+                        ->orWhereHas('student.program', fn ($pq) => $pq->where('department', $college));
+                });
+            })
             ->orderByDesc('academic_term_id')
             ->orderByDesc('id')
             ->paginate($perPage, ['*'], 'page', $page)
