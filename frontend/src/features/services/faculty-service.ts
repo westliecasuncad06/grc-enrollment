@@ -39,6 +39,7 @@ import {
   postAuthenticatedJson,
 } from "@/features/services/api-client"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
+import { formatTimeRange } from "@/features/lib/format-time"
 
 export const FACULTY_AVAILABILITIES_PATH = "/api/v1/faculty-availabilities"
 export const FACULTY_SUBJECT_PREFERENCES_PATH =
@@ -367,9 +368,6 @@ export interface TeachingScheduleRow {
   capacity: number
 }
 
-function formatTime(value: string | null): string {
-  return value?.slice(0, 5) ?? "Time pending"
-}
 
 /**
  * Translates only the already API-scoped section list into display rows. The
@@ -400,7 +398,7 @@ export function getFacultyTeachingSchedule(
       rawDays: section.schedule_days,
       time:
         section.starts_at_time && section.ends_at_time
-          ? `${formatTime(section.starts_at_time)}–${formatTime(section.ends_at_time)}`
+          ? formatTimeRange(section.starts_at_time, section.ends_at_time)
           : "Time pending",
       startsAtTime: section.starts_at_time,
       endsAtTime: section.ends_at_time,

@@ -15,6 +15,7 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
@@ -524,6 +525,51 @@ final class AcademicGradesEndpointTest extends TestCase
 
         $response = $this->withToken($registrarStaffToken)->getJson('/api/v1/academic-grades');
         $response->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_a_registrar_head_can_filter_academic_grades_by_college(): void
+    {
+        $term = $this->makeTerm();
+
+        $programCcs = Program::create(['code' => 'BSCS', 'name' => 'BS Computer Science', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active]);
+        $curriculumCcs = Curriculum::create(['program_id' => $programCcs->id, 'name' => 'BSCS Curriculum', 'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active]);
+        $subjectCcs = Subject::create(['code' => 'CS101', 'title' => 'CS101 Title', 'college' => CollegeCode::Ccs, 'units' => 3.0, 'status' => SubjectStatus::Active]);
+
+        $programCbae = Program::create(['code' => 'BSBA', 'name' => 'BS Business Admin', 'college' => CollegeCode::Cbae, 'status' => ProgramStatus::Active]);
+        $curriculumCbae = Curriculum::create(['program_id' => $programCbae->id, 'name' => 'BSBA Curriculum', 'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active]);
+        $subjectCbae = Subject::create(['code' => 'BA101', 'title' => 'BA101 Title', 'college' => CollegeCode::Cbae, 'units' => 3.0, 'status' => SubjectStatus::Active]);
+
+        $professor = User::create(['name' => 'Prof Multi', 'email' => 'prof.multi@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $sectionCcs = $this->makeSection($term, $subjectCcs, $professor);
+        $sectionCbae = $this->makeSection($term, $subjectCbae, $professor);
+
+        $studentCcs = $this->makeStudent($curriculumCcs, 'student.ccs@grc.test', '2026-0006');
+        $studentCbae = $this->makeStudent($curriculumCbae, 'student.cbae@grc.test', '2026-0007');
+
+        $this->makeGrade($studentCcs, $subjectCcs, $sectionCcs, $term, $professor);
+        $this->makeGrade($studentCbae, $subjectCbae, $sectionCbae, $term, $professor);
+
+        $registrarToken = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar.deptview@grc.test');
+
+        // Filter by CCS
+        $ccsResponse = $this->withToken($registrarToken)->getJson('/api/v1/academic-grades?college=ccs');
+        $ccsResponse->assertOk()->assertJsonCount(1, 'data');
+        $ccsResponse->assertJsonPath('data.0.student_number', $studentCcs->student_number);
+        $ccsResponse->assertJsonPath('data.0.college', 'ccs');
+
+        // Filter by CBAE
+        $cbaeResponse = $this->withToken($registrarToken)->getJson('/api/v1/academic-grades?college=cbae');
+        $cbaeResponse->assertOk()->assertJsonCount(1, 'data');
+        $cbaeResponse->assertJsonPath('data.0.student_number', $studentCbae->student_number);
+        $cbaeResponse->assertJsonPath('data.0.college', 'cbae');
+
+        // Filter by COE (empty)
+        $coeResponse = $this->withToken($registrarToken)->getJson('/api/v1/academic-grades?college=coe');
+        $coeResponse->assertOk()->assertJsonCount(0, 'data');
+
+        // Filter by all
+        $allResponse = $this->withToken($registrarToken)->getJson('/api/v1/academic-grades?college=all');
+        $allResponse->assertOk()->assertJsonCount(2, 'data');
     }
 
     public function test_a_faculty_member_can_complete_an_inc_grade_within_three_semesters(): void

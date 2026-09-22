@@ -6,11 +6,128 @@ in the local database, derived by the real `ClassifyEnrollmentStanding` from act
 (`Database\Seeders\StudentRosterSeeder`). A student appears here only when the database itself derived them
 as Irregular — never a guess.
 
-**Total irregular students:** 4
+**Active Academic Term:** 2026-2027 · 1st
+**Total irregular students:** 13
 
-| Student No. | Name | Email | Program | Section | Year |
-|---|---|---|---|---|---|
-| 2025-06-01253 | Jocelyn N. David | jocelyn.david@grc.com | BSENTREP | EN201 | 2 |
-| 2025-06-01667 | Quirino Y. Robles | quirino.robles@grc.com | BSIT | IT202 | 2 |
-| 2024-06-01541 | Divina V. Villaruel | divina.villaruel@grc.com | BSIT | IT301 | 3 |
-| 2024-06-01645 | Joshua B. Tuason | joshua.tuason@grc.com | BSIT | IT304 | 3 |
+## Seeded Roster Irregular Students
+
+| Student No. | Name | Email | Program | Section | Year | Sem Status | Units | Enrolled Subjects | Irregular Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-06-01001 | Rolando R. Lumbab | rolando.lumbab@grc.com | BEED | EDUC101 | 1 | Enrolled | 30.5 | ARTAPP, ENVISCI, ETHICS, KOMFIL, LEAD 1, MATHINV, NSTP 1, PATHFIT1, PHILHIS, PURPCOMM, UNDSELF | Irregular standing from curriculum evaluation |
+| 2026-06-01006 | Janine L. Chiong | janine.chiong@grc.com | BEED | EDUC101 | 1 | Enrolled | 30.5 | ARTAPP, ENVISCI, ETHICS, KOMFIL, LEAD 1, MATHINV, NSTP 1, PATHFIT1, PHILHIS, PURPCOMM, UNDSELF | Irregular standing from curriculum evaluation |
+| 2026-06-01020 | Santiago V. Gomez | santiago.gomez@grc.com | BEED | EDUC101 | 1 | Enrolled | 30.5 | ARTAPP, ENVISCI, ETHICS, KOMFIL, LEAD 1, MATHINV, NSTP 1, PATHFIT1, PHILHIS, PURPCOMM, UNDSELF | Irregular standing from curriculum evaluation |
+| 2026-06-01084 | Honorio G. Tagle | honorio.tagle@grc.com | BSED-FIL | EDUC103 | 1 | Enrolled | 30.5 | ARTAPP, ENVISCI, ETHICS, KOMFIL, LEAD 1, MATHINV, NSTP 1, PATHFIT1, PHILHIS, PURPCOMM, UNDSELF | Irregular standing from curriculum evaluation |
+| 2025-06-01253 | Jocelyn N. David | jocelyn.david@grc.com | BSENTREP | EN201 | 2 | Enrolled | 30.0 | CONWRLD, ENTREBE, HRMAN, MANACC, OPPOSE, E-COMM, FILDIS, SOSLIT, RIZAL, MATHWRLD | Backlog: FILDIS (DRP), LEAD2 (DRP), MARMAN (DRP), MATHWRLD (DRP), NSTP2 (DRP), PATHFIT2 (DRP), P.FIN (DRP), RIZAL (DRP), SCITECH (DRP) |
+| 2026-06-01554 | Mercedes C. Ramos | mercedes.ramos@grc.com | BSA | ACC101 | 1 | Enrolled | 30.5 | CONWRLD, FINACC, FUNDACC 1, KOMFIL, LEAD 1, MANECO, NSTP 1, PATHFIT 1, PHILHIST, QM-TQM, UNDSELF | Irregular standing from curriculum evaluation |
+| 2026-06-01661 | Michael S. Batungbakal | michael.batungbakal@grc.com | BSIT | IT101 | 1 | Not enrolled this term | 0.0 | — | Irregular standing from curriculum evaluation |
+| 2026-06-01663 | Reynaldo A. Reid | reynaldo.reid@grc.com | BSIT | IT101 | 1 | Not enrolled this term | 0.0 | — | Irregular standing from curriculum evaluation |
+| 2026-06-01691 | Soledad A. Mangahas | soledad.mangahas@grc.com | BSIT | IT102 | 1 | Not enrolled this term | 0.0 | — | Irregular standing from curriculum evaluation |
+| 2026-06-01703 | Faith Z. Angeles | faith.angeles@grc.com | BSIT | IT102 | 1 | Not enrolled this term | 0.0 | — | Irregular standing from curriculum evaluation |
+| 2025-06-01667 | Quirino Y. Robles | quirino.robles@grc.com | BSIT | IT202 | 2 | Not enrolled this term | 0.0 | — | Backlog: CONWRLD (DRP), ETHICS (DRP), HCI (DRP), HCIL (DRP), ITPLUS3 (DRP), ITPLUS4 (DRP), LEAD2 (DRP), NSTP2 (DRP), PATHFIT2 (DRP), PROG1 (DRP), PROG1L (DRP), PSPEAK (DRP), SCITECH (DRP) |
+| 2024-06-01541 | Divina V. Villaruel | divina.villaruel@grc.com | BSIT | IT301 | 3 | Not enrolled this term | 0.0 | — | Backlog: ITC (5.00), ITCL (5.00), ITP1 (5.00) |
+| 2024-06-01645 | Joshua B. Tuason | joshua.tuason@grc.com | BSIT | IT304 | 3 | Not enrolled this term | 0.0 | — | Backlog: ITC (5.00), ITCL (5.00), ITP1 (5.00) |
+
+## Active Institutional Test Cohorts (2026-2027 · 1st)
+
+| Student No. | Name | Email | Program | Year | Sem Status | Units | Enrolled Subjects |
+|---|---|---|---|---|---|---|---|
+| TEST-CBAE-IRREG-Y1-01 | Remedios T. Mendoza | remedios.mendoza@grc.com | BSBA-HRM | 1 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y1-02 | Jaime L. Bautista | jaime.bautista@grc.com | BSBA-HRM | 1 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y1-03 | Victoria K. Fernandez | victoria.fernandez@grc.com | BSBA-HRM | 1 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y1-04 | Rogelio V. Aquino | rogelio.aquino@grc.com | BSBA-HRM | 1 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y1-05 | Teresita G. Morales | teresita.morales@grc.com | BSBA-HRM | 1 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y2-01 | Gloria E. Soriano | gloria.soriano@grc.com | BSBA-HRM | 2 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y2-02 | Ernesto B. Espiritu | ernesto.espiritu@grc.com | BSBA-HRM | 2 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y2-03 | Cynthia M. Corpuz | cynthia.corpuz@grc.com | BSBA-HRM | 2 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y2-04 | Edgardo R. Manalo | edgardo.manalo@grc.com | BSBA-HRM | 2 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y2-05 | Zenaida T. Domingo | zenaida.domingo@grc.com | BSBA-HRM | 2 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y3-01 | Mercedes C. Gutierrez | mercedes.gutierrez@grc.com | BSBA-HRM | 3 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y3-02 | Domingo V. David | domingo.david@grc.com | BSBA-HRM | 3 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y3-03 | Fe M. Miranda | fe.miranda@grc.com | BSBA-HRM | 3 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y3-04 | Salvador L. Cortez | salvador.cortez@grc.com | BSBA-HRM | 3 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y3-05 | Josefina G. Pineda | josefina.pineda@grc.com | BSBA-HRM | 3 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y4-01 | Corazon H. Villanueva | corazon.villanueva@grc.com | BSBA-HRM | 4 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y4-02 | Dante F. Tolentino | dante.tolentino@grc.com | BSBA-HRM | 4 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y4-03 | Ester C. Flores | ester.flores@grc.com | BSBA-HRM | 4 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y4-04 | Gerardo E. Morales | gerardo.morales@grc.com | BSBA-HRM | 4 | Not enrolled this term | 0.0 | — |
+| TEST-CBAE-IRREG-Y4-05 | Elena B. Salazar | elena.salazar@grc.com | BSBA-HRM | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y1-01 | Glenn M. Fernandez | glenn.fernandez@grc.com | BSA | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y1-02 | Rowena D. Cruz | rowena.cruz@grc.com | BSA | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y1-03 | Arlene L. Castro | arlene.castro@grc.com | BSA | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y1-04 | Dennis K. Aquino | dennis.aquino@grc.com | BSA | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y1-05 | Sharon V. Morales | sharon.morales@grc.com | BSA | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y2-01 | Melanie A. Soriano | melanie.soriano@grc.com | BSA | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y2-02 | Allan E. Espiritu | allan.espiritu@grc.com | BSA | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y2-03 | Gina B. Corpuz | gina.corpuz@grc.com | BSA | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y2-04 | Alvin M. Manalo | alvin.manalo@grc.com | BSA | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y2-05 | Jennifer R. Domingo | jennifer.domingo@grc.com | BSA | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y3-01 | Bernadette N. Gutierrez | bernadette.gutierrez@grc.com | BSA | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y3-02 | Nelson C. David | nelson.david@grc.com | BSA | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y3-03 | Evelyn V. Miranda | evelyn.miranda@grc.com | BSA | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y3-04 | Joel M. Cortez | joel.cortez@grc.com | BSA | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y3-05 | Cherry L. Pineda | cherry.pineda@grc.com | BSA | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y4-01 | Irene R. Villanueva | irene.villanueva@grc.com | BSA | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y4-02 | Benjamin H. Tolentino | benjamin.tolentino@grc.com | BSA | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y4-03 | Nancy F. Flores | nancy.flores@grc.com | BSA | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y4-04 | Wilfredo C. Morales | wilfredo.morales@grc.com | BSA | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COA-IRREG-Y4-05 | Caridad E. Salazar | caridad.salazar@grc.com | BSA | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y1-01 | Rolando S. Mendoza | rolando.mendoza@grc.com | BEED | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y1-02 | Imelda B. Garcia | imelda.garcia@grc.com | BEED | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y1-03 | Alfredo P. Bautista | alfredo.bautista@grc.com | BEED | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y1-04 | Carmelita L. Fernandez | carmelita.fernandez@grc.com | BEED | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y1-05 | Oscar K. Cruz | oscar.cruz@grc.com | BEED | 1 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y2-01 | Arsenio C. Ocampo | arsenio.ocampo@grc.com | BEED | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y2-02 | Teresa A. Dela Cruz | teresa.delacruz@grc.com | BEED | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y2-03 | Bonifacio E. Soriano | bonifacio.soriano@grc.com | BEED | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y2-04 | Milagros B. Espiritu | milagros.espiritu@grc.com | BEED | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y2-05 | Arturo M. Corpuz | arturo.corpuz@grc.com | BEED | 2 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y3-01 | Teodoro K. Santiago | teodoro.santiago@grc.com | BEED | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y3-02 | Nilda N. Aguilar | nilda.aguilar@grc.com | BEED | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y3-03 | Gregorio C. Gutierrez | gregorio.gutierrez@grc.com | BEED | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y3-04 | Aida V. David | aida.david@grc.com | BEED | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y3-05 | Melchor M. Miranda | melchor.miranda@grc.com | BEED | 3 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y4-01 | Virgilio D. Vergara | virgilio.vergara@grc.com | BEED | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y4-02 | Rosita R. Pascual | rosita.pascual@grc.com | BEED | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y4-03 | Jaime H. Villanueva | jaime.villanueva@grc.com | BEED | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y4-04 | Lourdes F. Tolentino | lourdes.tolentino@grc.com | BEED | 4 | Not enrolled this term | 0.0 | — |
+| TEST-COE-IRREG-Y4-05 | Conrado C. Flores | conrado.flores@grc.com | BEED | 4 | Not enrolled this term | 0.0 | — |
+| TEST-IRREG-Y1-01 | Mark Anthony L. Ramos | anthony.ramos@grc.com | BSIT | 1 | Enrolled | 18.0 | ITC, ITCL, ITP1, ITP1L, KOMFIL, MATHWRLD, NSTP 1, UNDSELF |
+| TEST-IRREG-Y1-02 | Patricia Nicole G. Garcia | patricia.garcia@grc.com | BSIT | 1 | Enrolled | 18.0 | ITC, ITCL, ITP1, ITP1L, KOMFIL, MATHWRLD, NSTP 1, UNDSELF |
+| TEST-IRREG-Y1-03 | John Paul T. Fernandez | johnpaul.fernandez@grc.com | BSIT | 1 | Enrolled | 18.0 | ITC, ITCL, ITP1, ITP1L, KOMFIL, MATHWRLD, NSTP 1, UNDSELF |
+| TEST-IRREG-Y1-04 | Bea Louise E. Aquino | bea.aquino@grc.com | BSIT | 1 | Enrolled | 18.0 | ITC, ITCL, ITP1, ITP1L, KOMFIL, MATHWRLD, NSTP 1, UNDSELF |
+| TEST-IRREG-Y1-05 | Gabriel Vince C. Castro | gabriel.castro@grc.com | BSIT | 1 | Enrolled | 18.0 | ITC, ITCL, ITP1, ITP1L, KOMFIL, MATHWRLD, NSTP 1, UNDSELF |
+| TEST-IRREG-Y2-01 | Justine Kyle B. Morales | justine.morales@grc.com | BSIT | 2 | Enrolled | 15.0 | AVE, CPROG2, DBMSYS, ENVISCI, IPT1, NW1, WST |
+| TEST-IRREG-Y2-02 | Hannah Mae S. Salazar | hannah.salazar@grc.com | BSIT | 2 | Enrolled | 15.0 | AVE, CPROG2, DBMSYS, ENVISCI, IPT1, NW1, WST |
+| TEST-IRREG-Y2-03 | Dominic Sean V. Navarro | dominic.navarro@grc.com | BSIT | 2 | Enrolled | 15.0 | AVE, CPROG2, DBMSYS, ENVISCI, IPT1, NW1, WST |
+| TEST-IRREG-Y2-04 | Alyssa Denise M. Mercado | alyssa.mercado@grc.com | BSIT | 2 | Enrolled | 15.0 | AVE, CPROG2, DBMSYS, ENVISCI, IPT1, NW1, WST |
+| TEST-IRREG-Y2-05 | Adrian Kenneth D. Ocampo | adrian.ocampo@grc.com | BSIT | 2 | Enrolled | 15.0 | AVE, CPROG2, DBMSYS, ENVISCI, IPT1, NW1, WST |
+| TEST-IRREG-Y3-01 | Jeric Matthew L. Domingo | jeric.domingo@grc.com | BSIT | 3 | Enrolled | 16.0 | ARTAPP, BMC, CAO, DMATH, PRELEC2, PT, SIA2 |
+| TEST-IRREG-Y3-02 | Erika Jane G. Valenzuela | erika.valenzuela@grc.com | BSIT | 3 | Enrolled | 16.0 | ARTAPP, BMC, CAO, DMATH, PRELEC2, PT, SIA2 |
+| TEST-IRREG-Y3-03 | Tristan Paul P. Salvador | tristan.salvador@grc.com | BSIT | 3 | Enrolled | 16.0 | ARTAPP, BMC, CAO, DMATH, PRELEC2, PT, SIA2 |
+| TEST-IRREG-Y3-04 | Mary Grace F. De Leon | grace.deleon@grc.com | BSIT | 3 | Enrolled | 16.0 | ARTAPP, BMC, CAO, DMATH, PRELEC2, PT, SIA2 |
+| TEST-IRREG-Y3-05 | Paolo Miguel S. Santiago | paolo.santiago@grc.com | BSIT | 3 | Enrolled | 16.0 | ARTAPP, BMC, CAO, DMATH, PRELEC2, PT, SIA2 |
+| TEST-IRREG-Y4-01 | Dexter Allen M. Pineda | dexter.pineda@grc.com | BSIT | 4 | Enrolled | 13.0 | BUSANA, CAPS2, SPI, IT-ELEC1, IAS2 |
+| TEST-IRREG-Y4-02 | Clarisse Anne R. Castillo | clarisse.castillo@grc.com | BSIT | 4 | Enrolled | 13.0 | BUSANA, CAPS2, SPI, IT-ELEC1, IAS2 |
+| TEST-IRREG-Y4-03 | Louie Anton B. Rivera | louie.rivera@grc.com | BSIT | 4 | Enrolled | 13.0 | BUSANA, CAPS2, SPI, IT-ELEC1, IAS2 |
+| TEST-IRREG-Y4-04 | Kimberly Rose S. Ignacio | kimberly.ignacio@grc.com | BSIT | 4 | Enrolled | 13.0 | BUSANA, CAPS2, SPI, IT-ELEC1, IAS2 |
+| TEST-IRREG-Y4-05 | Marco Antonio D. Vergara | marco.vergara@grc.com | BSIT | 4 | Enrolled | 13.0 | BUSANA, CAPS2, SPI, IT-ELEC1, IAS2 |
+| TEST-REG-Y1-01 | Juan Carlos M. Santos | carlos.santos@grc.com | BSIT | 1 | Enrolled | 30.5 | ITC, ITCL, ITP1, ITP1L, ITP2, ITP2L, KOMFIL, LEAD 1, MATHWRLD, NSTP 1, PATHFIT1, PHILHIST, PURPCOMM, UNDSELF |
+| TEST-REG-Y1-02 | Maria Angelica R. Reyes | angelica.reyes@grc.com | BSIT | 1 | Enrolled | 30.5 | ITC, ITCL, ITP1, ITP1L, ITP2, ITP2L, KOMFIL, LEAD 1, MATHWRLD, NSTP 1, PATHFIT1, PHILHIST, PURPCOMM, UNDSELF |
+| TEST-REG-Y1-03 | Christian Dave B. Bautista | christian.bautista@grc.com | BSIT | 1 | Enrolled | 30.5 | ITC, ITCL, ITP1, ITP1L, ITP2, ITP2L, KOMFIL, LEAD 1, MATHWRLD, NSTP 1, PATHFIT1, PHILHIST, PURPCOMM, UNDSELF |
+| TEST-REG-Y1-04 | Althea Mae D. Mendoza | althea.mendoza@grc.com | BSIT | 1 | Enrolled | 30.5 | ITC, ITCL, ITP1, ITP1L, ITP2, ITP2L, KOMFIL, LEAD 1, MATHWRLD, NSTP 1, PATHFIT1, PHILHIST, PURPCOMM, UNDSELF |
+| TEST-REG-Y1-05 | Joshua Miguel S. Cruz | joshua.cruz@grc.com | BSIT | 1 | Enrolled | 30.5 | ITC, ITCL, ITP1, ITP1L, ITP2, ITP2L, KOMFIL, LEAD 1, MATHWRLD, NSTP 1, PATHFIT1, PHILHIST, PURPCOMM, UNDSELF |
+| TEST-REG-Y2-01 | Rafael Luis A. Gonzales | rafael.gonzales@grc.com | BSIT | 2 | Enrolled | 24.5 | AVE, AVEL, CPROG2, CPROG2L, DBMSYS, DBMSYSL, ENVISCI, IPT1, IPT1L, LEAD 3, NW1, NW1L, PATHFIT3, WST, WSTL |
+| TEST-REG-Y2-02 | Camille Joy P. Pascual | camille.pascual@grc.com | BSIT | 2 | Enrolled | 24.5 | AVE, AVEL, CPROG2, CPROG2L, DBMSYS, DBMSYSL, ENVISCI, IPT1, IPT1L, LEAD 3, NW1, NW1L, PATHFIT3, WST, WSTL |
+| TEST-REG-Y2-03 | Angelo Miguel H. Villanueva | angelo.villanueva@grc.com | BSIT | 2 | Enrolled | 24.5 | AVE, AVEL, CPROG2, CPROG2L, DBMSYS, DBMSYSL, ENVISCI, IPT1, IPT1L, LEAD 3, NW1, NW1L, PATHFIT3, WST, WSTL |
+| TEST-REG-Y2-04 | Sophia Marie T. Tolentino | sophia.tolentino@grc.com | BSIT | 2 | Enrolled | 24.5 | AVE, AVEL, CPROG2, CPROG2L, DBMSYS, DBMSYSL, ENVISCI, IPT1, IPT1L, LEAD 3, NW1, NW1L, PATHFIT3, WST, WSTL |
+| TEST-REG-Y2-05 | Daniel Kevin F. Flores | daniel.flores@grc.com | BSIT | 2 | Enrolled | 24.5 | AVE, AVEL, CPROG2, CPROG2L, DBMSYS, DBMSYSL, ENVISCI, IPT1, IPT1L, LEAD 3, NW1, NW1L, PATHFIT3, WST, WSTL |
+| TEST-REG-Y3-01 | Kenneth Dale R. Dela Cruz | kenneth.delacruz@grc.com | BSIT | 3 | Enrolled | 22.5 | ARTAPP, BMC, BMCL, CAO, CAOL, DMATH, LEAD 5, PRELEC2, PRELEC2L, PT, PTL, SIA2, SIA2L |
+| TEST-REG-Y3-02 | Princess Kimberly C. Soriano | princess.soriano@grc.com | BSIT | 3 | Enrolled | 22.5 | ARTAPP, BMC, BMCL, CAO, CAOL, DMATH, LEAD 5, PRELEC2, PRELEC2L, PT, PTL, SIA2, SIA2L |
+| TEST-REG-Y3-03 | Nathaniel James E. Espiritu | nathaniel.espiritu@grc.com | BSIT | 3 | Enrolled | 22.5 | ARTAPP, BMC, BMCL, CAO, CAOL, DMATH, LEAD 5, PRELEC2, PRELEC2L, PT, PTL, SIA2, SIA2L |
+| TEST-REG-Y3-04 | Celine Joyce B. Corpuz | celine.corpuz@grc.com | BSIT | 3 | Enrolled | 22.5 | ARTAPP, BMC, BMCL, CAO, CAOL, DMATH, LEAD 5, PRELEC2, PRELEC2L, PT, PTL, SIA2, SIA2L |
+| TEST-REG-Y3-05 | Vince Ryan M. Manalo | vince.manalo@grc.com | BSIT | 3 | Enrolled | 22.5 | ARTAPP, BMC, BMCL, CAO, CAOL, DMATH, LEAD 5, PRELEC2, PRELEC2L, PT, PTL, SIA2, SIA2L |
+| TEST-REG-Y4-01 | Jerome Patrick A. Aguilar | jerome.aguilar@grc.com | BSIT | 4 | Enrolled | 19.5 | BUSANA, CAPS2, CAPS2L, LEAD 7, SPI, IT-ELEC1, IT-ELEC2, IAS2, IAS2L |
+| TEST-REG-Y4-02 | Rochelle Ann N. Gutierrez | rochelle.gutierrez@grc.com | BSIT | 4 | Enrolled | 19.5 | BUSANA, CAPS2, CAPS2L, LEAD 7, SPI, IT-ELEC1, IT-ELEC2, IAS2, IAS2L |
+| TEST-REG-Y4-03 | Aldrin Jay T. David | aldrin.david@grc.com | BSIT | 4 | Enrolled | 19.5 | BUSANA, CAPS2, CAPS2L, LEAD 7, SPI, IT-ELEC1, IT-ELEC2, IAS2, IAS2L |
+| TEST-REG-Y4-04 | Kristine Joy V. Miranda | kristine.miranda@grc.com | BSIT | 4 | Enrolled | 19.5 | BUSANA, CAPS2, CAPS2L, LEAD 7, SPI, IT-ELEC1, IT-ELEC2, IAS2, IAS2L |
+| TEST-REG-Y4-05 | Francis Edward C. Cortez | francis.cortez@grc.com | BSIT | 4 | Enrolled | 19.5 | BUSANA, CAPS2, CAPS2L, LEAD 7, SPI, IT-ELEC1, IT-ELEC2, IAS2, IAS2L |

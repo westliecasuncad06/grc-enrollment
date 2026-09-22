@@ -70,6 +70,7 @@ const AUDIENCE_LABELS = [
   ["year_3", "3rd Year"],
   ["year_4", "4th Year"],
   ["irregular", "Irregular Students"],
+  ["late_enrollee", "Late Enrollees"],
 ] as const
 
 function scheduleFixture(overrides: Partial<{ status: string; audiences: unknown[] }> = {}) {
@@ -188,6 +189,7 @@ describe("EnrollmentScheduleCard", () => {
                 { audience: "year_3", label: "3rd Year", opens_at: null, closes_at: null, is_open: true, reason: "open" },
                 { audience: "year_4", label: "4th Year", opens_at: null, closes_at: null, is_open: true, reason: "open" },
                 { audience: "irregular", label: "Irregular Students", opens_at: "2028-09-01T00:00:00Z", closes_at: null, is_open: false, reason: "before_window" },
+                { audience: "late_enrollee", label: "Late Enrollees", opens_at: null, closes_at: null, is_open: true, reason: "open" },
               ],
             }),
           ),
@@ -199,7 +201,7 @@ describe("EnrollmentScheduleCard", () => {
       session: registrarSession(),
     })
 
-    expect((await screen.findAllByText("Open now")).length).toBe(3)
+    expect((await screen.findAllByText("Open now")).length).toBe(4)
     expect((await screen.findAllByText("Opens later")).length).toBe(2)
   })
 
@@ -227,15 +229,16 @@ describe("EnrollmentScheduleCard", () => {
       enrollment_opens_at: string
       windows: { audience: string }[]
     }
-    // Five, not four: `UpdateEnrollmentScheduleRequest` validates
-    // `size:count(EnrollmentAudience::cases())`, so a four-item array 422s.
-    expect(body.windows).toHaveLength(5)
+    // Six, not five: `UpdateEnrollmentScheduleRequest` validates
+    // `size:count(EnrollmentAudience::cases())`, so a five-item array 422s.
+    expect(body.windows).toHaveLength(6)
     expect(body.windows.map((window) => window.audience)).toEqual([
       "year_1",
       "year_2",
       "year_3",
       "year_4",
       "irregular",
+      "late_enrollee",
     ])
     expect(body.enrollment_opens_at).toBe("2028-07-01T00:00:00.000Z")
     expect(await screen.findByText("Enrollment schedule saved.")).toBeInTheDocument()
@@ -258,6 +261,7 @@ describe("EnrollmentScheduleCard", () => {
     expect(screen.getByText("3rd Year")).toBeInTheDocument()
     expect(screen.getByText("4th Year")).toBeInTheDocument()
     expect(screen.getByText("Irregular Students")).toBeInTheDocument()
+    expect(screen.getByText("Late Enrollees")).toBeInTheDocument()
     expect(screen.queryByText("Year 1")).not.toBeInTheDocument()
 
     expect(

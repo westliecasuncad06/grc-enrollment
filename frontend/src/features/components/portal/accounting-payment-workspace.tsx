@@ -69,6 +69,7 @@ import type {
   PaymentConfirmation,
 } from "@/features/schemas/enrollment-schema"
 import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
+import { playQueueAlert } from "@/features/lib/queue-announcement"
 
 /**
  * Priority tickets always precede regular ones; within a tier, ordered by
@@ -287,6 +288,7 @@ export function AccountingPaymentWorkspace() {
     const next = waiting[0]
     if (!next) return
     ticketMutation.mutate({ id: next.id, action: "serve" })
+    playQueueAlert(next.ticket_number)
   }
 
   const completeCurrent = () => {
@@ -429,6 +431,7 @@ export function AccountingPaymentWorkspace() {
     if (!candidate || !candidate.ticket || nowServing) return
 
     ticketMutation.mutate({ id: candidate.ticket.id, action: "serve" })
+    playQueueAlert(candidate.ticket.ticket_number)
   }
 
   const issueTicketForCandidate = async () => {
@@ -865,6 +868,14 @@ export function AccountingPaymentWorkspace() {
                         type="button"
                         variant="outline"
                         disabled={ticketMutation.isPending}
+                        onClick={() => playQueueAlert(nowServing.ticket_number)}
+                      >
+                        Announce ticket 📢
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={ticketMutation.isPending}
                         onClick={skipCurrent}
                       >
                         Skip
@@ -1128,13 +1139,29 @@ export function AccountingPaymentWorkspace() {
             {nowServingEnrollment?.assessment?.total_amount && (
               <div className="grid gap-1.5 rounded-lg border bg-muted/20 p-3 text-xs">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Total Assessment:</span>
+                  <span>Current Term Assessment:</span>
                   <span className="font-semibold text-foreground">
                     {formatPhp(nowServingEnrollment.assessment.total_amount)}
                   </span>
                 </div>
+                {accountQuery.data && Number(accountQuery.data.prior_balance) > 0 && (
+                  <div className="flex justify-between text-amber-700 dark:text-amber-400">
+                    <span>Unpaid Prior Balance:</span>
+                    <span className="font-semibold">
+                      {formatPhp(accountQuery.data.prior_balance)}
+                    </span>
+                  </div>
+                )}
+                {accountQuery.data && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Total Account Outstanding:</span>
+                    <span className="font-semibold text-foreground">
+                      {formatPhp(accountQuery.data.outstanding_balance)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Payment Entered:</span>
+                  <span>Payment Entered (This Term):</span>
                   <span className="font-semibold text-primary">
                     {formatPhp(String((Number(amount) || 0).toFixed(2)))}
                   </span>
@@ -1144,19 +1171,37 @@ export function AccountingPaymentWorkspace() {
                   const entered = Number(amount) || 0
                   const remaining = Math.max(0, assessed - entered)
                   const isPartial = entered > 0 && entered < assessed
+                  const priorBalance = accountQuery.data ? Number(accountQuery.data.prior_balance) : 0
+                  const overallOutstanding = accountQuery.data ? Number(accountQuery.data.outstanding_balance) : assessed
+                  const remainingOverall = Math.max(0, overallOutstanding - entered)
                   return (
                     <>
                       <div className="flex justify-between border-t pt-1.5 font-medium">
                         <span className={isPartial ? "text-destructive font-semibold" : "text-muted-foreground"}>
-                          Remaining Balance:
+                          Remaining Term Balance:
                         </span>
                         <span className={isPartial ? "font-bold text-destructive" : "font-bold text-emerald-600"}>
                           {formatPhp(String(remaining.toFixed(2)))}
                         </span>
                       </div>
+                      {priorBalance > 0 && (
+                        <div className="flex justify-between font-medium">
+                          <span className="text-amber-800 dark:text-amber-300">
+                            Remaining Overall Balance:
+                          </span>
+                          <span className="font-bold text-amber-800 dark:text-amber-300">
+                            {formatPhp(String(remainingOverall.toFixed(2)))}
+                          </span>
+                        </div>
+                      )}
                       {isPartial && (
                         <p className="text-[11px] text-amber-800 font-medium pt-1">
                           * Note: Partial payment detected. Ensure a promissory note is on file for the remaining balance.
+                        </p>
+                      )}
+                      {priorBalance > 0 && (
+                        <p className="text-[11px] text-amber-800 font-medium pt-1">
+                          * Note: Student has {formatPhp(String(priorBalance.toFixed(2)))} in unpaid balance from prior terms. This payment clears the current term assessment ({formatPhp(nowServingEnrollment.assessment.total_amount)}). Prior balances must be settled separately via &quot;Record Payment&quot; in the Student Account section.
                         </p>
                       )}
                     </>

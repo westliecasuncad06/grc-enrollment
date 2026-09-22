@@ -12,7 +12,6 @@ import {
   Gauge,
   GraduationCap,
   IdCard,
-  ListChecks,
   Lock,
   Medal,
   Network,
@@ -116,12 +115,6 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Teaching Schedule",
         "Review approved teaching assignments.",
         FileClock,
-      ),
-      portalModule(
-        "class-rosters",
-        "Class Rosters",
-        "View the enrolled roster for each of your assigned sections.",
-        ListChecks,
       ),
       portalModule(
         "grade-submission",

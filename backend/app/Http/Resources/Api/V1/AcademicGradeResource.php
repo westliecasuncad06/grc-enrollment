@@ -27,10 +27,18 @@ final class AcademicGradeResource extends JsonResource
      *     id: int,
      *     student_id: int,
      *     student_number: string,
+     *     student_name: ?string,
      *     subject_id: int,
      *     subject_code: string,
+     *     subject_title: string,
      *     section_id: ?int,
+     *     section_code: ?string,
+     *     professor_id: ?int,
+     *     professor_name: ?string,
+     *     college: ?string,
      *     academic_term_id: int,
+     *     school_year: ?string,
+     *     semester: ?string,
      *     mark: ?string,
      *     mark_label: ?string,
      *     final_grade: ?string,
@@ -43,6 +51,10 @@ final class AcademicGradeResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $college = $this->resource->section?->sectionPlan?->college
+            ?? $this->resource->subject?->college
+            ?? $this->resource->student?->program?->college;
+
         return [
             'type' => 'academic_grade',
             'id' => $this->resource->id,
@@ -56,7 +68,7 @@ final class AcademicGradeResource extends JsonResource
             'section_code' => $this->resource->section?->section_code,
             'professor_id' => $this->resource->section?->professor_id ?? $this->resource->encoded_by,
             'professor_name' => $this->resource->section?->professor?->name ?? $this->resource->encoder?->name,
-            'college' => $this->resource->section?->college ?? $this->resource->student?->program?->department,
+            'college' => $college instanceof \BackedEnum ? $college->value : (is_string($college) ? $college : null),
             'academic_term_id' => $this->resource->academic_term_id,
             'school_year' => $this->resource->academicTerm?->school_year,
             'semester' => $this->resource->academicTerm?->semester,

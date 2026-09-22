@@ -18,7 +18,6 @@ const expectedModuleIds = {
   faculty: [
     "availability-preferences",
     "teaching-schedule",
-    "class-rosters",
     "grade-submission",
     "professor-information",
   ],

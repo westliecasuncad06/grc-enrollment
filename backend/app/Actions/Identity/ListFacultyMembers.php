@@ -33,6 +33,10 @@ final readonly class ListFacultyMembers
                     fn ($query) => $query->where('college', $actor->college?->value),
                 )
                 ->when(
+                    $actor->role === UserRole::Faculty,
+                    fn ($query) => $query->where('id', $actor->id),
+                )
+                ->when(
                     $actor->role === UserRole::RegistrarHead && $college !== null,
                     fn ($query) => $query->where('college', $college),
                 )

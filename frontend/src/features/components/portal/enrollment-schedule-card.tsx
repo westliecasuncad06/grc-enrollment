@@ -52,6 +52,7 @@ const AUDIENCE_FALLBACK_LABEL: Record<EnrollmentAudience, string> = {
   year_3: "3rd Year",
   year_4: "4th Year",
   irregular: "Irregular Students",
+  late_enrollee: "Late Enrollees",
 }
 
 interface AudienceFormValues {
@@ -67,6 +68,8 @@ interface AudienceFormValues {
   year_4_closes_at: string
   irregular_opens_at: string
   irregular_closes_at: string
+  late_enrollee_opens_at: string
+  late_enrollee_closes_at: string
 }
 
 // Flat field names rather than a mapped `Record<EnrollmentAudience, …>`:
@@ -77,6 +80,7 @@ const AUDIENCE_FIELDS = [
   { audience: "year_3", opensField: "year_3_opens_at", closesField: "year_3_closes_at" },
   { audience: "year_4", opensField: "year_4_opens_at", closesField: "year_4_closes_at" },
   { audience: "irregular", opensField: "irregular_opens_at", closesField: "irregular_closes_at" },
+  { audience: "late_enrollee", opensField: "late_enrollee_opens_at", closesField: "late_enrollee_closes_at" },
 ] as const satisfies readonly {
   audience: EnrollmentAudience
   opensField: keyof AudienceFormValues
@@ -96,6 +100,8 @@ const EMPTY_FORM_VALUES: AudienceFormValues = {
   year_4_closes_at: "",
   irregular_opens_at: "",
   irregular_closes_at: "",
+  late_enrollee_opens_at: "",
+  late_enrollee_closes_at: "",
 }
 
 export function EnrollmentScheduleCard({

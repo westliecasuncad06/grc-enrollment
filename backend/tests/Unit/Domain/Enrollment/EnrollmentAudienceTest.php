@@ -9,10 +9,10 @@ use PHPUnit\Framework\TestCase;
 
 final class EnrollmentAudienceTest extends TestCase
 {
-    public function test_cases_are_the_five_approved_audiences_in_order(): void
+    public function test_cases_are_the_approved_audiences_in_order(): void
     {
         self::assertSame(
-            ['year_1', 'year_2', 'year_3', 'year_4', 'irregular'],
+            ['year_1', 'year_2', 'year_3', 'year_4', 'irregular', 'late_enrollee'],
             array_column(EnrollmentAudience::cases(), 'value'),
         );
     }
@@ -35,9 +35,10 @@ final class EnrollmentAudienceTest extends TestCase
         ];
     }
 
-    public function test_irregular_has_no_single_year_level(): void
+    public function test_irregular_and_late_enrollee_have_no_single_year_level(): void
     {
         self::assertNull(EnrollmentAudience::Irregular->yearLevel());
+        self::assertNull(EnrollmentAudience::LateEnrollee->yearLevel());
     }
 
     public function test_an_unsupported_year_level_is_rejected(): void
@@ -64,12 +65,13 @@ final class EnrollmentAudienceTest extends TestCase
         self::assertSame(EnrollmentAudience::Irregular, EnrollmentAudience::forStudent('Irregular', 4));
     }
 
-    public function test_labels_are_ordinal_for_year_levels_and_named_for_irregular(): void
+    public function test_labels_are_ordinal_for_year_levels_and_named_for_irregular_and_late(): void
     {
         self::assertSame('1st Year', EnrollmentAudience::Year1->label());
         self::assertSame('2nd Year', EnrollmentAudience::Year2->label());
         self::assertSame('3rd Year', EnrollmentAudience::Year3->label());
         self::assertSame('4th Year', EnrollmentAudience::Year4->label());
         self::assertSame('Irregular Students', EnrollmentAudience::Irregular->label());
+        self::assertSame('Late Enrollees', EnrollmentAudience::LateEnrollee->label());
     }
 }

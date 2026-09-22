@@ -13,6 +13,7 @@ import {
   readQueueCallSoundPreference,
   writeQueueCallSoundPreference,
 } from "@/features/lib/queue-alert-preference"
+import { announceTicketNumber } from "@/features/lib/queue-announcement"
 import type { StudentQueueView } from "@/features/schemas/student-queue-schema"
 
 type QueueTicket = StudentQueueView["ticket"]
@@ -312,6 +313,7 @@ export function useQueueCallAlert(ticket: QueueTicket) {
 
       if (getSharedSoundEnabled()) {
         playSharedTone(owner)
+        announceTicketNumber(currentTicket.ticket_number)
       }
 
       alertTimerRef.current = window.setTimeout(

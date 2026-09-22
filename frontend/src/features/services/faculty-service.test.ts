@@ -187,7 +187,7 @@ describe("faculty-service", () => {
       subjectTitle: "Programming 1",
       termLabel: "2026-2027 · 1st",
       days: "MWF",
-      time: "08:00–09:30",
+      time: "8:00 AM–9:30 AM",
       room: "R201",
       statusLabel: "Published",
     })

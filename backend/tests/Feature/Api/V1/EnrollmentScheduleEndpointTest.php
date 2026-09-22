@@ -14,6 +14,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -114,7 +115,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
         $response = $this->withToken($token)->getJson("/api/v1/academic-terms/{$term->id}/enrollment-windows");
 
         $response->assertOk();
-        self::assertCount(5, $response->json('data.audiences'));
+        self::assertCount(6, $response->json('data.audiences'));
         foreach ($response->json('data.audiences') as $audience) {
             // No `academic_term_enrollment_windows` row exists for any
             // audience, so every one falls back to the term-wide dates.
@@ -124,7 +125,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
             self::assertSame('open', $audience['reason']);
         }
         self::assertSame(
-            ['year_1', 'year_2', 'year_3', 'year_4', 'irregular'],
+            ['year_1', 'year_2', 'year_3', 'year_4', 'irregular', 'late_enrollee'],
             array_column($response->json('data.audiences'), 'audience'),
         );
     }
@@ -264,6 +265,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
                 ['audience' => 'year_2', 'opens_at' => '2028-07-10T00:00:00Z', 'closes_at' => '2028-07-20T00:00:00Z'],
                 ['audience' => 'year_1', 'opens_at' => '2028-07-15T00:00:00Z', 'closes_at' => '2028-07-31T00:00:00Z'],
                 ['audience' => 'irregular', 'opens_at' => '2028-07-20T00:00:00Z', 'closes_at' => '2028-07-31T00:00:00Z'],
+                ['audience' => 'late_enrollee', 'opens_at' => '2028-07-25T00:00:00Z', 'closes_at' => '2028-07-31T00:00:00Z'],
             ],
         ];
 
@@ -280,6 +282,12 @@ final class EnrollmentScheduleEndpointTest extends TestCase
             'academic_term_id' => $term->id,
             'audience' => 'irregular',
             'opens_at' => '2028-07-20 00:00:00',
+            'closes_at' => '2028-07-31 00:00:00',
+        ]);
+        $this->assertDatabaseHas('academic_term_enrollment_windows', [
+            'academic_term_id' => $term->id,
+            'audience' => 'late_enrollee',
+            'opens_at' => '2028-07-25 00:00:00',
             'closes_at' => '2028-07-31 00:00:00',
         ]);
         $this->assertDatabaseHas('audit_logs', [
@@ -354,9 +362,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
     }
 
-    /**
-     * @dataProvider nonRegistrarHeadRoleProvider
-     */
+    #[DataProvider('nonRegistrarHeadRoleProvider')]
     public function test_a_non_registrar_head_role_cannot_save_a_schedule(UserRole $role): void
     {
         $term = AcademicTerm::create(['school_year' => '2028-2029', 'semester' => '1st', 'status' => AcademicTermStatus::Draft]);

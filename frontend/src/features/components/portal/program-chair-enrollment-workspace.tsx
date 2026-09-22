@@ -659,8 +659,11 @@ export function ProgramChairEnrollmentWorkspace({
     }, 1_500)
     return () => window.clearTimeout(poll)
   }, [generationRun, queryClient, session?.userId, termId])
+
   const currentProposal = (proposalsQuery.data ?? []).find(
-    (proposal) => proposal.academic_term_id === termId,
+    (proposal) =>
+      proposal.academic_term_id === termId &&
+      (!session?.college || proposal.college === session.college),
   )
   const returnedProposal = currentProposal?.is_returned
     ? currentProposal

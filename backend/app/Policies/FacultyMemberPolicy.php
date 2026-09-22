@@ -10,7 +10,8 @@ final class FacultyMemberPolicy
     public function viewAny(User $user): bool
     {
         return ($user->role === UserRole::ProgramChair && $user->college !== null)
-            || $user->role === UserRole::RegistrarHead;
+            || $user->role === UserRole::RegistrarHead
+            || $user->role === UserRole::Faculty;
     }
 
     public function updateWorkforceProfile(User $user, User $facultyMember): bool

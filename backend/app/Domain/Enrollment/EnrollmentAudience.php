@@ -21,6 +21,7 @@ enum EnrollmentAudience: string
     case Year3 = 'year_3';
     case Year4 = 'year_4';
     case Irregular = 'irregular';
+    case LateEnrollee = 'late_enrollee';
 
     /**
      * The `student_profiles.enrollment_category` value meaning "irregular".
@@ -37,11 +38,12 @@ enum EnrollmentAudience: string
             self::Year3 => '3rd Year',
             self::Year4 => '4th Year',
             self::Irregular => 'Irregular Students',
+            self::LateEnrollee => 'Late Enrollees',
         };
     }
 
     /**
-     * Null for Irregular — it is not tied to a single year level.
+     * Null for Irregular and Late Enrollees — they are not tied to a single year level.
      */
     public function yearLevel(): ?int
     {
@@ -50,7 +52,7 @@ enum EnrollmentAudience: string
             self::Year2 => 2,
             self::Year3 => 3,
             self::Year4 => 4,
-            self::Irregular => null,
+            self::Irregular, self::LateEnrollee => null,
         };
     }
 

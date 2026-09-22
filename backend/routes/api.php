@@ -371,7 +371,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         });
 
         Route::get('/faculty-members', FacultyMemberController::class)
-            ->middleware('role:program_chair,registrar_head')
+            ->middleware('role:program_chair,registrar_head,faculty')
             ->name('faculty-members.index');
 
         // Enrollment analytics are role-scoped by DashboardPolicy: Program

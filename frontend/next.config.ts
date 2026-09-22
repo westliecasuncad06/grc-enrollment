@@ -34,6 +34,9 @@ function getDevOrigins(): string[] {
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   allowedDevOrigins: getDevOrigins(),
+  experimental: {
+    turbopackFileSystemCacheForDev: false,
+  },
 }
 
 export default nextConfig

@@ -23,6 +23,7 @@ export const enrollmentAudienceSchema = z.enum([
   "year_3",
   "year_4",
   "irregular",
+  "late_enrollee",
 ])
 
 /**

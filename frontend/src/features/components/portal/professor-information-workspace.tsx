@@ -32,14 +32,17 @@ export function ProfessorInformationWorkspace() {
   const directoryQuery = useFacultyDirectoryQuery(true)
 
   const ownRecord = useMemo(() => {
-    if (!directoryQuery.data || !session?.displayName) return null
+    if (!directoryQuery.data || !session) return null
+    const facultyId = Number(session.userId)
     return (
       directoryQuery.data.find(
         (member) =>
-          member.name.toLowerCase() === session.displayName.toLowerCase(),
+          member.id === facultyId ||
+          (Boolean(session.displayName) &&
+            member.name.toLowerCase() === session.displayName.toLowerCase()),
       ) ?? null
     )
-  }, [directoryQuery.data, session?.displayName])
+  }, [directoryQuery.data, session])
 
   return (
     <WorkspacePage

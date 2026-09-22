@@ -60,7 +60,7 @@ final class FacultyMembersEndpointTest extends TestCase
             ->assertJsonPath('data.1.id', $secondFaculty->id);
 
         self::assertSame(
-            ['type', 'id', 'name', 'college', 'status', 'status_label', 'employment_type', 'employment_type_label', 'planning_unit_reference', 'is_assignable'],
+            ['type', 'id', 'name', 'college', 'status', 'status_label', 'employment_type', 'employment_type_label', 'planning_unit_reference', 'deactivation_reason', 'is_assignable'],
             array_keys($response->json('data.0')),
         );
         $response->assertDontSee($firstFaculty->email);
@@ -197,13 +197,29 @@ final class FacultyMembersEndpointTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_faculty_member_can_view_own_record_only(): void
+    {
+        $facultyMe = $this->makeUser('faculty-me', UserRole::Faculty, 'Diana Santos', UserStatus::Active, CollegeCode::Ccs);
+        $facultyOther = $this->makeUser('faculty-other', UserRole::Faculty, 'Other Professor', UserStatus::Active, CollegeCode::Ccs);
+
+        $response = $this->withToken($this->tokenFor($facultyMe))
+            ->getJson('/api/v1/faculty-members');
+
+        $response
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $facultyMe->id)
+            ->assertJsonPath('data.0.name', 'Diana Santos');
+    }
+
     /**
      * @return iterable<string, array{UserRole}>
      */
     public static function nonChairRoleProvider(): iterable
     {
         foreach (UserRole::cases() as $role) {
-            if ($role !== UserRole::ProgramChair && $role !== UserRole::RegistrarHead) {
+            if ($role !== UserRole::ProgramChair && $role !== UserRole::RegistrarHead && $role !== UserRole::Faculty) {
                 yield $role->value => [$role];
             }
         }

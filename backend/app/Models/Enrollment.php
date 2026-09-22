@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\UserRole;
 use Carbon\CarbonImmutable;
@@ -185,5 +186,29 @@ final class Enrollment extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(EnrollmentDocument::class);
+    }
+
+    public function isLateEnrollee(): bool
+    {
+        $submittedAt = $this->submitted_at ?? $this->created_at;
+        if (! $submittedAt) {
+            return false;
+        }
+
+        $term = $this->academicTerm;
+        if (! $term) {
+            return false;
+        }
+
+        /** @var ?AcademicTermEnrollmentWindow $lateWindow */
+        $lateWindow = $term->enrollmentWindows?->first(
+            fn (AcademicTermEnrollmentWindow $w) => $w->audience === EnrollmentAudience::LateEnrollee
+        );
+
+        if ($lateWindow && $lateWindow->opens_at) {
+            return $submittedAt->greaterThanOrEqualTo($lateWindow->opens_at);
+        }
+
+        return false;
     }
 }

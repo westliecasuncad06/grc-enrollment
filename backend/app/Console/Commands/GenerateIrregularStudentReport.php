@@ -92,6 +92,10 @@ final class GenerateIrregularStudentReport extends Command
      */
     private function renderContents(array $rows): string
     {
+        $semesterInfo = $this->loadSemesterInfo(array_column($rows, 'student_number'));
+        $termLabel = $semesterInfo['term_label'] ?? 'Current Term';
+        $studentSemesterData = $semesterInfo['students'] ?? [];
+
         $lines = [
             '# Irregular Students',
             '',
@@ -101,25 +105,224 @@ final class GenerateIrregularStudentReport extends Command
             '(`Database\\Seeders\\StudentRosterSeeder`). A student appears here only when the database itself derived them',
             'as Irregular — never a guess.',
             '',
+            "**Active Academic Term:** {$termLabel}",
             '**Total irregular students:** '.count($rows),
             '',
-            '| Student No. | Name | Email | Program | Section | Year |',
-            '|---|---|---|---|---|---|',
+            '## Seeded Roster Irregular Students',
+            '',
+            '| Student No. | Name | Email | Program | Section | Year | Sem Status | Units | Enrolled Subjects | Irregular Notes |',
+            '|---|---|---|---|---|---|---|---|---|---|',
         ];
 
         foreach ($rows as $row) {
+            $sem = $studentSemesterData[$row['student_number']] ?? [
+                'status' => 'Not enrolled this term',
+                'units' => '0.0',
+                'subjects' => '—',
+                'notes' => 'Irregular standing',
+            ];
+
             $lines[] = sprintf(
-                '| %s | %s | %s | %s | %s | %d |',
+                '| %s | %s | %s | %s | %s | %d | %s | %s | %s | %s |',
                 $row['student_number'],
                 $row['name'],
                 $row['email'],
                 $row['program_code'],
                 $row['section_code'],
                 $row['year_level'],
+                $sem['status'],
+                $sem['units'],
+                $sem['subjects'],
+                $sem['notes'],
             );
         }
 
+        $cohortIrregulars = $this->loadCohortIrregulars($termLabel);
+        if ($cohortIrregulars !== []) {
+            $lines[] = '';
+            $lines[] = "## Active Institutional Test Cohorts ({$termLabel})";
+            $lines[] = '';
+            $lines[] = '| Student No. | Name | Email | Program | Year | Sem Status | Units | Enrolled Subjects |';
+            $lines[] = '|---|---|---|---|---|---|---|---|';
+            foreach ($cohortIrregulars as $cohort) {
+                $lines[] = sprintf(
+                    '| %s | %s | %s | %s | %d | %s | %s | %s |',
+                    $cohort['student_number'],
+                    $cohort['name'],
+                    $cohort['email'],
+                    $cohort['program_code'],
+                    $cohort['year_level'],
+                    $cohort['status'],
+                    $cohort['units'],
+                    $cohort['subjects'],
+                );
+            }
+        }
+
         return implode(PHP_EOL, $lines).PHP_EOL;
+    }
+
+    /**
+     * @param  list<string>  $studentNumbers
+     * @return array{term_label: string, students: array<string, array{status: string, units: string, subjects: string, notes: string}>}
+     */
+    private function loadSemesterInfo(array $studentNumbers): array
+    {
+        if ($studentNumbers === []) {
+            return ['term_label' => 'Current Term', 'students' => []];
+        }
+
+        $term = DB::table('academic_terms')
+            ->where('status', 'semester_ongoing')
+            ->first() ?? DB::table('academic_terms')->orderByDesc('id')->first();
+
+        if (! $term) {
+            return ['term_label' => 'Current Term', 'students' => []];
+        }
+
+        $profiles = DB::table('student_profiles')
+            ->whereIn('student_number', $studentNumbers)
+            ->get(['id', 'student_number'])
+            ->keyBy('student_number');
+
+        $profileIds = $profiles->pluck('id')->all();
+
+        $enrollments = DB::table('enrollments')
+            ->where('academic_term_id', $term->id)
+            ->whereIn('student_id', $profileIds)
+            ->get(['id', 'student_id', 'status', 'total_units'])
+            ->keyBy('student_id');
+
+        $enrollmentIds = $enrollments->pluck('id')->all();
+
+        $subjectsByEnrollment = [];
+        if ($enrollmentIds !== []) {
+            $enrolledSubjects = DB::table('enrollment_subjects')
+                ->join('sections', 'sections.id', '=', 'enrollment_subjects.section_id')
+                ->join('subjects', 'subjects.id', '=', 'sections.subject_id')
+                ->whereIn('enrollment_subjects.enrollment_id', $enrollmentIds)
+                ->get(['enrollment_subjects.enrollment_id', 'subjects.code']);
+
+            foreach ($enrolledSubjects as $es) {
+                $subjectsByEnrollment[$es->enrollment_id][] = $es->code;
+            }
+        }
+
+        $failedByStudent = [];
+        if ($profileIds !== []) {
+            $failedGrades = DB::table('academic_grades')
+                ->join('subjects', 'subjects.id', '=', 'academic_grades.subject_id')
+                ->whereIn('academic_grades.student_id', $profileIds)
+                ->where(function ($q) {
+                    $q->whereIn('academic_grades.mark', ['5.00', 'INC', 'DRP', 'NC'])
+                      ->orWhere('academic_grades.remarks', 'like', '%fail%');
+                })
+                ->get(['academic_grades.student_id', 'subjects.code', 'academic_grades.final_grade', 'academic_grades.mark']);
+
+            foreach ($failedGrades as $fg) {
+                $failedByStudent[$fg->student_id][] = $fg->code . ' (' . ($fg->final_grade ?? $fg->mark ?? 'Failed') . ')';
+            }
+        }
+
+        $termLabel = $term->school_year . ' · ' . $term->semester;
+        $students = [];
+
+        foreach ($studentNumbers as $no) {
+            $profile = $profiles->get($no);
+            if (! $profile) {
+                continue;
+            }
+
+            $enr = $enrollments->get($profile->id);
+            $subjs = $enr ? ($subjectsByEnrollment[$enr->id] ?? []) : [];
+            $failed = $failedByStudent[$profile->id] ?? [];
+
+            $students[$no] = [
+                'status' => $enr ? ucfirst(str_replace('_', ' ', $enr->status)) : 'Not enrolled this term',
+                'units' => $enr ? number_format((float) $enr->total_units, 1) : '0.0',
+                'subjects' => $subjs !== [] ? implode(', ', array_unique($subjs)) : '—',
+                'notes' => $failed !== [] ? 'Backlog: ' . implode(', ', array_unique($failed)) : 'Irregular standing from curriculum evaluation',
+            ];
+        }
+
+        return [
+            'term_label' => $termLabel,
+            'students' => $students,
+        ];
+    }
+
+    /**
+     * @return list<array{student_number: string, name: string, email: string, program_code: string, year_level: int, status: string, units: string, subjects: string}>
+     */
+    private function loadCohortIrregulars(string $termLabel): array
+    {
+        $term = DB::table('academic_terms')
+            ->where('status', 'semester_ongoing')
+            ->first() ?? DB::table('academic_terms')->orderByDesc('id')->first();
+
+        if (! $term) {
+            return [];
+        }
+
+        $cohortProfiles = DB::table('student_profiles')
+            ->join('users', 'users.id', '=', 'student_profiles.user_id')
+            ->join('programs', 'programs.id', '=', 'student_profiles.program_id')
+            ->where('student_profiles.enrollment_category', 'irregular')
+            ->where('student_profiles.student_number', 'like', 'TEST-%')
+            ->get([
+                'student_profiles.student_number',
+                'users.name',
+                'users.email',
+                'programs.code as program_code',
+                'student_profiles.year_level',
+                'student_profiles.id as profile_id',
+            ]);
+
+        if ($cohortProfiles->isEmpty()) {
+            return [];
+        }
+
+        $profileIds = $cohortProfiles->pluck('profile_id')->all();
+
+        $enrollments = DB::table('enrollments')
+            ->where('academic_term_id', $term->id)
+            ->whereIn('student_id', $profileIds)
+            ->get(['id', 'student_id', 'status', 'total_units'])
+            ->keyBy('student_id');
+
+        $enrollmentIds = $enrollments->pluck('id')->all();
+
+        $subjectsByEnrollment = [];
+        if ($enrollmentIds !== []) {
+            $enrolledSubjects = DB::table('enrollment_subjects')
+                ->join('sections', 'sections.id', '=', 'enrollment_subjects.section_id')
+                ->join('subjects', 'subjects.id', '=', 'sections.subject_id')
+                ->whereIn('enrollment_subjects.enrollment_id', $enrollmentIds)
+                ->get(['enrollment_subjects.enrollment_id', 'subjects.code']);
+
+            foreach ($enrolledSubjects as $es) {
+                $subjectsByEnrollment[$es->enrollment_id][] = $es->code;
+            }
+        }
+
+        $rows = [];
+        foreach ($cohortProfiles as $cp) {
+            $enr = $enrollments->get($cp->profile_id);
+            $subjs = $enr ? ($subjectsByEnrollment[$enr->id] ?? []) : [];
+
+            $rows[] = [
+                'student_number' => $cp->student_number,
+                'name' => $cp->name,
+                'email' => $cp->email,
+                'program_code' => $cp->program_code,
+                'year_level' => (int) $cp->year_level,
+                'status' => $enr ? ucfirst(str_replace('_', ' ', $enr->status)) : 'Not enrolled this term',
+                'units' => $enr ? number_format((float) $enr->total_units, 1) : '0.0',
+                'subjects' => $subjs !== [] ? implode(', ', array_unique($subjs)) : '—',
+            ];
+        }
+
+        return $rows;
     }
 
     /**

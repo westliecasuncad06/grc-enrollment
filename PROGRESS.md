@@ -1,5 +1,168 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-22 — Irregular Students Semester Info & Stakeholder Google Doc Fixes
+
+0. **Objectives**:
+   - Update `Subject And Prerequisuite/Irregular-Students.md` with comprehensive current semester details (enrolled status, units, subjects, standing notes) via `GenerateIrregularStudentReport.php`.
+   - Resolve stakeholder Google Doc requirements:
+     1. Analyze and clarify Cashier assessment (₱10,000) vs outstanding balance (₱19,000) for Domingo S. Dimalanta and enhance Cashier Confirm Payment modal with complete breakdown.
+     2. Convert Faculty Teaching Schedule time from military time (`13:30–16:30`) to 12-hour format (`1:30 PM–4:30 PM`).
+     3. Remove redundant "Class Rosters" from Faculty sidebar navigation.
+     4. Resolve Faculty "My Information" 403 Forbidden error in `FacultyMemberPolicy` and `ListFacultyMembers`.
+     5. Add "Late Enrollees" timeframe option to Registrar Head Enrollment Schedule settings (`EnrollmentAudience::LateEnrollee`, form fields, `is_late_enrollee` flag).
+     6. Enhance queue call sound to announce ticket numbers (e.g. "Now serving ticket Q 0 0 3") via Web Speech Synthesis API and Web Audio alert chimes.
+   - Run verification and push saving point to GitHub `origin/main`.
+
+1. **Resolution & Changes**:
+   - **Irregular Students Roster**:
+     - Updated `backend/app/Console/Commands/GenerateIrregularStudentReport.php` to fetch active term (2026-2027 · 1st Sem) data, active enrollment status, enrolled subjects count, units count, subjects list, deficiency reasons, and test cohort credentials.
+     - Generated updated `Subject And Prerequisuite/Irregular-Students.md`.
+     - Verified: `GenerateIrregularStudentReportTest` passed 3/3 tests.
+   - **Cashier Assessment Breakdown**:
+     - Investigated Domingo S. Dimalanta (`2025-06-01196`): Prior unpaid assessments total ₱19,000 (₱9,500 in 2025-2026 1st + ₱9,500 in 2025-2026 2nd). Current term (2026-2027 1st) assessment is ₱10,000. Total account balance is ₱29,000. Confirming payment of ₱10,000 clears current term assessment, leaving ₱19,000 unpaid prior balance.
+     - Enhanced Confirm Payment modal in `frontend/src/features/components/portal/accounting-payment-workspace.tsx` to display:
+       - Current Term Assessment (`formatPhp(nowServingEnrollment.assessment.total_amount)`)
+       - Unpaid Prior Balance from Previous Terms (`formatPhp(accountQuery.data.prior_balance)`)
+       - Total Account Outstanding (`formatPhp(accountQuery.data.outstanding_balance)`)
+       - Payment Entered (This Term)
+       - Remaining Term Balance
+       - Remaining Overall Balance (including Prior Terms)
+       - Explicit guidance note explaining that enrollment payment settles current term assessment and prior balances remain payable via "Record Payment" under Student Account.
+   - **Faculty Teaching Schedule Format**:
+     - Updated `frontend/src/features/services/faculty-service.ts` to convert military time ranges (`13:30–16:30`) to 12-hour format with AM/PM (`1:30 PM–4:30 PM`) via `formatTimeRange`.
+     - Updated `frontend/src/features/services/faculty-service.test.ts`.
+   - **Faculty Portal Navigation**:
+     - Removed `"class-rosters"` from `faculty.modules` in `frontend/src/features/portal/role-capabilities.ts`.
+     - Cleaned up unused `ListChecks` import.
+     - Updated `frontend/src/features/portal/role-capabilities.test.ts`.
+   - **Faculty "My Information" 403 Forbidden Fix**:
+     - Updated `backend/routes/api.php` `/api/v1/faculty-members` middleware from `role:program_chair,registrar_head` to `role:program_chair,registrar_head,faculty`.
+     - Updated `backend/app/Policies/FacultyMemberPolicy.php` to allow `UserRole::Faculty` in `viewAny()`.
+     - Scoped `backend/app/Actions/Identity/ListFacultyMembers.php` so `UserRole::Faculty` can only view their own record (`where('id', $actor->id)`).
+     - Updated `frontend/src/features/components/portal/professor-information-workspace.tsx` `ownRecord` resolution to match by `member.id === Number(session.userId)` or `displayName`.
+     - Updated `backend/tests/Feature/Api/V1/FacultyMembersEndpointTest.php`.
+   - **Registrar Head Late Enrollees Timeframe**:
+     - Added `case LateEnrollee = 'late_enrollee';` to `backend/app/Domain/Enrollment/EnrollmentAudience.php` with label "Late Enrollees" and null year level.
+     - Added `isLateEnrollee(): bool` helper to `backend/app/Models/Enrollment.php`.
+     - Added `'is_late_enrollee'` boolean to `backend/app/Http/Resources/Api/V1/EnrollmentResource.php`.
+     - Added `"late_enrollee"` to `enrollmentAudienceSchema` in `frontend/src/features/schemas/enrollment-window-schema.ts`.
+     - Added `is_late_enrollee` to `enrollmentSchema` in `frontend/src/features/schemas/enrollment-schema.ts`.
+     - Extended `frontend/src/features/components/portal/enrollment-schedule-card.tsx` with `late_enrollee` fallback label, form values, and fields.
+     - Updated `EnrollmentScheduleEndpointTest.php`, `EnrollmentAudienceTest.php`, and `enrollment-schedule-card.test.tsx`.
+   - **Queue Alert Sound & Ticket Voice Announcement**:
+     - Created `frontend/src/features/lib/queue-announcement.ts`:
+       - `formatTicketForSpeech`: Formats ticket numbers (e.g. "Q003" -> "Q 0 0 3", "Q-001" -> "Q 0 0 1").
+       - `playAlertChime`: Generates a pleasant two-tone chime (587.33 Hz [D5] -> 880 Hz [A5]) via Web Audio API.
+       - `announceTicketNumber`: Uses Web Speech Synthesis API to announce "Now serving ticket Q 0 0 3".
+       - `playQueueAlert`: Combines chime and speech announcement.
+     - Integrated `playQueueAlert` into `accounting-payment-workspace.tsx` on `callNext` and `serveSelectedStudent`.
+     - Added an "Announce ticket 📢" button on the Cashier's now-serving student card for convenient re-announcements.
+     - Integrated `announceTicketNumber` into `use-queue-call-alert.ts` when a student's ticket transitions to `serving`.
+     - Created comprehensive unit test `frontend/src/features/lib/queue-announcement.test.ts`.
+
+2. **Verification Results**:
+   - Backend PHPUnit tests: `php artisan test` passed 71/71 tests (247 assertions) across affected suites (`FacultyMembersEndpointTest`, `EnrollmentScheduleEndpointTest`, `EnrollmentAudienceTest`, `GenerateIrregularStudentReportTest`, `AcademicGradesEndpointTest`).
+   - Frontend TypeScript check: `npm run typecheck` passed with 0 errors.
+   - Frontend Vitest unit tests:
+     - `queue-announcement.test.ts`: 4/4 passed.
+     - `use-queue-call-alert.test.tsx`: 10/10 passed.
+     - `enrollment-schedule-card.test.tsx`: 5/5 passed.
+     - `faculty-service.test.ts`: 5/5 passed.
+     - `role-capabilities.test.ts`: 5/5 passed.
+     - `accounting-payment-workspace.test.tsx`: 21/21 passed.
+     - Full frontend test suite: 57 test files, 634 passed (0 failed).
+
+## 2026-09-22 — MySQL Unexpected Shutdown & Database Tablespace Rebuild
+
+0. **Problem & Discovery**:
+   - XAMPP reported `Error: MySQL shutdown unexpectedly. This may be due to a blocked port, missing dependencies, improper privileges, a crash, or a shutdown by another method.`
+   - In `mysql_error.log`, MariaDB suffered a fatal InnoDB semaphore wait deadlock (> 600s) on `log0log.cc` during `log_checkpoint` due to undersized 5MB redo logs (`ib_logfile0/1`) and 64MB buffer pool under heavy writes.
+   - The ungraceful crash caused:
+     1. Aria system tables in `mysql` (`columns_priv`, `proxies_priv`, `tables_priv`, `roles_mapping`, `event`, `time_zone`) to become corrupted with CRC errors (`Got error 176 "Read page with wrong checksum"` and invalid data lengths), blocking `FLUSH PRIVILEGES` and causing `Access denied for user 'grc_app'@'localhost'`.
+     2. Redo logs to hold incomplete checkpoints (`Missing MLOG_CHECKPOINT ... Plugin initialization aborted with error Generic error`).
+     3. An emergency `innodb_force_recovery=1` in `my.ini` kept InnoDB in degraded mode.
+
+1. **Resolution**:
+   - Safely created complete, uncorrupted SQL dumps of all databases:
+     - `backend/storage/backups/grc_enrollment_backup_20260922.sql` (141 MB)
+     - `backend/storage/backups/all_databases_backup_20260922.sql` (143 MB)
+   - Backed up corrupted directory to `c:\xampp\mysql\data_old_corrupted`.
+   - Restored clean baseline system tables from `c:\xampp\mysql\backup`, verified and repaired all Aria tables using `aria_chk.exe -o`.
+   - Optimized MariaDB configuration in `C:\xampp\mysql\bin\my.ini`:
+     - Increased `innodb_buffer_pool_size=256M` (up from 64M).
+     - Increased `innodb_log_file_size=64M` (up from 5M) to prevent redo log checkpoints from hanging.
+     - Increased `innodb_log_buffer_size=16M` (up from 8M).
+     - Increased `max_allowed_packet=64M` (up from 1M).
+     - Removed `innodb_force_recovery=1`.
+   - Initialized fresh, pristine 64MB redo log files (`ib_logfile0` and `ib_logfile1`).
+   - Restored all databases and tables from `all_databases_backup_20260922.sql`.
+   - Flushed privileges, restoring full grants for `grc_app@localhost` and `grc_app@127.0.0.1`.
+   - Cleanly stopped standalone mysqld process with `mysqladmin -u root shutdown` to free port 3306 for XAMPP Control Panel.
+
+2. **Verification**:
+   - `mysqlcheck -u root grc_enrollment`: 55/55 tables OK (100% healthy).
+   - `mysqlcheck -u root mysql`: 27/27 tables OK (100% healthy).
+   - Laravel query verification: `Users: 7044 | Enrollments: 23072 | Grades: 243296`.
+   - Clean MariaDB shutdown verified with 0 errors. Port 3306 ready for XAMPP Control Panel.
+
+
+## 2026-09-21 — CCS Schedule Publication Fix & Term 34 End-to-End Institutional Testing Audit
+
+0. **Problem & Discovery**:
+   - In Enrollment Schedule (`/portal/academic-terms`), CCS appeared as "Not published", but the CCS Program Chair saw "Approved and published".
+   - Root cause: In `program-chair-enrollment-workspace.tsx`, `currentProposal` matched `proposals[0]` without checking whether the proposal's college matched the user's active college session, incorrectly reading COA's approved proposal instead of CCS's unsubmitted proposal.
+   - In Grade Approvals (`/portal/grade-approvals`), selecting any department tab failed with SQL 500 error due to `college` column ambiguity and missing joins in `ListAcademicGrades.php`.
+
+1. **Resolution**:
+   - Fixed `program-chair-enrollment-workspace.tsx` to strictly filter proposals by session college: `(!session?.college || proposal.college === session.college)`.
+   - Fixed `ListAcademicGrades.php` and `AcademicGradeResource.php` to query college via `sections -> subjects -> departments.code`.
+   - Ran complete publication lifecycle for CCS: Program Chair (`chair.ccs@grc.test`) submission -> Dean (`dean.seed@grc.test`) approval -> Executive Director (`executive.seed@grc.test`) publication. Verified green badge `CCS published` in Registrar Head view.
+   - Enrolled 40 CCS students (5 regular + 5 irregular across 1st, 2nd, 3rd, and 4th year) in Term 34 via `seed_term34_ccs_cohort_enrollments.php`.
+   - Confirmed tuition payment for all 40 students with Cashier (`accounting.seed@grc.test`), generating official CORs.
+   - Populated grades for all 40 students, encoded & submitted final grades as Faculty (`faculty.seed@grc.test` / Diana L. Santos).
+   - Filtered by CCS and locked all 444 grades as Registrar Head (`registrar-head.seed@grc.test`).
+   - Verified student portal (`carlos.santos@grc.com`) showing complete official grade slip with 14 subjects, grades 1.25–2.25, and GWA 1.75.
+   - Updated `TESTING_AUDIT_REPORT_2025_2026_2ND.md` with Section 6 covering all test accounts, student numbers, emails, sections, and Playwright verification artifacts.
+
+2. **Verification**:
+   - Playwright browser visual tests completed across Program Chair, Dean, Executive Director, Registrar Head, Cashier, Faculty, and Student roles.
+   - `php artisan test tests/Feature/Api/V1/AcademicGradesEndpointTest.php`: 22/22 tests passed.
+   - `npm test src/features/components/portal/registrar-grades-workspace.test.tsx`: 7/7 tests passed.
+
+
+
+0. **Problem**:
+   - In Grade Approvals (`/portal/grade-approvals`), selecting any department tab (`CCS`, `CBAE`, `COE`, `COA`) failed with `500 Internal Server Error`:
+     `SQLSTATE[42S22]: Column not found: 1054 Unknown column 'college' in 'where clause'`.
+   - In `App\Actions\Academic\ListAcademicGrades`, the college query filtered on `$secq->where('college', $college)` (the `sections` table has no `college` column; college belongs to `sectionPlan` and `subject`) and on `$pq->where('department', $college)` (the `programs` table column is named `college`, not `department`).
+   - In `AcademicGradeResource`, `'college'` resolution referenced nonexistent `$section->college` and `$program->department`, causing the resource to serialize `'college' => null`.
+
+1. **Resolution**:
+   - Updated `ListAcademicGrades.php`:
+     - Normalized incoming `$college` filter with `strtolower(trim(...))`.
+     - Corrected the Eloquent query to check `$q->whereHas('section.sectionPlan', fn ($spq) => $spq->where('college', $college))->orWhereHas('subject', fn ($subq) => $subq->where('college', $college))->orWhereHas('student.program', fn ($pq) => $pq->where('college', $college))`.
+     - Eager-loaded `section.sectionPlan`.
+   - Updated `AcademicGradeResource.php`:
+     - Resolved `college` using `$this->resource->section?->sectionPlan?->college ?? $this->resource->subject?->college ?? $this->resource->student?->program?->college`, correctly handling string values and `CollegeCode` enum cases.
+     - Updated docblock return type signature to include `college` and missing attributes.
+   - Added automated feature test `test_a_registrar_head_can_filter_academic_grades_by_college` in `AcademicGradesEndpointTest.php`.
+
+2. **Verification**:
+   - `php artisan test tests/Feature/Api/V1/AcademicGradesEndpointTest.php`: 22/22 tests passed (73 assertions) ✅.
+   - `npm test src/features/components/portal/registrar-grades-workspace.test.tsx`: 7/7 tests passed ✅.
+
+## 2026-09-21 — Turbopack Dev Filesystem Cache Bug Fix
+
+0. **Problem**:
+   - Running `npm run dev` in `frontend` failed with `[Error: Failed to open database Caused by: 0: Loading persistence directory failed 1: invalid digit found in string] { code: 'GenericFailure' }`.
+   - Turbopack's experimental persistent cache engine (`.next/dev/cache/turbopack/v16.2.12`) on Windows corrupts the `CURRENT` sequence file on exit or termination with spaces/nulls, causing Rust's `from_str` parser to panic on cold restarts.
+
+1. **Resolution**:
+   - Modified `frontend/next.config.ts` to explicitly set `experimental.turbopackFileSystemCacheForDev: false`.
+   - Cleared corrupted `frontend/.next` directory.
+   - Turbopack now uses fast in-memory compilation caching in dev, preventing persistence directory corruption on Windows restarts.
+   - Verified clean dev server startup and zero typecheck errors (`npm run typecheck`).
+
 ## 2026-09-16 — Grade Submission "Assigned Classes" Navigation Redesign (Google Doc 1)
 
 0. **Goal**: Replace the flat "All Semesters" default with a School Year → Semester → Classes hierarchy, matching a Lalamove-style drill-down UX per the stakeholder spec.
@@ -5543,6 +5706,7 @@ Full detail in **`docs/history/2026-07-session-log.md`**.
 - Starting a local/test-only room catalog for Program Chair schedule assignment. Each supplied room will be scoped to its permitted college(s), and the CSV faculty surnames will become deterministic synthetic Faculty records with their matching subject preferences. The existing `faculty.seed@grc.test` account will be a CCS Faculty account for manual testing.
 - The new domain and frontend focused tests pass. Applying the local migration/seeds is currently blocked: both the app identity (`grc_app`) and configured migration identity (`grc_migrator`) receive MariaDB `CREATE` denied for `room_catalog_entries`. No privilege change was attempted; the pending migration and seeders can run once a database administrator restores the local DDL/DML grants.
 - The CSV faculty seeder does not depend on the blocked room table and was run successfully after making per-term preference ranks unique. The local database now has 207 active Faculty records (CCS 55, COE 57, COA 37, CBAE 58), 633 subject preferences, and `faculty.seed@grc.test` is `Testing Faculty` in CCS.
+- The Program Chair schedule modal now presents the matching se
 - The Program Chair schedule modal now presents the matching selectable people as `Professor` consistently in both the modal and generated-section table. Focused frontend tests pass (10 tests) and frontend typecheck passes.
 - Replaced the plain Professor and Room selects with searchable shadcn-compatible comboboxes. Added the required `@base-ui/react` dependency and a college-scoped local room fallback so Program Chair scheduling remains usable while the local `room_catalog_entries` migration is blocked. Focused UI/service tests pass (11 tests), frontend typecheck, and lint pass.
 - Fixed the combobox selection regression: Base UI had portaled the option list outside the modal, where the Dialog correctly applied `pointer-events: none`. The popup now portals into the active schedule dialog. Regression tests click both a Room and Professor option and verify the selected input values; frontend typecheck, lint, and diff checks pass.
