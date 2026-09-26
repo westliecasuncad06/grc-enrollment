@@ -3,6 +3,8 @@
 namespace App\Actions\Analytics;
 
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicTerm;
 use App\Models\Enrollment;
 use App\Models\StudentProfile;
@@ -11,6 +13,17 @@ use Illuminate\Support\Collection;
 /**
  * Factual, aggregate-only persistence report. Its baseline is official
  * enrollment, never a predictive-risk table or a student's private profile.
+ *
+ * Attrition means students who will not continue (stakeholder Doc 14, S19). Of
+ * the students enrolled in the baseline term:
+ *   retained  enrolled in the comparison term;
+ *   attrited  withdrew from the school, or finished the baseline term and did
+ *             not enroll in the comparison term although its enrollment window
+ *             has closed;
+ *   left out  graduates (nothing to continue), and students still deciding: no
+ *             enrollment yet while the comparison window is open, or an
+ *             enrollment in progress. They are reported as `undecided_count`,
+ *             never counted as attrition.
  */
 final class BuildAttritionReport
 {
@@ -31,28 +44,69 @@ final class BuildAttritionReport
             ->when($filters['college'] ?? null, fn ($query, string $college) => $query->whereHas('program', fn ($programs) => $programs->where('college', $college)))
             ->get();
 
+        $baselineIds = $baselineStudents->modelKeys();
         $retainedIds = Enrollment::query()
             ->where('academic_term_id', $comparisonTerm->id)
             ->where('status', EnrollmentStatus::Enrolled->value)
-            ->whereIn('student_id', $baselineStudents->modelKeys())
+            ->whereIn('student_id', $baselineIds)
             ->distinct()
             ->pluck('student_id')
             ->flip();
+        $inProgressIds = Enrollment::query()
+            ->where('academic_term_id', $comparisonTerm->id)
+            ->whereIn('status', array_map(fn (EnrollmentStatus $status): string => $status->value, [
+                EnrollmentStatus::Draft,
+                EnrollmentStatus::PendingProgramHeadApproval,
+                EnrollmentStatus::PendingRegistrarApproval,
+                EnrollmentStatus::PendingPayment,
+            ]))
+            ->whereIn('student_id', $baselineIds)
+            ->distinct()
+            ->pluck('student_id')
+            ->flip();
+        $withdrawnIds = Enrollment::query()
+            ->whereIn('academic_term_id', [$baselineTerm->id, $comparisonTerm->id])
+            ->where('status', EnrollmentStatus::Withdrawn->value)
+            ->whereIn('student_id', $baselineIds)
+            ->distinct()
+            ->pluck('student_id')
+            ->flip();
+        $windowClosed = self::enrollmentWindowClosed($comparisonTerm);
 
-        $rows = $baselineStudents->map(fn (StudentProfile $student): array => [
-            'college' => $student->program->college?->value,
-            'program_id' => $student->program->id,
-            'program_code' => $student->program->code,
-            'program_name' => $student->program->name,
-            'year_level' => $student->year_level,
-            'retained' => $retainedIds->has($student->id),
-        ]);
+        $undecided = 0;
+        $graduated = 0;
+        $rows = collect();
+        foreach ($baselineStudents as $student) {
+            if ($student->graduation_school_year !== null || $student->admission_status === AdmissionStatus::Graduated) {
+                $graduated++;
+
+                continue;
+            }
+
+            $retained = $retainedIds->has($student->id);
+            $withdrew = $student->admission_status === AdmissionStatus::Withdrawn || $withdrawnIds->has($student->id);
+
+            if (! $retained && ! $withdrew && (! $windowClosed || $inProgressIds->has($student->id))) {
+                $undecided++;
+
+                continue;
+            }
+
+            $rows->push([
+                'college' => $student->program->college?->value,
+                'program_id' => $student->program->id,
+                'program_code' => $student->program->code,
+                'program_name' => $student->program->name,
+                'year_level' => $student->year_level,
+                'retained' => $retained,
+            ]);
+        }
 
         return [
             'baseline_term' => self::term($baselineTerm),
             'comparison_term' => self::term($comparisonTerm),
             'generated_at' => now()->toIso8601String(),
-            'summary' => self::metrics($rows),
+            'summary' => self::metrics($rows) + ['undecided_count' => $undecided, 'graduated_count' => $graduated],
             'groups' => [
                 'colleges' => $rows->groupBy(fn (array $row): string => (string) ($row['college'] ?? 'Unassigned'))
                     ->map(fn (Collection $group): array => array_merge(['college' => $group->first()['college']], self::metrics($group)))
@@ -70,6 +124,25 @@ final class BuildAttritionReport
                     ->sortBy('year_level')->values()->all(),
             ],
         ];
+    }
+
+    /**
+     * Whether students have had their chance to enroll for this term: the
+     * enrollment window has ended, else the add/drop deadline has passed, else
+     * the term itself is closed. Without any of those the window is treated as
+     * still open, so nobody is called a dropout early.
+     */
+    private static function enrollmentWindowClosed(AcademicTerm $term): bool
+    {
+        if ($term->enrollment_closes_at !== null) {
+            return $term->enrollment_closes_at->isPast();
+        }
+
+        if ($term->add_drop_deadline_at !== null) {
+            return $term->add_drop_deadline_at->isPast();
+        }
+
+        return in_array($term->status, [AcademicTermStatus::SemesterClosed, AcademicTermStatus::Archived], true);
     }
 
     /** @return array<string, string|int> */

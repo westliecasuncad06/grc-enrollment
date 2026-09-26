@@ -16,6 +16,7 @@ use App\Models\Section;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 final class SectionsEndpointTest extends TestCase
@@ -88,6 +89,56 @@ final class SectionsEndpointTest extends TestCase
             ->getJson('/api/v1/sections');
 
         $response->assertOk()->assertJsonPath('data.0.schedule_days', 'TUE/THU');
+    }
+
+    /**
+     * PRD §8.1 / ADR 0029: `SectionResource` reads each section's professor, so
+     * the list must eager-load it. Up to ~630 extra queries per call used to run
+     * on every Program Chair page; the count must stay flat in the row count.
+     */
+    public function test_listing_sections_runs_a_constant_number_of_queries_regardless_of_row_count(): void
+    {
+        $term = $this->makeTerm();
+        $token = $this->tokenFor(UserRole::Student, 'student.sections.querycount@grc.test');
+        $this->withToken($token)->getJson('/api/v1/sections')->assertOk(); // warm-up
+
+        $this->seedPublishedSectionsWithDistinctProfessors($term, 0, 2);
+        $few = $this->countQueriesDuring(fn () => $this->withToken($token)
+            ->getJson('/api/v1/sections')->assertOk()->assertJsonCount(2, 'data'));
+
+        $this->seedPublishedSectionsWithDistinctProfessors($term, 2, 8);
+        $many = $this->countQueriesDuring(fn () => $this->withToken($token)
+            ->getJson('/api/v1/sections')->assertOk()->assertJsonCount(8, 'data'));
+
+        self::assertSame($few, $many, "Section list issued {$few} queries for 2 rows but {$many} for 8 (N+1).");
+    }
+
+    private function seedPublishedSectionsWithDistinctProfessors(AcademicTerm $term, int $from, int $to): void
+    {
+        for ($i = $from; $i < $to; $i++) {
+            $professor = User::create([
+                'name' => 'Prof '.$i, 'email' => "prof.sectionquery{$i}@grc.test",
+                'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            ]);
+            Section::create([
+                'academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('SQ'.(100 + $i))->id,
+                'section_code' => 'A', 'professor_id' => $professor->id, 'capacity' => 40,
+                'status' => SectionStatus::Published,
+            ]);
+        }
+    }
+
+    private function countQueriesDuring(callable $request): int
+    {
+        $this->app['auth']->forgetGuards();
+        $count = 0;
+        DB::listen(function () use (&$count): void {
+            $count++;
+        });
+
+        $request();
+
+        return $count;
     }
 
     public function test_a_faculty_member_sees_only_their_own_published_or_closed_sections(): void

@@ -12,7 +12,45 @@ export function formatTicketForSpeech(ticketNumber: string): string {
 }
 
 /**
- * Plays a pleasant two-tone queue alert chime (D5 587.33 Hz -> A5 880 Hz).
+ * The two-note queue alert chime: D5 (587.33 Hz), then A5 (880 Hz) starting
+ * 0.15 s later. One definition shared by the Cashier's own device
+ * (`playAlertChime`) and the student's device (`useQueueCallAlert`), so both
+ * hear the same call.
+ */
+export const ALERT_CHIME_NOTES = [
+  { frequency: 587.33, offset: 0, duration: 0.25 },
+  { frequency: 880, offset: 0.15, duration: 0.4 },
+] as const
+
+/**
+ * Plays the chime on `context`, returning the oscillators so a caller that owns
+ * the context can stop them early. Each note is a sine with a fast decay.
+ */
+export function scheduleAlertChime(context: AudioContext): OscillatorNode[] {
+  const oscillators: OscillatorNode[] = []
+
+  for (const note of ALERT_CHIME_NOTES) {
+    const start = context.currentTime + note.offset
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+
+    oscillator.type = "sine"
+    oscillator.frequency.setValueAtTime(note.frequency, start)
+    gain.gain.setValueAtTime(0.25, start)
+    gain.gain.exponentialRampToValueAtTime(0.001, start + note.duration)
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start(start)
+    oscillator.stop(start + note.duration)
+    oscillators.push(oscillator)
+  }
+
+  return oscillators
+}
+
+/**
+ * Plays the two-tone queue alert chime on its own short-lived audio context
+ * (the Cashier's device, which has had a user gesture).
  */
 export function playAlertChime(): void {
   if (typeof window === "undefined") return
@@ -20,41 +58,38 @@ export function playAlertChime(): void {
   try {
     const AudioContextClass =
       window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext
     if (!AudioContextClass) return
 
     const ctx = new AudioContextClass()
-    const now = ctx.currentTime
-
-    // First note: D5 (587.33 Hz)
-    const osc1 = ctx.createOscillator()
-    const gain1 = ctx.createGain()
-    osc1.type = "sine"
-    osc1.frequency.setValueAtTime(587.33, now)
-    gain1.gain.setValueAtTime(0.25, now)
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.25)
-    osc1.connect(gain1)
-    gain1.connect(ctx.destination)
-    osc1.start(now)
-    osc1.stop(now + 0.25)
-
-    // Second note: A5 (880 Hz)
-    const osc2 = ctx.createOscillator()
-    const gain2 = ctx.createGain()
-    osc2.type = "sine"
-    osc2.frequency.setValueAtTime(880, now + 0.15)
-    gain2.gain.setValueAtTime(0.25, now + 0.15)
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55)
-    osc2.connect(gain2)
-    gain2.connect(ctx.destination)
-    osc2.start(now + 0.15)
-    osc2.stop(now + 0.55)
+    scheduleAlertChime(ctx)
 
     setTimeout(() => {
-      void ctx.close().catch(() => {})
+      void ctx.close().catch(() => undefined)
     }, 800)
   } catch {
     // Audio contexts may be blocked by browser autoplay policies; fail silently
+  }
+}
+
+/**
+ * Speech synthesis stays blocked until it has been used from a user gesture
+ * (Chrome, Android) or first started in one (iOS Safari). Speaking an empty,
+ * silent utterance from the tap that unlocks audio lets the real announcement
+ * (which fires later, from a poll) be spoken.
+ */
+export function primeSpeechSynthesis(): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return
+  }
+
+  try {
+    const utterance = new SpeechSynthesisUtterance("")
+    utterance.volume = 0
+    window.speechSynthesis.speak(utterance)
+  } catch {
+    // Best effort: the visible alert does not depend on it.
   }
 }
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { createAppQueryClient } from "@/features/lib/query-client"
+import {
+  createAppQueryClient,
+  keepPreviousForSameUser,
+} from "@/features/lib/query-client"
 import { ApiClientError } from "@/features/services/api-client"
 
 function getRetry(): (failureCount: number, error: unknown) => boolean {
@@ -13,6 +16,38 @@ function getRetry(): (failureCount: number, error: unknown) => boolean {
 
   return retry as (failureCount: number, error: unknown) => boolean
 }
+
+describe("keepPreviousForSameUser", () => {
+  // Private query keys are ["name", session.userId, filters]: a paginated list
+  // may keep the previous page on screen while the next loads, but never one
+  // user's rows for another user (ADR 0029).
+  const rows = [{ id: 1 }]
+
+  it("keeps the previous rows when only the filters or page changed", () => {
+    const placeholder = keepPreviousForSameUser("7")
+
+    expect(
+      placeholder(rows, { queryKey: ["enrollments", "7", { page: 1 }] }),
+    ).toBe(rows)
+  })
+
+  it("never carries rows over from another user's query", () => {
+    const placeholder = keepPreviousForSameUser("8")
+
+    expect(
+      placeholder(rows, { queryKey: ["enrollments", "7", { page: 1 }] }),
+    ).toBeUndefined()
+  })
+
+  it("shows nothing when there is no previous query or no signed-in user", () => {
+    expect(keepPreviousForSameUser("7")(undefined, undefined)).toBeUndefined()
+    expect(
+      keepPreviousForSameUser(null)(rows, {
+        queryKey: ["enrollments", "7", { page: 1 }],
+      }),
+    ).toBeUndefined()
+  })
+})
 
 describe("createAppQueryClient retry", () => {
   it("does not retry a 403", () => {

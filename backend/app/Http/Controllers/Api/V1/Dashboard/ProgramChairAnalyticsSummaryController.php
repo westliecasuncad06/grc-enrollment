@@ -32,7 +32,7 @@ final class ProgramChairAnalyticsSummaryController extends Controller
         };
 
         if ($actor->role === UserRole::ProgramChair && $college === null) {
-            abort(403, 'No college is assigned to this Program Chair account.');
+            abort(403, 'No college is assigned to this Program Head account.');
         }
 
         if (
@@ -40,7 +40,7 @@ final class ProgramChairAnalyticsSummaryController extends Controller
             && $requestedDepartment !== null
             && $requestedDepartment !== $college->value
         ) {
-            abort(403, 'Program Chair analytics are limited to the assigned college.');
+            abort(403, 'Program Head analytics are limited to the assigned college.');
         }
 
         $termId = $request->validated('academic_term_id');

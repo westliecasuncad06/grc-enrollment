@@ -19,6 +19,7 @@ use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
 use App\Models\EnrollmentChangeRequest;
 use App\Models\EnrollmentSubject;
@@ -110,6 +111,19 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
         ], $overrides));
     }
 
+    /**
+     * Doc 12: an add (or a swap to another subject) is only accepted for a
+     * subject that is in the student's own curriculum, so tests that expect a
+     * request to be ACCEPTED place the target section's subject there first.
+     */
+    private function placeInCurriculum(Curriculum $curriculum, Section $section): void
+    {
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $section->subject_id,
+            'year_level' => 1, 'semester' => '1st', 'is_required' => true,
+        ]);
+    }
+
     private function makeEnrolledEnrollment(StudentProfile $student, AcademicTerm $term): Enrollment
     {
         return Enrollment::create([
@@ -157,6 +171,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
         $student = $this->makeStudent($curriculum);
         $enrollment = $this->makeEnrolledEnrollment($student, $term);
         $toSection = $this->makeSection($term, 'CS102');
+        $this->placeInCurriculum($curriculum, $toSection);
         $token = $this->tokenFor($student->user);
 
         $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/change-requests", [
@@ -168,6 +183,79 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
         $response->assertCreated()->assertJsonPath('data.status', 'pending');
         $response->assertJsonPath('data.request_type', 'add');
         self::assertSame(AuditAction::ENROLLMENT_CHANGE_REQUEST_CREATED, AuditLog::query()->sole()->action);
+    }
+
+    public function test_adding_a_subject_from_another_curriculum_is_rejected(): void
+    {
+        // Doc 12: "hindi lalabas yung mga subject from other curriculum".
+        $term = $this->makeTermWithOpenWindow();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrolledEnrollment($student, $term);
+        $otherProgramSection = $this->makeSection($term, 'ACC101');
+        $token = $this->tokenFor($student->user);
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/change-requests", [
+            'type' => 'add',
+            'to_section_id' => $otherProgramSection->id,
+            'reason' => 'Trying a subject outside my curriculum.',
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertSame('That subject is not part of your curriculum.', $response->json('error.errors.to_section_id.0'));
+        $this->assertDatabaseCount('enrollment_change_requests', 0);
+    }
+
+    public function test_swapping_to_a_subject_from_another_curriculum_is_rejected(): void
+    {
+        $term = $this->makeTermWithOpenWindow();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrolledEnrollment($student, $term);
+        $held = $this->makeSection($term, 'CS101');
+        $this->placeInCurriculum($curriculum, $held);
+        $this->occupySeat($enrollment, $held);
+        $otherProgramSection = $this->makeSection($term, 'ACC101');
+        $token = $this->tokenFor($student->user);
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/change-requests", [
+            'type' => 'change_section',
+            'from_section_id' => $held->id,
+            'to_section_id' => $otherProgramSection->id,
+            'reason' => 'Swap to a subject outside my curriculum.',
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertSame('That subject is not part of your curriculum.', $response->json('error.errors.to_section_id.0'));
+    }
+
+    public function test_a_sibling_subject_row_with_the_same_code_and_units_counts_as_the_curriculum_subject(): void
+    {
+        // General-education subjects exist once per college with the same code
+        // and units; the pool treats them as one subject and so must this check.
+        $term = $this->makeTermWithOpenWindow();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrolledEnrollment($student, $term);
+        $placed = Subject::create(['code' => 'GE101', 'college' => 'ccs', 'title' => 'Purposive Communication', 'units' => 3.0, 'status' => SubjectStatus::Active]);
+        CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $placed->id,
+            'year_level' => 1, 'semester' => '1st', 'is_required' => true,
+        ]);
+        $sibling = Subject::create(['code' => 'GE101', 'college' => 'coe', 'title' => 'Purposive Communication', 'units' => 3.0, 'status' => SubjectStatus::Active]);
+        $siblingSection = Section::create([
+            'academic_term_id' => $term->id, 'subject_id' => $sibling->id, 'section_code' => 'A',
+            'capacity' => 40, 'enrolled_count' => 0, 'status' => SectionStatus::Published,
+        ]);
+        $token = $this->tokenFor($student->user);
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/change-requests", [
+            'type' => 'add',
+            'to_section_id' => $siblingSection->id,
+            'reason' => 'The other college offers a better time.',
+        ]);
+
+        $response->assertCreated();
     }
 
     public function test_a_student_can_request_to_drop_a_currently_held_subject(): void
@@ -310,6 +398,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
             'capacity' => 40, 'status' => SectionStatus::Published,
             'schedule_days' => 'T', 'starts_at_time' => '13:00:00', 'ends_at_time' => '14:00:00',
         ]);
+        $this->placeInCurriculum($curriculum, $sectionA);
         $token = $this->tokenFor($student->user);
 
         $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/change-requests", [
@@ -332,6 +421,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
         $enrollment = $this->makeEnrolledEnrollment($owner, $term);
         $other = $this->makeStudent($curriculum, 'other.change@grc.test', '2026-0002');
         $toSection = $this->makeSection($term, 'CS106');
+        $this->placeInCurriculum($curriculum, $toSection);
         $token = $this->tokenFor($other->user);
 
         $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/change-requests", [

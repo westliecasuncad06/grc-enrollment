@@ -45,7 +45,7 @@ final class SaveSectionPlan
     ): array {
         $college = $actor->college?->value;
         if ($college === null) {
-            throw ValidationException::withMessages(['college' => 'A college-scoped Program Chair is required.']);
+            throw ValidationException::withMessages(['college' => 'A college-scoped Program Head is required.']);
         }
         $this->assertCurriculumBelongsToCollege($curriculumId, $actor, $college);
 
@@ -136,7 +136,7 @@ final class SaveSectionPlan
     ): array {
         $college = $actor->college?->value;
         if ($college === null) {
-            throw ValidationException::withMessages(['college' => 'A college-scoped Program Chair is required.']);
+            throw ValidationException::withMessages(['college' => 'A college-scoped Program Head is required.']);
         }
         $this->assertCurriculumBelongsToCollege($curriculumId, $actor, $college);
         $curriculum = Curriculum::query()->with('program')->findOrFail($curriculumId);
@@ -367,7 +367,7 @@ final class SaveSectionPlan
     ): ScheduleProposal {
         $college = $actor->college?->value;
         if ($college === null) {
-            throw ValidationException::withMessages(['college' => 'A college-scoped Program Chair is required.']);
+            throw ValidationException::withMessages(['college' => 'A college-scoped Program Head is required.']);
         }
         $this->assertCurriculumBelongsToCollege($curriculumId, $actor, $college);
 

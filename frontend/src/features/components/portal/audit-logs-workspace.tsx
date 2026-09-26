@@ -3,10 +3,13 @@
 import { useState, type FormEvent } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AccordionCard } from "@/features/components/portal/accordion-card"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { AuditActorEntries } from "@/features/components/portal/audit-actor-entries"
 import { Paginator } from "@/features/components/portal/paginator"
 import { ScheduleDecisionControls } from "@/features/components/portal/schedule-decision-workspace"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
   Card,
@@ -23,53 +26,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/features/components/ui/select"
-import { useAuditLogsQuery } from "@/features/hooks/use-audit-logs"
+import { useAuditActorsQuery } from "@/features/hooks/use-audit-logs"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
+import { formatAuditTimestamp } from "@/features/lib/audit-presentation"
 import {
   auditActions,
   auditableTypes,
-  type AuditLogFilters,
+  type AuditActorFilters,
 } from "@/features/schemas/audit-schema"
 
-const defaults: AuditLogFilters = { page: 1, per_page: 20 }
+const defaults: AuditActorFilters = { page: 1, per_page: 20 }
 // Radix `Select.Item` reserves an empty-string value to mean "no selection";
 // "all" is a safe sentinel since neither enum contains it (see ADR 0015).
 const ALL_FILTER_VALUE = "all"
-function snapshot(value: Record<string, unknown> | null) {
-  if (value === null) return "No recorded values."
-  const redact = (input: unknown, key = ""): unknown => {
-    if (/email|name|password|token|secret/iu.test(key)) return "[redacted]"
-    if (Array.isArray(input)) return input.map((item) => redact(item))
-    if (input && typeof input === "object")
-      return Object.fromEntries(
-        Object.entries(input).map(([childKey, childValue]) => [
-          childKey,
-          redact(childValue, childKey),
-        ]),
-      )
-    return input
-  }
-  return JSON.stringify(redact(value), null, 2)
-}
 
+/**
+ * The Registrar Head's audit screen (stakeholder Doc 14): one card per person
+ * who has done something, each opening to their own records, and each record
+ * opening to an old-versus-new comparison of what they changed.
+ */
 export function AuditLogsWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "registrar_head"
-  const [filters, setFilters] = useState<AuditLogFilters>(defaults)
+  const [filters, setFilters] = useState<AuditActorFilters>(defaults)
   const [actionFilter, setActionFilter] = useState(ALL_FILTER_VALUE)
   const [entityTypeFilter, setEntityTypeFilter] = useState(ALL_FILTER_VALUE)
-  const [actorUserId, setActorUserId] = useState("")
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
-  const auditQuery = useAuditLogsQuery(filters, authorized)
+  const actorsQuery = useAuditActorsQuery(filters, authorized)
   const proposalsQuery = useScheduleProposalsQuery({ enabled: authorized })
   const combinedQuery = {
-    isPending: auditQuery.isPending || proposalsQuery.isPending,
-    isError: auditQuery.isError || proposalsQuery.isError,
-    error: auditQuery.error ?? proposalsQuery.error,
-    data: auditQuery.data,
+    isPending: actorsQuery.isPending || proposalsQuery.isPending,
+    isError: actorsQuery.isError || proposalsQuery.isError,
+    error: actorsQuery.error ?? proposalsQuery.error,
+    data: actorsQuery.data,
     refetch: () => {
-      void auditQuery.refetch()
+      void actorsQuery.refetch()
       void proposalsQuery.refetch()
     },
   }
@@ -82,21 +74,26 @@ export function AuditLogsWorkspace() {
     setFilters({
       action,
       auditable_type: auditableType,
-      actor_user_id: actorUserId.trim()
-        ? Number(actorUserId.trim())
-        : undefined,
       from: fromDate || undefined,
       to: toDate || undefined,
       page: 1,
       per_page: 20,
     })
   }
+  // The same filters narrow each person's records once their card is open.
+  const entryFilters: AuditActorFilters = {
+    action: filters.action,
+    auditable_type: filters.auditable_type,
+    from: filters.from,
+    to: filters.to,
+  }
+
   return (
     <WorkspacePage
       title="Audit logs"
-      description="Operational activity is shown without actor names or email addresses."
+      description="See who changed what. Open a person to read their activity, then a record to compare the old and new values."
       unauthorized={!authorized}
-      lastUpdated={auditQuery.dataUpdatedAt}
+      lastUpdated={actorsQuery.dataUpdatedAt}
     >
       <form onSubmit={apply}>
         <FieldGroup className="grid gap-3 md:grid-cols-3">
@@ -139,15 +136,7 @@ export function AuditLogsWorkspace() {
               </SelectContent>
             </Select>
           </Field>
-          <Field>
-            <FieldLabel htmlFor="audit-filter-actor">Actor user ID</FieldLabel>
-            <Input
-              id="audit-filter-actor"
-              inputMode="numeric"
-              value={actorUserId}
-              onChange={(event) => setActorUserId(event.target.value)}
-            />
-          </Field>
+          <div className="hidden md:block" aria-hidden="true" />
           <Field>
             <FieldLabel htmlFor="audit-filter-from">From</FieldLabel>
             <Input
@@ -173,49 +162,44 @@ export function AuditLogsWorkspace() {
       </form>
       <AsyncBoundary
         query={combinedQuery}
-        isEmpty={(audit) => audit.data.length === 0}
+        isEmpty={(actors) => actors.data.length === 0}
         emptyMessage="No audit records match these filters."
         loadingLabel="Loading audit logs…"
       >
-        {(audit) => (
+        {(actors) => (
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>Audit history</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="grid gap-3">
-                  {audit.data.map((log) => (
-                    <li key={log.id} className="rounded-md border p-3">
-                      <p>
-                        {log.action} · {log.auditable_type}
-                        {log.auditable_id ? ` #${log.auditable_id}` : ""}
-                      </p>
-                      <p>
-                        {log.actor_role_label} account #{log.actor_user_id} ·{" "}
-                        {log.created_at ?? "Timestamp unavailable"}
-                      </p>
-                      <details>
-                        <summary>Expand audit snapshot</summary>
-                        <pre className="mt-2 overflow-auto rounded bg-muted p-2 text-xs">
-                          Before: {snapshot(log.before_values)}
-                          {"\n"}After: {snapshot(log.after_values)}
-                        </pre>
-                      </details>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-4">
-                  <Paginator
-                    currentPage={audit.meta.current_page}
-                    lastPage={audit.meta.last_page}
-                    onPageChange={(page) =>
-                      setFilters((value) => ({ ...value, page }))
-                    }
+            <div className="grid gap-3">
+              {actors.data.map((person) => (
+                <AccordionCard
+                  key={person.actor_user_id}
+                  id={`audit-actor-${person.actor_user_id}`}
+                  title={person.actor_name}
+                  defaultOpen={false}
+                  description={`Last activity ${formatAuditTimestamp(person.last_activity_at)}`}
+                  badges={
+                    <>
+                      <Badge variant="outline">{person.actor_role_label}</Badge>
+                      <Badge variant="secondary">
+                        {person.entries_count}{" "}
+                        {person.entries_count === 1 ? "record" : "records"}
+                      </Badge>
+                    </>
+                  }
+                >
+                  <AuditActorEntries
+                    actorUserId={person.actor_user_id}
+                    filters={entryFilters}
                   />
-                </div>
-              </CardContent>
-            </Card>
+                </AccordionCard>
+              ))}
+            </div>
+            <Paginator
+              currentPage={actors.meta.current_page}
+              lastPage={actors.meta.last_page}
+              onPageChange={(page) =>
+                setFilters((value) => ({ ...value, page }))
+              }
+            />
             <Card>
               <CardHeader>
                 <CardTitle level={2}>Published proposal closure</CardTitle>

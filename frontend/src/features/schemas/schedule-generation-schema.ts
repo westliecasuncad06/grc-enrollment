@@ -21,11 +21,48 @@ const facultyLoadAssignmentSchema = z
   })
   .strict()
 
+export const facultyEmploymentTypeSchema = z.enum(["full_time", "part_time"])
+
+/** Which rule set a professor's maximum load (ADR 0033), highest first. */
+export const facultyLoadLimitSourceSchema = z.enum([
+  "override",
+  "employment_type",
+  "college_default",
+])
+
+const facultyLoadLimitSchema = z
+  .object({
+    employment_type: facultyEmploymentTypeSchema,
+    label: z.string().min(1),
+    max_units: z.number().positive().nullable(),
+  })
+  .strict()
+
+const idleFacultySchema = z
+  .object({
+    professor_id: z.number().int().positive(),
+    professor_name: z.string().min(1),
+    employment_type: facultyEmploymentTypeSchema.nullable(),
+    employment_type_label: z.string().nullable(),
+    max_units: z.number().positive().nullable(),
+    limit_source: facultyLoadLimitSourceSchema.nullable(),
+    override: z
+      .object({
+        max_units: z.number().positive(),
+        reason: z.string().min(1),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+
 export const facultyLoadReportSchema = z
   .object({
     academic_term_id: z.number().int().positive(),
     college: z.string().min(1),
     threshold_units: z.number().positive().nullable(),
+    // The maximum per employment type; a type with no number has no limit.
+    limits: z.array(facultyLoadLimitSchema).optional(),
     required_teaching_units: z.number().nonnegative(),
     required_assignments: z.number().int().nonnegative(),
     equivalent_faculty_loads: z.number().int().nonnegative().nullable(),
@@ -37,13 +74,28 @@ export const facultyLoadReportSchema = z
         .object({
           professor_id: z.number().int().positive(),
           professor_name: z.string().nullable(),
+          employment_type: facultyEmploymentTypeSchema.nullable(),
+          employment_type_label: z.string().nullable(),
           total_units: z.number().nonnegative(),
+          // The maximum that applies to this professor and where it came from.
+          max_units: z.number().positive().nullable(),
+          limit_source: facultyLoadLimitSourceSchema.nullable(),
+          override: z
+            .object({
+              max_units: z.number().positive(),
+              reason: z.string().min(1),
+            })
+            .strict()
+            .nullable(),
           overloaded: z.boolean(),
           assignments: z.array(facultyLoadAssignmentSchema),
         })
         .strict(),
     ),
     unassigned: z.array(facultyLoadAssignmentSchema),
+    // Professors of the college with no section this term, so a Dean can see
+    // who still has room.
+    idle_faculty: z.array(idleFacultySchema).optional(),
   })
   .strict()
 
@@ -130,6 +182,14 @@ export const scheduleGenerationRunEnvelopeSchema = z
 
 export type ScheduleGenerationRun = z.infer<typeof scheduleGenerationRunSchema>
 export type FacultyLoadReport = z.infer<typeof facultyLoadReportSchema>
+export type FacultyLoadMember = FacultyLoadReport["faculty"][number]
+export type IdleFacultyMember = NonNullable<
+  FacultyLoadReport["idle_faculty"]
+>[number]
+export type FacultyEmploymentType = z.infer<typeof facultyEmploymentTypeSchema>
+export type FacultyLoadLimitSource = z.infer<
+  typeof facultyLoadLimitSourceSchema
+>
 export type ScheduleGenerationWarning = z.infer<
   typeof scheduleGenerationWarningSchema
 >

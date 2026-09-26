@@ -22,6 +22,7 @@ const baseEnrollment: Enrollment = {
   total_units: 3,
   requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
+  program_head_decided_at: null,
   registrar_decided_at: null,
   payment_confirmed_at: null,
   enrolled_at: null,
@@ -78,6 +79,7 @@ describe("EnrollmentQueuePaymentPanel", () => {
         enrollment={{
           ...baseEnrollment,
           status: "pending_payment",
+          program_head_decided_at: null,
           registrar_decided_at: "2026-07-31T00:00:00Z",
           assessment: {
             total_amount: "5775.00",
@@ -112,6 +114,54 @@ describe("EnrollmentQueuePaymentPanel", () => {
     expect(screen.getByText("Registration")).toBeInTheDocument()
   })
 
+  it("lists a scholarship discount as a deduction and shows the net as the amount due", () => {
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel
+        enrollment={{
+          ...baseEnrollment,
+          status: "pending_payment",
+          program_head_decided_at: null,
+          registrar_decided_at: "2026-07-31T00:00:00Z",
+          assessment: {
+            total_amount: "3465.00",
+            currency: "PHP",
+            assessed_at: "2026-07-31T00:00:00Z",
+            items: [
+              {
+                category: "tuition",
+                category_label: "Tuition",
+                label: "Tuition",
+                quantity: "10.5",
+                unit_amount: "450.00",
+                amount: "4725.00",
+              },
+              {
+                category: "miscellaneous",
+                category_label: "Miscellaneous",
+                label: "Registration",
+                quantity: null,
+                unit_amount: null,
+                amount: "1050.00",
+              },
+              {
+                category: "scholarship_discount",
+                category_label: "Scholarship discount",
+                label: "Scholarship discount (40%)",
+                quantity: "40.0",
+                unit_amount: null,
+                amount: "-2310.00",
+              },
+            ],
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText("₱3465.00")).toBeInTheDocument()
+    expect(screen.getByText("Scholarship discount (40%)")).toBeInTheDocument()
+    expect(screen.getByText("−₱2310.00")).toBeInTheDocument()
+  })
+
   it("does not show an amount-due section before assessment", () => {
     renderWithSession(
       <EnrollmentQueuePaymentPanel enrollment={baseEnrollment} />,
@@ -126,6 +176,7 @@ describe("EnrollmentQueuePaymentPanel", () => {
         enrollment={{
           ...baseEnrollment,
           status: "enrolled",
+          program_head_decided_at: null,
           registrar_decided_at: "2026-07-31T00:00:00Z",
           payment_confirmed_at: "2026-08-01T00:00:00Z",
           enrolled_at: "2026-08-01T00:00:00Z",
@@ -152,6 +203,7 @@ describe("EnrollmentQueuePaymentPanel", () => {
         enrollment={{
           ...baseEnrollment,
           status: "pending_payment",
+          program_head_decided_at: null,
           registrar_decided_at: "2026-07-31T00:00:00Z",
           queue_ticket: {
             ticket_number: "Q-STALE-001",
@@ -232,10 +284,34 @@ describe("EnrollmentQueuePaymentPanel", () => {
     )
 
     expect(
-      await screen.findByText("Claim your number at the Cashier kiosk."),
+      await screen.findByText(
+        /Claim your queuing ticket in person at the school Cashier kiosk/i,
+      ),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /claim/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it("does not show queue ticket or cashier queue when student is officially enrolled", () => {
+    renderWithSession(
+      <EnrollmentQueuePaymentPanel
+        enrollment={{
+          ...baseEnrollment,
+          status: "enrolled",
+          status_label: "Enrolled",
+          payment_confirmed_at: "2026-08-01T00:00:00Z",
+          enrolled_at: "2026-08-01T00:00:00Z",
+        }}
+      />,
+    )
+
+    expect(
+      screen.queryByText("Loading your Cashier queue…"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("region", { name: "Your Cashier queue" }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText("Enrolled")).toBeInTheDocument()
   })
 })

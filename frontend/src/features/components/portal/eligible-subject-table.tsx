@@ -8,6 +8,8 @@ import {
   Layers,
   ListIcon,
   MapPin,
+  Plus,
+  Search,
   User,
   Users,
 } from "lucide-react"
@@ -47,6 +49,7 @@ import {
   isBacklogSubject,
 } from "@/features/lib/curriculum-ordinal"
 import { formatTimeRange } from "@/features/lib/format-time"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import {
   compareBySchedule,
   hasScheduleConflict,
@@ -167,9 +170,7 @@ function columns(
             <div className="flex items-center gap-1.5">
               <span className="font-medium">{subject.code}</span>
               {isBacklog(subject) && <Badge variant="warning">Backlog</Badge>}
-              {isAdvance(subject) && (
-                <Badge variant="outline">Next year</Badge>
-              )}
+              {isAdvance(subject) && <Badge variant="outline">Next year</Badge>}
               {pairedCode && (
                 <Badge variant="secondary">Paired with {pairedCode}</Badge>
               )}
@@ -257,7 +258,9 @@ function columns(
                         ? ` · ${scheduleLabel(option)}`
                         : ""}{" "}
                       {option.room ? ` · ${option.room}` : ""}
-                      {option.professor_name ? ` · Prof. ${option.professor_name}` : ""}
+                      {option.professor_name
+                        ? ` · Prof. ${option.professor_name}`
+                        : ""}
                       · {seatsLabel(option)}
                       {option.is_own_department
                         ? ""
@@ -298,7 +301,7 @@ function columns(
       header: "Professor",
       render: (subject) => {
         const selected = selectedSectionOf(subject, selections)
-        return selected?.professor_name ?? "To be confirmed"
+        return selected?.professor_name ?? "Announced after enrollment"
       },
     },
     {
@@ -497,7 +500,8 @@ export function EligibleSubjectTable({
     const subject = subjectById.get(subjectId)
     const paired = subject ? pairOf(subject) : null
     if (paired) {
-      if (selections[paired.subject_id] !== undefined) onClear(paired.subject_id)
+      if (selections[paired.subject_id] !== undefined)
+        onClear(paired.subject_id)
       setRemovedIds((prev) => new Set(prev).add(paired.subject_id))
     }
   }
@@ -518,6 +522,18 @@ export function EligibleSubjectTable({
   const hiddenSubjects = subjects.filter(isHidden)
   const hiddenCount = hiddenSubjects.length
   const visibleSubjects = subjects.filter((subject) => !isHidden(subject))
+  const [addSubjectModalOpen, setAddSubjectModalOpen] = useState(false)
+  const [addSubjectSearch, setAddSubjectSearch] = useState("")
+
+  const filteredHiddenSubjects = useMemo(() => {
+    if (!addSubjectSearch.trim()) return hiddenSubjects
+    const query = addSubjectSearch.toLowerCase().trim()
+    return hiddenSubjects.filter(
+      (s) =>
+        s.code.toLowerCase().includes(query) ||
+        s.title.toLowerCase().includes(query),
+    )
+  }, [hiddenSubjects, addSubjectSearch])
   const selectedUnits = subjects.reduce((sum, subject) => {
     if (selections[subject.subject_id] !== undefined) {
       return sum + subject.units
@@ -592,22 +608,25 @@ export function EligibleSubjectTable({
     setInspectingSubject({ subject: matchingSubject, section: matchingSection })
   }
 
-  const rows = arrangedBySchedule
-    ? [...visibleSubjects].sort((a, b) =>
-        compareBySchedule(
-          selectedSectionOf(a, selections) ?? {
-            schedule_days: null,
-            starts_at_time: null,
-            ends_at_time: null,
-          },
-          selectedSectionOf(b, selections) ?? {
-            schedule_days: null,
-            starts_at_time: null,
-            ends_at_time: null,
-          },
-        ),
-      )
-    : visibleSubjects
+  // A lecture and its laboratory always show together, whatever the order.
+  const rows = groupPairedSubjects(
+    arrangedBySchedule
+      ? [...visibleSubjects].sort((a, b) =>
+          compareBySchedule(
+            selectedSectionOf(a, selections) ?? {
+              schedule_days: null,
+              starts_at_time: null,
+              ends_at_time: null,
+            },
+            selectedSectionOf(b, selections) ?? {
+              schedule_days: null,
+              starts_at_time: null,
+              ends_at_time: null,
+            },
+          ),
+        )
+      : visibleSubjects,
+  )
 
   return (
     <div className="grid min-w-0 gap-3">
@@ -620,7 +639,9 @@ export function EligibleSubjectTable({
             <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 type="button"
-                variant={recommendationMode === "manual" ? "default" : "outline"}
+                variant={
+                  recommendationMode === "manual" ? "default" : "outline"
+                }
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => handleSelectRecommendationMode("manual")}
@@ -630,7 +651,9 @@ export function EligibleSubjectTable({
               </Button>
               <Button
                 type="button"
-                variant={recommendationMode === "concise" ? "default" : "outline"}
+                variant={
+                  recommendationMode === "concise" ? "default" : "outline"
+                }
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => handleSelectRecommendationMode("concise")}
@@ -640,7 +663,9 @@ export function EligibleSubjectTable({
               </Button>
               <Button
                 type="button"
-                variant={recommendationMode === "morning" ? "default" : "outline"}
+                variant={
+                  recommendationMode === "morning" ? "default" : "outline"
+                }
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => handleSelectRecommendationMode("morning")}
@@ -650,7 +675,9 @@ export function EligibleSubjectTable({
               </Button>
               <Button
                 type="button"
-                variant={recommendationMode === "afternoon" ? "default" : "outline"}
+                variant={
+                  recommendationMode === "afternoon" ? "default" : "outline"
+                }
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => handleSelectRecommendationMode("afternoon")}
@@ -721,7 +748,22 @@ export function EligibleSubjectTable({
             Arrange by schedule
           </Button>
         )}
-        <div className="w-56">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setAddSubjectModalOpen(true)}
+          disabled={disabled || hiddenCount === 0}
+        >
+          <Plus className="size-4 mr-1.5" />
+          Add subject
+          {hiddenCount > 0 && (
+            <Badge variant="secondary" className="ml-1.5 text-xs py-0 px-1.5">
+              {hiddenCount}
+            </Badge>
+          )}
+        </Button>
+        <div className="sr-only">
           <SearchableCombobox
             id="add-subject"
             label="Add subject"
@@ -779,7 +821,12 @@ export function EligibleSubjectTable({
               <div className="flex items-center gap-2">
                 <Info className="size-4 shrink-0" />
                 <span>
-                  <strong>{unselectedSubjects.length} of {visibleSubjects.length} subjects</strong> do not have a section chosen yet ({unselectedSubjects.map((s) => s.code).join(", ")}).
+                  <strong>
+                    {unselectedSubjects.length} of {visibleSubjects.length}{" "}
+                    subjects
+                  </strong>{" "}
+                  do not have a section chosen yet (
+                  {unselectedSubjects.map((s) => s.code).join(", ")}).
                 </span>
               </div>
               <Button
@@ -827,6 +874,109 @@ export function EligibleSubjectTable({
       )}
 
       <Dialog
+        open={addSubjectModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddSubjectModalOpen(false)
+            setAddSubjectSearch("")
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] max-w-3xl overflow-hidden p-0">
+          <DialogHeader className="border-b p-4 sm:p-6 pb-4">
+            <div className="flex items-center gap-2">
+              <DialogTitle className="text-lg font-bold">
+                Add Subject to Schedule
+              </DialogTitle>
+              <Badge variant="secondary">{hiddenCount} available</Badge>
+            </div>
+            <DialogDescription>
+              Browse and select subjects to add to your enrollment schedule.
+            </DialogDescription>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search by subject code or title…"
+                value={addSubjectSearch}
+                onChange={(e) => setAddSubjectSearch(e.target.value)}
+                className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-4 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+          </DialogHeader>
+          <div className="max-h-[55vh] overflow-y-auto p-4 sm:p-6">
+            {filteredHiddenSubjects.length === 0 ? (
+              <p className="text-center py-8 text-sm text-muted-foreground">
+                {addSubjectSearch
+                  ? "No subjects match your search."
+                  : "No additional subjects available to add."}
+              </p>
+            ) : (
+              <div className="grid gap-2.5">
+                {filteredHiddenSubjects.map((subject) => (
+                  <div
+                    key={subject.subject_id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="grid gap-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-sm font-mono text-foreground">
+                          {subject.code}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {subject.units} Units
+                        </Badge>
+                        {isBacklog(subject) && (
+                          <Badge variant="warning">Backlog</Badge>
+                        )}
+                        {isAdvance(subject) && (
+                          <Badge variant="outline">Next year</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {subject.available_sections.length} section
+                          {subject.available_sections.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {subject.title}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        addSubject(subject.subject_id)
+                        if (hiddenCount <= 1) setAddSubjectModalOpen(false)
+                      }}
+                    >
+                      <Plus className="size-3.5 mr-1" />
+                      Add to schedule
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="border-t p-4 flex-row items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              Current selected: {selectedUnits} / {maxUnits.toFixed(1)} units
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAddSubjectModalOpen(false)
+                setAddSubjectSearch("")
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={inspectingSubject !== null}
         onOpenChange={(open) => {
           if (!open) setInspectingSubject(null)
@@ -835,7 +985,10 @@ export function EligibleSubjectTable({
         <DialogContent className="w-full p-6 sm:max-w-xl md:max-w-2xl overflow-hidden">
           <DialogHeader className="gap-2 border-b pb-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="font-mono text-xs font-semibold px-2 py-0.5">
+              <Badge
+                variant="secondary"
+                className="font-mono text-xs font-semibold px-2 py-0.5"
+              >
                 {inspectingSubject?.subject.code}
               </Badge>
               {inspectingSubject && isBacklog(inspectingSubject.subject) && (
@@ -851,10 +1004,12 @@ export function EligibleSubjectTable({
               )}
             </div>
             <DialogTitle className="text-lg font-bold leading-snug">
-              {inspectingSubject?.subject.code} — {inspectingSubject?.subject.title}
+              {inspectingSubject?.subject.code} —{" "}
+              {inspectingSubject?.subject.title}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Review current class details or switch to another section for this subject.
+              Review current class details or switch to another section for this
+              subject.
             </DialogDescription>
           </DialogHeader>
 
@@ -866,7 +1021,9 @@ export function EligibleSubjectTable({
                     <Layers className="size-4" aria-hidden="true" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-medium text-muted-foreground">Current Section</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Current Section
+                    </span>
                     <p className="text-sm font-semibold truncate">
                       Section {inspectingSubject.section.section_code}
                     </p>
@@ -878,7 +1035,9 @@ export function EligibleSubjectTable({
                     <Clock className="size-4" aria-hidden="true" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-medium text-muted-foreground">Class Schedule</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Class Schedule
+                    </span>
                     <p className="text-sm font-medium">
                       {scheduleLabel(inspectingSubject.section)}
                     </p>
@@ -890,7 +1049,9 @@ export function EligibleSubjectTable({
                     <MapPin className="size-4" aria-hidden="true" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-medium text-muted-foreground">Room</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Room
+                    </span>
                     <p className="text-sm font-medium">
                       {inspectingSubject.section.room ?? "To be confirmed"}
                     </p>
@@ -902,18 +1063,29 @@ export function EligibleSubjectTable({
                     <User className="size-4" aria-hidden="true" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-medium text-muted-foreground">Professor</span>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Professor
+                    </span>
                     <p className="text-sm font-medium truncate">
-                      {inspectingSubject.section.professor_name ?? "To be confirmed"}
+                      {inspectingSubject.section.professor_name ??
+                        "Announced after enrollment"}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 sm:col-span-2 text-xs">
                   <div className="flex items-center gap-2">
-                    <Users className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                    <span className="text-muted-foreground">Class Capacity:</span>
-                    <Badge variant="secondary" className="text-xs font-semibold">
+                    <Users
+                      className="size-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <span className="text-muted-foreground">
+                      Class Capacity:
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="text-xs font-semibold"
+                    >
                       {seatsLabel(inspectingSubject.section)}
                     </Badge>
                   </div>
@@ -931,18 +1103,25 @@ export function EligibleSubjectTable({
                     Switch Section:
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {inspectingSubject.subject.available_sections.length} available section{inspectingSubject.subject.available_sections.length === 1 ? "" : "s"}
+                    {inspectingSubject.subject.available_sections.length}{" "}
+                    available section
+                    {inspectingSubject.subject.available_sections.length === 1
+                      ? ""
+                      : "s"}
                   </span>
                 </div>
                 <Select
-                  value={String(selections[inspectingSubject.subject.subject_id] ?? "")}
+                  value={String(
+                    selections[inspectingSubject.subject.subject_id] ?? "",
+                  )}
                   onValueChange={(value) => {
                     const sectionId = Number(value)
                     if (sectionId) {
                       choose(inspectingSubject.subject.subject_id, sectionId)
-                      const newSec = inspectingSubject.subject.available_sections.find(
-                        (s) => s.id === sectionId,
-                      )
+                      const newSec =
+                        inspectingSubject.subject.available_sections.find(
+                          (s) => s.id === sectionId,
+                        )
                       if (newSec) {
                         setInspectingSubject({
                           subject: inspectingSubject.subject,
@@ -957,11 +1136,14 @@ export function EligibleSubjectTable({
                     <SelectValue placeholder="Select section" />
                   </SelectTrigger>
                   <SelectContent className="max-h-64">
-                    {inspectingSubject.subject.available_sections.map((option) => (
-                      <SelectItem key={option.id} value={String(option.id)}>
-                        Section {option.section_code} · {scheduleLabel(option)} · {seatsLabel(option)}
-                      </SelectItem>
-                    ))}
+                    {inspectingSubject.subject.available_sections.map(
+                      (option) => (
+                        <SelectItem key={option.id} value={String(option.id)}>
+                          Section {option.section_code} ·{" "}
+                          {scheduleLabel(option)} · {seatsLabel(option)}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>

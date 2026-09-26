@@ -30,6 +30,25 @@ Describe 'Start-PredictionService' {
     }
 }
 
+Describe 'Get-FrontendLaunchPlan' {
+    # ADR 0029: the day-to-day launcher runs `next dev` (unminified, compiles on
+    # demand), which is what makes the app feel slow on a phone or a demo. -Production
+    # builds once and serves the optimised bundle instead.
+    It 'runs the Next dev server by default, with no build step' {
+        $plan = Get-FrontendLaunchPlan
+
+        $plan.BuildArguments | Should BeNullOrEmpty
+        ($plan.RunArguments -join ' ') | Should Be 'run dev -- --hostname 0.0.0.0'
+    }
+
+    It 'builds first and then serves the production bundle with -Production' {
+        $plan = Get-FrontendLaunchPlan -Production
+
+        ($plan.BuildArguments -join ' ') | Should Be 'run build'
+        ($plan.RunArguments -join ' ') | Should Be 'run start -- --hostname 0.0.0.0'
+    }
+}
+
 Describe 'Start-LocalStack' {
     It 'fails before launching any process when an API port belongs to an unknown listener' {
         {

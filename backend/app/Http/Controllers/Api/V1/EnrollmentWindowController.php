@@ -47,13 +47,23 @@ final class EnrollmentWindowController extends Controller
         $user = $this->authenticatedUser($request);
         $this->authorize('update', $academicTerm);
 
+        $schedule = [
+            'enrollment_opens_at' => (string) $request->validated('enrollment_opens_at'),
+            'enrollment_closes_at' => (string) $request->validated('enrollment_closes_at'),
+            'add_drop_opens_at' => $request->validated('add_drop_opens_at'),
+            'add_drop_closes_at' => $request->validated('add_drop_closes_at'),
+            'windows' => $request->windows(),
+        ];
+
+        // Only a save that names the platform changes it (null clears it); one
+        // that leaves it out keeps whatever the Registrar Head set before.
+        if ($request->has('enrollment_platform')) {
+            $schedule['enrollment_platform'] = $request->validated('enrollment_platform');
+        }
+
         $term = $saveEnrollmentSchedule->execute(
             $academicTerm,
-            [
-                'enrollment_opens_at' => (string) $request->validated('enrollment_opens_at'),
-                'enrollment_closes_at' => (string) $request->validated('enrollment_closes_at'),
-                'windows' => $request->windows(),
-            ],
+            $schedule,
             $user,
             $contextFactory->fromRequest($request),
         );

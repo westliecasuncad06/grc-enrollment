@@ -28,6 +28,7 @@ export const eligibleSubjectReasonSchema = z
       "already_selected",
       "prerequisite",
       "prerequisite_advisory",
+      "prerequisite_waived",
       "no_sections_available",
       "block_restricted",
       "block_other_year",
@@ -92,7 +93,7 @@ const queueTicketSchema = z
 const assessmentItemSchema = z
   .object({
     id: z.number().int().positive().optional(),
-    category: z.enum(["tuition", "miscellaneous"]),
+    category: z.enum(["tuition", "miscellaneous", "scholarship_discount"]),
     category_label: z.string().min(1),
     label: z.string().min(1),
     quantity: z.string().nullable(),
@@ -112,6 +113,7 @@ const assessmentSchema = z
 
 const enrollmentStatusValues = [
   "draft",
+  "pending_program_head_approval",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",
@@ -139,6 +141,7 @@ export const enrollmentSchema = z
     total_units: z.number().nonnegative(),
     requires_overload_approval: z.boolean(),
     submitted_at: z.iso.datetime().nullable(),
+    program_head_decided_at: z.iso.datetime().nullable(),
     registrar_decided_at: z.iso.datetime().nullable(),
     payment_confirmed_at: z.iso.datetime().nullable(),
     enrolled_at: z.iso.datetime().nullable(),
@@ -212,8 +215,17 @@ export const storeEnrollmentInputSchema = z.union([
 
 export const updateEnrollmentInputSchema = z
   .object({
-    action: z.enum(["registrar_approve", "registrar_reject", "void"]),
+    action: z.enum([
+      "program_head_approve",
+      "program_head_reject",
+      "registrar_approve",
+      "registrar_reject",
+      "void",
+      "student_cancel",
+    ]),
     reason: z.string().min(1).optional(),
+    // Only for `void`: the Registrar is acting on the student's request.
+    requested_by_student: z.boolean().optional(),
     // Required only when the target enrollment's own
     // requires_overload_approval is true — see UpdateEnrollmentRequest.
     overload_acknowledged: z.boolean().optional(),
@@ -228,16 +240,36 @@ export const confirmPaymentInputSchema = z
   })
   .strict()
 
+// ADR 0025: the three scholarship tiers the Cashier can assign at payment time.
+export const scholarshipPercentageValues = [100, 40, 20] as const
+export type ScholarshipPercentage = (typeof scholarshipPercentageValues)[number]
+
+export const scholarshipDiscountInputSchema = z
+  .object({
+    percentage: z.union([z.literal(100), z.literal(40), z.literal(20)]),
+  })
+  .strict()
+
 export const adjustEnrollmentAssessmentInputSchema = z
   .object({
-    reason: z.string().trim().min(3, "Enter a reason for this fee adjustment.").max(1000),
+    reason: z
+      .string()
+      .trim()
+      .min(3, "Enter a reason for this fee adjustment.")
+      .max(1000),
     items: z
       .array(
         z
           .object({
             id: z.number().int().positive(),
-            amount: z.string().regex(/^\d{1,8}(?:\.\d{1,2})?$/).optional(),
-            unit_amount: z.string().regex(/^\d{1,8}(?:\.\d{1,2})?$/).optional(),
+            amount: z
+              .string()
+              .regex(/^\d{1,8}(?:\.\d{1,2})?$/)
+              .optional(),
+            unit_amount: z
+              .string()
+              .regex(/^\d{1,8}(?:\.\d{1,2})?$/)
+              .optional(),
           })
           .strict(),
       )

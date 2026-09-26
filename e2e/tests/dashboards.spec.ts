@@ -31,16 +31,16 @@ test("journey 16 — Dean reads the enrollment dashboard and stuck-students repo
   await expect(
     page.getByRole("heading", { name: "Enrollment dashboard" }),
   ).toBeVisible()
-  // Scoped to its own card ([data-slot="card"]): the seed data can reach
-  // "enrolled" in both the status-count and funnel-count cards with the same
-  // number, so an unscoped "Enrolled: N" match is ambiguous between them.
-  const statusCard = page
-    .locator('[data-slot="card"]')
-    .filter({ hasText: "Enrollment status" })
-  await expect(statusCard.getByRole("heading")).toBeVisible()
-  await expect(statusCard.getByText(/Enrolled: \d+/)).toBeVisible()
+  // The four student groups are buttons whose accessible name leads with the
+  // group and its count; the per-step chart replaces the old approval funnel.
   await expect(
-    page.getByRole("heading", { name: "Approval funnel" }),
+    page.getByRole("button", { name: /^Enrolled: \d+ students/ }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "By department" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Enrollment progress by step" }),
   ).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "Section fill" }),

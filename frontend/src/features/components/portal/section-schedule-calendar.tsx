@@ -20,6 +20,8 @@ import {
   type RoomCalendarPlacement,
 } from "@/features/lib/room-calendar"
 import { cn } from "@/features/lib/utils"
+import { useIsPhone } from "@/features/hooks/use-media-query"
+import { SectionScheduleAgenda } from "@/features/components/portal/section-schedule-agenda"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -102,6 +104,7 @@ export function SectionScheduleCalendar({
   className,
   emptyMessage = "No scheduled classes found for this section.",
 }: SectionScheduleCalendarProps) {
+  const isPhone = useIsPhone()
   const [openCluster, setOpenCluster] = useState<{
     day: number
     entries: SectionScheduleItem[]
@@ -150,6 +153,17 @@ export function SectionScheduleCalendar({
         </div>
       )}
 
+      {/* Phones get a day-at-a-time agenda: the 58rem grid below would be
+          clipped to about two columns (stakeholder Doc 13). */}
+      {isPhone && hasAnyPlacements && (
+        <SectionScheduleAgenda
+          week={week}
+          conflictingIds={conflictingIds}
+          onSelectSubject={disabled ? undefined : onSelectSubject}
+        />
+      )}
+
+      {!isPhone && (
       <div className="overflow-x-auto rounded-lg border bg-background">
         <div
           className="grid min-w-[58rem]"
@@ -222,6 +236,7 @@ export function SectionScheduleCalendar({
           )}
         </div>
       </div>
+      )}
 
       {!hasAnyPlacements && unscheduledItems.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center text-muted-foreground">

@@ -136,14 +136,15 @@ final class DashboardEndpointsTest extends TestCase
         $this->withToken($token)->getJson('/api/v1/dashboards/policy-settings')->assertForbidden();
     }
 
-    public function test_registrar_head_may_view_policy_settings_only(): void
+    public function test_registrar_head_may_view_policy_settings_and_enrollment_views_but_not_the_institution_summary(): void
     {
+        $this->makeActiveTerm();
         $token = $this->tokenFor($this->makeUser(UserRole::RegistrarHead, 'reghead'));
 
         $this->withToken($token)->getJson('/api/v1/dashboards/policy-settings')->assertOk();
-        $this->withToken($token)->getJson('/api/v1/dashboards/enrollment-summary')->assertForbidden();
+        $this->withToken($token)->getJson('/api/v1/dashboards/enrollment-summary')->assertOk();
         $this->withToken($token)->getJson('/api/v1/dashboards/institution-summary')->assertForbidden();
-        $this->withToken($token)->getJson('/api/v1/stuck-enrollments')->assertForbidden();
+        $this->withToken($token)->getJson('/api/v1/stuck-enrollments')->assertOk();
     }
 
     // --- Correctness: aggregation matches real data, no student identity leaks ---

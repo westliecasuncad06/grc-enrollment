@@ -74,6 +74,7 @@ function prospectusFixture(
     semesters: unknown[]
     unplaced_entries: unknown[]
     curriculum_transition: unknown
+    transferee_credits: unknown[]
   }> = {},
 ) {
   return {
@@ -100,6 +101,7 @@ function prospectusFixture(
       ],
       unplaced_entries: overrides.unplaced_entries ?? [],
       curriculum_transition: overrides.curriculum_transition ?? null,
+      transferee_credits: overrides.transferee_credits ?? [],
     },
   }
 }
@@ -119,7 +121,7 @@ describe("ProspectusDocument", () => {
     expect(
       await screen.findByText(/BS Information Technology/),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Year 1 · 1st Semester/)).toBeInTheDocument()
+    expect(screen.getByText(/1st Year · 1st Semester/)).toBeInTheDocument()
     // The Grade column shows the mark itself (numeric/C/NC), never the
     // "Good"/"Very Good" label -- that label only appears in the Status badge.
     expect(screen.getByText("1.50")).toBeInTheDocument()
@@ -242,6 +244,60 @@ describe("ProspectusDocument", () => {
     expect(screen.getByText("Credited")).toBeInTheDocument()
   })
 
+  it("lists subjects credited from a previous school, read-only, with what they count as", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          prospectusFixture({
+            transferee_credits: [
+              {
+                source_institution:
+                  "Technological Institute of the Philippines",
+                source_subject_code: "CS 101",
+                source_subject_title: "Intro to Computing",
+                source_grade: "1.50",
+                credited_units: 3,
+                source_school_year: "2023-2024",
+                source_semester: "1st",
+                target_code: "IT-NEW",
+                target_title: "Foundations of Programming",
+              },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    expect(
+      await screen.findByText("Credited from a previous school"),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/CS 101 — Intro to Computing/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Technological Institute of the Philippines · 2023-2024 \(1st\)/,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/IT-NEW — Foundations of Programming/),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Credited")).toBeInTheDocument()
+  })
+
+  it("shows no previous-school table when nothing was credited from one", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(prospectusFixture())),
+    )
+
+    renderWithSession(<ProspectusDocument />)
+
+    await screen.findByText(/BSIT 2023 Curriculum/)
+    expect(
+      screen.queryByText("Credited from a previous school"),
+    ).not.toBeInTheDocument()
+  })
+
   it("has no detectable accessibility violations once loaded", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify(prospectusFixture())),
@@ -251,5 +307,93 @@ describe("ProspectusDocument", () => {
 
     await screen.findByText(/BS Information Technology/)
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  describe("progressive disclosure on a phone (stakeholder Doc 13)", () => {
+    const multiYear = () =>
+      prospectusFixture({
+        semesters: [
+          {
+            year_level: 1,
+            semester: "1st",
+            semester_label: "1st Semester",
+            entries: [takenEntry],
+          },
+          {
+            year_level: 2,
+            semester: "1st",
+            semester_label: "1st Semester",
+            entries: [untakenEntry],
+          },
+          {
+            year_level: 3,
+            semester: "1st",
+            semester_label: "1st Semester",
+            entries: [{ ...untakenEntry, subject_id: 9, code: "CS301" }],
+          },
+        ],
+      })
+
+    function stubViewport(isPhone: boolean) {
+      vi.spyOn(window, "matchMedia").mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes("max-width: 47.99rem")
+              ? isPhone
+              : query.includes("prefers-reduced-motion"),
+            media: query,
+            onchange: null,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            dispatchEvent: () => false,
+          }) as MediaQueryList,
+      )
+    }
+
+    afterEach(() => vi.restoreAllMocks())
+
+    it("opens only the first year that still has unfinished subjects", async () => {
+      stubViewport(true)
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(multiYear())))
+
+      const { container } = renderWithSession(<ProspectusDocument />)
+      await screen.findByText(/BS Information Technology/)
+
+      const years = [...container.querySelectorAll("details")]
+      expect(years).toHaveLength(3)
+      // Year 1 is finished, year 2 is where the student is, year 3 is ahead.
+      expect(years.map((year) => year.open)).toEqual([false, true, false])
+      // Every year is still one tap away.
+      expect(years[0].querySelector("summary")).toHaveTextContent("1st Year")
+    })
+
+    it("keeps every year open on a wide screen", async () => {
+      stubViewport(false)
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(multiYear())))
+
+      const { container } = renderWithSession(<ProspectusDocument />)
+      await screen.findByText(/BS Information Technology/)
+
+      expect(
+        [...container.querySelectorAll("details")].map((year) => year.open),
+      ).toEqual([true, true, true])
+    })
+
+    it("labels each stacked cell so a row still reads without its column heading", async () => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify(prospectusFixture())),
+      )
+
+      renderWithSession(<ProspectusDocument />)
+
+      const row = (await screen.findByText("CS101")).closest("tr")!
+      const labelled = [...row.querySelectorAll("td[data-label]")].map((cell) =>
+        cell.getAttribute("data-label"),
+      )
+      expect(labelled).toEqual(["Pre-requisite", "Units", "Grade", "Status"])
+      expect(row.closest("table")).toHaveAttribute("data-stack-mobile")
+    })
   })
 })

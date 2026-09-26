@@ -1,11 +1,22 @@
 import { screen, within } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 
 import type { AuthSession } from "@/features/auth/auth-types"
 import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
-import { isConnectedModuleId } from "@/features/portal/module-registry"
+import {
+  isConnectedModuleId,
+  preloadConnectedModules,
+} from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { renderWithSession } from "@/tests/render-app"
 
@@ -52,6 +63,9 @@ const workspaceHeadings: Record<string, string> = {
   "academic-records": "Academic records",
   "enrollment-documents": "Enrollment documents",
   "master-schedule": "Enrollment planning review",
+  "submitted-schedules": "Submitted schedules",
+  "section-change-requests": "Schedule change requests",
+  "faculty-load-monitoring": "Faculty load",
   "audit-logs": "Audit logs",
   "teaching-schedule": "Teaching schedule",
   grades: "Grades",
@@ -69,12 +83,14 @@ const workspaceHeadings: Record<string, string> = {
   rooms: "Rooms",
   enrollment: "Select your subjects",
   "enrollment-approvals": "Enrollment approvals",
-  "overrides-voids": "Overrides & voids",
   "program-chair-enrollment": "Enrollment",
   "subjects-prerequisites": "Curriculum editor",
   "academic-terms": "Enrollment",
   "availability-preferences": "Availability and preferences",
   "payment-queue": "Payment queue",
+  "advance-payment": "Advance Payment",
+  "statement-of-account": "Statement of Account",
+  "admission-requirements": "Admission",
   "payment-records": "Transaction history",
   "cor-records": "Certificate of Registration Records",
   "queue-kiosk-access": "Queue kiosk access",
@@ -84,12 +100,12 @@ const workspaceHeadings: Record<string, string> = {
   honors: "Dean's list",
   "enrollment-dashboard": "Enrollment dashboard",
   "institution-dashboard": "Institution dashboard",
-  "stuck-students": "Stuck students",
   "policy-settings": "Policy settings",
   "fee-settings": "Fee Settings",
   "grade-approvals": "Grade approvals",
   "academic-transcripts": "Academic transcripts",
   "enrollment-change-requests": "Add/Drop requests",
+  "enrollment-requests": "Enrollment requests",
   "it-control-students": "IT Control student accounts",
   "it-control-faculty": "IT Control faculty accounts",
   "it-control-enrollment-override": "Enrollment overrides",
@@ -99,9 +115,15 @@ const workspaceHeadings: Record<string, string> = {
 }
 
 describe("PortalModulePage", () => {
+  // Workspaces are lazy chunks (ADR 0029): warm them all once so each case below
+  // resolves from the module cache instead of transforming a workspace on demand.
+  beforeAll(async () => {
+    await preloadConnectedModules()
+  }, 180_000)
+
   it.each(allowedModuleCases)(
     "renders $role access to $module.id from that role's catalog",
-    ({ module, role }) => {
+    async ({ module, role }) => {
       const definition = rolePortalDefinitions[role]
       renderModule(role, module.id)
 
@@ -116,7 +138,11 @@ describe("PortalModulePage", () => {
         const heading = workspaceHeadings[module.id]
         expect(heading).toBeDefined()
         expect(
-          screen.getByRole("heading", { level: 1, name: heading }),
+          await screen.findByRole(
+            "heading",
+            { level: 1, name: heading },
+            { timeout: 15_000 },
+          ),
         ).toBeInTheDocument()
         expect(
           screen.getByRole("region", { name: heading }),

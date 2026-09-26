@@ -101,6 +101,23 @@ final class StudentQueueViewEndpointTest extends TestCase
             ->assertJsonPath('data.ticket.position', 0);
     }
 
+    public function test_a_student_sees_how_many_times_their_ticket_has_been_announced(): void
+    {
+        [$token, $enrollment] = $this->makeStudentWithEnrollment('2026-08-90020', EnrollmentStatus::PendingPayment);
+        $cycle = QueueCycle::create(['opened_on' => QueueServiceDate::today(), 'last_ticket_sequence' => 0]);
+        QueueTicket::create([
+            'enrollment_id' => $enrollment->id, 'queue_cycle_id' => $cycle->id, 'ticket_sequence' => 1,
+            'ticket_number' => 'Q001', 'queue_date' => QueueServiceDate::today(),
+            'status' => QueueTicketStatus::Serving, 'announce_count' => 3,
+        ]);
+
+        // The student's device compares this number between polls to know the
+        // Cashier called the ticket out again.
+        $this->withToken($token)->getJson('/api/v1/queue-status')
+            ->assertOk()
+            ->assertJsonPath('data.ticket.announce_count', 3);
+    }
+
     public function test_the_board_shows_now_serving_and_the_first_ten_waiting_by_number_only(): void
     {
         [$token, $enrollment] = $this->makeStudentWithEnrollment('2026-08-90006', EnrollmentStatus::PendingPayment);

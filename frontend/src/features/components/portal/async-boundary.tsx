@@ -9,7 +9,7 @@ import {
 } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import { Empty, EmptyDescription } from "@/features/components/ui/empty"
-import { GrcLoadingLogo } from "@/features/components/portal/grc-loading-logo"
+import { Skeleton } from "@/features/components/ui/skeleton"
 import { getStatePresentation } from "@/features/lib/api-error-presentation"
 
 export interface AsyncBoundaryQuery<T> {
@@ -27,6 +27,26 @@ export interface AsyncBoundaryProps<T> {
   loadingLabel?: string
   loadingFallback?: ReactNode
   children: (data: T) => ReactNode
+}
+
+/**
+ * What every `AsyncBoundary` shows while its query is pending and the caller
+ * supplied no `loadingFallback` (ADR 0029): a heading line and a few card-sized
+ * blocks, so the page keeps roughly the shape of what is about to appear
+ * instead of a centred spinner that jumps when data lands. The blocks are
+ * decorative (`Skeleton` is aria-hidden); the wrapping status region above
+ * announces loading once. The branded `GrcLoadingLogo` remains for the
+ * full-page and session-restore states.
+ */
+function DefaultLoadingSkeleton() {
+  return (
+    <div className="grid gap-3">
+      <Skeleton className="h-6 w-1/3" />
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+    </div>
+  )
 }
 
 /**
@@ -53,16 +73,17 @@ export function AsyncBoundary<T>({
   children,
 }: AsyncBoundaryProps<T>) {
   if (query.isPending) {
-    if (loadingFallback) {
-      return (
-        <div role="status" aria-live="polite" className="flex flex-col gap-2">
-          <span className="sr-only">{loadingLabel}</span>
-          {loadingFallback}
-        </div>
-      )
-    }
-
-    return <GrcLoadingLogo label={loadingLabel} />
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={loadingLabel}
+        className="flex flex-col gap-2"
+      >
+        <span className="sr-only">{loadingLabel}</span>
+        {loadingFallback ?? <DefaultLoadingSkeleton />}
+      </div>
+    )
   }
 
   if (query.isError) {

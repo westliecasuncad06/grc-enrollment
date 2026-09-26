@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/features/components/ui/dialog"
 import { buildSectionGenerationRationale } from "@/features/lib/section-generation-rationale"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import type { Section, Subject } from "@/features/schemas/reference-data-schema"
 import type { ScheduleGenerationRun } from "@/features/schemas/schedule-generation-schema"
 import type { SectionPlan } from "@/features/schemas/section-plan-schema"
@@ -84,7 +85,7 @@ export function DemandForecastDialog({
                 </div>
                 <DialogTitle>Demand Forecast</DialogTitle>
                 <DialogDescription>
-                  Forecasts are advisory. The Program Chair can review and edit
+                  Forecasts are advisory. The Program Head can review and edit
                   every section, faculty, and room recommendation.
                 </DialogDescription>
               </div>
@@ -232,7 +233,7 @@ export function DemandForecastDialog({
                             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                               <span>
                                 {group.yearLevel
-                                  ? `Year ${group.yearLevel}`
+                                  ? formatYearLevel(group.yearLevel)
                                   : "Year not set"}
                               </span>
                               {group.curriculumVersion && (
@@ -300,8 +301,8 @@ export function DemandForecastDialog({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-medium">
-                        {recommendation.program_code} · Year{" "}
-                        {recommendation.year_level}
+                        {recommendation.program_code} ·{" "}
+                        {formatYearLevel(recommendation.year_level)}
                       </p>
                       {recommendation.curriculum_effective_school_year && (
                         <Badge

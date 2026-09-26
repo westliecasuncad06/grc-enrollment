@@ -16,7 +16,12 @@ import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/features/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/features/components/ui/card"
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,13 +45,19 @@ import {
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
 import { useRoomOptionsQuery } from "@/features/hooks/use-room-catalog"
-import { roomOccupancyQueryKey } from "@/features/hooks/use-room-occupancy"
+import {
+  roomOccupancyQueryKey,
+  useRoomOccupancySummaryQuery,
+} from "@/features/hooks/use-room-occupancy"
 import { isLectureComponentSubject } from "@/features/lib/room-calendar"
 import type { Section } from "@/features/schemas/reference-data-schema"
 import { isApiClientError } from "@/features/services/api-client"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
 import { getLocalRoomOptions } from "@/features/services/room-catalog-service"
-import { replaceSection, toSectionReplacement } from "@/features/services/scheduling-service"
+import {
+  replaceSection,
+  toSectionReplacement,
+} from "@/features/services/scheduling-service"
 
 const asTime = (value: string) => (value ? `${value}:00`.slice(0, 8) : "")
 
@@ -64,9 +75,17 @@ export function RoomsOperationsWorkspace() {
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const termSelection = useAcademicTermSelection()
-  const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } = termSelection
+  const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } =
+    termSelection
   const roomsQuery = useRoomOptionsQuery()
-  const rawRoomOptions = roomsQuery.data ?? getLocalRoomOptions(session?.college)
+  const summaryQuery = useRoomOccupancySummaryQuery(termId)
+  const summaryByRoom = useMemo(
+    () =>
+      new Map((summaryQuery.data ?? []).map((entry) => [entry.room, entry])),
+    [summaryQuery.data],
+  )
+  const rawRoomOptions =
+    roomsQuery.data ?? getLocalRoomOptions(session?.college)
   const roomOptions = useMemo(() => {
     const seen = new Set<string>()
     return rawRoomOptions.filter((r) => {
@@ -76,7 +95,10 @@ export function RoomsOperationsWorkspace() {
     })
   }, [rawRoomOptions])
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null)
-  const roomComboOptions = roomOptions.map((room) => ({ value: room.name, label: room.name }))
+  const roomComboOptions = roomOptions.map((room) => ({
+    value: room.name,
+    label: room.name,
+  }))
   const isProgramChair = session?.role === "program_chair"
 
   const sectionsQuery = useSectionsQuery()
@@ -87,26 +109,43 @@ export function RoomsOperationsWorkspace() {
   const [awaitingRoomOpen, setAwaitingRoomOpen] = useState(true)
 
   const subjectMap = useMemo(
-    () => new Map((subjectsQuery.data ?? []).map((subject) => [subject.id, subject])),
+    () =>
+      new Map(
+        (subjectsQuery.data ?? []).map((subject) => [subject.id, subject]),
+      ),
     [subjectsQuery.data],
   )
   const facultyMap = useMemo(
-    () => new Map((facultyQuery.data ?? []).map((member) => [member.id, member.name])),
+    () =>
+      new Map(
+        (facultyQuery.data ?? []).map((member) => [member.id, member.name]),
+      ),
     [facultyQuery.data],
   )
   const unassignedSections = useMemo(
     () =>
       (sectionsQuery.data ?? [])
-        .filter((section) => section.academic_term_id === termId && section.room === null)
+        .filter(
+          (section) =>
+            section.academic_term_id === termId && section.room === null,
+        )
         .filter((section) => {
           const subject = subjectMap.get(section.subject_id)
-          return !(subject?.college === "ccs" && isLectureComponentSubject(subject))
+          return !(
+            subject?.college === "ccs" && isLectureComponentSubject(subject)
+          )
         }),
     [sectionsQuery.data, subjectMap, termId],
   )
 
   const assignSectionMutation = useMutation({
-    mutationFn: ({ section, result }: { section: Section; result: RoomScheduleAssignmentResult }) =>
+    mutationFn: ({
+      section,
+      result,
+    }: {
+      section: Section
+      result: RoomScheduleAssignmentResult
+    }) =>
       replaceSection(
         section.id,
         toSectionReplacement(section, {
@@ -124,7 +163,11 @@ export function RoomsOperationsWorkspace() {
         exact: true,
       })
       void queryClient.invalidateQueries({
-        queryKey: roomOccupancyQueryKey(session?.userId ?? null, result.room, termId),
+        queryKey: roomOccupancyQueryKey(
+          session?.userId ?? null,
+          result.room,
+          termId,
+        ),
         exact: true,
       })
     },
@@ -167,7 +210,9 @@ export function RoomsOperationsWorkspace() {
           ? "System-wide room inventory. Pick a school year, semester, and room to see every college's booking in it."
           : "Pick a school year, semester, and room to see its full weekly schedule and assign an open slot."
       }
-      unauthorized={session?.role !== "program_chair" && session?.role !== "registrar_head"}
+      unauthorized={
+        session?.role !== "program_chair" && session?.role !== "registrar_head"
+      }
       lastUpdated={roomsQuery.dataUpdatedAt}
     >
       <AsyncBoundary query={query} loadingLabel="Loading room availability…">
@@ -187,14 +232,22 @@ export function RoomsOperationsWorkspace() {
                     <div>
                       <CardTitle level={2}>Find a room</CardTitle>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        A shared campus room may already carry another college&apos;s booking —
-                        opening it shows every booking in it this term, not just your own.
+                        A shared campus room may already carry another
+                        college&apos;s booking — opening it shows every booking
+                        in it this term, not just your own.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{roomOptions.length} rooms</Badge>
+                      <Badge variant="outline">
+                        {roomOptions.length} rooms
+                      </Badge>
                       <CollapsibleTrigger asChild>
-                        <Button type="button" variant="ghost" size="sm" aria-label="Toggle Find a room">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Toggle Find a room"
+                        >
                           <ChevronDown
                             className={`size-4 transition-transform duration-200 ${findRoomOpen ? "rotate-180" : ""}`}
                             aria-hidden="true"
@@ -214,7 +267,9 @@ export function RoomsOperationsWorkspace() {
                           label="Room"
                           options={roomComboOptions}
                           value={selectedRoom ?? ""}
-                          onValueChange={(value) => setSelectedRoom(value || null)}
+                          onValueChange={(value) =>
+                            setSelectedRoom(value || null)
+                          }
                           placeholder="Search room, e.g. LAB 1, 3A"
                           emptyMessage="No room matches."
                         />
@@ -228,15 +283,29 @@ export function RoomsOperationsWorkspace() {
                           onClick={() => setSelectedRoom(room.name)}
                           className="flex items-center gap-2 rounded-lg border p-3 text-left text-sm font-medium transition-colors hover:border-primary hover:bg-primary/5 focus-visible:border-primary focus-visible:outline-none"
                         >
-                          <DoorOpen className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                          {room.name}
+                          <DoorOpen
+                            className="size-4 shrink-0 text-primary"
+                            aria-hidden="true"
+                          />
+                          <span className="grid gap-0.5">
+                            {room.name}
+                            <RoomUsage
+                              entry={summaryByRoom.get(room.name)}
+                              loaded={summaryQuery.isSuccess}
+                            />
+                          </span>
                         </button>
                       ))}
                     </div>
                     {roomOptions.length === 0 && (
                       <div className="grid place-items-center gap-2 border-t py-10 text-center">
-                        <Search className="size-5 text-muted-foreground" aria-hidden="true" />
-                        <p className="font-medium">No rooms are configured for your college yet.</p>
+                        <Search
+                          className="size-5 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <p className="font-medium">
+                          No rooms are configured for your college yet.
+                        </p>
                       </div>
                     )}
                   </CardContent>
@@ -245,7 +314,10 @@ export function RoomsOperationsWorkspace() {
             </Collapsible>
 
             {isProgramChair && (
-              <Collapsible open={awaitingRoomOpen} onOpenChange={setAwaitingRoomOpen}>
+              <Collapsible
+                open={awaitingRoomOpen}
+                onOpenChange={setAwaitingRoomOpen}
+              >
                 <Card>
                   <CardHeader>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -256,11 +328,23 @@ export function RoomsOperationsWorkspace() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={unassignedSections.length > 0 ? "destructive" : "outline"}>
-                          {unassignedSections.length} subject{unassignedSections.length === 1 ? "" : "s"}
+                        <Badge
+                          variant={
+                            unassignedSections.length > 0
+                              ? "destructive"
+                              : "outline"
+                          }
+                        >
+                          {unassignedSections.length} subject
+                          {unassignedSections.length === 1 ? "" : "s"}
                         </Badge>
                         <CollapsibleTrigger asChild>
-                          <Button type="button" variant="ghost" size="sm" aria-label="Toggle Awaiting a room">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Toggle Awaiting a room"
+                          >
                             <ChevronDown
                               className={`size-4 transition-transform duration-200 ${awaitingRoomOpen ? "rotate-180" : ""}`}
                               aria-hidden="true"
@@ -279,54 +363,66 @@ export function RoomsOperationsWorkspace() {
                           </AlertDescription>
                         </Alert>
                       )}
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Subject</TableHead>
-                          <TableHead>Section</TableHead>
-                          <TableHead>Professor</TableHead>
-                          <TableHead />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {unassignedSections.map((section) => {
-                          const subject = subjectMap.get(section.subject_id)
-                          return (
-                            <TableRow key={section.id}>
-                              <TableCell className="font-medium">
-                                {subject ? `${subject.code} — ${subject.title}` : `#${section.subject_id}`}
-                              </TableCell>
-                              <TableCell>{section.section_code}</TableCell>
-                              <TableCell>
-                                {section.professor_id
-                                  ? (facultyMap.get(section.professor_id) ?? "—")
-                                  : <Badge variant="outline">Unassigned</Badge>}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={!isCurrentTerm}
-                                  onClick={() => setAssigningSection(section)}
-                                >
-                                  Assign a room
-                                </Button>
-                              </TableCell>
+                      <div className="overflow-x-auto rounded-lg border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Subject</TableHead>
+                              <TableHead>Section</TableHead>
+                              <TableHead>Professor</TableHead>
+                              <TableHead />
                             </TableRow>
-                          )
-                        })}
-                        {unassignedSections.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={4} className="py-9 text-center text-muted-foreground">
-                              Every section this term already has a room.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            {unassignedSections.map((section) => {
+                              const subject = subjectMap.get(section.subject_id)
+                              return (
+                                <TableRow key={section.id}>
+                                  <TableCell className="font-medium">
+                                    {subject
+                                      ? `${subject.code} — ${subject.title}`
+                                      : `#${section.subject_id}`}
+                                  </TableCell>
+                                  <TableCell>{section.section_code}</TableCell>
+                                  <TableCell>
+                                    {section.professor_id ? (
+                                      (facultyMap.get(section.professor_id) ??
+                                      "—")
+                                    ) : (
+                                      <Badge variant="outline">
+                                        Unassigned
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={!isCurrentTerm}
+                                      onClick={() =>
+                                        setAssigningSection(section)
+                                      }
+                                    >
+                                      Assign a room
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                            {unassignedSections.length === 0 && (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  className="py-9 text-center text-muted-foreground"
+                                >
+                                  Every section this term already has a room.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </CardContent>
                   </CollapsibleContent>
                 </Card>
@@ -354,9 +450,69 @@ export function RoomsOperationsWorkspace() {
         }}
         termId={termId}
         onConfirm={(result) => {
-          if (assigningSection) assignSectionMutation.mutate({ section: assigningSection, result })
+          if (assigningSection)
+            assignSectionMutation.mutate({ section: assigningSection, result })
         }}
       />
     </WorkspacePage>
+  )
+}
+
+const WEEKDAYS = [
+  { day: 1, label: "Mon" },
+  { day: 2, label: "Tue" },
+  { day: 3, label: "Wed" },
+  { day: 4, label: "Thu" },
+  { day: 5, label: "Fri" },
+  { day: 6, label: "Sat" },
+] as const
+
+/**
+ * What a room tile says about its use this term: "Empty" (muted) or the class
+ * count with a dot for each weekday, Monday to Saturday, that has a class.
+ * Nothing is shown until the summary has loaded, so a slow response never
+ * makes an occupied room look empty.
+ */
+function RoomUsage({
+  entry,
+  loaded,
+}: {
+  entry: { classes_count: number; days: readonly number[] } | undefined
+  loaded: boolean
+}) {
+  if (!loaded) return null
+
+  if (!entry) {
+    return (
+      <span className="text-xs font-normal text-muted-foreground">Empty</span>
+    )
+  }
+
+  const usedDays = WEEKDAYS.filter((weekday) =>
+    entry.days.includes(weekday.day),
+  )
+
+  return (
+    <span className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+      <span>
+        {entry.classes_count} {entry.classes_count === 1 ? "class" : "classes"}
+      </span>
+      <span
+        className="flex gap-0.5"
+        role="img"
+        aria-label={`Used on ${usedDays.map((weekday) => weekday.label).join(", ") || "no set day"}`}
+      >
+        {WEEKDAYS.map((weekday) => (
+          <span
+            key={weekday.day}
+            className={
+              entry.days.includes(weekday.day)
+                ? "size-1.5 rounded-full bg-primary"
+                : "size-1.5 rounded-full bg-muted-foreground/25"
+            }
+          />
+        ))}
+      </span>
+    </span>
   )
 }

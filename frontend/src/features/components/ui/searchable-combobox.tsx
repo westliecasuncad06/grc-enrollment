@@ -41,12 +41,15 @@ export function SearchableCombobox({
   const selected = options.find((option) => option.value === value) ?? null
   const [inputElement, setInputElement] = useState<HTMLInputElement | null>(null)
   // Inside a dialog the popup has to be portalled into that dialog, or the
-  // dialog's own focus trap swallows every click on an option. Anywhere else
-  // (a table cell, a plain form) there is no such container, and the popup
-  // portals to its default target — passing `undefined` rather than skipping
-  // the portal entirely, which would render no option list at all.
+  // dialog's own focus trap swallows every click on an option. That includes
+  // an AlertDialog (`role="alertdialog"`), e.g. the Change subject picker.
+  // Anywhere else (a table cell, a plain form) there is no such container, and
+  // the popup portals to its default target — passing `undefined` rather than
+  // skipping the portal entirely, which would render no option list at all.
   const portalContainer =
-    (inputElement?.closest('[role="dialog"]') as HTMLElement | null) ?? undefined
+    (inputElement?.closest(
+      '[role="dialog"], [role="alertdialog"]',
+    ) as HTMLElement | null) ?? undefined
 
   return (
     <ComboboxPrimitive.Root

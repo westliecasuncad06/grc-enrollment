@@ -8,7 +8,10 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Program;
@@ -67,6 +70,7 @@ final class CurriculumAuditTest extends TestCase
             null,
             [
                 'program_id' => $program->id,
+                'equivalency_source_curriculum_id' => null,
                 'name' => 'BSCS 2026',
                 'effective_school_year' => '2026-2027',
                 'status' => 'draft',
@@ -76,6 +80,7 @@ final class CurriculumAuditTest extends TestCase
                         'year_level' => 1,
                         'semester' => '1st',
                         'is_required' => true,
+                        'equivalent_source_subject_id' => null,
                         'prerequisites' => [],
                     ],
                     [
@@ -83,6 +88,7 @@ final class CurriculumAuditTest extends TestCase
                         'year_level' => 2,
                         'semester' => '1st',
                         'is_required' => false,
+                        'equivalent_source_subject_id' => null,
                         'prerequisites' => [
                             ['prerequisite_subject_id' => $first->id, 'minimum_grade' => '2.50'],
                             ['prerequisite_subject_id' => $second->id, 'minimum_grade' => '2.25'],
@@ -145,6 +151,7 @@ final class CurriculumAuditTest extends TestCase
             $actor,
             [
                 'program_id' => $program->id,
+                'equivalency_source_curriculum_id' => null,
                 'name' => 'Original curriculum',
                 'effective_school_year' => '2025-2026',
                 'status' => 'draft',
@@ -154,6 +161,7 @@ final class CurriculumAuditTest extends TestCase
                         'year_level' => 1,
                         'semester' => '1st',
                         'is_required' => true,
+                        'equivalent_source_subject_id' => null,
                         'prerequisites' => [],
                     ],
                     [
@@ -161,6 +169,7 @@ final class CurriculumAuditTest extends TestCase
                         'year_level' => 2,
                         'semester' => '2nd',
                         'is_required' => false,
+                        'equivalent_source_subject_id' => null,
                         'prerequisites' => [
                             ['prerequisite_subject_id' => $first->id, 'minimum_grade' => '2.75'],
                         ],
@@ -169,8 +178,9 @@ final class CurriculumAuditTest extends TestCase
             ],
             [
                 'program_id' => $program->id,
+                'equivalency_source_curriculum_id' => null,
                 'name' => 'Replacement curriculum',
-                'effective_school_year' => '2026-2027',
+                'effective_school_year' => '2025-2026',
                 'status' => 'draft',
                 'subjects' => [
                     [
@@ -178,6 +188,7 @@ final class CurriculumAuditTest extends TestCase
                         'year_level' => 1,
                         'semester' => '2nd',
                         'is_required' => true,
+                        'equivalent_source_subject_id' => null,
                         'prerequisites' => [],
                     ],
                 ],
@@ -374,6 +385,7 @@ final class CurriculumAuditTest extends TestCase
             'email' => $email,
             'password' => self::PASSWORD,
             'role' => $role,
+            'college' => CollegeCode::Ccs,
             'status' => UserStatus::Active,
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
@@ -386,9 +398,13 @@ final class CurriculumAuditTest extends TestCase
 
     private function makeProgram(): Program
     {
+        // A curriculum is created against the current or latest academic term.
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing, 'starts_at' => '2026-08-01']);
+
         return Program::create([
             'code' => 'BSCS',
             'name' => 'BS Computer Science',
+            'college' => CollegeCode::Ccs,
             'status' => ProgramStatus::Active,
         ]);
     }

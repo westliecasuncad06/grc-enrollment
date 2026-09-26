@@ -61,7 +61,7 @@ final class SectionAuditTest extends TestCase
                 'subject_id' => $subject->id,
                 'section_code' => 'A',
                 'professor_id' => $professor->id,
-                'schedule_days' => 'MWF',
+                'schedule_days' => 'MON/WED/FRI',
                 'starts_at_time' => '08:00:00',
                 'ends_at_time' => '09:00:00',
                 'room' => 'Lab 1',

@@ -24,6 +24,7 @@ import {
   getAuthenticatedJson,
   patchAuthenticatedJson,
   postAuthenticatedJson,
+  putAuthenticatedJson,
 } from "@/features/services/api-client"
 
 export const SCHEDULE_PROPOSALS_PATH = "/api/v1/schedule-proposals"
@@ -116,6 +117,25 @@ export async function replaceSection(
   const payload = await patchAuthenticatedJson(
     `${SECTIONS_PATH}/${id}`,
     parse(sectionInputSchema, input, "section replacement request"),
+  )
+  return parse(zSectionEnvelope, payload, "updated section").data
+}
+
+/**
+ * Dean: assign, change, or remove (`null`) the professor of one section in
+ * their own college. Changes nothing else about the section (ADR 0033).
+ */
+export async function assignSectionProfessor(
+  sectionId: number,
+  professorId: number | null,
+  overrideReason?: string,
+): Promise<Section> {
+  const payload = await putAuthenticatedJson(
+    `${SECTIONS_PATH}/${sectionId}/professor`,
+    {
+      professor_id: professorId,
+      ...(overrideReason ? { override_reason: overrideReason } : {}),
+    },
   )
   return parse(zSectionEnvelope, payload, "updated section").data
 }

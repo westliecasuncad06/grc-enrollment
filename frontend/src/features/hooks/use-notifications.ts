@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import type { NotificationEnvelope } from "@/features/schemas/notification-schema"
 import {
   getNotifications,
   markAllNotificationsRead,
@@ -32,7 +33,8 @@ export function useNotificationsQuery(
     queryKey: notificationQueryKey(options, session?.userId ?? null),
     queryFn: ({ signal }) => getNotifications(options, signal),
     enabled: session !== null && open,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   })
@@ -59,22 +61,86 @@ export function useUnreadNotificationCountQuery() {
     queryKey: notificationQueryKey(UNREAD_COUNT_OPTIONS, session?.userId ?? null),
     queryFn: ({ signal }) => getNotifications(UNREAD_COUNT_OPTIONS, signal),
     enabled: session !== null,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
     select: (envelope) => envelope.meta.total,
   })
 }
 
+/**
+ * Applies "notification `id` was just read" to one cached notifications
+ * envelope. The bell's unread badge is `meta.total` of the unread-only
+ * queries, so those lose the item and one from the total; the "all" list keeps
+ * the row but stamps `read_at`. Envelopes that don't contain the id and aren't
+ * unread-only are returned untouched.
+ */
+function markReadInEnvelope(
+  envelope: NotificationEnvelope,
+  id: number,
+  unreadOnly: boolean,
+  readAt: string,
+): NotificationEnvelope {
+  if (unreadOnly) {
+    return {
+      ...envelope,
+      data: envelope.data.filter((notification) => notification.id !== id),
+      meta: { ...envelope.meta, total: Math.max(0, envelope.meta.total - 1) },
+    }
+  }
+
+  if (!envelope.data.some((notification) => notification.id === id)) {
+    return envelope
+  }
+
+  return {
+    ...envelope,
+    data: envelope.data.map((notification) =>
+      notification.id === id && notification.read_at === null
+        ? { ...notification, read_at: readAt }
+        : notification,
+    ),
+  }
+}
+
+/**
+ * Marks one notification read and updates the bell immediately (optimistic),
+ * so the unread badge drops the moment a notification is clicked instead of
+ * waiting for the PATCH plus a refetch. Only ever called for notifications
+ * the UI knows are unread. On failure the previous cache is restored; either
+ * way the server's truth is refetched afterwards.
+ */
 export function useMarkNotificationReadMutation() {
   const queryClient = useQueryClient()
   const { session } = useAuth()
+  const scope = ["notifications", session?.userId ?? null] as const
 
   return useMutation({
     mutationFn: markNotificationRead,
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ["notifications", session?.userId ?? null],
-      }),
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: scope })
+      const previous = queryClient.getQueriesData<NotificationEnvelope>({
+        queryKey: scope,
+      })
+      const readAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z")
+
+      for (const [key, envelope] of previous) {
+        if (!envelope) continue
+        // Key layout: ["notifications", userId, unreadOnly, page, perPage].
+        queryClient.setQueryData<NotificationEnvelope>(
+          key,
+          markReadInEnvelope(envelope, id, key[2] === true, readAt),
+        )
+      }
+
+      return { previous }
+    },
+    onError: (_error, _id, context) => {
+      for (const [key, envelope] of context?.previous ?? []) {
+        queryClient.setQueryData(key, envelope)
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: scope }),
   })
 }
 

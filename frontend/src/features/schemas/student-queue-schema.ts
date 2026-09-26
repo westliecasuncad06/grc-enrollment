@@ -2,6 +2,7 @@ import { z } from "zod"
 
 const studentQueueStageValues = [
   "no_active_enrollment",
+  "pending_program_head_approval",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",
@@ -24,6 +25,10 @@ export const studentQueueTicketSchema = z
     priority: z.enum(queueTicketPriorityValues),
     priority_label: z.string().min(1),
     position: z.number().int().nonnegative().nullable(),
+    // How many times the Cashier called this ticket out while it was serving.
+    // Defaults to 0 so a response from a server that predates the counter
+    // still parses.
+    announce_count: z.number().int().nonnegative().default(0),
   })
   .strict()
 

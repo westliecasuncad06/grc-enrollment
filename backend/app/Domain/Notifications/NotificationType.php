@@ -9,12 +9,16 @@ enum NotificationType: string
     case EnrollmentRegistrarApproved = 'enrollment_registrar_approved';
     case EnrollmentRegistrarRejected = 'enrollment_registrar_rejected';
     case EnrollmentVoided = 'enrollment_voided';
+    case EnrollmentProgramHeadApproved = 'enrollment_program_head_approved';
+    case EnrollmentProgramHeadRejected = 'enrollment_program_head_rejected';
     case AcademicGradeLocked = 'academic_grade_locked';
     case EnrollmentPaymentConfirmed = 'enrollment_payment_confirmed';
     case WithdrawalRequestApproved = 'withdrawal_request_approved';
     case WithdrawalRequestRejected = 'withdrawal_request_rejected';
     case TransfereeCreditApproved = 'transferee_credit_approved';
     case TransfereeCreditRejected = 'transferee_credit_rejected';
+    case TransfereeCreditRequested = 'transferee_credit_requested';
+    case TransfereeCreditEndorsed = 'transferee_credit_endorsed';
     case ScheduleSubmittedForDean = 'schedule_submitted_for_dean';
     case ScheduleDeanApproved = 'schedule_dean_approved';
     case ScheduleExecutiveApproved = 'schedule_executive_approved';
@@ -34,4 +38,9 @@ enum NotificationType: string
     case FacultySpecializationApproved = 'faculty_specialization_approved';
     case FacultySpecializationRejected = 'faculty_specialization_rejected';
     case SectionAssigned = 'section_assigned';
+    case SectionChangeRequested = 'section_change_requested';
+    case SectionChangeApproved = 'section_change_approved';
+    case SectionChangeRejected = 'section_change_rejected';
+    case SectionProfessorReassigned = 'section_professor_reassigned';
+    case StudentYearLevelPromoted = 'student_year_level_promoted';
 }

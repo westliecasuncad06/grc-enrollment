@@ -95,4 +95,75 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(screen.getByText("Cashier Test")).toBeInTheDocument()
     expect(screen.getByText("COR000009")).toBeInTheDocument()
   })
+
+  it("uses the approved labels and the ordinal year level, even for a legacy 'Year N' snapshot", () => {
+    const legacy = {
+      ...cor,
+      snapshot: {
+        ...cor.snapshot,
+        admission_certification:
+          "This is to certify that Test Student is cleared and enrolled for SY 2026-2027, 1st for BS Information Technology, Year 4.",
+      },
+    } satisfies CertificateOfRegistration & { snapshot: CorSnapshot }
+
+    render(<CertificateOfRegistrationDocument cor={legacy} />)
+
+    for (const label of ["Name", "Degree", "Academic Year", "Year Level"]) {
+      expect(screen.getByText(label, { selector: "dt" })).toBeInTheDocument()
+    }
+    for (const oldLabel of ["Student", "Course", "School Year", "Level"]) {
+      expect(
+        screen.queryByText(oldLabel, { selector: "dt" }),
+      ).not.toBeInTheDocument()
+    }
+    expect(
+      screen.getByText("Test Student", { selector: "dd" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("4th Year", { selector: "dd" })).toBeInTheDocument()
+    expect(
+      screen.queryByText("Year 4", { selector: "dd" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/BS Information Technology, 4th Year\./),
+    ).toBeInTheDocument()
+  })
+
+  it("lists a scholarship discount above the grand total, which is already the net", () => {
+    const discounted = {
+      ...cor,
+      snapshot: {
+        ...cor.snapshot,
+        fees: {
+          ...cor.snapshot.fees,
+          scholarship_discount: [
+            {
+              label: "Scholarship discount (40%)",
+              quantity: "40.0",
+              unit_amount: null,
+              amount: "-1160.00",
+            },
+          ],
+          total_scholarship_discount: "-1160.00",
+          grand_total: "1740.00",
+          payment_amount: "1740.00",
+        },
+      },
+    } satisfies CertificateOfRegistration & { snapshot: CorSnapshot }
+
+    render(<CertificateOfRegistrationDocument cor={discounted} />)
+
+    const discount = screen.getByLabelText("Scholarship discount")
+    expect(discount).toHaveTextContent("Scholarship discount (40%)")
+    expect(discount).toHaveTextContent(/[-\u2212]\s?₱1,160\.00/)
+    expect(screen.getByText("GRAND TOTAL")).toBeInTheDocument()
+    expect(screen.getAllByText("₱1,740.00").length).toBeGreaterThan(0)
+  })
+
+  it("shows no scholarship section for a COR generated without a discount", () => {
+    render(<CertificateOfRegistrationDocument cor={cor} />)
+
+    expect(
+      screen.queryByLabelText("Scholarship discount"),
+    ).not.toBeInTheDocument()
+  })
 })

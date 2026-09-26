@@ -11,6 +11,7 @@ const callAlert = vi.hoisted(() => ({
     isCalled: false,
     callMessage: null as string | null,
     soundEnabled: false,
+    soundPreferred: false,
     enableSound: vi.fn(),
     disableSound: vi.fn(),
   },
@@ -31,6 +32,7 @@ const queueView = {
     priority: "priority",
     priority_label: "Priority",
     position: 2,
+    announce_count: 0,
   },
   now_serving_ticket_number: "Q005",
   upcoming_ticket_numbers: ["Q006", "Q007", "Q008"],
@@ -43,6 +45,7 @@ describe("StudentQueueLivePanel", () => {
       isCalled: false,
       callMessage: null,
       soundEnabled: false,
+      soundPreferred: false,
       enableSound: vi.fn(),
       disableSound: vi.fn(),
     }
@@ -169,6 +172,26 @@ describe("StudentQueueLivePanel", () => {
     },
   )
 
+  it("tells an irregular student the Program Head reviews the schedule before the Registrar", () => {
+    render(
+      <StudentQueueLivePanel
+        queue={{
+          ...queueView,
+          stage: "pending_program_head_approval",
+          ticket: null,
+          now_serving_ticket_number: null,
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText("Waiting for Program Head approval"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Program Head approval, then Registrar approval/),
+    ).toBeInTheDocument()
+  })
+
   it("shows only ticket-number queue information and omits the full upcoming list in compact mode", () => {
     const privateBoardData = {
       ...queueView,
@@ -222,16 +245,16 @@ describe("StudentQueueLivePanel", () => {
         "You do not have an active enrollment for the current term.",
       ],
       [
+        "pending_program_head_approval",
+        "Program Head approval, then Registrar approval, is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
+      ],
+      [
         "pending_registrar_approval",
         "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
       ],
       [
         "pending_payment",
         "Your enrollment is approved! Claim your queuing ticket in person at the school Cashier kiosk.",
-      ],
-      [
-        "enrolled",
-        "Payment has been confirmed and your enrollment is complete.",
       ],
     ]
 
@@ -252,14 +275,43 @@ describe("StudentQueueLivePanel", () => {
       ).not.toBeInTheDocument()
       unmount()
     }
+
+    // In kiosk mode, enrolled communicates completed enrollment guidance
+    const { unmount: unmountKiosk } = render(
+      <StudentQueueLivePanel
+        queue={{ ...queueView, stage: "enrolled" }}
+        mode="kiosk"
+      />,
+    )
+    expect(
+      screen.getByText(
+        "Payment has been confirmed and your enrollment is complete.",
+      ),
+    ).toBeInTheDocument()
+    unmountKiosk()
+
+    // On student surfaces, queue ticket panel is removed when officially enrolled
+    const { container: studentContainer } = render(
+      <StudentQueueLivePanel
+        queue={{ ...queueView, stage: "enrolled" }}
+        mode="default"
+      />,
+    )
+    expect(studentContainer).toBeEmptyDOMElement()
   })
 
-  it("offers sound controls, an iOS vibration limitation, and a cut-off notice", async () => {
+  it("offers a sound toggle, an iOS vibration limitation, and a cut-off notice", async () => {
     const user = userEvent.setup()
     render(
       <StudentQueueLivePanel queue={{ ...queueView, cut_off_today: true }} />,
     )
 
+    // Sound must not be described as automatic: a browser will not play audio
+    // until the student has interacted with the page.
+    expect(screen.queryByText(/play automatically/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Turn on sound so this device rings/i),
+    ).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Turn on sound" }))
     expect(callAlert.current.enableSound).toHaveBeenCalledOnce()
     expect(
@@ -268,6 +320,53 @@ describe("StudentQueueLivePanel", () => {
     expect(
       screen.getByText(/Today's queue has reached its cut-off/i),
     ).toBeInTheDocument()
+  })
+
+  it("says a tap is still needed when sound is wanted but the browser has not allowed it yet", () => {
+    callAlert.current = { ...callAlert.current, soundPreferred: true }
+    render(<StudentQueueLivePanel queue={queueView} />)
+
+    expect(
+      screen.getByText(/tap anywhere on this page once/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Turn on sound" }),
+    ).toBeInTheDocument()
+  })
+
+  it("turns sound off from the same control once it is on", async () => {
+    const user = userEvent.setup()
+    callAlert.current = {
+      ...callAlert.current,
+      soundEnabled: true,
+      soundPreferred: true,
+    }
+    render(<StudentQueueLivePanel queue={queueView} />)
+
+    expect(
+      screen.getByText(/this device rings when your ticket is called/i),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Turn off sound" }))
+    expect(callAlert.current.disableSound).toHaveBeenCalledOnce()
+  })
+
+  it("uses the alert its parent owns instead of running a second one", () => {
+    // The hook mock returns no call message; the parent-owned alert does.
+    render(
+      <StudentQueueLivePanel
+        queue={queueView}
+        alert={{
+          ...callAlert.current,
+          isCalled: true,
+          callMessage: "Your ticket Q007 is being called again.",
+          soundPreferred: false,
+        }}
+      />,
+    )
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your ticket Q007 is being called again.",
+    )
   })
 
   it("exposes the called ticket as an assertive alert with a static called state", () => {

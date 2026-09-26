@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   connectedModuleIds,
   connectedModuleRegistry,
+  preloadConnectedModules,
 } from "@/features/portal/module-registry"
 import {
   getRoleModule,
@@ -20,9 +21,12 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "grade-submission": "Grade submission",
   "credit-mappings": "Credit mappings",
   "drops-withdrawals": "Drops & withdrawals",
-  "academic-records": "Academic records",
-  "enrollment-documents": "Enrollment documents",
+  "academic-records": "Certificate of Registration Records",
+  "enrollment-documents": "Certificate of Registration Records",
   "master-schedule": "Enrollment planning review",
+  "submitted-schedules": "Submitted schedules",
+  "section-change-requests": "Schedule change requests",
+  "faculty-load-monitoring": "Faculty load",
   "audit-logs": "Audit logs",
   "teaching-schedule": "Teaching schedule",
   grades: "Grades",
@@ -42,13 +46,17 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   "grade-approvals": "Grade approvals",
   "academic-transcripts": "Academic transcripts",
   "enrollment-change-requests": "Add/Drop requests",
+  "enrollment-requests": "Enrollment requests",
   "enrollment-approvals": "Enrollment approvals",
-  "overrides-voids": "Overrides & voids",
+  "irregular-enrollments": "Irregular Student Advising & Approvals",
   "program-chair-enrollment": "Enrollment",
   "subjects-prerequisites": "Curriculum editor",
   "academic-terms": "Enrollment",
   "availability-preferences": "Availability and preferences",
   "payment-queue": "Payment queue",
+  "advance-payment": "Advance Payment",
+  "statement-of-account": "Statement of Account",
+  "admission-requirements": "Admission",
   "payment-records": "Transaction history",
   "cor-records": "Certificate of Registration Records",
   "queue-kiosk-access": "Queue kiosk access",
@@ -58,7 +66,6 @@ const migratedRegionNames: Partial<Record<string, string>> = {
   honors: "Dean's list",
   "enrollment-dashboard": "Enrollment dashboard",
   "institution-dashboard": "Institution dashboard",
-  "stuck-students": "Stuck students",
   "policy-settings": "Policy settings",
   "fee-settings": "Fee Settings",
   "it-control-students": "IT Control student accounts",
@@ -82,42 +89,54 @@ describe("connectedModuleRegistry", () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it("dispatches every role-owned connected module ID", () => {
-    expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
-      [...connectedModuleIds].sort(),
-    )
-
-    for (const moduleId of connectedModuleIds) {
-      const ModuleComponent = connectedModuleRegistry[moduleId]
-      const role = (
-        Object.keys(
-          rolePortalDefinitions,
-        ) as (keyof typeof rolePortalDefinitions)[]
-      ).find((candidate) =>
-        rolePortalDefinitions[candidate].modules.some(
-          (module) => module.id === moduleId,
-        ),
+  // Workspaces are lazy chunks (ADR 0029). Loading all 48 through Vite in a test
+  // takes a while the first time, so warm them once up front and give this test
+  // room; each render then resolves from the module cache.
+  it(
+    "dispatches every role-owned connected module ID",
+    { timeout: 180_000 },
+    async () => {
+      await preloadConnectedModules()
+      expect(Object.keys(connectedModuleRegistry).sort()).toEqual(
+        [...connectedModuleIds].sort(),
       )
-      const view = renderWithSession(<ModuleComponent />, {
-        session: {
-          userId: "5",
-          displayName: role === "dean" ? "Dean" : "Test User",
-          role: role ?? "admission_staff",
-          signedInAt: "2026-07-29T12:00:00Z",
-        },
-      })
-      const expectedRegion =
-        migratedRegionNames[moduleId] ??
-        unmigratedRegionNames[moduleId] ??
-        "Connected portal workspace"
-      expect(
-        view.getByRole("region", { name: expectedRegion }),
-      ).toBeInTheDocument()
-      view.unmount()
-    }
-  })
 
-  it("connects curriculum approvals for Dean and Executive Director", () => {
+      for (const moduleId of connectedModuleIds) {
+        const ModuleComponent = connectedModuleRegistry[moduleId]
+        const role = (
+          Object.keys(
+            rolePortalDefinitions,
+          ) as (keyof typeof rolePortalDefinitions)[]
+        ).find((candidate) =>
+          rolePortalDefinitions[candidate].modules.some(
+            (module) => module.id === moduleId,
+          ),
+        )
+        const view = renderWithSession(<ModuleComponent />, {
+          session: {
+            userId: "5",
+            displayName: role === "dean" ? "Dean" : "Test User",
+            role: role ?? "admission_staff",
+            signedInAt: "2026-07-29T12:00:00Z",
+          },
+        })
+        const expectedRegion =
+          migratedRegionNames[moduleId] ??
+          unmigratedRegionNames[moduleId] ??
+          "Connected portal workspace"
+        expect(
+          await view.findByRole(
+            "region",
+            { name: expectedRegion },
+            { timeout: 15_000 },
+          ),
+        ).toBeInTheDocument()
+        view.unmount()
+      }
+    },
+  )
+
+  it("connects curriculum approvals for Dean and Executive Director", async () => {
     expect(connectedModuleIds).toContain("curriculum-approvals")
     expect(connectedModuleRegistry["curriculum-approvals"]).toBeDefined()
 
@@ -141,8 +160,26 @@ describe("connectedModuleRegistry", () => {
     })
 
     expect(
-      view.getByRole("region", { name: "Curriculum Approvals" }),
+      await view.findByRole("region", { name: "Curriculum Approvals" }),
     ).toBeInTheDocument()
+    view.unmount()
+  })
+
+  it("shows a loading skeleton, announced once, while a workspace chunk loads", () => {
+    const ModuleComponent = connectedModuleRegistry["curriculum-approvals"]
+    const view = renderWithSession(<ModuleComponent />, {
+      session: {
+        userId: "5",
+        displayName: "Dean",
+        role: "dean",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    // First paint is the fallback; the workspace arrives asynchronously.
+    expect(
+      view.container.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0)
     view.unmount()
   })
 

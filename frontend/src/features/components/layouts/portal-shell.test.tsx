@@ -7,6 +7,7 @@ import { userRoles, type UserRole } from "@/features/auth/roles"
 import { PortalShell } from "@/features/components/layouts/portal-shell"
 import { PortalModulePage } from "@/features/components/pages/portal-module-page"
 import { PortalOverviewPage } from "@/features/components/pages/portal-overview-page"
+import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "@/features/hooks/use-sidebar-collapsed"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
 import { rolePortalDefinitions } from "@/features/portal/role-capabilities"
 import { routerMock } from "@/tests/navigation-mock"
@@ -193,6 +194,44 @@ describe("PortalShell", () => {
     ).toBeInTheDocument()
   })
 
+  it("moves Sign out into the bottom of the navigation drawer for phones", async () => {
+    // Stakeholder Doc 13: on a phone the bell takes the top bar's right-hand
+    // spot and Sign out lives at the very bottom of the hamburger menu.
+    const user = userEvent.setup()
+    const signOut = vi.fn()
+    renderShell("student", { signOut })
+
+    // The top bar keeps its own Sign out for desktop; the class is the hook the
+    // tablet/phone stylesheet uses to hide it while the drawer exists.
+    expect(screen.getByRole("button", { name: "Sign out" })).toHaveClass(
+      "portal-topbar__signout",
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Open portal navigation" }),
+    )
+    const drawer = screen.getByRole("dialog", {
+      name: "GRC Connect navigation",
+    })
+    const drawerNavigation = within(drawer).getByRole("navigation", {
+      name: "Mobile role portal navigation",
+    })
+    const drawerSignOut = within(drawer).getByRole("button", {
+      name: "Sign out",
+    })
+
+    // After the links, i.e. at the bottom of the menu.
+    expect(
+      drawerNavigation.compareDocumentPosition(drawerSignOut) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    await user.click(drawerSignOut)
+
+    expect(routerMock.replace).toHaveBeenCalledWith("/")
+    expect(signOut).toHaveBeenCalled()
+  })
+
   it("signs out by navigating home before clearing the session", async () => {
     const user = userEvent.setup()
     const signOut = vi.fn()
@@ -269,7 +308,7 @@ describe("PortalShell", () => {
     )
   })
 
-  it("keeps the Curriculum Editor link unlocked while other Enrollment-gated links stay locked", async () => {
+  it("never greys out a Program Chair link, whatever stage the term workflow is in", async () => {
     fetchMock.mockImplementation((input) => {
       const url = requestUrl(input)
       if (url.includes("/academic-term-workflows")) {
@@ -333,8 +372,141 @@ describe("PortalShell", () => {
         name: "Curriculum Editor",
       }),
     ).not.toHaveAttribute("aria-disabled")
-    expect(
-      within(navigation).getByRole("link", { name: "Schedule Proposals" }),
-    ).toHaveAttribute("aria-disabled", "true")
+
+    // Stakeholder Doc 12: Schedule looked greyed out yet was clickable. The
+    // "curriculum_preparation" stage used to lock it; no stage may now.
+    const schedule = within(navigation).getByRole("link", { name: "Schedule" })
+    expect(schedule).not.toHaveAttribute("aria-disabled")
+    expect(schedule).not.toHaveAttribute("title")
+    expect(schedule).not.toHaveClass("portal-nav-link--locked")
+    expect(schedule).toHaveAttribute("href", "/portal/schedule")
+
+    for (const link of within(navigation).getAllByRole("link")) {
+      expect(link).not.toHaveAttribute("aria-disabled")
+    }
+  })
+
+  it("lists Irregular Advising and the Enrollment Dashboard right after Enrollment for a Program Chair", () => {
+    renderShell("program_chair", {
+      session: { ...sessionFor("program_chair"), college: "ccs" },
+    })
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Role portal navigation",
+    })
+    const names = within(navigation)
+      .getAllByRole("link")
+      .map((link) => link.textContent?.trim())
+
+    expect(names.slice(0, 5)).toEqual([
+      "GRC Connect",
+      "Enrollment",
+      "Irregular Advising",
+      "Enrollment Dashboard",
+      "Enrollment Analytics",
+    ])
+  })
+
+  describe("foldable sidebar", () => {
+    beforeEach(() => {
+      window.localStorage.removeItem(SIDEBAR_COLLAPSED_STORAGE_KEY)
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+      window.localStorage.removeItem(SIDEBAR_COLLAPSED_STORAGE_KEY)
+    })
+
+    it.each(userRoles)(
+      "offers an expanded, foldable sidebar for %s",
+      (role) => {
+        renderShell(role)
+
+        expect(
+          screen.getByRole("button", { name: "Collapse sidebar" }),
+        ).toHaveAttribute("aria-expanded", "true")
+        expect(document.querySelector(".portal-app")).toHaveAttribute(
+          "data-sidebar",
+          "expanded",
+        )
+      },
+    )
+
+    it("folds to an icon rail, keeps every link named, and remembers the choice", async () => {
+      const user = userEvent.setup()
+      renderShell("student")
+
+      const navigation = screen.getByRole("navigation", {
+        name: "Role portal navigation",
+      })
+      const namesBefore = within(navigation)
+        .getAllByRole("link")
+        .map((link) => link.textContent?.trim())
+
+      await user.click(screen.getByRole("button", { name: "Collapse sidebar" }))
+
+      const expand = screen.getByRole("button", { name: "Expand sidebar" })
+      expect(expand).toHaveAttribute("aria-expanded", "false")
+      expect(expand).toHaveAttribute("aria-controls", "portal-sidebar")
+      expect(document.querySelector(".portal-app")).toHaveAttribute(
+        "data-sidebar",
+        "collapsed",
+      )
+      // Labels leave the layout but never the DOM, so links keep their names
+      // and show a hover title while only icons are visible.
+      expect(
+        within(navigation)
+          .getAllByRole("link")
+          .map((link) => link.textContent?.trim()),
+      ).toEqual(namesBefore)
+      expect(
+        within(navigation).getByRole("link", { name: "GRC Connect" }),
+      ).toHaveAttribute("title", "GRC Connect")
+      expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe(
+        "1",
+      )
+
+      await user.click(expand)
+
+      expect(
+        screen.getByRole("button", { name: "Collapse sidebar" }),
+      ).toHaveAttribute("aria-expanded", "true")
+      expect(
+        within(navigation).getByRole("link", { name: "GRC Connect" }),
+      ).not.toHaveAttribute("title")
+      expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe(
+        "0",
+      )
+    })
+
+    it("starts folded when the choice was saved earlier", () => {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "1")
+      renderShell("registrar_head")
+
+      expect(
+        screen.getByRole("button", { name: "Expand sidebar" }),
+      ).toHaveAttribute("aria-expanded", "false")
+      expect(document.querySelector(".portal-app")).toHaveAttribute(
+        "data-sidebar",
+        "collapsed",
+      )
+    })
+
+    it("still folds for the session when storage is blocked", async () => {
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("storage blocked")
+      })
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("storage blocked")
+      })
+      const user = userEvent.setup()
+      renderShell("dean")
+
+      await user.click(screen.getByRole("button", { name: "Collapse sidebar" }))
+
+      expect(
+        screen.getByRole("button", { name: "Expand sidebar" }),
+      ).toHaveAttribute("aria-expanded", "false")
+    })
   })
 })

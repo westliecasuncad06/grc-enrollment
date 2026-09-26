@@ -53,7 +53,7 @@ const automationSteps: readonly AutomationStepDefinition[] = [
     step: "chair_generate_sections",
     label: "Generate all sections",
     description: "Creates and submits draft section plans across all colleges.",
-    role: "Program Chair",
+    role: "Program Head",
   },
   {
     step: "dean_approve_all",

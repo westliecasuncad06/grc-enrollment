@@ -13,12 +13,12 @@ final class AcademicTermSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_clean_seed_creates_seven_terms_with_1st_semester_2026_2027_current(): void
+    public function test_a_clean_seed_creates_nineteen_terms_with_1st_semester_2026_2027_current(): void
     {
         $this->seed(AcademicTermSeeder::class);
 
-        $this->assertSame(7, AcademicTerm::count());
-        $this->assertSame(6, AcademicTerm::where('status', AcademicTermStatus::Archived)->count());
+        $this->assertSame(19, AcademicTerm::count());
+        $this->assertSame(18, AcademicTerm::where('status', AcademicTermStatus::Archived)->count());
 
         $current = AcademicTerm::where('school_year', '2026-2027')->where('semester', '1st')->sole();
         $this->assertSame(AcademicTermStatus::SemesterClosed, $current->status);
@@ -37,7 +37,7 @@ final class AcademicTermSeederTest extends TestCase
 
         $this->seed(AcademicTermSeeder::class);
 
-        $this->assertSame(7, AcademicTerm::count());
+        $this->assertSame(19, AcademicTerm::count());
         $this->assertSame($ids, AcademicTerm::orderBy('id')->pluck('id')->all());
     }
 }

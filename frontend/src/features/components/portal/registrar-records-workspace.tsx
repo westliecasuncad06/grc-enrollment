@@ -22,16 +22,17 @@ import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { Textarea } from "@/features/components/ui/textarea"
 import { useAcademicGradesQuery } from "@/features/hooks/use-academic-grades"
+import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import { useEnrollmentDocumentsQuery } from "@/features/hooks/use-enrollment-documents"
 import {
-  useCreateTransfereeCreditMutation,
   useDecideTransfereeCreditMutation,
   useTransfereeCreditsQuery,
 } from "@/features/hooks/use-transferee-credits"
@@ -51,9 +52,10 @@ const workspaceHeadings: Record<string, string> = {
 
 function pendingBadgeVariant(
   status: TransfereeCredit["status"],
-): "default" | "destructive" | "outline" {
+): "default" | "destructive" | "outline" | "secondary" {
   if (status === "rejected") return "destructive"
   if (status === "approved") return "default"
+  if (status === "endorsed") return "secondary"
   return "outline"
 }
 
@@ -77,7 +79,11 @@ export function RegistrarRecordsWorkspace({
   initialModuleId?: string
 }) {
   const { session } = useAuth()
-  const authorized = session?.role === "registrar_staff"
+  // Credit mapping is the Program Chair's work (`ProgramChairCreditMappingsWorkspace`);
+  // Registrar Staff only approve or reject a credit the Chair has endorsed
+  // (ADR 0026), so this is the Registrar Staff's workspace alone.
+  const isRegistrarStaff = session?.role === "registrar_staff"
+  const authorized = isRegistrarStaff
   const heading =
     workspaceHeadings[initialModuleId] ?? workspaceHeadings["credit-mappings"]
 
@@ -96,19 +102,10 @@ export function RegistrarRecordsWorkspace({
   const [reason, setReason] = useState("")
   const [error, setError] = useState("")
 
-  const [studentId, setStudentId] = useState("")
-  const [sourceInstitution, setSourceInstitution] = useState("")
-  const [sourceSubjectCode, setSourceSubjectCode] = useState("")
-  const [sourceSubjectTitle, setSourceSubjectTitle] = useState("")
-  const [sourceGrade, setSourceGrade] = useState("")
-  const [creditedUnits, setCreditedUnits] = useState("")
-  const [createError, setCreateError] = useState("")
-
   const creditsQuery = useTransfereeCreditsQuery(
     { page: creditsPage, per_page: 20 },
     { enabled: showCredits },
   )
-  const createCreditMutation = useCreateTransfereeCreditMutation()
   const decideCreditMutation = useDecideTransfereeCreditMutation()
 
   const withdrawalsQuery = useWithdrawalRequestsQuery(
@@ -122,11 +119,13 @@ export function RegistrarRecordsWorkspace({
     { enabled: showGrades },
   )
 
+  // Query the server 300 ms after typing stops, not on every keystroke.
+  const debouncedDocumentsSearch = useDebouncedValue(documentsSearch, 300)
   const documentsQuery = useEnrollmentDocumentsQuery(
     {
       page: documentsPage,
       per_page: 20,
-      search: documentsSearch.trim() || undefined,
+      search: debouncedDocumentsSearch.trim() || undefined,
     },
     { enabled: showDocuments },
   )
@@ -143,10 +142,10 @@ export function RegistrarRecordsWorkspace({
       if (decision.kind === "credit") {
         await decideCreditMutation.mutateAsync({
           id: decision.id,
-          input: {
-            action: decision.action,
-            reason: reason.trim() || undefined,
-          },
+          input:
+            decision.action === "approve"
+              ? { action: "approve" }
+              : { action: "reject", reason: reason.trim() },
         })
       } else {
         await decideWithdrawalMutation.mutateAsync({
@@ -162,43 +161,6 @@ export function RegistrarRecordsWorkspace({
     } catch {
       setError(
         "The decision could not be saved. Check the connection and try again.",
-      )
-    }
-  }
-
-  const createCredit = async () => {
-    setCreateError("")
-    const parsedStudentId = Number(studentId)
-    const parsedCreditedUnits = Number(creditedUnits)
-    if (!Number.isSafeInteger(parsedStudentId) || parsedStudentId <= 0) {
-      setCreateError("Enter a valid student ID.")
-      return
-    }
-    if (
-      !Number.isSafeInteger(parsedCreditedUnits) ||
-      parsedCreditedUnits <= 0
-    ) {
-      setCreateError("Enter a valid number of credited units.")
-      return
-    }
-    try {
-      await createCreditMutation.mutateAsync({
-        student_id: parsedStudentId,
-        source_institution: sourceInstitution.trim(),
-        source_subject_code: sourceSubjectCode.trim(),
-        source_subject_title: sourceSubjectTitle.trim(),
-        source_grade: sourceGrade.trim() || undefined,
-        credited_units: parsedCreditedUnits,
-      })
-      setStudentId("")
-      setSourceInstitution("")
-      setSourceSubjectCode("")
-      setSourceSubjectTitle("")
-      setSourceGrade("")
-      setCreditedUnits("")
-    } catch {
-      setCreateError(
-        "The transferee credit could not be recorded. Check the connection and try again.",
       )
     }
   }
@@ -225,102 +187,11 @@ export function RegistrarRecordsWorkspace({
         <>
           <Card>
             <CardHeader>
-              <CardTitle level={2}>Record a transferee credit</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {createError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>{createError}</AlertDescription>
-                </Alert>
-              )}
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="credit-student-id">
-                    Student ID (see Academic Records)
-                  </FieldLabel>
-                  <Input
-                    id="credit-student-id"
-                    inputMode="numeric"
-                    value={studentId}
-                    onChange={(event) => setStudentId(event.target.value)}
-                    disabled={createCreditMutation.isPending}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="credit-source-institution">
-                    Source institution
-                  </FieldLabel>
-                  <Input
-                    id="credit-source-institution"
-                    value={sourceInstitution}
-                    onChange={(event) =>
-                      setSourceInstitution(event.target.value)
-                    }
-                    disabled={createCreditMutation.isPending}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="credit-source-code">
-                    Source subject code
-                  </FieldLabel>
-                  <Input
-                    id="credit-source-code"
-                    value={sourceSubjectCode}
-                    onChange={(event) =>
-                      setSourceSubjectCode(event.target.value)
-                    }
-                    disabled={createCreditMutation.isPending}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="credit-source-title">
-                    Source subject title
-                  </FieldLabel>
-                  <Input
-                    id="credit-source-title"
-                    value={sourceSubjectTitle}
-                    onChange={(event) =>
-                      setSourceSubjectTitle(event.target.value)
-                    }
-                    disabled={createCreditMutation.isPending}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="credit-source-grade">
-                    Source grade (optional)
-                  </FieldLabel>
-                  <Input
-                    id="credit-source-grade"
-                    value={sourceGrade}
-                    onChange={(event) => setSourceGrade(event.target.value)}
-                    disabled={createCreditMutation.isPending}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="credit-units">Credited units</FieldLabel>
-                  <Input
-                    id="credit-units"
-                    inputMode="numeric"
-                    value={creditedUnits}
-                    onChange={(event) => setCreditedUnits(event.target.value)}
-                    disabled={createCreditMutation.isPending}
-                  />
-                </Field>
-                <Button
-                  type="button"
-                  disabled={createCreditMutation.isPending}
-                  onClick={() => void createCredit()}
-                >
-                  {createCreditMutation.isPending
-                    ? "Recording credit"
-                    : "Record credit"}
-                </Button>
-              </FieldGroup>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
               <CardTitle level={2}>Transferee credits</CardTitle>
+              <CardDescription>
+                A credit reaches you once the Program Head has mapped it to a
+                subject and endorsed it. Approve or reject each one.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <AsyncBoundary
@@ -329,7 +200,7 @@ export function RegistrarRecordsWorkspace({
                   data: creditsQuery.data?.data,
                 }}
                 isEmpty={(rows) => rows.length === 0}
-                emptyMessage="No transferee credits have been recorded yet."
+                emptyMessage="No credit requests have reached the Registrar yet."
                 loadingLabel="Loading transferee credits…"
               >
                 {(credits) => (
@@ -341,13 +212,28 @@ export function RegistrarRecordsWorkspace({
                       {
                         key: "student",
                         header: "Student",
-                        render: (credit) => credit.student_number,
+                        render: (credit) =>
+                          credit.student_name
+                            ? `${credit.student_name} (${credit.student_number})`
+                            : credit.student_number,
                       },
                       {
                         key: "source",
-                        header: "Source",
+                        header: "Previous subject",
                         render: (credit) =>
-                          `${credit.source_institution} — ${credit.source_subject_code}`,
+                          `${credit.source_subject_title} — ${credit.source_institution}${
+                            credit.source_subject_code
+                              ? ` (${credit.source_subject_code})`
+                              : ""
+                          }`,
+                      },
+                      {
+                        key: "maps-to",
+                        header: "Credited as",
+                        render: (credit) =>
+                          credit.subject_code
+                            ? `${credit.subject_code} — ${credit.subject_title ?? ""}`
+                            : "Not mapped",
                       },
                       {
                         key: "units",
@@ -367,7 +253,8 @@ export function RegistrarRecordsWorkspace({
                         key: "actions",
                         header: "Actions",
                         render: (credit) =>
-                          credit.status === "pending" && (
+                          isRegistrarStaff &&
+                          credit.status === "endorsed" && (
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 type="button"

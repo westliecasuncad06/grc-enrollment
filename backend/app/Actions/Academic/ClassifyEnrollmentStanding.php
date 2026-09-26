@@ -11,7 +11,6 @@ use App\Domain\Enrollment\ClassificationVerdict;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
-use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubject;
 use App\Models\Section;
 use App\Models\StudentProfile;
@@ -38,7 +37,11 @@ use Illuminate\Database\Eloquent\Collection;
  * `null` means undetermined (no block published yet for that year level
  * this term) — never coerce this to Irregular. Forcing Irregular here would
  * eagerly flip every student in that year level the instant they open
- * their enrollment page, purely because setup isn't finished yet.
+ * their enrollment page, purely because setup isn't finished yet. The one
+ * exception is a failed back subject (ADR 0028): a required subject from an
+ * earlier point in the curriculum, taken and not passed in a prior term,
+ * makes the student Irregular whether or not any section or block exists
+ * yet, because that fact does not depend on this term's setup.
  */
 final readonly class ClassifyEnrollmentStanding
 {
@@ -70,9 +73,10 @@ final readonly class ClassifyEnrollmentStanding
 
         $standardSubjectIds = $this->standardBlockSubjectIds($term, $curriculumId, $yearLevel);
 
-        if ($standardSubjectIds === []) {
-            return collect($studentIds)->mapWithKeys(fn (int $id): array => [$id => null])->all();
-        }
+        // No block published yet for this year level: standing is only
+        // undetermined (null) when nothing else already settles it. A failed
+        // back subject (below) does not depend on any section being published.
+        $blockPublished = $standardSubjectIds !== [];
 
         $placements = CurriculumSubject::query()
             ->where('curriculum_id', $curriculumId)
@@ -84,7 +88,9 @@ final readonly class ClassifyEnrollmentStanding
             static fn (int|string $id): int => (int) $id,
             $placements->keys()->diff($standardSubjectIds)->all(),
         ));
-        $openBacklogSubjectIds = $this->openNonBlockSectionSubjectIds($term, $backlogSubjectIds);
+        $openBacklogSubjectIds = $blockPublished
+            ? $this->openNonBlockSectionSubjectIds($term, $backlogSubjectIds)
+            : [];
 
         // A backlog subject only counts if the student should already have
         // reached it by now — a subject placed at a LATER point in the
@@ -110,22 +116,10 @@ final readonly class ClassifyEnrollmentStanding
                     continue;
                 }
 
-                if ($this->isCompleted($subjectId, $marks, $credited)) {
-                    // A subject offered either semester (SemesterCoverage::
-                    // coversBoth() — the composite '1st|2nd' placement) is
-                    // designed to be taken in whichever term suits the
-                    // student. Already having passed it is the normal,
-                    // expected outcome of that flexibility, not an anomaly
-                    // -- flagging it for removal would misclassify every
-                    // student who simply took a flexible subject a term
-                    // early.
-                    if (! SemesterCoverage::coversBoth($placement->semester)) {
-                        $reasons[] = [
-                            'code' => 'needs_removing_completed',
-                            'message' => "{$placement->subject->code} has already been completed and is no longer part of this term's standard load.",
-                        ];
-                    }
-
+                if ($this->isCompletedEarly($subjectId, $marks, $credited, $term->id)) {
+                    // Having already passed a subject is a normal academic achievement and
+                    // must never make a student irregular. Only unmet prerequisites or backlogs
+                    // from prior failures trigger irregular standing.
                     continue;
                 }
 
@@ -137,9 +131,45 @@ final readonly class ClassifyEnrollmentStanding
                 }
             }
 
+            // Back subjects (ADR 0028): a required subject from an earlier point in the
+            // curriculum that the student took in a PRIOR term and did not pass. It counts
+            // whether or not a section is offered this term - the student is Irregular
+            // either way, and enrolls it per subject when a section exists. A result
+            // recorded in the current term is not a back subject yet (Doc 7: standing
+            // changes from the next term), and a subject that is part of this term's own
+            // block is a repeat inside the block, handled above.
+            $backSubjectIds = [];
+
+            foreach ($backlogSubjectIds as $subjectId) {
+                $placement = $placements->get($subjectId);
+                $entry = $marks[$subjectId] ?? null;
+
+                if ($placement === null
+                    || ! $placement->is_required
+                    || $entry === null
+                    || isset($credited[$subjectId])
+                    || ! $entry['mark']->blocksRegularStanding()
+                    || $entry['academic_term_id'] === $term->id) {
+                    continue;
+                }
+
+                if (SemesterCoverage::primary($placement->semester)->ordinal($placement->year_level) >= $currentOrdinal) {
+                    continue;
+                }
+
+                $backSubjectIds[$subjectId] = true;
+                $reasons[] = [
+                    'code' => 'needs_adding_backlog',
+                    'message' => "{$placement->subject->code} was not passed in an earlier term and still needs to be retaken (back subject).",
+                ];
+            }
+
             foreach ($openBacklogSubjectIds as $subjectId) {
                 $placement = $placements->get($subjectId);
-                if ($placement === null || $this->isCompleted($subjectId, $marks, $credited)) {
+                if ($placement === null
+                    || ! $placement->is_required
+                    || isset($backSubjectIds[$subjectId])
+                    || $this->isCompleted($subjectId, $marks, $credited)) {
                     continue;
                 }
                 if (! $this->prerequisitesSatisfied($placement, $marks, $credited)) {
@@ -147,10 +177,23 @@ final readonly class ClassifyEnrollmentStanding
                 }
 
                 $placementOrdinal = SemesterCoverage::primary($placement->semester)->ordinal($placement->year_level);
-                if ($placementOrdinal > $currentOrdinal) {
-                    // Ahead of the student's current position — not a
-                    // backlog item yet.
+                if ($placementOrdinal >= $currentOrdinal) {
+                    // Current term or ahead of the student's current position — not a
+                    // backlog item.
                     continue;
+                }
+
+                // If the subject is from the same year level (e.g. 1st sem of current year level),
+                // it only becomes an actionable backlog if the student actually took and failed it in a prior term.
+                // A regular student with passing grades in 1st semester must never flip to irregular in 2nd semester!
+                if ($placement->year_level >= $student->year_level) {
+                    $hasPriorFailure = isset($marks[$subjectId])
+                        && ! $marks[$subjectId]['mark']->isPassing()
+                        && $marks[$subjectId]['academic_term_id'] !== $term->id;
+
+                    if (! $hasPriorFailure) {
+                        continue;
+                    }
                 }
 
                 $reasons[] = [
@@ -159,9 +202,11 @@ final readonly class ClassifyEnrollmentStanding
                 ];
             }
 
-            $verdicts[$student->id] = $reasons === []
-                ? ClassificationVerdict::regular()
-                : ClassificationVerdict::irregular($reasons);
+            $verdicts[$student->id] = match (true) {
+                $reasons !== [] => ClassificationVerdict::irregular($reasons),
+                ! $blockPublished => null,
+                default => ClassificationVerdict::regular(),
+            };
         }
 
         return $verdicts;
@@ -214,7 +259,7 @@ final readonly class ClassifyEnrollmentStanding
 
     /**
      * @param  list<int>  $studentIds
-     * @return array<int, array<int, GradeMark>>
+     * @return array<int, array<int, array{mark: GradeMark, academic_term_id: int}>>
      */
     private function latestLockedMarksByStudent(array $studentIds): array
     {
@@ -224,7 +269,7 @@ final readonly class ClassifyEnrollmentStanding
             ->orderBy('student_id')
             ->orderByDesc('academic_term_id')
             ->orderByDesc('id')
-            ->get(['student_id', 'subject_id', 'mark']);
+            ->get(['student_id', 'subject_id', 'academic_term_id', 'mark']);
 
         $marksByStudent = [];
         foreach ($grades as $grade) {
@@ -233,7 +278,10 @@ final readonly class ClassifyEnrollmentStanding
             }
             $marksByStudent[$grade->student_id] ??= [];
             if (! array_key_exists($grade->subject_id, $marksByStudent[$grade->student_id])) {
-                $marksByStudent[$grade->student_id][$grade->subject_id] = $grade->mark;
+                $marksByStudent[$grade->student_id][$grade->subject_id] = [
+                    'mark' => $grade->mark,
+                    'academic_term_id' => $grade->academic_term_id,
+                ];
             }
         }
 
@@ -246,32 +294,13 @@ final readonly class ClassifyEnrollmentStanding
      */
     private function creditedSubjectIdsByStudent(array $studentIds, int $curriculumId): array
     {
-        $credits = CurriculumMigrationCredit::query()
-            ->whereHas('migration', fn ($query) => $query
-                ->whereIn('student_id', $studentIds)
-                ->where('target_curriculum_id', $curriculumId))
-            ->with('migration:id,student_id,target_curriculum_id')
-            ->get(['id', 'curriculum_migration_id', 'target_subject_id']);
-
-        $byStudent = [];
-        foreach ($credits as $credit) {
-            // whereHas('migration', ...) above already guarantees a match
-            // exists at the DB level, but the eager-loaded relation is
-            // still nullable to PHPStan's static analysis.
-            if ($credit->migration === null) {
-                continue;
-            }
-
-            $studentId = $credit->migration->student_id;
-            $byStudent[$studentId] ??= [];
-            $byStudent[$studentId][$credit->target_subject_id] = true;
-        }
-
-        return $byStudent;
+        // Curriculum-migration credits and approved transferee credits alike
+        // (ADR 0026): neither carries a GRC grade.
+        return (new ResolveCreditedSubjectIds)->forStudents($studentIds, $curriculumId);
     }
 
     /**
-     * @param  array<int, GradeMark>  $marks
+     * @param  array<int, array{mark: GradeMark, academic_term_id: int}>  $marks
      * @param  array<int, true>  $credited
      */
     private function isCompleted(int $subjectId, array $marks, array $credited): bool
@@ -280,11 +309,28 @@ final readonly class ClassifyEnrollmentStanding
             return true;
         }
 
-        return ($marks[$subjectId] ?? null)?->isPassing() === true;
+        $entry = $marks[$subjectId] ?? null;
+
+        return $entry !== null && $entry['mark']->isPassing();
     }
 
     /**
-     * @param  array<int, GradeMark>  $marks
+     * @param  array<int, array{mark: GradeMark, academic_term_id: int}>  $marks
+     * @param  array<int, true>  $credited
+     */
+    private function isCompletedEarly(int $subjectId, array $marks, array $credited, int $currentTermId): bool
+    {
+        if (isset($credited[$subjectId])) {
+            return true;
+        }
+
+        $entry = $marks[$subjectId] ?? null;
+
+        return $entry !== null && $entry['mark']->isPassing() && $entry['academic_term_id'] !== $currentTermId;
+    }
+
+    /**
+     * @param  array<int, array{mark: GradeMark, academic_term_id: int}>  $marks
      * @param  array<int, true>  $credited
      */
     private function prerequisitesSatisfied(CurriculumSubject $placement, array $marks, array $credited): bool
@@ -294,7 +340,8 @@ final readonly class ClassifyEnrollmentStanding
                 continue;
             }
 
-            $mark = $marks[$edge->prerequisite_subject_id] ?? null;
+            $entry = $marks[$edge->prerequisite_subject_id] ?? null;
+            $mark = $entry['mark'] ?? null;
             if ($mark?->isCompletion() === true) {
                 continue;
             }

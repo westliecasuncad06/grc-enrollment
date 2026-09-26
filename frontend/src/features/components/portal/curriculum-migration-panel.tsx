@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -70,11 +70,15 @@ export function CurriculumMigrationPanel({
   const apply = useApplyCurriculumMigrationMutation()
   const previewData = preview.data
 
-  useEffect(() => {
+  // Re-select every candidate whenever a new preview arrives — adjusted
+  // during render rather than in an effect, which cost an extra render.
+  const [selectedForPreview, setSelectedForPreview] = useState(previewData)
+  if (selectedForPreview !== previewData) {
+    setSelectedForPreview(previewData)
     setSelectedIds(
       previewData?.credit_candidates.map((item) => item.equivalency_id) ?? [],
     )
-  }, [previewData])
+  }
 
   if (targets.length === 0) return null
 

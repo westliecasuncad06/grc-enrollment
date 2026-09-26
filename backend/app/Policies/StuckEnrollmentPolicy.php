@@ -14,6 +14,6 @@ final class StuckEnrollmentPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role === UserRole::Dean;
+        return in_array($user->role, [UserRole::Dean, UserRole::RegistrarHead], true);
     }
 }

@@ -44,10 +44,12 @@ export const studentAccountSchema = z
     outstanding_balance: moneySchema,
     advance_payment_balance: moneySchema.default("0.00"),
     has_promissory_note_on_file: z.boolean(),
+    financial_status: z.enum(["scholar", "payee"]).optional(),
+    financial_status_label: z.string().optional(),
     entries: z.array(studentAccountEntrySchema),
     transactions: z.array(studentAccountTransactionSchema).default([]),
   })
-  .strict()
+  .passthrough()
 
 export const studentAccountEnvelopeSchema = z
   .object({ data: studentAccountSchema })
@@ -55,7 +57,8 @@ export const studentAccountEnvelopeSchema = z
 
 export const recordStudentAccountPaymentInputSchema = z
   .object({
-    amount: z.number().positive().max(99_999_999.99),
+    amount: z.number().min(0).max(99_999_999.99).optional().default(0),
+    financial_status: z.enum(["scholar", "payee"]).nullable().optional(),
   })
   .strict()
 

@@ -55,6 +55,16 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "neutral",
     icon: FileCheck,
   },
+  enrollment_program_head_approved: {
+    label: "Program Head approved",
+    tone: "success",
+    icon: BadgeCheck,
+  },
+  enrollment_program_head_rejected: {
+    label: "Enrollment not approved",
+    tone: "destructive",
+    icon: Ban,
+  },
   enrollment_registrar_approved: {
     label: "Enrollment approved",
     tone: "success",
@@ -100,6 +110,18 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "destructive",
     icon: Ban,
   },
+  // A student asked for a credit mapping (to the Program Chair), and the Chair
+  // endorsed one (to Registrar Staff): see ADR 0026.
+  transferee_credit_requested: {
+    label: "Credit request",
+    tone: "neutral",
+    icon: FileCheck,
+  },
+  transferee_credit_endorsed: {
+    label: "Credit awaiting approval",
+    tone: "warning",
+    icon: FileCheck,
+  },
   enrollment_category_reclassified: {
     label: "Enrollment standing updated",
     tone: "neutral",
@@ -130,6 +152,56 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "destructive",
     icon: Ban,
   },
+  curriculum_submitted_for_dean: {
+    label: "Curriculum submitted",
+    tone: "neutral",
+    icon: FileCheck,
+  },
+  curriculum_dean_approved: {
+    label: "Curriculum Dean approved",
+    tone: "success",
+    icon: BadgeCheck,
+  },
+  curriculum_executive_approved: {
+    label: "Curriculum approved",
+    tone: "success",
+    icon: BadgeCheck,
+  },
+  curriculum_returned: {
+    label: "Curriculum returned",
+    tone: "destructive",
+    icon: UndoDot,
+  },
+  section_assigned: {
+    label: "Teaching assignment",
+    tone: "neutral",
+    icon: CalendarCheck,
+  },
+  section_change_requested: {
+    label: "Schedule change requested",
+    tone: "warning",
+    icon: CalendarCheck,
+  },
+  section_change_approved: {
+    label: "Schedule change approved",
+    tone: "success",
+    icon: BadgeCheck,
+  },
+  section_change_rejected: {
+    label: "Schedule change not approved",
+    tone: "destructive",
+    icon: UndoDot,
+  },
+  section_professor_reassigned: {
+    label: "Professor reassigned",
+    tone: "neutral",
+    icon: CalendarCheck,
+  },
+  student_year_level_promoted: {
+    label: "Year level promoted",
+    tone: "success",
+    icon: BadgeCheck,
+  },
 }
 
 const DEFAULT_PRESENTATION: NotificationPresentation = {
@@ -145,12 +217,8 @@ export function notificationPresentation(
 }
 
 /**
- * Where clicking a notification should navigate. Deliberately scoped to the
- * schedule-proposal types this build introduces (plus the pre-existing
- * `schedule_published`) rather than every `NotificationType` — a full
- * type-to-module map for the other, unrelated notification kinds is outside
- * this task's scope and would just be guesswork about destinations this
- * change never touched.
+ * Where clicking a notification should navigate. Routes each notification
+ * type to its dedicated workflow workspace for the active user role.
  */
 export function notificationDestinationPath(
   notificationType: string,
@@ -159,7 +227,9 @@ export function notificationDestinationPath(
   switch (notificationType) {
     case "faculty_specialization_approved":
     case "faculty_specialization_rejected":
-      return role === "faculty" ? "/portal/availability-preferences" : null
+      if (role === "faculty") return "/portal/availability-preferences"
+      if (role === "program_chair") return "/portal/faculty-workforce"
+      return null
     case "schedule_submitted_for_dean":
       return role === "dean" ? "/portal/schedule-approvals" : null
     case "schedule_dean_approved":
@@ -171,28 +241,71 @@ export function notificationDestinationPath(
       if (role === "program_chair") return "/portal/program-chair-enrollment"
       return null
     case "schedule_returned":
-      return role === "program_chair" ? "/portal/program-chair-enrollment" : null
+      return role === "program_chair"
+        ? "/portal/program-chair-enrollment"
+        : null
     case "schedule_published":
       if (role === "program_chair") return "/portal/program-chair-enrollment"
       if (role === "faculty") return "/portal/teaching-schedule"
       return null
+    case "curriculum_submitted_for_dean":
+      return role === "dean" ? "/portal/curricula" : null
+    case "curriculum_dean_approved":
+      if (role === "executive_director" || role === "program_chair")
+        return "/portal/curricula"
+      return null
+    case "curriculum_executive_approved":
+    case "curriculum_returned":
+      if (role === "dean" || role === "program_chair")
+        return "/portal/curricula"
+      return null
+    case "section_assigned":
+      return role === "faculty" ? "/portal/teaching-schedule" : null
+    case "section_change_requested":
+      return role === "registrar_head" ? "/portal/section-change-requests" : null
+    case "section_change_approved":
+    case "section_change_rejected":
+      return role === "program_chair" ? "/portal/schedule" : null
+    case "section_professor_reassigned":
+      return role === "registrar_head" ? "/portal/submitted-schedules" : null
     case "enrollment_payment_confirmed":
       return role === "student" ? "/portal/digital-com" : null
     case "academic_grade_locked":
+    case "student_year_level_promoted":
       return role === "student" ? "/portal/grades" : null
     case "enrollment_submitted":
+      // The Program Chair only receives this type for an irregular student's
+      // submission awaiting schedule checking (`SubmitEnrollment`), and that
+      // decision is made in Irregular Advising & Approvals, not the section
+      // planner.
+      if (role === "program_chair") return "/portal/irregular-enrollments"
+      if (role === "student") return "/portal/enrollment"
+      return null
+    case "enrollment_program_head_approved":
+    case "enrollment_program_head_rejected":
     case "enrollment_registrar_approved":
     case "enrollment_registrar_rejected":
     case "enrollment_voided":
     case "enrollment_category_reclassified":
       return role === "student" ? "/portal/enrollment" : null
     case "enrollment_change_request_submitted":
+      if (role === "program_chair") return "/portal/program-chair-enrollment"
+      if (role === "student") return "/portal/enrollment-change-requests"
+      return null
     case "enrollment_change_request_approved":
     case "enrollment_change_request_rejected":
       return role === "student" ? "/portal/enrollment-change-requests" : null
     case "withdrawal_request_approved":
     case "withdrawal_request_rejected":
       return role === "student" ? "/portal/drops-withdrawals" : null
+    case "transferee_credit_requested":
+      return role === "program_chair" ? "/portal/credit-mappings" : null
+    case "transferee_credit_endorsed":
+      return role === "registrar_staff" ? "/portal/credit-mappings" : null
+    case "transferee_credit_approved":
+    case "transferee_credit_rejected":
+      // The student's own request (and its status) lives on the Grades page.
+      return role === "student" ? "/portal/grades" : null
     default:
       return null
   }

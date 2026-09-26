@@ -14,5 +14,7 @@ final readonly class AnalyticsYearOverYearPoint
         public string $schoolYear,
         public string $semester,
         public int $enrolleeCount,
+        public int $stoppedCount = 0,
+        public float $attritionRate = 0.0,
     ) {}
 }

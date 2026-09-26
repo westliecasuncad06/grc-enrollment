@@ -52,19 +52,36 @@ final class CreateAcademicTerm
                 ]);
             }
 
-            $term = AcademicTerm::create([
-                ...$validatedData,
-                'status' => AcademicTermStatus::Draft,
-            ]);
+            $existing = AcademicTerm::query()
+                ->where('school_year', $validatedData['school_year'])
+                ->where('semester', $validatedData['semester'])
+                ->first();
+
+            if ($existing) {
+                $existing->update([
+                    'status' => AcademicTermStatus::Draft,
+                    'enrollment_opens_at' => $validatedData['enrollment_opens_at'] ?? null,
+                    'enrollment_closes_at' => $validatedData['enrollment_closes_at'] ?? null,
+                    'add_drop_opens_at' => null,
+                    'add_drop_deadline_at' => $validatedData['add_drop_deadline_at'] ?? null,
+                ]);
+                $term = $existing->refresh();
+            } else {
+                $term = AcademicTerm::create([
+                    ...$validatedData,
+                    'status' => AcademicTermStatus::Draft,
+                ]);
+            }
 
             DB::table('academic_term_current_slots')
                 ->where('id', 1)
                 ->update(['academic_term_id' => $term->id, 'updated_at' => now()]);
 
             foreach (CollegeCode::cases() as $college) {
-                AcademicTermCollegeWorkflow::create([
+                AcademicTermCollegeWorkflow::firstOrCreate([
                     'academic_term_id' => $term->id,
                     'college' => $college,
+                ], [
                     'stage' => AcademicTermCollegeWorkflowStage::Draft,
                 ]);
             }
@@ -74,9 +91,10 @@ final class CreateAcademicTerm
             // stays fully functional even if the Registrar never customizes
             // a specific audience's schedule.
             foreach (EnrollmentAudience::cases() as $audience) {
-                AcademicTermEnrollmentWindow::create([
+                AcademicTermEnrollmentWindow::firstOrCreate([
                     'academic_term_id' => $term->id,
                     'audience' => $audience,
+                ], [
                     'opens_at' => $term->enrollment_opens_at,
                     'closes_at' => $term->enrollment_closes_at,
                 ]);

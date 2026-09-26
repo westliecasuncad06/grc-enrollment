@@ -43,6 +43,8 @@ final class StudentAccountResource extends JsonResource
             'student_name' => $this->resource->user->name,
             'student_number' => $this->resource->student_number,
             'year_level' => $this->resource->year_level,
+            'financial_status' => $this->resource->financial_status?->value ?? 'payee',
+            'financial_status_label' => $this->resource->financial_status?->label() ?? 'Payee',
             'currency' => 'PHP',
             'total_assessed' => $this->balance->totalAssessed,
             'total_paid' => $this->balance->totalPaid,

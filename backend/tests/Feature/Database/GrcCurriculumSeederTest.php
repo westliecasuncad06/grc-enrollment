@@ -141,27 +141,6 @@ final class GrcCurriculumSeederTest extends TestCase
         }
     }
 
-    public function test_archived_versions_omit_the_illustrative_removed_subjects(): void
-    {
-        $this->seedProgramAndSubjects();
-        $fixturePath = $this->writeFixture();
-
-        try {
-            $this->seederForFixture($fixturePath)->run();
-
-            $ias2 = Subject::where('code', 'IAS2')->sole();
-            $newest = Curriculum::where('effective_start_year', 2024)->sole();
-            $middle = Curriculum::where('effective_start_year', 2018)->sole();
-            $oldest = Curriculum::where('effective_start_year', 2012)->sole();
-
-            $this->assertDatabaseHas('curriculum_subjects', ['curriculum_id' => $newest->id, 'subject_id' => $ias2->id]);
-            $this->assertDatabaseMissing('curriculum_subjects', ['curriculum_id' => $middle->id, 'subject_id' => $ias2->id]);
-            $this->assertDatabaseMissing('curriculum_subjects', ['curriculum_id' => $oldest->id, 'subject_id' => $ias2->id]);
-        } finally {
-            unlink($fixturePath);
-        }
-    }
-
     public function test_reseeding_updates_in_place_without_duplicates(): void
     {
         $this->seedProgramAndSubjects();

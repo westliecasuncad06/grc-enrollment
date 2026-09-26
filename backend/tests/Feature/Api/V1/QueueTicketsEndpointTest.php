@@ -229,6 +229,54 @@ final class QueueTicketsEndpointTest extends TestCase
         self::assertSame(AuditAction::QUEUE_TICKET_SERVED, AuditLog::query()->sole()->action);
     }
 
+    public function test_announce_counts_each_call_out_of_a_serving_ticket_without_changing_it(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001', '2026-08-01', QueueTicketStatus::Serving);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.announce@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'announce'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'serving');
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'announce'])
+            ->assertOk();
+
+        self::assertSame(2, $ticket->refresh()->announce_count);
+        self::assertSame(QueueTicketStatus::Serving, $ticket->status);
+        // A repeatable operational ping, not a state change: nothing to audit.
+        $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    public function test_announce_requires_the_ticket_to_be_serving(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.announcewaiting@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'announce'])
+            ->assertUnprocessable();
+
+        self::assertSame(0, $ticket->refresh()->announce_count);
+    }
+
+    public function test_only_accounting_staff_can_announce_a_ticket(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $ticket = $this->makeTicket($student, $term, 'Q000001', '2026-08-01', QueueTicketStatus::Serving);
+        $token = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar.announce@grc.test');
+
+        $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'announce'])
+            ->assertForbidden();
+
+        self::assertSame(0, $ticket->refresh()->announce_count);
+    }
+
     public function test_a_non_accounting_role_cannot_transition_a_ticket(): void
     {
         $term = $this->makeTerm();

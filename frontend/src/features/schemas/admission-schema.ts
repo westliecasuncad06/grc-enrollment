@@ -233,7 +233,10 @@ export const decideProfileChangeRequestSchema = z
 export const accountSetupSchema = z
   .object({
     email: z.email(),
-    code: z.string().trim().min(1),
+    code: z
+      .string()
+      .trim()
+      .regex(/^[0-9]{6}$/, "Enter the 6-digit code from your email."),
     password: z.string().min(8),
     password_confirmation: z.string().min(8),
   })
@@ -295,4 +298,3 @@ export interface Paginated<T> {
   links: z.infer<typeof paginationLinksSchema>
   meta: z.infer<typeof paginationMetaSchema>
 }
-

@@ -17,6 +17,7 @@ const queueView = {
     priority: "regular",
     priority_label: "Regular",
     position: 2,
+    announce_count: 2,
   },
   now_serving_ticket_number: "Q000007",
   upcoming_ticket_numbers: ["Q000008", "Q000009"],
@@ -45,6 +46,20 @@ describe("student-queue-service", () => {
     )
 
     await expect(getStudentQueueView()).resolves.toEqual(queueView)
+  })
+
+  it("reads a ticket from a server that predates the announce counter as never announced", async () => {
+    const olderTicket: Record<string, unknown> = { ...queueView.ticket }
+    delete olderTicket.announce_count
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ data: { ...queueView, ticket: olderTicket } }),
+      ),
+    )
+
+    await expect(getStudentQueueView()).resolves.toMatchObject({
+      ticket: { ticket_number: "Q000009", announce_count: 0 },
+    })
   })
 
   it("rejects a queue ticket that exposes a Student identity field", async () => {

@@ -8,7 +8,6 @@ import {
   FileClock,
   FileText,
   FileSearch,
-  FolderArchive,
   Gauge,
   GraduationCap,
   IdCard,
@@ -23,7 +22,6 @@ import {
   UserMinus,
   UserPlus,
   Users,
-  Waypoints,
   type LucideIcon,
 } from "lucide-react"
 
@@ -69,6 +67,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         CalendarDays,
       ),
       portalModule(
+        "statement-of-account",
+        "Statement of Account",
+        "See what was assessed, what you paid, and what you still owe, term by term.",
+        ScrollText,
+      ),
+      portalModule(
         "grades",
         "Grades",
         "Browse your recorded grades by school year and semester, and view your full prospectus.",
@@ -86,6 +90,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "View your official information and request Admission-approved corrections.",
         UserCheck,
       ),
+      portalModule(
+        "admission-requirements",
+        "Admission",
+        "See your admission status and which requirements are submitted or still missing.",
+        ClipboardCheck,
+      ),
     ],
   },
   admission_staff: {
@@ -97,6 +107,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Student Records",
         "Create accounts, maintain verified profiles, and decide student information changes.",
         Users,
+      ),
+      portalModule(
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "See the students who are still in the admission process.",
+        Gauge,
       ),
     ],
   },
@@ -131,7 +147,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
     ],
   },
   program_chair: {
-    roleLabel: "Program Chair",
+    roleLabel: "Program Head",
     welcomeHeading: "Shape curriculum demand into a reviewable schedule.",
     modules: [
       portalModule(
@@ -139,6 +155,26 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Enrollment",
         "Define curriculum capacities, review faculty input, and generate the term schedule.",
         GraduationCap,
+      ),
+      // Advising and the dashboards sit right under Enrollment, the page they
+      // are read alongside (stakeholder Doc 12).
+      portalModule(
+        "irregular-enrollments",
+        "Irregular Advising",
+        "Check irregular student subject schedules, review student curriculum prospectus, and approve enrollments.",
+        FileCheck2,
+      ),
+      portalModule(
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "View your college's enrollment status for the current term — overall, per section, and per student.",
+        Gauge,
+      ),
+      portalModule(
+        "program-chair-analytics",
+        "Enrollment Analytics",
+        "Descriptive, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
+        BarChart3,
       ),
       portalModule(
         "subjects-prerequisites",
@@ -171,22 +207,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         Building2,
       ),
       portalModule(
-        "enrollment-dashboard",
-        "Enrollment Dashboard",
-        "View enrollment funnel metrics and submission status counts for the current term.",
-        Gauge,
-      ),
-      portalModule(
-        "program-chair-analytics",
-        "Enrollment Analytics",
-        "Descriptive, predictive, and prescriptive views built from your college's existing enrollment and forecast data.",
-        BarChart3,
-      ),
-      portalModule(
-        "irregular-enrollments",
-        "Irregular Advising",
-        "Check irregular student subject schedules, review student curriculum prospectus, and approve enrollments.",
-        FileCheck2,
+        "credit-mappings",
+        "Credit Mappings",
+        "Review students' credit requests, map each previous subject to their curriculum, and endorse it to the Registrar.",
+        Network,
       ),
       portalModule(
         "faculty-invitations",
@@ -203,26 +227,26 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "schedule-approvals",
         "Enrollment",
-        "Review submitted Program Chair enrollment plans and return them with notes when changes are needed.",
+        "Review submitted Program Head enrollment plans and return them with notes when changes are needed.",
         ClipboardCheck,
       ),
       portalModule(
         "curriculum-approvals",
         "Curriculum Approvals",
-        "Review curricula submitted by Program Chairs and record your decision.",
+        "Review curricula submitted by Program Heads and record your decision.",
         ClipboardCheck,
       ),
       portalModule(
         "enrollment-dashboard",
         "Enrollment Dashboard",
-        "See where validated enrollment activity will be summarized.",
+        "View your college's enrollment status for the current term — overall, per section, and per student.",
         Gauge,
       ),
       portalModule(
-        "stuck-students",
-        "Stuck Students",
-        "Preview support-oriented exception signals for authorized review.",
-        Waypoints,
+        "faculty-load-monitoring",
+        "Faculty Load",
+        "See each professor's teaching load against their maximum, set a professor's own limit, and change who teaches a section.",
+        Users,
       ),
       portalModule(
         "honors",
@@ -251,7 +275,7 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "curriculum-approvals",
         "Curriculum Approvals",
-        "Review curricula submitted by Program Chairs and record your decision.",
+        "Review curricula submitted by Program Heads and record your decision.",
         ClipboardCheck,
       ),
       portalModule(
@@ -259,6 +283,12 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Institution Dashboard",
         "See where validated institution-level activity will be summarized.",
         Building2,
+      ),
+      portalModule(
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "View institution-wide enrollment status — overall, per department, per section, and per student.",
+        Gauge,
       ),
       portalModule(
         "kpis",
@@ -285,6 +315,24 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         GraduationCap,
       ),
       portalModule(
+        "enrollment-approvals",
+        "Enrollment Approvals",
+        "Give the final approval to submitted enrollments, open a student's information, and review their schedule.",
+        ClipboardCheck,
+      ),
+      portalModule(
+        "submitted-schedules",
+        "Submitted Schedules",
+        "See the class schedules Program Heads have submitted and the sections already published.",
+        CalendarDays,
+      ),
+      portalModule(
+        "section-change-requests",
+        "Schedule Change Requests",
+        "Approve or reject Program Head requests to change a published schedule.",
+        ArrowLeftRight,
+      ),
+      portalModule(
         "grade-approvals",
         "Grade Approvals",
         "Lock submitted grades so they count toward prerequisites and standing.",
@@ -309,15 +357,9 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         FileSearch,
       ),
       portalModule(
-        "overrides-voids",
-        "Overrides & Voids",
-        "Void an already-approved enrollment before payment is confirmed, for authorized edge cases.",
-        ShieldCheck,
-      ),
-      portalModule(
-        "enrollment-change-requests",
-        "Add/Drop Requests",
-        "Approve or reject student add/drop/change-section requests.",
+        "enrollment-requests",
+        "Enrollment Requests",
+        "Approve or reject student withdrawals, drops, added subjects, and section changes.",
         ArrowLeftRight,
       ),
       portalModule(
@@ -339,16 +381,16 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ScrollText,
       ),
       portalModule(
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "View enrollment status counts — overall, per department, per section, and per student.",
+        Gauge,
+      ),
+      portalModule(
         "audit-logs",
         "Audit Logs",
         "Review traceable activity records within authorized controls.",
         FileText,
-      ),
-      portalModule(
-        "fee-settings",
-        "Fee Settings",
-        "Configure tuition fee rates and miscellaneous fee particulars for student assessments.",
-        ReceiptText,
       ),
       portalModule(
         "rooms",
@@ -377,26 +419,26 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       portalModule(
         "enrollment-approvals",
         "Enrollment Approvals",
-        "Approve or reject enrollment submissions pending registrar review. Approved students claim their Cashier queue number at the front desk.",
+        "Approve or reject submitted enrollments so students can proceed to payment.",
         ClipboardCheck,
       ),
       portalModule(
         "credit-mappings",
         "Credit Mappings",
-        "Record and decide transferee credit mappings for admitted students.",
+        "Approve or reject the credit mappings the Program Head has endorsed.",
         Network,
       ),
       portalModule(
-        "drops-withdrawals",
-        "Drops & Withdrawals",
-        "Approve or reject student withdrawal requests and release seats accordingly.",
+        "enrollment-requests",
+        "Enrollment Requests",
+        "Approve or reject student withdrawals and view drop, add, and section-change requests.",
         UserMinus,
       ),
       portalModule(
-        "academic-records",
-        "Academic Records",
-        "View every student's academic grade records across the institution.",
-        FolderArchive,
+        "cor-records",
+        "COR Records",
+        "Find, review, and print any student's confirmed Certificate of Registration (COR) history.",
+        FileSearch,
       ),
       portalModule(
         "graduates",
@@ -405,16 +447,10 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         GraduationCap,
       ),
       portalModule(
-        "enrollment-change-requests",
-        "Add/Drop Requests",
-        "View every student add/drop/change-section request.",
-        ArrowLeftRight,
-      ),
-      portalModule(
-        "enrollment-documents",
-        "Enrollment Documents",
-        "View every student's generated Certificate of Registration.",
-        FileText,
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "See the students waiting for the Registrar's approval.",
+        Gauge,
       ),
     ],
   },
@@ -435,6 +471,18 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         ScrollText,
       ),
       portalModule(
+        "advance-payment",
+        "Advance Payment",
+        "Record student advance payments and edit a student's billing classification.",
+        ReceiptText,
+      ),
+      portalModule(
+        "statement-of-account",
+        "Statement of Account",
+        "Look up a student's assessments, payments, and running balance, and print a copy.",
+        ScrollText,
+      ),
+      portalModule(
         "cor-records",
         "COR Records",
         "Find and print confirmed Certificates of Registration for prior enrollments.",
@@ -445,6 +493,18 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
         "Queue Kiosk Access",
         "Review the shared kiosk credential and rotate it before a controlled handoff.",
         Lock,
+      ),
+      portalModule(
+        "enrollment-dashboard",
+        "Enrollment Dashboard",
+        "See the students waiting at the payment stage.",
+        Gauge,
+      ),
+      portalModule(
+        "fee-settings",
+        "Fee Settings",
+        "Configure tuition fee rates and miscellaneous fee particulars for student assessments.",
+        ReceiptText,
       ),
     ],
   },

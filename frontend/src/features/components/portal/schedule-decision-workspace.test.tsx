@@ -142,7 +142,7 @@ describe("ScheduleDecisionWorkspace", () => {
       screen.getByRole("button", { name: "Confirm decision" }),
     ).toBeDisabled()
     await user.type(
-      screen.getByLabelText("Notes for Program Chair"),
+      screen.getByLabelText("Notes for Program Head"),
       "Capacity conflict",
     )
     await user.click(screen.getByRole("button", { name: "Confirm decision" }))
@@ -285,7 +285,7 @@ describe("ScheduleDecisionWorkspace", () => {
 
     proposalSubmitted = true
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(30_000)
     })
 
     expect(

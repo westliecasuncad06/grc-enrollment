@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Calculator, CheckCircle2, Plus, Receipt, Trash2 } from "lucide-react"
 
 import { useAuth } from "@/features/auth/use-auth"
@@ -48,7 +48,7 @@ interface EditableMiscFee {
 
 export function FeeSettingsWorkspace() {
   const { session } = useAuth()
-  const authorized = session?.role === "registrar_head"
+  const authorized = session?.role === "accounting_staff"
   const feeQuery = useFeeSchedulesQuery(authorized)
   const programsQuery = useProgramsQuery({ enabled: authorized })
   const updateMutation = useUpdateFeeSchedulesMutation()
@@ -57,26 +57,31 @@ export function FeeSettingsWorkspace() {
   const [miscFees, setMiscFees] = useState<EditableMiscFee[]>([])
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  // Initialize form state when query succeeds
-  useEffect(() => {
-    if (feeQuery.data) {
-      const tuition = feeQuery.data.find((f) => f.category === "tuition")
-      if (tuition) {
-        setTuitionRate(tuition.amount)
-      }
+  // Initialize form state when (new) fee data arrives — adjusted during
+  // render rather than in an effect, which committed the defaults first.
+  // `undefined` start (not `feeQuery.data`) so cached data present at mount
+  // still initializes the form.
+  const [initializedFrom, setInitializedFrom] =
+    useState<typeof feeQuery.data>(undefined)
+  if (feeQuery.data && initializedFrom !== feeQuery.data) {
+    setInitializedFrom(feeQuery.data)
 
-      const misc = feeQuery.data
-        .filter((f) => f.category === "miscellaneous")
-        .map((f) => ({
-          id: f.id,
-          label: f.label,
-          amount: f.amount,
-          program_code: f.program_codes && f.program_codes.length > 0 ? f.program_codes[0] : "ALL",
-          is_active: f.is_active,
-        }))
-      setMiscFees(misc)
+    const tuition = feeQuery.data.find((f) => f.category === "tuition")
+    if (tuition) {
+      setTuitionRate(tuition.amount)
     }
-  }, [feeQuery.data])
+
+    const misc = feeQuery.data
+      .filter((f) => f.category === "miscellaneous")
+      .map((f) => ({
+        id: f.id,
+        label: f.label,
+        amount: f.amount,
+        program_code: f.program_codes && f.program_codes.length > 0 ? f.program_codes[0] : "ALL",
+        is_active: f.is_active,
+      }))
+    setMiscFees(misc)
+  }
 
   const totalOtherFeesAll = useMemo(() => {
     return miscFees

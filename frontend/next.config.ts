@@ -32,7 +32,21 @@ function getDevOrigins(): string[] {
  * runnable per ADR 0001. There is deliberately no `rewrites()` block here.
  */
 const nextConfig: NextConfig = {
+  devIndicators: false,
   reactStrictMode: true,
+  /**
+   * `NEXT_DIST_DIR` lets a production build (`start-local.ps1 -Production`, a
+   * bundle-size check) write somewhere other than `.next`, so it never clobbers
+   * the build cache a running `next dev` is using (ADR 0029). Default: `.next`.
+   */
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  /**
+   * The React Compiler auto-memoizes components, derived values, and
+   * callbacks, so the large polled workspaces stop re-rendering subtrees whose
+   * inputs did not change. `eslint-plugin-react-hooks` v7's recommended rules
+   * already enforce the Rules of React the compiler relies on.
+   */
+  reactCompiler: true,
   allowedDevOrigins: getDevOrigins(),
   experimental: {
     turbopackFileSystemCacheForDev: false,

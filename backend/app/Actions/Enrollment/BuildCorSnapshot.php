@@ -30,6 +30,12 @@ final class BuildCorSnapshot
         $otherFees = $this->otherFees(
             $items->filter(fn ($item): bool => $item->category === AssessmentItemCategory::Miscellaneous),
         );
+        // ADR 0025: a scholarship is a negative line, so tuition + other fees +
+        // this always add up to the grand total. Empty when there is none.
+        $scholarshipDiscount = array_values($items
+            ->filter(fn ($item): bool => $item->category === AssessmentItemCategory::ScholarshipDiscount)
+            ->map(fn ($item): array => $this->feeItem($item))
+            ->all());
 
         $additionalPayments = '0.00';
         if ($enrollment->exists) {
@@ -64,7 +70,9 @@ final class BuildCorSnapshot
                 'address' => filled($student->address) ? $student->address : 'Not provided',
                 'course' => $student->program->name,
                 'level' => 'Year '.$student->year_level,
-                'platform' => 'Not provided',
+                // Set once per term by the Registrar Head (stakeholder Doc 14).
+                'platform' => $enrollment->academicTerm->enrollment_platform?->label() ?? 'Not provided',
+                'classification' => $student->financial_status?->label() ?? 'Payee',
             ],
             'term' => [
                 'school_year' => $enrollment->academicTerm->school_year,
@@ -99,6 +107,8 @@ final class BuildCorSnapshot
                 'other_fees' => $otherFees,
                 'total_tuition' => $this->sum($tuition),
                 'total_other_fees' => $this->sum($otherFees),
+                'scholarship_discount' => $scholarshipDiscount,
+                'total_scholarship_discount' => $this->sum($scholarshipDiscount),
                 'grand_total' => $grandTotal,
                 'initial_payment' => $initialPayment,
                 'additional_payments' => $additionalPayments,

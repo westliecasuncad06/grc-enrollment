@@ -229,7 +229,7 @@ export function EnrollmentReviewDialog({
               </div>
               <span className="text-[11px] text-muted-foreground">
                 {enrollment?.requires_overload_approval
-                  ? "Requires Program Chair sign-off"
+                  ? "Requires Program Head sign-off"
                   : "Standard prescribed ceiling"}
               </span>
             </div>

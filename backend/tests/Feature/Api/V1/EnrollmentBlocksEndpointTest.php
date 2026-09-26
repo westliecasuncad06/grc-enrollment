@@ -192,9 +192,9 @@ final class EnrollmentBlocksEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
-        $plan = $this->makePlan($term, $curriculum);
+        $plan = $this->makePlan($term, $curriculum, 2);
         $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
-        // A genuine backlog subject outside the block, with an open
+        // A genuine backlog subject (year 1, while she is in year 2) outside the block, with an open
         // section this term — this is what actually makes her Irregular
         // under the term-scoped rule now that BuildEnrollmentAccessContext
         // self-heals on every read.
@@ -207,7 +207,7 @@ final class EnrollmentBlocksEndpointTest extends TestCase
             'academic_term_id' => $term->id, 'subject_id' => $backlog->id, 'section_code' => 'A',
             'capacity' => 40, 'is_block_exclusive' => false, 'status' => SectionStatus::Published,
         ]);
-        $student = $this->makeStudent($curriculum, enrollmentCategory: 'irregular');
+        $student = $this->makeStudent($curriculum, yearLevel: 2, enrollmentCategory: 'irregular');
         $token = $this->tokenFor($student);
         User::create([
             'name' => 'Registrar', 'email' => 'registrar.blockpool@grc.test',

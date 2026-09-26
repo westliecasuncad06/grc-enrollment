@@ -31,4 +31,15 @@ final class AcademicRecordPolicy
             UserRole::ExecutiveDirector,
         ], true);
     }
+
+    public function viewAny(User $user): bool
+    {
+        return in_array($user->role, [
+            UserRole::RegistrarHead,
+            UserRole::RegistrarStaff,
+            UserRole::ProgramChair,
+            UserRole::Dean,
+            UserRole::ExecutiveDirector,
+        ], true);
+    }
 }

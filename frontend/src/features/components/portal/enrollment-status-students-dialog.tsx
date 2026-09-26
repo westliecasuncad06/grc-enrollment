@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 
 import { DataTable } from "@/features/components/portal/data-table"
 import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
@@ -33,7 +33,11 @@ function statusBadgeVariant(
 ): "default" | "destructive" | "outline" | "secondary" {
   if (status === "rejected" || status === "cancelled") return "destructive"
   if (status === "enrolled") return "default"
-  if (status === "pending_registrar_approval" || status === "pending_payment")
+  if (
+    status === "pending_program_head_approval" ||
+    status === "pending_registrar_approval" ||
+    status === "pending_payment"
+  )
     return "secondary"
   return "outline"
 }
@@ -64,10 +68,14 @@ export function EnrollmentStatusStudentsDialog({
 }: EnrollmentStatusStudentsDialogProps) {
   const [page, setPage] = useState(1)
 
-  // Reset page when status or term changes
-  useEffect(() => {
+  // Reset page when status or term changes — adjusted during render, not in
+  // an effect, so the stale page never commits (and never fetches).
+  const pageScope = `${status ?? ""}|${academicTermId ?? ""}`
+  const [pagedScope, setPagedScope] = useState(pageScope)
+  if (pagedScope !== pageScope) {
+    setPagedScope(pageScope)
     setPage(1)
-  }, [status, academicTermId])
+  }
 
   const enrollmentsQuery = useEnrollmentsListQuery(
     {
@@ -99,7 +107,11 @@ export function EnrollmentStatusStudentsDialog({
         </DialogHeader>
 
         {enrollmentsQuery.isPending ? (
-          <div className="grid gap-3 py-4" role="status" aria-label="Loading student roster">
+          <div
+            className="grid gap-3 py-4"
+            role="status"
+            aria-label="Loading student roster"
+          >
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
@@ -206,4 +218,3 @@ export function EnrollmentStatusStudentsDialog({
     </Dialog>
   )
 }
-

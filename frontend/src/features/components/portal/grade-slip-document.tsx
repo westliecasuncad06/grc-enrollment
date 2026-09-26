@@ -19,6 +19,7 @@ import {
   markTone,
   markToneBadgeVariant,
 } from "@/features/lib/grade-presentation"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import type { GradeSlip } from "@/features/schemas/academic-record-schema"
 
 /**
@@ -33,7 +34,7 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
   return (
     <PrintDocument
       title={`Grade slip — ${slip.term_label}`}
-      actions={<PrintButton />}
+      actions={<PrintButton label="Print Grade" />}
     >
       <div className="mb-3 grid gap-1 text-sm">
         <p>
@@ -41,7 +42,7 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
           {slip.program_code})
         </p>
         <p>
-          Year {slip.year_level}
+          {formatYearLevel(slip.year_level)}
           {slip.enrollment_category_label
             ? ` · ${slip.enrollment_category_label}`
             : ""}{" "}
@@ -49,7 +50,7 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
         </p>
       </div>
       <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
-        <Table>
+        <Table data-stack-mobile>
           <TableCaption>Grade slip for {slip.term_label}</TableCaption>
           <TableHeader>
             <TableRow>
@@ -60,24 +61,24 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
               <TableHead scope="col" className="whitespace-nowrap">Remarks</TableHead>
               <TableHead scope="col" className="whitespace-nowrap">Section</TableHead>
               <TableHead scope="col" className="whitespace-nowrap">Professor</TableHead>
-              <TableHead scope="col" className="whitespace-nowrap">Signature</TableHead>
+              <TableHead scope="col" className="whitespace-nowrap hidden print:table-cell">Signature</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {slip.rows.map((row) => (
               <TableRow key={row.academic_grade_id}>
-                <TableCell className="font-mono whitespace-nowrap font-medium">{row.code}</TableCell>
-                <TableCell className="min-w-[12rem]">{row.title}</TableCell>
-                <TableCell className="text-center whitespace-nowrap">{row.units}</TableCell>
-                <TableCell className="whitespace-nowrap">
+                <TableCell data-stack="full" className="font-mono whitespace-nowrap font-medium">{row.code}</TableCell>
+                <TableCell data-stack="full" className="min-w-[12rem]">{row.title}</TableCell>
+                <TableCell data-label="Units" className="text-center whitespace-nowrap">{row.units}</TableCell>
+                <TableCell data-label="Final" className="whitespace-nowrap">
                   <Badge variant={markToneBadgeVariant(markTone(row.mark))}>
                     {row.mark ?? "—"}
                   </Badge>
                 </TableCell>
-                <TableCell className="whitespace-nowrap">{row.mark_label ?? "—"}</TableCell>
-                <TableCell className="whitespace-nowrap">{row.section_code ?? "—"}</TableCell>
-                <TableCell className="whitespace-nowrap">{row.professor_name ?? "—"}</TableCell>
-                <TableCell className="signature-cell whitespace-nowrap" />
+                <TableCell data-label="Remarks" className="whitespace-nowrap">{row.mark_label ?? "—"}</TableCell>
+                <TableCell data-label="Section" className="whitespace-nowrap">{row.section_code ?? "—"}</TableCell>
+                <TableCell data-label="Professor" data-stack="full" className="whitespace-nowrap">{row.professor_name ?? "—"}</TableCell>
+                <TableCell className="signature-cell whitespace-nowrap hidden print:table-cell" />
               </TableRow>
             ))}
           </TableBody>

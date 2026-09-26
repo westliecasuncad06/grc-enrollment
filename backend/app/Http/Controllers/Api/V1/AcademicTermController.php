@@ -6,6 +6,7 @@ use App\Actions\Organization\ArchiveAndCreateNextTerm;
 use App\Actions\Organization\CreateAcademicTerm;
 use App\Actions\Organization\TransitionAcademicTerm;
 use App\Actions\Organization\UpdateDraftAcademicTermIdentity;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AcademicTerm\ArchiveAndCreateNextRequest;
 use App\Http\Requests\Api\V1\AcademicTerm\StoreAcademicTermRequest;
@@ -18,6 +19,7 @@ use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 final class AcademicTermController extends Controller
 {
@@ -30,8 +32,19 @@ final class AcademicTermController extends Controller
 
         $this->authorize('viewAny', AcademicTerm::class);
 
+        $currentSlotId = DB::table('academic_term_current_slots')
+            ->where('id', 1)
+            ->value('academic_term_id');
+
         $terms = AcademicTerm::query()
             ->visibleTo($user)
+            ->when(
+                $currentSlotId !== null,
+                fn ($query) => $query->where(function ($q) use ($currentSlotId) {
+                    $q->where('id', '<=', (int) $currentSlotId)
+                        ->orWhere('status', AcademicTermStatus::Archived);
+                }),
+            )
             ->orderByDesc('school_year')
             ->orderBy('semester')
             ->get();

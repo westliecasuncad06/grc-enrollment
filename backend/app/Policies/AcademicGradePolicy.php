@@ -50,4 +50,9 @@ final class AcademicGradePolicy
     {
         return $user->role === UserRole::RegistrarHead;
     }
+
+    public function lockAll(User $user): bool
+    {
+        return $user->role === UserRole::RegistrarHead;
+    }
 }

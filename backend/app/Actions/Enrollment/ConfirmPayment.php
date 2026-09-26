@@ -8,12 +8,14 @@ use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Assessment;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
 use App\Models\Notification;
 use App\Models\Payment;
+use App\Models\QueueTicket;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +49,25 @@ use Illuminate\Validation\ValidationException;
  */
 final readonly class ConfirmPayment
 {
+    /**
+     * Everything `PaymentConfirmationResource` (and the `EnrollmentResource` it
+     * embeds) reads, eager-loaded in one place: the subject rows are a
+     * multi-row relation, so their `section` must not be lazy-loaded per row
+     * (PRD §8.1, the N+1 guard).
+     *
+     * @var list<string>
+     */
+    private const RESPONSE_RELATIONS = [
+        'student.user',
+        'payment',
+        'documents',
+        'assessment.items',
+        'academicTerm.enrollmentWindows',
+        'queueTicket',
+        'enrollmentSubjects.section.subject',
+        'enrollmentSubjects.section.professor',
+    ];
+
     public function __construct(
         private AuditRecorder $auditRecorder,
         private BuildCorSnapshot $buildCorSnapshot,
@@ -68,7 +89,7 @@ final readonly class ConfirmPayment
 
             if ($existingPayment !== null) {
                 return [
-                    'enrollment' => $lockedEnrollment->load(['student', 'payment', 'documents', 'assessment.items']),
+                    'enrollment' => $lockedEnrollment->load(self::RESPONSE_RELATIONS),
                     'created' => false,
                 ];
             }
@@ -90,6 +111,13 @@ final readonly class ConfirmPayment
             // fixtures) keeps the established behavior of staying null.
             $assessment = Assessment::query()->where('enrollment_id', $lockedEnrollment->id)->first();
             $amount = $validated['amount'] ?? $assessment?->total_amount;
+            $promissoryNoteOnFile = (bool) ($validated['promissory_note_on_file'] ?? false);
+
+            if ($amount !== null && $assessment?->total_amount !== null && bccomp((string) $amount, (string) $assessment->total_amount, 2) === -1 && ! $promissoryNoteOnFile) {
+                throw ValidationException::withMessages([
+                    'promissory_note_on_file' => 'A promissory note on file is required for partial payments.',
+                ]);
+            }
 
             $payment = Payment::create([
                 'enrollment_id' => $lockedEnrollment->id,
@@ -106,6 +134,14 @@ final readonly class ConfirmPayment
                 'enrolled_at' => $confirmedAt,
             ]);
             $lockedEnrollment->refresh();
+
+            QueueTicket::query()
+                ->where('enrollment_id', $lockedEnrollment->id)
+                ->whereIn('status', [QueueTicketStatus::Waiting, QueueTicketStatus::Serving])
+                ->update([
+                    'status' => QueueTicketStatus::Served,
+                    'served_at' => $confirmedAt,
+                ]);
 
             $lockedEnrollment->enrollmentSubjects()
                 ->where('status', EnrollmentSubjectStatus::Selected)
@@ -155,7 +191,7 @@ final readonly class ConfirmPayment
             ]);
 
             return [
-                'enrollment' => $lockedEnrollment->load(['student', 'payment', 'documents', 'assessment.items']),
+                'enrollment' => $lockedEnrollment->load(self::RESPONSE_RELATIONS),
                 'created' => true,
             ];
         });

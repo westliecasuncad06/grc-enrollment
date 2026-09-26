@@ -23,6 +23,7 @@ final class ShowGradeSlipRequest extends FormRequest
         return [
             'academic_term_id' => ['required', 'integer', 'exists:academic_terms,id'],
             'student_id' => ['sometimes', 'integer', 'exists:student_profiles,id'],
+            'student_number' => ['sometimes', 'string', 'max:255'],
         ];
     }
 }

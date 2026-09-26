@@ -67,7 +67,9 @@ export const queueTicketFiltersSchema = z
   .strict()
 
 export const updateQueueTicketInputSchema = z
-  .object({ action: z.enum(["serve", "complete", "skip", "mark_priority"]) })
+  .object({
+    action: z.enum(["serve", "complete", "skip", "mark_priority", "announce"]),
+  })
   .strict()
 
 export type QueueTicket = z.infer<typeof queueTicketResourceSchema>

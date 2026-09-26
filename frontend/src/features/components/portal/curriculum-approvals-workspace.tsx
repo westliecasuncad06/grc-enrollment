@@ -143,7 +143,7 @@ export function CurriculumApprovalsWorkspace() {
   return (
     <WorkspacePage
       title="Curriculum Approvals"
-      description="Review curricula submitted by Program Chairs and record your decision."
+      description="Review curricula submitted by Program Heads and record your decision."
       lastUpdated={curriculaQuery.dataUpdatedAt}
     >
       <AsyncBoundary query={query} loadingLabel="Loading pending curricula…">
@@ -236,13 +236,13 @@ export function CurriculumApprovalsWorkspace() {
           <AlertDialogHeader>
             <AlertDialogTitle>Return {returning?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The curriculum goes back to the Program Chair as a Draft. Explain
+              The curriculum goes back to the Program Head as a Draft. Explain
               what needs to change.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Field data-invalid={Boolean(reasonError)}>
             <FieldLabel htmlFor="return-reason">
-              Notes for Program Chair
+              Notes for Program Head
             </FieldLabel>
             <Textarea
               id="return-reason"

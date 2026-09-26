@@ -32,28 +32,31 @@ final class ReferenceDataSeederTest extends TestCase
     }
 
     /**
-     * Six archived historical semesters (2023-2024 through 2025-2026) and one
-     * closed current term (2026-2027 1st) tracked by
+     * Eighteen archived historical semesters (2017-2018 through 2025-2026) and
+     * one closed current term (2026-2027 1st) tracked by
      * `academic_term_current_slots` — see `AcademicTermSeederTest` for the
      * dedicated, exhaustive coverage of this seeder's shape. This test just
      * confirms `ReferenceDataSeederTest`'s own combined-seed expectations
      * still line up with it.
      */
-    public function test_academic_term_seeder_creates_the_expected_seven_terms(): void
+    public function test_academic_term_seeder_creates_the_expected_terms(): void
     {
         $this->seed(AcademicTermSeeder::class);
 
-        $this->assertDatabaseCount('academic_terms', 7);
-        $this->assertSame(6, AcademicTerm::where('status', AcademicTermStatus::Archived)->count());
+        $expected = [];
+        foreach (range(2017, 2025) as $startYear) {
+            $schoolYear = $startYear.'-'.($startYear + 1);
+            $expected[] = "{$schoolYear}|1st";
+            $expected[] = "{$schoolYear}|2nd";
+        }
+        $expected[] = '2026-2027|1st';
+
+        $this->assertDatabaseCount('academic_terms', 19);
+        $this->assertSame(18, AcademicTerm::where('status', AcademicTermStatus::Archived)->count());
         $this->assertSame(1, AcademicTerm::where('status', AcademicTermStatus::SemesterClosed)->count());
         $this->assertSame(0, AcademicTerm::where('status', AcademicTermStatus::SemesterOngoing)->count());
         $this->assertSame(
-            [
-                '2023-2024|1st', '2023-2024|2nd',
-                '2024-2025|1st', '2024-2025|2nd',
-                '2025-2026|1st', '2025-2026|2nd',
-                '2026-2027|1st',
-            ],
+            $expected,
             AcademicTerm::query()->orderBy('school_year')->orderBy('semester')->get()
                 ->map(fn (AcademicTerm $term): string => "{$term->school_year}|{$term->semester}")
                 ->all(),
@@ -82,7 +85,7 @@ final class ReferenceDataSeederTest extends TestCase
 
         $this->seed(AcademicTermSeeder::class);
 
-        $this->assertSame(7, AcademicTerm::count());
+        $this->assertSame(19, AcademicTerm::count());
         $this->assertSame($originalIds, AcademicTerm::orderBy('id')->pluck('id')->all());
     }
 

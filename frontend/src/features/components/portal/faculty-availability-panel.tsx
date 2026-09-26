@@ -53,6 +53,7 @@ import {
   useFacultyAvailabilitiesQuery,
 } from "@/features/hooks/use-faculty-input"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import { formatTimeRange } from "@/features/lib/format-time"
 import {
   facultyAvailabilityInputSchema,
   type FacultyAvailability,
@@ -281,8 +282,7 @@ export function FacultyAvailabilityPanel() {
                         {dayLabel(row.day_of_week)}
                       </TableCell>
                       <TableCell>
-                        {row.starts_at_time.slice(0, 5)}–
-                        {row.ends_at_time.slice(0, 5)}
+                        {formatTimeRange(row.starts_at_time, row.ends_at_time)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button

@@ -48,7 +48,10 @@ final class RunStudentsAutoEnroll implements RunsItControlAutomationStep
         // ordering by curriculum before `chunkById()` can skip lower IDs in
         // later curricula. We keep ID-keyed retrieval and sort each bounded
         // batch for section-lock locality only after it has been retrieved.
+        // `user` and `curriculum` are read for every student while selecting sections and submitting; loading them with the
+        // batch avoids one query per student (and trips the lazy-loading guard).
         StudentProfile::query()
+            ->with(['user', 'curriculum'])
             ->when($scenario !== null, fn ($query) => $query
                 ->whereIn('id', $scenario['roster_student_ids'])
                 ->whereNotIn('id', $scenario['holdout_student_ids']))

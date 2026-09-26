@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type { ClassRosterFilters } from "@/features/schemas/class-roster-schema"
 import { listClassRoster } from "@/features/services/class-roster-service"
 
@@ -20,6 +21,7 @@ export function useClassRosterQuery(
   return useQuery({
     queryKey: classRosterQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listClassRoster(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }

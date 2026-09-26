@@ -25,8 +25,11 @@ describe("AsyncBoundary", () => {
     expect(screen.queryByText("data")).not.toBeInTheDocument()
   })
 
-  it("shows the branded fallback when pending without a custom fallback", () => {
-    render(
+  it("shows a layout-shaped skeleton, announced once, when pending without a custom fallback", () => {
+    // ADR 0029: in-page loads show content-shaped placeholders (perceived
+    // performance) instead of a spinner-like logo; the branded logo stays for
+    // full-page and session-restore states.
+    const { container } = render(
       <AsyncBoundary
         query={{
           isPending: true,
@@ -35,13 +38,20 @@ describe("AsyncBoundary", () => {
           data: undefined,
           refetch: () => undefined,
         }}
+        loadingLabel="Loading grades…"
       >
         {() => <p>data</p>}
       </AsyncBoundary>,
     )
 
-    expect(screen.getByRole("status", { name: "Loading…" })).toBeInTheDocument()
-    expect(screen.getByText("GRC")).toBeInTheDocument()
+    const status = screen.getByRole("status")
+    expect(status).toHaveTextContent("Loading grades…")
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThanOrEqual(3)
+    // One status region only; the skeleton blocks stay out of the a11y tree.
+    expect(screen.getAllByRole("status")).toHaveLength(1)
+    expect(screen.queryByText("GRC")).not.toBeInTheDocument()
   })
 
   it("preserves a caller-provided loading fallback", () => {

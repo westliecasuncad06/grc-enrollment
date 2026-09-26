@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { enrollmentScheduleQueryKey } from "@/features/hooks/use-enrollment-windows"
 import {
   archiveAndCreateNextAcademicTerm,
   createAcademicTerm,
@@ -70,11 +71,24 @@ export function useUpdateAcademicTermMutation() {
       academicTermId: number
       action: "open_enrollment" | "archive"
     }) => updateAcademicTerm(academicTermId, action),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: academicTermsQueryKey(session?.userId ?? null),
-        exact: true,
-      }),
+    // The "Live enrollment status" grid reads the enrollment schedule, not the
+    // term list, so it has to follow the transition too. Otherwise it keeps
+    // saying "Enrollment not opened" for the query's whole stale time after a
+    // successful Start enrollment.
+    onSuccess: (_term, { academicTermId }) =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: academicTermsQueryKey(session?.userId ?? null),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: enrollmentScheduleQueryKey(
+            academicTermId,
+            session?.userId ?? null,
+          ),
+          exact: true,
+        }),
+      ]),
   })
 }
 

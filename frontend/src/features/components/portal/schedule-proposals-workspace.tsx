@@ -101,7 +101,7 @@ export function ScheduleProposalsWorkspace() {
   return (
     <WorkspacePage
       title="Schedule proposals"
-      description="Create a draft proposal for review. Dean and executive decisions are intentionally unavailable in this Program Chair workspace."
+      description="Create a draft proposal for review. Dean and executive decisions are intentionally unavailable in this Program Head workspace."
       lastUpdated={proposalsQuery.dataUpdatedAt}
     >
       {requestError && (

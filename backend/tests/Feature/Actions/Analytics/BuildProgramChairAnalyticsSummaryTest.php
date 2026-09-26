@@ -310,6 +310,50 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
         self::assertSame(0, $summary->enrollmentStatusCounts['draft']);
     }
 
+    public function test_stopped_students_are_those_who_will_not_continue(): void
+    {
+        $first = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        $second = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing, 'enrollment_closes_at' => now()->subDay()]);
+        $program = $this->makeProgram(CollegeCode::Ccs, 'BSIT');
+        $curriculum = $this->makeCurriculum($program);
+
+        $continuing = $this->makeStudent($curriculum);
+        $gone = $this->makeStudent($curriculum);
+        $enrolling = $this->makeStudent($curriculum);
+        $graduate = $this->makeStudent($curriculum);
+        $graduate->update(['graduation_school_year' => '2026-2027']);
+        $withdrew = $this->makeStudent($curriculum);
+
+        foreach ([$continuing, $gone, $enrolling, $graduate, $withdrew] as $student) {
+            $this->makeEnrollment($student, $first, EnrollmentStatus::Enrolled);
+        }
+        $this->makeEnrollment($continuing, $second, EnrollmentStatus::Enrolled);
+        $this->makeEnrollment($enrolling, $second, EnrollmentStatus::PendingPayment);
+        $this->makeEnrollment($withdrew, $second, EnrollmentStatus::Withdrawn);
+
+        $summary = app(BuildProgramChairAnalyticsSummary::class)->execute($second, CollegeCode::Ccs);
+        $point = collect($summary->yearOverYear)->first(fn ($row) => $row->semester === '1st');
+
+        // Only the student who did not come back once the window closed, and the
+        // one who withdrew; not the graduate, not the one still enrolling.
+        self::assertSame(5, $point->enrolleeCount);
+        self::assertSame(2, $point->stoppedCount);
+    }
+
+    public function test_a_student_who_has_not_enrolled_yet_is_not_stopped_while_the_next_windows_is_open(): void
+    {
+        $first = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
+        $second = AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing, 'enrollment_closes_at' => now()->addWeek()]);
+        $curriculum = $this->makeCurriculum($this->makeProgram(CollegeCode::Ccs, 'BSIT'));
+        $this->makeEnrollment($this->makeStudent($curriculum), $first, EnrollmentStatus::Enrolled);
+
+        $summary = app(BuildProgramChairAnalyticsSummary::class)->execute($second, CollegeCode::Ccs);
+        $point = collect($summary->yearOverYear)->first(fn ($row) => $row->semester === '1st');
+
+        self::assertSame(1, $point->enrolleeCount);
+        self::assertSame(0, $point->stoppedCount);
+    }
+
     public function test_school_year_range_scopes_the_descriptive_details_and_trend(): void
     {
         $termEarly = AcademicTerm::create(['school_year' => '2024-2025', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterClosed]);
@@ -465,7 +509,7 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
             array_keys($response->json('data.retention_breakdown.0')),
         );
         self::assertSame(
-            ['school_year', 'semester', 'enrollee_count'],
+            ['school_year', 'semester', 'enrollee_count', 'stopped_count', 'attrition_rate'],
             array_keys($response->json('data.year_over_year.0')),
         );
 

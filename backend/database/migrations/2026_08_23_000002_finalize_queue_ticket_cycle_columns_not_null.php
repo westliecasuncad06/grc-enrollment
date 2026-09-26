@@ -32,6 +32,13 @@ return new class extends Migration
 
     public function down(): void
     {
+        // The foreign key on queue_cycle_id is served by the composite unique index. MariaDB refuses
+        // to drop an index a foreign key still needs (error 1553), so give the key its own plain
+        // index first; it disappears with the column when the earlier migration is rolled back.
+        Schema::table('queue_tickets', function (Blueprint $table) {
+            $table->index('queue_cycle_id', 'queue_tickets_queue_cycle_id_index');
+        });
+
         Schema::table('queue_tickets', function (Blueprint $table) {
             $table->dropUnique(['queue_cycle_id', 'ticket_sequence']);
         });

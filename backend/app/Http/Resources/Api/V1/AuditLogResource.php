@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\AuditLog;
+use App\Support\Audit\AuditChangeFormatter;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -12,13 +13,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
 final class AuditLogResource extends JsonResource
 {
     /**
-     * Exact safe key set. Actor names and email addresses are deliberately
-     * excluded from this privileged-read response.
+     * Exact safe key set. This privileged read (Registrar Head only) names the
+     * actor and their role (stakeholder Doc 14); email addresses are still
+     * never included, and `changes` hides any field that looks like a name or
+     * contact detail.
      *
      * @return array{
      *     type: string,
      *     id: int,
      *     actor_user_id: int,
+     *     actor_name: string,
      *     actor_role: string,
      *     actor_role_label: string,
      *     action: string,
@@ -26,6 +30,7 @@ final class AuditLogResource extends JsonResource
      *     auditable_id: ?int,
      *     before_values: ?array<string, mixed>,
      *     after_values: ?array<string, mixed>,
+     *     changes: list<array{field: string, label: string, old: mixed, new: mixed, changed: bool}>,
      *     reason: ?string,
      *     request_id: string,
      *     ip_address: ?string,
@@ -38,6 +43,7 @@ final class AuditLogResource extends JsonResource
             'type' => 'audit_log',
             'id' => $this->resource->id,
             'actor_user_id' => $this->resource->actor_user_id,
+            'actor_name' => $this->resource->actor->name,
             'actor_role' => $this->resource->actor->role->value,
             'actor_role_label' => $this->resource->actor->role->label(),
             'action' => $this->resource->action,
@@ -45,6 +51,13 @@ final class AuditLogResource extends JsonResource
             'auditable_id' => $this->resource->auditable_id,
             'before_values' => $this->resource->before_values,
             'after_values' => $this->resource->after_values,
+            // `ListAuditLogs` attaches names for the whole page; without them the
+            // ids simply stay ids.
+            'changes' => AuditChangeFormatter::changes(
+                $this->resource->before_values,
+                $this->resource->after_values,
+                $this->resource->getAttribute('user_names') ?? [],
+            ),
             'reason' => $this->resource->reason,
             'request_id' => $this->resource->request_id,
             'ip_address' => $this->resource->ip_address,

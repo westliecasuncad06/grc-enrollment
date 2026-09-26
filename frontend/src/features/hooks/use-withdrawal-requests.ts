@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type {
   DecideWithdrawalRequestInput,
   WithdrawalRequestFilters,
@@ -27,6 +28,7 @@ export function useWithdrawalRequestsQuery(
   return useQuery({
     queryKey: withdrawalRequestsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listWithdrawalRequests(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }

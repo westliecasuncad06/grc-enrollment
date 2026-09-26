@@ -5,11 +5,13 @@ namespace Tests\Feature\Database;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\RollsBackThroughMigration;
 use Tests\TestCase;
 
 final class StudentRecordAccountSetupMigrationTest extends TestCase
 {
     use RefreshDatabase;
+    use RollsBackThroughMigration;
 
     /**
      * A pre-existing account (created before invitation-based provisioning
@@ -30,7 +32,7 @@ final class StudentRecordAccountSetupMigrationTest extends TestCase
      */
     public function test_the_migration_backfills_completed_setup_for_pre_existing_accounts(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 7])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_26_000001_add_student_record_and_account_setup_fields');
         self::assertFalse(Schema::hasColumn('users', 'account_setup_completed_at'));
 
         DB::table('users')->insert([

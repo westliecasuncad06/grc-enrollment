@@ -413,6 +413,7 @@ const createdEnrollment = {
     total_units: 3,
     requires_overload_approval: false,
     submitted_at: "2026-07-30T00:00:00Z",
+    program_head_decided_at: null,
     registrar_decided_at: null,
     payment_confirmed_at: null,
     enrolled_at: null,
@@ -494,6 +495,45 @@ async function selectOption(
   const triggers = await screen.findAllByLabelText(labelText)
   await user.click(triggers[0])
   await user.click(await screen.findByRole("option", { name: optionName }))
+}
+
+function ownProfile(maxUnits: number) {
+  return {
+    type: "student_profile",
+    id: 4,
+    user_id: 1,
+    student_number: "2026-0001",
+    name: "Maria Santos",
+    first_name: "Maria",
+    middle_initial: null,
+    last_name: "Santos",
+    suffix: null,
+    email: "maria.santos@grc.com",
+    address: null,
+    program_id: 1,
+    program_code: "BSIT",
+    program_name: "BS Information Technology",
+    curriculum_id: 1,
+    entry_year: 2024,
+    curriculum_name: "BS Information Technology Curriculum 2024-2029",
+    curriculum_effective_school_year: "2024-2029",
+    curriculum_max_units: maxUnits,
+    curriculum_default_max_units: 30,
+    year_level: 3,
+    enrollment_category: "irregular",
+    student_type: "freshman",
+    student_type_label: "Freshman",
+    admission_status: "enrolled",
+    admission_status_label: "Enrolled",
+    academic_standing: "good",
+    academic_standing_label: "Good standing",
+    financial_status: null,
+    financial_status_label: null,
+    requirements_verified_at: null,
+    academic_setup_editable: false,
+    account_setup_status: "active",
+    invitation_delivery_status: "sent",
+  }
 }
 
 function mockRoutes(
@@ -623,7 +663,7 @@ describe("EnrollmentWorkspace", () => {
       sections: [{ section_id: 5 }],
     })
     expect(
-      await screen.findByText(/pending registrar approval/),
+      await screen.findByText(/pending Program Head approval/),
     ).toBeInTheDocument()
   })
 
@@ -692,7 +732,7 @@ describe("EnrollmentWorkspace", () => {
     await selectOption(user, "CS101 section", /Section A/)
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
-    await screen.findByText(/pending registrar approval/)
+    await screen.findByText(/pending Program Head approval/)
 
     // Isolates the refetch this test cares about from the *separate*,
     // already-existing post-success `invalidateQueries` refetch (see
@@ -772,7 +812,7 @@ describe("EnrollmentWorkspace", () => {
     await selectOption(user, "CS101 section", /Section A/)
     await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
     await user.click(screen.getByRole("button", { name: "Confirm submission" }))
-    await screen.findByText(/pending registrar approval/)
+    await screen.findByText(/pending Program Head approval/)
     first.unmount()
 
     fetchMock.mockImplementation(
@@ -901,7 +941,7 @@ describe("EnrollmentWorkspace", () => {
 
     expect(
       await screen.findByText(
-        "Your enrollment could not be submitted. Check the connection and try again.",
+        "This section filled up while you were reviewing your selection.",
       ),
     ).toBeInTheDocument()
     expect(screen.getAllByLabelText("CS101 section")[0]).toHaveTextContent(
@@ -990,6 +1030,7 @@ describe("EnrollmentWorkspace", () => {
             {
               ...createdEnrollment.data,
               status: "pending_payment",
+              program_head_decided_at: null,
               registrar_decided_at: "2026-07-31T00:00:00Z",
               queue_ticket: {
                 ticket_number: "Q000001",
@@ -1027,6 +1068,7 @@ describe("EnrollmentWorkspace", () => {
   })
 
   it("shows the student's own account balance as read-only information", async () => {
+    const user = userEvent.setup()
     fetchMock.mockImplementation(mockRoutes())
     renderWithSession(<EnrollmentWorkspace />, {
       session: regularStudentSession,
@@ -1035,6 +1077,9 @@ describe("EnrollmentWorkspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Account balance" }),
     ).toBeInTheDocument()
+    // Informational sections start collapsed; the section being chosen does not.
+    expect(screen.queryByText("₱5,000.00")).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Account balance" }))
     expect(screen.getByText("₱5,000.00")).toBeInTheDocument()
     expect(screen.getByText("2025-2026 · 2nd")).toBeInTheDocument()
     expect(screen.getByText("Promissory note on file")).toBeInTheDocument()
@@ -1070,6 +1115,7 @@ describe("EnrollmentWorkspace", () => {
             {
               ...createdEnrollment.data,
               status: "enrolled",
+              program_head_decided_at: null,
               registrar_decided_at: "2026-07-31T00:00:00Z",
               payment_confirmed_at: "2026-08-01T00:00:00Z",
               enrolled_at: "2026-08-01T00:00:00Z",
@@ -1094,6 +1140,55 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
+  it("opens only the step the student is on and lets every other section be expanded", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(
+      mockRoutes({
+        enrollments: {
+          data: [
+            {
+              ...createdEnrollment.data,
+              status: "enrolled",
+              program_head_decided_at: null,
+              registrar_decided_at: "2026-07-31T00:00:00Z",
+              payment_confirmed_at: "2026-08-01T00:00:00Z",
+              enrolled_at: "2026-08-01T00:00:00Z",
+            },
+          ],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 1 },
+        },
+      }),
+    )
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    const addDrop = await screen.findByRole("button", {
+      name: "Add/Drop requests",
+    })
+    // Enrolled: the timetable is the current step and is open ...
+    expect(
+      screen.getByRole("button", { name: /Enrolled Class Schedule/ }),
+    ).toHaveAttribute("aria-expanded", "true")
+    // ... while everything else starts collapsed.
+    expect(addDrop).toHaveAttribute("aria-expanded", "false")
+    expect(
+      screen.getByRole("button", { name: "Account balance" }),
+    ).toHaveAttribute("aria-expanded", "false")
+    expect(
+      screen.getByRole("button", { name: "Your enrollments" }),
+    ).toHaveAttribute("aria-expanded", "false")
+
+    await user.click(addDrop)
+    expect(addDrop).toHaveAttribute("aria-expanded", "true")
+  })
+
   it("offers subject changes instead of a whole-term withdrawal once the enrollment is enrolled", async () => {
     fetchMock.mockImplementation(
       mockRoutes({
@@ -1102,6 +1197,7 @@ describe("EnrollmentWorkspace", () => {
             {
               ...createdEnrollment.data,
               status: "enrolled",
+              program_head_decided_at: null,
               registrar_decided_at: "2026-07-31T00:00:00Z",
               payment_confirmed_at: "2026-08-01T00:00:00Z",
               enrolled_at: "2026-08-01T00:00:00Z",
@@ -1266,7 +1362,7 @@ describe("EnrollmentWorkspace", () => {
       block_code: "IT201",
     })
     expect(
-      await screen.findByText(/pending registrar approval/),
+      await screen.findByText(/Enrollment submitted/),
     ).toBeInTheDocument()
   })
 
@@ -1333,7 +1429,7 @@ describe("EnrollmentWorkspace", () => {
 
     expect(
       await screen.findByText(
-        "No sections were generated for your year level and curriculum yet. Contact the Registrar.",
+        "No sections were generated for your year level and curriculum yet. Contact the Program Head.",
       ),
     ).toBeInTheDocument()
   })
@@ -1559,5 +1655,128 @@ describe("EnrollmentWorkspace", () => {
     expect(
       screen.getByRole("button", { name: "Submit enrollment" }),
     ).toBeDisabled()
+  })
+
+  it("reports a rejected submission inside the confirm dialog and lets the student retry", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollments") && init?.method === "POST")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_FAILED",
+                message: "Validation failed.",
+                errors: {
+                  academic_term_id: ["Enrollment for 2025-2026 · 2nd has closed."],
+                },
+                request_id: "req-closed",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+
+    // The message is inside the dialog the student is looking at, the dialog
+    // stays open, and Confirm is usable again.
+    const dialog = await screen.findByRole("alertdialog")
+    expect(
+      await within(dialog).findByText("Enrollment for 2025-2026 · 2nd has closed."),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole("button", { name: "Confirm submission" }),
+    ).toBeEnabled()
+  })
+
+  it("keeps the confirm dialog honest when the chosen section disappears before submitting", async () => {
+    const user = userEvent.setup()
+    let blockReads = 0
+    let posted = false
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollment-blocks")) {
+        blockReads += 1
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: blockReads === 1 ? [enrollmentBlock] : [] }),
+          ),
+        )
+      }
+      if (url(input).includes("/enrollments") && init?.method === "POST") posted = true
+      return mockRegularRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    const section = await screen.findByRole("article", { name: "IT201 section" })
+    await user.click(within(section).getByRole("button", { name: "Choose IT201" }))
+    await user.click(await screen.findByRole("button", { name: "Submit enrollment" }))
+    await user.click(await screen.findByRole("button", { name: "Confirm submission" }))
+
+    const dialog = await screen.findByRole("alertdialog")
+    expect(
+      await within(dialog).findByText(/Section IT201 is no longer available/),
+    ).toBeInTheDocument()
+    // No "0 subjects, 0 units" sentence over a live button: it says nothing is
+    // selected and Confirm cannot be pressed.
+    expect(dialog).not.toHaveTextContent(/0 subjects/)
+    expect(dialog).toHaveTextContent(/No section is selected any more/)
+    expect(
+      within(dialog).getByRole("button", { name: "Confirm submission" }),
+    ).toBeDisabled()
+    expect(posted).toBe(false)
+  })
+
+  it("uses the student's own curriculum unit cap instead of a fixed 30", async () => {
+    const user = userEvent.setup()
+    let posted = false
+    const heavySubject = { ...eligibleSubject, units: 32 }
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.endsWith("/student-profile"))
+        return Promise.resolve(new Response(JSON.stringify({ data: ownProfile(41.5) })))
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(new Response(JSON.stringify({ data: [heavySubject] })))
+      if (target.includes("/enrollments") && init?.method === "POST") posted = true
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    // 32 units is over the old fixed 30 but within this curriculum's 41.5.
+    expect(screen.queryByText(/Exceeds/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Submit enrollment" }))
+    await user.click(screen.getByRole("button", { name: "Confirm submission" }))
+
+    await vi.waitFor(() => expect(posted).toBe(true))
+    expect(
+      screen.queryByText(/exceeds the maximum allowed limit/),
+    ).not.toBeInTheDocument()
   })
 })

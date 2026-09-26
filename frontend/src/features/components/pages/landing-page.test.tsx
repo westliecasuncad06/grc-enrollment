@@ -43,6 +43,18 @@ describe("LandingPage", () => {
     expect(within(navigation).getByRole("link", { name: "Visit GRC Website" })).toHaveAttribute("href", "https://grc.edu.ph/")
   })
 
+  it("offers no account-setup entry point: setup is reachable only through the emailed link", () => {
+    const { container } = renderWithSession(<LandingPage />)
+
+    expect(
+      screen.queryByRole("link", { name: /account setup/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /account setup/i }),
+    ).not.toBeInTheDocument()
+    expect(container.querySelector('a[href*="account-setup"]')).toBeNull()
+  })
+
   it("presents GRC values and official public pathways without private records", () => {
     renderWithSession(<LandingPage />)
 

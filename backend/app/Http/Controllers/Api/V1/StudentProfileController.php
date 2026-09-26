@@ -94,6 +94,14 @@ final class StudentProfileController extends Controller
         return $this->cachePrivateResponse(StudentProfileResource::make($studentProfile)->response($request));
     }
 
+    public function showForRegistrar(Request $request, StudentProfile $studentProfile): JsonResponse
+    {
+        $this->authorize('viewForRegistrar', $studentProfile);
+        $studentProfile->load(['user', 'program', 'curriculum'])->loadExists('enrollments');
+
+        return $this->cachePrivateResponse(StudentProfileResource::make($studentProfile)->response($request));
+    }
+
     public function update(
         UpdateStudentProfileRequest $request,
         StudentProfile $studentProfile,

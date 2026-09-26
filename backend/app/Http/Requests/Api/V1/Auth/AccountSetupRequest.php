@@ -16,7 +16,7 @@ final class AccountSetupRequest extends FormRequest
     {
         return [
             'email' => ['required', 'email', 'max:255'],
-            'code' => ['required', 'string', 'max:255'],
+            'code' => ['required', 'digits:6'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ];
     }

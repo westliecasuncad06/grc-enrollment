@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -282,11 +282,15 @@ describe("ScheduleWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   let sectionSaveError: unknown = null
   let patchedBody: unknown = null
+  let section11Published = false
+  let changeRequestBody: Record<string, unknown> | null = null
 
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock)
     sectionSaveError = null
     patchedBody = null
+    section11Published = false
+    changeRequestBody = null
     fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
       if (url.endsWith("/sections/11") && init?.method === "PATCH") {
@@ -312,12 +316,50 @@ describe("ScheduleWorkspace", () => {
           ),
         )
       }
+      if (url.endsWith("/sections/11/change-requests") && init?.method === "POST") {
+        changeRequestBody =
+          typeof init.body === "string"
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : null
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "section_change_request",
+                id: 5,
+                section_id: 11,
+                section_code: "IT101",
+                subject_code: "IT101",
+                subject_title: "Introduction to Computing",
+                academic_term_id: 1,
+                status: "pending",
+                status_label: "Pending",
+                reason: "Room repair",
+                requested_by_name: "Program Chair",
+                changes: [{ field: "room", label: "Room", old: "LAB 1", new: "LAB 9" }],
+                decided_by_name: null,
+                decided_at: null,
+                decision_reason: null,
+                created_at: "2026-09-26T00:00:00Z",
+              },
+            }),
+            { status: 201 },
+          ),
+        )
+      }
       if (url.endsWith("/room-options")) return Promise.resolve(new Response(JSON.stringify(rooms)))
       if (url.includes("/room-occupancy")) return Promise.resolve(new Response(JSON.stringify(roomOccupancy)))
       const body = url.endsWith("/academic-terms")
         ? terms
         : url.endsWith("/sections")
-          ? sections
+          ? section11Published
+            ? {
+                data: [
+                  { ...sections.data[0], status: "published", status_label: "Published" },
+                  ...sections.data.slice(1),
+                ],
+              }
+            : sections
           : url.endsWith("/subjects")
             ? subjects
             : url.includes("/faculty-members")
@@ -404,6 +446,42 @@ describe("ScheduleWorkspace", () => {
     expect(
       screen.queryByText("The submitted data is invalid."),
     ).not.toBeInTheDocument()
+  })
+
+  it("turns a published section's Edit into Request change and sends the change to the Registrar Head", async () => {
+    section11Published = true
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    const sectionCard = await screen.findByRole("article", { name: "IT101 section" })
+    await user.click(within(sectionCard).getByRole("button", { name: /View schedule & assign/ }))
+
+    await user.click(await screen.findByRole("button", { name: "Request change" }))
+    const dialog = await screen.findByRole("dialog", {
+      name: "Request a schedule change",
+    })
+    expect(
+      within(dialog).getByText(/can only change with the Registrar Head/),
+    ).toBeInTheDocument()
+
+    const send = within(dialog).getByRole("button", { name: "Send change request" })
+    expect(send).toBeDisabled()
+
+    const room = within(dialog).getByLabelText("Room")
+    // Not `user.clear`: an empty room swaps the fields for the room picker.
+    fireEvent.change(room, { target: { value: "LAB 9" } })
+    expect(send).toBeDisabled()
+    await user.type(within(dialog).getByLabelText("Reason for the change"), "Room repair")
+    expect(send).toBeEnabled()
+    await user.click(send)
+
+    await waitFor(() => expect(changeRequestBody).not.toBeNull())
+    expect(changeRequestBody).toEqual({
+      reason: "Room repair",
+      changes: { room: "LAB 9" },
+    })
+    // No direct schedule edit was attempted.
+    expect(patchedBody).toBeNull()
   })
 
   it("lets the Program Chair switch to an archived term and view its schedule read-only", async () => {

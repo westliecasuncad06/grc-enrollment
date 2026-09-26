@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/features/components/ui/table"
+import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import { useGraduatesQuery } from "@/features/hooks/use-graduates"
 import {
   useCurriculaQuery,
@@ -64,12 +65,14 @@ export function GraduatesWorkspace() {
   const [curriculumId, setCurriculumId] = useState<number>()
   const [search, setSearch] = useState<string>("")
   const [page, setPage] = useState(1)
+  // Query the server 300 ms after typing stops, not on every keystroke.
+  const debouncedSearch = useDebouncedValue(search, 300)
 
   const graduatesQuery = useGraduatesQuery({
     programId,
     graduationSchoolYear,
     curriculumId,
-    search: search ? search : undefined,
+    search: debouncedSearch ? debouncedSearch : undefined,
     page,
     perPage: 25,
   })

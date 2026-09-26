@@ -106,4 +106,24 @@ describe("CashierCorRecordsWorkspace", () => {
       screen.queryByText("This workspace is not available for your role."),
     ).not.toBeInTheDocument()
   })
+
+  it("authorizes the COR Records workspace for Registrar Staff", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(() => Promise.resolve(documentResponse([]))),
+    )
+    renderWithSession(<CashierCorRecordsWorkspace />, {
+      session: {
+        userId: "9",
+        displayName: "Registrar Staff",
+        role: "registrar_staff",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+
+    expect(await screen.findByText("Find a student's COR")).toBeInTheDocument()
+    expect(
+      screen.queryByText("This workspace is not available for your role."),
+    ).not.toBeInTheDocument()
+  })
 })

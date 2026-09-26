@@ -157,7 +157,7 @@ describe("admission-service", () => {
     await expect(
       setupStudentAccount({
         email: profile.email,
-        code: "one-time-code",
+        code: "123456",
         password: "secure-password",
         password_confirmation: "secure-password",
       }),

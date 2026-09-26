@@ -14,6 +14,7 @@ import Link from "next/link"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { CurriculumPill } from "@/features/components/portal/curriculum-pill"
 import { DemandForecastDialog } from "@/features/components/portal/demand-forecast-dialog"
 import {
   SectionScheduleCalendarDialog,
@@ -337,21 +338,19 @@ function BlockSectionCard({
           <Badge variant="outline" className="text-xs">
             {yearLabel(year)}
           </Badge>
-          {curriculum && (
-            <Badge
-              variant="outline"
-              className="text-[10px] font-normal border-primary/30 text-primary bg-primary/5 max-w-[200px] truncate"
-              title={curriculum.name}
-            >
-              {curriculum.name.replace(/\s*Curriculum\s*/i, " ")} ({curriculum.effective_school_year})
-            </Badge>
-          )}
           {program && (
             <Badge variant="outline" className="text-[10px] text-muted-foreground">
               {program.code}
             </Badge>
           )}
         </div>
+
+        {curriculum && (
+          <CurriculumPill
+            name={curriculum.name}
+            effectiveSchoolYear={curriculum.effective_school_year}
+          />
+        )}
 
         <p className="text-xs text-muted-foreground">
           {sections.length} subject{sections.length === 1 ? "" : "s"}
@@ -481,7 +480,12 @@ export function ProgramChairEnrollmentWorkspace({
   const subjectsQuery = useSubjectsQuery()
   const preferencesQuery = useFacultySubjectPreferencesQuery()
   const roomsQuery = useRoomOptionsQuery()
-  const currentTerm = getActiveAcademicTerm(termsQuery.data)
+  // A hook result is immutable to the React Compiler; a bare helper call is
+  // not, and would taint every memo derived from `termId` below.
+  const currentTerm = useMemo(
+    () => getActiveAcademicTerm(termsQuery.data),
+    [termsQuery.data],
+  )
   const proposalsQuery = useScheduleProposalsQuery({
     enabled: currentTerm !== null,
   })
@@ -671,10 +675,16 @@ export function ProgramChairEnrollmentWorkspace({
   const approvalLocked = submitted || currentProposal?.is_submitted === true
   const plansQuery = useSectionPlansQuery(termId, currentTerm !== null)
   const planMutations = useSectionPlanMutations(termId)
-  const visibleSections = (sectionsQuery.data ?? []).filter(
-    (section) =>
-      section.academic_term_id === termId &&
-      !/^[1-4][A-Z]$/u.test(section.section_code),
+  // Memoized so the block-grouping memo below survives 5s schedule polls
+  // (and so the React Compiler can optimize this component at all).
+  const visibleSections = useMemo(
+    () =>
+      (sectionsQuery.data ?? []).filter(
+        (section) =>
+          section.academic_term_id === termId &&
+          !/^[1-4][A-Z]$/u.test(section.section_code),
+      ),
+    [sectionsQuery.data, termId],
   )
   const selected =
     visibleSections.find((section) => section.id === editingSection) ?? null
@@ -682,7 +692,24 @@ export function ProgramChairEnrollmentWorkspace({
     (curriculum) => curriculum.subjects,
   )
 
-  useEffect(() => {
+  // Restore the planning form from saved section plans whenever the server
+  // data changes. Adjusted during render (React's "adjusting state when a
+  // prop changes") rather than in an effect: under 5s schedule polling the
+  // effect committed a stale form and then re-rendered this whole workspace.
+  const restoreSource = [
+    plansQuery.data,
+    sectionsQuery.data,
+    curriculaQuery.data,
+    termId,
+  ] as const
+  const [restoredFrom, setRestoredFrom] = useState<
+    typeof restoreSource | null
+  >(null)
+  if (
+    restoredFrom === null ||
+    restoreSource.some((value, index) => value !== restoredFrom[index])
+  ) {
+    setRestoredFrom(restoreSource)
     const next = plansQuery.data ?? []
     if (next.length) {
       const nextCurriculaByYearProg: Record<string, number | null> = {}
@@ -712,7 +739,6 @@ export function ProgramChairEnrollmentWorkspace({
         ...prev,
       }))
 
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCounts(
         Object.fromEntries(
           years.map((year) => [year, restoredPlans[year]?.section_count ?? 0]),
@@ -748,7 +774,7 @@ export function ProgramChairEnrollmentWorkspace({
         setStep("subjects")
       }
     }
-  }, [plansQuery.data, sectionsQuery.data, curriculaQuery.data, termId])
+  }
 
   const subjectFor = (subjectId: number) =>
     subjects.find((subject) => subject.subject_id === subjectId)
@@ -974,7 +1000,7 @@ export function ProgramChairEnrollmentWorkspace({
     return (
       <WorkspacePage
         title="Enrollment"
-        description="Program Chair enrollment opens after the Registrar creates the next school year and semester."
+        description="Program Head enrollment opens after the Registrar creates the next school year and semester."
       >
         <Alert>
           <AlertDescription>

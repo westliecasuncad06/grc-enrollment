@@ -146,9 +146,23 @@ function NotificationItem({
     )
   }
 
+  // No destination for this role: clicking the card still counts as opening the
+  // notification, so it is marked read (and the bell drops) without needing the
+  // separate button. The explicit button stays as a labelled, keyboard-friendly
+  // control; the two are siblings, never nested.
   return (
     <article className={className}>
-      {body}
+      {isUnread ? (
+        <button
+          type="button"
+          className="w-full text-left"
+          onClick={() => onMarkRead(notification.id)}
+        >
+          {body}
+        </button>
+      ) : (
+        body
+      )}
       {isUnread && (
         <Button
           type="button"

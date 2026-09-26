@@ -16,7 +16,8 @@ export function useScheduleProposalsQuery({
     queryKey: scheduleProposalsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getScheduleProposals(signal),
     enabled: enabled && session !== null,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
   })
 }

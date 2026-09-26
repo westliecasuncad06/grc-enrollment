@@ -12,7 +12,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
+use App\Support\Auth\AccountSetupCodes;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -72,6 +72,7 @@ final class FacultyInvitationsEndpointTest extends TestCase
 
     public function test_program_chair_can_invite_a_professor_and_it_appears_pending_in_their_college_list(): void
     {
+        config(['app.frontend_url' => 'http://localhost:3000']);
         $token = $this->programChairToken('chair.ccs.invite@grc.test', CollegeCode::Ccs);
         Mail::fake();
 
@@ -184,7 +185,7 @@ final class FacultyInvitationsEndpointTest extends TestCase
             'status' => 'active',
         ]);
         self::assertNotNull(User::query()->where('email', 'pending.professor@grc.test')->value('account_setup_completed_at'));
-        $this->assertDatabaseMissing('password_reset_tokens', ['email' => 'pending.professor@grc.test']);
+        $this->assertDatabaseCount('account_setup_codes', 0);
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::FACULTY_ACCOUNT_ACTIVATED)->count());
 
         $this->postJson('/api/v1/auth/login', [
@@ -216,11 +217,11 @@ final class FacultyInvitationsEndpointTest extends TestCase
 
             return true;
         });
-        DB::table('password_reset_tokens')
-            ->where('email', 'expiring.professor@grc.test')
-            ->update(['created_at' => now()->subMinutes((int) config('auth.passwords.users.expire') + 1)]);
+        DB::table('account_setup_codes')
+            ->whereIn('user_id', User::query()->where('email', 'expiring.professor@grc.test')->pluck('id'))
+            ->update(['expires_at' => now()->subMinute()]);
 
-        foreach ([$setupCode, 'definitely-not-the-code'] as $code) {
+        foreach ([$setupCode, '123456'] as $code) {
             $this->postJson('/api/v1/auth/faculty-account-setup', [
                 'email' => 'expiring.professor@grc.test',
                 'code' => $code,
@@ -260,7 +261,7 @@ final class FacultyInvitationsEndpointTest extends TestCase
             'role' => UserRole::Student,
             'status' => UserStatus::Disabled,
         ]);
-        $studentCode = Password::broker()->createToken($student);
+        $studentCode = app(AccountSetupCodes::class)->issue($student);
 
         // The faculty code must not activate a student account.
         $this->postJson('/api/v1/auth/account-setup', [

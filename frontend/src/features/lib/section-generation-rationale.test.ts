@@ -196,7 +196,7 @@ describe("buildSectionGenerationRationale", () => {
     )
 
     expect(group.reasons).toEqual([
-      "Manually planned by the Program Chair — no demand forecast was available for this subject.",
+      "Manually planned by the Program Head — no demand forecast was available for this subject.",
     ])
   })
 
@@ -219,7 +219,7 @@ describe("buildSectionGenerationRationale", () => {
     )
 
     expect(group.reasons).toEqual([
-      "A demand forecast suggested 3 section(s); the Program Chair set 2 instead.",
+      "A demand forecast suggested 3 section(s); the Program Head set 2 instead.",
     ])
   })
 

@@ -245,20 +245,29 @@ module to render as a print-stylesheet page (FR-FIN-010). OpenAPI tag
 | `student_id` | `BIGINT UNSIGNED` | not null, FK → `student_profiles.id`, `CASCADE` on delete | |
 | `source_institution`, `source_subject_code`, `source_subject_title` | `VARCHAR(255)` | not null | |
 | `source_grade` | `VARCHAR(255)` | nullable | Free string — no equivalence/passing rule encoded (PRD §17) |
-| `credited_units` | `TINYINT UNSIGNED` | not null | Cast to `integer` on the model |
-| `subject_id` | `BIGINT UNSIGNED` | nullable, FK → `subjects.id`, `SET NULL` on delete | Nullable — a transferred subject may not map onto any local subject |
-| `status` | `VARCHAR(255)` | not null | **Provisional** — see `App\Domain\Academic\TransfereeCreditStatus` |
+| `credited_units` | `DECIMAL(4,1)` | not null | Cast to `float` on the model. Widened from `TINYINT UNSIGNED` (ADR 0026) so a 1.5-unit subject fits |
+| `source_school_year`, `source_semester` | `VARCHAR(255)` | nullable | When the student took the subject; required on a Student's request |
+| `subject_id` | `BIGINT UNSIGNED` | nullable, FK → `subjects.id`, `SET NULL` on delete | The subject of the student's curriculum the credit counts as. Set only by the Program Chair (never guessed by the API); nullable — a transferred subject may not map onto any local subject yet |
+| `requested_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | Who asked: the Student, or the Program Chair who recorded it. Never exposed (the resource says only `requested_by_student`) |
+| `endorsed_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | The Program Chair who endorsed it |
+| `endorsed_at` | `TIMESTAMP` | nullable | |
+| `status` | `VARCHAR(255)` | not null | `pending` → `endorsed` → `approved` \| `rejected`. **Provisional** — see `App\Domain\Academic\TransfereeCreditStatus` |
 | `processed_by` | `BIGINT UNSIGNED` | nullable, FK → `users.id`, `SET NULL` on delete | |
 | `processed_at` | `TIMESTAMP` | nullable | |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | |
 
-**API (Phase 7b Task 2):** `GET`/`POST`/`PATCH /api/v1/transferee-credits`.
-Role-scoped read (Student own, Registrar Staff and Registrar Head all);
-`POST` is Registrar-Staff-only; `PATCH` serves a plain content edit
-(`pending` only) or `action: approve`/`reject` — every write is audited,
-including plain edits (FR-FIN-003). Approved credits are record-only: they
-are never read by `BuildEligibleSubjectPool`, since cross-institution grade
-equivalence is an open PRD §17 decision. OpenAPI tag `Transferee Credits`.
+**API (ADR 0026):** `GET`/`POST`/`PATCH /api/v1/transferee-credits` and
+`GET /api/v1/transferee-credits/{id}/suggestions`. Role-scoped read (Student own,
+Program Chair their college's students, Registrar Staff and Registrar Head all).
+`POST`: a Student asks for themselves, a Program Chair records one for a student in
+their college; Registrar Staff and Registrar Head cannot. `PATCH` serves a Program
+Chair's content edit / mapping (`pending` only), `action: endorse` or `decline`
+(`pending` only), and Registrar Staff's `action: approve` or `reject` (`endorsed` only).
+`suggestions` is Program Chair only and computed on demand — nothing is stored. Every
+write is audited (FR-FIN-003). An approved credit that is mapped to a subject counts as
+credited (see `ResolveCreditedSubjectIds`: eligible-subject pool, standing, promotion,
+prospectus) with no GRC grade, so cross-institution grade equivalence (PRD §17) stays
+open. OpenAPI tag `Transferee Credits`.
 
 ## `withdrawal_requests`
 

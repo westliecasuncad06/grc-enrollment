@@ -201,20 +201,20 @@
             <tr>
                 <td width="15%" class="font-bold">Student No.:</td>
                 <td width="35%">{{ $snapshot['student']['student_number'] }}</td>
-                <td width="15%" class="font-bold">School Year:</td>
+                <td width="15%" class="font-bold">Academic Year:</td>
                 <td width="35%">{{ $snapshot['term']['school_year'] }}</td>
             </tr>
             <tr>
-                <td class="font-bold">Student:</td>
+                <td class="font-bold">Name:</td>
                 <td>{{ $snapshot['student']['name'] }}</td>
                 <td class="font-bold">Semester:</td>
                 <td>{{ $snapshot['term']['semester'] }}</td>
             </tr>
             <tr>
-                <td class="font-bold">Course:</td>
+                <td class="font-bold">Degree:</td>
                 <td>{{ $snapshot['student']['course'] }}</td>
-                <td class="font-bold">Level:</td>
-                <td>{{ $snapshot['student']['level'] }}</td>
+                <td class="font-bold">Year Level:</td>
+                <td>{{ \App\Domain\Enrollment\CorDisplay::yearLevel($snapshot['student']['level'] ?? null) }}</td>
             </tr>
             <tr>
                 <td class="font-bold">Address:</td>
@@ -257,7 +257,7 @@
         @if (!empty($snapshot['admission_certification']))
             <div class="admission-box avoid-break">
                 <h3 class="uppercase">Admission Form</h3>
-                <div>{{ $snapshot['admission_certification'] }}</div>
+                <div>{{ \App\Domain\Enrollment\CorDisplay::sentence($snapshot['admission_certification']) }}</div>
             </div>
         @endif
 
@@ -311,6 +311,12 @@
                     <td width="55%"></td>
                     <td width="45%">
                         <table class="fee-table grand-total">
+                            @foreach (($snapshot['fees']['scholarship_discount'] ?? []) as $discount)
+                            <tr style="color: #047857;">
+                                <td>{{ $discount['label'] }}:</td>
+                                <td class="text-right">-&#8369;{{ number_format(abs((float) $discount['amount']), 2) }}</td>
+                            </tr>
+                            @endforeach
                             <tr>
                                 <td>GRAND TOTAL:</td>
                                 <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['grand_total'], 2) }}</td>

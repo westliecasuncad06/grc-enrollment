@@ -2,10 +2,12 @@ import { z } from "zod"
 import {
   facultyLoadReportSchema,
   scheduleGenerationRunEnvelopeSchema,
+  type FacultyEmploymentType,
   type FacultyLoadReport,
   type ScheduleGenerationRun,
 } from "@/features/schemas/schedule-generation-schema"
 import {
+  deleteAuthenticatedJson,
   getAuthenticatedJson,
   postAuthenticatedJson,
   putAuthenticatedJson,
@@ -58,6 +60,44 @@ export async function getFacultyLoadReport(
   )
   return z.object({ data: facultyLoadReportSchema }).strict().parse(payload)
     .data
+}
+
+/** Program Head or Dean: the maximum units for one employment type (ADR 0033). */
+export async function saveFacultyLoadLimit(
+  termId: number,
+  employmentType: FacultyEmploymentType,
+  maxUnits: number,
+): Promise<number> {
+  const payload = await putAuthenticatedJson(
+    `/api/v1/academic-terms/${termId}/faculty-load-limits/${employmentType}`,
+    { max_units: maxUnits },
+  )
+  return z
+    .object({
+      data: z.object({ max_units: z.number().positive() }).passthrough(),
+    })
+    .parse(payload).data.max_units
+}
+
+/** One professor's own maximum for the term, with the reason it is needed. */
+export async function saveFacultyLoadOverride(
+  termId: number,
+  professorId: number,
+  input: { max_units: number; reason: string },
+): Promise<void> {
+  await putAuthenticatedJson(
+    `/api/v1/academic-terms/${termId}/faculty-load-overrides/${professorId}`,
+    input,
+  )
+}
+
+export async function clearFacultyLoadOverride(
+  termId: number,
+  professorId: number,
+): Promise<void> {
+  await deleteAuthenticatedJson(
+    `/api/v1/academic-terms/${termId}/faculty-load-overrides/${professorId}`,
+  )
 }
 
 export async function saveFacultyLoadThreshold(

@@ -24,7 +24,7 @@ final class RoomOccupancyController extends Controller
         abort_unless(
             $actor->role === UserRole::ProgramChair || $actor->role === UserRole::RegistrarHead,
             403,
-            'Room occupancy is available only to Program Chairs and the Registrar Head.',
+            'Room occupancy is available only to Program Heads and the Registrar Head.',
         );
 
         $data = $request->validated();

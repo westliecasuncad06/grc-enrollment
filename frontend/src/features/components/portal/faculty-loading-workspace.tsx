@@ -1,12 +1,14 @@
 "use client"
 
-import { useMutation, useQuery } from "@tanstack/react-query"
 import { SlidersHorizontal } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { useAuth } from "@/features/auth/use-auth"
 import { AcademicTermSelector } from "@/features/components/portal/academic-term-selector"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import {
+  FacultyLoadOverrideDialog,
+  type FacultyLoadOverrideTarget,
+} from "@/features/components/portal/faculty-load-override-dialog"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
@@ -23,22 +25,29 @@ import { SearchableCombobox } from "@/features/components/ui/searchable-combobox
 import { useFacultyDirectoryQuery } from "@/features/hooks/use-faculty-directory"
 import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
 import {
-  getFacultyLoadReport,
-  saveFacultyLoadThreshold,
-} from "@/features/services/schedule-generation-service"
+  useClearFacultyLoadOverrideMutation,
+  useFacultyLoadReportQuery,
+  useSaveFacultyLoadLimitMutation,
+  useSaveFacultyLoadOverrideMutation,
+  useSaveFacultyLoadThresholdMutation,
+} from "@/features/hooks/use-faculty-load"
+import {
+  limitSourceLabel,
+  loadSummary,
+} from "@/features/lib/faculty-load-presentation"
+import type { FacultyEmploymentType } from "@/features/schemas/schedule-generation-schema"
 
 export function FacultyLoadingWorkspace() {
-  const { session } = useAuth()
   const termSelection = useAcademicTermSelection()
   const { term, termId, sortedTerms, isCurrentTerm, setSelectedTermId } =
     termSelection
   const facultyQuery = useFacultyDirectoryQuery()
-  const reportQuery = useQuery({
-    queryKey: ["faculty-load-report", session?.userId ?? null, termId],
-    queryFn: () => getFacultyLoadReport(termId),
-    enabled: termId > 0,
-  })
-  const [threshold, setThreshold] = useState("")
+  const reportQuery = useFacultyLoadReportQuery(termId)
+  // One draft per maximum: a value typed but not saved yet, keyed by which
+  // limit it is for. An untouched field shows what the server has.
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({})
+  const [overrideTarget, setOverrideTarget] =
+    useState<FacultyLoadOverrideTarget | null>(null)
   const [filter, setFilter] = useState({ subjectId: "", professorId: "" })
   const subjectOptions = useMemo(() => {
     const subjectsById = new Map<number, { code: string; title: string }>()
@@ -84,13 +93,21 @@ export function FacultyLoadingWorkspace() {
       ),
     [reportQuery.data?.faculty, filter],
   )
-  const saveThreshold = useMutation({
-    mutationFn: () => saveFacultyLoadThreshold(termId, Number(threshold)),
-    onSuccess: () => {
-      setThreshold("")
-      void reportQuery.refetch()
-    },
-  })
+  const saveThreshold = useSaveFacultyLoadThresholdMutation(termId)
+  const saveLimit = useSaveFacultyLoadLimitMutation(termId)
+  const saveOverride = useSaveFacultyLoadOverrideMutation(termId)
+  const clearOverride = useClearFacultyLoadOverrideMutation(termId)
+  const setDraft = (key: string, value: string) =>
+    setLimitDrafts((drafts) => ({ ...drafts, [key]: value }))
+  const clearDraft = (key: string) =>
+    setLimitDrafts((drafts) =>
+      Object.fromEntries(
+        Object.entries(drafts).filter(([draftKey]) => draftKey !== key),
+      ),
+    )
+  const limitFor = (type: FacultyEmploymentType) =>
+    reportQuery.data?.limits?.find((limit) => limit.employment_type === type)
+      ?.max_units ?? null
   const query = {
     isPending:
       termSelection.termsQuery.isPending ||
@@ -101,9 +118,7 @@ export function FacultyLoadingWorkspace() {
       facultyQuery.isError ||
       reportQuery.isError,
     error:
-      termSelection.termsQuery.error ??
-      facultyQuery.error ??
-      reportQuery.error,
+      termSelection.termsQuery.error ?? facultyQuery.error ?? reportQuery.error,
     data: true as const,
     refetch: () => {
       void termSelection.termsQuery.refetch()
@@ -115,7 +130,7 @@ export function FacultyLoadingWorkspace() {
   return (
     <WorkspacePage
       title="Faculty Loading"
-      description="Set the faculty load threshold, review the load report, and manage the faculty workforce."
+      description="Set the most units a professor may carry, review the load report, and raise or lower one professor's limit when you must."
       lastUpdated={reportQuery.dataUpdatedAt}
     >
       <AsyncBoundary query={query} loadingLabel="Loading faculty load data…">
@@ -131,10 +146,12 @@ export function FacultyLoadingWorkspace() {
                         Planning control room
                       </span>
                     </div>
-                    <CardTitle level={2}>Faculty load threshold</CardTitle>
+                    <CardTitle level={2}>Maximum teaching load</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                       Set one maximum teaching-unit threshold for this college
-                      and term. Assignment recommendations remain editable.
+                      Set the most units a professor may carry, separately for
+                      full-time and part-time. Until a limit is set, nobody of
+                      that type is flagged as overloaded. Assignment
+                      recommendations remain editable.
                     </p>
                   </div>
                   <Badge variant="secondary">
@@ -144,49 +161,103 @@ export function FacultyLoadingWorkspace() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="flex flex-wrap items-end gap-3 pt-5">
-                <label
-                  className="grid gap-2 text-sm font-medium"
-                  htmlFor="faculty-load-threshold"
-                >
-                  Maximum units
-                  <Input
-                    id="faculty-load-threshold"
-                    type="number"
-                    min="1"
-                    value={
-                      threshold === ""
-                        ? (reportQuery.data?.threshold_units ?? "")
-                        : threshold
+              <CardContent className="grid gap-4 pt-5 sm:grid-cols-3">
+                {(
+                  [
+                    ["full_time", "Full-time maximum units"],
+                    ["part_time", "Part-time maximum units"],
+                  ] as const
+                ).map(([type, label]) => (
+                  <div key={type} className="grid content-start gap-2">
+                    <label
+                      className="grid gap-2 text-sm font-medium"
+                      htmlFor={`faculty-load-limit-${type}`}
+                    >
+                      {label}
+                      <Input
+                        id={`faculty-load-limit-${type}`}
+                        type="number"
+                        min="1"
+                        value={limitDrafts[type] ?? limitFor(type) ?? ""}
+                        onChange={(event) => setDraft(type, event.target.value)}
+                        placeholder="Not set"
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      aria-label={`Save ${label.toLowerCase()}`}
+                      onClick={() =>
+                        saveLimit.mutate(
+                          {
+                            employmentType: type,
+                            maxUnits: Number(limitDrafts[type]),
+                          },
+                          { onSuccess: () => clearDraft(type) },
+                        )
+                      }
+                      disabled={
+                        !limitDrafts[type] ||
+                        saveLimit.isPending ||
+                        !isCurrentTerm
+                      }
+                    >
+                      {saveLimit.isPending ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
+                ))}
+                <div className="grid content-start gap-2">
+                  <label
+                    className="grid gap-2 text-sm font-medium"
+                    htmlFor="faculty-load-threshold"
+                  >
+                    Everyone else (default)
+                    <Input
+                      id="faculty-load-threshold"
+                      type="number"
+                      min="1"
+                      value={
+                        limitDrafts.default ??
+                        reportQuery.data?.threshold_units ??
+                        ""
+                      }
+                      onChange={(event) =>
+                        setDraft("default", event.target.value)
+                      }
+                      placeholder="Not set"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    aria-label="Save default maximum units"
+                    onClick={() =>
+                      saveThreshold.mutate(Number(limitDrafts.default), {
+                        onSuccess: () => clearDraft("default"),
+                      })
                     }
-                    onChange={(event) => setThreshold(event.target.value)}
-                    placeholder="e.g. 18"
-                  />
-                </label>
-                <Button
-                  type="button"
-                  onClick={() => void saveThreshold.mutateAsync()}
-                  disabled={
-                    !threshold || saveThreshold.isPending || !isCurrentTerm
-                  }
-                >
-                  {saveThreshold.isPending
-                    ? "Saving threshold…"
-                    : "Save threshold"}
-                </Button>
-                {reportQuery.data?.threshold_units === null && (
-                  <p className="text-sm text-muted-foreground">
-                    Overload flags remain off until a threshold is configured.
-                  </p>
-                )}
-                {saveThreshold.error instanceof Error && (
-                  <p className="text-sm text-destructive">
-                    {saveThreshold.error.message}
+                    disabled={
+                      !limitDrafts.default ||
+                      saveThreshold.isPending ||
+                      !isCurrentTerm
+                    }
+                  >
+                    {saveThreshold.isPending ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground sm:col-span-3">
+                  A professor&apos;s own max load, set from the report below,
+                  beats their type limit; the default applies only when neither
+                  exists.
+                </p>
+                {(saveLimit.error instanceof Error ||
+                  saveThreshold.error instanceof Error) && (
+                  <p className="text-sm text-destructive sm:col-span-3">
+                    {(saveLimit.error ?? saveThreshold.error)?.message}
                   </p>
                 )}
               </CardContent>
             </Card>
-
             <AcademicTermSelector
               sortedTerms={sortedTerms}
               term={term}
@@ -208,7 +279,7 @@ export function FacultyLoadingWorkspace() {
               <Metric
                 label="Equivalent faculty loads"
                 value={reportQuery.data?.equivalent_faculty_loads ?? "—"}
-                detail="Uses configured threshold"
+                detail="Uses the college default"
               />
               <Metric
                 label="Flags to review"
@@ -303,19 +374,69 @@ export function FacultyLoadingWorkspace() {
                               .join(", ")}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant={
                               member.overloaded ? "destructive" : "secondary"
                             }
                           >
-                            {member.total_units} units
+                            {loadSummary(member.total_units, member.max_units)}
+                          </Badge>
+                          <Badge variant="outline">
+                            {limitSourceLabel(
+                              member.limit_source,
+                              member.employment_type_label,
+                            )}
                           </Badge>
                           <Badge variant="outline">
                             {member.assignments.length} assignments
                           </Badge>
                         </div>
                       </div>
+                      {member.override && (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            Own max load:
+                          </span>{" "}
+                          {member.override.reason}
+                        </p>
+                      )}
+                      {isCurrentTerm && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setOverrideTarget({
+                                professorId: member.professor_id,
+                                professorName:
+                                  member.professor_name ??
+                                  `Faculty #${member.professor_id}`,
+                                currentMaxUnits:
+                                  member.override?.max_units ??
+                                  member.max_units,
+                                currentReason: member.override?.reason ?? null,
+                              })
+                            }
+                          >
+                            Set max load
+                          </Button>
+                          {member.override && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={clearOverride.isPending}
+                              onClick={() =>
+                                clearOverride.mutate(member.professor_id)
+                              }
+                            >
+                              Remove own max load
+                            </Button>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {member.assignments
                           .flatMap((assignment) => assignment.rationale)
@@ -345,6 +466,25 @@ export function FacultyLoadingWorkspace() {
           </div>
         )}
       </AsyncBoundary>
+
+      <FacultyLoadOverrideDialog
+        target={overrideTarget}
+        pending={saveOverride.isPending}
+        error={saveOverride.error}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOverrideTarget(null)
+            saveOverride.reset()
+          }
+        }}
+        onSubmit={({ maxUnits, reason }) => {
+          if (!overrideTarget) return
+          saveOverride.mutate(
+            { professorId: overrideTarget.professorId, maxUnits, reason },
+            { onSuccess: () => setOverrideTarget(null) },
+          )
+        }}
+      />
     </WorkspacePage>
   )
 }

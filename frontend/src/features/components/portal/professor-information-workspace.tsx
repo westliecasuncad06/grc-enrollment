@@ -126,10 +126,10 @@ export function ProfessorInformationWorkspace() {
               <CardContent>
                 <p className="text-sm text-muted-foreground">
                   {ownRecord === null
-                    ? "Your faculty record was not found in the directory. Contact your Program Chair."
+                    ? "Your faculty record was not found in the directory. Contact your Program Head."
                     : ownRecord.is_assignable
                       ? "You are currently marked as assignable and may be assigned to sections this term."
-                      : "You are currently marked as non-assignable. Contact your Program Chair to update your workforce status."}
+                      : "You are currently marked as non-assignable. Contact your Program Head to update your workforce status."}
                 </p>
                 {ownRecord !== null && (
                   <div className="mt-3">
@@ -150,7 +150,7 @@ export function ProfessorInformationWorkspace() {
               <CardContent>
                 <p className="text-sm text-muted-foreground">
                   For corrections to your profile information, contact your
-                  Program Chair or the Registrar. Teaching schedule assignments
+                  Program Head or the Registrar. Teaching schedule assignments
                   and grade submissions are managed through their respective
                   modules.
                 </p>

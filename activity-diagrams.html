@@ -1,0 +1,1704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRC Enrollment System - Activity Diagrams (ABR Library Reference Format)</title>
+  <!-- Mermaid.js -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --primary-subtle: #f0f9ff;
+      --primary-border: #bae6fd;
+      
+      --accent: #4f46e5;
+      --success: #16a34a;
+      --warning: #d97706;
+      --danger: #dc2626;
+
+      --bg-page: #f1f5f9;
+      --bg-card: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #cbd5e1;
+
+      /* ABR Thesis Format Specifics */
+      --uml-bg: #ffffff;
+      --uml-border: #000000;
+      --uml-header-bg: #ffffff;
+      --uml-line: #000000;
+      --uml-red: #d90429;
+      
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+    }
+
+    [data-theme="dark"] {
+      --bg-page: #0f172a;
+      --bg-card: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: #334155;
+      
+      --uml-bg: #1e293b;
+      --uml-border: #94a3b8;
+      --uml-header-bg: #334155;
+      --uml-line: #cbd5e1;
+      --uml-red: #ff4d6d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.5;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    /* TOP HEADER */
+    header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-inner {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #0284c7, #4f46e5);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      font-size: 1.15rem;
+    }
+
+    .brand-text h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .brand-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-main);
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: var(--primary-subtle);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      color: white;
+    }
+
+    /* MAIN LAYOUT WITH SIDEBAR */
+    .app-container {
+      max-width: 1600px;
+      margin: 1.25rem auto;
+      padding: 0 1.25rem;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .app-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* SIDEBAR DIAGRAM DIRECTORY */
+    .sidebar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+      position: sticky;
+      top: 5rem;
+      max-height: calc(100vh - 6.5rem);
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid var(--primary-subtle);
+      margin-bottom: 1rem;
+    }
+
+    .sidebar-header h2 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-header p {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .diagram-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .diagram-item-btn {
+      display: flex;
+      flex-direction: column;
+      padding: 0.65rem 0.85rem;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    .diagram-item-btn:hover {
+      background: var(--bg-page);
+      border-color: var(--border-color);
+    }
+
+    .diagram-item-btn.active {
+      background: var(--primary-subtle);
+      border-color: var(--primary-border);
+    }
+
+    .diagram-item-btn .fig-num {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+    }
+
+    .diagram-item-btn .fig-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-top: 0.15rem;
+      line-height: 1.3;
+    }
+
+    .diagram-item-btn .fig-actors {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    /* MAIN VIEWPORT */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* MANUSCRIPT FIGURE CARD */
+    .figure-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .figure-header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .figure-title-box h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .figure-title-box p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .view-toggle-group {
+      display: flex;
+      background: var(--bg-page);
+      padding: 0.2rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .view-toggle-btn {
+      padding: 0.35rem 0.65rem;
+      border-radius: 5px;
+      border: none;
+      background: transparent;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .view-toggle-btn.active {
+      background: var(--bg-card);
+      color: var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* CANVAS PAN-ZOOM AREA */
+    .canvas-viewport {
+      background: var(--bg-page);
+      padding: 2rem;
+      overflow: auto;
+      min-height: 600px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      position: relative;
+    }
+
+    /* FIGURE CAPTION IN THESIS FORMAT */
+    .figure-caption-box {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border-color);
+      padding: 0.85rem 1.25rem;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .caption-bold {
+      font-weight: 700;
+    }
+
+    .code-box-display {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 1.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      border-radius: 8px;
+      margin: 1.25rem;
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 0.65rem 1.15rem;
+      border-radius: 8px;
+      box-shadow: var(--shadow-lg);
+      font-size: 0.82rem;
+      font-weight: 600;
+      display: none;
+      z-index: 1000;
+    }
+
+    /* SVG DIAGRAM STYLING (Vector UML) */
+    svg.abr-uml-svg {
+      background: var(--uml-bg);
+      border: 2px solid var(--uml-border);
+      box-shadow: var(--shadow-md);
+      display: block;
+    }
+
+    svg.abr-uml-svg text {
+      user-select: none;
+    }
+  </style>
+</head>
+<body data-theme="light">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-inner">
+      <div class="brand-section">
+        <div class="brand-logo">GRC</div>
+        <div class="brand-text">
+          <h1>UML Activity Diagrams — Manuscript Reference Format</h1>
+          <p>Structured following the official GRC Thesis & ABR Diagnostic Center Standard with Exact Orthogonal Cross-Swimlane Routing</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn" onclick="toggleTheme()" id="themeBtn">🌙 Dark</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Export Figures</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- APP CONTAINER -->
+  <div class="app-container">
+    
+    <!-- SIDEBAR: TABLE OF FIGURES -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>List of Figures</h2>
+        <p>Select an Activity Diagram to view:</p>
+      </div>
+
+      <nav class="diagram-list">
+        <button class="diagram-item-btn active" onclick="loadDiagram('fig1')">
+          <span class="fig-num">Figure 1</span>
+          <span class="fig-title">Master Activity Diagram: End-to-End Proposed Enrollment System</span>
+          <span class="fig-actors">Student • Proposed System • Staff</span>
+        </button>
+
+        <button class="diagram-item-btn" onclick="loadDiagram('fig2')">
+          <span class="fig-num">Figure 2 (Process 1.0)</span>
+          <span class="fig-title">Activity Diagram for Program Chair - Pre-Enrollment & AI Scheduling</span>
+          <span class="fig-actors">Program Chair • Proposed System • Dean & ED</span>
+        </button>
+
+        <button class="diagram-item-btn" onclick="loadDiagram('fig3')">
+          <span class="fig-num">Figure 3 (Process 2.0)</span>
+          <span class="fig-title">Activity Diagram for Student - Digital Advising & Prerequisite Check</span>
+          <span class="fig-actors">Student • Proposed System</span>
+        </button>
+
+        <button class="diagram-item-btn" onclick="loadDiagram('fig4')">
+          <span class="fig-num">Figure 4 (Process 3.0)</span>
+          <span class="fig-title">Activity Diagram for Program Chair & Registrar - Enrollment Approval</span>
+          <span class="fig-actors">Student • Program Chair • Registrar</span>
+        </button>
+
+        <button class="diagram-item-btn" onclick="loadDiagram('fig5')">
+          <span class="fig-num">Figure 5 (Process 3.4 - 3.5)</span>
+          <span class="fig-title">Activity Diagram for Cashier & Student - Payment Queue & COM Release</span>
+          <span class="fig-actors">Student • Proposed System • Cashier</span>
+        </button>
+
+        <button class="diagram-item-btn" onclick="loadDiagram('fig6')">
+          <span class="fig-num">Figure 6 (Process 4.0)</span>
+          <span class="fig-title">Activity Diagram for Registrar - Closed-Loop Analytics & CHED Reports</span>
+          <span class="fig-actors">Registrar Head • Proposed System (ML Core)</span>
+        </button>
+
+        <button class="diagram-item-btn" onclick="loadDiagram('fig7')">
+          <span class="fig-num">Figure 7 (Baseline)</span>
+          <span class="fig-title">Process Flowchart of Existing Manual Enrollment System</span>
+          <span class="fig-actors">Figure 9 from Manuscript (6-11 Steps)</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- CONTENT DISPLAY AREA -->
+    <main class="content-area">
+      <div class="figure-card">
+        <div class="figure-header">
+          <div class="figure-title-box">
+            <h3 id="currentFigTitle">Figure 1. Master Activity Diagram for Proposed Enrollment System</h3>
+            <p id="currentFigSubtitle">Standard UML Swimlane format with precise orthogonal cross-swimlane arrows showing actor-system transitions.</p>
+          </div>
+
+          <div class="toolbar-actions">
+            <div class="view-toggle-group">
+              <button class="view-toggle-btn active" id="btnViewUml" onclick="setDisplayMode('uml')">🏛️ ABR Library UML (Vector)</button>
+              <button class="view-toggle-btn" id="btnViewMermaid" onclick="setDisplayMode('mermaid')">📊 Mermaid Flow</button>
+              <button class="view-toggle-btn" id="btnViewCode" onclick="setDisplayMode('code')">💻 Copy Code</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CANVAS VIEWPORT -->
+        <div class="canvas-viewport" id="canvasViewport">
+          <div id="dynamicDiagramContainer"></div>
+        </div>
+
+        <!-- CAPTION -->
+        <div class="figure-caption-box">
+          <span id="figureCaptionText"><span class="caption-bold">Figure 1.</span> Master Activity Diagram for Proposed Enrollment System</span>
+          <button class="btn" onclick="copyCurrentMermaid()">📋 Copy Mermaid Code</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toastMsg">Code copied to clipboard!</div>
+
+  <script>
+    // DATA DICTIONARY WITH VECTOR SVG (Precise orthogonal arrows connecting across columns)
+    const DIAGRAMS = {
+      fig1: {
+        number: "Figure 1",
+        title: "Master Activity Diagram for Proposed Enrollment System",
+        subtitle: "Models end-to-end interactions with orthogonal cross-swimlane arrows across Student, Proposed System, Registrar, and Cashier.",
+        mermaid: `flowchart TB
+  Init((●)) --> S_Start
+
+  subgraph Col1["Student"]
+    S_Start["Start"] --> S_Login["Login to Centralized Portal via Sanctum Token"]
+    S_Select["Select Block Section or Eligible Subjects"]
+    S_Submit["Submit Digital Enrollment Request"]
+    S_Queue["Receive Digital Queue Ticket on Phone/Kiosk"]
+    S_Pay["Present Ticket & Pay Tuition Fee at Cashier"]
+    S_Download["Download & Print Digital COM"]
+    S_End(((⦿)))
+  end
+
+  subgraph Col2["Proposed System"]
+    Sys_Verify["Authenticate & Cross-Reference Prerequisites in 3NF DB"]
+    Sys_Rec["Display Real-time Conflict-Free Subject Pool"]
+    Sys_Route["Route Submission to Digital Approval Queue"]
+    Sys_Assess["Auto-compute Assessment & Push to Cashier Dashboard"]
+    Sys_Lock["Idempotently Lock Enrollment Record to 'Enrolled'"]
+    Sys_GenCOM["Instantly Provision Digital COM to Student Portal"]
+  end
+
+  subgraph Col3["Program Chair & Registrar"]
+    Reg_Check{"Is Student Irregular?"}
+    PC_Endorse["Program Chair: Endorse Irregular Study Plan"]
+    Reg_Approve["Registrar: Digital PEF Approval & Prerequisite Lock"]
+  end
+
+  subgraph Col4["Cashier Staff"]
+    Cash_Call["Call Active Serving Number on Live Screen"]
+    Cash_Confirm["Verify Pre-computed Tuition & Confirm Receipt"]
+  end
+
+  S_Login --> Sys_Verify
+  Sys_Verify --> Sys_Rec
+  Sys_Rec --> S_Select
+  S_Select --> S_Submit
+  S_Submit --> Sys_Route
+  Sys_Route --> Reg_Check
+  Reg_Check -- "Yes" --> PC_Endorse
+  PC_Endorse --> Reg_Approve
+  Reg_Check -- "No (Regular)" --> Reg_Approve
+  Reg_Approve --> Sys_Assess
+  Sys_Assess --> S_Queue
+  Sys_Assess --> Cash_Call
+  Cash_Call --> S_Pay
+  S_Pay --> Cash_Confirm
+  Cash_Confirm --> Sys_Lock
+  Sys_Lock --> Sys_GenCOM
+  Sys_GenCOM --> S_Download
+  S_Download --> S_End`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="980" height="880" viewBox="0 0 980 880" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <!-- SWIMLANE COLUMNS (WIDTH 980) -->
+            <!-- Header bar -->
+            <rect x="0" y="0" width="980" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="245" y1="0" x2="245" y2="880" stroke="#000000" stroke-width="2" />
+            <line x1="490" y1="0" x2="490" y2="880" stroke="#000000" stroke-width="2" />
+            <line x1="735" y1="0" x2="735" y2="880" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="980" height="880" fill="none" stroke="#000000" stroke-width="2" />
+
+            <!-- Column Headers with [-] box and bold title -->
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <!-- Col 1 -->
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="122" y="22" text-anchor="middle">Student</text>
+
+              <!-- Col 2 -->
+              <rect x="253" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="257" y="20" font-size="10">-</text>
+              <text x="367" y="22" text-anchor="middle">Proposed System</text>
+
+              <!-- Col 3 -->
+              <rect x="498" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="502" y="20" font-size="10">-</text>
+              <text x="612" y="22" text-anchor="middle">Program Chair & Registrar</text>
+
+              <!-- Col 4 -->
+              <rect x="743" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="747" y="20" font-size="10">-</text>
+              <text x="857" y="22" text-anchor="middle">Cashier Staff</text>
+            </g>
+
+            <!-- ================= ACTION BOXES & NODES ================= -->
+
+            <!-- INITIAL NODE (Student) -->
+            <circle cx="122" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="122" y1="73" x2="122" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <!-- BOX 1: Start (Student) -->
+            <rect x="35" y="94" width="175" height="34" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="115" font-family="Arial" font-size="11.5" text-anchor="middle" fill="#000000">Start</text>
+
+            <!-- Line 1 -> 2 -->
+            <path d="M 122 128 L 122 150" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 2: Login to Portal (Student) -->
+            <rect x="25" y="152" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="169" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Login to Centralized Portal</text>
+            <text x="122" y="184" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">via Sanctum Token</text>
+
+            <!-- ARROW: Student Box 2 -> Proposed System Box 3 (CROSS-COLUMN HORIZONTAL) -->
+            <path d="M 220 173 L 268 173" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 3: Authenticate & Validate (Proposed System) -->
+            <rect x="270" y="152" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="169" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Authenticate & Cross-Reference</text>
+            <text x="367" y="184" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Prerequisites in 3NF DB</text>
+
+            <!-- Line 3 -> 4 (System) -->
+            <path d="M 367 194 L 367 218" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 4: Display Subject Pool (Proposed System) -->
+            <rect x="270" y="220" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="237" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Display Real-time Conflict-Free</text>
+            <text x="367" y="252" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Subject Pool</text>
+
+            <!-- ARROW: Proposed System Box 4 -> Student Box 5 (CROSS-COLUMN HORIZONTAL) -->
+            <path d="M 270 241 L 222 241" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 5: Select Block Section (Student) -->
+            <rect x="25" y="220" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="237" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Select Block Section or</text>
+            <text x="122" y="252" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Eligible Subjects</text>
+
+            <!-- Line 5 -> 6 (Student) -->
+            <path d="M 122 262 L 122 284" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 6: Submit Request (Student) -->
+            <rect x="25" y="286" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="303" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Submit Digital Enrollment</text>
+            <text x="122" y="317" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Request</text>
+
+            <!-- ARROW: Student Box 6 -> Proposed System Box 7 (CROSS-COLUMN HORIZONTAL) -->
+            <path d="M 220 305 L 268 305" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 7: Route Submission (Proposed System) -->
+            <rect x="270" y="286" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="303" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Route Submission to</text>
+            <text x="367" y="317" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Digital Approval Queue</text>
+
+            <!-- ARROW: Proposed System Box 7 -> Decision Diamond (Col 3) -->
+            <path d="M 465 305 L 553 305" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- DECISION DIAMOND: Is Student Irregular? (Col 3) -->
+            <polygon points="612,280 670,305 612,330 554,305" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="612" y="302" font-family="Arial" font-size="9.5" font-weight="bold" text-anchor="middle" fill="#000000">Is Student</text>
+            <text x="612" y="314" font-family="Arial" font-size="9.5" font-weight="bold" text-anchor="middle" fill="#000000">Irregular?</text>
+
+            <!-- BRANCH 1: Yes -> Box 8 (Program Chair) -->
+            <text x="622" y="342" font-family="Arial" font-size="10" font-weight="bold" fill="#000000">Yes</text>
+            <path d="M 612 330 L 612 352" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 8: Program Chair Endorse (Col 3) -->
+            <rect x="515" y="354" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="612" y="371" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Program Chair: Endorse</text>
+            <text x="612" y="385" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Irregular Study Plan</text>
+
+            <!-- Line 8 -> Box 9 -->
+            <path d="M 612 392 L 612 414" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BRANCH 2: No (Regular) -> Bypasses PC to Box 9 -->
+            <text x="680" y="300" font-family="Arial" font-size="9.5" font-weight="bold" fill="#000000">No (Regular)</text>
+            <path d="M 670 305 L 722 305 L 722 433 L 712 433" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 9: Registrar Approval (Col 3) -->
+            <rect x="515" y="416" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="612" y="433" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Registrar: Digital PEF</text>
+            <text x="612" y="448" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Approval & Prerequisite Lock</text>
+
+            <!-- ARROW: Registrar Box 9 -> Proposed System Box 10 (CROSS-COLUMN RETURN) -->
+            <path d="M 515 437 L 480 437 L 480 495 L 467 495" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 10: Auto-compute Assessment (Proposed System) -->
+            <rect x="270" y="475" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="492" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Auto-compute Assessment &</text>
+            <text x="367" y="507" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Push to Cashier Dashboard</text>
+
+            <!-- ARROW 1 from Box 10: to Student Box 11 (Digital Queue Ticket) -->
+            <path d="M 270 496 L 222 496" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 11: Receive Queue Ticket (Student) -->
+            <rect x="25" y="475" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="492" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Receive Digital Queue Ticket</text>
+            <text x="122" y="507" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">on Phone / Kiosk</text>
+
+            <!-- ARROW 2 from Box 10: to Cashier Box 12 (Call Active Number) -->
+            <path d="M 465 496 L 758 496" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 12: Call Serving Number (Cashier) -->
+            <rect x="760" y="475" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="857" y="492" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Call Active Serving Number</text>
+            <text x="857" y="507" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">on Live Screen</text>
+
+            <!-- Line 11 -> 13 (Student steps to window) -->
+            <path d="M 122 517 L 122 555" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 13: Present Ticket & Pay (Student) -->
+            <rect x="25" y="557" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="574" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Present Ticket & Pay</text>
+            <text x="122" y="589" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Tuition Fee at Cashier</text>
+
+            <!-- Line 12 -> 14 (Cashier awaits student) -->
+            <path d="M 857 517 L 857 555" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- ARROW: Student Box 13 (Hand over payment) -> Cashier Box 14 -->
+            <path d="M 220 578 L 758 578" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 14: Confirm Receipt (Cashier) -->
+            <rect x="760" y="557" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="857" y="574" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Verify Pre-computed Tuition</text>
+            <text x="857" y="589" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">& Confirm Receipt</text>
+
+            <!-- ARROW: Cashier Box 14 -> Proposed System Box 15 (CROSS-COLUMN RETURN) -->
+            <path d="M 857 599 L 857 655 L 467 655" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 15: Idempotently Lock Record (Proposed System) -->
+            <rect x="270" y="635" width="195" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="652" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Idempotently Lock Enrollment</text>
+            <text x="367" y="666" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Record to 'Enrolled'</text>
+
+            <!-- Line 15 -> 16 (System) -->
+            <path d="M 367 675 L 367 700" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 16: Instantly Provision Digital COM (Proposed System) -->
+            <rect x="270" y="702" width="195" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="719" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Instantly Provision Digital</text>
+            <text x="367" y="733" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">COM to Student Portal</text>
+
+            <!-- ARROW: Proposed System Box 16 -> Student Box 17 (CROSS-COLUMN HORIZONTAL) -->
+            <path d="M 270 722 L 222 722" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- BOX 17: Download Digital COM (Student) -->
+            <rect x="25" y="702" width="195" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="719" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Download & Print Digital</text>
+            <text x="122" y="733" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Certificate of Matriculation</text>
+
+            <!-- Line 17 -> END NODE -->
+            <path d="M 122 742 L 122 780" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- TERMINAL END NODE (Bullseye with red outer ring, black inner circle) -->
+            <circle cx="122" cy="798" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="122" cy="798" r="8" fill="#000000"/>
+            <text x="122" y="828" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#000000">END</text>
+          </svg>
+        `
+      },
+
+      fig2: {
+        number: "Figure 2",
+        title: "Activity Diagram for Program Chair - Pre-Enrollment & AI Scheduling",
+        subtitle: "Models Process 1.0 (Pre-Enrollment) integrating Process 4.0 closed-loop demand forecasts with orthogonal cross-swimlane arrows.",
+        mermaid: `flowchart TB
+  Init((●)) --> PC_Start
+
+  subgraph Col1["Program Chair"]
+    PC_Start["Start"] --> PC_Req["Request AI Section Demand Forecast"]
+    PC_View["Review Forecast & Faculty Loading"]
+    PC_Draft["Configure Class Sections (25-Student Threshold)"]
+    PC_Submit["Submit Master Schedule Proposal"]
+    PC_Revise["Adjust Schedules Based on Remarks"]
+  end
+
+  subgraph Col2["Proposed System"]
+    Sys_ML["Process 4.0: Supervised ML Demand Forecast"]
+    Sys_Disp["Display Projected Demands & Alerts"]
+    Sys_Route["Route Proposal to Approval Dashboards"]
+    Sys_Lock["Lock Master Schedule & Open Term Window"]
+  end
+
+  subgraph Col3["Dean & Executive Director"]
+    Dean_Dec{"Dean Approval?"}
+    ED_Dec{"Exec. Director Lock?"}
+  end
+
+  PC_Req --> Sys_ML
+  Sys_ML --> Sys_Disp
+  Sys_Disp --> PC_View
+  PC_View --> PC_Draft
+  PC_Draft --> PC_Submit
+  PC_Submit --> Sys_Route
+  Sys_Route --> Dean_Dec
+  Dean_Dec -- "No (Returned)" --> PC_Revise
+  PC_Revise --> PC_Draft
+  Dean_Dec -- "Yes" --> ED_Dec
+  ED_Dec -- "No (Returned)" --> PC_Revise
+  ED_Dec -- "Yes" --> Sys_Lock
+  Sys_Lock --> EndNode(((⦿)))`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="820" height="700" viewBox="0 0 820 700" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <!-- 3 COLUMNS -->
+            <rect x="0" y="0" width="820" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="273" y1="0" x2="273" y2="700" stroke="#000000" stroke-width="2" />
+            <line x1="546" y1="0" x2="546" y2="700" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="820" height="700" fill="none" stroke="#000000" stroke-width="2" />
+
+            <!-- Headers -->
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="136" y="22" text-anchor="middle">Program Chair</text>
+
+              <rect x="281" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="285" y="20" font-size="10">-</text>
+              <text x="409" y="22" text-anchor="middle">Proposed System</text>
+
+              <rect x="554" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="558" y="20" font-size="10">-</text>
+              <text x="683" y="22" text-anchor="middle">Dean & Executive Director</text>
+            </g>
+
+            <!-- Start Node -->
+            <circle cx="136" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="136" y1="73" x2="136" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <rect x="35" y="94" width="202" height="34" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="115" font-family="Arial" font-size="11.5" text-anchor="middle">Start</text>
+
+            <path d="M 136 128 L 136 150" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Request AI Forecast -->
+            <rect x="30" y="152" width="212" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="169" font-family="Arial" font-size="11" text-anchor="middle">Request AI Section Demand</text>
+            <text x="136" y="183" font-family="Arial" font-size="11" text-anchor="middle">Forecast</text>
+
+            <!-- Cross arrow to Proposed System -->
+            <path d="M 242 172 L 298 172" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="152" width="218" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="169" font-family="Arial" font-size="11" text-anchor="middle">Process 4.0: Ingest Historical</text>
+            <text x="409" y="183" font-family="Arial" font-size="11" text-anchor="middle">Data & Run ML Demand Model</text>
+
+            <path d="M 409 192 L 409 216" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="218" width="218" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="235" font-family="Arial" font-size="11" text-anchor="middle">Display Projected Demands &</text>
+            <text x="409" y="249" font-family="Arial" font-size="11" text-anchor="middle">Unassigned Alerts</text>
+
+            <!-- Return arrow to Program Chair -->
+            <path d="M 300 238 L 244 238" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="218" width="212" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="235" font-family="Arial" font-size="11" text-anchor="middle">Review Forecast & Faculty</text>
+            <text x="136" y="249" font-family="Arial" font-size="11" text-anchor="middle">Availability Matrix</text>
+
+            <path d="M 136 258 L 136 282" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="284" width="212" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="301" font-family="Arial" font-size="11" text-anchor="middle">Configure Class Sections</text>
+            <text x="136" y="316" font-family="Arial" font-size="11" text-anchor="middle">(Enforce 25-Student Threshold)</text>
+
+            <path d="M 136 326 L 136 350" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="352" width="212" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="369" font-family="Arial" font-size="11" text-anchor="middle">Submit Proposed Schedule</text>
+            <text x="136" y="383" font-family="Arial" font-size="11" text-anchor="middle">Package to Dean</text>
+
+            <!-- Cross arrow to Proposed System -->
+            <path d="M 242 372 L 298 372" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="352" width="218" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="369" font-family="Arial" font-size="11" text-anchor="middle">Push Proposal to Academic</text>
+            <text x="409" y="383" font-family="Arial" font-size="11" text-anchor="middle">Approval Dashboards</text>
+
+            <!-- Cross arrow to Dean & ED -->
+            <path d="M 518 372 L 610 372" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Dean Decision -->
+            <polygon points="683,348 743,372 683,396 623,372" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="683" y="375" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Dean Approval?</text>
+
+            <text x="692" y="412" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
+            <path d="M 683 396 L 683 430" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Exec Director Decision -->
+            <polygon points="683,432 743,456 683,480 623,456" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="683" y="460" font-family="Arial" font-size="9.5" font-weight="bold" text-anchor="middle">Exec. Director Lock?</text>
+
+            <!-- Return loop on Rejection -->
+            <text x="750" y="365" font-family="Arial" font-size="9" font-weight="bold">No (Return)</text>
+            <path d="M 743 372 L 785 372 L 785 410 L 250 410 L 250 310 L 244 310" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+            <!-- Approved Exec Director -> Lock System -->
+            <text x="692" y="496" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
+            <path d="M 683 480 L 683 540 L 520 540" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="520" width="218" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="537" font-family="Arial" font-size="11" text-anchor="middle">Lock Master Schedule &</text>
+            <text x="409" y="552" font-family="Arial" font-size="11" text-anchor="middle">Publish Term Window</text>
+
+            <path d="M 409 562 L 409 600" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Terminal End -->
+            <circle cx="409" cy="620" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="409" cy="620" r="8" fill="#000000"/>
+            <text x="409" y="650" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
+          </svg>
+        `
+      },
+
+      fig3: {
+        number: "Figure 3",
+        title: "Activity Diagram for Student - Digital Advising & Prerequisite Validation",
+        subtitle: "Models Process 2.0 with orthogonal cross-swimlane arrows between Student and Proposed System.",
+        mermaid: `flowchart TB
+  Init((●)) --> S_Start
+
+  subgraph Col1["Student"]
+    S_Start["Start"] --> S_Login["Login to Web Portal via Sanctum Token"]
+    S_View["View Evaluated Standing & Eligible Subject Pool"]
+    S_Select["Select Block Section or Allowed Subjects"]
+    S_Submit["Submit Digital Pre-Enrollment Request"]
+  end
+
+  subgraph Col2["Proposed System"]
+    Sys_Auth["Process 2.1: Validate Token & Authentication Context"]
+    Sys_Check["Process 2.2: Automated Prerequisite Check in 3NF DB"]
+    Sys_Disp["Display Recommendations & Block Offerings"]
+    Sys_Lock["Validate Real-time Seat Quotas & Prevent Conflicts"]
+    Sys_Done["Save Digital PEF & Issue Status: 'Draft Submitted'"]
+  end
+
+  S_Login --> Sys_Auth
+  Sys_Auth --> Sys_Check
+  Sys_Check --> Sys_Disp
+  Sys_Disp --> S_View
+  S_View --> S_Select
+  S_Select --> S_Submit
+  S_Submit --> Sys_Lock
+  Sys_Lock --> Sys_Done
+  Sys_Done --> EndNode(((⦿)))`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="760" height="600" viewBox="0 0 760 600" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <!-- 2 COLUMNS -->
+            <rect x="0" y="0" width="760" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="380" y1="0" x2="380" y2="600" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="760" height="600" fill="none" stroke="#000000" stroke-width="2" />
+
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="190" y="22" text-anchor="middle">Student</text>
+
+              <rect x="388" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="392" y="20" font-size="10">-</text>
+              <text x="570" y="22" text-anchor="middle">Proposed System</text>
+            </g>
+
+            <!-- Initial Node -->
+            <circle cx="190" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="190" y1="73" x2="190" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <rect x="75" y="94" width="230" height="34" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="115" font-family="Arial" font-size="11.5" text-anchor="middle">Start</text>
+
+            <path d="M 190 128 L 190 150" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="75" y="152" width="230" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="169" font-family="Arial" font-size="11" text-anchor="middle">Login to Web Portal via</text>
+            <text x="190" y="184" font-family="Arial" font-size="11" text-anchor="middle">Sanctum Bearer Token</text>
+
+            <!-- Cross arrow -> System -->
+            <path d="M 305 173 L 448 173" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="152" width="240" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="169" font-family="Arial" font-size="11" text-anchor="middle">Process 2.1: Validate Token &</text>
+            <text x="570" y="184" font-family="Arial" font-size="11" text-anchor="middle">Authentication Context</text>
+
+            <path d="M 570 194 L 570 218" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="220" width="240" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="237" font-family="Arial" font-size="11" text-anchor="middle">Process 2.2: Automated Prerequisite</text>
+            <text x="570" y="252" font-family="Arial" font-size="11" text-anchor="middle">Cross-Check in 3NF Database</text>
+
+            <path d="M 570 262 L 570 286" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="288" width="240" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="305" font-family="Arial" font-size="11" text-anchor="middle">Display Real-time Conflict-Free</text>
+            <text x="570" y="320" font-family="Arial" font-size="11" text-anchor="middle">Subject Pool & Recommendation</text>
+
+            <!-- Cross arrow -> Student -->
+            <path d="M 450 309 L 307 309" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="75" y="288" width="230" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="305" font-family="Arial" font-size="11" text-anchor="middle">Select Block Section (Regular)</text>
+            <text x="190" y="320" font-family="Arial" font-size="11" text-anchor="middle">or Eligible Subjects (Irregular)</text>
+
+            <path d="M 190 330 L 190 354" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="75" y="356" width="230" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="373" font-family="Arial" font-size="11" text-anchor="middle">Submit Digital Pre-Enrollment</text>
+            <text x="190" y="387" font-family="Arial" font-size="11" text-anchor="middle">Request</text>
+
+            <!-- Cross arrow -> System -->
+            <path d="M 305 375 L 448 375" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="356" width="240" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="373" font-family="Arial" font-size="11" text-anchor="middle">Process 2.4: Validate Real-time Quotas</text>
+            <text x="570" y="387" font-family="Arial" font-size="11" text-anchor="middle">& Schedule Conflicts</text>
+
+            <path d="M 570 394 L 570 422" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="424" width="240" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="441" font-family="Arial" font-size="11" text-anchor="middle">Save Digital PEF & Issue Status:</text>
+            <text x="570" y="455" font-family="Arial" font-size="11" text-anchor="middle">'Draft Submitted'</text>
+
+            <path d="M 570 464 L 570 500" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- End -->
+            <circle cx="570" cy="520" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="570" cy="520" r="8" fill="#000000"/>
+            <text x="570" y="550" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
+          </svg>
+        `
+      },
+
+      fig4: {
+        number: "Figure 4",
+        title: "Activity Diagram for Program Chair & Registrar - Enrollment Approval",
+        subtitle: "Models Process 3.3 and ADR 0030: Irregular endorsement followed by Registrar verification with orthogonal cross-swimlane arrows.",
+        mermaid: `flowchart TB
+  Init((●)) --> S_Start
+
+  subgraph Col1["Student"]
+    S_Start["Start: Submit Draft Request"]
+    S_Wait["Wait for Evaluation"]
+    S_Approved["Receive Status: Pending Payment"]
+  end
+
+  subgraph Col2["Program Chair (Irregulars)"]
+    PC_Review["Inspect Irregular Plan & Credit Mappings"]
+    PC_Dec{"Endorse Plan?"}
+  end
+
+  subgraph Col3["Registrar Staff & Head"]
+    Reg_Review["Verify Digital PEF & Prerequisites"]
+    Reg_Dec{"Final Approval?"}
+    Reg_Lock["Digital PEF Approval & Lock"]
+  end
+
+  S_Start --> PC_Review
+  PC_Review --> PC_Dec
+  PC_Dec -- "Yes (Endorsed)" --> Reg_Review
+  PC_Dec -- "No (Rejected)" --> S_Wait
+  Reg_Review --> Reg_Dec
+  Reg_Dec -- "Yes" --> Reg_Lock
+  Reg_Dec -- "No" --> S_Wait
+  Reg_Lock --> S_Approved
+  S_Approved --> EndNode(((⦿)))`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="820" height="620" viewBox="0 0 820 620" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <rect x="0" y="0" width="820" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="273" y1="0" x2="273" y2="620" stroke="#000000" stroke-width="2" />
+            <line x1="546" y1="0" x2="546" y2="620" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="820" height="620" fill="none" stroke="#000000" stroke-width="2" />
+
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="136" y="22" text-anchor="middle">Student</text>
+
+              <rect x="281" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="285" y="20" font-size="10">-</text>
+              <text x="409" y="22" text-anchor="middle">Program Chair (Irregulars)</text>
+
+              <rect x="554" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="558" y="20" font-size="10">-</text>
+              <text x="683" y="22" text-anchor="middle">Registrar (Staff & Head)</text>
+            </g>
+
+            <circle cx="136" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="136" y1="73" x2="136" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <rect x="35" y="94" width="202" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="111" font-family="Arial" font-size="11" text-anchor="middle">Submit Draft Pre-Enrollment</text>
+            <text x="136" y="125" font-family="Arial" font-size="11" text-anchor="middle">Request</text>
+
+            <!-- Cross arrow -> Program Chair -->
+            <path d="M 237 115 L 298 115" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="94" width="218" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="111" font-family="Arial" font-size="11" text-anchor="middle">Inspect Irregular Plan &</text>
+            <text x="409" y="125" font-family="Arial" font-size="11" text-anchor="middle">Transferee Credit Mappings</text>
+
+            <path d="M 409 136 L 409 160" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- PC Decision -->
+            <polygon points="409,162 469,186 409,210 349,186" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="409" y="190" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Endorse Plan?</text>
+
+            <text x="478" y="180" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
+            <!-- Cross arrow -> Registrar -->
+            <path d="M 469 186 L 570 186" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="572" y="165" width="222" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="683" y="182" font-family="Arial" font-size="11" text-anchor="middle">Verify Digital PEF & Validate</text>
+            <text x="683" y="196" font-family="Arial" font-size="11" text-anchor="middle">Academic Constraints</text>
+
+            <path d="M 683 207 L 683 235" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Registrar Decision -->
+            <polygon points="683,237 743,261 683,285 623,261" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="683" y="265" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Final Approval?</text>
+
+            <text x="692" y="302" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
+            <path d="M 683 285 L 683 318" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="572" y="320" width="222" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="683" y="337" font-family="Arial" font-size="11" text-anchor="middle">Execute Digital PEF</text>
+            <text x="683" y="351" font-family="Arial" font-size="11" text-anchor="middle">Approval & Lock Transaction</text>
+
+            <!-- Cross arrow -> Student Approved -->
+            <path d="M 572 340 L 239 340" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="35" y="320" width="202" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="337" font-family="Arial" font-size="11" text-anchor="middle">Receive Approval Notice:</text>
+            <text x="136" y="351" font-family="Arial" font-size="11" text-anchor="middle">'Status: Pending Payment'</text>
+
+            <path d="M 136 360 L 136 410" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <circle cx="136" cy="430" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="136" cy="430" r="8" fill="#000000"/>
+            <text x="136" y="460" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
+          </svg>
+        `
+      },
+
+      fig5: {
+        number: "Figure 5",
+        title: "Activity Diagram for Cashier & Student - Payment Queue & COM Release",
+        subtitle: "Models Process 3.4 (Pre-assessed Queue) and Process 3.5 (Digital Certificate of Matriculation) with orthogonal cross-swimlane arrows.",
+        mermaid: `flowchart TB
+  Init((●)) --> Sys_Assess
+
+  subgraph Col1["Student"]
+    S_Ticket["Receive Digital Queue Ticket"]
+    S_Step["Proceed to Cashier when Number Called"]
+    S_Pay["Submit Tuition Payment & Student Number"]
+    S_COM["Instant COM Release in Portal: Download & Print"]
+    S_End(((⦿)))
+  end
+
+  subgraph Col2["Proposed System"]
+    Sys_Assess["Auto-compute Assessment from Fee Schedule"]
+    Sys_Push["Push Pre-assessed Queue to Cashier Screen"]
+    Sys_Lock["Idempotently Lock Status to 'Enrolled'"]
+    Sys_Gen["Process 3.5: Provision Digital COM PDF"]
+  end
+
+  subgraph Col3["Cashier Staff"]
+    Cash_View["Inspect Pre-assessed Balance (Zero Re-computation)"]
+    Cash_Call["Call Active Serving Number on Dashboard"]
+    Cash_Confirm["Verify Receipt & Click 'Confirm Payment'"]
+  end
+
+  Sys_Assess --> Sys_Push
+  Sys_Push --> S_Ticket
+  Sys_Push --> Cash_View
+  Cash_View --> Cash_Call
+  Cash_Call --> S_Step
+  S_Step --> S_Pay
+  S_Pay --> Cash_Confirm
+  Cash_Confirm --> Sys_Lock
+  Sys_Lock --> Sys_Gen
+  Sys_Gen --> S_COM
+  S_COM --> S_End`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="820" height="660" viewBox="0 0 820 660" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <rect x="0" y="0" width="820" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="273" y1="0" x2="273" y2="660" stroke="#000000" stroke-width="2" />
+            <line x1="546" y1="0" x2="546" y2="660" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="820" height="660" fill="none" stroke="#000000" stroke-width="2" />
+
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="136" y="22" text-anchor="middle">Student</text>
+
+              <rect x="281" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="285" y="20" font-size="10">-</text>
+              <text x="409" y="22" text-anchor="middle">Proposed System</text>
+
+              <rect x="554" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="558" y="20" font-size="10">-</text>
+              <text x="683" y="22" text-anchor="middle">Cashier Staff</text>
+            </g>
+
+            <!-- Initial in System -->
+            <circle cx="409" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="409" y1="73" x2="409" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <rect x="300" y="94" width="218" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="111" font-family="Arial" font-size="11" text-anchor="middle">Auto-compute Assessment</text>
+            <text x="409" y="125" font-family="Arial" font-size="11" text-anchor="middle">(Tuition Rate + Misc Fees)</text>
+
+            <path d="M 409 136 L 409 160" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="162" width="218" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="179" font-family="Arial" font-size="11" text-anchor="middle">Push Pre-assessed Queue to</text>
+            <text x="409" y="193" font-family="Arial" font-size="11" text-anchor="middle">Accounting Live Screen</text>
+
+            <!-- Arrow to Student -->
+            <path d="M 300 183 L 244 183" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="162" width="212" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="179" font-family="Arial" font-size="11" text-anchor="middle">Receive Digital Queue Ticket</text>
+            <text x="136" y="193" font-family="Arial" font-size="11" text-anchor="middle">on Phone or Kiosk</text>
+
+            <!-- Arrow to Cashier -->
+            <path d="M 518 183 L 570 183" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="572" y="162" width="222" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="683" y="179" font-family="Arial" font-size="11" text-anchor="middle">Inspect Pre-assessed Balance</text>
+            <text x="683" y="193" font-family="Arial" font-size="11" text-anchor="middle">(Zero Re-computation)</text>
+
+            <path d="M 683 204 L 683 232" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="572" y="234" width="222" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="683" y="251" font-family="Arial" font-size="11" text-anchor="middle">Call Active Serving Number</text>
+            <text x="683" y="265" font-family="Arial" font-size="11" text-anchor="middle">on Dashboard</text>
+
+            <!-- Cashier call alerts Student -->
+            <path d="M 572 254 L 244 254" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="234" width="212" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="251" font-family="Arial" font-size="11" text-anchor="middle">Proceed to Cashier Window</text>
+            <text x="136" y="265" font-family="Arial" font-size="11" text-anchor="middle">when Called</text>
+
+            <path d="M 136 274 L 136 308" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="310" width="212" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="327" font-family="Arial" font-size="11" text-anchor="middle">Submit Physical Tuition Payment</text>
+            <text x="136" y="341" font-family="Arial" font-size="11" text-anchor="middle">& State Student No.</text>
+
+            <!-- Student hands payment to Cashier -->
+            <path d="M 242 330 L 570 330" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="572" y="310" width="222" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="683" y="327" font-family="Arial" font-size="11" text-anchor="middle">Receive Payment & Click</text>
+            <text x="683" y="341" font-family="Arial" font-size="11" text-anchor="middle">'Confirm Payment'</text>
+
+            <!-- Cashier trigger returns to System -->
+            <path d="M 683 350 L 683 400 L 520 400" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="380" width="218" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="397" font-family="Arial" font-size="11" text-anchor="middle">Idempotently Lock Enrollment</text>
+            <text x="409" y="411" font-family="Arial" font-size="11" text-anchor="middle">Record to 'Enrolled'</text>
+
+            <path d="M 409 420 L 409 448" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="300" y="450" width="218" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="409" y="467" font-family="Arial" font-size="11" text-anchor="middle">Process 3.5: Provision Official</text>
+            <text x="409" y="481" font-family="Arial" font-size="11" text-anchor="middle">Digital COM PDF</text>
+
+            <!-- Cross to Student COM -->
+            <path d="M 300 470 L 244 470" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="30" y="450" width="212" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="467" font-family="Arial" font-size="11" text-anchor="middle">Instant COM Release in Portal:</text>
+            <text x="136" y="481" font-family="Arial" font-size="11" text-anchor="middle">Download / Print</text>
+
+            <path d="M 136 490 L 136 535" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <circle cx="136" cy="555" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="136" cy="555" r="8" fill="#000000"/>
+            <text x="136" y="585" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
+          </svg>
+        `
+      },
+
+      fig6: {
+        number: "Figure 6",
+        title: "Activity Diagram for Registrar - Closed-Loop Analytics & CHED Reports",
+        subtitle: "Models Process 4.0: Machine learning models generating attrition metrics and compliance exports with orthogonal cross-swimlane arrows.",
+        mermaid: `flowchart TB
+  Init((●)) --> Reg_Start
+
+  subgraph Col1["Registrar Head & Dean"]
+    Reg_Start["Start: Open Analytics Dashboard"]
+    Reg_ViewAt["Review Attrition Risk Profiles"]
+    Reg_ViewHn["Inspect Automated Dean's List Roster"]
+    Reg_Export["Trigger 1-Click CHED Official Export"]
+  end
+
+  subgraph Col2["Proposed System (ML Core)"]
+    Sys_Agg["Process 4.1: Pull Locked Records from Database"]
+    Sys_ML["Process 4.4: Run Predictive Dropout Scoring"]
+    Sys_CalcHn["Process 4.5: Calculate GPA & Filter Latin Honors"]
+    Sys_Rep["Process 4.6: Format & Stream Government Regulatory PDF/Excel"]
+  end
+
+  Reg_Start --> Sys_Agg
+  Sys_Agg --> Sys_ML
+  Sys_ML --> Reg_ViewAt
+  Sys_Agg --> Sys_CalcHn
+  Sys_CalcHn --> Reg_ViewHn
+  Reg_Export --> Sys_Rep
+  Sys_Rep --> EndFig6(((⦿)))`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="760" height="600" viewBox="0 0 760 600" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <rect x="0" y="0" width="760" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="380" y1="0" x2="380" y2="600" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="760" height="600" fill="none" stroke="#000000" stroke-width="2" />
+
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="190" y="22" text-anchor="middle">Registrar Head & Dean</text>
+
+              <rect x="388" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="392" y="20" font-size="10">-</text>
+              <text x="570" y="22" text-anchor="middle">Proposed System (ML Core)</text>
+            </g>
+
+            <circle cx="190" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="190" y1="73" x2="190" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <rect x="75" y="94" width="230" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="111" font-family="Arial" font-size="11" text-anchor="middle">Open Institutional Analytics</text>
+            <text x="190" y="125" font-family="Arial" font-size="11" text-anchor="middle">Dashboard</text>
+
+            <path d="M 305 115 L 448 115" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="94" width="240" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="111" font-family="Arial" font-size="11" text-anchor="middle">Process 4.1: Pull Locked Records</text>
+            <text x="570" y="125" font-family="Arial" font-size="11" text-anchor="middle">from ENROLLMENT DATASTORE</text>
+
+            <path d="M 570 136 L 570 162" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="164" width="240" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="181" font-family="Arial" font-size="11" text-anchor="middle">Process 4.4: Execute Supervised</text>
+            <text x="570" y="195" font-family="Arial" font-size="11" text-anchor="middle">Student Attrition Models</text>
+
+            <path d="M 450 185 L 307 185" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="75" y="164" width="230" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="181" font-family="Arial" font-size="11" text-anchor="middle">Review Attrition Risk Profiles &</text>
+            <text x="190" y="195" font-family="Arial" font-size="11" text-anchor="middle">Dropout Probability Scores</text>
+
+            <path d="M 190 206 L 190 238" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="75" y="240" width="230" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="257" font-family="Arial" font-size="11" text-anchor="middle">Inspect Automated Dean's List /</text>
+            <text x="190" y="271" font-family="Arial" font-size="11" text-anchor="middle">Honors Evaluation Roster</text>
+
+            <path d="M 190 282 L 190 314" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="75" y="316" width="230" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="190" y="333" font-family="Arial" font-size="11" text-anchor="middle">Trigger 1-Click CHED Official</text>
+            <text x="190" y="347" font-family="Arial" font-size="11" text-anchor="middle">Enrollment List Export</text>
+
+            <path d="M 305 337 L 448 337" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="450" y="316" width="240" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="570" y="333" font-family="Arial" font-size="11" text-anchor="middle">Process 4.6: Format & Stream</text>
+            <text x="570" y="347" font-family="Arial" font-size="11" text-anchor="middle">Government Regulatory PDF/Excel</text>
+
+            <path d="M 570 358 L 570 410" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <circle cx="570" cy="430" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="570" cy="430" r="8" fill="#000000"/>
+            <text x="570" y="460" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
+          </svg>
+        `
+      },
+
+      fig7: {
+        number: "Figure 7",
+        title: "Process Flowchart of the Existing Enrollment System (Baseline)",
+        subtitle: "Direct reconstruction of Figure 9 (Page 58) of the Capstone Manuscript with orthogonal cross-swimlane arrows.",
+        mermaid: `flowchart TB
+  InitCurrent((●)) --> C_Plot
+
+  subgraph Col1["Pre-Enrollment"]
+    C_Plot["Program Chair: Plot Master Schedules Manually (Guesswork)"]
+    C_Dean{"Dean Approval?"}
+    C_ED{"Exec Director Approval?"}
+    C_Type{"Identify Student Type?"}
+    C_Plot --> C_Dean
+    C_Dean -- "Approved" --> C_ED
+    C_Dean -. "Revisions" .-> C_Plot
+    C_ED -- "Approved" --> C_Type
+    C_ED -. "Revisions" .-> C_Plot
+  end
+
+  subgraph Col2["Connector A: Admission Phase"]
+    StepA1["Step A1 - Cashier: Pay Admission Test Fee (₱200.00)"]
+    StepA2["Step A2 - Guidance: Take CAT & Personality Test"]
+    StepA3["Step A3 - Clinic & Admission: Submit Requirements & X-Ray"]
+    StepA1 --> StepA2
+    StepA2 --> StepA3
+  end
+
+  subgraph Col3["Connector B: Enrollment Phase"]
+    StepBC1["Step BC1 - Academic Adviser (3rd Flr Rm 3H/3I): Manual Advising"]
+    StepBC2["Step BC2 - Faculty / Admission: Update Demographic Info"]
+    StepBC3["Step BC3 - Faculty Professor (2nd Flr Lab 1): Manual Subject Encoding"]
+    StepBC4["Step BC4 - Library Staff: Secure Physical Clearance Signature"]
+    StepBC5["Step BC5 - Registrar Staff: Manual Paper PEF Verification"]
+    StepBC1 --> StepBC2
+    StepBC2 --> StepBC3
+    StepBC3 --> StepBC4
+    StepBC4 --> StepBC5
+  end
+
+  subgraph Col4["Connector C: Payment Phase"]
+    StepBC6["Step BC6 - Cashier: Manual Fee Recalculation, Payment & COR Release"]
+    StepID{"Require School I.D?"}
+    StepBC7["Step BC7 - Admission Office: Process & Issue Physical ID Card"]
+    StatusEnrolled(["Status: OFFICIALLY ENROLLED<br/>(Total Time: 2 to 5 Days)"])
+    StepBC6 --> StepID
+    StepID -- "Yes" --> StepBC7
+    StepID -- "No" --> StatusEnrolled
+    StepBC7 --> StatusEnrolled
+  end
+
+  C_Type -- "New / Transferee" --> StepA1
+  C_Type -- "Old / Regular" --> StepBC1
+  StepA3 --> StepBC1
+  StepBC5 --> StepBC6
+  StatusEnrolled --> EndCurrent(((⦿)))`,
+        svgHtml: `
+          <svg class="abr-uml-svg" width="980" height="740" viewBox="0 0 980 740" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
+              </marker>
+              <marker id="red-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#d90429" />
+              </marker>
+            </defs>
+
+            <rect x="0" y="0" width="980" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
+            <line x1="245" y1="0" x2="245" y2="740" stroke="#000000" stroke-width="2" />
+            <line x1="490" y1="0" x2="490" y2="740" stroke="#000000" stroke-width="2" />
+            <line x1="735" y1="0" x2="735" y2="740" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="980" height="740" fill="none" stroke="#000000" stroke-width="2" />
+
+            <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
+              <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="12" y="20" font-size="10">-</text>
+              <text x="122" y="22" text-anchor="middle">Pre-Enrollment</text>
+
+              <rect x="253" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="257" y="20" font-size="10">-</text>
+              <text x="367" y="22" text-anchor="middle">Admission (Connector A)</text>
+
+              <rect x="498" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="502" y="20" font-size="10">-</text>
+              <text x="612" y="22" text-anchor="middle">Enrollment (Connector B)</text>
+
+              <rect x="743" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
+              <text x="747" y="20" font-size="10">-</text>
+              <text x="857" y="22" text-anchor="middle">Payment (Connector C)</text>
+            </g>
+
+            <circle cx="122" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
+            <line x1="122" y1="73" x2="122" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
+
+            <rect x="25" y="94" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="122" y="111" font-family="Arial" font-size="11" text-anchor="middle">Program Chair: Manual</text>
+            <text x="122" y="125" font-family="Arial" font-size="11" text-anchor="middle">Schedule Plotting (Guesswork)</text>
+
+            <path d="M 122 136 L 122 165" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <polygon points="122,167 182,191 122,215 62,191" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="122" y="195" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Dean Approval?</text>
+
+            <path d="M 122 215 L 122 245" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <polygon points="122,247 182,271 122,295 62,271" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="122" y="275" font-family="Arial" font-size="9" font-weight="bold" text-anchor="middle">Exec. Director Lock?</text>
+
+            <path d="M 122 295 L 122 325" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <polygon points="122,327 182,351 122,375 62,351" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="122" y="355" font-family="Arial" font-size="9.5" font-weight="bold" text-anchor="middle">Student Type?</text>
+
+            <!-- New / Transferee -> Connector A -->
+            <text x="186" y="345" font-family="Arial" font-size="9" font-weight="bold">New / Transferee</text>
+            <path d="M 182 351 L 268 351" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="270" y="332" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="348" font-family="Arial" font-size="10.5" text-anchor="middle">Step A1: Pay ₱200 Test Fee</text>
+            <text x="367" y="361" font-family="Arial" font-size="10" text-anchor="middle">at Ground Flr Cashier</text>
+
+            <path d="M 367 370 L 367 395" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="270" y="397" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="413" font-family="Arial" font-size="10.5" text-anchor="middle">Step A2: Take Paper CAT</text>
+            <text x="367" y="426" font-family="Arial" font-size="10" text-anchor="middle">& Exam at Guidance Office</text>
+
+            <path d="M 367 435 L 367 460" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="270" y="462" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="367" y="478" font-family="Arial" font-size="10.5" text-anchor="middle">Step A3: Submit Physical X-Ray</text>
+            <text x="367" y="491" font-family="Arial" font-size="10" text-anchor="middle">& Requirements to Clinic</text>
+
+            <!-- Connector A3 crosses to Connector B -->
+            <path d="M 465 481 L 513 481" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Old / Regular bypasses straight to Connector B Step BC1 -->
+            <text x="130" y="420" font-family="Arial" font-size="9" font-weight="bold">Old / Regular</text>
+            <path d="M 122 375 L 122 530 L 513 530" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Connector B: Steps -->
+            <rect x="515" y="462" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="612" y="478" font-family="Arial" font-size="10.5" text-anchor="middle">Step BC1: Climb to 3rd Flr</text>
+            <text x="612" y="491" font-family="Arial" font-size="10" text-anchor="middle">Rm 3H/3I for Manual Advising</text>
+
+            <path d="M 612 500 L 612 525" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="515" y="527" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="612" y="543" font-family="Arial" font-size="10.5" text-anchor="middle">Step BC2 & BC3: Descend to</text>
+            <text x="612" y="556" font-family="Arial" font-size="10" text-anchor="middle">2nd Flr Lab 1 for Encoding</text>
+
+            <path d="M 612 565 L 612 590" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="515" y="592" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="612" y="608" font-family="Arial" font-size="10.5" text-anchor="middle">Step BC4 & BC5: Library &</text>
+            <text x="612" y="621" font-family="Arial" font-size="10" text-anchor="middle">Registrar Manual Stamping</text>
+
+            <!-- Connector B crosses to Connector C -->
+            <path d="M 710 611 L 758 611" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <rect x="760" y="592" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="857" y="608" font-family="Arial" font-size="10.5" text-anchor="middle">Step BC6: Cashier Re-calculates</text>
+            <text x="857" y="621" font-family="Arial" font-size="10" text-anchor="middle">Tuition & Releases Paper COR</text>
+
+            <path d="M 857 630 L 857 665" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <circle cx="857" cy="682" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="857" cy="682" r="8" fill="#000000"/>
+            <text x="857" y="710" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">OFFICIALLY ENROLLED</text>
+          </svg>
+        `
+      }
+    };
+
+    let currentDiagramId = 'fig1';
+    let currentDisplayMode = 'uml';
+
+    // INITIALIZE MERMAID
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      themeVariables: {
+        primaryColor: '#ffffff',
+        primaryTextColor: '#000000',
+        primaryBorderColor: '#000000',
+        lineColor: '#000000',
+        secondaryColor: '#ffffff',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '12px'
+      }
+    });
+
+    function loadDiagram(figId) {
+      currentDiagramId = figId;
+      document.querySelectorAll('.diagram-item-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.diagram-item-btn')).find(b => b.getAttribute('onclick').includes(figId));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const data = DIAGRAMS[figId];
+      document.getElementById('currentFigTitle').innerText = `${data.number}. ${data.title}`;
+      document.getElementById('currentFigSubtitle').innerText = data.subtitle;
+      document.getElementById('figureCaptionText').innerHTML = `<span class="caption-bold">${data.number}.</span> ${data.title}`;
+
+      renderCurrentDiagram();
+    }
+
+    function setDisplayMode(mode) {
+      currentDisplayMode = mode;
+      document.querySelectorAll('.view-toggle-btn').forEach(btn => btn.classList.remove('active'));
+
+      if (mode === 'uml') document.getElementById('btnViewUml').classList.add('active');
+      if (mode === 'mermaid') document.getElementById('btnViewMermaid').classList.add('active');
+      if (mode === 'code') document.getElementById('btnViewCode').classList.add('active');
+
+      renderCurrentDiagram();
+    }
+
+    function renderCurrentDiagram() {
+      const container = document.getElementById('dynamicDiagramContainer');
+      const data = DIAGRAMS[currentDiagramId];
+
+      if (currentDisplayMode === 'uml') {
+        container.innerHTML = data.svgHtml;
+      } else if (currentDisplayMode === 'mermaid') {
+        container.innerHTML = `
+          <div style="min-width: 650px; display: flex; justify-content: center;">
+            <pre class="mermaid">${data.mermaid}</pre>
+          </div>
+        `;
+        mermaid.run();
+      } else if (currentDisplayMode === 'code') {
+        container.innerHTML = `
+          <div style="min-width: 600px;">
+            <pre class="code-box-display"><code>${data.mermaid}</code></pre>
+          </div>
+        `;
+      }
+    }
+
+    function copyCurrentMermaid() {
+      const code = DIAGRAMS[currentDiagramId].mermaid;
+      navigator.clipboard.writeText(code).then(() => {
+        showToast("Mermaid code copied to clipboard!");
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastMsg');
+      toast.innerText = msg;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2200);
+    }
+
+    function toggleTheme() {
+      const body = document.body;
+      const isDark = body.getAttribute('data-theme') === 'dark';
+      const btn = document.getElementById('themeBtn');
+
+      if (isDark) {
+        body.setAttribute('data-theme', 'light');
+        btn.innerHTML = '🌙 Dark';
+      } else {
+        body.setAttribute('data-theme', 'dark');
+        btn.innerHTML = '☀️ Light';
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDiagram('fig1');
+    });
+  </script>
+</body>
+</html>

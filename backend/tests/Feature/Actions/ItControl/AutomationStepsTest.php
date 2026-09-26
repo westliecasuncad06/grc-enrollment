@@ -122,7 +122,7 @@ final class AutomationStepsTest extends TestCase
         $run = $this->runStep(AutomationStep::ChairGenerateSections);
 
         $this->assertNotSame(AutomationRunStatus::Failed, $run->status, implode(' ', [$run->error_summary, ...($run->warnings ?? [])]));
-        $this->assertStringContainsString('No current-term curriculum subjects were found', implode(' ', $run->warnings ?? []));
+        $this->assertStringContainsString('No current-term student cohorts were found', implode(' ', $run->warnings ?? []));
     }
 
     public function test_student_automation_does_not_skip_lower_ids_after_curriculum_ordering(): void
@@ -175,9 +175,11 @@ final class AutomationStepsTest extends TestCase
         $this->assertSame('SEL101', $submission->after_values['block_code'] ?? null);
     }
 
-    public function test_irregular_auto_enrollment_skips_pairwise_conflicts_before_a_com_is_created(): void
+    public function test_irregular_auto_enrollment_skips_pairwise_conflicts_before_a_cor_is_created(): void
     {
         $this->makeTermAndItAdmin();
+        // An irregular enrollment is forwarded to its Program Head first, so one must exist.
+        $this->makeProgramChairs();
         [$student, $firstFixtureSection, $secondFixtureSection] = $this->makeIrregularStudentWithConflictingSections();
         $this->assertTrue(app(SectionConflictDetector::class)->hasConflict(
             [
@@ -205,7 +207,7 @@ final class AutomationStepsTest extends TestCase
         $this->assertCount(1, $enrollment->enrollmentSubjects);
         $this->assertDatabaseHas('enrollment_documents', [
             'enrollment_id' => $enrollment->id,
-            'document_type' => 'com',
+            'document_type' => 'cor',
         ]);
     }
 
@@ -218,7 +220,7 @@ final class AutomationStepsTest extends TestCase
         $run = $this->runStep(AutomationStep::ChairGenerateSections);
 
         $this->assertSame(AutomationRunStatus::Partial, $run->status);
-        $this->assertStringContainsString('No current-term curriculum subjects were found', implode(' ', $run->warnings ?? []));
+        $this->assertStringContainsString('No current-term student cohorts were found', implode(' ', $run->warnings ?? []));
     }
 
     public function test_throughput_is_logged_at_every_five_hundred_processed_records(): void

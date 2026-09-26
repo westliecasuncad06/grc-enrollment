@@ -23,7 +23,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { useQueueCallAlert } from "@/features/hooks/use-queue-call-alert"
+import {
+  useQueueCallAlert,
+  type QueueCallAlert,
+} from "@/features/hooks/use-queue-call-alert"
 import { cn } from "@/features/lib/utils"
 import type { StudentQueueView } from "@/features/schemas/student-queue-schema"
 
@@ -32,12 +35,21 @@ export type QueueLivePanelMode = "kiosk" | "default" | "compact"
 interface StudentQueueLivePanelProps {
   queue: StudentQueueView
   mode?: QueueLivePanelMode
+  /**
+   * The call alert, when a parent that stays mounted owns it. The Enrollment
+   * page keeps it outside its collapsible card, so collapsing the card does
+   * not tear the audio down and silence the call. Without it the panel runs
+   * its own.
+   */
+  alert?: QueueCallAlert
 }
 
 function getStageGuidance(queue: StudentQueueView): string {
   switch (queue.stage) {
     case "no_active_enrollment":
       return "You do not have an active enrollment for the current term."
+    case "pending_program_head_approval":
+      return "Program Head approval, then Registrar approval, is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk."
     case "pending_registrar_approval":
       return "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk."
     case "pending_payment":
@@ -74,9 +86,32 @@ function getPositionCopy(position: number): string {
 }
 
 export function StudentQueueLivePanel({
+  alert,
+  ...props
+}: StudentQueueLivePanelProps) {
+  return alert ? (
+    <QueueLivePanelView {...props} alert={alert} />
+  ) : (
+    <StudentQueueLivePanelWithOwnAlert {...props} />
+  )
+}
+
+function StudentQueueLivePanelWithOwnAlert(
+  props: Omit<StudentQueueLivePanelProps, "alert">,
+) {
+  // A student's own device defaults sound on; the shared kiosk does not.
+  const alert = useQueueCallAlert(props.queue.ticket, {
+    defaultSoundOn: props.mode !== "kiosk",
+  })
+
+  return <QueueLivePanelView {...props} alert={alert} />
+}
+
+function QueueLivePanelView({
   queue,
   mode = "default",
-}: StudentQueueLivePanelProps) {
+  alert,
+}: StudentQueueLivePanelProps & { alert: QueueCallAlert }) {
   const upcomingTicketNumbersId = useId()
   const {
     isCalled,
@@ -85,13 +120,23 @@ export function StudentQueueLivePanel({
     soundPreferred,
     enableSound,
     disableSound,
-  } = useQueueCallAlert(queue.ticket)
+  } = alert
   const ticket = queue.ticket
   const isStudentSurface = mode !== "kiosk"
-  const isAwaitingRegistrarApproval =
+
+  if (isStudentSurface && queue.stage === "enrolled") {
+    return null
+  }
+
+  const isAwaitingApproval =
     isStudentSurface &&
     ticket === null &&
-    queue.stage === "pending_registrar_approval"
+    (queue.stage === "pending_program_head_approval" ||
+      queue.stage === "pending_registrar_approval")
+  const awaitingApprovalLabel =
+    queue.stage === "pending_program_head_approval"
+      ? "Waiting for Program Head approval"
+      : "Waiting for Registrar approval"
 
   return (
     <Card
@@ -129,7 +174,7 @@ export function StudentQueueLivePanel({
               !ticket &&
                 isStudentSurface &&
                 "queue-live-panel__ticket--unavailable",
-              isAwaitingRegistrarApproval &&
+              isAwaitingApproval &&
                 "queue-live-panel__ticket--awaiting-approval",
             )}
           >
@@ -143,14 +188,15 @@ export function StudentQueueLivePanel({
                 Not issued
               </p>
             )}
-            {isAwaitingRegistrarApproval && (
+            {isAwaitingApproval && (
               <div className="space-y-1">
                 <p className="queue-live-panel__approval-status">
                   <Clock3Icon aria-hidden="true" />
-                  Waiting for Registrar approval
+                  {awaitingApprovalLabel}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Once approved, go in person to the school Cashier kiosk on campus to claim your queuing ticket.
+                  Once approved, go in person to the school Cashier kiosk on
+                  campus to claim your queuing ticket.
                 </p>
               </div>
             )}
@@ -231,14 +277,13 @@ export function StudentQueueLivePanel({
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium">Queue alerts</p>
           <p className="text-sm text-muted-foreground">
+            {soundEnabled
+              ? "Sound is on: this device rings when your ticket is called."
+              : soundPreferred
+                ? "Sound is on for this device; tap anywhere on this page once so your browser allows it to play."
+                : "Turn on sound so this device rings when your ticket is called."}{" "}
             Vibration is best-effort; iOS Safari does not support web vibration.
-            Visual alerts remain available.
           </p>
-          {soundPreferred && !soundEnabled && (
-            <p className="text-sm text-muted-foreground">
-              Sound is preferred, but this visit still needs you to turn it on.
-            </p>
-          )}
         </div>
         <Button
           type="button"

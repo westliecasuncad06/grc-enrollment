@@ -11,6 +11,13 @@ use App\Models\AcademicTerm;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/**
+ * @deprecated No screen calls this since stakeholder Doc 14 (S16 retired the
+ *             Stuck Students module and the dashboard's "past threshold" split;
+ *             ADR 0024 amendment). Kept until the owner confirms removing it
+ *             together with `StuckEnrollmentPolicy` and the dwell-threshold entry
+ *             in `BuildPolicySettingsSummary`.
+ */
 final class StuckEnrollmentController extends Controller
 {
     public function __invoke(

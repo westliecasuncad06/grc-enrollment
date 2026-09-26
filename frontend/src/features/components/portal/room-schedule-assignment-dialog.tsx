@@ -113,14 +113,19 @@ export function RoomScheduleAssignmentDialog({
     modality: "f2f" as "f2f" | "hyflex_a" | "hyflex_b",
   })
 
-  useEffect(() => {
+  // Reset the picker each time the dialog opens (or its initial room
+  // changes while open) — adjusted during render, not in an effect.
+  const resetKey = open ? `open|${initialRoom ?? ""}` : "closed"
+  const [appliedResetKey, setAppliedResetKey] = useState<string | null>(null)
+  if (appliedResetKey !== resetKey) {
+    setAppliedResetKey(resetKey)
     if (open) {
       setRoom(initialRoom ?? null)
       setStep("room")
       setCalendarViewMode("overlay")
       setFormDraft({ days: [], startsAt: "", endsAt: "", modality: "f2f" })
     }
-  }, [open, initialRoom])
+  }
 
   const roomsQuery = useRoomOptionsQuery()
   const roomOptions = roomsQuery.data ?? getLocalRoomOptions(session?.college)

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentAudience;
@@ -31,6 +32,7 @@ use App\Models\StudentProfile;
 use App\Models\StudentSchedulePreference;
 use App\Models\Subject;
 use App\Models\SubjectPrerequisite;
+use App\Models\TransfereeCredit;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -297,6 +299,75 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('data.0.is_eligible', false)
             ->assertJsonPath('data.0.reasons.0.code', 'completed');
+    }
+
+    private function makeTransfereeCredit(StudentProfile $student, Subject $subject, TransfereeCreditStatus $status): TransfereeCredit
+    {
+        return TransfereeCredit::create([
+            'student_id' => $student->id, 'source_institution' => 'Other University',
+            'source_subject_code' => 'EXT101', 'source_subject_title' => 'Programming',
+            'credited_units' => 3, 'subject_id' => $subject->id, 'status' => $status,
+        ]);
+    }
+
+    public function test_a_subject_credited_from_an_approved_transferee_credit_is_excluded_as_completed(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS-XFER');
+        $this->placeSubject($curriculum, $subject);
+        $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $this->makeTransfereeCredit($student, $subject, TransfereeCreditStatus::Approved);
+
+        $response = $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.is_eligible', false)
+            ->assertJsonPath('data.0.reasons.0.code', 'completed')
+            ->assertJsonPath('data.0.reasons.0.message', "This subject was credited from the student's previous school.");
+    }
+
+    public function test_a_transferee_credit_that_is_not_approved_credits_nothing(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS-XFER');
+        $this->placeSubject($curriculum, $subject);
+        $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        // Still in the workflow, or turned down: none of them credits the subject.
+        foreach ([TransfereeCreditStatus::Pending, TransfereeCreditStatus::Endorsed, TransfereeCreditStatus::Rejected] as $status) {
+            $this->makeTransfereeCredit($student, $subject, $status);
+        }
+
+        $response = $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertOk()->assertJsonPath('data.0.is_eligible', true);
+    }
+
+    public function test_an_approved_transferee_credit_satisfies_a_prerequisite(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $intro = $this->makeSubject('CS101');
+        $advanced = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $intro);
+        $placement = $this->placeSubject($curriculum, $advanced, 2);
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $intro->id, 'minimum_grade' => '3.00',
+        ]);
+        $this->makeSection($term, $advanced);
+        $student = $this->makeStudent($curriculum);
+        $this->makeTransfereeCredit($student, $intro, TransfereeCreditStatus::Approved);
+
+        $response = $this->withToken($this->tokenFor($student))
+            ->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $advancedEntry = collect($response->json('data'))->firstWhere('code', 'CS201');
+        self::assertTrue($advancedEntry['is_eligible']);
     }
 
     public function test_an_unmet_prerequisite_excludes_the_subject(): void
@@ -571,6 +642,48 @@ final class EligibleSubjectsEndpointTest extends TestCase
             ['CS101', 'CS201'],
             collect($response->json('data'))->pluck('code')->sort()->values()->all(),
         );
+    }
+
+    public function test_a_2nd_year_student_with_a_failed_first_year_subject_can_enroll_per_subject_on_the_live_standing(): void
+    {
+        // The Doc 12 stakeholder case (student 2026-06-01067): promoted to 2nd
+        // Year with ETHICS failed. The stored category is still 'regular', yet
+        // the pool must already treat the student as Irregular: the back
+        // subject and the current-year subject are both offered per subject,
+        // and a subject two years ahead is not.
+        $priorTerm = AcademicTerm::create([
+            'school_year' => '2025-2026', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $ethics = $this->makeSubject('ETHICS');
+        $current = $this->makeSubject('CS201');
+        $tooFar = $this->makeSubject('CS401');
+        $this->placeSubject($curriculum, $ethics, 1);
+        $this->placeSubject($curriculum, $current, 2);
+        $this->placeSubject($curriculum, $tooFar, 4);
+        $this->makeSection($term, $ethics);
+        $this->makeSection($term, $current);
+        $this->makeSection($term, $tooFar);
+        $student = $this->makeStudent($curriculum);
+        $student->forceFill(['year_level' => 2, 'enrollment_category' => 'regular'])->save();
+        $encoder = User::create([
+            'name' => 'Encoder', 'email' => 'encoder.backsubject@grc.test',
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+        ]);
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $ethics->id, 'academic_term_id' => $priorTerm->id,
+            'mark' => '5.00', 'status' => GradeStatus::Locked, 'encoded_by' => $encoder->id,
+        ]);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->getJson('/api/v1/eligible-subjects?academic_term_id='.$term->id);
+
+        $response->assertOk();
+        $rows = collect($response->json('data'))->keyBy('code');
+        self::assertSame(['CS201', 'ETHICS'], $rows->keys()->sort()->values()->all());
+        self::assertTrue($rows['ETHICS']['is_eligible'], 'a failed subject can be retaken');
+        self::assertTrue($rows['CS201']['is_eligible']);
     }
 
     public function test_an_irregular_students_pool_includes_a_subject_exactly_one_year_ahead(): void

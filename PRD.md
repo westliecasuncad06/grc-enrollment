@@ -76,7 +76,7 @@ The implementation must preserve these manuscript boundaries:
 
 - **Frontend technology:** The manuscript's architecture diagram references Next.js/React. PRD v3.1 temporarily replaced this with a Vite-based React SPA. **As of v3.2 this is reversed: Next.js with React and strict TypeScript is the approved Presentation Layer**, realigning the implementation with the manuscript's own architecture diagram. The three-tier Client-Server architecture, Laravel REST API, MySQL data layer, and bearer-token authentication are unchanged. Next.js is used as a client-rendered application against the independent Laravel API — it does not render backend data server-side, does not proxy the API, and does not introduce session cookies. See ADR 0013.
 - **COM versus COR:** The Level 1 and Level 2 DFDs, proposed workflow, and use case discussion identify **Digital Certificate of Matriculation (COM)** as the Process 3.5 output delivered to the Student Portal after payment confirmation. Earlier scope and context passages also mention **Certificate of Registration (COR)**, including a Registrar Staff view. The implementation must not silently merge the terms. COM is required for Process 3.5; whether COR is a separate artifact remains an open institutional decision.
-- **Accounting permissions:** “View-only” applies to academic and enrollment-record content. Accounting Staff may perform only the operational writes explicitly required by the DFD: update the Active Serving Number and record Payment Confirmation. They cannot edit academic data, curriculum, Registrar decisions, or enrollment contents.
+- **Accounting permissions:** “View-only” applies to academic and enrollment-record content. Accounting Staff may perform only the operational writes explicitly required by the DFD: update the Active Serving Number and record Payment Confirmation. They cannot edit academic data, curriculum, Registrar decisions, or enrollment contents. Stakeholder Doc 14 (ADR 0035) adds one more: Accounting Staff own the fee schedule (tuition rate and miscellaneous fees), which is billing configuration rather than academic data.
 
 ---
 
@@ -141,6 +141,7 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - Claim a queue ticket only at the authorized Cashier kiosk; the normal portal
   does not expose a claim action.
 - View grades and approved academic history.
+- Request credit mapping for subjects completed at another school, and follow its status.
 - Download or print the Digital COM after payment confirmation.
 - Manage permitted profile fields and password.
 - View notifications and enrollment history.
@@ -161,18 +162,20 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 - View schedule-publication notifications.
 - Cannot access student payment details or Registrar overrides.
 
-### 3.4 Program Chair
+### 3.4 Program Head (role key `program_chair`)
 
 - Manage program curriculum mappings, subjects, prerequisites, and term offerings.
 - Configure planned sections, capacities, schedules, and faculty assignments.
 - Review unassigned-subject alerts and section-demand forecasts.
 - Compare forecasted and actual demand.
 - Submit proposed schedules for approval.
+- Approve or reject the irregular and overload enrollments of their own college before they reach the Registrar (ADR 0030).
+- Map students' transferee credit requests to subjects of their curriculum, using the system's suggestions or a manual choice, and endorse them to the Registrar (ADR 0026).
 
 ### 3.5 Dean
 
 - Review and approve or return proposed schedules.
-- View the real-time enrollment dashboard and stuck-student reports.
+- View the real-time enrollment dashboard for their college (Doc 14 replaced the separate stuck-student list with the dashboard's "Ongoing" group; the older stuck-student endpoint is unused and pending removal).
 - View honors evaluation results.
 - View approved digital curriculum information.
 - Export authorized reports.
@@ -186,16 +189,17 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 
 ### 3.7 Registrar Head
 
-- Review and approve enrollment submissions.
+- Review and approve enrollment submissions, and open a student's profile from the approvals queue.
 - Perform logged override or void actions for authorized edge cases.
 - View predictive attrition analytics.
 - Generate government compliance reports.
 - View audit logs and daily control reports.
-- Configure approved Registrar-controlled policy values where the product supports configuration.
+- Configure approved Registrar-controlled policy values where the product supports configuration. The fee schedule is no longer one of them: it moved to Accounting Staff (ADR 0035); the Registrar Head can still read it.
 
 ### 3.8 Registrar Staff
 
-- Process transferee credit mappings.
+- Approve or reject enrollment submissions (regular, and irregular once the Program Head has approved them).
+- Approve or reject transferee credit mappings that the Program Chair has endorsed (ADR 0026).
 - Process dropping and withdrawal requests.
 - View permitted academic records and enrollment documents.
 - Cannot execute Registrar Head overrides.
@@ -204,7 +208,8 @@ The system supports nine primary roles. Access must be enforced in both Laravel 
 
 - View the pending-payment queue without editing academic, curriculum, or Registrar-controlled enrollment data.
 - Manage the active serving number.
-- Record confirmation of an externally received payment as the role's only other operational write.
+- Record confirmation of an externally received payment as an operational write.
+- Maintain the fee schedule: the tuition rate per unit and the miscellaneous fees, with every change audited (ADR 0035).
 - Trigger idempotent enrollment finalization and Digital COM generation through that payment-confirmation action.
 - Cannot change academic records, curriculum data, or Registrar decisions.
 
@@ -235,6 +240,10 @@ A returned proposal moves back to `draft` with a required reason. Every transiti
 
 `draft → pending_registrar_approval → pending_payment → enrolled`
 
+An irregular or overload submission first passes the Program Head:
+
+`draft → pending_program_head_approval → pending_registrar_approval → pending_payment → enrolled`
+
 Alternative terminal or exception states:
 
 - `rejected`
@@ -244,11 +253,15 @@ Alternative terminal or exception states:
 Rules:
 
 1. A student saves subject choices as `draft`.
-2. Submission performs authoritative validation and creates `pending_registrar_approval`.
+2. Submission performs authoritative validation and creates `pending_registrar_approval`,
+   or `pending_program_head_approval` for an irregular or overload submission, which
+   the Program Head of the student's college approves or rejects (with a reason) before
+   it joins the Registrar's queue (ADR 0030).
 3. The system does not issue a queue ticket until Registrar approval has made
    the enrollment `pending_payment`; the Student then claims one at the
    Cashier kiosk, or Accounting Staff may issue one on the Student's behalf.
-4. Registrar Head approval changes the enrollment to `pending_payment`.
+4. Registrar Staff or Registrar Head approval changes the enrollment to `pending_payment`
+   for every enrollment, regular or irregular, and creates its assessment.
 5. Accounting confirmation changes it to `enrolled`.
 6. The same database transaction creates or confirms the Digital COM record.
 7. Rejection, cancellation, and withdrawal require a reason and audit entry.
@@ -371,7 +384,7 @@ This process handles grade encoding, Registrar decisions, transferee credits, dr
 
 - **FR-FIN-001:** Provide a Registrar approval queue with filters and pagination.
 - **FR-FIN-002:** Require authorization and a reason for rejection, override, void, or forced status change.
-- **FR-FIN-003:** Map transferee credits without bypassing audit and academic-record controls.
+- **FR-FIN-003:** Map transferee credits without bypassing audit and academic-record controls. A Student requests, the Program Chair maps and endorses, and Registrar Staff approve; an approved credit counts as credited without a GRC grade (ADR 0026).
 - **FR-FIN-004:** Process dropping or withdrawal exactly once and release seats when policy requires.
 - **FR-FIN-005:** Show Accounting only approved `pending_payment` enrollments.
 - **FR-FIN-006:** Maintain the active serving number and queue order.

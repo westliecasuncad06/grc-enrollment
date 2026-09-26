@@ -3,10 +3,12 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type { CashierTransactionFilters } from "@/features/schemas/cashier-transaction-schema"
 import {
   findCashierPaymentCandidate,
   listCashierTransactions,
+  searchCashierStudents,
 } from "@/features/services/cashier-transaction-service"
 
 export const cashierTransactionsQueryKey = (
@@ -28,6 +30,7 @@ export function useCashierTransactionsQuery(
   return useQuery({
     queryKey: cashierTransactionsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listCashierTransactions(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }
@@ -47,5 +50,25 @@ export function useCashierPaymentCandidateQuery(
     queryFn: ({ signal }) =>
       findCashierPaymentCandidate(studentNumber ?? "", signal),
     enabled: enabled && session !== null && hasStudentNumber,
+  })
+}
+
+export const cashierStudentSearchQueryKey = (
+  userId: string | null,
+  search: string | null,
+) => ["cashier-student-search", userId, search] as const
+
+/** The Cashier's general student search; enabled only once a search is submitted. */
+export function useCashierStudentSearchQuery(
+  search: string | null,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { session } = useAuth()
+  const hasSearch = search !== null && search.trim().length >= 2
+
+  return useQuery({
+    queryKey: cashierStudentSearchQueryKey(session?.userId ?? null, search),
+    queryFn: ({ signal }) => searchCashierStudents(search ?? "", signal),
+    enabled: enabled && session !== null && hasSearch,
   })
 }

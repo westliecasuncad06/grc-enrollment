@@ -1,52 +1,280 @@
+import dynamic from "next/dynamic"
 import type { ComponentType } from "react"
 
-import { StudentRecordsWorkspace } from "@/features/components/portal/student-records-workspace"
-import { StudentInformationWorkspace } from "@/features/components/portal/student-information-workspace"
-import { AnalyticsDashboardWorkspace } from "@/features/components/portal/analytics-dashboard-workspace"
-import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
-import { TeachingScheduleWorkspace } from "@/features/components/portal/teaching-schedule-workspace"
-import { CurriculumWorkspace } from "@/features/components/portal/curriculum-workspace"
-import { CurriculumApprovalsWorkspace } from "@/features/components/portal/curriculum-approvals-workspace"
-import { ProgramChairEnrollmentWorkspace } from "@/features/components/portal/program-chair-enrollment-workspace"
-import { AcademicTermWorkspace } from "@/features/components/portal/academic-term-workspace"
-import { ScheduleProposalsWorkspace } from "@/features/components/portal/schedule-proposals-workspace"
-import { ScheduleWorkspace } from "@/features/components/portal/schedule-workspace"
-import { StudentScheduleWorkspace } from "@/features/components/portal/student-schedule-workspace"
 import { useAuth } from "@/features/auth/use-auth"
-import { FacultyLoadingWorkspace } from "@/features/components/portal/faculty-loading-workspace"
-import { FacultyWorkforceWorkspace } from "@/features/components/portal/faculty-workforce-workspace"
-import { ScheduleDecisionWorkspace } from "@/features/components/portal/schedule-decision-workspace"
-import { MasterScheduleWorkspace } from "@/features/components/portal/master-schedule-workspace"
-import { AuditLogsWorkspace } from "@/features/components/portal/audit-logs-workspace"
-import { EnrollmentWorkspace } from "@/features/components/portal/enrollment-workspace"
-import { RegistrarEnrollmentWorkspace } from "@/features/components/portal/registrar-enrollment-workspace"
-import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
-import { PaymentRecordsWorkspace } from "@/features/components/portal/payment-records-workspace"
-import { StudentGradesWorkspace } from "@/features/components/portal/student-grades-workspace"
-import { StudentDigitalComWorkspace } from "@/features/components/portal/student-digital-com-workspace"
-import { EnrollmentChangeRequestsWorkspace } from "@/features/components/portal/enrollment-change-requests-workspace"
-import { RegistrarRecordsWorkspace } from "@/features/components/portal/registrar-records-workspace"
-import { RegistrarGradesWorkspace } from "@/features/components/portal/registrar-grades-workspace"
-import { ClassRostersWorkspace } from "@/features/components/portal/class-rosters-workspace"
-import { GradeSubmissionWorkspace } from "@/features/components/portal/grade-submission-workspace"
-import { EnrollmentDashboardWorkspace } from "@/features/components/portal/enrollment-dashboard-workspace"
-import { InstitutionDashboardWorkspace } from "@/features/components/portal/institution-dashboard-workspace"
-import { StuckStudentsWorkspace } from "@/features/components/portal/stuck-students-workspace"
-import { PolicySettingsWorkspace } from "@/features/components/portal/policy-settings-workspace"
-import { FeeSettingsWorkspace } from "@/features/components/portal/fee-settings-workspace"
-import { RoomsOperationsWorkspace } from "@/features/components/portal/rooms-operations-workspace"
-import { FacultyInvitationWorkspace } from "@/features/components/portal/faculty-invitation-workspace"
-import { StaffInvitationWorkspace } from "@/features/components/portal/staff-invitation-workspace"
-import { ItControlStudentsWorkspace } from "@/features/components/portal/it-control-students-workspace"
-import { ItControlFacultyWorkspace } from "@/features/components/portal/it-control-faculty-workspace"
-import { ItControlEnrollmentOverrideWorkspace } from "@/features/components/portal/it-control-enrollment-override-workspace"
-import { QueueKioskAccessWorkspace } from "@/features/components/portal/queue-kiosk-access-workspace"
-import { AttritionAnalyticsWorkspace } from "@/features/components/portal/attrition-analytics-workspace"
-import { HonorsWorkspace } from "@/features/components/portal/honors-workspace"
-import { GraduatesWorkspace } from "@/features/components/portal/graduates-workspace"
-import { CashierCorRecordsWorkspace } from "@/features/components/portal/cashier-cor-records-workspace"
-import { ProfessorInformationWorkspace } from "@/features/components/portal/professor-information-workspace"
-import { ProgramChairIrregularEnrollmentsWorkspace } from "@/features/components/portal/program-chair-irregular-enrollments-workspace"
+import { Skeleton } from "@/features/components/ui/skeleton"
+
+/**
+ * Every workspace is its own chunk (ADR 0029). They used to be static imports, so
+ * signing in shipped all 48 workspaces (charts, PDF/print, the 2,300-line Program
+ * Chair planner) as one ~480 KB gzipped route chunk before anything rendered. Now
+ * the shell and the one workspace being opened load; the rest wait until visited.
+ *
+ * `lazyWorkspace` keeps each `import()` literal at its call site (so the bundler
+ * can split it), preserves the workspace's prop types, and records the loader so
+ * `preloadConnectedModules()` can warm every chunk (tests, or a future hover
+ * prefetch) without going through the component.
+ */
+const preloaders: (() => Promise<unknown>)[] = []
+
+function WorkspaceLoading() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="portal-workspace grid gap-4"
+    >
+      <span className="sr-only">Loading workspace…</span>
+      <Skeleton className="h-8 w-1/3" />
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+    </div>
+  )
+}
+
+function lazyWorkspace<
+  Loaded extends Record<string, unknown>,
+  Name extends keyof Loaded & string,
+>(
+  load: () => Promise<Loaded>,
+  exportName: Name,
+): Loaded[Name] extends ComponentType<infer Props>
+  ? ComponentType<Props>
+  : never {
+  preloaders.push(load)
+
+  return dynamic(
+    () =>
+      load().then((loaded) => ({
+        default: loaded[exportName] as ComponentType,
+      })),
+    { loading: WorkspaceLoading },
+  ) as never
+}
+
+/** Loads every workspace chunk. Resolves once all are cached. */
+export function preloadConnectedModules(): Promise<unknown[]> {
+  return Promise.all(preloaders.map((load) => load()))
+}
+
+const StudentRecordsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/student-records-workspace"),
+  "StudentRecordsWorkspace",
+)
+const StudentInformationWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/student-information-workspace"),
+  "StudentInformationWorkspace",
+)
+const AnalyticsDashboardWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/analytics-dashboard-workspace"),
+  "AnalyticsDashboardWorkspace",
+)
+const FacultyInputWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/faculty-input-workspace"),
+  "FacultyInputWorkspace",
+)
+const TeachingScheduleWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/teaching-schedule-workspace"),
+  "TeachingScheduleWorkspace",
+)
+const CurriculumWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/curriculum-workspace"),
+  "CurriculumWorkspace",
+)
+const CurriculumApprovalsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/curriculum-approvals-workspace"),
+  "CurriculumApprovalsWorkspace",
+)
+const ProgramChairEnrollmentWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/program-chair-enrollment-workspace"),
+  "ProgramChairEnrollmentWorkspace",
+)
+const ProgramChairCreditMappingsWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/program-chair-credit-mappings-workspace"),
+  "ProgramChairCreditMappingsWorkspace",
+)
+const AcademicTermWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/academic-term-workspace"),
+  "AcademicTermWorkspace",
+)
+const ScheduleProposalsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/schedule-proposals-workspace"),
+  "ScheduleProposalsWorkspace",
+)
+const ScheduleWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/schedule-workspace"),
+  "ScheduleWorkspace",
+)
+const StudentScheduleWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/student-schedule-workspace"),
+  "StudentScheduleWorkspace",
+)
+const FacultyLoadingWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/faculty-loading-workspace"),
+  "FacultyLoadingWorkspace",
+)
+const FacultyWorkforceWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/faculty-workforce-workspace"),
+  "FacultyWorkforceWorkspace",
+)
+const ScheduleDecisionWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/schedule-decision-workspace"),
+  "ScheduleDecisionWorkspace",
+)
+const MasterScheduleWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/master-schedule-workspace"),
+  "MasterScheduleWorkspace",
+)
+const SubmittedSchedulesWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/submitted-schedules-workspace"),
+  "SubmittedSchedulesWorkspace",
+)
+const SectionChangeRequestsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/section-change-requests-workspace"),
+  "SectionChangeRequestsWorkspace",
+)
+const DeanFacultyLoadWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/dean-faculty-load-workspace"),
+  "DeanFacultyLoadWorkspace",
+)
+const AuditLogsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/audit-logs-workspace"),
+  "AuditLogsWorkspace",
+)
+const EnrollmentWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/enrollment-workspace"),
+  "EnrollmentWorkspace",
+)
+const RegistrarEnrollmentWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/registrar-enrollment-workspace"),
+  "RegistrarEnrollmentWorkspace",
+)
+const AccountingPaymentWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/accounting-payment-workspace"),
+  "AccountingPaymentWorkspace",
+)
+const PaymentRecordsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/payment-records-workspace"),
+  "PaymentRecordsWorkspace",
+)
+const StudentGradesWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/student-grades-workspace"),
+  "StudentGradesWorkspace",
+)
+const StudentDigitalComWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/student-digital-com-workspace"),
+  "StudentDigitalComWorkspace",
+)
+const EnrollmentChangeRequestsWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/enrollment-change-requests-workspace"),
+  "EnrollmentChangeRequestsWorkspace",
+)
+const EnrollmentRequestsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/enrollment-requests-workspace"),
+  "EnrollmentRequestsWorkspace",
+)
+const RegistrarRecordsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/registrar-records-workspace"),
+  "RegistrarRecordsWorkspace",
+)
+const RegistrarGradesWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/registrar-grades-workspace"),
+  "RegistrarGradesWorkspace",
+)
+const ClassRostersWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/class-rosters-workspace"),
+  "ClassRostersWorkspace",
+)
+const GradeSubmissionWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/grade-submission-workspace"),
+  "GradeSubmissionWorkspace",
+)
+const EnrollmentDashboardWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/enrollment-dashboard-workspace"),
+  "EnrollmentDashboardWorkspace",
+)
+const InstitutionDashboardWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/institution-dashboard-workspace"),
+  "InstitutionDashboardWorkspace",
+)
+const PolicySettingsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/policy-settings-workspace"),
+  "PolicySettingsWorkspace",
+)
+const FeeSettingsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/fee-settings-workspace"),
+  "FeeSettingsWorkspace",
+)
+const RoomsOperationsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/rooms-operations-workspace"),
+  "RoomsOperationsWorkspace",
+)
+const FacultyInvitationWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/faculty-invitation-workspace"),
+  "FacultyInvitationWorkspace",
+)
+const StaffInvitationWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/staff-invitation-workspace"),
+  "StaffInvitationWorkspace",
+)
+const ItControlStudentsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/it-control-students-workspace"),
+  "ItControlStudentsWorkspace",
+)
+const ItControlFacultyWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/it-control-faculty-workspace"),
+  "ItControlFacultyWorkspace",
+)
+const ItControlEnrollmentOverrideWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/it-control-enrollment-override-workspace"),
+  "ItControlEnrollmentOverrideWorkspace",
+)
+const QueueKioskAccessWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/queue-kiosk-access-workspace"),
+  "QueueKioskAccessWorkspace",
+)
+const AttritionAnalyticsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/attrition-analytics-workspace"),
+  "AttritionAnalyticsWorkspace",
+)
+const HonorsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/honors-workspace"),
+  "HonorsWorkspace",
+)
+const GraduatesWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/graduates-workspace"),
+  "GraduatesWorkspace",
+)
+const CashierCorRecordsWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/cashier-cor-records-workspace"),
+  "CashierCorRecordsWorkspace",
+)
+const ProfessorInformationWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/professor-information-workspace"),
+  "ProfessorInformationWorkspace",
+)
+const ProgramChairIrregularEnrollmentsWorkspace = lazyWorkspace(
+  () =>
+    import("@/features/components/portal/program-chair-irregular-enrollments-workspace"),
+  "ProgramChairIrregularEnrollmentsWorkspace",
+)
+const AdvancePaymentWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/advance-payment-workspace"),
+  "AdvancePaymentWorkspace",
+)
+const StatementOfAccountWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/statement-of-account-workspace"),
+  "StatementOfAccountWorkspace",
+)
+const StudentAdmissionWorkspace = lazyWorkspace(
+  () => import("@/features/components/portal/student-admission-workspace"),
+  "StudentAdmissionWorkspace",
+)
 
 export type ConnectedModuleId =
   | "student-records"
@@ -68,12 +296,14 @@ export type ConnectedModuleId =
   | "schedule-approvals"
   | "curriculum-approvals"
   | "master-schedule"
+  | "submitted-schedules"
+  | "section-change-requests"
+  | "faculty-load-monitoring"
   | "audit-logs"
   | "enrollment"
   | "grade-approvals"
   | "academic-transcripts"
   | "enrollment-approvals"
-  | "overrides-voids"
   | "payment-queue"
   | "payment-records"
   | "cor-records"
@@ -81,6 +311,7 @@ export type ConnectedModuleId =
   | "grades"
   | "digital-com"
   | "enrollment-change-requests"
+  | "enrollment-requests"
   | "credit-mappings"
   | "drops-withdrawals"
   | "academic-records"
@@ -89,7 +320,6 @@ export type ConnectedModuleId =
   | "grade-submission"
   | "enrollment-dashboard"
   | "institution-dashboard"
-  | "stuck-students"
   | "policy-settings"
   | "fee-settings"
   | "academic-terms"
@@ -100,6 +330,9 @@ export type ConnectedModuleId =
   | "honors"
   | "graduates"
   | "professor-information"
+  | "advance-payment"
+  | "statement-of-account"
+  | "admission-requirements"
 
 export type PortalModuleComponent = ComponentType
 
@@ -123,19 +356,25 @@ export const connectedModuleIds = [
   "schedule-approvals",
   "curriculum-approvals",
   "master-schedule",
+  "submitted-schedules",
+  "section-change-requests",
+  "faculty-load-monitoring",
   "audit-logs",
   "enrollment",
   "grade-approvals",
   "academic-transcripts",
   "enrollment-approvals",
-  "overrides-voids",
   "payment-queue",
+  "advance-payment",
+  "statement-of-account",
+  "admission-requirements",
   "payment-records",
   "cor-records",
   "queue-kiosk-access",
   "grades",
   "digital-com",
   "enrollment-change-requests",
+  "enrollment-requests",
   "credit-mappings",
   "drops-withdrawals",
   "academic-records",
@@ -144,7 +383,6 @@ export const connectedModuleIds = [
   "grade-submission",
   "enrollment-dashboard",
   "institution-dashboard",
-  "stuck-students",
   "policy-settings",
   "fee-settings",
   "academic-terms",
@@ -207,21 +445,29 @@ const academicTranscriptsWorkspace: PortalModuleComponent = () => (
 const enrollmentApprovalsWorkspace: PortalModuleComponent = () => (
   <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />
 )
-const overridesVoidsWorkspace: PortalModuleComponent = () => (
-  <RegistrarEnrollmentWorkspace initialModuleId="overrides-voids" />
-)
 
+// Credit mapping is the Program Chair's work; Registrar Staff only approve what
+// the Chair has endorsed (ADR 0026). One module id, two workspaces.
+function CreditMappingsModuleRouter() {
+  const { session } = useAuth()
+
+  return session?.role === "program_chair" ? (
+    <ProgramChairCreditMappingsWorkspace />
+  ) : (
+    <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
+  )
+}
 const creditMappingsWorkspace: PortalModuleComponent = () => (
-  <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />
+  <CreditMappingsModuleRouter />
 )
 const dropsWithdrawalsWorkspace: PortalModuleComponent = () => (
   <RegistrarRecordsWorkspace initialModuleId="drops-withdrawals" />
 )
 const academicRecordsWorkspace: PortalModuleComponent = () => (
-  <RegistrarRecordsWorkspace initialModuleId="academic-records" />
+  <CashierCorRecordsWorkspace />
 )
 const enrollmentDocumentsWorkspace: PortalModuleComponent = () => (
-  <RegistrarRecordsWorkspace initialModuleId="enrollment-documents" />
+  <CashierCorRecordsWorkspace />
 )
 
 export const connectedModuleRegistry: Readonly<
@@ -245,19 +491,25 @@ export const connectedModuleRegistry: Readonly<
   "schedule-approvals": ScheduleDecisionWorkspace,
   "curriculum-approvals": CurriculumApprovalsWorkspace,
   "master-schedule": MasterScheduleWorkspace,
+  "submitted-schedules": SubmittedSchedulesWorkspace,
+  "section-change-requests": SectionChangeRequestsWorkspace,
+  "faculty-load-monitoring": DeanFacultyLoadWorkspace,
   "audit-logs": AuditLogsWorkspace,
   enrollment: EnrollmentWorkspace,
   "grade-approvals": gradeApprovalsWorkspace,
   "academic-transcripts": academicTranscriptsWorkspace,
   "enrollment-approvals": enrollmentApprovalsWorkspace,
-  "overrides-voids": overridesVoidsWorkspace,
   "payment-queue": AccountingPaymentWorkspace,
+  "advance-payment": AdvancePaymentWorkspace,
+  "statement-of-account": StatementOfAccountWorkspace,
+  "admission-requirements": StudentAdmissionWorkspace,
   "payment-records": PaymentRecordsWorkspace,
   "cor-records": CashierCorRecordsWorkspace,
   "queue-kiosk-access": QueueKioskAccessWorkspace,
   grades: StudentGradesWorkspace,
   "digital-com": StudentDigitalComWorkspace,
   "enrollment-change-requests": EnrollmentChangeRequestsWorkspace,
+  "enrollment-requests": EnrollmentRequestsWorkspace,
   "credit-mappings": creditMappingsWorkspace,
   "drops-withdrawals": dropsWithdrawalsWorkspace,
   "academic-records": academicRecordsWorkspace,
@@ -266,7 +518,6 @@ export const connectedModuleRegistry: Readonly<
   "grade-submission": GradeSubmissionWorkspace,
   "enrollment-dashboard": EnrollmentDashboardWorkspace,
   "institution-dashboard": InstitutionDashboardWorkspace,
-  "stuck-students": StuckStudentsWorkspace,
   "policy-settings": PolicySettingsWorkspace,
   "fee-settings": FeeSettingsWorkspace,
   "academic-terms": academicTermWorkspace,

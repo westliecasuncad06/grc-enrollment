@@ -2,10 +2,13 @@
 
 use App\Http\Controllers\Api\V1\AcademicGradeController;
 use App\Http\Controllers\Api\V1\AcademicRecordController;
+use App\Http\Controllers\Api\V1\AcademicRecordStudentLookupController;
 use App\Http\Controllers\Api\V1\AcademicTermController;
 use App\Http\Controllers\Api\V1\AcademicTermSectionPlanController;
 use App\Http\Controllers\Api\V1\AcademicTermWorkflowController;
+use App\Http\Controllers\Api\V1\AdmissionRequirementController;
 use App\Http\Controllers\Api\V1\AttritionReportController;
+use App\Http\Controllers\Api\V1\AuditActorController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\AccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\FacultyAccountSetupController;
@@ -16,12 +19,14 @@ use App\Http\Controllers\Api\V1\Auth\ResendStudentAccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\StaffAccountSetupController;
 use App\Http\Controllers\Api\V1\Billing\FeeScheduleController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
+use App\Http\Controllers\Api\V1\CashierStudentLookupController;
 use App\Http\Controllers\Api\V1\CashierTransactionController;
 use App\Http\Controllers\Api\V1\ClassRosterController;
 use App\Http\Controllers\Api\V1\CurrentCurriculumSubjectController;
 use App\Http\Controllers\Api\V1\CurriculumController;
 use App\Http\Controllers\Api\V1\CurriculumMigrationController;
 use App\Http\Controllers\Api\V1\CurriculumSubjectPlacementController;
+use App\Http\Controllers\Api\V1\Dashboard\EnrollmentStatusController;
 use App\Http\Controllers\Api\V1\Dashboard\EnrollmentSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\InstitutionSummaryController;
 use App\Http\Controllers\Api\V1\Dashboard\PolicySettingsController;
@@ -32,13 +37,17 @@ use App\Http\Controllers\Api\V1\EnrollmentBlockController;
 use App\Http\Controllers\Api\V1\EnrollmentChangeRequestController;
 use App\Http\Controllers\Api\V1\EnrollmentController;
 use App\Http\Controllers\Api\V1\EnrollmentDocumentController;
+use App\Http\Controllers\Api\V1\EnrollmentMovementController;
+use App\Http\Controllers\Api\V1\EnrollmentScholarshipDiscountController;
 use App\Http\Controllers\Api\V1\EnrollmentWindowController;
 use App\Http\Controllers\Api\V1\FacultyAvailabilityController;
 use App\Http\Controllers\Api\V1\FacultyCurriculumSubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyInvitationController;
+use App\Http\Controllers\Api\V1\FacultyLoadLimitController;
 use App\Http\Controllers\Api\V1\FacultyLoadReportController;
 use App\Http\Controllers\Api\V1\FacultyMemberController;
 use App\Http\Controllers\Api\V1\FacultyPreferenceCatalogController;
+use App\Http\Controllers\Api\V1\FacultyProfileController;
 use App\Http\Controllers\Api\V1\FacultySpecializationController;
 use App\Http\Controllers\Api\V1\FacultySubjectPreferenceController;
 use App\Http\Controllers\Api\V1\FacultyTeachingHistoryController;
@@ -49,6 +58,7 @@ use App\Http\Controllers\Api\V1\HonorsReportController;
 use App\Http\Controllers\Api\V1\ItControl\AutomationRunController;
 use App\Http\Controllers\Api\V1\ItControl\FacultyAccountController;
 use App\Http\Controllers\Api\V1\ItControl\StudentAccountController as ItControlStudentAccountController;
+use App\Http\Controllers\Api\V1\LectureLabAdjacencyController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ProgramController;
@@ -58,11 +68,15 @@ use App\Http\Controllers\Api\V1\QueueKioskCredentialController;
 use App\Http\Controllers\Api\V1\QueueTicketController;
 use App\Http\Controllers\Api\V1\RoomCatalogEntryController;
 use App\Http\Controllers\Api\V1\RoomOccupancyController;
+use App\Http\Controllers\Api\V1\RoomOccupancySummaryController;
 use App\Http\Controllers\Api\V1\ScheduleGenerationRunController;
 use App\Http\Controllers\Api\V1\ScheduleProposalController;
+use App\Http\Controllers\Api\V1\SectionChangeRequestController;
 use App\Http\Controllers\Api\V1\SectionController;
 use App\Http\Controllers\Api\V1\SectionGradeController;
+use App\Http\Controllers\Api\V1\SectionProfessorController;
 use App\Http\Controllers\Api\V1\StaffInvitationController;
+use App\Http\Controllers\Api\V1\StatementOfAccountController;
 use App\Http\Controllers\Api\V1\StudentAccountController;
 use App\Http\Controllers\Api\V1\StudentProfileChangeRequestController;
 use App\Http\Controllers\Api\V1\StudentProfileController;
@@ -70,6 +84,7 @@ use App\Http\Controllers\Api\V1\StudentQueueViewController;
 use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectOfferingController;
+use App\Http\Controllers\Api\V1\SubjectWaiverController;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
 use App\Http\Controllers\Api\V1\WithdrawalRequestController;
 use App\Http\Middleware\EnsureQueueKioskUsesDeviceSurface;
@@ -144,6 +159,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'index'])->name('faculty-subject-preferences.index');
         Route::get('/room-options', RoomCatalogEntryController::class)->name('room-options.index');
         Route::get('/room-occupancy', RoomOccupancyController::class)->name('room-occupancy.index');
+        Route::get('/room-occupancy-summary', RoomOccupancySummaryController::class)->name('room-occupancy-summary.index');
         Route::get('/fee-schedules', [FeeScheduleController::class, 'index'])->name('fee-schedules.index');
         Route::put('/fee-schedules', [FeeScheduleController::class, 'update'])->name('fee-schedules.update');
         Route::get('/sections', [SectionController::class, 'index'])->name('sections.index');
@@ -177,6 +193,13 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // the served Student's account and record a balance-only receipt.
         // StudentProfilePolicy applies the narrower account-specific gate.
         Route::get('/student-account', [StudentAccountController::class, 'showOwn'])->name('student-account.show-own');
+        // Statement of Account: the same `viewAccount` ability (ADR 0036).
+        // A Student's own Admission requirements checklist (read-only; ADR 0037).
+        Route::get('/me/admission-requirements', [AdmissionRequirementController::class, 'showOwn'])->middleware('role:student')->name('me.admission-requirements.show');
+        Route::get('/me/statement-of-account', [StatementOfAccountController::class, 'showOwn'])->name('me.statement-of-account.show');
+        Route::get('/me/statement-of-account/pdf', [StatementOfAccountController::class, 'pdfOwn'])->name('me.statement-of-account.pdf');
+        Route::get('/students/{student}/statement-of-account', [StatementOfAccountController::class, 'show'])->whereNumber('student')->name('students.statement-of-account.show');
+        Route::get('/students/{student}/statement-of-account/pdf', [StatementOfAccountController::class, 'pdf'])->whereNumber('student')->name('students.statement-of-account.pdf');
         Route::get('/students/{student}/account', [StudentAccountController::class, 'show'])->name('students.account.show');
         Route::post('/students/{student}/account-payments', [StudentAccountController::class, 'store'])->name('students.account-payments.store');
 
@@ -215,11 +238,19 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // resolves `confirmPayment` the same way it resolves the other two
         // Registrar Head checkpoints.
         Route::post('/enrollments/{enrollment}/payment', [EnrollmentController::class, 'confirmPayment'])->name('enrollments.payment');
+        Route::get('/enrollments/{enrollment}/cor-preview', [EnrollmentController::class, 'corPreview'])->name('enrollments.cor-preview');
 
         // Accounting may correct financial assessment lines while payment is
         // still pending. The action itself locks the record and rejects any
         // payment/COR-finalized assessment.
         Route::patch('/enrollments/{enrollment}/assessment', [EnrollmentController::class, 'adjustAssessment'])->name('enrollments.assessment.update');
+
+        // ADR 0025: the Cashier's Payee/Scholar choice at payment time. PUT
+        // assigns a 100/40/20% scholarship as a negative assessment line;
+        // DELETE (Regular payee) removes it. Same authorization and the same
+        // pending-payment/no-payment rule as the fee adjustment above.
+        Route::put('/enrollments/{enrollment}/scholarship-discount', [EnrollmentScholarshipDiscountController::class, 'update'])->name('enrollments.scholarship-discount.update');
+        Route::delete('/enrollments/{enrollment}/scholarship-discount', [EnrollmentScholarshipDiscountController::class, 'destroy'])->name('enrollments.scholarship-discount.destroy');
 
         // Student own; Accounting Staff and Registrar readers can view COR
         // history through EnrollmentDocument::scopeVisibleTo.
@@ -244,6 +275,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // QueueTicketPolicy limits it to Accounting Staff; the UI separately
         // delegates any actual serving transition to the existing endpoint.
         Route::get('/cashier-payment-candidates', [CashierPaymentCandidateController::class, 'show'])->name('cashier-payment-candidates.show');
+
+        // The Cashier's general student search for the Advance Payment page.
+        // Unlike the candidate lookup above it depends on no enrollment or
+        // queue state, so an already-enrolled student can still be found.
+        Route::get('/cashier-student-lookup', [CashierStudentLookupController::class, 'index'])->name('cashier-student-lookup.index');
 
         // FR-FIN-004 / PRD §4.2 rule 7: Student-only, own `enrolled`
         // enrollment. No `role:` middleware — EnrollmentPolicy::withdraw
@@ -297,6 +333,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/transferee-credits', [TransfereeCreditController::class, 'index'])->name('transferee-credits.index');
         Route::post('/transferee-credits', [TransfereeCreditController::class, 'store'])->name('transferee-credits.store');
         Route::patch('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'update'])->name('transferee-credits.update');
+        Route::get('/transferee-credits/{transfereeCredit}/suggestions', [TransfereeCreditController::class, 'suggestions'])->name('transferee-credits.suggestions');
 
         // PRD §3.2 "View assigned teaching schedules and class rosters" —
         // Faculty own sections, Registrar Staff/Head all
@@ -314,6 +351,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // void. See ADR 0011.
         Route::get('/academic-grades', [AcademicGradeController::class, 'index'])->name('academic-grades.index');
         Route::post('/academic-grades', [AcademicGradeController::class, 'store'])->name('academic-grades.store');
+        Route::post('/academic-grades/lock-all', [AcademicGradeController::class, 'lockAll'])->middleware('role:registrar_head')->name('academic-grades.lock-all');
         Route::patch('/academic-grades/{academicGrade}', [AcademicGradeController::class, 'update'])->name('academic-grades.update');
 
         // A student's full academic history, not a single grade record —
@@ -322,6 +360,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('/prospectus', ProspectusController::class)->name('prospectus.show');
         Route::get('/grade-slip', GradeSlipController::class)->name('grade-slip.show');
         Route::get('/academic-record', AcademicRecordController::class)->name('academic-record.show');
+        Route::get('/academic-record/students', AcademicRecordStudentLookupController::class)->name('academic-record.students');
         Route::get('/graduates', GraduateController::class)->name('graduates.index');
 
         // First production consumer of the `role` middleware (ADR 0008):
@@ -342,6 +381,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             // curriculum authorship.
             Route::post('/sections', [SectionController::class, 'store'])->name('sections.store');
             Route::patch('/sections/{section}', [SectionController::class, 'update'])->name('sections.update');
+            // A published section is final: the Program Head asks the Registrar Head
+            // for a change instead (ADR 0032).
+            Route::post('/sections/{section}/change-requests', [SectionChangeRequestController::class, 'store'])
+                ->whereNumber('section')
+                ->name('sections.change-requests.store');
 
             // Submitting (creating) a proposal is single-role, unlike its
             // transitions.
@@ -357,7 +401,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/academic-terms/{academicTerm}/schedule-generation-runs', [ScheduleGenerationRunController::class, 'store'])->name('schedule-generation-runs.store');
             Route::get('/academic-terms/{academicTerm}/schedule-generation-runs/latest', [ScheduleGenerationRunController::class, 'latest'])->name('schedule-generation-runs.latest');
             Route::get('/schedule-generation-runs/{scheduleGenerationRun}', [ScheduleGenerationRunController::class, 'show'])->name('schedule-generation-runs.show');
-            Route::get('/academic-terms/{academicTerm}/faculty-load-report', [FacultyLoadReportController::class, 'show'])->name('faculty-load-report.show');
+            Route::get('/academic-terms/{academicTerm}/lecture-lab-adjacency', [LectureLabAdjacencyController::class, 'index'])->name('lecture-lab-adjacency.index');
             Route::put('/academic-terms/{academicTerm}/faculty-load-threshold', [FacultyLoadReportController::class, 'updateThreshold'])->name('faculty-load-threshold.update');
 
             // A Chair invites professors into their own college only —
@@ -415,13 +459,81 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/student-profiles/{studentProfile}', [StudentProfileController::class, 'showForAdmission'])->name('student-profiles.show');
             Route::patch('/student-profiles/{studentProfile}', [StudentProfileController::class, 'update'])->name('student-profiles.update');
             Route::post('/student-profiles/{studentProfile}/account-setup-invitations', [StudentProfileController::class, 'resendSetupInvitation'])->name('student-profiles.account-setup-invitations.store');
+            // The Admission requirements checklist (ADR 0037).
+            Route::get('/student-profiles/{studentProfile}/admission-requirements', [AdmissionRequirementController::class, 'show'])->whereNumber('studentProfile')->name('student-profiles.admission-requirements.show');
+            Route::put('/student-profiles/{studentProfile}/admission-requirements/{requirementType}', [AdmissionRequirementController::class, 'update'])->whereNumber(['studentProfile', 'requirementType'])->name('student-profiles.admission-requirements.update');
+            Route::post('/admission-requirement-types', [AdmissionRequirementController::class, 'storeType'])->name('admission-requirement-types.store');
         });
 
+        // Program Head files and withdraws, Registrar Head decides; the policy
+        // separates the two (ADR 0032).
+        Route::middleware('role:program_chair,registrar_head')->group(function (): void {
+            Route::get('/section-change-requests', [SectionChangeRequestController::class, 'index'])
+                ->name('section-change-requests.index');
+            Route::patch('/section-change-requests/{sectionChangeRequest}', [SectionChangeRequestController::class, 'update'])
+                ->whereNumber('sectionChangeRequest')
+                ->name('section-change-requests.update');
+        });
+
+        // Enrollment Analytics: drops, withdrawals, and course shifts (ADR 0034).
+        Route::get('/analytics/enrollment-movements', [EnrollmentMovementController::class, 'index'])
+            ->middleware('role:registrar_head,registrar_staff,program_chair')
+            ->name('analytics.enrollment-movements');
+        Route::post('/program-shifts', [EnrollmentMovementController::class, 'storeShift'])
+            ->middleware('role:registrar_head,registrar_staff')
+            ->name('program-shifts.store');
+
+        // Teaching-load limits per employment type and per-professor overrides:
+        // Program Head and Dean, own college only (ADR 0033).
+        Route::middleware('role:program_chair,dean')->group(function (): void {
+            // The report is the Dean's monitoring view too, scoped to their own college.
+            Route::get('/academic-terms/{academicTerm}/faculty-load-report', [FacultyLoadReportController::class, 'show'])
+                ->whereNumber('academicTerm')
+                ->name('faculty-load-report.show');
+            Route::put('/academic-terms/{academicTerm}/faculty-load-limits/{employmentType}', [FacultyLoadLimitController::class, 'updateLimit'])
+                ->whereNumber('academicTerm')
+                ->name('faculty-load-limits.update');
+            Route::put('/academic-terms/{academicTerm}/faculty-load-overrides/{professor}', [FacultyLoadLimitController::class, 'updateOverride'])
+                ->whereNumber(['academicTerm', 'professor'])
+                ->name('faculty-load-overrides.update');
+            Route::delete('/academic-terms/{academicTerm}/faculty-load-overrides/{professor}', [FacultyLoadLimitController::class, 'destroyOverride'])
+                ->whereNumber(['academicTerm', 'professor'])
+                ->name('faculty-load-overrides.destroy');
+        });
+
+        // The Dean assigns or unassigns the professor of a section in their own
+        // college; nothing else about the section (ADR 0033).
+        Route::put('/sections/{section}/professor', [SectionProfessorController::class, 'update'])
+            ->middleware('role:dean')
+            ->whereNumber('section')
+            ->name('sections.professor.update');
+
         Route::middleware('role:registrar_head')->group(function (): void {
+            // A professor's teaching profile: terms taught, sections, timetable data, and
+            // grade-submission counts. Counts only, no student is named.
+            Route::get('/faculty-members/{professor}/profile', FacultyProfileController::class)
+                ->whereNumber('professor')
+                ->name('faculty-members.profile.show');
+            Route::get('/students/{studentProfile}/registrar-profile', [StudentProfileController::class, 'showForRegistrar'])
+                ->whereNumber('studentProfile')
+                ->name('students.registrar-profile.show');
+            // Prerequisite waivers (ADR 0031): Registrar Head only.
+            Route::get('/students/{studentProfile}/subject-waivers', [SubjectWaiverController::class, 'index'])
+                ->whereNumber('studentProfile')
+                ->name('students.subject-waivers.index');
+            Route::post('/students/{studentProfile}/subject-waivers', [SubjectWaiverController::class, 'store'])
+                ->whereNumber('studentProfile')
+                ->name('students.subject-waivers.store');
+            Route::delete('/subject-waivers/{waiver}', [SubjectWaiverController::class, 'destroy'])
+                ->whereNumber('waiver')
+                ->name('subject-waivers.destroy');
             Route::get('/analytics/attrition', AttritionReportController::class)
                 ->name('analytics.attrition');
             Route::get('/audit-logs', AuditLogController::class)
                 ->name('audit-logs.index');
+            // The audit screen's per-user first level (stakeholder Doc 14).
+            Route::get('/audit-logs/actors', AuditActorController::class)
+                ->name('audit-logs.actors');
             Route::get('/dashboards/policy-settings', PolicySettingsController::class)
                 ->name('dashboards.policy-settings');
 
@@ -458,9 +570,29 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // one PRD-authorized exception (§3.5's "stuck-student reports"),
         // scoped to Dean only and returning student_number, never a full
         // Enrollment or student record.
-        Route::middleware('role:dean,executive_director')->group(function (): void {
+        //
+        // ADR 0024 adds a second, narrower exception: the Enrollment Dashboard
+        // drill-down. `enrollment-status` and `.../sections` stay aggregate-only;
+        // `.../students` and `.../students/{id}` return a fixed identity field
+        // set, are limited to the actor's own college for Dean/Program Chair,
+        // and write an audit entry (see EnrollmentStatusPopulation).
+        Route::middleware('role:dean,executive_director,registrar_head,program_chair')->group(function (): void {
             Route::get('/dashboards/enrollment-summary', EnrollmentSummaryController::class)
                 ->name('dashboards.enrollment-summary');
+        });
+        // Registrar Staff, Accounting Staff, and Admission Staff join the roles above
+        // on the status dashboard only, each limited to the students waiting on them
+        // (`EnrollmentStatusPopulation::query` applies the stage at every level).
+        Route::middleware('role:dean,executive_director,registrar_head,program_chair,registrar_staff,accounting_staff,admission_staff')->group(function (): void {
+            Route::get('/dashboards/enrollment-status', [EnrollmentStatusController::class, 'overview'])
+                ->name('dashboards.enrollment-status.overview');
+            Route::get('/dashboards/enrollment-status/sections', [EnrollmentStatusController::class, 'sections'])
+                ->name('dashboards.enrollment-status.sections');
+            Route::get('/dashboards/enrollment-status/students', [EnrollmentStatusController::class, 'students'])
+                ->name('dashboards.enrollment-status.students');
+            Route::get('/dashboards/enrollment-status/students/{studentProfile}', [EnrollmentStatusController::class, 'student'])
+                ->whereNumber('studentProfile')
+                ->name('dashboards.enrollment-status.student');
         });
         Route::middleware('role:dean')->group(function (): void {
             Route::get('/reports/honors', HonorsReportController::class)
@@ -470,7 +602,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::get('/dashboards/institution-summary', InstitutionSummaryController::class)
                 ->name('dashboards.institution-summary');
         });
-        Route::middleware('role:dean')->group(function (): void {
+        Route::middleware('role:dean,registrar_head')->group(function (): void {
             Route::get('/stuck-enrollments', StuckEnrollmentController::class)
                 ->name('stuck-enrollments.index');
         });

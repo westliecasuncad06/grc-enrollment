@@ -300,7 +300,8 @@ describe("RoomsOperationsWorkspace", () => {
     fetchMock.mockImplementation((input, init) => {
       const url = requestUrl(input)
       if (url.includes("/sections/12") && init?.method === "PATCH") {
-        patchedBody = typeof init.body === "string" ? JSON.parse(init.body) : null
+        patchedBody =
+          typeof init.body === "string" ? JSON.parse(init.body) : null
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -310,23 +311,33 @@ describe("RoomsOperationsWorkspace", () => {
         )
       }
       if (url.includes("/sections/26") && init?.method === "PATCH") {
-        patchedBody = typeof init.body === "string" ? JSON.parse(init.body) : null
+        patchedBody =
+          typeof init.body === "string" ? JSON.parse(init.body) : null
         return Promise.resolve(
           new Response(JSON.stringify({ data: sections.data[2] })),
         )
       }
       if (url.includes("/sections/27") && init?.method === "PATCH") {
-        patchedBody = typeof init.body === "string" ? JSON.parse(init.body) : null
+        patchedBody =
+          typeof init.body === "string" ? JSON.parse(init.body) : null
         return Promise.resolve(
-          new Response(JSON.stringify({ data: { ...sections.data[3], room: "LAB 1" } })),
+          new Response(
+            JSON.stringify({ data: { ...sections.data[3], room: "LAB 1" } }),
+          ),
         )
       }
-      if (url.endsWith("/academic-terms")) return Promise.resolve(new Response(JSON.stringify(terms)))
-      if (url.endsWith("/room-options")) return Promise.resolve(new Response(JSON.stringify(rooms)))
-      if (url.includes("/room-occupancy")) return Promise.resolve(new Response(JSON.stringify(roomOccupancy)))
-      if (url.endsWith("/sections")) return Promise.resolve(new Response(JSON.stringify(sections)))
-      if (url.endsWith("/subjects")) return Promise.resolve(new Response(JSON.stringify(subjects)))
-      if (url.includes("/faculty-members")) return Promise.resolve(new Response(JSON.stringify(faculty)))
+      if (url.endsWith("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (url.endsWith("/room-options"))
+        return Promise.resolve(new Response(JSON.stringify(rooms)))
+      if (url.includes("/room-occupancy"))
+        return Promise.resolve(new Response(JSON.stringify(roomOccupancy)))
+      if (url.endsWith("/sections"))
+        return Promise.resolve(new Response(JSON.stringify(sections)))
+      if (url.endsWith("/subjects"))
+        return Promise.resolve(new Response(JSON.stringify(subjects)))
+      if (url.includes("/faculty-members"))
+        return Promise.resolve(new Response(JSON.stringify(faculty)))
 
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
@@ -342,7 +353,9 @@ describe("RoomsOperationsWorkspace", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
     expect(within(dialog).getAllByText("ELEM101")[0]).toBeInTheDocument()
-    expect(within(dialog).queryByText(/Programming 1 LEC/)).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByText(/Programming 1 LEC/),
+    ).not.toBeInTheDocument()
     expect(
       within(dialog).getByText(/IT lecture components are asynchronous/),
     ).toBeInTheDocument()
@@ -382,7 +395,9 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
-    await user.click(within(dialog).getByRole("button", { name: "Assign a class" }))
+    await user.click(
+      within(dialog).getByRole("button", { name: "Assign a class" }),
+    )
 
     const assignDialog = await screen.findByRole("dialog", {
       name: "Assign a class to LAB 1",
@@ -402,7 +417,9 @@ describe("RoomsOperationsWorkspace", () => {
     await user.type(within(assignDialog).getByLabelText("Start time"), "0800AM")
     await user.type(within(assignDialog).getByLabelText("End time"), "0900AM")
 
-    await user.click(within(assignDialog).getByRole("button", { name: "Assign class" }))
+    await user.click(
+      within(assignDialog).getByRole("button", { name: "Assign class" }),
+    )
 
     await screen.findByRole("dialog", { name: "LAB 1" })
     expect(
@@ -424,8 +441,12 @@ describe("RoomsOperationsWorkspace", () => {
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
 
-    await user.click(within(dialog).getByRole("button", { name: /3 overlapping bookings/ }))
-    const clusterDialog = await screen.findByRole("dialog", { name: "Friday bookings" })
+    await user.click(
+      within(dialog).getByRole("button", { name: /3 overlapping bookings/ }),
+    )
+    const clusterDialog = await screen.findByRole("dialog", {
+      name: "Friday bookings",
+    })
 
     expect(within(clusterDialog).getByText("HyFlex A")).toBeInTheDocument()
     expect(within(clusterDialog).getByText("HyFlex B")).toBeInTheDocument()
@@ -454,7 +475,9 @@ describe("RoomsOperationsWorkspace", () => {
     const endTime = within(editDialog).getByLabelText("End time")
     await user.clear(endTime)
     await user.type(endTime, "1100")
-    await user.click(within(editDialog).getByRole("button", { name: "Save changes" }))
+    await user.click(
+      within(editDialog).getByRole("button", { name: "Save changes" }),
+    )
 
     await screen.findByRole("dialog", { name: "LAB 1" })
     expect(
@@ -475,30 +498,41 @@ describe("RoomsOperationsWorkspace", () => {
 
     await user.click(await screen.findByRole("button", { name: "LAB 1" }))
     const dialog = await screen.findByRole("dialog", { name: "LAB 1" })
-    await user.click(within(dialog).getByRole("button", { name: "Assign a class" }))
+    await user.click(
+      within(dialog).getByRole("button", { name: "Assign a class" }),
+    )
 
     const assignDialog = await screen.findByRole("dialog", {
       name: "Assign a class to LAB 1",
     })
     await user.click(
-      within(assignDialog).getByRole("radio", { name: "Move a section already scheduled elsewhere" }),
+      within(assignDialog).getByRole("radio", {
+        name: "Move a section already scheduled elsewhere",
+      }),
     )
     await user.click(within(assignDialog).getByLabelText("Section"))
     expect(
-      screen.queryByRole("option", { name: /IT301 — Networking \(Unassigned\)/ }),
+      screen.queryByRole("option", {
+        name: /IT301 — Networking \(Unassigned\)/,
+      }),
     ).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole("option", { name: /IT301B.*currently 3A/ }))
+    await user.click(
+      screen.getByRole("option", { name: /IT301B.*currently 3A/ }),
+    )
 
     // Prefilled from IT301B's current booking, not left blank.
-    expect(within(assignDialog).getByRole("radio", { name: "Wed" })).toHaveAttribute(
-      "aria-checked",
-      "true",
+    expect(
+      within(assignDialog).getByRole("radio", { name: "Wed" }),
+    ).toHaveAttribute("aria-checked", "true")
+    expect(within(assignDialog).getByLabelText("Start time")).toHaveValue(
+      "13:00",
     )
-    expect(within(assignDialog).getByLabelText("Start time")).toHaveValue("13:00")
     expect(within(assignDialog).getByLabelText("End time")).toHaveValue("15:00")
 
-    await user.click(within(assignDialog).getByRole("button", { name: "Assign class" }))
+    await user.click(
+      within(assignDialog).getByRole("button", { name: "Assign class" }),
+    )
 
     await screen.findByRole("dialog", { name: "LAB 1" })
     expect(patchedBody).toMatchObject({
@@ -526,8 +560,13 @@ describe("RoomsOperationsWorkspace", () => {
       within(editDialog).getByLabelText(/Override reason/),
     ).toBeInTheDocument()
 
-    await user.type(within(editDialog).getByLabelText(/Override reason/), "Room conflict fix")
-    await user.click(within(editDialog).getByRole("button", { name: "Save changes" }))
+    await user.type(
+      within(editDialog).getByLabelText(/Override reason/),
+      "Room conflict fix",
+    )
+    await user.click(
+      within(editDialog).getByRole("button", { name: "Save changes" }),
+    )
 
     await screen.findByRole("dialog", { name: "LAB 1" })
     expect(patchedBody).toMatchObject({ override_reason: "Room conflict fix" })
@@ -536,12 +575,14 @@ describe("RoomsOperationsWorkspace", () => {
   it("lists sections still awaiting a room, excluding a CCS lecture component with no room", async () => {
     renderWorkspace()
 
-    const card = (await screen.findByText("Awaiting a room")).closest<HTMLElement>(
-      '[data-slot="card"]',
-    )!
+    const card = (
+      await screen.findByText("Awaiting a room")
+    ).closest<HTMLElement>('[data-slot="card"]')!
     expect(within(card).getByText("IT301 — Networking")).toBeInTheDocument()
     expect(within(card).getByText("Unassigned")).toBeInTheDocument()
-    expect(within(card).queryByText(/Programming 1 LEC/)).not.toBeInTheDocument()
+    expect(
+      within(card).queryByText(/Programming 1 LEC/),
+    ).not.toBeInTheDocument()
     expect(within(card).getByText("1 subject")).toBeInTheDocument()
   })
 
@@ -549,23 +590,31 @@ describe("RoomsOperationsWorkspace", () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    const card = (await screen.findByText("Awaiting a room")).closest<HTMLElement>(
-      '[data-slot="card"]',
-    )!
-    await user.click(within(card).getByRole("button", { name: "Assign a room" }))
+    const card = (
+      await screen.findByText("Awaiting a room")
+    ).closest<HTMLElement>('[data-slot="card"]')!
+    await user.click(
+      within(card).getByRole("button", { name: "Assign a room" }),
+    )
 
     const picker = await screen.findByRole("dialog", { name: "Pick a room" })
     await user.click(within(picker).getByRole("button", { name: "LAB 1" }))
 
-    const calendarStep = await screen.findByRole("dialog", { name: "LAB 1 — pick an open slot" })
+    const calendarStep = await screen.findByRole("dialog", {
+      name: "LAB 1 — pick an open slot",
+    })
     await user.click(
       within(calendarStep).getByRole("button", {
         name: "Saturday 7:30 AM — available, assign a class",
       }),
     )
 
-    const formStep = await screen.findByRole("dialog", { name: "Confirm the schedule in LAB 1" })
-    await user.click(within(formStep).getByRole("button", { name: "Save schedule" }))
+    const formStep = await screen.findByRole("dialog", {
+      name: "Confirm the schedule in LAB 1",
+    })
+    await user.click(
+      within(formStep).getByRole("button", { name: "Save schedule" }),
+    )
 
     await vi.waitFor(() => {
       expect(patchedBody).toMatchObject({
@@ -576,5 +625,61 @@ describe("RoomsOperationsWorkspace", () => {
         modality: "f2f",
       })
     })
+  })
+
+  it("shows on every room tile whether it is empty or how many classes it holds, and on which days", async () => {
+    fetchMock.mockImplementation((input) => {
+      const target = requestUrl(input)
+      if (target.endsWith("/room-options"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                { type: "room_option", id: 1, name: "LAB 1" },
+                { type: "room_option", id: 2, name: "LAB 2" },
+              ],
+            }),
+          ),
+        )
+      if (target.includes("/room-occupancy-summary"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [{ room: "LAB 1", classes_count: 2, days: [1, 3] }],
+            }),
+          ),
+        )
+      if (target.endsWith("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWorkspace()
+
+    const busy = await screen.findByRole("button", { name: /LAB 1/ })
+    expect(await within(busy).findByText("2 classes")).toBeInTheDocument()
+    expect(
+      within(busy).getByRole("img", { name: "Used on Mon, Wed" }),
+    ).toBeInTheDocument()
+
+    const empty = screen.getByRole("button", { name: /LAB 2/ })
+    expect(within(empty).getByText("Empty")).toBeInTheDocument()
+  })
+
+  it("says nothing about use until the summary has loaded, so a slow answer never shows an occupied room as empty", async () => {
+    fetchMock.mockImplementation((input) => {
+      const target = requestUrl(input)
+      if (target.endsWith("/room-options"))
+        return Promise.resolve(new Response(JSON.stringify(rooms)))
+      if (target.includes("/room-occupancy-summary"))
+        return new Promise<Response>(() => undefined)
+      if (target.endsWith("/academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    renderWorkspace()
+
+    const tile = await screen.findByRole("button", { name: "LAB 1" })
+    expect(within(tile).queryByText("Empty")).not.toBeInTheDocument()
+    expect(within(tile).queryByText(/classes?$/)).not.toBeInTheDocument()
   })
 })

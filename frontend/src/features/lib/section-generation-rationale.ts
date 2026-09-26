@@ -35,7 +35,7 @@ function reasonsForSection(
 
   if (plan?.recommendation_source == null) {
     return [
-      "Manually planned by the Program Chair — no demand forecast was available for this subject.",
+      "Manually planned by the Program Head — no demand forecast was available for this subject.",
     ]
   }
 
@@ -44,7 +44,7 @@ function reasonsForSection(
     plan.recommendation_is_overridden
   ) {
     return [
-      `A demand forecast suggested ${plan.recommended_section_count ?? "—"} section(s); the Program Chair set ${plan.section_count} instead.`,
+      `A demand forecast suggested ${plan.recommended_section_count ?? "—"} section(s); the Program Head set ${plan.section_count} instead.`,
     ]
   }
 

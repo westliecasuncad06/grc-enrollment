@@ -291,21 +291,38 @@ final class WithdrawalRequestsEndpointTest extends TestCase
         );
     }
 
-    public function test_a_registrar_head_cannot_decide_a_withdrawal_request(): void
+    public function test_a_registrar_head_can_decide_a_withdrawal_request(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
-        [$enrollment] = $this->makeEnrolledEnrollmentWithSeat($student, $term);
+        [$enrollment, $section] = $this->makeEnrolledEnrollmentWithSeat($student, $term);
         $withdrawalRequest = $this->makeWithdrawalRequest($enrollment);
-        $registrarHeadToken = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar-head.forbidden@grc.test');
+        $registrarHeadToken = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar-head.decide@grc.test');
 
         $response = $this->withToken($registrarHeadToken)->patchJson(
             "/api/v1/withdrawal-requests/{$withdrawalRequest->id}",
             ['action' => 'approve'],
         );
 
-        $response->assertForbidden();
+        $response->assertOk()->assertJsonPath('data.status', 'approved');
+        self::assertSame('withdrawn', $enrollment->refresh()->status->value);
+        self::assertSame(0, $section->refresh()->enrolled_count);
+    }
+
+    public function test_accounting_staff_cannot_decide_a_withdrawal_request(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        [$enrollment] = $this->makeEnrolledEnrollmentWithSeat($student, $term);
+        $withdrawalRequest = $this->makeWithdrawalRequest($enrollment);
+        $accountingToken = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.withdraw.forbidden@grc.test');
+
+        $this->withToken($accountingToken)->patchJson(
+            "/api/v1/withdrawal-requests/{$withdrawalRequest->id}",
+            ['action' => 'approve'],
+        )->assertForbidden();
     }
 
     public function test_a_student_sees_only_their_own_withdrawal_request(): void

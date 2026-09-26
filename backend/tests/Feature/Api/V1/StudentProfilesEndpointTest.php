@@ -202,6 +202,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
     public function test_student_activates_the_pending_account_with_the_emailed_one_time_code(): void
     {
+        config(['app.frontend_url' => 'http://localhost:3000']);
         [$program] = $this->makeProgramAndCurriculum();
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.activation@grc.test');
         Mail::fake();
@@ -223,7 +224,7 @@ final class StudentProfilesEndpointTest extends TestCase
         Mail::assertSent(StudentAccountSetupMail::class, function (StudentAccountSetupMail $mail) use (&$setupCode): bool {
             $setupCode = $mail->setupCode;
 
-            return $mail->setupUrl === 'http://localhost:3000/account-setup'
+            return $mail->setupUrl === 'http://localhost:3000'
                 && ! str_contains($mail->setupUrl, 'token=');
         });
         self::assertIsString($setupCode);
@@ -249,7 +250,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'status' => 'active',
         ]);
         self::assertNotNull(User::query()->where('email', 'pending.student@grc.test')->value('account_setup_completed_at'));
-        $this->assertDatabaseMissing('password_reset_tokens', ['email' => 'pending.student@grc.test']);
+        $this->assertDatabaseCount('account_setup_codes', 0);
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::STUDENT_ACCOUNT_ACTIVATED)->count());
 
         $this->postJson('/api/v1/auth/login', [
@@ -290,11 +291,11 @@ final class StudentProfilesEndpointTest extends TestCase
 
             return true;
         });
-        DB::table('password_reset_tokens')
-            ->where('email', 'expiring.student@grc.test')
-            ->update(['created_at' => now()->subMinutes((int) config('auth.passwords.users.expire') + 1)]);
+        DB::table('account_setup_codes')
+            ->whereIn('user_id', User::query()->where('email', 'expiring.student@grc.test')->pluck('id'))
+            ->update(['expires_at' => now()->subMinute()]);
 
-        foreach ([$setupCode, 'definitely-not-the-code'] as $code) {
+        foreach ([$setupCode, '123456'] as $code) {
             $this->postJson('/api/v1/auth/account-setup', [
                 'email' => 'expiring.student@grc.test',
                 'code' => $code,
@@ -339,7 +340,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'email' => 'mail.failure.student@grc.test',
             'status' => 'disabled',
         ]);
-        $this->assertDatabaseCount('password_reset_tokens', 1);
+        $this->assertDatabaseCount('account_setup_codes', 1);
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::STUDENT_ACCOUNT_SETUP_INVITATION_FAILED)->count());
     }
 

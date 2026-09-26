@@ -5,9 +5,11 @@ namespace App\Actions\Scheduling;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
+use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\CapacitySource;
 use App\Domain\Scheduling\CanonicalScheduleDays;
+use App\Domain\Scheduling\SectionStatus;
 use App\Models\Notification;
 use App\Models\Section;
 use App\Models\User;
@@ -104,9 +106,19 @@ final class UpdateSection
                 }
             }
 
+            // A published section is final for the Program Head, who may still
+            // swap the professor without approval (ADR 0032). The Registrar Head
+            // hears about it and the audit log says so in its own action.
+            $reassignedAfterPublish = in_array($actor->role, [UserRole::ProgramChair, UserRole::Dean], true)
+                && $beforeValues['status'] === SectionStatus::Published->value
+                && $previousProfessorId !== $newProfessorId;
+            if ($reassignedAfterPublish) {
+                $this->notifyRegistrarHeads($actor, $section, $previousProfessorId, $newProfessorId);
+            }
+
             $this->auditRecorder->record(
                 $actor,
-                AuditAction::SECTION_UPDATED,
+                $reassignedAfterPublish ? AuditAction::SECTION_PROFESSOR_REASSIGNED : AuditAction::SECTION_UPDATED,
                 AuditableType::SECTION,
                 $section->id,
                 $beforeValues,
@@ -117,6 +129,29 @@ final class UpdateSection
 
             return $section;
         });
+    }
+
+    private function notifyRegistrarHeads(User $actor, Section $section, ?int $fromId, ?int $toId): void
+    {
+        $names = User::query()->whereIn('id', array_filter([$fromId, $toId]))->pluck('name', 'id');
+        $section->loadMissing('subject');
+
+        User::query()
+            ->where('role', UserRole::RegistrarHead)
+            ->whereKeyNot($actor->id)
+            ->get()
+            ->each(fn (User $head) => Notification::create([
+                'user_id' => $head->id,
+                'type' => NotificationType::SectionProfessorReassigned,
+                'message' => sprintf(
+                    '%s changed the professor of %s section %s from %s to %s.',
+                    $actor->name,
+                    $section->subject->code,
+                    $section->section_code,
+                    $fromId === null ? 'no professor' : ($names[$fromId] ?? 'the previous professor'),
+                    $toId === null ? 'no professor' : ($names[$toId] ?? 'a new professor'),
+                ),
+            ]));
     }
 
     /** @return array{academic_term_id: int, subject_id: int, section_code: string, professor_id: ?int, schedule_days: ?string, starts_at_time: ?string, ends_at_time: ?string, room: ?string, modality: ?string, capacity: int, capacity_source: string, viability_threshold: ?int, enrolled_count: int, status: string} */

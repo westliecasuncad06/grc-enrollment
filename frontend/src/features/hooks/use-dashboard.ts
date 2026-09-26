@@ -4,11 +4,15 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
 import {
+  getEnrollmentStatusOverview,
+  getEnrollmentStatusSections,
+  getEnrollmentStatusStudent,
+  getEnrollmentStatusStudents,
   getEnrollmentSummary,
   getInstitutionSummary,
   getPolicySettings,
   getProgramChairAnalyticsSummary,
-  getStuckEnrollments,
+  type EnrollmentStatusStudentsOptions,
 } from "@/features/services/dashboard-service"
 
 export const enrollmentSummaryQueryKey = (
@@ -59,23 +63,6 @@ export function usePolicySettingsQuery(enabled = true) {
   return useQuery({
     queryKey: policySettingsQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getPolicySettings(signal),
-    enabled: enabled && session !== null,
-  })
-}
-
-export const stuckEnrollmentsQueryKey = (
-  userId: string | null,
-  academicTermId?: number,
-) => ["stuck-enrollments", userId, academicTermId ?? null] as const
-
-export function useStuckEnrollmentsQuery(
-  academicTermId?: number,
-  enabled = true,
-) {
-  const { session } = useAuth()
-  return useQuery({
-    queryKey: stuckEnrollmentsQueryKey(session?.userId ?? null, academicTermId),
-    queryFn: ({ signal }) => getStuckEnrollments(academicTermId, signal),
     enabled: enabled && session !== null,
   })
 }
@@ -131,5 +118,97 @@ export function useProgramChairAnalyticsSummaryQuery(
         signal,
       ),
     enabled: enabled && session !== null,
+  })
+}
+
+// --- Enrollment Dashboard drill-down (ADR 0024) ---------------------------
+// Keys carry the session user id (private data) and every filter that changes
+// the answer, so a different department/section/group/page never reuses a row.
+
+export const enrollmentStatusOverviewQueryKey = (
+  userId: string | null,
+  academicTermId?: number,
+) => ["enrollment-status-overview", userId, academicTermId ?? null] as const
+
+export function useEnrollmentStatusOverviewQuery(
+  academicTermId?: number,
+  enabled = true,
+) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: enrollmentStatusOverviewQueryKey(
+      session?.userId ?? null,
+      academicTermId,
+    ),
+    queryFn: ({ signal }) =>
+      getEnrollmentStatusOverview(academicTermId, signal),
+    enabled: enabled && session !== null,
+  })
+}
+
+export function useEnrollmentStatusSectionsQuery(
+  department: string | null,
+  academicTermId?: number,
+  enabled = true,
+) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: [
+      "enrollment-status-sections",
+      session?.userId ?? null,
+      academicTermId ?? null,
+      department,
+    ] as const,
+    queryFn: ({ signal }) =>
+      getEnrollmentStatusSections(
+        { department: department ?? "", academicTermId },
+        signal,
+      ),
+    enabled: enabled && session !== null && department !== null,
+  })
+}
+
+export function useEnrollmentStatusStudentsQuery(
+  options: EnrollmentStatusStudentsOptions | null,
+  enabled = true,
+) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: [
+      "enrollment-status-students",
+      session?.userId ?? null,
+      options?.academicTermId ?? null,
+      options?.department ?? null,
+      // `null` (no section yet) and `undefined` (whole department) differ.
+      options?.sectionCode === undefined
+        ? "all"
+        : (options.sectionCode ?? "none"),
+      options?.group ?? null,
+      options?.page ?? 1,
+      options?.perPage ?? 15,
+    ] as const,
+    queryFn: ({ signal }) =>
+      // Only runs when `options` is set (see `enabled`).
+      getEnrollmentStatusStudents(options!, signal),
+    enabled: enabled && session !== null && options !== null,
+  })
+}
+
+export function useEnrollmentStatusStudentQuery(
+  studentProfileId: number | null,
+  academicTermId?: number,
+  enabled = true,
+) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: [
+      "enrollment-status-student",
+      session?.userId ?? null,
+      academicTermId ?? null,
+      studentProfileId,
+    ] as const,
+    queryFn: ({ signal }) =>
+      getEnrollmentStatusStudent(studentProfileId ?? 0, academicTermId, signal),
+    enabled: enabled && session !== null && studentProfileId !== null,
   })
 }

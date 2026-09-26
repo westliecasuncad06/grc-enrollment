@@ -27,7 +27,8 @@ export function useQueueCycleQuery({
     queryKey: queueCycleQueryKey(session?.userId ?? null),
     queryFn: ({ signal }) => getQueueCycle(signal),
     enabled: enabled && session !== null,
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
   })
 }

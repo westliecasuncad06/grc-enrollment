@@ -4,8 +4,8 @@ import { useMemo, useState } from "react"
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { AttritionCohortChart } from "@/features/components/portal/attrition-cohort-chart"
-import { EnrollmentYearOverYearChart } from "@/features/components/portal/enrollment-year-over-year-chart"
 import { SchoolYearRangeSlider } from "@/features/components/portal/school-year-range-slider"
+import { StoppedStudentsTrendChart } from "@/features/components/portal/stopped-students-trend-chart"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Card,
@@ -34,6 +34,7 @@ import {
   useAcademicTermsQuery,
   useProgramsQuery,
 } from "@/features/hooks/use-reference-data"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 
 const colleges = [
   ["ccs", "College of Computer Studies"],
@@ -138,7 +139,7 @@ export function AttritionAnalyticsWorkspace() {
   return (
     <WorkspacePage
       title="Attrition analytics"
-      description="Official enrollment retention from the first to second semester. Results are anonymous cohort aggregates."
+      description="Students who will not continue: those who withdrew, and those who finished the first semester but did not enroll in the second after its enrollment window closed. Students still enrolling and graduates are not counted. Results are anonymous cohort aggregates."
       unauthorized={!authorized}
       lastUpdated={report.dataUpdatedAt}
     >
@@ -160,7 +161,10 @@ export function AttritionAnalyticsWorkspace() {
                     value={activeSchoolYear}
                     onValueChange={(v) => setSelectedSchoolYear(v)}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger
+                      className="w-full"
+                      aria-label="Cohort School Year"
+                    >
                       <SelectValue placeholder="Select school year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -178,11 +182,12 @@ export function AttritionAnalyticsWorkspace() {
                   College / Department
                 </label>
                 <Select
-                  onValueChange={(v) =>
-                    setCollege(v === "all" ? undefined : v)
-                  }
+                  onValueChange={(v) => setCollege(v === "all" ? undefined : v)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger
+                    className="w-full"
+                    aria-label="College / Department"
+                  >
                     <SelectValue placeholder="All colleges" />
                   </SelectTrigger>
                   <SelectContent>
@@ -204,7 +209,7 @@ export function AttritionAnalyticsWorkspace() {
                     setProgramId(v === "all" ? undefined : Number(v))
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full" aria-label="Degree Program">
                     <SelectValue placeholder="All programs" />
                   </SelectTrigger>
                   <SelectContent>
@@ -226,14 +231,14 @@ export function AttritionAnalyticsWorkspace() {
                     setYearLevel(v === "all" ? undefined : Number(v))
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full" aria-label="Year Level">
                     <SelectValue placeholder="All years" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All years</SelectItem>
                     {[1, 2, 3, 4].map((y) => (
                       <SelectItem key={y} value={String(y)}>
-                        Year {y}
+                        {formatYearLevel(y)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -253,9 +258,9 @@ export function AttritionAnalyticsWorkspace() {
           </CardContent>
         </Card>
 
-        {/* Multi-Term Official Enrollment & Retention Trend Line Chart */}
+        {/* Multi-Term Stopped Students & Attrition Trend Line Chart */}
         {trendSummary.data?.year_over_year && (
-          <EnrollmentYearOverYearChart
+          <StoppedStudentsTrendChart
             points={trendSummary.data.year_over_year}
           />
         )}
@@ -274,7 +279,7 @@ export function AttritionAnalyticsWorkspace() {
           <AsyncBoundary
             query={report}
             isEmpty={(data) => data.summary.baseline_count === 0}
-            emptyMessage="No officially enrolled students match this term pair and filter."
+            emptyMessage="No students from this cohort have finished the term and either withdrawn or missed the next enrollment window. Students still enrolling are not counted."
             loadingLabel="Loading attrition analytics…"
           >
             {(data) => (
@@ -283,7 +288,7 @@ export function AttritionAnalyticsWorkspace() {
                   {[
                     ["Baseline", data.summary.baseline_count],
                     ["Retained", data.summary.retained_count],
-                    ["Did not enroll", data.summary.attrited_count],
+                    ["Will not continue", data.summary.attrited_count],
                     ["Attrition", `${data.summary.attrition_rate}%`],
                   ].map(([label, value]) => (
                     <Card key={String(label)}>
@@ -298,6 +303,14 @@ export function AttritionAnalyticsWorkspace() {
                     </Card>
                   ))}
                 </div>
+
+                {(data.summary.undecided_count ?? 0) > 0 && (
+                  <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                    {data.summary.undecided_count} student(s) from this cohort
+                    are still deciding or enrolling, so they are not counted as
+                    attrition yet.
+                  </p>
+                )}
 
                 <AttritionCohortChart report={data} />
 
@@ -314,7 +327,7 @@ export function AttritionAnalyticsWorkspace() {
                           <TableHead>Program</TableHead>
                           <TableHead>Baseline</TableHead>
                           <TableHead>Retained</TableHead>
-                          <TableHead>Did not enroll</TableHead>
+                          <TableHead>Will not continue</TableHead>
                           <TableHead>Rate</TableHead>
                         </TableRow>
                       </TableHeader>

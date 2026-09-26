@@ -10,15 +10,31 @@ import {
 import { toast } from "sonner"
 
 import {
-  readQueueCallSoundPreference,
+  readQueueCallSoundChoice,
   writeQueueCallSoundPreference,
 } from "@/features/lib/queue-alert-preference"
-import { announceTicketNumber } from "@/features/lib/queue-announcement"
+import {
+  announceTicketNumber,
+  primeSpeechSynthesis,
+  scheduleAlertChime,
+} from "@/features/lib/queue-announcement"
 import type { StudentQueueView } from "@/features/schemas/student-queue-schema"
 
 type QueueTicket = StudentQueueView["ticket"]
 
-type PreviousTicket = Pick<NonNullable<QueueTicket>, "ticket_number" | "status">
+type PreviousTicket = Pick<
+  NonNullable<QueueTicket>,
+  "ticket_number" | "status" | "announce_count"
+>
+
+export interface QueueCallAlertOptions {
+  /**
+   * Whether sound counts as wanted when the student never chose either way.
+   * True on a student's own device, false on the shared kiosk. Browsers still
+   * need one tap before audio can play (see the unlock listener below).
+   */
+  defaultSoundOn?: boolean
+}
 
 interface TitleClaim {
   title: string
@@ -34,7 +50,7 @@ let titleSequence = 0
 
 const audioListeners = new Set<() => void>()
 const audioOwners = new Set<symbol>()
-const activeOscillators = new Map<symbol, OscillatorNode>()
+const activeOscillators = new Map<symbol, OscillatorNode[]>()
 let sharedAudioContext: AudioContext | null = null
 let sharedSoundEnabled = false
 let sharedSoundPreferred = false
@@ -114,22 +130,24 @@ function subscribeToSharedSound(listener: () => void): () => void {
 }
 
 function stopSharedOscillator(owner: symbol): void {
-  const oscillator = activeOscillators.get(owner)
-  if (!oscillator) {
+  const oscillators = activeOscillators.get(owner)
+  if (!oscillators) {
     return
   }
 
   activeOscillators.delete(owner)
-  oscillator.onended = null
-  try {
-    oscillator.stop()
-  } catch {
-    // A natural end or an earlier transition can stop the node first.
-  }
-  try {
-    oscillator.disconnect()
-  } catch {
-    // Browser implementations differ when disconnecting a detached node.
+  for (const oscillator of oscillators) {
+    oscillator.onended = null
+    try {
+      oscillator.stop()
+    } catch {
+      // A natural end or an earlier transition can stop the node first.
+    }
+    try {
+      oscillator.disconnect()
+    } catch {
+      // Browser implementations differ when disconnecting a detached node.
+    }
   }
 }
 
@@ -151,9 +169,9 @@ function closeSharedAudioContext(): void {
   notifyAudioListeners()
 }
 
-function registerAudioOwner(owner: symbol): void {
+function registerAudioOwner(owner: symbol, defaultSoundOn: boolean): void {
   if (audioOwners.size === 0) {
-    sharedSoundPreferred = readQueueCallSoundPreference()
+    sharedSoundPreferred = readQueueCallSoundChoice() ?? defaultSoundOn
   }
   audioOwners.add(owner)
   notifyAudioListeners()
@@ -167,10 +185,19 @@ function releaseAudioOwner(owner: symbol): void {
   }
 }
 
-function enableSharedSound(): void {
-  writeQueueCallSoundPreference(true)
-  sharedSoundPreferred = true
-  notifyAudioListeners()
+/**
+ * Creates and resumes the shared audio context. Must run inside a user
+ * gesture. `persist` is true for the student's own "Turn on sound" choice;
+ * the automatic first-tap unlock passes false so it never saves a choice the
+ * student did not make.
+ */
+function enableSharedSound(persist = true): void {
+  if (persist) {
+    writeQueueCallSoundPreference(true)
+    sharedSoundPreferred = true
+    notifyAudioListeners()
+  }
+  primeSpeechSynthesis()
 
   const AudioContextConstructor = getAudioContextConstructor()
   if (!AudioContextConstructor) {
@@ -204,7 +231,12 @@ function disableSharedSound(): void {
   closeSharedAudioContext()
 }
 
-function playSharedTone(owner: symbol): void {
+/**
+ * The same two-note chime the Cashier hears (`ALERT_CHIME_NOTES`), on the
+ * student's gesture-unlocked shared context. The oscillators are tracked per
+ * owner so leaving the page or the next call stops them.
+ */
+function playSharedChime(owner: symbol): void {
   const context = sharedAudioContext
   if (!sharedSoundEnabled || !context) {
     return
@@ -213,29 +245,27 @@ function playSharedTone(owner: symbol): void {
   stopSharedOscillator(owner)
 
   try {
-    const oscillator = context.createOscillator()
-    oscillator.type = "sine"
-    oscillator.frequency.value = 880
-    oscillator.connect(context.destination)
-    oscillator.onended = () => {
-      if (activeOscillators.get(owner) === oscillator) {
-        activeOscillators.delete(owner)
-      }
-      try {
-        oscillator.disconnect()
-      } catch {
-        // A replacement or disable action may already have disconnected it.
+    const oscillators = scheduleAlertChime(context)
+    activeOscillators.set(owner, oscillators)
+    const last = oscillators[oscillators.length - 1]
+    if (last) {
+      last.onended = () => {
+        if (activeOscillators.get(owner) === oscillators) {
+          stopSharedOscillator(owner)
+        }
       }
     }
-    activeOscillators.set(owner, oscillator)
-    oscillator.start()
-    oscillator.stop(context.currentTime + 0.75)
   } catch {
     stopSharedOscillator(owner)
   }
 }
 
-export function useQueueCallAlert(ticket: QueueTicket) {
+export type QueueCallAlert = ReturnType<typeof useQueueCallAlert>
+
+export function useQueueCallAlert(
+  ticket: QueueTicket,
+  { defaultSoundOn = false }: QueueCallAlertOptions = {},
+) {
   const [owner] = useState(() => Symbol("queue-call-alert"))
   const [isCalled, setIsCalled] = useState(false)
   const [callMessage, setCallMessage] = useState<string | null>(null)
@@ -274,33 +304,71 @@ export function useQueueCallAlert(ticket: QueueTicket) {
 
   const ticketNumber = ticket?.ticket_number
   const ticketStatus = ticket?.status
+  const announceCount = ticket?.announce_count ?? 0
 
   useEffect(() => {
-    registerAudioOwner(owner)
+    registerAudioOwner(owner, defaultSoundOn)
     return () => {
       clearCalledState()
       releaseAudioOwner(owner)
     }
-  }, [clearCalledState, owner])
+  }, [clearCalledState, defaultSoundOn, owner])
+
+  // Sound is wanted but the browser has not allowed audio yet: the student's
+  // first tap or key press anywhere on the page is the gesture that does.
+  // Waiting for them to find a button is why the call was never heard.
+  useEffect(() => {
+    if (!soundPreferred || soundEnabled || typeof window === "undefined") {
+      return
+    }
+
+    const unlock = () => enableSharedSound(false)
+    window.addEventListener("pointerdown", unlock, {
+      once: true,
+      capture: true,
+    })
+    window.addEventListener("keydown", unlock, { once: true, capture: true })
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock, { capture: true })
+      window.removeEventListener("keydown", unlock, { capture: true })
+    }
+  }, [soundPreferred, soundEnabled])
 
   useEffect(() => {
     const currentTicket =
       ticketNumber && ticketStatus
-        ? { ticket_number: ticketNumber, status: ticketStatus }
+        ? {
+            ticket_number: ticketNumber,
+            status: ticketStatus,
+            announce_count: announceCount,
+          }
         : null
     const previousTicket = previousTicketRef.current
 
-    if (
-      currentTicket &&
+    // Two things ring the student's device: their own ticket going from
+    // waiting to serving, and the Cashier pressing "Announce ticket" again
+    // while it is serving (the counter goes up between polls).
+    const wasCalled =
+      currentTicket !== null &&
       previousTicket?.ticket_number === currentTicket.ticket_number &&
       previousTicket.status === "waiting" &&
       currentTicket.status === "serving"
-    ) {
+    const wasAnnounced =
+      currentTicket !== null &&
+      previousTicket?.ticket_number === currentTicket.ticket_number &&
+      previousTicket.status === "serving" &&
+      currentTicket.status === "serving" &&
+      currentTicket.announce_count > previousTicket.announce_count
+
+    if (currentTicket && (wasCalled || wasAnnounced)) {
       const title = `Now serving ${currentTicket.ticket_number} — GRC Queue`
       claimDocumentTitle(owner, title)
       setIsCalled(true)
       setCallMessage(
-        `Your ticket ${currentTicket.ticket_number} is now being served.`,
+        wasAnnounced
+          ? `Your ticket ${currentTicket.ticket_number} is being called again.`
+          : `Your ticket ${currentTicket.ticket_number} is now being served.`,
       )
       toast(title)
 
@@ -312,7 +380,7 @@ export function useQueueCallAlert(ticket: QueueTicket) {
       }
 
       if (getSharedSoundEnabled()) {
-        playSharedTone(owner)
+        playSharedChime(owner)
         announceTicketNumber(currentTicket.ticket_number)
       }
 
@@ -325,7 +393,7 @@ export function useQueueCallAlert(ticket: QueueTicket) {
     previousTicketRef.current = currentTicket
 
     return clearCalledState
-  }, [clearCalledState, owner, ticketNumber, ticketStatus])
+  }, [clearCalledState, owner, ticketNumber, ticketStatus, announceCount])
 
   return {
     isCalled,

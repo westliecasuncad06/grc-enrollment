@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -111,6 +111,10 @@ const facultyLoadReport = {
     academic_term_id: 1,
     college: "ccs",
     threshold_units: 18,
+    limits: [
+      { employment_type: "full_time", label: "Full-time", max_units: 24 },
+      { employment_type: "part_time", label: "Part-time", max_units: null },
+    ],
     required_teaching_units: 6,
     required_assignments: 2,
     equivalent_faculty_loads: 1,
@@ -121,7 +125,12 @@ const facultyLoadReport = {
       {
         professor_id: 12,
         professor_name: "Prof. Reyes",
+        employment_type: "full_time",
+        employment_type_label: "Full-time",
         total_units: 3,
+        max_units: 24,
+        limit_source: "employment_type",
+        override: null,
         overloaded: false,
         assignments: [
           {
@@ -147,7 +156,15 @@ const facultyLoadReport = {
       {
         professor_id: 13,
         professor_name: "Prof. Santos",
+        employment_type: "part_time",
+        employment_type_label: "Part-time",
         total_units: 3,
+        max_units: 6,
+        limit_source: "override",
+        override: {
+          max_units: 6,
+          reason: "No one else can teach Data Structures.",
+        },
         overloaded: false,
         assignments: [
           {
@@ -209,9 +226,22 @@ describe("FacultyLoadingWorkspace", () => {
               : faculty
             : url.endsWith("/faculty-load-report")
               ? facultyLoadReport
-              : url.includes("/faculty-load-threshold") && init?.method === "PUT"
+              : url.includes("/faculty-load-threshold") &&
+                  init?.method === "PUT"
                 ? { data: { max_units: 18 } }
-                : { data: [] }
+                : url.includes("/faculty-load-limits/") &&
+                    init?.method === "PUT"
+                  ? { data: { max_units: 24 } }
+                  : url.includes("/faculty-load-overrides/") &&
+                      init?.method === "PUT"
+                    ? { data: { max_units: 30 } }
+                    : { data: [] }
+      if (
+        url.includes("/faculty-load-overrides/") &&
+        init?.method === "DELETE"
+      ) {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
       return Promise.resolve(new Response(JSON.stringify(body)))
     })
   })
@@ -238,7 +268,9 @@ describe("FacultyLoadingWorkspace", () => {
     renderWorkspace()
 
     await user.click(await screen.findByLabelText("Subject"))
-    await user.click(await screen.findByRole("option", { name: "IT201 — Data Structures" }))
+    await user.click(
+      await screen.findByRole("option", { name: "IT201 — Data Structures" }),
+    )
 
     expect(
       await screen.findByText("Assigned subjects: IT201"),
@@ -267,28 +299,126 @@ describe("FacultyLoadingWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
+  const bodyOf = (init: RequestInit | undefined) =>
+    typeof init?.body === "string" ? init.body : ""
 
-  it("saves a faculty load threshold successfully", async () => {
+  function calls(method: string, part: string) {
+    return (
+      fetchMock.mock.calls as [RequestInfo | URL, RequestInit | undefined][]
+    ).filter(
+      ([input, init]) =>
+        requestUrl(input).includes(part) && init?.method === method,
+    )
+  }
+
+  it("shows each professor's load against the maximum that applies and where it comes from", async () => {
+    renderWorkspace()
+
+    expect(await screen.findByText("3 of 24 units")).toBeInTheDocument()
+    expect(screen.getByText("Full-time limit")).toBeInTheDocument()
+    expect(screen.getByText("3 of 6 units")).toBeInTheDocument()
+    expect(screen.getByText("Own max load")).toBeInTheDocument()
+    expect(
+      screen.getByText("No one else can teach Data Structures."),
+    ).toBeInTheDocument()
+  })
+
+  it("saves the full-time maximum on its own", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
-    await screen.findByText("Faculty load threshold")
+    const input = await screen.findByLabelText("Full-time maximum units")
+    expect(input).toHaveValue(24)
+    await user.clear(input)
+    await user.type(input, "21")
+    await user.click(
+      screen.getByRole("button", { name: "Save full-time maximum units" }),
+    )
 
-    const thresholdInput = screen.getByPlaceholderText("e.g. 18") as HTMLInputElement
-    await user.clear(thresholdInput)
-    await user.type(thresholdInput, "24")
-
-    await user.click(screen.getByRole("button", { name: "Save threshold" }))
-
-    // Verify the PUT request was made to the faculty-load-threshold endpoint
-    await new Promise((resolve) => setTimeout(resolve, 150))
-    const putCalls = (
-      fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit | undefined]>
-    ).filter(([input, init]) => {
-      const url = requestUrl(input)
-      return url.includes("/faculty-load-threshold") && init?.method === "PUT"
-    })
-    expect(putCalls.length).toBe(1)
+    await waitFor(() =>
+      expect(calls("PUT", "/faculty-load-limits/full_time")).toHaveLength(1),
+    )
+    const [, init] = calls("PUT", "/faculty-load-limits/full_time")[0]
+    expect(JSON.parse(bodyOf(init))).toEqual({ max_units: 21 })
+    // The other limits were not touched.
+    expect(calls("PUT", "/faculty-load-limits/part_time")).toHaveLength(0)
+    expect(calls("PUT", "/faculty-load-threshold")).toHaveLength(0)
   })
 
+  it("leaves the part-time maximum unset until someone sets one", async () => {
+    renderWorkspace()
+
+    const input = await screen.findByLabelText("Part-time maximum units")
+    expect(input).toHaveValue(null)
+    expect(input).toHaveAttribute("placeholder", "Not set")
+    expect(
+      screen.getByRole("button", { name: "Save part-time maximum units" }),
+    ).toBeDisabled()
+  })
+
+  it("saves the college default through the older threshold endpoint", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    const input = await screen.findByLabelText("Everyone else (default)")
+    await user.clear(input)
+    await user.type(input, "15")
+    await user.click(
+      screen.getByRole("button", { name: "Save default maximum units" }),
+    )
+
+    await waitFor(() =>
+      expect(calls("PUT", "/faculty-load-threshold")).toHaveLength(1),
+    )
+  })
+
+  it("sets one professor's own max load, and needs a reason", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    const reyes = (await screen.findByText("Prof. Reyes")).closest<HTMLElement>(
+      "div.rounded-lg",
+    )!
+    await user.click(
+      within(reyes).getByRole("button", { name: "Set max load" }),
+    )
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /Set max load for Prof\. Reyes/,
+    })
+    const save = within(dialog).getByRole("button", { name: "Save max load" })
+    expect(save).toBeDisabled()
+
+    const units = within(dialog).getByLabelText("Maximum units")
+    await user.clear(units)
+    await user.type(units, "30")
+    expect(save).toBeDisabled()
+    await user.type(
+      within(dialog).getByLabelText("Reason"),
+      "Only professor for Networking",
+    )
+    await user.click(save)
+
+    await waitFor(() =>
+      expect(calls("PUT", "/faculty-load-overrides/12")).toHaveLength(1),
+    )
+    const [, init] = calls("PUT", "/faculty-load-overrides/12")[0]
+    expect(JSON.parse(bodyOf(init))).toEqual({
+      max_units: 30,
+      reason: "Only professor for Networking",
+    })
+  })
+
+  it("removes a professor's own max load", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remove own max load" }),
+    )
+
+    await waitFor(() =>
+      expect(calls("DELETE", "/faculty-load-overrides/13")).toHaveLength(1),
+    )
+  })
 })

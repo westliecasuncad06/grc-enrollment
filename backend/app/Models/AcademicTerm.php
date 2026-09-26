@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Domain\Enrollment\EnrollmentPlatform;
 use App\Domain\Organization\AcademicTermStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -16,7 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $ends_at
  * @property ?CarbonImmutable $enrollment_opens_at
  * @property ?CarbonImmutable $enrollment_closes_at
+ * @property ?CarbonImmutable $add_drop_opens_at
  * @property ?CarbonImmutable $add_drop_deadline_at
+ * @property ?EnrollmentPlatform $enrollment_platform
  * @property ?CarbonImmutable $grading_deadline_at
  * @property ?CarbonImmutable $closed_at
  * @property ?CarbonImmutable $archived_at
@@ -34,7 +38,9 @@ final class AcademicTerm extends Model
         'ends_at',
         'enrollment_opens_at',
         'enrollment_closes_at',
+        'add_drop_opens_at',
         'add_drop_deadline_at',
+        'enrollment_platform',
         'grading_deadline_at',
         'closed_at',
         'archived_at',
@@ -51,7 +57,9 @@ final class AcademicTerm extends Model
             'ends_at' => 'immutable_datetime',
             'enrollment_opens_at' => 'immutable_datetime',
             'enrollment_closes_at' => 'immutable_datetime',
+            'add_drop_opens_at' => 'immutable_datetime',
             'add_drop_deadline_at' => 'immutable_datetime',
+            'enrollment_platform' => EnrollmentPlatform::class,
             'grading_deadline_at' => 'immutable_datetime',
             'closed_at' => 'immutable_datetime',
             'archived_at' => 'immutable_datetime',
@@ -61,11 +69,23 @@ final class AcademicTerm extends Model
 
     public function isActionableCurrent(): bool
     {
-        return in_array($this->status, [
+        if (! in_array($this->status, [
             AcademicTermStatus::Draft,
             AcademicTermStatus::ForDeanApproval,
             AcademicTermStatus::SemesterOngoing,
-        ], true);
+        ], true)) {
+            return false;
+        }
+
+        $currentSlotId = DB::table('academic_term_current_slots')
+            ->where('id', 1)
+            ->value('academic_term_id');
+
+        if ($currentSlotId !== null) {
+            return (int) $currentSlotId === (int) $this->id;
+        }
+
+        return true;
     }
 
     /**

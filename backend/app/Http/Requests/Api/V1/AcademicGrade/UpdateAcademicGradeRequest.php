@@ -5,7 +5,9 @@ namespace App\Http\Requests\Api\V1\AcademicGrade;
 use App\Domain\Academic\CompletionOnlySubjectRule;
 use App\Domain\Academic\GradeMark;
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicGrade;
+use App\Models\AcademicTerm;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -75,8 +77,8 @@ final class UpdateAcademicGradeRequest extends FormRequest
             $isIncCompletion = false;
             if (! $grade->status->isEditableByEncoder()) {
                 if ($grade->mark === GradeMark::Incomplete) {
-                    $currentTerm = \App\Models\AcademicTerm::query()
-                        ->where('status', \App\Domain\Organization\AcademicTermStatus::SemesterOngoing)
+                    $currentTerm = AcademicTerm::query()
+                        ->where('status', AcademicTermStatus::SemesterOngoing)
                         ->first();
                     $gradeTerm = $grade->academicTerm;
                     if ($currentTerm !== null && $gradeTerm !== null) {

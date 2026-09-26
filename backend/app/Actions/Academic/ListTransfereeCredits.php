@@ -26,7 +26,7 @@ final readonly class ListTransfereeCredits
 
         return TransfereeCredit::query()
             ->visibleTo($actor)
-            ->with(['student', 'subject'])
+            ->with(['student.user', 'subject'])
             ->when($studentId !== null, fn ($query) => $query->where('student_id', $studentId))
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->orderByDesc('created_at')

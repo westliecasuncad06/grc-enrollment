@@ -25,14 +25,14 @@ final class DashboardPolicyTest extends TestCase
         ]);
     }
 
-    public function test_enrollment_summary_is_visible_to_dean_executive_director_and_program_chair(): void
+    public function test_enrollment_summary_is_visible_to_dean_executive_director_program_chair_and_registrar_head(): void
     {
         $policy = new DashboardPolicy;
 
         self::assertTrue($policy->viewEnrollmentSummary($this->makeUser(UserRole::Dean)));
         self::assertTrue($policy->viewEnrollmentSummary($this->makeUser(UserRole::ExecutiveDirector)));
         self::assertTrue($policy->viewEnrollmentSummary($this->makeUser(UserRole::ProgramChair)));
-        self::assertFalse($policy->viewEnrollmentSummary($this->makeUser(UserRole::RegistrarHead)));
+        self::assertTrue($policy->viewEnrollmentSummary($this->makeUser(UserRole::RegistrarHead)));
         self::assertFalse($policy->viewEnrollmentSummary($this->makeUser(UserRole::Student)));
     }
 
@@ -54,12 +54,12 @@ final class DashboardPolicyTest extends TestCase
         self::assertFalse($policy->viewPolicySettings($this->makeUser(UserRole::ExecutiveDirector)));
     }
 
-    public function test_stuck_enrollments_is_visible_only_to_dean(): void
+    public function test_stuck_enrollments_is_visible_only_to_dean_and_registrar_head(): void
     {
         $policy = new StuckEnrollmentPolicy;
 
         self::assertTrue($policy->viewAny($this->makeUser(UserRole::Dean)));
         self::assertFalse($policy->viewAny($this->makeUser(UserRole::ExecutiveDirector)));
-        self::assertFalse($policy->viewAny($this->makeUser(UserRole::RegistrarHead)));
+        self::assertTrue($policy->viewAny($this->makeUser(UserRole::RegistrarHead)));
     }
 }

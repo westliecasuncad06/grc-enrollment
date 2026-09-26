@@ -9,14 +9,17 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 
 final class ActivateStudentAccount
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly AccountSetupCodes $setupCodes,
+    ) {}
 
     public function handle(
         string $email,
@@ -35,38 +38,33 @@ final class ActivateStudentAccount
             $this->invalidCode();
         }
 
-        $activated = null;
-        $status = Password::broker()->reset([
-            'email' => $email,
-            'password' => $password,
-            'password_confirmation' => $password,
-            'token' => $code,
-        ], function (User $user, string $newPassword) use (&$activated): void {
-            $activated = DB::transaction(function () use ($user, $newPassword): User {
-                $locked = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
-
-                if (
-                    $locked->role !== UserRole::Student
-                    || $locked->status !== UserStatus::Disabled
-                    || $locked->account_setup_completed_at !== null
-                ) {
-                    $this->invalidCode();
-                }
-
-                $locked->forceFill([
-                    'password' => Hash::make($newPassword),
-                    'status' => UserStatus::Active,
-                    'account_setup_completed_at' => now(),
-                ])->save();
-                $locked->tokens()->delete();
-
-                return $locked->refresh();
-            });
-        });
-
-        if ($status !== Password::PASSWORD_RESET || ! $activated instanceof User) {
+        // A wrong guess is committed inside attempt(), so it still counts
+        // against the code when this method then throws.
+        if (! $this->setupCodes->attempt($candidate, $code)) {
             $this->invalidCode();
         }
+
+        $activated = DB::transaction(function () use ($candidate, $password): User {
+            $locked = User::query()->whereKey($candidate->id)->lockForUpdate()->firstOrFail();
+
+            if (
+                $locked->role !== UserRole::Student
+                || $locked->status !== UserStatus::Disabled
+                || $locked->account_setup_completed_at !== null
+                || ! $this->setupCodes->consume($locked)
+            ) {
+                $this->invalidCode();
+            }
+
+            $locked->forceFill([
+                'password' => Hash::make($password),
+                'status' => UserStatus::Active,
+                'account_setup_completed_at' => now(),
+            ])->save();
+            $locked->tokens()->delete();
+
+            return $locked->refresh();
+        });
 
         $profileId = $activated->studentProfile()->value('id');
         $this->auditRecorder->record(

@@ -24,7 +24,7 @@ final class RoomCatalogEntryController extends Controller
         abort_unless(
             $actor->role === UserRole::ProgramChair || $actor->role === UserRole::RegistrarHead,
             403,
-            'Rooms are available only to Program Chairs and the Registrar Head.',
+            'Rooms are available only to Program Heads and the Registrar Head.',
         );
 
         $rooms = RoomCatalogEntry::query()

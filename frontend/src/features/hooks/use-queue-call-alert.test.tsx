@@ -16,10 +16,11 @@ const waitingTicket: NonNullable<StudentQueueView["ticket"]> = {
   priority: "regular",
   priority_label: "Regular",
   position: 1,
+  announce_count: 0,
 }
 
 class FakeOscillator {
-  frequency = { value: 0 }
+  frequency = { value: 0, setValueAtTime: vi.fn() }
   type: OscillatorType = "sine"
   onended: (() => void) | null = null
   connect = vi.fn()
@@ -32,8 +33,24 @@ class FakeAudioContext {
   currentTime = 0
   destination = {}
   state: AudioContextState = "running"
-  oscillator = new FakeOscillator()
-  createOscillator = vi.fn(() => this.oscillator as unknown as OscillatorNode)
+  // One ring is the two-note chime: two oscillators, each with its own gain.
+  oscillators: FakeOscillator[] = []
+  createOscillator = vi.fn(() => {
+    const oscillator = new FakeOscillator()
+    this.oscillators.push(oscillator)
+    return oscillator as unknown as OscillatorNode
+  })
+  createGain = vi.fn(
+    () =>
+      ({
+        gain: {
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }) as unknown as GainNode,
+  )
   resume = vi.fn(() => Promise.resolve())
   close = vi.fn(() => Promise.resolve())
 }
@@ -118,10 +135,19 @@ describe("useQueueCallAlert", () => {
 
     rerender({ ticket: { ...waitingTicket, status: "waiting" } })
     rerender({ ticket: { ...waitingTicket, status: "serving" } })
-    expect(audioContext.createOscillator).toHaveBeenCalledOnce()
-    expect(audioContext.oscillator.start).toHaveBeenCalledOnce()
-    expect(audioContext.oscillator.stop).toHaveBeenCalledOnce()
-    expect(audioContext.oscillator.disconnect).toHaveBeenCalledOnce()
+    // The same two-note chime the Cashier hears: two oscillators, each
+    // started and stopped once.
+    expect(audioContext.createOscillator).toHaveBeenCalledTimes(2)
+    expect(audioContext.oscillators).toHaveLength(2)
+    for (const oscillator of audioContext.oscillators) {
+      expect(oscillator.start).toHaveBeenCalledOnce()
+      expect(oscillator.stop).toHaveBeenCalledOnce()
+    }
+    expect(
+      audioContext.oscillators.map(
+        (o): unknown => o.frequency.setValueAtTime.mock.calls[0]?.[0],
+      ),
+    ).toEqual([587.33, 880])
   })
 
   it("restores document and alert resources on ticket replacement, timeout, and unmount", async () => {
@@ -138,8 +164,11 @@ describe("useQueueCallAlert", () => {
     rerender({ ticket: { ...waitingTicket, ticket_number: "Q008" } })
     expect(result.current.isCalled).toBe(false)
     expect(document.title).toBe(originalTitle)
-    expect(audioContext.oscillator.stop).toHaveBeenCalledOnce()
-    expect(audioContext.oscillator.disconnect).toHaveBeenCalledOnce()
+    // Replacing the ticket silences the chime that was ringing.
+    expect(audioContext.oscillators).toHaveLength(2)
+    for (const oscillator of audioContext.oscillators) {
+      expect(oscillator.disconnect).toHaveBeenCalledOnce()
+    }
 
     rerender({
       ticket: { ...waitingTicket, ticket_number: "Q008", status: "serving" },
@@ -292,5 +321,103 @@ describe("useQueueCallAlert", () => {
 
     unmount()
     expect(audioContext.close).toHaveBeenCalledOnce()
+  })
+
+  it("rings again each time the Cashier announces the serving ticket", async () => {
+    const serving = { ...waitingTicket, status: "serving" as const }
+    const { result, rerender } = renderHook(
+      ({ ticket }) => useQueueCallAlert(ticket),
+      { initialProps: { ticket: serving } },
+    )
+    await act(async () => {
+      result.current.enableSound()
+      await Promise.resolve()
+    })
+    expect(toast).not.toHaveBeenCalled()
+
+    rerender({ ticket: { ...serving, announce_count: 1 } })
+    expect(result.current.isCalled).toBe(true)
+    expect(result.current.callMessage).toBe(
+      "Your ticket Q007 is being called again.",
+    )
+    expect(toast).toHaveBeenCalledOnce()
+    expect(audioContext.createOscillator).toHaveBeenCalledTimes(2)
+
+    // The same counter on the next poll is not a new announcement.
+    rerender({ ticket: { ...serving, announce_count: 1 } })
+    expect(toast).toHaveBeenCalledOnce()
+
+    rerender({ ticket: { ...serving, announce_count: 2 } })
+    expect(toast).toHaveBeenCalledTimes(2)
+    expect(audioContext.createOscillator).toHaveBeenCalledTimes(4)
+  })
+
+  it("does not ring for announcements already counted when the page loaded", () => {
+    renderHook(() =>
+      useQueueCallAlert({
+        ...waitingTicket,
+        status: "serving",
+        announce_count: 3,
+      }),
+    )
+
+    expect(toast).not.toHaveBeenCalled()
+  })
+
+  it("wants sound by default on a student's own device, but never over an explicit off", () => {
+    const { result, unmount } = renderHook(() =>
+      useQueueCallAlert(waitingTicket, { defaultSoundOn: true }),
+    )
+    // Wanted, but the browser has not allowed audio yet.
+    expect(result.current.soundPreferred).toBe(true)
+    expect(result.current.soundEnabled).toBe(false)
+    unmount()
+
+    window.localStorage.setItem("grc.queue-call-sound.v1", "false")
+    const off = renderHook(() =>
+      useQueueCallAlert(waitingTicket, { defaultSoundOn: true }),
+    )
+    expect(off.result.current.soundPreferred).toBe(false)
+    off.unmount()
+    window.localStorage.clear()
+
+    // The kiosk (and any caller that does not ask) keeps sound opt-in.
+    const kiosk = renderHook(() => useQueueCallAlert(waitingTicket))
+    expect(kiosk.result.current.soundPreferred).toBe(false)
+  })
+
+  it("unlocks audio on the first tap without saving a choice the student did not make", async () => {
+    const { result, rerender } = renderHook(
+      ({ ticket }) => useQueueCallAlert(ticket, { defaultSoundOn: true }),
+      { initialProps: { ticket: waitingTicket } },
+    )
+    expect(audioContext.resume).not.toHaveBeenCalled()
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pointerdown"))
+      await Promise.resolve()
+    })
+
+    expect(audioContext.resume).toHaveBeenCalledOnce()
+    expect(result.current.soundEnabled).toBe(true)
+    expect(window.localStorage.getItem("grc.queue-call-sound.v1")).toBeNull()
+
+    rerender({ ticket: { ...waitingTicket, status: "serving" } })
+    expect(audioContext.createOscillator).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not unlock audio on a tap when the student turned sound off", async () => {
+    window.localStorage.setItem("grc.queue-call-sound.v1", "false")
+    const { result } = renderHook(() =>
+      useQueueCallAlert(waitingTicket, { defaultSoundOn: true }),
+    )
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pointerdown"))
+      await Promise.resolve()
+    })
+
+    expect(audioContext.resume).not.toHaveBeenCalled()
+    expect(result.current.soundEnabled).toBe(false)
   })
 })

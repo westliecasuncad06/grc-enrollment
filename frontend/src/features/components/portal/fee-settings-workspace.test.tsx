@@ -47,7 +47,7 @@ const mockFeeSchedules = [
 describe("FeeSettingsWorkspace", () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it("renders fee schedules and allows Registrar Head to edit and add fee particulars", async () => {
+  it("renders fee schedules and allows Accounting Staff to edit and add fee particulars", async () => {
     const user = userEvent.setup()
     vi.stubGlobal(
       "fetch",
@@ -90,8 +90,8 @@ describe("FeeSettingsWorkspace", () => {
     renderWithSession(<FeeSettingsWorkspace />, {
       session: {
         userId: "1",
-        displayName: "Registrar Head",
-        role: "registrar_head",
+        displayName: "Accounting Staff",
+        role: "accounting_staff",
         signedInAt: "2026-07-28T00:00:00.000Z",
       },
     })
@@ -100,8 +100,10 @@ describe("FeeSettingsWorkspace", () => {
       await screen.findByRole("heading", { name: "Fee Settings" }),
     ).toBeInTheDocument()
 
-    expect(await screen.findByDisplayValue("200.00")).toBeInTheDocument()
-    expect(screen.getByDisplayValue("Registration")).toBeInTheDocument()
+    // Fee data initializes the form in the same render it arrives (no
+    // default-then-effect flash): tuition and Registration are both 200.00.
+    expect(await screen.findByDisplayValue("Registration")).toBeInTheDocument()
+    expect(screen.getAllByDisplayValue("200.00")).toHaveLength(2)
     expect(screen.getByDisplayValue("Medical and Dental")).toBeInTheDocument()
 
     const addBtn = screen.getByRole("button", { name: /Add Fee Particular/i })

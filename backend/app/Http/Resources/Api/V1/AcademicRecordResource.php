@@ -38,6 +38,7 @@ final class AcademicRecordResource extends JsonResource
             'type' => 'academic_record',
             'student_id' => $student->id,
             'student_number' => $student->student_number,
+            'student_name' => $student->user?->name,
             'program_code' => $student->program->code,
             'program_name' => $student->program->name,
             'year_level' => $student->year_level,

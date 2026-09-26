@@ -18,15 +18,29 @@ use Illuminate\Validation\Rule;
 final class UpdateEnrollmentRequest extends FormRequest
 {
     /**
-     * @var array<string, EnrollmentStatus>
+     * The statuses each action may start from; the same table as
+     * `TransitionEnrollment`, checked here so a wrong-state request is a 422
+     * before anything is authorized or locked.
+     *
+     * @var array<string, list<EnrollmentStatus>>
      */
-    private const REQUIRED_CURRENT_STATUS = [
-        'registrar_approve' => EnrollmentStatus::PendingRegistrarApproval,
-        'registrar_reject' => EnrollmentStatus::PendingRegistrarApproval,
-        'void' => EnrollmentStatus::PendingPayment,
+    private const REQUIRED_CURRENT_STATUSES = [
+        'program_head_approve' => [EnrollmentStatus::PendingProgramHeadApproval],
+        'program_head_reject' => [EnrollmentStatus::PendingProgramHeadApproval],
+        'registrar_approve' => [EnrollmentStatus::PendingRegistrarApproval],
+        'registrar_reject' => [EnrollmentStatus::PendingRegistrarApproval],
+        'void' => [
+            EnrollmentStatus::PendingProgramHeadApproval,
+            EnrollmentStatus::PendingRegistrarApproval,
+            EnrollmentStatus::PendingPayment,
+        ],
+        'student_cancel' => [
+            EnrollmentStatus::PendingProgramHeadApproval,
+            EnrollmentStatus::PendingRegistrarApproval,
+        ],
     ];
 
-    private const REASON_REQUIRED_ACTIONS = ['registrar_reject', 'void'];
+    private const REASON_REQUIRED_ACTIONS = ['program_head_reject', 'registrar_reject', 'void', 'student_cancel'];
 
     public function authorize(): bool
     {
@@ -39,13 +53,15 @@ final class UpdateEnrollmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', 'string', Rule::in(array_keys(self::REQUIRED_CURRENT_STATUS))],
+            'action' => ['required', 'string', Rule::in(array_keys(self::REQUIRED_CURRENT_STATUSES))],
             'reason' => [
                 Rule::requiredIf(fn (): bool => in_array($this->input('action'), self::REASON_REQUIRED_ACTIONS, true)),
                 'nullable',
                 'string',
             ],
             'overload_acknowledged' => ['sometimes', 'boolean'],
+            // Only meaningful for `void`: the Registrar is acting on the student's request.
+            'requested_by_student' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -54,18 +70,19 @@ final class UpdateEnrollmentRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $action = $this->input('action');
 
-            if (! is_string($action) || ! isset(self::REQUIRED_CURRENT_STATUS[$action])) {
+            if (! is_string($action) || ! isset(self::REQUIRED_CURRENT_STATUSES[$action])) {
                 return;
             }
 
             /** @var Enrollment $enrollment */
             $enrollment = $this->route('enrollment');
-            $requiredStatus = self::REQUIRED_CURRENT_STATUS[$action];
+            $requiredStatuses = self::REQUIRED_CURRENT_STATUSES[$action];
 
-            if ($enrollment->status !== $requiredStatus) {
+            if (! in_array($enrollment->status, $requiredStatuses, true)) {
+                $expected = implode("' or '", array_map(fn (EnrollmentStatus $status): string => $status->value, $requiredStatuses));
                 $validator->errors()->add(
                     'action',
-                    "This action requires the enrollment to currently be '{$requiredStatus->value}'; ".
+                    "This action requires the enrollment to currently be '{$expected}'; ".
                     "it is currently '{$enrollment->status->value}'.",
                 );
 
@@ -73,9 +90,14 @@ final class UpdateEnrollmentRequest extends FormRequest
             }
 
             // FR-ENR-004: an enrollment SubmitEnrollment flagged as needing
-            // overload approval cannot be approved silently — Registrar
-            // Staff must explicitly acknowledge it in the same request.
-            if ($action === 'registrar_approve' && $enrollment->requires_overload_approval && $this->boolean('overload_acknowledged') !== true) {
+            // overload approval cannot be approved silently. The Program Head
+            // acknowledges it first; the Registrar only has to acknowledge an
+            // enrollment the Program Head never saw (one that predates the
+            // Program Head stage).
+            $needsAcknowledgement = $action === 'program_head_approve'
+                || ($action === 'registrar_approve' && $enrollment->program_head_decided_at === null);
+
+            if ($needsAcknowledgement && $enrollment->requires_overload_approval && $this->boolean('overload_acknowledged') !== true) {
                 $validator->errors()->add(
                     'overload_acknowledged',
                     'This enrollment exceeds the regular unit load and requires explicit overload acknowledgement before it can be approved.',

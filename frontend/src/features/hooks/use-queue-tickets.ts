@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type { QueueTicketFilters } from "@/features/schemas/queue-ticket-schema"
 import {
   claimQueueTicket,
@@ -37,6 +38,7 @@ export function useQueueTicketsQuery(
   return useQuery({
     queryKey: queueTicketsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listQueueTickets(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
     refetchInterval: 5_000,
     refetchOnWindowFocus: "always",
@@ -53,7 +55,7 @@ export function useUpdateQueueTicketMutation() {
       action,
     }: {
       id: number
-      action: "serve" | "complete" | "skip" | "mark_priority"
+      action: "serve" | "complete" | "skip" | "mark_priority" | "announce"
     }) => updateQueueTicket(id, { action }),
     onSuccess: () =>
       queryClient.invalidateQueries({

@@ -81,6 +81,7 @@ const enrollmentFixture = {
       total_units: 6,
       requires_overload_approval: false,
       submitted_at: "2026-09-01T08:00:00Z",
+      program_head_decided_at: null,
       registrar_decided_at: "2026-09-02T09:00:00Z",
       payment_confirmed_at: "2026-09-03T10:00:00Z",
       enrolled_at: "2026-09-03T10:05:00Z",

@@ -4,8 +4,10 @@ namespace Tests\Feature\Actions\Academic;
 
 use App\Actions\Academic\ClassifyEnrollmentStanding;
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
+use App\Domain\Enrollment\ClassificationVerdict;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -26,6 +28,7 @@ use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\SubjectPrerequisite;
+use App\Models\TransfereeCredit;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -144,7 +147,8 @@ final class ClassifyEnrollmentStandingTest extends TestCase
 
     public function test_a_backlog_subject_with_an_open_section_this_term_makes_the_student_irregular(): void
     {
-        $term = $this->makeTerm();
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
         $curriculum = $this->makeCurriculum();
         $plan = $this->makePlan($term, $curriculum, 2);
         $standard = $this->makeSubject('CS201');
@@ -154,6 +158,8 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         $this->placeSubject($curriculum, $backlog, 1, '1st');
         $this->makePlainSection($term, $backlog);
         $student = $this->makeStudent($curriculum, 'backlog-open@grc.test');
+        // Student previously took and failed the subject in a prior term
+        $this->lockGrade($student, $backlog, $priorTerm, '5.00');
 
         $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
 
@@ -161,6 +167,26 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertFalse($verdict->isRegular());
         self::assertSame('needs_adding_backlog', $verdict->reasons[0]['code']);
         self::assertStringContainsString('ITC', $verdict->reasons[0]['message']);
+    }
+
+    public function test_a_student_with_no_failed_grades_remains_regular_even_if_prior_subject_has_open_section(): void
+    {
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 1);
+        $standard = $this->makeSubject('CS102');
+        $this->placeSubject($curriculum, $standard, 1, '2nd');
+        $this->makeBlockSection($term, $plan, $standard);
+        $priorSubject = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $priorSubject, 1, '1st');
+        $this->makePlainSection($term, $priorSubject);
+        $student = $this->makeStudent($curriculum, 'no-failures@grc.test', yearLevel: 1);
+        // Student has no failed grades
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular(), 'Student with no failed grades should remain regular');
     }
 
     public function test_a_future_subject_with_an_open_section_this_term_does_not_affect_standing(): void
@@ -210,22 +236,157 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertTrue($verdict->isRegular());
     }
 
-    public function test_a_standard_subject_already_passed_early_makes_the_student_irregular(): void
+    public function test_a_failed_backlog_subject_makes_the_student_irregular_even_with_no_section_this_term(): void
     {
-        $term = $this->makeTerm();
+        // ADR 0028 (Doc 12): a subject the student took and failed in an earlier
+        // term is a back subject whether or not a section happens to be offered
+        // this term. Contrast with the Amurao case above, where the subject was
+        // never taken at all.
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $standard = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $standard, 2);
+        $this->makeBlockSection($term, $plan, $standard);
+        $backlog = $this->makeSubject('ETHICS');
+        $this->placeSubject($curriculum, $backlog, 1, '1st');
+        // No section for ETHICS this term.
+        $student = $this->makeStudent($curriculum, 'failed-no-section@grc.test');
+        $this->lockGrade($student, $backlog, $priorTerm, '5.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertFalse($verdict->isRegular());
+        self::assertSame('needs_adding_backlog', $verdict->reasons[0]['code']);
+        self::assertStringContainsString('ETHICS', $verdict->reasons[0]['message']);
+        self::assertStringContainsString('back subject', $verdict->reasons[0]['message']);
+    }
+
+    public function test_a_failed_backlog_subject_is_irregular_even_when_no_block_is_published_yet(): void
+    {
+        // Undetermined (null) only means "we cannot tell yet"; a failed
+        // back subject is already enough to tell.
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $backlog = $this->makeSubject('ETHICS');
+        $this->placeSubject($curriculum, $backlog, 1, '1st');
+        $student = $this->makeStudent($curriculum, 'failed-no-block@grc.test');
+        $this->lockGrade($student, $backlog, $priorTerm, '5.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertFalse($verdict->isRegular());
+    }
+
+    public function test_a_year_one_student_who_failed_a_first_semester_subject_is_irregular_in_the_second_semester(): void
+    {
+        // Doc 7: "kapag may bagsak na subject dapat next sem na sya magiging irregular".
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 1);
+        $standard = $this->makeSubject('CS102');
+        $this->placeSubject($curriculum, $standard, 1, '2nd');
+        $this->makeBlockSection($term, $plan, $standard);
+        $failed = $this->makeSubject('CS101');
+        $this->placeSubject($curriculum, $failed, 1, '1st');
+        $student = $this->makeStudent($curriculum, 'failed-first-sem@grc.test', yearLevel: 1);
+        $this->lockGrade($student, $failed, $priorTerm, '5.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertFalse($verdict->isRegular());
+    }
+
+    public function test_a_failure_recorded_in_the_current_term_does_not_flip_the_student_mid_term(): void
+    {
+        // Locking a grade during the term it belongs to must never change the
+        // student's standing for that same term (Doc 7); it counts from the next term.
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $standard = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $standard, 2);
+        $this->makeBlockSection($term, $plan, $standard);
+        $backlog = $this->makeSubject('ETHICS');
+        $this->placeSubject($curriculum, $backlog, 1, '1st');
+        $student = $this->makeStudent($curriculum, 'failed-this-term@grc.test');
+        $this->lockGrade($student, $backlog, $term, '5.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular());
+    }
+
+    public function test_a_failed_subject_that_was_later_passed_is_not_a_back_subject(): void
+    {
+        $firstTerm = $this->makeTerm('1st');
+        $secondTerm = AcademicTerm::create([
+            'school_year' => '2027-2028', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $term = AcademicTerm::create([
+            'school_year' => '2027-2028', 'semester' => '2nd', 'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 2);
+        $standard = $this->makeSubject('CS201');
+        $this->placeSubject($curriculum, $standard, 2);
+        $this->makeBlockSection($term, $plan, $standard);
+        $retaken = $this->makeSubject('ETHICS');
+        $this->placeSubject($curriculum, $retaken, 1, '1st');
+        $student = $this->makeStudent($curriculum, 'failed-then-passed@grc.test');
+        $this->lockGrade($student, $retaken, $firstTerm, '5.00');
+        $this->lockGrade($student, $retaken, $secondTerm, '2.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular());
+    }
+
+    public function test_a_failed_subject_that_is_part_of_this_terms_block_is_a_repeat_not_a_back_subject(): void
+    {
+        // A dual-semester subject failed in the 1st semester and taken again
+        // inside this term's block is simply being repeated in the block the
+        // student already follows; it does not make them Irregular.
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 1);
+        $subject = $this->makeSubject('E-COMM');
+        $this->placeSubject($curriculum, $subject, 1, '1st|2nd');
+        $this->makeBlockSection($term, $plan, $subject);
+        $student = $this->makeStudent($curriculum, 'failed-repeat-in-block@grc.test', yearLevel: 1);
+        $this->lockGrade($student, $subject, $priorTerm, '5.00');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular());
+    }
+
+    public function test_a_standard_subject_already_passed_early_does_not_make_student_irregular(): void
+    {
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
         $curriculum = $this->makeCurriculum();
         $plan = $this->makePlan($term, $curriculum, 2);
         $subject = $this->makeSubject('CS201');
         $this->placeSubject($curriculum, $subject, 2);
         $this->makeBlockSection($term, $plan, $subject);
         $student = $this->makeStudent($curriculum, 'early-pass@grc.test');
-        $this->lockGrade($student, $subject, $term, '2.00');
+        $this->lockGrade($student, $subject, $priorTerm, '2.00');
 
         $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
 
         self::assertNotNull($verdict);
-        self::assertFalse($verdict->isRegular());
-        self::assertSame('needs_removing_completed', $verdict->reasons[0]['code']);
+        self::assertTrue($verdict->isRegular());
     }
 
     public function test_a_dual_semester_standard_subject_already_passed_does_not_affect_standing(): void
@@ -241,14 +402,15 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         // this term's Irregular population after the population-wide
         // reclassify, including a student with no genuine backlog subject
         // at all (Ernesto F. Ward).
-        $term = $this->makeTerm();
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
         $curriculum = $this->makeCurriculum();
         $plan = $this->makePlan($term, $curriculum, 2);
         $subject = $this->makeSubject('E-COMM');
         $this->placeSubject($curriculum, $subject, 2, '1st|2nd');
         $this->makeBlockSection($term, $plan, $subject);
         $student = $this->makeStudent($curriculum, 'flexible-early-pass@grc.test');
-        $this->lockGrade($student, $subject, $term, '2.00');
+        $this->lockGrade($student, $subject, $priorTerm, '2.00');
 
         $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
 
@@ -333,24 +495,83 @@ final class ClassifyEnrollmentStandingTest extends TestCase
         self::assertTrue($verdict->isRegular());
     }
 
-    public function test_classify_many_batches_across_students_sharing_curriculum_and_year_level(): void
+    private function studentWithACreditedBacklogSubject(TransfereeCreditStatus $status): ClassificationVerdict
     {
         $term = $this->makeTerm();
+        $target = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $target, 2);
+        $standard = $this->makeSubject('CS201');
+        $this->placeSubject($target, $standard, 2);
+        $this->makeBlockSection($term, $plan, $standard);
+        $backlog = $this->makeSubject('CS-XFER');
+        $this->placeSubject($target, $backlog, 1, '1st');
+        $this->makePlainSection($term, $backlog);
+        $student = $this->makeStudent($target, 'transferee-backlog-'.$status->value.'@grc.test');
+        TransfereeCredit::create([
+            'student_id' => $student->id, 'source_institution' => 'Other University',
+            'source_subject_code' => 'EXT101', 'source_subject_title' => 'Programming',
+            'credited_units' => 3, 'subject_id' => $backlog->id, 'status' => $status,
+        ]);
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+        self::assertNotNull($verdict);
+
+        return $verdict;
+    }
+
+    public function test_an_approved_transferee_credit_on_a_backlog_subject_is_not_counted_as_needing_addition(): void
+    {
+        self::assertTrue($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Approved)->isRegular());
+    }
+
+    public function test_a_transferee_credit_that_is_only_endorsed_does_not_clear_a_backlog_subject(): void
+    {
+        self::assertFalse($this->studentWithACreditedBacklogSubject(TransfereeCreditStatus::Endorsed)->isRegular());
+    }
+
+    public function test_classify_many_batches_across_students_sharing_curriculum_and_year_level(): void
+    {
+        $priorTerm = $this->makeTerm('1st');
+        $term = $this->makeTerm('2nd');
         $curriculum = $this->makeCurriculum();
         $plan = $this->makePlan($term, $curriculum, 2);
         $subject = $this->makeSubject('CS201');
-        $this->placeSubject($curriculum, $subject, 2);
+        $placement = $this->placeSubject($curriculum, $subject, 2);
+        $prereq = $this->makeSubject('CS100');
+        $this->placeSubject($curriculum, $prereq, 1, '1st');
+        SubjectPrerequisite::create([
+            'curriculum_subject_id' => $placement->id, 'prerequisite_subject_id' => $prereq->id, 'minimum_grade' => '3.00',
+        ]);
         $this->makeBlockSection($term, $plan, $subject);
         $fits = $this->makeStudent($curriculum, 'many-fits@grc.test');
-        $early = $this->makeStudent($curriculum, 'many-early@grc.test');
-        $this->lockGrade($early, $subject, $term, '2.00');
+        $this->lockGrade($fits, $prereq, $priorTerm, '2.00');
+        $blocked = $this->makeStudent($curriculum, 'many-blocked@grc.test');
 
         $verdicts = app(ClassifyEnrollmentStanding::class)->classifyMany(
-            new Collection([$fits, $early]),
+            new Collection([$fits, $blocked]),
             $term,
         );
 
         self::assertTrue($verdicts[$fits->id]->isRegular());
-        self::assertFalse($verdicts[$early->id]->isRegular());
+        self::assertFalse($verdicts[$blocked->id]->isRegular());
+    }
+
+    public function test_locked_grades_in_current_term_do_not_make_student_irregular(): void
+    {
+        $term = $this->makeTerm('1st');
+        $curriculum = $this->makeCurriculum();
+        $plan = $this->makePlan($term, $curriculum, 1);
+        $subject = $this->makeSubject('IT101');
+        $this->placeSubject($curriculum, $subject, 1, '1st');
+        $this->makeBlockSection($term, $plan, $subject, 'IT101-SEC');
+        $student = $this->makeStudent($curriculum, 'current-term-grades@grc.test', 1);
+
+        // Grade is encoded and locked for the current term enrollment
+        $this->lockGrade($student, $subject, $term, '1.25');
+
+        $verdict = app(ClassifyEnrollmentStanding::class)->classify($student, $term);
+
+        self::assertNotNull($verdict);
+        self::assertTrue($verdict->isRegular(), 'Student with locked grades in the current term should remain regular for this term');
     }
 }

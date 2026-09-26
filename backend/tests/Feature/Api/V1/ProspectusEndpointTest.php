@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Domain\Academic\GradeStatus;
+use App\Domain\Academic\TransfereeCreditStatus;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -22,6 +23,7 @@ use App\Models\Program;
 use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\SubjectPrerequisite;
+use App\Models\TransfereeCredit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -227,6 +229,32 @@ final class ProspectusEndpointTest extends TestCase
             ->assertJsonPath('data.curriculum_transition.target_curriculum_name', 'BSCS Curriculum')
             ->assertJsonPath('data.curriculum_transition.credits.0.source_code', 'CS-OLD')
             ->assertJsonPath('data.curriculum_transition.credits.0.target_code', 'CS-NEW');
+    }
+
+    public function test_an_approved_transferee_credit_is_listed_and_others_are_not(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $credited = $this->makeSubject('CS-XFER');
+        $notYet = $this->makeSubject('CS-LATER');
+        $this->placeSubject($curriculum, $credited, 1);
+        $this->placeSubject($curriculum, $notYet, 1);
+        $student = $this->makeStudent($curriculum, 'transferee.prospectus@grc.test');
+        foreach ([[$credited, TransfereeCreditStatus::Approved], [$notYet, TransfereeCreditStatus::Endorsed]] as [$subject, $status]) {
+            TransfereeCredit::create([
+                'student_id' => $student->id, 'source_institution' => 'Other University',
+                'source_subject_code' => 'EXT101', 'source_subject_title' => 'Programming',
+                'credited_units' => 3, 'source_school_year' => '2023-2024', 'source_semester' => '1st',
+                'subject_id' => $subject->id, 'status' => $status,
+            ]);
+        }
+
+        $this->withToken($this->tokenFor($student->user))
+            ->getJson('/api/v1/prospectus')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.transferee_credits')
+            ->assertJsonPath('data.transferee_credits.0.target_code', 'CS-XFER')
+            ->assertJsonPath('data.transferee_credits.0.source_institution', 'Other University')
+            ->assertJsonPath('data.transferee_credits.0.source_school_year', '2023-2024');
     }
 
     public function test_a_student_cannot_view_another_students_prospectus(): void

@@ -22,7 +22,7 @@ enum UserRole: string
             self::Student => 'Student',
             self::AdmissionStaff => 'Admission Staff',
             self::Faculty => 'Professor / Faculty',
-            self::ProgramChair => 'Program Chair',
+            self::ProgramChair => 'Program Head',
             self::Dean => 'Dean',
             self::ExecutiveDirector => 'Executive Director',
             self::RegistrarHead => 'Registrar Head',

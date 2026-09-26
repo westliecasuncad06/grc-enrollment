@@ -39,26 +39,37 @@ final class AddDropWindowResolver
         ?CarbonImmutable $addDropDeadlineAt,
         CarbonImmutable $now,
         bool $studentAlreadyEnrolled = false,
+        ?CarbonImmutable $addDropOpensAt = null,
     ): AddDropAvailability {
+        $effectiveOpensAt = $addDropOpensAt ?? $enrollmentClosesAt;
+
         if ($status !== AcademicTermStatus::SemesterOngoing) {
             return new AddDropAvailability(
                 false,
                 AddDropAvailabilityReason::TermNotOngoing,
-                $enrollmentClosesAt,
+                $effectiveOpensAt,
                 $addDropDeadlineAt,
             );
         }
 
-        // When the student is already enrolled, skip the enrollment-window
-        // check: the window being open for new submissions is irrelevant —
-        // the student has already enrolled and only needs the add/drop
-        // deadline to not have passed yet.
-        if (! $studentAlreadyEnrolled) {
+        if ($addDropOpensAt !== null && $now->lt($addDropOpensAt)) {
+            return new AddDropAvailability(
+                false,
+                AddDropAvailabilityReason::BeforeWindow,
+                $effectiveOpensAt,
+                $addDropDeadlineAt,
+            );
+        }
+
+        // When the student is already enrolled and addDropOpensAt is not explicitly set,
+        // skip the enrollment-window check: the student has already enrolled and only
+        // needs the add/drop deadline to not have passed yet.
+        if ($addDropOpensAt === null && ! $studentAlreadyEnrolled) {
             if ($enrollmentClosesAt === null || $now->lt($enrollmentClosesAt)) {
                 return new AddDropAvailability(
                     false,
                     AddDropAvailabilityReason::EnrollmentStillOpen,
-                    $enrollmentClosesAt,
+                    $effectiveOpensAt,
                     $addDropDeadlineAt,
                 );
             }
@@ -68,7 +79,7 @@ final class AddDropWindowResolver
             return new AddDropAvailability(
                 false,
                 AddDropAvailabilityReason::DeadlineNotConfigured,
-                $enrollmentClosesAt,
+                $effectiveOpensAt,
                 $addDropDeadlineAt,
             );
         }
@@ -77,7 +88,7 @@ final class AddDropWindowResolver
             return new AddDropAvailability(
                 false,
                 AddDropAvailabilityReason::DeadlinePassed,
-                $enrollmentClosesAt,
+                $effectiveOpensAt,
                 $addDropDeadlineAt,
             );
         }
@@ -85,7 +96,7 @@ final class AddDropWindowResolver
         return new AddDropAvailability(
             true,
             AddDropAvailabilityReason::Open,
-            $enrollmentClosesAt,
+            $effectiveOpensAt,
             $addDropDeadlineAt,
         );
     }

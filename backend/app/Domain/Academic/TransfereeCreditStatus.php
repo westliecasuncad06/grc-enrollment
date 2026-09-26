@@ -12,7 +12,10 @@ namespace App\Domain\Academic;
  */
 enum TransfereeCreditStatus: string
 {
+    /** Asked for (by the Student, or recorded by the Program Chair); awaiting the Program Chair's mapping. */
     case Pending = 'pending';
+    /** Mapped to a subject and endorsed by the Program Chair; awaiting Registrar Staff. */
+    case Endorsed = 'endorsed';
     case Approved = 'approved';
     case Rejected = 'rejected';
 
@@ -20,8 +23,15 @@ enum TransfereeCreditStatus: string
     {
         return match ($this) {
             self::Pending => 'Pending',
+            self::Endorsed => 'Endorsed',
             self::Approved => 'Approved',
             self::Rejected => 'Rejected',
         };
+    }
+
+    /** Still moving through the workflow: not yet approved or rejected. */
+    public function isOpen(): bool
+    {
+        return $this === self::Pending || $this === self::Endorsed;
     }
 }

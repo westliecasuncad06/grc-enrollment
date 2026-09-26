@@ -1,5 +1,5 @@
 "use client"
- 
+
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import {
   PrintButton,
@@ -17,7 +17,8 @@ import {
   TableRow,
 } from "@/features/components/ui/table"
 import { useProspectusQuery } from "@/features/hooks/use-academic-record"
-import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
+import { useIsPhone } from "@/features/hooks/use-media-query"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import {
   markTone,
   markToneBadgeVariant,
@@ -35,6 +36,7 @@ import type { ProspectusSemester } from "@/features/schemas/academic-record-sche
  */
 export function ProspectusDocument({ studentId }: { studentId?: number }) {
   const query = useProspectusQuery(studentId)
+  const isPhone = useIsPhone()
 
   return (
     <AsyncBoundary
@@ -96,6 +98,48 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
             </div>
           )}
 
+          {prospectus.transferee_credits.length > 0 && (
+            <div className="mb-4">
+              <Table>
+                <TableCaption>Credited from a previous school</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">Previous subject</TableHead>
+                    <TableHead scope="col">Credited as</TableHead>
+                    <TableHead scope="col">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {prospectus.transferee_credits.map((credit, index) => (
+                    <TableRow key={`${credit.source_subject_title}-${index}`}>
+                      <TableCell>
+                        {credit.source_subject_code
+                          ? `${credit.source_subject_code} — `
+                          : ""}
+                        {credit.source_subject_title}
+                        <span className="block text-xs text-muted-foreground">
+                          {credit.source_institution}
+                          {credit.source_school_year
+                            ? ` · ${credit.source_school_year}`
+                            : ""}
+                          {credit.source_semester
+                            ? ` (${credit.source_semester})`
+                            : ""}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {credit.target_code} — {credit.target_title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge>Credited</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
           {(() => {
             const semestersByYear = new Map<number, ProspectusSemester[]>()
             for (const sem of prospectus.semesters) {
@@ -104,58 +148,66 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
               semestersByYear.set(sem.year_level, list)
             }
 
-            return [...semestersByYear.entries()]
-              .sort(([a], [b]) => a - b)
-              .map(([yearLevel, sems]) => {
-                const yearUnits = sems.reduce(
-                  (sum, s) =>
-                    sum +
-                    s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
-                  0,
-                )
-                const completedEntries = sems.reduce(
-                  (sum, s) =>
-                    sum + s.entries.filter((e) => e.mark !== null).length,
-                  0,
-                )
-                const totalEntries = sems.reduce(
-                  (sum, s) => sum + s.entries.length,
-                  0,
-                )
+            const years = [...semestersByYear.entries()].sort(
+              ([a], [b]) => a - b,
+            )
+            // On a phone only the year the student is working on starts open:
+            // the first with any subject not yet passed, else the last one.
+            const focusYear =
+              years.find(([, sems]) =>
+                sems.some((sem) =>
+                  sem.entries.some(
+                    (entry) => markTone(entry.mark) !== "passed",
+                  ),
+                ),
+              )?.[0] ?? years.at(-1)?.[0]
 
-                return (
-                  <details
-                    key={yearLevel}
-                    open
-                    className="group mb-4 rounded-xl border bg-card overflow-hidden print:border-none print:shadow-none print:mb-2"
-                  >
-                    <summary className="flex cursor-pointer select-none items-center justify-between p-3.5 bg-muted/25 hover:bg-muted/40 border-b transition-colors print:hidden">
-                      <div className="flex items-center gap-2 font-semibold text-sm">
-                        <span>Year {yearLevel}</span>
-                        <Badge variant="outline" className="text-xs font-normal">
-                          {formatYearLevelOrdinal(yearLevel)}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {completedEntries} / {totalEntries} completed
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {yearUnits} units
-                        </Badge>
-                      </div>
-                    </summary>
-                    <div className="p-3">
-                      {sems.map((semester) => (
-                        <SemesterTable
-                          key={`${semester.year_level}-${semester.semester}`}
-                          semester={semester}
-                        />
-                      ))}
+            return years.map(([yearLevel, sems]) => {
+              const yearUnits = sems.reduce(
+                (sum, s) =>
+                  sum + s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
+                0,
+              )
+              const completedEntries = sems.reduce(
+                (sum, s) =>
+                  sum + s.entries.filter((e) => e.mark !== null).length,
+                0,
+              )
+              const totalEntries = sems.reduce(
+                (sum, s) => sum + s.entries.length,
+                0,
+              )
+
+              return (
+                <details
+                  key={yearLevel}
+                  open={!isPhone || yearLevel === focusYear}
+                  className="group mb-4 rounded-xl border bg-card overflow-hidden print:border-none print:shadow-none print:mb-2"
+                >
+                  <summary className="flex cursor-pointer select-none items-center justify-between p-3.5 bg-muted/25 hover:bg-muted/40 border-b transition-colors print:hidden">
+                    <div className="flex items-center gap-2 font-semibold text-sm">
+                      <span>{formatYearLevel(yearLevel)}</span>
                     </div>
-                  </details>
-                )
-              })
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {completedEntries} / {totalEntries} completed
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {yearUnits} units
+                      </Badge>
+                    </div>
+                  </summary>
+                  <div className="p-3">
+                    {sems.map((semester) => (
+                      <SemesterTable
+                        key={`${semester.year_level}-${semester.semester}`}
+                        semester={semester}
+                      />
+                    ))}
+                  </div>
+                </details>
+              )
+            })
           })()}
 
           {prospectus.unplaced_entries.length > 0 && (
@@ -194,9 +246,9 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
 function SemesterTable({ semester }: { semester: ProspectusSemester }) {
   return (
     <div className="mb-4">
-      <Table className="caption-top">
+      <Table className="caption-top" data-stack-mobile>
         <TableCaption className="mt-0 mb-2 text-left font-medium text-foreground">
-          Year {semester.year_level} · {semester.semester_label}
+          {formatYearLevel(semester.year_level)} · {semester.semester_label}
         </TableCaption>
         <TableHeader>
           <TableRow>
@@ -217,7 +269,7 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
                 key={entry.subject_id}
                 className={cn("print:bg-transparent", markToneRowClass(tone))}
               >
-                <TableCell>
+                <TableCell data-stack="full">
                   {entry.code}
                   {entry.offered_either_semester && (
                     <Badge variant="outline" className="ml-2 print:hidden">
@@ -225,15 +277,15 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell>{entry.title}</TableCell>
-                <TableCell>
+                <TableCell data-stack="full">{entry.title}</TableCell>
+                <TableCell data-label="Pre-requisite">
                   {entry.prerequisites.length > 0
                     ? entry.prerequisites.map((p) => p.code).join(", ")
                     : "—"}
                 </TableCell>
-                <TableCell>{entry.units}</TableCell>
-                <TableCell>{entry.mark ?? "—"}</TableCell>
-                <TableCell>
+                <TableCell data-label="Units">{entry.units}</TableCell>
+                <TableCell data-label="Grade">{entry.mark ?? "—"}</TableCell>
+                <TableCell data-label="Status">
                   <Badge variant={markToneBadgeVariant(tone)}>
                     {entry.status_label ?? "Not taken"}
                   </Badge>

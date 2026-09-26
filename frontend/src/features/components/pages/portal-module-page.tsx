@@ -76,7 +76,7 @@ function ProgramChairModuleGate({ children }: { children: ReactNode }) {
   return (
     <WorkspacePage
       title="Enrollment step in progress"
-      description="Supporting pages open after the Program Chair completes the manual Enrollment steps."
+      description="Supporting pages open after the Program Head completes the manual Enrollment steps."
     >
       <AsyncBoundary query={query} loadingLabel="Checking Enrollment progress…">
         {(currentWorkflow) => (

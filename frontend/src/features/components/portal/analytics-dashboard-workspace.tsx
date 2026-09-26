@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { EnrollmentMovementsPanel } from "@/features/components/portal/enrollment-movements-panel"
 import { EnrollmentYearOverYearChart } from "@/features/components/portal/enrollment-year-over-year-chart"
 import { SchoolYearRangeSlider } from "@/features/components/portal/school-year-range-slider"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
@@ -36,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/features/components/ui/select"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import {
   Collapsible,
   CollapsibleContent,
@@ -181,7 +183,9 @@ function PredictiveTab({
                             {forecast.subject_title}
                           </p>
                         </TableCell>
-                        <TableCell>{forecast.year_level ?? "—"}</TableCell>
+                        <TableCell>
+                          {formatYearLevel(forecast.year_level)}
+                        </TableCell>
                         <TableCell>
                           {forecast.curriculum_name ? (
                             <>
@@ -477,7 +481,7 @@ export function AnalyticsDashboardWorkspace() {
                         <SelectItem value="all">All year levels</SelectItem>
                         {[1, 2, 3, 4].map((yearLevel) => (
                           <SelectItem key={yearLevel} value={String(yearLevel)}>
-                            Year {yearLevel}
+                            {formatYearLevel(yearLevel)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -523,6 +527,9 @@ export function AnalyticsDashboardWorkspace() {
             <Tabs defaultValue="descriptive">
               <TabsList>
                 <TabsTrigger value="descriptive">Descriptive</TabsTrigger>
+                <TabsTrigger value="drops">Drops</TabsTrigger>
+                <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
+                <TabsTrigger value="shifts">Course shifts</TabsTrigger>
                 {isProgramChair ? (
                   <TabsTrigger value="predictive">Predictive</TabsTrigger>
                 ) : null}
@@ -538,6 +545,16 @@ export function AnalyticsDashboardWorkspace() {
                   {(summary) => <DescriptiveTab summary={summary} />}
                 </AsyncBoundary>
               </TabsContent>
+              {(["drops", "withdrawals", "shifts"] as const).map((movement) => (
+                <TabsContent key={movement} value={movement}>
+                  <EnrollmentMovementsPanel
+                    type={movement}
+                    termId={termId}
+                    college={isRegistrarHead ? selectedDepartment : null}
+                    canRecord={isRegistrarHead}
+                  />
+                </TabsContent>
+              ))}
               {isProgramChair ? (
                 <TabsContent value="predictive">
                   <PredictiveTab

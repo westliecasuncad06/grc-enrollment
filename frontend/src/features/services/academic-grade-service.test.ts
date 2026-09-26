@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createAcademicGrade,
   listAcademicGrades,
+  lockAllAcademicGrades,
   updateAcademicGrade,
 } from "@/features/services/academic-grade-service"
 
@@ -95,4 +96,31 @@ describe("academic-grade-service", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/academic-grades/3")
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("PATCH")
   })
+
+  it("locks all submitted grades", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            locked_count: 5,
+            message: "Successfully locked 5 grades.",
+          },
+        }),
+      ),
+    )
+
+    const result = await lockAllAcademicGrades({
+      academic_term_id: 2,
+      college: "CCS",
+    })
+
+    expect(result.locked_count).toBe(5)
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/academic-grades/lock-all")
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST")
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      academic_term_id: 2,
+      college: "CCS",
+    })
+  })
 })
+

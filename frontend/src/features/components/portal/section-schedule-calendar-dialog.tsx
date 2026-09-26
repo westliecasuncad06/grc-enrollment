@@ -114,7 +114,7 @@ export function SectionScheduleCalendarDialog({
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border">
-              <Table>
+              <Table data-stack-mobile>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Subject code</TableHead>
@@ -135,18 +135,18 @@ export function SectionScheduleCalendarDialog({
                     const label = typeof actionLabel === "function" ? actionLabel(item) : (actionLabel ?? "Assign schedule")
                     return (
                       <TableRow key={item.id}>
-                        <TableCell className="font-semibold">{item.subject_code}</TableCell>
-                        <TableCell>{item.subject_title ?? "—"}</TableCell>
-                        <TableCell>{item.units ?? "—"}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{item.id}</TableCell>
-                        <TableCell>{item.schedule_days ?? "—"}</TableCell>
-                        <TableCell>
+                        <TableCell data-stack="full" className="font-semibold">{item.subject_code}</TableCell>
+                        <TableCell data-stack="full">{item.subject_title ?? "—"}</TableCell>
+                        <TableCell data-label="Units">{item.units ?? "—"}</TableCell>
+                        <TableCell data-label="Sched ID" className="font-mono text-xs text-muted-foreground">{item.id}</TableCell>
+                        <TableCell data-label="Day(s)">{item.schedule_days ?? "—"}</TableCell>
+                        <TableCell data-label="Time">
                           {item.starts_at_time && item.ends_at_time
                             ? formatTimeRange12(item.starts_at_time, item.ends_at_time)
                             : "—"}
                         </TableCell>
-                        <TableCell>{item.room ?? "—"}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="Room">{item.room ?? "—"}</TableCell>
+                        <TableCell data-label="Professor">
                           {item.professor_name ? (
                             item.professor_name
                           ) : (
@@ -155,7 +155,7 @@ export function SectionScheduleCalendarDialog({
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Modality">
                           {item.modality ? (
                             <Badge variant="secondary" className="text-xs font-normal">
                               {modalityLabel[item.modality] ?? item.modality.toUpperCase()}
@@ -165,7 +165,7 @@ export function SectionScheduleCalendarDialog({
                           )}
                         </TableCell>
                         {onSelectSubject && (
-                          <TableCell className="text-right">
+                          <TableCell data-stack="full" className="text-right">
                             <Button
                               type="button"
                               size="sm"
@@ -183,7 +183,7 @@ export function SectionScheduleCalendarDialog({
                   })}
                   {items.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={onSelectSubject ? 10 : 9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={onSelectSubject ? 10 : 9} data-stack="full" className="py-8 text-center text-muted-foreground">
                         No subjects found for this section.
                       </TableCell>
                     </TableRow>

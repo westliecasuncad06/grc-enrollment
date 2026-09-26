@@ -31,6 +31,8 @@ const submittedGrade = {
   student_number: "2026-0001",
   subject_id: 7,
   subject_code: "CS101",
+  professor_id: 20,
+  professor_name: "Prof. Reyes",
   section_id: 5,
   academic_term_id: 2,
   mark: "1.50",
@@ -124,7 +126,11 @@ describe("RegistrarGradesWorkspace", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: { ...submittedGrade, status: "locked", locked_at: "2026-07-31T00:00:00Z" },
+              data: {
+                ...submittedGrade,
+                status: "locked",
+                locked_at: "2026-07-31T00:00:00Z",
+              },
             }),
           ),
         )
@@ -147,10 +153,14 @@ describe("RegistrarGradesWorkspace", () => {
       { session: registrarHeadSession },
     )
 
+    await user.click(
+      await screen.findByRole("button", { name: /Prof\. Reyes/ }),
+    )
+    await user.click(await screen.findByRole("button", { name: /CS101/ }))
     const table = await screen.findByRole("table", {
       name: "Submitted grades awaiting lock",
     })
-    expect(within(table).getByText("CS101")).toBeInTheDocument()
+    expect(within(table).getByText("2026-0001")).toBeInTheDocument()
 
     await user.click(within(table).getByRole("button", { name: "Lock" }))
 
@@ -158,15 +168,122 @@ describe("RegistrarGradesWorkspace", () => {
     expect(within(dialog).getByText(/permanent/i)).toBeInTheDocument()
     await user.click(within(dialog).getByRole("button", { name: "Lock grade" }))
 
-    await waitFor(() =>
-      expect(lockRequestBody).toEqual({ action: "lock" }),
-    )
+    await waitFor(() => expect(lockRequestBody).toEqual({ action: "lock" }))
   })
 
-  it("looks up a student and renders their academic record", async () => {
+  it("locks all submitted grades for the semester after confirmation", async () => {
     const user = userEvent.setup()
+    let lockAllRequestBody: unknown = null
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (
+        target.includes("/academic-grades/lock-all") &&
+        init?.method === "POST"
+      ) {
+        lockAllRequestBody = init.body ? JSON.parse(init.body as string) : null
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                locked_count: 1,
+                message: "Successfully locked 1 grades.",
+              },
+            }),
+          ),
+        )
+      }
+      if (target.includes("/academic-terms")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  type: "academic-term",
+                  id: 2,
+                  school_year: "2026-2027",
+                  semester: "1st",
+                  starts_at: null,
+                  ends_at: null,
+                  enrollment_opens_at: null,
+                  enrollment_closes_at: null,
+                  add_drop_deadline_at: null,
+                  grading_deadline_at: null,
+                  status: "semester_ongoing",
+                  status_label: "Ongoing",
+                },
+              ],
+            }),
+          ),
+        )
+      }
+      if (target.includes("/academic-grades"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [submittedGrade],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(
+      <RegistrarGradesWorkspace initialModuleId="grade-approvals" />,
+      { session: registrarHeadSession },
+    )
+
+    const lockAllBtn = await screen.findByRole("button", {
+      name: /lock all grades for this semester/i,
+    })
+    expect(lockAllBtn).toBeInTheDocument()
+
+    await user.click(lockAllBtn)
+
+    const dialog = await screen.findByRole("alertdialog")
+    expect(
+      within(dialog).getByRole("heading", {
+        name: "Lock all submitted grades for this semester?",
+      }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText(/permanent/i)).toBeInTheDocument()
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Lock all grades" }),
+    )
+
+    await waitFor(() => {
+      expect(lockAllRequestBody).toBeDefined()
+    })
+  })
+
+  it("looks up a student by student number and renders their transcript", async () => {
+    const user = userEvent.setup()
+    const studentCandidate = {
+      type: "academic_record_student",
+      id: 1508,
+      student_id: 1508,
+      student_number: "2024-06-01298",
+      name: "Bonifacio B. Pangilinan",
+      first_name: "Bonifacio",
+      last_name: "Pangilinan",
+      email: "bonifacio.pangilinan@grc.com",
+      program_code: "BSIT",
+      program_name: "BS Information Technology",
+      year_level: 3,
+      enrollment_category: "regular",
+      enrollment_category_label: "Regular",
+      academic_standing: "good",
+      academic_standing_label: "Good Standing",
+    }
+
     fetchMock.mockImplementation((input) => {
       const target = url(input)
+      if (target.includes("/academic-record/students"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [studentCandidate] })),
+        )
       if (target.includes("/academic-record"))
         return Promise.resolve(
           new Response(JSON.stringify({ data: academicRecord })),
@@ -183,17 +300,88 @@ describe("RegistrarGradesWorkspace", () => {
       { session: registrarHeadSession },
     )
 
-    await user.type(screen.getByLabelText("Student ID"), "4")
+    await user.type(screen.getByLabelText("Student ID"), "2024-06-01298")
     await user.click(screen.getByRole("button", { name: "View records" }))
 
-    expect(await screen.findByText(/BS Information Technology/)).toBeInTheDocument()
+    expect(
+      await screen.findByText("Bonifacio B. Pangilinan"),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText("Search another student"),
+    ).toBeInTheDocument()
     expect(
       url(
         fetchMock.mock.calls.find((call) =>
-          url(call[0]).includes("/academic-record"),
+          url(call[0]).includes("/academic-record?"),
         )![0],
       ),
-    ).toContain("student_id=4")
+    ).toContain("student_id=1508")
+  })
+
+  it("searches students by name and renders transcript upon selection", async () => {
+    const user = userEvent.setup()
+    const studentCandidate = {
+      type: "academic_record_student",
+      id: 1508,
+      student_id: 1508,
+      student_number: "2024-06-01298",
+      name: "Bonifacio B. Pangilinan",
+      first_name: "Bonifacio",
+      last_name: "Pangilinan",
+      email: "bonifacio.pangilinan@grc.com",
+      program_code: "BSIT",
+      program_name: "BS Information Technology",
+      year_level: 3,
+      enrollment_category: "regular",
+      enrollment_category_label: "Regular",
+      academic_standing: "good",
+      academic_standing_label: "Good Standing",
+    }
+
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-record/students"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [studentCandidate] })),
+        )
+      if (target.includes("/academic-record"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: academicRecord })),
+        )
+      if (target.includes("/prospectus"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: prospectus })),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(
+      <RegistrarGradesWorkspace initialModuleId="academic-transcripts" />,
+      { session: registrarHeadSession },
+    )
+
+    // Switch to By Student Name tab
+    await user.click(screen.getByRole("tab", { name: "By Student Name" }))
+
+    await user.type(screen.getByLabelText("Student Name"), "Bonifacio")
+    await user.click(screen.getByRole("button", { name: "Search" }))
+
+    expect(await screen.findByText("Matching Students (1)")).toBeInTheDocument()
+    expect(screen.getByText("Bonifacio B. Pangilinan")).toBeInTheDocument()
+
+    // Click view transcript
+    await user.click(screen.getByRole("button", { name: "View transcript" }))
+
+    expect(
+      await screen.findByText("Search another student"),
+    ).toBeInTheDocument()
+    expect(
+      url(
+        fetchMock.mock.calls.find((call) =>
+          url(call[0]).includes("/academic-record?"),
+        )![0],
+      ),
+    ).toContain("student_id=1508")
   })
 
   it("rejects a non-numeric student ID without querying the API", async () => {
@@ -208,14 +396,17 @@ describe("RegistrarGradesWorkspace", () => {
     await user.type(screen.getByLabelText("Student ID"), "abc")
     await user.click(screen.getByRole("button", { name: "View records" }))
 
-    expect(await screen.findByText("Enter a valid student ID.")).toBeInTheDocument()
+    expect(
+      await screen.findByText("Enter a valid student ID."),
+    ).toBeInTheDocument()
   })
 
-  it("renders Department -> Professor -> Submitted Subjects hierarchy and filters by department", async () => {
+  it("drills Professor -> Subjects -> Students -> a student's grades, with Department as a filter", async () => {
     const user = userEvent.setup()
     const coeGrade = {
       ...submittedGrade,
       id: 10,
+      student_id: 40,
       student_number: "2026-0100",
       student_name: "Mercedes C. Ramos",
       subject_code: "ACC101",
@@ -228,6 +419,7 @@ describe("RegistrarGradesWorkspace", () => {
     const ccsGrade = {
       ...submittedGrade,
       id: 11,
+      student_id: 41,
       student_number: "2026-0200",
       student_name: "Alan Turing",
       subject_code: "CS201",
@@ -262,6 +454,19 @@ describe("RegistrarGradesWorkspace", () => {
           ),
         )
       }
+      if (target.includes("/academic-record")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...academicRecord,
+                student_id: 40,
+                student_number: "2026-0100",
+              },
+            }),
+          ),
+        )
+      }
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
 
@@ -270,31 +475,78 @@ describe("RegistrarGradesWorkspace", () => {
       { session: registrarHeadSession },
     )
 
-    // Verify both professors render
+    // Level 1: professors only. No subject or student is listed yet.
     expect(
-      await screen.findByText("Henry Nieva Corrales"),
+      await screen.findByRole("button", { name: /Henry Nieva Corrales/ }),
     ).toBeInTheDocument()
-    expect(screen.getByText("Maria Delos Santos")).toBeInTheDocument()
-
-    // Verify subjects render
-    expect(screen.getByText(/ACC101 — Accounting 1/)).toBeInTheDocument()
     expect(
-      screen.getByText(/CS201 — Object-Oriented Programming/),
+      screen.getByRole("button", { name: /Maria Delos Santos/ }),
     ).toBeInTheDocument()
+    expect(screen.queryByText(/ACC101 — Accounting 1/)).not.toBeInTheDocument()
+    expect(screen.queryByText("Mercedes C. Ramos")).not.toBeInTheDocument()
 
-    // Filter by CCS department
+    // Department is a filter: CCS leaves only its professor.
     const filterGroup = screen.getByRole("group", {
       name: "Filter by department",
     })
     await user.click(within(filterGroup).getByRole("button", { name: "CCS" }))
-
-    // Only CCS professor remains
-    expect(await screen.findByText("Maria Delos Santos")).toBeInTheDocument()
     expect(
-      screen.queryByText("Henry Nieva Corrales"),
+      await screen.findByRole("button", { name: /Maria Delos Santos/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Henry Nieva Corrales/ }),
     ).not.toBeInTheDocument()
-  })
+    await user.click(
+      within(filterGroup).getByRole("button", { name: "All Departments" }),
+    )
 
+    // Level 2: this professor's subjects.
+    await user.click(
+      await screen.findByRole("button", { name: /Henry Nieva Corrales/ }),
+    )
+    expect(
+      await screen.findByRole("button", { name: /ACC101 — Accounting 1/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/CS201/)).not.toBeInTheDocument()
+
+    // Level 3: the students of that subject.
+    await user.click(
+      screen.getByRole("button", { name: /ACC101 — Accounting 1/ }),
+    )
+    const table = await screen.findByRole("table", {
+      name: "Submitted grades awaiting lock",
+    })
+    expect(within(table).getByText("Mercedes C. Ramos")).toBeInTheDocument()
+
+    // Level 4: one student's grades.
+    await user.click(
+      within(table).getByRole("button", { name: /Mercedes C\. Ramos/ }),
+    )
+    expect(
+      await screen.findByRole("button", { name: /Back to students/ }),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          url(input).includes("/academic-record"),
+        ),
+      ).toBe(true),
+    )
+
+    // Back out one level at a time.
+    await user.click(screen.getByRole("button", { name: /Back to students/ }))
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Back to Henry Nieva Corrales's subjects/,
+      }),
+    )
+    await user.click(
+      await screen.findByRole("button", { name: /Back to professors/ }),
+    )
+    expect(
+      await screen.findByRole("button", { name: /Maria Delos Santos/ }),
+    ).toBeInTheDocument()
+  })
   it("switches to Grade History tab and searches historical locked records", async () => {
     const user = userEvent.setup()
     const historicalGrade = {
@@ -404,7 +656,7 @@ describe("RegistrarGradesWorkspace", () => {
       { session: registrarHeadSession },
     )
 
-    await screen.findByRole("table", { name: "Submitted grades awaiting lock" })
+    await screen.findByRole("button", { name: /Prof\. Reyes/ })
     expect(await axe(container)).toHaveNoViolations()
   })
 })

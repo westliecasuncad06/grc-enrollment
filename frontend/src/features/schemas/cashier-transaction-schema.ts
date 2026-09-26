@@ -35,6 +35,26 @@ export const cashierPaymentCandidateSchema = z
   })
   .strict()
 
+// One row of the Cashier's student search (Advance Payment). Unlike a payment
+// candidate it carries no enrollment or ticket: it works for any student.
+export const cashierStudentSchema = z
+  .object({
+    type: z.literal("cashier_student"),
+    student_id: z.number().int().positive(),
+    student_number: z.string().min(1),
+    student_name: z.string().min(1),
+    year_level: z.number().int().positive(),
+    financial_status: z.enum(["payee", "scholar"]),
+    financial_status_label: z.string().min(1),
+  })
+  .strict()
+
+export const cashierStudentsEnvelopeSchema = z
+  .object({ data: z.array(cashierStudentSchema) })
+  .strict()
+
+export const cashierStudentSearchSchema = z.string().trim().min(2).max(100)
+
 const paginationLinksSchema = z
   .object({
     first: z.string().url(),
@@ -79,6 +99,7 @@ export const cashierPaymentCandidateEnvelopeSchema = z
   .object({ data: cashierPaymentCandidateSchema })
   .strict()
 
+export type CashierStudent = z.infer<typeof cashierStudentSchema>
 export type CashierTransaction = z.infer<typeof cashierTransactionSchema>
 export type CashierPaymentCandidate = z.infer<
   typeof cashierPaymentCandidateSchema

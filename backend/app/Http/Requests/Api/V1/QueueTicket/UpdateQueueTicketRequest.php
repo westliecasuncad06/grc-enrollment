@@ -15,7 +15,8 @@ use Illuminate\Validation\Rule;
  * three-step order (`waiting` → `serving` → `served`, `skip` from either
  * `waiting` or `serving`) and nothing about which or how many tickets an
  * Accounting Staff member may advance. `mark_priority` is not a status
- * transition — see `App\Actions\Enrollment\TransitionQueueTicket`.
+ * transition — see `App\Actions\Enrollment\TransitionQueueTicket`. Neither is
+ * `announce`, a repeatable ping that only a `serving` ticket accepts.
  */
 final class UpdateQueueTicketRequest extends FormRequest
 {
@@ -27,6 +28,7 @@ final class UpdateQueueTicketRequest extends FormRequest
         'complete' => [QueueTicketStatus::Serving],
         'skip' => [QueueTicketStatus::Waiting, QueueTicketStatus::Serving],
         'mark_priority' => [QueueTicketStatus::Waiting],
+        'announce' => [QueueTicketStatus::Serving],
     ];
 
     public function authorize(): bool

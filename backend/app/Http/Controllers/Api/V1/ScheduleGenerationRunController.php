@@ -27,7 +27,7 @@ final class ScheduleGenerationRunController extends Controller
         $college = $user->college?->value;
 
         if ($college === null) {
-            throw ValidationException::withMessages(['college' => 'A college-scoped Program Chair is required.']);
+            throw ValidationException::withMessages(['college' => 'A college-scoped Program Head is required.']);
         }
 
         [$run, $created] = DB::transaction(function () use ($academicTerm, $college, $user): array {
@@ -95,7 +95,7 @@ final class ScheduleGenerationRunController extends Controller
         $user = $this->authenticatedUser($request);
         $college = $user->college?->value;
         if ($college === null) {
-            throw ValidationException::withMessages(['college' => 'A college-scoped Program Chair is required.']);
+            throw ValidationException::withMessages(['college' => 'A college-scoped Program Head is required.']);
         }
         $run = ScheduleGenerationRun::query()
             ->where('academic_term_id', $academicTerm->id)

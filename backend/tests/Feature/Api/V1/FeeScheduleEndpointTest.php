@@ -46,9 +46,9 @@ final class FeeScheduleEndpointTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_registrar_head_can_view_and_update_fee_schedules(): void
+    public function test_accounting_staff_can_view_and_update_fee_schedules(): void
     {
-        $token = $this->tokenFor(UserRole::RegistrarHead, 'reg.head@grc.test');
+        $token = $this->tokenFor(UserRole::AccountingStaff, 'acct.staff@grc.test');
 
         FeeSchedule::create([
             'category' => 'tuition',
@@ -90,5 +90,20 @@ final class FeeScheduleEndpointTest extends TestCase
             'label' => 'Medical and Dental',
             'amount' => '350.00',
         ]);
+    }
+
+    public function test_registrar_head_can_view_fee_schedules_but_cannot_update_them(): void
+    {
+        $token = $this->tokenFor(UserRole::RegistrarHead, 'reg.head@grc.test');
+
+        $response = $this->withToken($token)->getJson('/api/v1/fee-schedules');
+        $response->assertOk();
+
+        $updateResponse = $this->withToken($token)->putJson('/api/v1/fee-schedules', [
+            'tuition_rate_per_unit' => '220.00',
+            'miscellaneous_fees' => [],
+        ]);
+
+        $updateResponse->assertForbidden();
     }
 }

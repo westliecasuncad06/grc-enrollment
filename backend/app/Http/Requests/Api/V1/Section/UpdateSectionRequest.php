@@ -3,8 +3,7 @@
 namespace App\Http\Requests\Api\V1\Section;
 
 use App\Domain\Identity\UserRole;
-use App\Domain\Scheduling\RoomConflictDetector;
-use App\Domain\Scheduling\SectionConflictDetector;
+use App\Domain\Scheduling\SectionAssignmentConflicts;
 use App\Domain\Scheduling\SectionModality;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\Section;
@@ -53,30 +52,24 @@ final class UpdateSectionRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if ($intraConflict = $this->hasIntraSectionConflict()) {
-                $subjectCode = $intraConflict->subject?->code ?? 'another subject';
-                $validator->errors()->add(
-                    'schedule_days',
-                    "Schedule conflicts with {$subjectCode} in block section {$this->input('section_code')} ({$intraConflict->schedule_days} {$intraConflict->starts_at_time}-{$intraConflict->ends_at_time}).",
-                );
+            /** @var ?Section $current */
+            $current = $this->route('section');
+            if ($current instanceof Section) {
+                $conflicts = app(SectionAssignmentConflicts::class)->errorsFor($current, [
+                    'academic_term_id' => $this->input('academic_term_id'),
+                    'section_code' => $this->input('section_code'),
+                    'schedule_days' => $this->input('schedule_days'),
+                    'starts_at_time' => $this->input('starts_at_time'),
+                    'ends_at_time' => $this->input('ends_at_time'),
+                    'professor_id' => $this->input('professor_id'),
+                    'room' => $this->input('room'),
+                    'modality' => $this->input('modality'),
+                ]);
+                foreach ($conflicts as $field => $message) {
+                    $validator->errors()->add($field, $message);
+                }
             }
-            if ($profConflict = $this->hasProfessorConflict()) {
-                $subjectCode = $profConflict->subject?->code ?? 'another class';
-                $validator->errors()->add(
-                    'professor_id',
-                    "This professor is already assigned to {$profConflict->section_code} ({$subjectCode}) on {$profConflict->schedule_days} {$profConflict->starts_at_time}-{$profConflict->ends_at_time}.",
-                );
-            }
-            if ($roomConflict = $this->hasRoomConflict()) {
-                $subjectCode = $roomConflict->subject?->code ?? 'another class';
-                $validator->errors()->add(
-                    'room',
-                    "Room {$this->input('room')} is already occupied by {$roomConflict->section_code} ({$subjectCode}) on {$roomConflict->schedule_days} {$roomConflict->starts_at_time}-{$roomConflict->ends_at_time}.",
-                );
-            }
-            /** @var ?Section $section */
-            $section = $this->route('section');
-            if ($section instanceof Section && $section->recommendation_prediction_run_id !== null && $this->changesGeneratedAssignment($section) && ! filled($this->input('override_reason'))) {
+            if ($current instanceof Section && $current->recommendation_prediction_run_id !== null && $this->changesGeneratedAssignment($current) && ! filled($this->input('override_reason'))) {
                 $validator->errors()->add('override_reason', 'Explain why this generated assignment is being overridden.');
             }
         });
@@ -95,121 +88,5 @@ final class UpdateSectionRequest extends FormRequest
         }
 
         return false;
-    }
-
-    private function hasIntraSectionConflict(): ?Section
-    {
-        $sectionCode = $this->input('section_code');
-        $academicTermId = $this->input('academic_term_id');
-        $scheduleDays = $this->input('schedule_days');
-        $startsAt = $this->input('starts_at_time');
-        $endsAt = $this->input('ends_at_time');
-
-        if (! $sectionCode || ! $scheduleDays || ! $startsAt || ! $endsAt) {
-            return null;
-        }
-
-        $otherSections = Section::query()
-            ->where('academic_term_id', $academicTermId)
-            ->where('section_code', $sectionCode)
-            ->whereKeyNot($this->route('section'))
-            ->whereNotNull('schedule_days')
-            ->whereNotNull('starts_at_time')
-            ->whereNotNull('ends_at_time')
-            ->with('subject')
-            ->get();
-
-        $detector = app(SectionConflictDetector::class);
-
-        foreach ($otherSections as $other) {
-            if ($detector->hasConflict([
-                'schedule_days' => $scheduleDays,
-                'starts_at_time' => $startsAt,
-                'ends_at_time' => $endsAt,
-            ], [[
-                'schedule_days' => $other->schedule_days,
-                'starts_at_time' => $other->starts_at_time,
-                'ends_at_time' => $other->ends_at_time,
-            ]])) {
-                return $other;
-            }
-        }
-
-        return null;
-    }
-
-    private function hasProfessorConflict(): ?Section
-    {
-        $professorId = $this->input('professor_id');
-
-        if (! is_numeric($professorId)) {
-            return null;
-        }
-
-        $otherSections = Section::query()
-            ->where('professor_id', $professorId)
-            ->where('academic_term_id', $this->input('academic_term_id'))
-            ->whereKeyNot($this->route('section'))
-            ->whereNotNull('schedule_days')
-            ->whereNotNull('starts_at_time')
-            ->whereNotNull('ends_at_time')
-            ->with('subject')
-            ->get();
-
-        $detector = app(SectionConflictDetector::class);
-
-        foreach ($otherSections as $other) {
-            if ($detector->hasConflict([
-                'schedule_days' => $this->input('schedule_days'),
-                'starts_at_time' => $this->input('starts_at_time'),
-                'ends_at_time' => $this->input('ends_at_time'),
-            ], [[
-                'schedule_days' => $other->schedule_days,
-                'starts_at_time' => $other->starts_at_time,
-                'ends_at_time' => $other->ends_at_time,
-            ]])) {
-                return $other;
-            }
-        }
-
-        return null;
-    }
-
-    private function hasRoomConflict(): ?Section
-    {
-        $room = $this->input('room');
-        if (! is_string($room) || trim($room) === '') {
-            return null;
-        }
-
-        $otherSections = Section::query()
-            ->where('room', $room)
-            ->where('academic_term_id', $this->input('academic_term_id'))
-            ->whereKeyNot($this->route('section'))
-            ->whereNotNull('schedule_days')
-            ->whereNotNull('starts_at_time')
-            ->whereNotNull('ends_at_time')
-            ->with('subject')
-            ->get();
-
-        $detector = app(RoomConflictDetector::class);
-
-        foreach ($otherSections as $other) {
-            if ($detector->hasConflict([
-                'schedule_days' => $this->input('schedule_days'),
-                'starts_at_time' => $this->input('starts_at_time'),
-                'ends_at_time' => $this->input('ends_at_time'),
-                'modality' => $this->input('modality'),
-            ], [[
-                'schedule_days' => $other->schedule_days,
-                'starts_at_time' => $other->starts_at_time,
-                'ends_at_time' => $other->ends_at_time,
-                'modality' => $other->modality?->value,
-            ]])) {
-                return $other;
-            }
-        }
-
-        return null;
     }
 }

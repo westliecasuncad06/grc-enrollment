@@ -2,6 +2,7 @@
 
 namespace App\Actions\Organization;
 
+use App\Actions\Enrollment\BuildEnrollmentAccessContext;
 use App\Domain\Enrollment\AddDropWindowResolver;
 use App\Domain\Enrollment\AudienceAvailability;
 use App\Domain\Enrollment\EnrollmentAudience;
@@ -25,6 +26,8 @@ use Illuminate\Support\Collection;
  */
 final class BuildEnrollmentScheduleSummary
 {
+    public function __construct(private readonly BuildEnrollmentAccessContext $accessContext) {}
+
     public function execute(AcademicTerm $term, ?User $viewer): EnrollmentScheduleSummary
     {
         $now = CarbonImmutable::now();
@@ -53,6 +56,8 @@ final class BuildEnrollmentScheduleSummary
                 $term->enrollment_closes_at,
                 $term->add_drop_deadline_at,
                 $now,
+                false,
+                $term->add_drop_opens_at,
             ),
         );
     }
@@ -76,7 +81,10 @@ final class BuildEnrollmentScheduleSummary
             return null;
         }
 
-        $audience = EnrollmentAudience::forStudent($studentProfile->enrollment_category, $studentProfile->year_level);
+        // The live standing decides the audience (ADR 0028), exactly as it does for
+        // the block and eligible-subject pools, so this banner can never say
+        // "Regular" while those pools already treat the student as Irregular.
+        $audience = $this->accessContext->execute($term, $studentProfile)->viewerAudience;
 
         return new AudienceAvailability(
             $audience,

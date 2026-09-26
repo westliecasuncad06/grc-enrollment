@@ -375,6 +375,34 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $this->assertStringContainsString('filename="COR-', (string) $response->headers->get('Content-Disposition'));
     }
 
+    public function test_the_cor_pdf_view_uses_the_approved_labels_and_the_ordinal_year_level(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.pdflabels@grc.test', '2026-0204');
+        $document = $this->makeDocument($student, $term);
+
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        // The stored wording stays "Year 1"; only the printed COR is reworded.
+        $this->assertSame('Year 1', $snapshot['student']['level']);
+
+        $html = view('pdf.certificate-of-registration', [
+            'document' => $document,
+            'snapshot' => $snapshot,
+        ])->render();
+
+        foreach (['Name:', 'Degree:', 'Academic Year:', 'Year Level:', '1st Year'] as $expected) {
+            $this->assertStringContainsString($expected, $html);
+        }
+        foreach (['Course:', 'School Year:', 'Year 1'] as $retired) {
+            $this->assertStringNotContainsString($retired, $html);
+        }
+    }
+
     public function test_a_student_cannot_download_another_students_cor_pdf(): void
     {
         $term = $this->makeTerm();
@@ -499,5 +527,65 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             ->assertJsonPath('data.snapshot.fees.additional_payments', '1000.00')
             ->assertJsonPath('data.snapshot.fees.amount_paid', '2500.00')
             ->assertJsonPath('data.snapshot.fees.remaining_balance', '2500.00');
+    }
+
+    public function test_a_cor_prints_the_platform_the_registrar_set_for_the_term(): void
+    {
+        $term = $this->makeTerm();
+        $term->update(['enrollment_platform' => 'face_to_face']);
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.platform@grc.test', '2026-0301');
+        $document = $this->makeDocument($student, $term);
+
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        $this->assertSame('Face-to-Face', $snapshot['student']['platform']);
+    }
+
+    public function test_a_cor_still_says_not_provided_while_no_platform_is_set(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.noplatform@grc.test', '2026-0302');
+        $document = $this->makeDocument($student, $term);
+
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        $this->assertSame('Not provided', $snapshot['student']['platform']);
+    }
+
+    public function test_re_syncing_a_cor_after_the_platform_changes_never_moves_its_issue_time(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.resync@grc.test', '2026-0303');
+        $document = $this->makeDocument($student, $term);
+        $issuedAt = '2026-01-05 03:04:05';
+        // Naming the column keeps MariaDB's implicit ON UPDATE from touching it.
+        DB::table('enrollment_documents')->where('id', $document->id)->update(['generated_at' => $issuedAt]);
+        $token = $this->tokenFor($student->user);
+
+        $this->withToken($token)->getJson("/api/v1/enrollment-documents/{$document->id}")->assertOk();
+        $hashBefore = DB::table('enrollment_documents')->where('id', $document->id)->value('content_hash');
+        $this->assertSame($issuedAt, DB::table('enrollment_documents')->where('id', $document->id)->value('generated_at'));
+
+        // The Registrar sets the platform after the COR exists: the next view
+        // re-syncs the stored snapshot, but the "Generated" time must not move.
+        $term->update(['enrollment_platform' => 'online']);
+        $snapshot = $this->withToken($token)->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        $this->assertSame('Online', $snapshot['student']['platform']);
+        $this->assertNotSame($hashBefore, DB::table('enrollment_documents')->where('id', $document->id)->value('content_hash'));
+        $this->assertSame($issuedAt, DB::table('enrollment_documents')->where('id', $document->id)->value('generated_at'));
+        $stored = json_decode((string) DB::table('enrollment_documents')->where('id', $document->id)->value('snapshot'), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame('Online', $stored['student']['platform']);
     }
 }

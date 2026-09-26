@@ -60,7 +60,7 @@ final class FacultyMembersEndpointTest extends TestCase
             ->assertJsonPath('data.1.id', $secondFaculty->id);
 
         self::assertSame(
-            ['type', 'id', 'name', 'college', 'status', 'status_label', 'employment_type', 'employment_type_label', 'planning_unit_reference', 'deactivation_reason', 'is_assignable'],
+            ['type', 'id', 'name', 'college', 'status', 'status_label', 'employment_type', 'employment_type_label', 'planning_unit_reference', 'masters_degree', 'deactivation_reason', 'is_assignable'],
             array_keys($response->json('data.0')),
         );
         $response->assertDontSee($firstFaculty->email);

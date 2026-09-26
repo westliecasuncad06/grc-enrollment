@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AuthError } from "@/features/auth/auth-error"
 import type { AuthSession } from "@/features/auth/auth-types"
@@ -229,6 +229,73 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(routerMock.replace).toHaveBeenCalledWith("/portal")
+    })
+  })
+
+  describe("on a phone", () => {
+    // The two panels stack at (max-width: 45rem), so the hero fills the first
+    // screen and the credentials sit a screen below (stakeholder Doc 13).
+    function stubViewport(isPhone: boolean) {
+      vi.spyOn(window, "matchMedia").mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes("max-width: 45rem")
+              ? isPhone
+              : query.includes("prefers-reduced-motion"),
+            media: query,
+            onchange: null,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            dispatchEvent: () => false,
+          }) as MediaQueryList,
+      )
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it("scrolls the sign-in form into view as soon as the page opens", async () => {
+      stubViewport(true)
+      const scrollIntoView = vi.spyOn(
+        window.HTMLElement.prototype,
+        "scrollIntoView",
+      )
+
+      renderLogin()
+      await screen.findByRole("heading", { name: "Sign in to your portal" })
+
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" })
+      // It scrolls the form's panel, which contains the credentials.
+      const scrolled = scrollIntoView.mock.contexts[0] as HTMLElement
+      expect(scrolled).toContainElement(screen.getByLabelText("Email address"))
+      expect(scrolled).toContainElement(screen.getByLabelText("Password"))
+    })
+
+    it("only scrolls; it never steals focus or opens the keyboard", async () => {
+      stubViewport(true)
+
+      renderLogin()
+      await screen.findByRole("heading", { name: "Sign in to your portal" })
+
+      expect(screen.getByLabelText("Email address")).not.toHaveFocus()
+      expect(screen.getByLabelText("Password")).not.toHaveFocus()
+    })
+
+    it("does not scroll on a wide screen where both panels are already visible", async () => {
+      stubViewport(false)
+      const scrollIntoView = vi.spyOn(
+        window.HTMLElement.prototype,
+        "scrollIntoView",
+      )
+
+      renderLogin()
+      await screen.findByRole("heading", { name: "Sign in to your portal" })
+
+      expect(scrollIntoView).not.toHaveBeenCalled()
     })
   })
 })

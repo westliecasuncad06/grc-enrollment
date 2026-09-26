@@ -5,13 +5,14 @@ namespace App\Domain\Identity;
 /**
  * PROVISIONAL VOCABULARY — NOT AN APPROVED INSTITUTIONAL POLICY VALUE.
  *
- * Whether a student is a fee-paying Payee or a Scholar, informational only —
- * set at admission provisioning and shown to Registrar/Accounting staff so
- * they know who they are dealing with. This deliberately does not change any
- * fee computation: `App\Domain\Billing\AssessmentComputation` reads only
- * total units and the fee schedule, never this value. A real
- * scholarship-waiver policy is a separate, not-yet-approved institutional
- * decision (PRD §17).
+ * Whether a student is a fee-paying Payee or a Scholar. The value itself is a
+ * label shown to Registrar/Accounting staff (and on the COR); it never drives a
+ * fee computation: `App\Domain\Billing\AssessmentComputation` reads only total
+ * units and the fee schedule. A scholarship's *discount* is not derived from
+ * this value: the Cashier assigns it per enrollment at payment time as an
+ * explicit 100%/40%/20% assessment line (ADR 0025, `ScholarshipTier`), which
+ * also sets this to Scholar (or back to Payee when it is removed). The wider
+ * scholarship-waiver policy stays a PRD §17 open item.
  */
 enum FinancialStatus: string
 {

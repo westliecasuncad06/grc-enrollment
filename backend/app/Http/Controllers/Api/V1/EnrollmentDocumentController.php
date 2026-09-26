@@ -17,6 +17,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 final class EnrollmentDocumentController extends Controller
 {
@@ -121,9 +122,20 @@ final class EnrollmentDocumentController extends Controller
             $document->setAttribute('snapshot', $freshSnapshot);
 
             if ($document->exists && $document->content_hash !== $buildCorSnapshot->hash($freshSnapshot)) {
+                $hash = $buildCorSnapshot->hash($freshSnapshot);
                 $document->snapshot = $freshSnapshot;
-                $document->content_hash = $buildCorSnapshot->hash($freshSnapshot);
-                $document->save();
+                $document->content_hash = $hash;
+                // Written with a plain UPDATE that names `generated_at`: under
+                // MariaDB's legacy `explicit_defaults_for_timestamp = 0` that
+                // column has an implicit ON UPDATE CURRENT_TIMESTAMP, and a
+                // model save would stamp the DB clock over the real issue time
+                // every time a COR is re-synced (the +8h drift).
+                DB::table($document->getTable())->where('id', $document->id)->update([
+                    'snapshot' => json_encode($freshSnapshot, JSON_THROW_ON_ERROR),
+                    'content_hash' => $hash,
+                    'generated_at' => DB::raw('`generated_at`'),
+                ]);
+                $document->syncOriginal();
             }
 
             return;

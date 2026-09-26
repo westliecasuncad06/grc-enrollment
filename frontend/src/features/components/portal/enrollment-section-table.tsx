@@ -25,6 +25,7 @@ import {
 } from "@/features/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
 import { formatTimeRange } from "@/features/lib/format-time"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
@@ -69,7 +70,7 @@ function scheduleColumns(): DataTableColumn<
     {
       key: "professor",
       header: "Professor",
-      render: (subject) => subject.professor_name ?? "To be confirmed",
+      render: (subject) => subject.professor_name ?? "Announced after enrollment",
     },
   ]
 }
@@ -130,7 +131,7 @@ function SectionThumbnailCard({
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           <Badge variant="secondary">{seatLabel(block)}</Badge>
           <Badge variant="outline">{block.total_units} units</Badge>
-          <Badge variant="outline">Year {block.year_level}</Badge>
+          <Badge variant="outline">{formatYearLevel(block.year_level)}</Badge>
         </div>
         <span className="text-xs text-muted-foreground">
           {block.subjects.length} subject{block.subjects.length === 1 ? "" : "s"}
@@ -226,7 +227,7 @@ function SelectedSectionModal({
                 </DialogTitle>
                 <Badge variant="secondary">{seatLabel(block)}</Badge>
                 <Badge variant="outline">{block.total_units} units</Badge>
-                <Badge variant="outline">Year {block.year_level}</Badge>
+                <Badge variant="outline">{formatYearLevel(block.year_level)}</Badge>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <ToggleGroup
@@ -251,7 +252,7 @@ function SelectedSectionModal({
               </div>
             </div>
             <DialogDescription id="selected-section-description">
-              Year {block.year_level} block section · {block.subjects.length}{" "}
+              {formatYearLevel(block.year_level)} block section · {block.subjects.length}{" "}
               subject{block.subjects.length === 1 ? "" : "s"} ·{" "}
               {view === "calendar"
                 ? "Weekly visual timetable across Monday to Saturday."

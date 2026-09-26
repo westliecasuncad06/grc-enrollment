@@ -1,6 +1,6 @@
 "use client"
 
-import { useDeferredValue, useState } from "react"
+import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -28,6 +28,7 @@ import {
 } from "@/features/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
 import {
   useCertificateOfRegistrationQuery,
   useEnrollmentDocumentsQuery,
@@ -38,11 +39,13 @@ interface SelectedStudent {
   studentNumber: string
 }
 
-/** Authorized Accounting Staff and Registrar Heads can review COR history. */
+/** Authorized Accounting Staff, Registrar Heads, and Registrar Staff can review COR history. */
 export function CashierCorRecordsWorkspace() {
   const { session } = useAuth()
   const authorized =
-    session?.role === "accounting_staff" || session?.role === "registrar_head"
+    session?.role === "accounting_staff" ||
+    session?.role === "registrar_head" ||
+    session?.role === "registrar_staff"
   const [studentNumber, setStudentNumber] = useState("")
   const [studentName, setStudentName] = useState("")
   const [page, setPage] = useState(1)
@@ -52,8 +55,10 @@ export function CashierCorRecordsWorkspace() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(
     null,
   )
-  const deferredStudentNumber = useDeferredValue(studentNumber.trim())
-  const deferredStudentName = useDeferredValue(studentName.trim())
+  // `useDeferredValue` only lowers render priority: it still queried the server
+  // on every keystroke. Debounce so a query fires 300 ms after typing stops.
+  const deferredStudentNumber = useDebouncedValue(studentNumber.trim(), 300)
+  const deferredStudentName = useDebouncedValue(studentName.trim(), 300)
   const documentsQuery = useEnrollmentDocumentsQuery(
     {
       page,

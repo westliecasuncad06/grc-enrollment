@@ -59,11 +59,16 @@ export function ScheduleDecisionControls({
   actorRole,
   proposals,
   viewMode = "all",
+  readOnly = false,
 }: {
   actorRole: UserRole
   proposals: readonly ScheduleProposal[]
   viewMode?: "all" | "review_only" | "history_only"
+  /** Show every proposal as history and offer no decision buttons. */
+  readOnly?: boolean
 }) {
+  const actionsFor = (proposal: ScheduleProposal) =>
+    readOnly ? [] : availableScheduleActions(actorRole, proposal)
   const { session } = useAuth()
   const queryClient = useQueryClient()
   const [pending, setPending] = useState<{
@@ -127,7 +132,7 @@ export function ScheduleDecisionControls({
 
   // Proposals where the current role can perform an action
   const selectable = proposals.filter(
-    (proposal) => availableScheduleActions(actorRole, proposal).length > 0,
+    (proposal) => actionsFor(proposal).length > 0,
   )
 
   // Proposals returned by Executive Director that are in draft state
@@ -162,7 +167,7 @@ export function ScheduleDecisionControls({
           ),
       )
     : proposals.filter(
-        (proposal) => availableScheduleActions(actorRole, proposal).length === 0,
+        (proposal) => actionsFor(proposal).length === 0,
       )
 
   const showReviewList =
@@ -207,7 +212,7 @@ export function ScheduleDecisionControls({
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
             {reviewItems.map((proposal) => {
-              const actions = availableScheduleActions(actorRole, proposal)
+              const actions = actionsFor(proposal)
               const isActionable = actions.length > 0
               const presentation = scheduleProposalPresentation(proposal)
               const priorReturn = [...(proposal.decision_history ?? [])]
@@ -236,7 +241,7 @@ export function ScheduleDecisionControls({
                       <p>
                         Submitted by{" "}
                         {proposal.submitted_by_name ??
-                          `Program Chair #${proposal.submitted_by}`}
+                          `Program Head #${proposal.submitted_by}`}
                       </p>
                       <div className="flex items-center gap-2">
                         <Badge variant={isActionable ? presentation.badgeVariant : "destructive"}>
@@ -254,7 +259,7 @@ export function ScheduleDecisionControls({
                       )}
                       {!isActionable && (
                         <p className="text-xs text-muted-foreground">
-                          Waiting for Program Chair revision and Dean resubmission.
+                          Waiting for Program Head revision and Dean resubmission.
                         </p>
                       )}
                       <div className="flex flex-wrap gap-2">
@@ -344,7 +349,7 @@ export function ScheduleDecisionControls({
                       <p>
                         Submitted by{" "}
                         {proposal.submitted_by_name ??
-                          `Program Chair #${proposal.submitted_by}`}
+                          `Program Head #${proposal.submitted_by}`}
                       </p>
                       <div className="flex items-center gap-2">
                         <Badge variant={badgeVariant}>
@@ -400,6 +405,7 @@ export function ScheduleDecisionControls({
         actorRole={actorRole}
         proposal={reviewingProposal}
         decisionPending={mutation.isPending}
+        readOnly={readOnly}
         onOpenChange={(open) => {
           if (!open) setReviewingProposal(null)
         }}
@@ -425,7 +431,7 @@ export function ScheduleDecisionControls({
           </AlertDialogHeader>
           {pending && requiresReason(pending.action) && (
             <Field data-invalid={reasonRequired}>
-              <FieldLabel htmlFor="decision-reason">Notes for Program Chair</FieldLabel>
+              <FieldLabel htmlFor="decision-reason">Notes for Program Head</FieldLabel>
               <Textarea
                 id="decision-reason"
                 value={reason}
@@ -464,7 +470,7 @@ export function ScheduleDecisionWorkspace() {
   return (
     <WorkspacePage
       title="Enrollment planning review"
-      description="Review each department's submitted enrollment plan, approve it, or return it with clear notes for the Program Chair."
+      description="Review each department's submitted enrollment plan, approve it, or return it with clear notes for the Program Head."
       unauthorized={!authorized}
       lastUpdated={proposalsQuery.dataUpdatedAt}
     >

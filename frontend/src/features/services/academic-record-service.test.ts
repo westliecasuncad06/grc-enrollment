@@ -5,6 +5,7 @@ import {
   getAcademicRecord,
   getGradeSlip,
   getProspectus,
+  searchAcademicRecordStudents,
 } from "@/features/services/academic-record-service"
 
 const prospectus = {
@@ -20,6 +21,7 @@ const prospectus = {
   enrollment_category: "regular",
   enrollment_category_label: "Regular",
   enrollment_category_derived_at: "2026-07-30T00:00:00Z",
+  transferee_credits: [],
   semesters: [],
   unplaced_entries: [],
 } as const
@@ -164,5 +166,42 @@ describe("academic-record-service", () => {
     )
 
     await expect(getAcademicRecord()).rejects.toBeInstanceOf(ApiClientError)
+  })
+
+  it("searches students for academic records with query parameters", async () => {
+    const studentCandidate = {
+      type: "academic_record_student",
+      id: 1508,
+      student_id: 1508,
+      student_number: "2024-06-01298",
+      name: "Bonifacio B. Pangilinan",
+      first_name: "Bonifacio",
+      last_name: "Pangilinan",
+      email: "bonifacio.pangilinan@grc.com",
+      program_code: "BSIT",
+      program_name: "BS Information Technology",
+      year_level: 3,
+      enrollment_category: "regular",
+      enrollment_category_label: "Regular",
+      academic_standing: "good",
+      academic_standing_label: "Good Standing",
+    }
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [studentCandidate] })),
+    )
+
+    const result = await searchAcademicRecordStudents({
+      search: "Bonifacio",
+      by: "name",
+      limit: 10,
+    })
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.name).toBe("Bonifacio B. Pangilinan")
+    const callUrl = fetchMock.mock.calls[0]?.[0] as string
+    expect(callUrl).toContain("/api/v1/academic-record/students")
+    expect(callUrl).toContain("search=Bonifacio")
+    expect(callUrl).toContain("by=name")
+    expect(callUrl).toContain("limit=10")
   })
 })

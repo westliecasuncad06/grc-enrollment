@@ -117,6 +117,25 @@ export async function getStudentProfile(
   return envelope.data
 }
 
+/**
+ * The Registrar Head's read of one student while reviewing an enrollment. A
+ * separate path from `getStudentProfile`, whose API is Admission Staff's.
+ */
+export async function getRegistrarStudentProfile(
+  id: number,
+  signal?: AbortSignal,
+): Promise<StudentProfile> {
+  const envelope = parse(
+    studentProfileEnvelopeSchema,
+    await getAuthenticatedJson(
+      `/api/v1/students/${id}/registrar-profile`,
+      signal,
+    ),
+    "student profile",
+  )
+  return envelope.data
+}
+
 export async function updateStudentProfile(
   id: number,
   input: UpdateStudentProfileInput,

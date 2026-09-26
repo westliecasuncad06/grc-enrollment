@@ -75,6 +75,10 @@ const specialization = {
   proficiency: "primary",
   proficiency_label: "Primary",
   source: "declared",
+  status: "approved",
+  status_label: "Approved",
+  decided_at: null,
+  decision_reason: null,
   notes: null,
 } as const
 

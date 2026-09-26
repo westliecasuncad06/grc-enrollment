@@ -40,7 +40,7 @@ export function PrintDocument({
 }
 
 export function PrintButton({
-  label = "Print COR",
+  label = "Print",
 }: {
   label?: string
 }) {

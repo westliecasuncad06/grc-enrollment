@@ -5,6 +5,7 @@ namespace App\Actions\Identity;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +28,8 @@ final class InviteStaffAccount
         UserRole $role,
         User $actor,
         AuditRequestContext $context,
+        ?CollegeCode $college = null,
+        ?string $mastersDegree = null,
     ): User {
         if (! in_array($role, UserRole::registrarInvitableCases(), true)) {
             throw ValidationException::withMessages([
@@ -47,6 +50,8 @@ final class InviteStaffAccount
             'email' => $email,
             'password' => Str::random(64),
             'role' => $role,
+            'college' => $college,
+            'masters_degree' => $mastersDegree,
             'status' => UserStatus::Disabled,
             'account_setup_completed_at' => null,
         ]);

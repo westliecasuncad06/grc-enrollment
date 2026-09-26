@@ -32,6 +32,14 @@ const account = {
   ],
 } as const
 
+// The service parses the response, and the schema fills in the fields an older API omitted
+// (advance payment credit and the transaction list).
+const parsedAccount = {
+  ...account,
+  advance_payment_balance: "0.00",
+  transactions: [],
+}
+
 describe("student-account-service", () => {
   const fetchMock = vi.fn<typeof fetch>()
 
@@ -43,7 +51,7 @@ describe("student-account-service", () => {
       new Response(JSON.stringify({ data: account })),
     )
 
-    await expect(getOwnStudentAccount()).resolves.toEqual(account)
+    await expect(getOwnStudentAccount()).resolves.toEqual(parsedAccount)
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/student-account")
   })
 
@@ -59,7 +67,7 @@ describe("student-account-service", () => {
         ),
       )
 
-    await expect(getStudentAccount(4)).resolves.toEqual(account)
+    await expect(getStudentAccount(4)).resolves.toEqual(parsedAccount)
     await expect(
       recordStudentAccountPayment(4, { amount: 500 }),
     ).resolves.toMatchObject({

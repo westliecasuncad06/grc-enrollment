@@ -47,9 +47,24 @@ final class GradeSlipController extends Controller
     private function resolveStudent(ShowGradeSlipRequest $request, User $actor): StudentProfile
     {
         $studentId = $request->validated('student_id');
+        $studentNumber = $request->validated('student_number');
 
         if ($studentId !== null) {
             return StudentProfile::query()->where('id', $studentId)->firstOrFail();
+        }
+
+        if ($studentNumber !== null) {
+            $clean = trim((string) $studentNumber);
+            $unhyphenated = str_replace('-', '', $clean);
+            $hyphenated = preg_match('/^\d{11}$/', $clean)
+                ? substr($clean, 0, 4).'-'.substr($clean, 4, 2).'-'.substr($clean, 6, 5)
+                : $clean;
+
+            return StudentProfile::query()
+                ->where('student_number', $clean)
+                ->orWhere('student_number', $hyphenated)
+                ->orWhereRaw("REPLACE(student_number, '-', '') = ?", [$unhyphenated])
+                ->firstOrFail();
         }
 
         if ($actor->role === UserRole::Student) {
@@ -57,6 +72,6 @@ final class GradeSlipController extends Controller
         }
 
         // See the identical guard in ProspectusController::resolveStudent().
-        throw new AuthorizationException('A student_id is required for this role.');
+        throw new AuthorizationException('A student_id or student_number is required for this role.');
     }
 }

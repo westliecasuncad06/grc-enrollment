@@ -2,7 +2,6 @@
 
 namespace App\Actions\Enrollment;
 
-use App\Actions\Billing\AssessEnrollment;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
@@ -32,15 +31,14 @@ use Illuminate\Validation\ValidationException;
  * against a freshly built eligible pool before this executes — this action
  * only writes.
  *
- * The queue ticket is deliberately NOT created here for irregular/overload
- * students — it is issued only once Registrar Staff approves
- * (`TransitionEnrollment`'s `registrar_approve`), so a student sees "waiting
- * for approval" with no queue number until then.
- *
- * For regular students (enrollment_category = 'regular') who do NOT require
- * overload approval, the enrollment is automatically transitioned to
- * `pending_payment` with an immediate fee assessment, bypassing the manual
- * registrar approval step.
+ * No assessment and no queue ticket are created here, for any student: both
+ * come only once the Registrar approves (`TransitionEnrollment`'s
+ * `registrar_approve`), so a student sees "waiting for approval" with no
+ * queue number until then. An irregular or overload submission first waits
+ * at `pending_program_head_approval`; every other submission (a prescribed
+ * block, or a regular-category student) goes straight to
+ * `pending_registrar_approval`. This reverses the 2026-09-16 rule that
+ * auto-approved regular submissions to payment (ADR 0030).
  *
  * All writes happen in one transaction (FR-ENR-007's "submit atomically" and
  * its acceptance criterion: exactly one enrollment, the selected enrollment
@@ -64,7 +62,6 @@ final readonly class SubmitEnrollment
     public function __construct(
         private AuditRecorder $auditRecorder,
         private NotificationRecorder $notificationRecorder,
-        private AssessEnrollment $assessEnrollment,
     ) {}
 
     /**
@@ -131,10 +128,18 @@ final readonly class SubmitEnrollment
                 ]);
             }
 
+            // Regular students taking their prescribed block (or classified
+            // regular) go straight to the Registrar; everyone else, irregular
+            // or overload, is checked by the Program Head first.
+            $needsProgramHead = ! ($isBlockSubmission || $isRegularCategory)
+                || $overloadVerdict === OverloadVerdict::RequiresApproval;
+
             $enrollment = Enrollment::create([
                 'student_id' => $student->id,
                 'academic_term_id' => $term->id,
-                'status' => EnrollmentStatus::PendingRegistrarApproval,
+                'status' => $needsProgramHead
+                    ? EnrollmentStatus::PendingProgramHeadApproval
+                    : EnrollmentStatus::PendingRegistrarApproval,
                 'total_units' => $totalUnits,
                 'requires_overload_approval' => $overloadVerdict === OverloadVerdict::RequiresApproval,
                 'submitted_at' => now(),
@@ -149,21 +154,6 @@ final readonly class SubmitEnrollment
             }
 
             Section::query()->whereIn('id', $sectionIds)->increment('enrolled_count');
-
-            // Regular students enrolling in a prescribed block or regular category students
-            // who do not require overload approval are automatically approved: their
-            // enrollment transitions directly to pending_payment and an assessment is
-            // computed immediately, removing the manual registrar approval bottleneck.
-            $isRegular = ($isBlockSubmission || $isRegularCategory)
-                && $overloadVerdict !== OverloadVerdict::RequiresApproval;
-
-            if ($isRegular) {
-                $enrollment->update([
-                    'status' => EnrollmentStatus::PendingPayment,
-                    'registrar_decided_at' => now(),
-                ]);
-                $this->assessEnrollment->execute($enrollment->refresh());
-            }
 
             $this->auditRecorder->record(
                 $actor,
@@ -183,12 +173,12 @@ final readonly class SubmitEnrollment
                 $context,
             );
 
-            if ($isRegular) {
+            if (! $needsProgramHead) {
                 Notification::create([
                     'user_id' => $actor->id,
                     'type' => NotificationType::EnrollmentSubmitted,
                     'message' => sprintf(
-                        'Your enrollment for %s %s has been submitted and assessed. Please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
+                        'Your enrollment for %s %s has been submitted and is pending Registrar approval. Once approved, please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
                         $term->school_year,
                         $term->semester,
                     ),
@@ -198,7 +188,7 @@ final readonly class SubmitEnrollment
                     'user_id' => $actor->id,
                     'type' => NotificationType::EnrollmentSubmitted,
                     'message' => sprintf(
-                        'Your enrollment for %s %s has been submitted and is pending Program Chair schedule review. Once approved, please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
+                        'Your enrollment for %s %s has been submitted and is pending Program Head schedule review, then Registrar approval. Once approved, please proceed to the school Cashier kiosk on campus to claim your queuing ticket.',
                         $term->school_year,
                         $term->semester,
                     ),
@@ -208,7 +198,7 @@ final readonly class SubmitEnrollment
                     UserRole::ProgramChair,
                     NotificationType::EnrollmentSubmitted,
                     sprintf(
-                        'Irregular student %s submitted an enrollment for %s %s and is awaiting Program Chair schedule checking.',
+                        'Irregular student %s submitted an enrollment for %s %s and is awaiting Program Head schedule checking.',
                         $student->student_number,
                         $term->school_year,
                         $term->semester,

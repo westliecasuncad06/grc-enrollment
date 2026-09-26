@@ -7,6 +7,8 @@ use App\Domain\Analytics\AnalyticsYearOverYearPoint;
 use App\Domain\Analytics\ProgramChairAnalyticsSummary;
 use App\Domain\Analytics\RetentionBreakdownRow;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Identity\AdmissionStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Models\AcademicTerm;
 use Illuminate\Database\Query\Builder;
@@ -117,7 +119,27 @@ final readonly class BuildProgramChairAnalyticsSummary
             DB::table('enrollments')
                 ->join('student_profiles', 'student_profiles.id', '=', 'enrollments.student_id')
                 ->join('programs', 'programs.id', '=', 'student_profiles.program_id')
-                ->join('academic_terms', 'academic_terms.id', '=', 'enrollments.academic_term_id'),
+                ->join('academic_terms', 'academic_terms.id', '=', 'enrollments.academic_term_id')
+                ->leftJoin('academic_terms as next_terms', function ($join): void {
+                    $join->on('next_terms.school_year', '=', 'academic_terms.school_year')
+                        ->where('next_terms.semester', '=', '2nd');
+                })
+                ->leftJoin('enrollments as next_enrollments', function ($join): void {
+                    $join->on('next_enrollments.academic_term_id', '=', 'next_terms.id')
+                        ->on('next_enrollments.student_id', '=', 'enrollments.student_id')
+                        ->where('next_enrollments.status', '=', EnrollmentStatus::Enrolled->value);
+                })
+                // A student still enrolling for the next term has not stopped yet.
+                ->leftJoin('enrollments as next_pending', function ($join): void {
+                    $join->on('next_pending.academic_term_id', '=', 'next_terms.id')
+                        ->on('next_pending.student_id', '=', 'enrollments.student_id')
+                        ->whereIn('next_pending.status', [
+                            EnrollmentStatus::Draft->value,
+                            EnrollmentStatus::PendingProgramHeadApproval->value,
+                            EnrollmentStatus::PendingRegistrarApproval->value,
+                            EnrollmentStatus::PendingPayment->value,
+                        ]);
+                }),
             $college,
         )
             ->when($yearLevel !== null, fn ($query) => $query->where('student_profiles.year_level', $yearLevel))
@@ -127,17 +149,40 @@ final readonly class BuildProgramChairAnalyticsSummary
             ->when($trendSchoolYearTo !== null, fn ($query) => $query->where('academic_terms.school_year', '<=', $trendSchoolYearTo))
             ->select('academic_terms.school_year', 'academic_terms.semester')
             ->selectRaw("COUNT(DISTINCT CASE WHEN enrollments.status = '".EnrollmentStatus::Enrolled->value."' THEN enrollments.student_id END) as aggregate")
+            // Stopped = students who will not continue (stakeholder Doc 14, S19):
+            // withdrew, or enrolled this term and did not enroll in the next one
+            // although its enrollment window has closed. Graduates and students
+            // still enrolling are not counted.
+            ->selectRaw(
+                "COUNT(DISTINCT CASE WHEN (enrollments.status = '".EnrollmentStatus::Enrolled->value."'"
+                .' AND next_terms.id IS NOT NULL AND next_enrollments.id IS NULL AND next_pending.id IS NULL'
+                .' AND student_profiles.graduation_school_year IS NULL'
+                ." AND student_profiles.admission_status <> '".AdmissionStatus::Graduated->value."'"
+                .' AND (CASE WHEN next_terms.enrollment_closes_at IS NOT NULL THEN next_terms.enrollment_closes_at < ?'
+                .' WHEN next_terms.add_drop_deadline_at IS NOT NULL THEN next_terms.add_drop_deadline_at < ?'
+                ." ELSE next_terms.status IN ('".AcademicTermStatus::SemesterClosed->value."', '".AcademicTermStatus::Archived->value."') END))"
+                ." OR enrollments.status = '".EnrollmentStatus::Withdrawn->value."' THEN enrollments.student_id END) as stopped_count",
+                [now()->utc()->toDateTimeString(), now()->utc()->toDateTimeString()],
+            )
             ->groupBy('academic_terms.school_year', 'academic_terms.semester')
             ->orderBy('academic_terms.school_year')
             ->orderBy('academic_terms.semester')
             ->get();
 
         $yearOverYear = array_values($yearOverYearRows
-            ->map(fn ($row): AnalyticsYearOverYearPoint => new AnalyticsYearOverYearPoint(
-                schoolYear: (string) $row->school_year,
-                semester: (string) $row->semester,
-                enrolleeCount: (int) $row->aggregate,
-            ))
+            ->map(function ($row): AnalyticsYearOverYearPoint {
+                $enrolleeCount = (int) $row->aggregate;
+                $stoppedCount = (int) ($row->stopped_count ?? 0);
+                $attritionRate = $enrolleeCount > 0 ? round(($stoppedCount / $enrolleeCount) * 100, 2) : 0.0;
+
+                return new AnalyticsYearOverYearPoint(
+                    schoolYear: (string) $row->school_year,
+                    semester: (string) $row->semester,
+                    enrolleeCount: $enrolleeCount,
+                    stoppedCount: $stoppedCount,
+                    attritionRate: $attritionRate,
+                );
+            })
             ->all());
 
         return new ProgramChairAnalyticsSummary(

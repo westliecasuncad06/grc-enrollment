@@ -581,7 +581,7 @@ describe("ProgramChairEnrollmentWorkspace", () => {
         name: "Why these sections were generated",
       }),
     ).toHaveTextContent(
-      "Manually planned by the Program Chair — no demand forecast was available for this subject.",
+      "Manually planned by the Program Head — no demand forecast was available for this subject.",
     )
   })
 

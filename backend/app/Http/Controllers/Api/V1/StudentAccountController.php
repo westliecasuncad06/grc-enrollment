@@ -50,17 +50,30 @@ final class StudentAccountController extends Controller
         StoreAccountPaymentRequest $request,
         StudentProfile $student,
         RecordAccountPayment $recordAccountPayment,
+        BuildStudentAccountBalance $buildStudentAccountBalance,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
         $this->authorize('recordAccountPayment', $student);
-        $student->load('user');
-        $balance = $recordAccountPayment->execute(
-            $student,
-            (string) $request->validated('amount'),
-            $actor,
-            $contextFactory->fromRequest($request),
-        );
+        if ($request->filled('financial_status')) {
+            $student->update([
+                'financial_status' => $request->validated('financial_status'),
+            ]);
+        }
+
+        $rawAmount = $request->validated('amount');
+        $amount = $rawAmount !== null ? (string) $rawAmount : '0.00';
+
+        if (bccomp($amount, '0.00', 2) === 1) {
+            $balance = $recordAccountPayment->execute(
+                $student,
+                $amount,
+                $actor,
+                $contextFactory->fromRequest($request),
+            );
+        } else {
+            $balance = $buildStudentAccountBalance->execute($student);
+        }
 
         $response = (new StudentAccountResource($student, $balance))->response($request);
         $response->setStatusCode(201);

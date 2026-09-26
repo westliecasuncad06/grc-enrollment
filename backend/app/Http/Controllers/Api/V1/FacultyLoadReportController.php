@@ -20,7 +20,7 @@ final class FacultyLoadReportController extends Controller
     public function show(Request $request, AcademicTerm $academicTerm, BuildFacultyLoadReport $report): JsonResponse
     {
         $user = $this->user($request);
-        abort_unless($user->college !== null, 422, 'A college-scoped Program Chair is required.');
+        abort_unless($user->college !== null, 422, 'A college-scoped Program Head or Dean is required.');
 
         return response()->json(['data' => $report->execute($academicTerm, $user->college->value)]);
     }
@@ -32,7 +32,7 @@ final class FacultyLoadReportController extends Controller
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $user = $this->user($request);
-        abort_unless($user->college !== null, 422, 'A college-scoped Program Chair is required.');
+        abort_unless($user->college !== null, 422, 'A college-scoped Program Head is required.');
         $data = $request->validate(['max_units' => ['required', 'numeric', 'gt:0', 'max:99']]);
         $existing = FacultyLoadThreshold::query()->where([
             'academic_term_id' => $academicTerm->id,

@@ -29,14 +29,16 @@ final class GrcSubjectCatalogSeederCurriculumIntegrationTest extends TestCase
     {
         $this->seed(GrcSubjectCatalogSeeder::class);
 
-        $program = Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active]);
+        $program = Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active, 'college' => 'ccs']);
+        // A curriculum is created against the current or latest academic term.
+        \App\Models\AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => \App\Domain\Organization\AcademicTermStatus::SemesterOngoing, 'starts_at' => '2026-08-01']);
 
         $intro = Subject::where('code', 'ITC')->sole();
         $hardware = Subject::where('code', 'ITP1')->sole();
 
         User::create([
             'name' => 'Chair', 'email' => 'chair.ccs@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'college' => 'ccs', 'status' => UserStatus::Active,
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => 'chair.ccs@grc.test', 'password' => self::PASSWORD,

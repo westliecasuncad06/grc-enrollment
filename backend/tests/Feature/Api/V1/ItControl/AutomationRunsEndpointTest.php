@@ -28,6 +28,8 @@ final class AutomationRunsEndpointTest extends TestCase
     public function test_it_queues_a_run_and_reports_progress(): void
     {
         $itAdmin = $this->makeUser('it-admin', UserRole::ItAdmin);
+        // The step acts as a Dean, so one has to exist even when there is nothing to approve.
+        $this->makeUser('dean', UserRole::Dean);
         $term = $this->makeCurrentTerm();
 
         $response = $this->withToken($this->tokenFor($itAdmin))

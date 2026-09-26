@@ -3,14 +3,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
-import type { EnrollmentFilters } from "@/features/schemas/enrollment-schema"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
+import type {
+  EnrollmentFilters,
+  ScholarshipPercentage,
+} from "@/features/schemas/enrollment-schema"
 import {
+  applyScholarshipDiscount,
   confirmPayment,
   adjustEnrollmentAssessment,
+  getCorPreview,
   getEligibleSubjects,
   getEnrollmentBlocks,
   getEnrollments,
   listEnrollments,
+  removeScholarshipDiscount,
   updateEnrollment,
 } from "@/features/services/enrollment-service"
 
@@ -109,8 +116,10 @@ export function useEnrollmentsListQuery(
   return useQuery({
     queryKey: enrollmentsListQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listEnrollments(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
   })
 }
@@ -150,12 +159,26 @@ export function useUpdateEnrollmentMutation() {
       action,
       reason,
       overload_acknowledged,
+      requested_by_student,
     }: {
       id: number
-      action: "registrar_approve" | "registrar_reject" | "void"
+      action:
+        | "program_head_approve"
+        | "program_head_reject"
+        | "registrar_approve"
+        | "registrar_reject"
+        | "void"
+        | "student_cancel"
       reason?: string
       overload_acknowledged?: boolean
-    }) => updateEnrollment(id, { action, reason, overload_acknowledged }),
+      requested_by_student?: boolean
+    }) =>
+      updateEnrollment(id, {
+        action,
+        reason,
+        overload_acknowledged,
+        requested_by_student,
+      }),
     onSuccess: () => invalidate(),
   })
 }
@@ -198,5 +221,44 @@ export function useAdjustEnrollmentAssessmentMutation() {
       items: Array<{ id: number; amount?: string; unit_amount?: string }>
     }) => adjustEnrollmentAssessment(id, { reason, items }),
     onSuccess: () => invalidate(),
+  })
+}
+
+/**
+ * The Cashier's Payee/Scholar step (ADR 0025). `mutateAsync` resolves only
+ * after the enrollment lists and account have been refetched, so the payment
+ * modal that opens next already reads the discounted assessment.
+ */
+export function useApplyScholarshipDiscountMutation() {
+  const invalidate = useInvalidateEnrollmentQueries()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      percentage,
+    }: {
+      id: number
+      percentage: ScholarshipPercentage
+    }) => applyScholarshipDiscount(id, percentage),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useRemoveScholarshipDiscountMutation() {
+  const invalidate = useInvalidateEnrollmentQueries()
+
+  return useMutation({
+    mutationFn: ({ id }: { id: number }) => removeScholarshipDiscount(id),
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useCorPreviewQuery(enrollmentId: number | null) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: ["cor-preview", session?.userId ?? null, enrollmentId],
+    queryFn: ({ signal }) => getCorPreview(enrollmentId!, signal),
+    enabled: session !== null && enrollmentId !== null,
   })
 }

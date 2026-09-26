@@ -24,9 +24,11 @@ final class FacultyInputMigrationTest extends TestCase
     {
         $this->assertTrue(Schema::hasTable('faculty_availabilities'));
         $this->assertTrue(Schema::hasColumns('faculty_availabilities', [
-            'id', 'professor_id', 'academic_term_id', 'day_of_week',
+            'id', 'professor_id', 'day_of_week',
             'starts_at_time', 'ends_at_time', 'created_at', 'updated_at',
         ]));
+        // Availability is term-independent (2026_08_10_000001).
+        $this->assertFalse(Schema::hasColumn('faculty_availabilities', 'academic_term_id'));
     }
 
     public function test_the_same_professor_cannot_declare_the_same_slot_twice(): void

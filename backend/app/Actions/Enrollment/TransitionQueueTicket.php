@@ -39,8 +39,8 @@ use InvalidArgumentException;
  * a ticket is Accounting's own operational action, with no live-queue
  * display this slice implements to make a push notification meaningful yet.
  *
- * `mark_priority` is a separate, non-status-changing write — see its own
- * method below.
+ * `mark_priority` and `announce` are separate, non-status-changing writes —
+ * see their own methods below.
  */
 final readonly class TransitionQueueTicket
 {
@@ -77,6 +77,10 @@ final readonly class TransitionQueueTicket
     {
         if ($action === 'mark_priority') {
             return $this->markPriority($ticket, $actor, $context);
+        }
+
+        if ($action === 'announce') {
+            return $this->announce($ticket);
         }
 
         if (! isset(self::TARGET_STATUS[$action])) {
@@ -190,6 +194,36 @@ final readonly class TransitionQueueTicket
                 null,
                 $context,
             );
+
+            return $lockedTicket->refresh()->load(['enrollment.student']);
+        });
+    }
+
+    /**
+     * The Cashier calling a `serving` ticket out (again). Not a state change:
+     * it only adds one to `announce_count`, which the Student's polled queue
+     * view exposes so their own device rings when the number goes up (ADR
+     * 0027). Deliberately repeatable — every press is meant to ring again, so
+     * there is nothing to make idempotent — and deliberately not audited: a
+     * ping is not a change to the ticket, and an audit row per press would
+     * only bury the real transitions.
+     */
+    private function announce(QueueTicket $ticket): QueueTicket
+    {
+        return DB::transaction(function () use ($ticket): QueueTicket {
+            $lockedTicket = QueueTicket::query()
+                ->whereKey($ticket->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedTicket->status !== QueueTicketStatus::Serving) {
+                throw ValidationException::withMessages([
+                    'action' => "A ticket can only be announced while it is 'serving'; ".
+                        "it is currently '{$lockedTicket->status->value}'.",
+                ]);
+            }
+
+            $lockedTicket->increment('announce_count');
 
             return $lockedTicket->refresh()->load(['enrollment.student']);
         });

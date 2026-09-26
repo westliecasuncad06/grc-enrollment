@@ -119,7 +119,7 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
 
     public function test_result_business_unique_constraints_exist_with_the_approved_names(): void
     {
-        $forecastUnique = 'section_demand_forecasts_run_term_subject_unique';
+        $forecastUnique = 'section_demand_forecasts_cohort_unique';
         $attritionUnique = 'attrition_predictions_run_student_unique';
 
         $this->assertSame([$forecastUnique], $this->indexNamesFor('section_demand_forecasts', [$forecastUnique]));
@@ -137,9 +137,12 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
             ['prediction_runs', 'prediction_runs_type_status_created_index', 1, 'type', 1],
             ['prediction_runs', 'prediction_runs_type_status_created_index', 2, 'status', 1],
             ['prediction_runs', 'prediction_runs_type_status_created_index', 3, 'created_at', 1],
-            ['section_demand_forecasts', 'section_demand_forecasts_run_term_subject_unique', 1, 'prediction_run_id', 0],
-            ['section_demand_forecasts', 'section_demand_forecasts_run_term_subject_unique', 2, 'academic_term_id', 0],
-            ['section_demand_forecasts', 'section_demand_forecasts_run_term_subject_unique', 3, 'subject_id', 0],
+            ['section_demand_forecasts', 'section_demand_forecasts_cohort_unique', 1, 'prediction_run_id', 0],
+            ['section_demand_forecasts', 'section_demand_forecasts_cohort_unique', 2, 'academic_term_id', 0],
+            ['section_demand_forecasts', 'section_demand_forecasts_cohort_unique', 3, 'curriculum_id', 0],
+            ['section_demand_forecasts', 'section_demand_forecasts_cohort_unique', 4, 'subject_id', 0],
+            ['section_demand_forecasts', 'section_demand_forecasts_cohort_unique', 5, 'year_level', 0],
+            ['section_demand_forecasts', 'section_demand_forecasts_prediction_run_index', 1, 'prediction_run_id', 1],
         ], $this->indexDefinitionsFor());
     }
 
@@ -244,17 +247,32 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
         ]];
     }
 
-    public function test_a_prediction_run_can_have_only_one_forecast_per_term_and_subject(): void
+    /**
+     * Forecasts are per curriculum cohort now (`section_demand_forecasts_cohort_unique`), so the
+     * duplicate has to repeat the curriculum and year level too. (A unique key ignores rows whose
+     * key columns are NULL, so both must be set for the constraint to apply.)
+     */
+    public function test_a_prediction_run_can_have_only_one_forecast_per_term_subject_curriculum_and_year_level(): void
     {
         $runId = $this->makePredictionRun($this->makeTerm()->id);
         $term = $this->makeTerm();
         $subject = $this->makeSubject();
+        $programId = DB::table('programs')->insertGetId([
+            'code' => 'UNQ', 'name' => 'Unique test program', 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $curriculumId = DB::table('curricula')->insertGetId([
+            'program_id' => $programId, 'name' => 'Unique test curriculum',
+            'effective_school_year' => '2024-2029', 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $cohort = ['curriculum_id' => $curriculumId, 'year_level' => 1];
 
-        $this->insertForecast($runId, $term->id, $subject->id);
+        $this->insertForecast($runId, $term->id, $subject->id, $cohort);
 
         $this->expectException(QueryException::class);
 
-        $this->insertForecast($runId, $term->id, $subject->id);
+        $this->insertForecast($runId, $term->id, $subject->id, $cohort);
     }
 
     #[DataProvider('invalidRiskProbabilities')]
@@ -461,7 +479,7 @@ final class AnalyticsSubstrateMigrationTest extends TestCase
          * }> $indexes
          */
         $indexes = DB::select(
-            "select TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME, NON_UNIQUE from information_schema.statistics where table_schema = ? and ((table_name = 'prediction_runs' and index_name in ('prediction_runs_type_status_created_index', 'prediction_runs_term_type_created_index')) or (table_name = 'section_demand_forecasts' and index_name = 'section_demand_forecasts_run_term_subject_unique') or (table_name = 'attrition_predictions' and index_name = 'attrition_predictions_run_student_unique')) order by TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
+            "select TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME, NON_UNIQUE from information_schema.statistics where table_schema = ? and ((table_name = 'prediction_runs' and index_name in ('prediction_runs_type_status_created_index', 'prediction_runs_term_type_created_index')) or (table_name = 'section_demand_forecasts' and index_name in ('section_demand_forecasts_cohort_unique', 'section_demand_forecasts_prediction_run_index')) or (table_name = 'attrition_predictions' and index_name = 'attrition_predictions_run_student_unique')) order by TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
             [DB::connection()->getDatabaseName()],
         );
 

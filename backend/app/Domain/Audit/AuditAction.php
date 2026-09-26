@@ -50,7 +50,23 @@ final class AuditAction
 
     public const SECTION_UPDATED = 'section.updated';
 
+    public const SECTION_PROFESSOR_REASSIGNED = 'section.professor_reassigned';
+
+    public const SECTION_CHANGE_REQUESTED = 'section_change_request.requested';
+
+    public const SECTION_CHANGE_APPROVED = 'section_change_request.approved';
+
+    public const SECTION_CHANGE_REJECTED = 'section_change_request.rejected';
+
+    public const SECTION_CHANGE_CANCELLED = 'section_change_request.cancelled';
+
     public const FACULTY_LOAD_THRESHOLD_UPDATED = 'faculty_load_threshold.updated';
+
+    public const FACULTY_LOAD_LIMIT_UPDATED = 'faculty_load_limit.updated';
+
+    public const FACULTY_LOAD_OVERRIDE_SET = 'faculty_load_override.set';
+
+    public const FACULTY_LOAD_OVERRIDE_CLEARED = 'faculty_load_override.cleared';
 
     public const SCHEDULE_PROPOSAL_CREATED = 'schedule_proposal.created';
 
@@ -84,6 +100,10 @@ final class AuditAction
 
     public const FACULTY_ACCOUNT_ACTIVATED = 'faculty_account.activated';
 
+    public const FACULTY_ACCOUNT_MERGED = 'faculty_account.merged';
+
+    public const FACULTY_ACCOUNT_MERGE_ROLLED_BACK = 'faculty_account.merge_rolled_back';
+
     public const STAFF_ACCOUNT_SETUP_INVITATION_SENT = 'staff_account.setup_invitation_sent';
 
     public const STAFF_ACCOUNT_SETUP_INVITATION_FAILED = 'staff_account.setup_invitation_failed';
@@ -108,15 +128,37 @@ final class AuditAction
 
     public const FACULTY_DIRECTORY_LIST_VIEWED = 'faculty_directory.list_viewed';
 
+    public const ENROLLMENT_STATUS_STUDENT_LIST_VIEWED = 'enrollment_status_dashboard.student_list_viewed';
+
+    public const ENROLLMENT_STATUS_STUDENT_VIEWED = 'enrollment_status_dashboard.student_viewed';
+
     public const FACULTY_WORKFORCE_PROFILE_UPDATED = 'faculty_workforce_profile.updated';
 
     public const ENROLLMENT_SUBMITTED = 'enrollment.submitted';
+
+    public const ENROLLMENT_PROGRAM_HEAD_APPROVED = 'enrollment.program_head_approved';
+
+    public const ENROLLMENT_PROGRAM_HEAD_REJECTED = 'enrollment.program_head_rejected';
 
     public const ENROLLMENT_REGISTRAR_APPROVED = 'enrollment.registrar_approved';
 
     public const ENROLLMENT_REGISTRAR_REJECTED = 'enrollment.registrar_rejected';
 
     public const ENROLLMENT_VOIDED = 'enrollment.voided';
+
+    public const ENROLLMENT_CANCELLED_BY_STUDENT = 'enrollment.cancelled_by_student';
+
+    public const PROGRAM_SHIFT_RECORDED = 'program_shift.recorded';
+
+    public const FEE_SCHEDULE_UPDATED = 'fee_schedule.updated';
+
+    public const ENROLLMENT_SUBJECT_WAIVER_GRANTED = 'enrollment_subject_waiver.granted';
+
+    public const ENROLLMENT_SUBJECT_WAIVER_REVOKED = 'enrollment_subject_waiver.revoked';
+
+    public const ADMISSION_REQUIREMENT_UPDATED = 'admission_requirement.updated';
+
+    public const ADMISSION_REQUIREMENT_TYPE_CREATED = 'admission_requirement_type.created';
 
     public const ACADEMIC_GRADE_CREATED = 'academic_grade.created';
 
@@ -138,6 +180,10 @@ final class AuditAction
 
     public const ASSESSMENT_ADJUSTED = 'assessment.adjusted';
 
+    public const ASSESSMENT_SCHOLARSHIP_APPLIED = 'assessment.scholarship_applied';
+
+    public const ASSESSMENT_SCHOLARSHIP_REMOVED = 'assessment.scholarship_removed';
+
     public const ACCOUNT_PAYMENT_RECORDED = 'account_payment.recorded';
 
     public const WITHDRAWAL_REQUEST_CREATED = 'withdrawal_request.created';
@@ -149,6 +195,8 @@ final class AuditAction
     public const TRANSFEREE_CREDIT_CREATED = 'transferee_credit.created';
 
     public const TRANSFEREE_CREDIT_UPDATED = 'transferee_credit.updated';
+
+    public const TRANSFEREE_CREDIT_ENDORSED = 'transferee_credit.endorsed';
 
     public const TRANSFEREE_CREDIT_APPROVED = 'transferee_credit.approved';
 
@@ -227,7 +275,15 @@ final class AuditAction
             self::FACULTY_SPECIALIZATION_REJECTED,
             self::SECTION_CREATED,
             self::SECTION_UPDATED,
+            self::SECTION_PROFESSOR_REASSIGNED,
+            self::SECTION_CHANGE_REQUESTED,
+            self::SECTION_CHANGE_APPROVED,
+            self::SECTION_CHANGE_REJECTED,
+            self::SECTION_CHANGE_CANCELLED,
             self::FACULTY_LOAD_THRESHOLD_UPDATED,
+            self::FACULTY_LOAD_LIMIT_UPDATED,
+            self::FACULTY_LOAD_OVERRIDE_SET,
+            self::FACULTY_LOAD_OVERRIDE_CLEARED,
             self::SCHEDULE_PROPOSAL_CREATED,
             self::SCHEDULE_PROPOSAL_DEAN_APPROVED,
             self::SCHEDULE_PROPOSAL_DEAN_RETURNED,
@@ -250,11 +306,22 @@ final class AuditAction
             self::STUDENT_CURRICULUM_MIGRATED,
             self::AUDIT_LOG_LIST_VIEWED,
             self::FACULTY_DIRECTORY_LIST_VIEWED,
+            self::ENROLLMENT_STATUS_STUDENT_LIST_VIEWED,
+            self::ENROLLMENT_STATUS_STUDENT_VIEWED,
             self::FACULTY_WORKFORCE_PROFILE_UPDATED,
             self::ENROLLMENT_SUBMITTED,
+            self::ENROLLMENT_PROGRAM_HEAD_APPROVED,
+            self::ENROLLMENT_PROGRAM_HEAD_REJECTED,
             self::ENROLLMENT_REGISTRAR_APPROVED,
             self::ENROLLMENT_REGISTRAR_REJECTED,
             self::ENROLLMENT_VOIDED,
+            self::ENROLLMENT_CANCELLED_BY_STUDENT,
+            self::PROGRAM_SHIFT_RECORDED,
+            self::FEE_SCHEDULE_UPDATED,
+            self::ENROLLMENT_SUBJECT_WAIVER_GRANTED,
+            self::ENROLLMENT_SUBJECT_WAIVER_REVOKED,
+            self::ADMISSION_REQUIREMENT_UPDATED,
+            self::ADMISSION_REQUIREMENT_TYPE_CREATED,
             self::ACADEMIC_GRADE_CREATED,
             self::ACADEMIC_GRADE_UPDATED,
             self::ACADEMIC_GRADE_SUBMITTED,
@@ -265,12 +332,15 @@ final class AuditAction
             self::QUEUE_TICKET_MARKED_PRIORITY,
             self::ENROLLMENT_PAYMENT_CONFIRMED,
             self::ASSESSMENT_ADJUSTED,
+            self::ASSESSMENT_SCHOLARSHIP_APPLIED,
+            self::ASSESSMENT_SCHOLARSHIP_REMOVED,
             self::ACCOUNT_PAYMENT_RECORDED,
             self::WITHDRAWAL_REQUEST_CREATED,
             self::WITHDRAWAL_REQUEST_APPROVED,
             self::WITHDRAWAL_REQUEST_REJECTED,
             self::TRANSFEREE_CREDIT_CREATED,
             self::TRANSFEREE_CREDIT_UPDATED,
+            self::TRANSFEREE_CREDIT_ENDORSED,
             self::TRANSFEREE_CREDIT_APPROVED,
             self::TRANSFEREE_CREDIT_REJECTED,
             self::ACADEMIC_TERM_CREATED,
@@ -298,6 +368,8 @@ final class AuditAction
             self::FACULTY_ACCOUNT_SETUP_INVITATION_SENT,
             self::FACULTY_ACCOUNT_SETUP_INVITATION_FAILED,
             self::FACULTY_ACCOUNT_ACTIVATED,
+            self::FACULTY_ACCOUNT_MERGED,
+            self::FACULTY_ACCOUNT_MERGE_ROLLED_BACK,
             self::STAFF_ACCOUNT_SETUP_INVITATION_SENT,
             self::STAFF_ACCOUNT_SETUP_INVITATION_FAILED,
             self::STAFF_ACCOUNT_ACTIVATED,

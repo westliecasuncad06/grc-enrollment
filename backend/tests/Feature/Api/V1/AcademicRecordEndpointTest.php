@@ -10,6 +10,7 @@ use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
@@ -177,6 +178,92 @@ final class AcademicRecordEndpointTest extends TestCase
         $this->withToken($registrarToken)
             ->getJson('/api/v1/academic-record?student_id='.$student->id)
             ->assertOk();
+    }
+
+    public function test_a_registrar_head_can_view_academic_record_by_student_number(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $student->update(['student_number' => '2024-06-01298']);
+
+        $registrarToken = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar.by_num@grc.test');
+
+        // Formatted student number
+        $this->withToken($registrarToken)
+            ->getJson('/api/v1/academic-record?student_number=2024-06-01298')
+            ->assertOk()
+            ->assertJsonPath('data.student_number', '2024-06-01298')
+            ->assertJsonPath('data.student_id', $student->id);
+
+        // Unhyphenated raw 11-digit student number
+        $this->withToken($registrarToken)
+            ->getJson('/api/v1/academic-record?student_number=20240601298')
+            ->assertOk()
+            ->assertJsonPath('data.student_number', '2024-06-01298')
+            ->assertJsonPath('data.student_id', $student->id);
+    }
+
+    public function test_a_registrar_head_can_search_students_by_student_number_and_by_name(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $student->update(['student_number' => '2024-06-01298']);
+        $student->user->update(['name' => 'Bonifacio B. Pangilinan']);
+
+        $registrarToken = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar.search@grc.test');
+
+        // Search by name
+        $response = $this->withToken($registrarToken)
+            ->getJson('/api/v1/academic-record/students?search=Bonifacio&by=name');
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Bonifacio B. Pangilinan', $response->json('data.0.name'));
+        $this->assertSame('2024-06-01298', $response->json('data.0.student_number'));
+        $this->assertSame($student->id, $response->json('data.0.student_id'));
+
+        // Search by raw student number
+        $responseNum = $this->withToken($registrarToken)
+            ->getJson('/api/v1/academic-record/students?search=20240601298&by=student_number');
+        $responseNum->assertOk();
+        $this->assertCount(1, $responseNum->json('data'));
+        $this->assertSame('2024-06-01298', $responseNum->json('data.0.student_number'));
+    }
+
+    public function test_a_program_chair_only_finds_students_of_their_own_college(): void
+    {
+        $ccs = Program::create(['code' => 'BSIT', 'name' => 'BS IT', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Ccs]);
+        $coe = Program::create(['code' => 'BSCE', 'name' => 'BS CE', 'status' => ProgramStatus::Active, 'college' => CollegeCode::Coe]);
+        $ownStudent = $this->makeStudent(Curriculum::create([
+            'program_id' => $ccs->id, 'name' => 'BSIT Curriculum',
+            'effective_school_year' => '2024-2025', 'status' => CurriculumStatus::Active,
+        ]), 'alex.ccs@grc.test');
+        $ownStudent->user->update(['name' => 'Alex Reyes']);
+        $otherStudent = $this->makeStudent(Curriculum::create([
+            'program_id' => $coe->id, 'name' => 'BSCE Curriculum',
+            'effective_school_year' => '2024-2025', 'status' => CurriculumStatus::Active,
+        ]), 'alex.coe@grc.test');
+        $otherStudent->user->update(['name' => 'Alex Cruz']);
+        $chair = User::create([
+            'name' => 'Chair', 'email' => 'chair.search@grc.test', 'password' => self::PASSWORD,
+            'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'college' => CollegeCode::Ccs,
+        ]);
+
+        $response = $this->withToken($this->tokenFor($chair))
+            ->getJson('/api/v1/academic-record/students?search=Alex&by=name')
+            ->assertOk();
+
+        $this->assertSame([$ownStudent->id], array_column($response->json('data'), 'student_id'));
+    }
+
+    public function test_a_student_cannot_search_students_for_academic_records(): void
+    {
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student->user);
+
+        $this->withToken($token)
+            ->getJson('/api/v1/academic-record/students?search=test')
+            ->assertForbidden();
     }
 
     public function test_a_faculty_role_is_forbidden(): void

@@ -8,6 +8,11 @@ import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { CertificateOfRegistrationDocument } from "@/features/components/portal/certificate-of-registration-document"
 import { DataTable } from "@/features/components/portal/data-table"
 import {
+  PaymentClassificationDialog,
+  ScholarshipTierDialog,
+  type PaymentClassification,
+} from "@/features/components/portal/payment-classification-dialogs"
+import {
   DownloadPdfButton,
   PrintButton,
   PrintDocument,
@@ -40,16 +45,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/components/ui/card"
-import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { Checkbox } from "@/features/components/ui/checkbox"
 import {
-  useAdjustEnrollmentAssessmentMutation,
+  useApplyScholarshipDiscountMutation,
   useConfirmPaymentMutation,
+  useCorPreviewQuery,
   useEnrollmentsListQuery,
+  useRemoveScholarshipDiscountMutation,
 } from "@/features/hooks/use-enrollment"
 import {
-  useRecordStudentAccountPaymentMutation,
   useStudentAccountQuery,
 } from "@/features/hooks/use-student-account"
 import {
@@ -67,9 +79,12 @@ import { useCashierPaymentCandidateQuery } from "@/features/hooks/use-cashier-tr
 import type {
   Enrollment,
   PaymentConfirmation,
+  ScholarshipPercentage,
 } from "@/features/schemas/enrollment-schema"
+import { isApiClientError } from "@/features/services/api-client"
 import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
 import { playQueueAlert } from "@/features/lib/queue-announcement"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 
 /**
  * Priority tickets always precede regular ones; within a tier, ordered by
@@ -109,20 +124,34 @@ function formatAmountDue(enrollment: Enrollment | undefined) {
   return total ? `₱${total}` : "—"
 }
 
+/**
+ * The enrollment payment rule agreed for the Cashier workflow, also enforced by
+ * the API (`ConfirmPaymentRequest`): an explicit first payment is at least this.
+ */
+const MIN_FIRST_PAYMENT = 1000
+
+/** The tier stored on a scholarship line (in its `quantity`), or null if it is not one. */
+function scholarshipTierOf(
+  item: { quantity: string | null } | null,
+): ScholarshipPercentage | null {
+  const value = item?.quantity ? Math.round(Number(item.quantity)) : null
+  return value === 100 || value === 40 || value === 20 ? value : null
+}
+
+/** The API's own reason when it gave one (e.g. "cannot be changed after payment"), else `fallback`. */
+function apiMessage(error: unknown, fallback: string): string {
+  if (isApiClientError(error)) {
+    const first = Object.values(error.fieldErrors ?? {})[0]?.[0]
+    if (first) return first
+  }
+  return fallback
+}
+
 function formatPhp(amount: string): string {
   return new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
   }).format(Number(amount))
-}
-
-type FeeAdjustmentItem = {
-  id: number
-  label: string
-  category: "tuition" | "miscellaneous"
-  quantity: string | null
-  amount: string | null
-  unit_amount: string | null
 }
 
 function WaitingTicketCard({
@@ -211,16 +240,15 @@ function ServedTicketCard({ ticket }: { ticket: QueueTicket }) {
 export function AccountingPaymentWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "accounting_staff"
-  const [confirming, setConfirming] = useState(false)
-  const [amount, setAmount] = useState("")
+  // Confirm payment is a short chain of dialogs (ADR 0025): the Payee/Scholar
+  // question, the tier for a scholar, then the payment modal.
+  const [step, setStep] = useState<
+    "closed" | "classification" | "scholarship" | "payment"
+  >("closed")
+  const confirming = step === "payment"
+  const [amountOverride, setAmountOverride] = useState<string | null>(null)
+  const [stepError, setStepError] = useState("")
   const [promissoryNoteOnFile, setPromissoryNoteOnFile] = useState(false)
-  const [adjustingAssessment, setAdjustingAssessment] = useState(false)
-  const [adjustmentReason, setAdjustmentReason] = useState("")
-  const [adjustmentItems, setAdjustmentItems] = useState<FeeAdjustmentItem[]>(
-    [],
-  )
-  const [recordingBalance, setRecordingBalance] = useState(false)
-  const [balancePaymentAmount, setBalancePaymentAmount] = useState("")
   const [lastConfirmation, setLastConfirmation] =
     useState<PaymentConfirmation | null>(null)
   const [viewingCorDocumentId, setViewingCorDocumentId] = useState<
@@ -229,6 +257,10 @@ export function AccountingPaymentWorkspace() {
   const corQuery = useCertificateOfRegistrationQuery(viewingCorDocumentId, {
     enabled: viewingCorDocumentId !== null,
   })
+  const [previewingEnrollmentId, setPreviewingEnrollmentId] = useState<
+    number | null
+  >(null)
+  const corPreviewQuery = useCorPreviewQuery(previewingEnrollmentId)
   const [processedEnrollmentId, setProcessedEnrollmentId] = useState<
     number | null
   >(null)
@@ -248,8 +280,8 @@ export function AccountingPaymentWorkspace() {
     { enabled: authorized },
   )
   const paymentMutation = useConfirmPaymentMutation()
-  const assessmentMutation = useAdjustEnrollmentAssessmentMutation()
-  const accountPaymentMutation = useRecordStudentAccountPaymentMutation()
+  const applyScholarship = useApplyScholarshipDiscountMutation()
+  const removeScholarship = useRemoveScholarshipDiscountMutation()
   const cycleQuery = useQueueCycleQuery({ enabled: authorized })
   const cutOffMutation = useCutOffQueueMutation()
   const resumeMutation = useResumeQueueMutation()
@@ -265,7 +297,16 @@ export function AccountingPaymentWorkspace() {
   const waiting = [...tickets]
     .filter((ticket) => ticket.status === "waiting")
     .sort(byQueueOrder)
-  const servedToday = tickets.filter((ticket) => ticket.status === "served")
+  const servedToday = [...tickets]
+    .filter((ticket) => ticket.status === "served")
+    .sort((a, b) => {
+      const aTime = a.served_at ? new Date(a.served_at).getTime() : 0
+      const bTime = b.served_at ? new Date(b.served_at).getTime() : 0
+      if (bTime !== aTime) {
+        return bTime - aTime
+      }
+      return b.id - a.id
+    })
   const nowServingEnrollment = nowServing
     ? enrollmentFor(nowServing)
     : undefined
@@ -277,23 +318,52 @@ export function AccountingPaymentWorkspace() {
     submittedStudentNumber,
     { enabled: authorized },
   )
+  // The assessment the payment is against: net of any scholarship line.
+  const assessment = nowServingEnrollment?.assessment ?? null
+  const discountItem =
+    assessment?.items.find((item) => item.category === "scholarship_discount") ??
+    null
+  const discountAmount = discountItem?.amount
+    ? Math.abs(Number(discountItem.amount))
+    : 0
+  const netTotal =
+    assessment?.total_amount != null ? Number(assessment.total_amount) : null
+  const baseAmount =
+    netTotal !== null ? Math.round((netTotal + discountAmount) * 100) / 100 : 0
+  // Below the minimum (a 100% scholarship's zero included) the assessment is
+  // collected in full, so no amount is typed or sent; the API falls back to it.
+  const fixedAmount = netTotal !== null && netTotal < MIN_FIRST_PAYMENT
+  const amount = amountOverride ?? (netTotal !== null ? netTotal.toFixed(2) : "")
+  const amountBelowMinimum =
+    !fixedAmount && amount.trim() !== "" && !(Number(amount) >= MIN_FIRST_PAYMENT)
+  const isPartialPayment =
+    !amountBelowMinimum &&
+    netTotal !== null &&
+    Number(amount) > 0 &&
+    Number(amount) < netTotal
+  const currentClassification: PaymentClassification =
+    (accountQuery.data?.financial_status ??
+      nowServingEnrollment?.student_financial_status) === "scholar"
+      ? "scholar"
+      : "payee"
+  const studentDisplayName =
+    accountQuery.data?.student_name ??
+    nowServingEnrollment?.student_name ??
+    nowServingEnrollment?.student_number ??
+    "this student"
   const isCurrentEnrollmentProcessed =
     processedEnrollmentId === nowServingEnrollment?.id
   const confirmDisabled =
     paymentMutation.isPending ||
     nowServingEnrollment === undefined ||
-    isCurrentEnrollmentProcessed
+    isCurrentEnrollmentProcessed ||
+    (confirming && isPartialPayment && !promissoryNoteOnFile)
 
   const callNext = () => {
     const next = waiting[0]
     if (!next) return
     ticketMutation.mutate({ id: next.id, action: "serve" })
     playQueueAlert(next.ticket_number)
-  }
-
-  const completeCurrent = () => {
-    if (!nowServing) return
-    ticketMutation.mutate({ id: nowServing.id, action: "complete" })
   }
 
   const skipCurrent = () => {
@@ -307,87 +377,75 @@ export function AccountingPaymentWorkspace() {
 
   const openConfirm = () => {
     if (confirmDisabled) return
-    setAmount(nowServingEnrollment?.assessment?.total_amount ?? "")
+    setAmountOverride(null)
     setPromissoryNoteOnFile(false)
     setError("")
-    setConfirming(true)
+    setStepError("")
+    setStep("classification")
   }
 
-  const openAssessmentAdjustment = () => {
-    const assessment = nowServingEnrollment?.assessment
-    if (!assessment) return
-
-    const editableItems = assessment.items.flatMap((item) =>
-      item.id === undefined
-        ? []
-        : [
-            {
-              id: item.id,
-              label: item.label,
-              category: item.category,
-              quantity: item.quantity,
-              amount: item.amount,
-              unit_amount: item.unit_amount,
-            },
-          ],
-    )
-
-    if (editableItems.length !== assessment.items.length) {
-      setError("This assessment cannot be adjusted because one or more fee lines are incomplete.")
+  // Regular payee goes straight on to the payment modal; a scholar picks a tier
+  // first. A payee choice also drops any scholarship the student had.
+  const continueFromClassification = async (choice: PaymentClassification) => {
+    if (!nowServingEnrollment) return
+    setStepError("")
+    if (choice === "scholar") {
+      setStep("scholarship")
       return
     }
-
-    setAdjustmentItems(editableItems)
-    setAdjustmentReason("")
-    setError("")
-    setAdjustingAssessment(true)
-  }
-
-  const updateAssessmentItem = (
-    id: number,
-    field: "amount" | "unit_amount",
-    value: string,
-  ) => {
-    setAdjustmentItems((items) =>
-      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
-    )
-  }
-
-  const saveAssessmentAdjustment = async () => {
-    if (!nowServingEnrollment) return
-    setError("")
-    try {
-      const result = await assessmentMutation.mutateAsync({
-        id: nowServingEnrollment.id,
-        reason: adjustmentReason.trim(),
-        items: adjustmentItems.map((item) =>
-          item.category === "tuition"
-            ? { id: item.id, unit_amount: item.unit_amount ?? "" }
-            : { id: item.id, amount: item.amount ?? "" },
-        ),
-      })
-      setAmount(result.assessment?.total_amount ?? "")
-      setAdjustingAssessment(false)
-    } catch {
-      setError(
-        "The fee assessment could not be adjusted. Check every amount and try again.",
-      )
+    if (discountItem !== null || currentClassification === "scholar") {
+      try {
+        await removeScholarship.mutateAsync({ id: nowServingEnrollment.id })
+      } catch (removeError) {
+        setStepError(
+          apiMessage(
+            removeError,
+            "The classification could not be saved. Check the connection and try again.",
+          ),
+        )
+        return
+      }
     }
+    setAmountOverride(null)
+    setStep("payment")
+  }
+
+  // `mutateAsync` resolves after the enrollment list has been refetched, so the
+  // payment modal that opens next already reads the discounted assessment.
+  const applyTier = async (percentage: ScholarshipPercentage) => {
+    if (!nowServingEnrollment) return
+    setStepError("")
+    try {
+      await applyScholarship.mutateAsync({
+        id: nowServingEnrollment.id,
+        percentage,
+      })
+    } catch (applyError) {
+      setStepError(
+        apiMessage(
+          applyError,
+          "The scholarship could not be applied. Check the connection and try again.",
+        ),
+      )
+      return
+    }
+    setAmountOverride(null)
+    setStep("payment")
   }
 
   const confirmPayment = async () => {
-    if (!nowServing || confirmDisabled) return
+    if (!nowServing || confirmDisabled || amountBelowMinimum) return
     setError("")
     try {
       const result = await paymentMutation.mutateAsync({
         id: nowServing.enrollment_id,
-        amount: amount.trim() ? Number(amount) : undefined,
+        amount: fixedAmount || !amount.trim() ? undefined : Number(amount),
         promissoryNoteOnFile,
       })
       setLastConfirmation(result)
       setProcessedEnrollmentId(result.enrollment.id)
-      setConfirming(false)
-      setAmount("")
+      setStep("closed")
+      setAmountOverride(null)
       if (nowServingEnrollment?.student_id) {
         void accountQuery.refetch()
       }
@@ -399,29 +457,6 @@ export function AccountingPaymentWorkspace() {
     } catch {
       setError(
         "The payment could not be confirmed. Check the connection and try again.",
-      )
-    }
-  }
-
-  const openBalancePayment = () => {
-    setBalancePaymentAmount("")
-    setError("")
-    setRecordingBalance(true)
-  }
-
-  const recordBalancePayment = async () => {
-    if (!nowServingEnrollment) return
-    setError("")
-    try {
-      await accountPaymentMutation.mutateAsync({
-        studentId: nowServingEnrollment.student_id,
-        amount: Number(balancePaymentAmount),
-      })
-      setRecordingBalance(false)
-      setBalancePaymentAmount("")
-    } catch {
-      setError(
-        "The balance payment could not be recorded. Check the amount and try again.",
       )
     }
   }
@@ -592,8 +627,7 @@ export function AccountingPaymentWorkspace() {
                   {candidateQuery.data.student_name}
                 </p>
                 <p className="text-muted-foreground">
-                  {candidateQuery.data.student_number} · Year{" "}
-                  {candidateQuery.data.year_level}
+                  {candidateQuery.data.student_number} · {formatYearLevel(candidateQuery.data.year_level)}
                   {candidateQuery.data.ticket
                     ? ` · ${candidateQuery.data.ticket.ticket_number}`
                     : ""}
@@ -709,6 +743,27 @@ export function AccountingPaymentWorkspace() {
                         ? `₱${nowServingEnrollment.assessment.total_amount}`
                         : "—"}
                     </p>
+                    {nowServingEnrollment?.assessment?.items &&
+                      nowServingEnrollment.assessment.items.length > 0 && (
+                        <div className="grid gap-1.5 rounded-lg border bg-muted/20 p-3 text-xs">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Assessment Particulars
+                          </p>
+                          {nowServingEnrollment.assessment.items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between"
+                            >
+                              <span>{item.label}</span>
+                              <span className="font-medium">
+                                {item.category === "scholarship_discount"
+                                  ? `-${formatPhp(item.amount ?? "0.00")}`
+                                  : formatPhp(item.amount ?? "0.00")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     {accountQuery.isPending && (
                       <p className="text-sm text-muted-foreground">
                         Loading student account…
@@ -732,8 +787,7 @@ export function AccountingPaymentWorkspace() {
                             Student details
                           </dt>
                           <dd>
-                            {accountQuery.data.student_number} · Year{" "}
-                            {accountQuery.data.year_level}
+                            {accountQuery.data.student_number} · {formatYearLevel(accountQuery.data.year_level)}
                           </dd>
                         </div>
                         <div className="grid gap-1">
@@ -826,18 +880,6 @@ export function AccountingPaymentWorkspace() {
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
-                        variant="outline"
-                        disabled={
-                          assessmentMutation.isPending ||
-                          !nowServingEnrollment?.assessment ||
-                          isCurrentEnrollmentProcessed
-                        }
-                        onClick={openAssessmentAdjustment}
-                      >
-                        Adjust fees
-                      </Button>
-                      <Button
-                        type="button"
                         disabled={confirmDisabled}
                         onClick={openConfirm}
                       >
@@ -848,27 +890,28 @@ export function AccountingPaymentWorkspace() {
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={
-                          accountPaymentMutation.isPending ||
-                          accountQuery.data === undefined
+                        disabled={!nowServingEnrollment}
+                        onClick={() =>
+                          setPreviewingEnrollmentId(
+                            nowServingEnrollment?.id ?? null,
+                          )
                         }
-                        onClick={openBalancePayment}
                       >
-                        Record balance / advance payment
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="default"
-                        disabled={ticketMutation.isPending}
-                        onClick={completeCurrent}
-                      >
-                        Complete
+                        Preview COR
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         disabled={ticketMutation.isPending}
-                        onClick={() => playQueueAlert(nowServing.ticket_number)}
+                        onClick={() => {
+                          // Tells the student's own device too: their polled
+                          // queue view sees the counter go up and rings.
+                          ticketMutation.mutate({
+                            id: nowServing.id,
+                            action: "announce",
+                          })
+                          playQueueAlert(nowServing.ticket_number)
+                        }}
                       >
                         Announce ticket 📢
                       </Button>
@@ -879,16 +922,6 @@ export function AccountingPaymentWorkspace() {
                         onClick={skipCurrent}
                       >
                         Skip
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={
-                          ticketMutation.isPending || waiting.length === 0
-                        }
-                        onClick={callNext}
-                      >
-                        Call next →
                       </Button>
                     </div>
                   </div>
@@ -1026,94 +1059,9 @@ export function AccountingPaymentWorkspace() {
         )}
       </AsyncBoundary>
       <AlertDialog
-        open={adjustingAssessment}
-        onOpenChange={(open) => {
-          if (!open && !assessmentMutation.isPending)
-            setAdjustingAssessment(false)
-        }}
-      >
-        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Adjust fee assessment</AlertDialogTitle>
-            <AlertDialogDescription>
-              Update this student&apos;s tuition rate or other fee amounts before
-              payment. A reason is required and the issued COR cannot be
-              changed after payment confirmation.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <FieldGroup>
-            {adjustmentItems.map((item) => {
-              const tuitionAmount =
-                item.category === "tuition" &&
-                item.quantity !== null &&
-                item.unit_amount !== null
-                  ? (Number(item.quantity) * Number(item.unit_amount)).toFixed(2)
-                  : null
-
-              return (
-                <Field key={item.id}>
-                  <FieldLabel htmlFor={`assessment-item-${item.id}`}>
-                    {item.category === "tuition"
-                      ? `${item.label} rate per unit`
-                      : item.label}
-                  </FieldLabel>
-                  <Input
-                    id={`assessment-item-${item.id}`}
-                    inputMode="decimal"
-                    value={
-                      item.category === "tuition"
-                        ? (item.unit_amount ?? "")
-                        : (item.amount ?? "")
-                    }
-                    onChange={(event) =>
-                      updateAssessmentItem(
-                        item.id,
-                        item.category === "tuition" ? "unit_amount" : "amount",
-                        event.target.value,
-                      )
-                    }
-                    disabled={assessmentMutation.isPending}
-                  />
-                  {tuitionAmount && (
-                    <p className="text-sm text-muted-foreground">
-                      {item.quantity} units × rate = {formatPhp(tuitionAmount)}
-                    </p>
-                  )}
-                </Field>
-              )
-            })}
-            <Field>
-              <FieldLabel htmlFor="assessment-adjustment-reason">
-                Adjustment reason
-              </FieldLabel>
-              <Input
-                id="assessment-adjustment-reason"
-                value={adjustmentReason}
-                onChange={(event) => setAdjustmentReason(event.target.value)}
-                disabled={assessmentMutation.isPending}
-              />
-            </Field>
-          </FieldGroup>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={assessmentMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              disabled={
-                assessmentMutation.isPending || adjustmentReason.trim().length < 3
-              }
-              onClick={() => void saveAssessmentAdjustment()}
-            >
-              {assessmentMutation.isPending ? "Saving fees" : "Save adjusted fees"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
         open={confirming}
         onOpenChange={(open) => {
-          if (!open && !paymentMutation.isPending) setConfirming(false)
+          if (!open && !paymentMutation.isPending) setStep("closed")
         }}
       >
         <AlertDialogContent>
@@ -1126,18 +1074,52 @@ export function AccountingPaymentWorkspace() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
-            <Field>
+            <Field data-invalid={amountBelowMinimum}>
               <FieldLabel htmlFor="payment-amount">Amount</FieldLabel>
               <Input
                 id="payment-amount"
                 inputMode="decimal"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                readOnly={fixedAmount}
+                aria-invalid={amountBelowMinimum}
+                onChange={(event) => setAmountOverride(event.target.value)}
                 disabled={paymentMutation.isPending}
               />
+              {fixedAmount ? (
+                <FieldDescription>
+                  {netTotal === 0
+                    ? "No payment is due: the scholarship covers the whole assessment. Confirming still generates the Certificate of Registration."
+                    : "The assessment is below the ₱1,000.00 first-payment minimum, so it is collected in full."}
+                </FieldDescription>
+              ) : (
+                <FieldDescription>
+                  The first enrollment payment must be at least ₱1,000.00.
+                </FieldDescription>
+              )}
+              {amountBelowMinimum && (
+                <FieldError>
+                  The first enrollment payment must be at least ₱1,000.00.
+                </FieldError>
+              )}
             </Field>
             {nowServingEnrollment?.assessment?.total_amount && (
               <div className="grid gap-1.5 rounded-lg border bg-muted/20 p-3 text-xs">
+                {discountItem !== null && discountAmount > 0 && (
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Assessment before scholarship:</span>
+                      <span className="font-semibold text-foreground">
+                        {formatPhp(baseAmount.toFixed(2))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
+                      <span>{discountItem.label}:</span>
+                      <span className="font-semibold">
+                        -{formatPhp(discountAmount.toFixed(2))}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between text-muted-foreground">
                   <span>Current Term Assessment:</span>
                   <span className="font-semibold text-foreground">
@@ -1209,7 +1191,7 @@ export function AccountingPaymentWorkspace() {
                 })()}
               </div>
             )}
-            <Field>
+            <Field data-invalid={isPartialPayment && !promissoryNoteOnFile}>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="promissory-note-on-file"
@@ -1223,6 +1205,11 @@ export function AccountingPaymentWorkspace() {
                   Promissory note on file
                 </FieldLabel>
               </div>
+              {isPartialPayment && !promissoryNoteOnFile && (
+                <FieldError className="mt-1">
+                  A promissory note on file is required for partial payments.
+                </FieldError>
+              )}
             </Field>
           </FieldGroup>
           <AlertDialogFooter>
@@ -1231,7 +1218,17 @@ export function AccountingPaymentWorkspace() {
             </AlertDialogCancel>
             <Button
               type="button"
-              disabled={confirmDisabled}
+              variant="outline"
+              disabled={!nowServingEnrollment}
+              onClick={() =>
+                setPreviewingEnrollmentId(nowServingEnrollment?.id ?? null)
+              }
+            >
+              Preview COR
+            </Button>
+            <Button
+              type="button"
+              disabled={confirmDisabled || amountBelowMinimum}
               onClick={() => void confirmPayment()}
             >
               {paymentMutation.isPending
@@ -1243,55 +1240,30 @@ export function AccountingPaymentWorkspace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog
-        open={recordingBalance}
-        onOpenChange={(open) => {
-          if (!open && !accountPaymentMutation.isPending)
-            setRecordingBalance(false)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Record balance or advance payment</AlertDialogTitle>
-            <AlertDialogDescription>
-              {accountQuery.data?.outstanding_balance === "0.00"
-                ? "This student currently has no outstanding balance. The payment will be credited as an advance payment on their student account."
-                : "This payment settles the student's oldest outstanding balances first. Any excess is credited as an advance payment on their account."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="balance-payment-amount">
-                Payment amount (PHP)
-              </FieldLabel>
-              <Input
-                id="balance-payment-amount"
-                inputMode="decimal"
-                value={balancePaymentAmount}
-                onChange={(event) =>
-                  setBalancePaymentAmount(event.target.value)
-                }
-                disabled={accountPaymentMutation.isPending}
-                placeholder="0.00"
-              />
-            </Field>
-          </FieldGroup>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={accountPaymentMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              disabled={accountPaymentMutation.isPending}
-              onClick={() => void recordBalancePayment()}
-            >
-              {accountPaymentMutation.isPending
-                ? "Recording payment"
-                : "Record payment"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {step === "classification" && nowServingEnrollment && (
+        <PaymentClassificationDialog
+          studentName={studentDisplayName}
+          initial={currentClassification}
+          busy={removeScholarship.isPending}
+          error={stepError}
+          onContinue={(choice) => void continueFromClassification(choice)}
+          onCancel={() => setStep("closed")}
+        />
+      )}
+      {step === "scholarship" && nowServingEnrollment && (
+        <ScholarshipTierDialog
+          studentName={studentDisplayName}
+          baseAmount={baseAmount}
+          initialPercentage={scholarshipTierOf(discountItem) ?? 100}
+          busy={applyScholarship.isPending}
+          error={stepError}
+          onApply={(percentage) => void applyTier(percentage)}
+          onBack={() => {
+            setStepError("")
+            setStep("classification")
+          }}
+        />
+      )}
       <AlertDialog
         open={cuttingOff}
         onOpenChange={(open) => {
@@ -1362,6 +1334,46 @@ export function AccountingPaymentWorkspace() {
                 </PrintDocument>
               )
             }
+          </AsyncBoundary>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={previewingEnrollmentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewingEnrollmentId(null)
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] sm:max-w-6xl print:max-h-none print:w-full print:max-w-none print:p-0 print:border-none print:shadow-none print:overflow-visible">
+          <DialogHeader className="pr-8 print:hidden">
+            <DialogTitle>Certificate of Registration Preview</DialogTitle>
+            <DialogDescription>
+              Preview official COR before confirming payment.
+            </DialogDescription>
+          </DialogHeader>
+          <AsyncBoundary
+            query={{ ...corPreviewQuery, data: corPreviewQuery.data }}
+            isEmpty={(preview) => !preview?.snapshot}
+            emptyMessage="COR preview could not be loaded."
+            loadingLabel="Loading COR preview…"
+          >
+            {(preview) => (
+              <CertificateOfRegistrationDocument
+                cor={{
+                  type: "certificate_of_registration",
+                  id: 0,
+                  enrollment_id: previewingEnrollmentId!,
+                  document_number: "PREVIEW",
+                  generated_at: new Date().toISOString(),
+                  content_hash: null,
+                  snapshot: preview.snapshot,
+                }}
+                watermark={
+                  preview.watermark ??
+                  "Preview — official COR is issued after payment confirmation"
+                }
+              />
+            )}
           </AsyncBoundary>
         </DialogContent>
       </Dialog>

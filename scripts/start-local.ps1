@@ -2,6 +2,10 @@
 param(
     [switch] $NoAutoStart,
     [switch] $PredictionOnly,
+    # Build once and serve the optimised Next.js bundle instead of `next dev`
+    # (minified, code-split, no on-demand compile). Slower to start, much faster
+    # to use: the right choice for a demo, a phone on the LAN, or performance checks.
+    [switch] $Production,
     [ValidateRange(1, 120)]
     [int] $ReadinessAttempts = 30,
     [ValidateRange(0, 60000)]
@@ -135,9 +139,28 @@ function Start-PredictionService {
     throw 'The prediction service did not become healthy. Run ml-service/.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8100 for diagnostics.'
 }
 
+function Get-FrontendLaunchPlan {
+    param(
+        [switch] $Production
+    )
+
+    if ($Production) {
+        return [pscustomobject]@{
+            BuildArguments = @('run', 'build')
+            RunArguments = @('run', 'start', '--', '--hostname', '0.0.0.0')
+        }
+    }
+
+    return [pscustomobject]@{
+        BuildArguments = $null
+        RunArguments = @('run', 'dev', '--', '--hostname', '0.0.0.0')
+    }
+}
+
 function Start-LocalStack {
     param(
         [switch] $PredictionOnly,
+        [switch] $Production,
         [scriptblock] $PortProbe = { param([int] $Port) Get-ListeningProcessId -Port $Port },
         [scriptblock] $ProcessStarter,
         [ValidateRange(1, 120)]
@@ -190,8 +213,26 @@ function Start-LocalStack {
             -RedirectStandardOutput $paths.ApiOutputLog `
             -RedirectStandardError $paths.ApiErrorLog
 
+        $frontendPlan = Get-FrontendLaunchPlan -Production:$Production
+
+        if ($null -ne $frontendPlan.BuildArguments) {
+            Write-Host 'Building the production frontend (a few minutes; output in frontend.output.log)...'
+            $build = Start-Process -FilePath $npmCommand.Source `
+                -ArgumentList $frontendPlan.BuildArguments `
+                -WorkingDirectory $paths.FrontendPath `
+                -WindowStyle Hidden `
+                -PassThru `
+                -Wait `
+                -RedirectStandardOutput $paths.FrontendOutputLog `
+                -RedirectStandardError $paths.FrontendErrorLog
+
+            if ($build.ExitCode -ne 0) {
+                throw "The production frontend build failed (exit code $($build.ExitCode)). See $($paths.FrontendErrorLog)."
+            }
+        }
+
         $frontend = Start-Process -FilePath $npmCommand.Source `
-            -ArgumentList 'run', 'dev', '--', '--hostname', '0.0.0.0' `
+            -ArgumentList $frontendPlan.RunArguments `
             -WorkingDirectory $paths.FrontendPath `
             -WindowStyle Hidden `
             -PassThru `
@@ -218,6 +259,7 @@ function Start-LocalStack {
 if (-not $NoAutoStart) {
     Start-LocalStack `
         -PredictionOnly:$PredictionOnly `
+        -Production:$Production `
         -ReadinessAttempts $ReadinessAttempts `
         -ReadinessDelayMilliseconds $ReadinessDelayMilliseconds
 }

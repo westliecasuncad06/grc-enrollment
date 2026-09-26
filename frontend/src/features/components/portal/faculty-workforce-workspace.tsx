@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { FacultyProfilePanel } from "@/features/components/portal/faculty-profile-panel"
 import { FacultyWorkforceSpecializationsPanel } from "@/features/components/portal/faculty-workforce-specializations-panel"
 import { WorkspaceField } from "@/features/components/portal/workspace-field"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
@@ -149,11 +150,15 @@ export function FacultyWorkforceWorkspace() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {!member.is_assignable && member.deactivation_reason && (
-                          <Badge variant="outline" className="capitalize text-xs font-normal">
-                            {member.deactivation_reason.replace(/_/g, " ")}
-                          </Badge>
-                        )}
+                        {!member.is_assignable &&
+                          member.deactivation_reason && (
+                            <Badge
+                              variant="outline"
+                              className="capitalize text-xs font-normal"
+                            >
+                              {member.deactivation_reason.replace(/_/g, " ")}
+                            </Badge>
+                          )}
                         <Badge
                           variant={
                             member.is_assignable ? "secondary" : "destructive"
@@ -188,17 +193,26 @@ export function FacultyWorkforceWorkspace() {
               <DialogDescription>
                 {canManage
                   ? "Review this professor's profile and the subjects they may teach."
-                  : "Review this professor's profile and the subjects they may teach."}
+                  : "Review this professor's teaching load, timetable, grade submission, and the subjects they may teach."}
               </DialogDescription>
             </DialogHeader>
 
-            {!canManage && (
-              <p className="mb-4 text-sm text-muted-foreground">
-                You have read-only access.
-              </p>
+            {!canManage && selected && (
+              <div className="mb-6">
+                <p className="mb-3 text-sm text-muted-foreground">
+                  You have read-only access.
+                </p>
+                <FacultyProfilePanel professorId={selected.id} />
+              </div>
             )}
 
-            <div className={canManage ? "grid min-w-0 gap-6 sm:grid-cols-[280px_1fr]" : "block"}>
+            <div
+              className={
+                canManage
+                  ? "grid min-w-0 gap-6 sm:grid-cols-[280px_1fr]"
+                  : "block"
+              }
+            >
               {canManage && selected && (
                 <div className="grid content-start gap-4">
                   <WorkspaceField label="Account status">
@@ -238,7 +252,8 @@ export function FacultyWorkforceWorkspace() {
                   </WorkspaceField>
                   <WorkspaceField
                     label={
-                      selected.status === "active" && draft.status === "disabled"
+                      selected.status === "active" &&
+                      draft.status === "disabled"
                         ? "Reason for making this account inactive"
                         : "Change note (optional)"
                     }
@@ -286,7 +301,6 @@ export function FacultyWorkforceWorkspace() {
           </div>
         </DialogContent>
       </Dialog>
-
     </WorkspacePage>
   )
 }

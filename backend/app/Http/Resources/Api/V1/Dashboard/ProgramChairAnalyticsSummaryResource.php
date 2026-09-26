@@ -23,7 +23,7 @@ final class ProgramChairAnalyticsSummaryResource extends JsonResource
      *     enrollment_status_counts: array<string, int>,
      *     grade_status_counts: array<string, int>,
      *     retention_breakdown: list<array{grade_status: string, enrollment_status: string, count: int}>,
-     *     year_over_year: list<array{school_year: string, semester: string, enrollee_count: int}>
+     *     year_over_year: list<array{school_year: string, semester: string, enrollee_count: int, stopped_count: int, attrition_rate: float}>
      * }
      */
     public function toArray(Request $request): array
@@ -49,6 +49,8 @@ final class ProgramChairAnalyticsSummaryResource extends JsonResource
                     'school_year' => $point->schoolYear,
                     'semester' => $point->semester,
                     'enrollee_count' => $point->enrolleeCount,
+                    'stopped_count' => $point->stoppedCount,
+                    'attrition_rate' => $point->attritionRate,
                 ],
                 $this->resource->yearOverYear,
             ),

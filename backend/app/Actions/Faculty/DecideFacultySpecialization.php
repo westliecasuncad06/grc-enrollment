@@ -106,8 +106,8 @@ final readonly class DecideFacultySpecialization
     private static function notificationMessage(string $action, ?string $reason): string
     {
         return match ($action) {
-            'approve' => 'A subject you can teach has been approved by your Program Chair.',
-            'reject' => "A subject you declared was not approved by your Program Chair. Reason: {$reason}",
+            'approve' => 'A subject you can teach has been approved by your Program Head.',
+            'reject' => "A subject you declared was not approved by your Program Head. Reason: {$reason}",
             default => 'Your declared subject status has changed.',
         };
     }

@@ -103,6 +103,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | One-time Account Setup Codes
+    |--------------------------------------------------------------------------
+    |
+    | Invited Students, Faculty and staff finish their account with a six-digit
+    | code (see App\Support\Auth\AccountSetupCodes). A six-digit code is only
+    | safe with a guess limit: after this many wrong attempts the code stops
+    | working and a new invitation must be sent. Its expiry follows
+    | `passwords.users.expire`.
+    |
+    */
+
+    'setup_codes' => [
+        'max_attempts' => (int) env('AUTH_SETUP_CODE_MAX_ATTEMPTS', 5),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |

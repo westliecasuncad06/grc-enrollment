@@ -82,6 +82,7 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
         $this->enrolled($retained, $second);
         $this->enrolled($attrited, $first);
         $this->enrolled($demo, $first);
+        $second->update(['enrollment_closes_at' => now()->subDay()]);
 
         $response = $this->withToken($this->token($this->user(UserRole::RegistrarHead, 'registrar@grc.test')))
             ->getJson("/api/v1/analytics/attrition?baseline_academic_term_id={$first->id}&comparison_academic_term_id={$second->id}");
@@ -154,5 +155,96 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
         self::assertEqualsCanonicalizing(['data', 'summary', 'meta'], array_keys($body));
         self::assertEqualsCanonicalizing(['qualifier_count'], array_keys($body['summary']));
         self::assertEqualsCanonicalizing(['current_page', 'last_page', 'per_page', 'total'], array_keys($body['meta']));
+    }
+
+    // --- Attrition = students who will not continue (Doc 14 S19) ----------
+
+    /** @return array<string, mixed> the summary block of the report */
+    private function attritionSummary(AcademicTerm $first, AcademicTerm $second): array
+    {
+        $response = $this->withToken($this->token($this->user(UserRole::RegistrarHead, 'registrar-'.uniqid().'@grc.test')))
+            ->getJson("/api/v1/analytics/attrition?baseline_academic_term_id={$first->id}&comparison_academic_term_id={$second->id}");
+
+        $response->assertOk();
+
+        return $response->json('data.summary');
+    }
+
+    public function test_a_student_who_has_not_enrolled_yet_is_not_attrition_while_the_window_is_open(): void
+    {
+        [$first, $second, $curriculum] = $this->termsAndCurriculum();
+        $second->update(['enrollment_closes_at' => now()->addWeek()]);
+        $this->enrolled($this->student($curriculum, 'S-RET'), $first);
+        $this->enrolled($this->student($curriculum, 'S-LATER'), $first);
+        $this->enrolled($this->student($curriculum, 'S-RET'.'2'), $first);
+        $this->enrolled(StudentProfile::query()->where('student_number', 'S-RET')->firstOrFail(), $second);
+
+        $summary = $this->attritionSummary($first, $second);
+
+        self::assertSame(1, $summary['baseline_count']);
+        self::assertSame(1, $summary['retained_count']);
+        self::assertSame(0, $summary['attrited_count']);
+        self::assertSame(2, $summary['undecided_count']);
+    }
+
+    public function test_a_student_who_did_not_enroll_after_the_window_closed_is_attrition(): void
+    {
+        [$first, $second, $curriculum] = $this->termsAndCurriculum();
+        $second->update(['enrollment_closes_at' => now()->subDay()]);
+        $this->enrolled($this->student($curriculum, 'S-GONE'), $first);
+
+        $summary = $this->attritionSummary($first, $second);
+
+        self::assertSame(1, $summary['baseline_count']);
+        self::assertSame(1, $summary['attrited_count']);
+        self::assertSame(0, $summary['undecided_count']);
+    }
+
+    public function test_a_student_with_an_enrollment_in_progress_is_never_counted_as_attrition(): void
+    {
+        [$first, $second, $curriculum] = $this->termsAndCurriculum();
+        $second->update(['enrollment_closes_at' => now()->subDay()]);
+        $student = $this->student($curriculum, 'S-BUSY');
+        $this->enrolled($student, $first);
+        Enrollment::create(['student_id' => $student->id, 'academic_term_id' => $second->id, 'status' => EnrollmentStatus::PendingPayment]);
+
+        $summary = $this->attritionSummary($first, $second);
+
+        self::assertSame(0, $summary['baseline_count']);
+        self::assertSame(0, $summary['attrited_count']);
+        self::assertSame(1, $summary['undecided_count']);
+    }
+
+    public function test_a_student_who_withdrew_counts_at_once_even_while_the_window_is_open(): void
+    {
+        [$first, $second, $curriculum] = $this->termsAndCurriculum();
+        $second->update(['enrollment_closes_at' => now()->addWeek()]);
+        $left = $this->student($curriculum, 'S-LEFT');
+        $left->update(['admission_status' => AdmissionStatus::Withdrawn]);
+        $this->enrolled($left, $first);
+        $dropped = $this->student($curriculum, 'S-DROPPED');
+        $this->enrolled($dropped, $first);
+        Enrollment::create(['student_id' => $dropped->id, 'academic_term_id' => $second->id, 'status' => EnrollmentStatus::Withdrawn]);
+
+        $summary = $this->attritionSummary($first, $second);
+
+        self::assertSame(2, $summary['baseline_count']);
+        self::assertSame(2, $summary['attrited_count']);
+        self::assertSame(0, $summary['undecided_count']);
+    }
+
+    public function test_graduates_are_not_attrition(): void
+    {
+        [$first, $second, $curriculum] = $this->termsAndCurriculum();
+        $second->update(['enrollment_closes_at' => now()->subDay()]);
+        $graduate = $this->student($curriculum, 'S-GRAD');
+        $graduate->update(['graduation_school_year' => '2026-2027']);
+        $this->enrolled($graduate, $first);
+
+        $summary = $this->attritionSummary($first, $second);
+
+        self::assertSame(0, $summary['baseline_count']);
+        self::assertSame(0, $summary['attrited_count']);
+        self::assertSame(1, $summary['graduated_count']);
     }
 }

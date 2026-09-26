@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type { EnrollmentDocumentFilters } from "@/features/schemas/enrollment-document-schema"
 import {
   getCertificateOfRegistration,
@@ -23,6 +24,7 @@ export function useEnrollmentDocumentsQuery(
   return useQuery({
     queryKey: enrollmentDocumentsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listEnrollmentDocuments(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }

@@ -1,14 +1,20 @@
 import {
   createTransfereeCreditInputSchema,
+  creditSubjectSuggestionsEnvelopeSchema,
   decideTransfereeCreditInputSchema,
   paginatedTransfereeCreditsSchema,
+  transfereeCreditActionInputSchema,
   transfereeCreditEnvelopeSchema,
   transfereeCreditFiltersSchema,
+  updateTransfereeCreditInputSchema,
   type CreateTransfereeCreditInput,
+  type CreditSubjectSuggestion,
   type DecideTransfereeCreditInput,
   type Paginated,
   type TransfereeCredit,
+  type TransfereeCreditActionInput,
   type TransfereeCreditFilters,
+  type UpdateTransfereeCreditInput,
 } from "@/features/schemas/transferee-credit-schema"
 import {
   ApiClientError,
@@ -74,21 +80,67 @@ export async function createTransfereeCredit(
   ).data
 }
 
+/** The Program Chair's corrections and mapping of a pending credit. */
+export async function updateTransfereeCredit(
+  id: number,
+  input: UpdateTransfereeCreditInput,
+): Promise<TransfereeCredit> {
+  const payload = await patchAuthenticatedJson(
+    `${TRANSFEREE_CREDITS_PATH}/${id}`,
+    parse(updateTransfereeCreditInputSchema, input, "transferee credit edit"),
+  )
+  return parse(
+    transfereeCreditEnvelopeSchema,
+    payload,
+    "updated transferee credit",
+  ).data
+}
+
+/** Endorse / decline (Program Chair) or approve / reject (Registrar Staff). */
+export async function actOnTransfereeCredit(
+  id: number,
+  input: TransfereeCreditActionInput,
+): Promise<TransfereeCredit> {
+  const payload = await patchAuthenticatedJson(
+    `${TRANSFEREE_CREDITS_PATH}/${id}`,
+    parse(transfereeCreditActionInputSchema, input, "transferee credit action"),
+  )
+  return parse(
+    transfereeCreditEnvelopeSchema,
+    payload,
+    "updated transferee credit",
+  ).data
+}
+
+/** The Registrar's decision on an endorsed credit. */
 export async function decideTransfereeCredit(
   id: number,
   input: DecideTransfereeCreditInput,
 ): Promise<TransfereeCredit> {
-  const payload = await patchAuthenticatedJson(
-    `${TRANSFEREE_CREDITS_PATH}/${id}`,
+  return actOnTransfereeCredit(
+    id,
     parse(
       decideTransfereeCreditInputSchema,
       input,
       "transferee credit decision",
     ),
   )
+}
+
+/**
+ * Subjects of the student's own curriculum this credit could be mapped to,
+ * best first. Advice for the Program Chair, computed on demand.
+ */
+export async function getTransfereeCreditSuggestions(
+  id: number,
+  signal?: AbortSignal,
+): Promise<CreditSubjectSuggestion[]> {
   return parse(
-    transfereeCreditEnvelopeSchema,
-    payload,
-    "updated transferee credit",
+    creditSubjectSuggestionsEnvelopeSchema,
+    await getAuthenticatedJson(
+      `${TRANSFEREE_CREDITS_PATH}/${id}/suggestions`,
+      signal,
+    ),
+    "credit subject suggestions",
   ).data
 }

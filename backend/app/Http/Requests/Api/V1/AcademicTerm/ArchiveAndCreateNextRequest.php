@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\AcademicTerm;
 
+use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicTerm;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -53,15 +54,26 @@ final class ArchiveAndCreateNextRequest extends FormRequest
                 return;
             }
 
-            $duplicateExists = AcademicTerm::query()
-                ->where('school_year', $schoolYear)
-                ->where('semester', $semester)
-                ->exists();
-
-            if ($duplicateExists) {
+            $term = $this->route('academicTerm');
+            if ($term instanceof AcademicTerm && $term->school_year === $schoolYear && $term->semester === $semester) {
                 $validator->errors()->add(
                     'school_year',
-                    'A term for this school year and semester combination already exists.',
+                    'The next academic term must be different from the term being archived.',
+                );
+
+                return;
+            }
+
+            $archivedDuplicateExists = AcademicTerm::query()
+                ->where('school_year', $schoolYear)
+                ->where('semester', $semester)
+                ->where('status', AcademicTermStatus::Archived)
+                ->exists();
+
+            if ($archivedDuplicateExists) {
+                $validator->errors()->add(
+                    'school_year',
+                    'A term for this school year and semester combination already exists and is archived.',
                 );
             }
         });

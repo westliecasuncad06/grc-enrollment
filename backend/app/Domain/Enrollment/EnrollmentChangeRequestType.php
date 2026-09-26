@@ -13,7 +13,7 @@ enum EnrollmentChangeRequestType: string
         return match ($this) {
             self::Add => 'Add subject',
             self::Drop => 'Drop subject',
-            self::ChangeSection => 'Change section',
+            self::ChangeSection => 'Change subject',
         };
     }
 

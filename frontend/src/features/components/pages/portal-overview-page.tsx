@@ -219,7 +219,7 @@ export function GrcConnectPage() {
                 Retry queue status
               </Button>
             </Alert>
-          ) : studentQueueQuery.data ? (
+          ) : studentQueueQuery.data && studentQueueQuery.data.stage !== "enrolled" ? (
             <StudentQueueLivePanel
               queue={studentQueueQuery.data}
               mode="compact"

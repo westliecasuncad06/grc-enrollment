@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/features/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
 const MODALITY_LABEL: Record<string, string> = {
@@ -88,7 +89,7 @@ export function EnrollmentBlockDetailDialog({
                 <Badge variant="outline">{block.total_units} units</Badge>
               </div>
               <DialogDescription>
-                Year {block.year_level} block section · {block.subjects.length}{" "}
+                {formatYearLevel(block.year_level)} block section · {block.subjects.length}{" "}
                 subject
                 {block.subjects.length === 1 ? "" : "s"}
               </DialogDescription>

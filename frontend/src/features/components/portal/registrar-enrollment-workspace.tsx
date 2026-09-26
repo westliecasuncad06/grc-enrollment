@@ -2,11 +2,14 @@
 
 import { useState } from "react"
 
+import { useDebouncedValue } from "@/features/hooks/use-debounced-value"
+
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
 import { EnrollmentReviewDialog } from "@/features/components/portal/enrollment-review-dialog"
 import { Paginator } from "@/features/components/portal/paginator"
+import { StudentInfoDialog } from "@/features/components/portal/student-info-dialog"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   AlertDialog,
@@ -38,14 +41,11 @@ import type { Enrollment } from "@/features/schemas/enrollment-schema"
 
 const workspaceHeadings: Record<string, string> = {
   "enrollment-approvals": "Enrollment approvals",
-  "overrides-voids": "Overrides & voids",
 }
 
 const workspaceDescriptions: Record<string, string> = {
   "enrollment-approvals":
-    "Approve or reject submissions pending registrar review. Approving issues the student's Cashier queue number.",
-  "overrides-voids":
-    "Void an already-approved enrollment before payment is confirmed, for authorized edge cases.",
+    "Give the final approval to every submitted enrollment, regular or irregular. Irregular submissions arrive here after the Program Head has approved them. An approved student then claims a queue number at the Cashier kiosk.",
 }
 
 type RegistrarAction = "registrar_approve" | "registrar_reject" | "void"
@@ -61,31 +61,25 @@ function requiresReason(action: RegistrarAction) {
 }
 
 /**
- * Which actions a row offers depends on the tab, not just the enrollment's
- * own status — Registrar Staff owns the approval checkpoint, Registrar Head
- * owns `void` only (ADR 0011/Phase 6). Filtering the query by status per tab
- * means every row here already matches, but this stays defensive rather than
- * assuming the filter can never drift from what the backend actually allows.
+ * Which actions a row offers depends on the enrollment's status. Registrar
+ * Staff and the Registrar Head own the approval checkpoint for every
+ * enrollment (ADR 0030); an irregular one only reaches it after the Program
+ * Head has approved, and until then it is shown here view-only (it can still
+ * be voided, which cancels it at the student's request). Void is offered
+ * everywhere before payment; a paid enrollment is a withdrawal instead.
  */
 function availableActions(
   enrollment: Enrollment,
   moduleId: string,
 ): readonly RegistrarAction[] {
-  if (
-    moduleId === "enrollment-approvals" &&
-    enrollment.status === "pending_registrar_approval"
-  ) {
-    // Irregular students: Program Chair is the final approval authority.
-    // Registrar Staff has view-only access without an approve button.
-    if (
-      enrollment.is_irregular ||
-      enrollment.student_enrollment_category === "irregular"
-    ) {
-      return []
-    }
-    return ["registrar_approve", "registrar_reject"]
+  if (moduleId !== "enrollment-approvals") return []
+  if (enrollment.status === "pending_registrar_approval") {
+    return ["registrar_approve", "registrar_reject", "void"]
   }
-  if (moduleId === "overrides-voids" && enrollment.status === "pending_payment") {
+  if (
+    enrollment.status === "pending_program_head_approval" ||
+    enrollment.status === "pending_payment"
+  ) {
     return ["void"]
   }
   return []
@@ -152,7 +146,9 @@ function EnrollmentQueueCard({
           variant="outline"
           onClick={() => onReview(enrollment)}
         >
-          {enrollment.status === "enrolled" ? "Check Schedule & Info" : "Review"}
+          {enrollment.status === "enrolled"
+            ? "Check Schedule & Info"
+            : "Review"}
         </Button>
         {actions.map((action) => (
           <Button
@@ -179,9 +175,13 @@ export function RegistrarEnrollmentWorkspace({
 }: RegistrarEnrollmentWorkspaceProps) {
   const { session } = useAuth()
   const authorized =
-    (initialModuleId === "enrollment-approvals" &&
-      session?.role === "registrar_staff") ||
-    (initialModuleId === "overrides-voids" && session?.role === "registrar_head")
+    session?.role === "registrar_staff" || session?.role === "registrar_head"
+  // Only the Registrar Head may open the student's profile from the queue.
+  const canViewStudentInfo = session?.role === "registrar_head"
+  const [infoStudent, setInfoStudent] = useState<{
+    studentId: number
+    termId: number
+  } | null>(null)
   const [page, setPage] = useState(1)
   const [pending, setPending] = useState<{
     enrollment: Enrollment
@@ -191,10 +191,18 @@ export function RegistrarEnrollmentWorkspace({
     useState<Enrollment | null>(null)
   const [reason, setReason] = useState("")
   const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
+  // Only for a void: the Registrar is acting on the student's request.
+  const [requestedByStudent, setRequestedByStudent] = useState(false)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, 300)
   const [statusFilter, setStatusFilter] = useState<
-    "pending_registrar_approval" | "pending_payment" | "enrolled" | "rejected" | "all"
+    | "pending_program_head_approval"
+    | "pending_registrar_approval"
+    | "pending_payment"
+    | "enrolled"
+    | "rejected"
+    | "all"
   >("pending_registrar_approval")
   const heading =
     workspaceHeadings[initialModuleId] ??
@@ -203,17 +211,12 @@ export function RegistrarEnrollmentWorkspace({
     workspaceDescriptions[initialModuleId] ??
     workspaceDescriptions["enrollment-approvals"]
 
-  const queryStatus =
-    initialModuleId === "overrides-voids"
-      ? "pending_payment"
-      : statusFilter === "all"
-        ? undefined
-        : statusFilter
+  const queryStatus = statusFilter === "all" ? undefined : statusFilter
 
   const enrollmentsQuery = useEnrollmentsListQuery(
     {
       status: queryStatus,
-      search: search.trim() || undefined,
+      search: debouncedSearch.trim() || undefined,
       page,
       per_page: 20,
     },
@@ -239,10 +242,13 @@ export function RegistrarEnrollmentWorkspace({
         overload_acknowledged: pending.enrollment.requires_overload_approval
           ? overloadAcknowledged
           : undefined,
+        requested_by_student:
+          pending.action === "void" ? requestedByStudent : undefined,
       })
       setPending(null)
       setReason("")
       setOverloadAcknowledged(false)
+      setRequestedByStudent(false)
     } catch {
       setError(
         "The enrollment decision could not be saved. Check the connection and try again.",
@@ -270,7 +276,11 @@ export function RegistrarEnrollmentWorkspace({
               <Button
                 type="button"
                 size="sm"
-                variant={statusFilter === "pending_registrar_approval" ? "default" : "outline"}
+                variant={
+                  statusFilter === "pending_registrar_approval"
+                    ? "default"
+                    : "outline"
+                }
                 onClick={() => {
                   setStatusFilter("pending_registrar_approval")
                   setPage(1)
@@ -281,7 +291,24 @@ export function RegistrarEnrollmentWorkspace({
               <Button
                 type="button"
                 size="sm"
-                variant={statusFilter === "pending_payment" ? "default" : "outline"}
+                variant={
+                  statusFilter === "pending_program_head_approval"
+                    ? "default"
+                    : "outline"
+                }
+                onClick={() => {
+                  setStatusFilter("pending_program_head_approval")
+                  setPage(1)
+                }}
+              >
+                Awaiting Program Head
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={
+                  statusFilter === "pending_payment" ? "default" : "outline"
+                }
                 onClick={() => {
                   setStatusFilter("pending_payment")
                   setPage(1)
@@ -374,6 +401,7 @@ export function RegistrarEnrollmentWorkspace({
                       setPending({ enrollment: target, action })
                       setReason("")
                       setOverloadAcknowledged(false)
+                      setRequestedByStudent(false)
                       setError("")
                     }}
                   />
@@ -384,7 +412,28 @@ export function RegistrarEnrollmentWorkspace({
                     header: "Student",
                     render: (enrollment) => (
                       <span className="flex items-center gap-2">
-                        {enrollment.student_number}
+                        {canViewStudentInfo ? (
+                          <button
+                            type="button"
+                            className="text-left font-medium underline-offset-2 hover:underline focus-visible:underline"
+                            onClick={() =>
+                              setInfoStudent({
+                                studentId: enrollment.student_id,
+                                termId: enrollment.academic_term_id,
+                              })
+                            }
+                          >
+                            {enrollment.student_name ??
+                              enrollment.student_number}
+                            <span className="sr-only">
+                              {" "}
+                              ({enrollment.student_number}) — open student
+                              information
+                            </span>
+                          </button>
+                        ) : (
+                          enrollment.student_number
+                        )}
                         {enrollment.student_financial_status_label && (
                           <Badge variant="secondary">
                             {enrollment.student_financial_status_label}
@@ -416,12 +465,18 @@ export function RegistrarEnrollmentWorkspace({
                         {enrollment.requires_overload_approval && (
                           <Badge variant="outline">Overload</Badge>
                         )}
-                        {(enrollment.is_irregular ||
-                          enrollment.student_enrollment_category === "irregular") && (
+                        {enrollment.status ===
+                        "pending_program_head_approval" ? (
                           <Badge variant="secondary" className="text-xs">
-                            Irregular · View only
+                            Awaiting Program Head · View only
                           </Badge>
-                        )}
+                        ) : enrollment.is_irregular ||
+                          enrollment.student_enrollment_category ===
+                            "irregular" ? (
+                          <Badge variant="secondary" className="text-xs">
+                            Irregular
+                          </Badge>
+                        ) : null}
                       </div>
                     ),
                   },
@@ -436,29 +491,34 @@ export function RegistrarEnrollmentWorkspace({
                           variant="outline"
                           onClick={() => setReviewingEnrollment(enrollment)}
                         >
-                          {enrollment.status === "enrolled" ? "Check Schedule & Info" : "Review"}
+                          {enrollment.status === "enrolled"
+                            ? "Check Schedule & Info"
+                            : "Review"}
                         </Button>
-                        {availableActions(enrollment, initialModuleId).map((action) => (
-                          <Button
-                            key={action}
-                            type="button"
-                            size="sm"
-                            variant={
-                              action === "registrar_approve"
-                                ? "default"
-                                : "destructive"
-                            }
-                            disabled={mutation.isPending}
-                            onClick={() => {
-                              setPending({ enrollment, action })
-                              setReason("")
-                              setOverloadAcknowledged(false)
-                              setError("")
-                            }}
-                          >
-                            {actionLabel[action]}
-                          </Button>
-                        ))}
+                        {availableActions(enrollment, initialModuleId).map(
+                          (action) => (
+                            <Button
+                              key={action}
+                              type="button"
+                              size="sm"
+                              variant={
+                                action === "registrar_approve"
+                                  ? "default"
+                                  : "destructive"
+                              }
+                              disabled={mutation.isPending}
+                              onClick={() => {
+                                setPending({ enrollment, action })
+                                setReason("")
+                                setOverloadAcknowledged(false)
+                                setRequestedByStudent(false)
+                                setError("")
+                              }}
+                            >
+                              {actionLabel[action]}
+                            </Button>
+                          ),
+                        )}
                       </div>
                     ),
                   },
@@ -481,6 +541,15 @@ export function RegistrarEnrollmentWorkspace({
           if (!open) setReviewingEnrollment(null)
         }}
       />
+      {canViewStudentInfo && (
+        <StudentInfoDialog
+          studentId={infoStudent?.studentId ?? null}
+          academicTermId={infoStudent?.termId ?? null}
+          onOpenChange={(open) => {
+            if (!open) setInfoStudent(null)
+          }}
+        />
+      )}
       <AlertDialog
         open={pending !== null}
         onOpenChange={(open) => {
@@ -518,6 +587,19 @@ export function RegistrarEnrollmentWorkspace({
                 </p>
               )}
             </Field>
+          )}
+          {pending?.action === "void" && (
+            <label className="flex items-center gap-2 text-sm font-normal">
+              <input
+                type="checkbox"
+                checked={requestedByStudent}
+                onChange={(event) =>
+                  setRequestedByStudent(event.target.checked)
+                }
+                disabled={mutation.isPending}
+              />
+              <span>The student asked for this to be voided.</span>
+            </label>
           )}
           {pending?.action === "registrar_approve" &&
             pending.enrollment.requires_overload_approval && (

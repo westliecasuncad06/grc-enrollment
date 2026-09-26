@@ -10,6 +10,10 @@ namespace App\Domain\Enrollment;
  *   draft → pending_registrar_approval → pending_payment → enrolled
  *
  * with `rejected`, `cancelled`, and `withdrawn` as terminal exception states.
+ * An irregular or overload submission first waits at
+ * `pending_program_head_approval` and only then joins the Registrar's queue
+ * (ADR 0030, stakeholder Doc 14); a regular submission goes straight to
+ * `pending_registrar_approval`.
  * Treat this enum as authoritative and change it only when the PRD changes.
  *
  * The `enrollments.active_academic_term_id` generated column repeats the
@@ -20,6 +24,7 @@ namespace App\Domain\Enrollment;
 enum EnrollmentStatus: string
 {
     case Draft = 'draft';
+    case PendingProgramHeadApproval = 'pending_program_head_approval';
     case PendingRegistrarApproval = 'pending_registrar_approval';
     case PendingPayment = 'pending_payment';
     case Enrolled = 'enrolled';
@@ -31,6 +36,7 @@ enum EnrollmentStatus: string
     {
         return match ($this) {
             self::Draft => 'Draft',
+            self::PendingProgramHeadApproval => 'Pending Program Head Approval',
             self::PendingRegistrarApproval => 'Pending Registrar Approval',
             self::PendingPayment => 'Pending Payment',
             self::Enrolled => 'Enrolled',
@@ -50,6 +56,7 @@ enum EnrollmentStatus: string
         return match ($this) {
             self::Rejected, self::Cancelled, self::Withdrawn => true,
             self::Draft,
+            self::PendingProgramHeadApproval,
             self::PendingRegistrarApproval,
             self::PendingPayment,
             self::Enrolled => false,

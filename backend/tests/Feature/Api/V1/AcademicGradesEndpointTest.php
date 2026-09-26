@@ -22,6 +22,7 @@ use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
+use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
 use App\Models\Notification;
@@ -31,6 +32,7 @@ use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 final class AcademicGradesEndpointTest extends TestCase
@@ -504,6 +506,62 @@ final class AcademicGradesEndpointTest extends TestCase
     }
 
     /**
+     * PRD §8.1 N+1 guard: the list query must eager-load every relation
+     * AcademicGradeResource renders, so the query count is flat in row count.
+     */
+    public function test_listing_grades_runs_a_constant_number_of_queries_regardless_of_row_count(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $token = $this->tokenForNewUser(UserRole::RegistrarHead, 'registrar.querycount@grc.test');
+
+        $this->seedDistinctGrades($term, $curriculum, 0, 2);
+        $few = $this->countQueriesDuring(fn () => $this->withToken($token)
+            ->getJson('/api/v1/academic-grades')->assertOk()->assertJsonCount(2, 'data'));
+
+        $this->seedDistinctGrades($term, $curriculum, 2, 8);
+        $many = $this->countQueriesDuring(fn () => $this->withToken($token)
+            ->getJson('/api/v1/academic-grades')->assertOk()->assertJsonCount(8, 'data'));
+
+        $this->assertSame($few, $many, "Grade list issued {$few} queries for 2 rows but {$many} for 8 (N+1).");
+    }
+
+    /**
+     * Grades whose student, subject, section, and professor are all distinct,
+     * so any missing eager load shows up as one extra query per row.
+     */
+    private function seedDistinctGrades(AcademicTerm $term, Curriculum $curriculum, int $from, int $to): void
+    {
+        for ($i = $from; $i < $to; $i++) {
+            $subject = $this->makeSubject('QC'.(100 + $i));
+            $professor = User::create([
+                'name' => 'Prof '.$i, 'email' => "prof.querycount{$i}@grc.test",
+                'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            ]);
+            $section = $this->makeSection($term, $subject, $professor);
+            $student = $this->makeStudent($curriculum, "student.querycount{$i}@grc.test", sprintf('2026-9%03d', $i));
+            $this->makeGrade($student, $subject, $section, $term, $professor);
+        }
+    }
+
+    /**
+     * Guards are forgotten first so both measured requests resolve the
+     * bearer token from scratch instead of reusing a cached user.
+     */
+    private function countQueriesDuring(callable $request): int
+    {
+        $this->app['auth']->forgetGuards();
+        $count = 0;
+        DB::listen(function () use (&$count): void {
+            $count++;
+        });
+
+        $request();
+
+        return $count;
+    }
+
+    /**
      * Phase 7b Task 3: Registrar Staff gets the same broad read access the
      * Registrar Head already has (PRD §3.8 "view permitted academic
      * records") — mirrors the test directly above.
@@ -649,5 +707,218 @@ final class AcademicGradesEndpointTest extends TestCase
 
         $response->assertUnprocessable();
         self::assertArrayHasKey('mark', $response->json('error.errors'));
+    }
+
+    public function test_non_registrar_head_cannot_lock_all_grades(): void
+    {
+        $term = $this->makeTerm();
+        $professor = User::create(['name' => 'Prof Unauthorized', 'email' => 'prof.unauth@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $token = $this->tokenFor($professor);
+
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertForbidden();
+    }
+
+    public function test_registrar_head_can_lock_all_submitted_grades_for_term(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject();
+        $professor = User::create(['name' => 'Prof LockAll', 'email' => 'prof.lockall@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $subject, $professor);
+        $student1 = $this->makeStudent($curriculum, 'student.lockall1@grc.test', '2026-8001');
+        $student2 = $this->makeStudent($curriculum, 'student.lockall2@grc.test', '2026-8002');
+        $student3 = $this->makeStudent($curriculum, 'student.lockall3@grc.test', '2026-8003');
+
+        $grade1 = AcademicGrade::create([
+            'student_id' => $student1->id, 'subject_id' => $subject->id, 'section_id' => $section->id,
+            'academic_term_id' => $term->id, 'mark' => GradeMark::Excellent, 'status' => GradeStatus::Submitted,
+            'encoded_by' => $professor->id, 'submitted_at' => now(),
+        ]);
+        $grade2 = AcademicGrade::create([
+            'student_id' => $student2->id, 'subject_id' => $subject->id, 'section_id' => $section->id,
+            'academic_term_id' => $term->id, 'mark' => GradeMark::VeryGood, 'status' => GradeStatus::Submitted,
+            'encoded_by' => $professor->id, 'submitted_at' => now(),
+        ]);
+        $grade3Draft = AcademicGrade::create([
+            'student_id' => $student3->id, 'subject_id' => $subject->id, 'section_id' => $section->id,
+            'academic_term_id' => $term->id, 'mark' => GradeMark::Passed, 'status' => GradeStatus::Draft,
+            'encoded_by' => $professor->id,
+        ]);
+
+        $registrarHead = User::create(['name' => 'Reg Head', 'email' => 'reg.head.lockall@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $token = $this->tokenFor($registrarHead);
+
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.locked_count', 2);
+
+        $this->assertEquals(GradeStatus::Locked, $grade1->fresh()->status);
+        $this->assertNotNull($grade1->fresh()->locked_at);
+        $this->assertEquals(GradeStatus::Locked, $grade2->fresh()->status);
+        $this->assertNotNull($grade2->fresh()->locked_at);
+        $this->assertEquals(GradeStatus::Draft, $grade3Draft->fresh()->status);
+        $this->assertNull($grade3Draft->fresh()->locked_at);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditAction::ACADEMIC_GRADE_LOCKED,
+            'auditable_id' => $grade1->id,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $student1->user_id,
+            'type' => NotificationType::AcademicGradeLocked->value,
+        ]);
+    }
+
+    /**
+     * A Year-1 student whose curriculum has two required Year-1 subjects; the
+     * second subject's grade is submitted (not yet locked). Returns what a
+     * promotion-on-lock test needs.
+     *
+     * @return array{term: AcademicTerm, student: StudentProfile, subject: Subject, section: Section, professor: User, registrarHead: User}
+     */
+    private function makeYearOneStudentWithOneOpenGrade(string $emailKey, GradeMark $finalMark): array
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $done = $this->makeSubject('CS101');
+        $open = $this->makeSubject('CS102');
+        foreach ([[$done, '1st'], [$open, '2nd']] as [$subject, $semester]) {
+            CurriculumSubject::create([
+                'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
+                'year_level' => 1, 'semester' => $semester, 'is_required' => true,
+            ]);
+        }
+        $professor = User::create(['name' => 'Prof Promote', 'email' => "prof.{$emailKey}@grc.test", 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $section = $this->makeSection($term, $open, $professor);
+        $student = $this->makeStudent($curriculum, "student.{$emailKey}@grc.test", '2026-'.random_int(9000, 9999));
+
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $done->id, 'academic_term_id' => $term->id,
+            'mark' => GradeMark::Good, 'status' => GradeStatus::Locked,
+            'encoded_by' => $professor->id, 'locked_at' => now(),
+        ]);
+        AcademicGrade::create([
+            'student_id' => $student->id, 'subject_id' => $open->id, 'section_id' => $section->id,
+            'academic_term_id' => $term->id, 'mark' => $finalMark, 'status' => GradeStatus::Submitted,
+            'encoded_by' => $professor->id, 'submitted_at' => now(),
+        ]);
+
+        $registrarHead = User::create(['name' => 'Reg Head', 'email' => "reg.{$emailKey}@grc.test", 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+
+        return [
+            'term' => $term, 'student' => $student, 'subject' => $open,
+            'section' => $section, 'professor' => $professor, 'registrarHead' => $registrarHead,
+        ];
+    }
+
+    public function test_locking_the_last_grade_of_a_year_promotes_the_student_even_when_it_is_a_fail(): void
+    {
+        // ADR 0028 / Doc 12: promotion no longer waits for the daily scheduler
+        // and a 5.00 does not hold the student back.
+        ['student' => $student, 'registrarHead' => $registrarHead] = $this->makeYearOneStudentWithOneOpenGrade('promote1', GradeMark::Failed);
+        $gradeId = AcademicGrade::query()->where('student_id', $student->id)->where('status', GradeStatus::Submitted)->value('id');
+        $token = $this->tokenFor($registrarHead);
+
+        $this->withToken($token)->patchJson("/api/v1/academic-grades/{$gradeId}", ['action' => 'lock'])->assertOk();
+
+        $this->assertSame(2, $student->fresh()->year_level);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $student->user_id,
+            'type' => NotificationType::StudentYearLevelPromoted->value,
+        ]);
+    }
+
+    public function test_lock_all_promotes_a_student_whose_year_is_now_fully_graded(): void
+    {
+        ['student' => $student, 'registrarHead' => $registrarHead, 'term' => $term] = $this->makeYearOneStudentWithOneOpenGrade('promote2', GradeMark::Failed);
+        $token = $this->tokenFor($registrarHead);
+
+        $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
+            'academic_term_id' => $term->id,
+        ])->assertOk()->assertJsonPath('data.locked_count', 1);
+
+        $this->assertSame(2, $student->fresh()->year_level);
+    }
+
+    public function test_locking_a_grade_does_not_promote_a_student_who_still_has_ungraded_subjects(): void
+    {
+        ['student' => $student, 'registrarHead' => $registrarHead, 'term' => $term] = $this->makeYearOneStudentWithOneOpenGrade('promote3', GradeMark::Good);
+        // A third required Year-1 subject with no grade at all.
+        $extra = $this->makeSubject('CS103');
+        CurriculumSubject::create([
+            'curriculum_id' => $student->curriculum_id, 'subject_id' => $extra->id,
+            'year_level' => 1, 'semester' => '2nd', 'is_required' => true,
+        ]);
+        $token = $this->tokenFor($registrarHead);
+
+        $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
+            'academic_term_id' => $term->id,
+        ])->assertOk();
+
+        $this->assertSame(1, $student->fresh()->year_level);
+    }
+
+    public function test_registrar_head_can_lock_all_submitted_grades_filtered_by_college(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subjectCcs = $this->makeSubject('CS101');
+        $subjectCcs->update(['college' => 'ccs']);
+        $subjectCoe = $this->makeSubject('ENG101');
+        $subjectCoe->update(['college' => 'coe']);
+
+        $professor = User::create(['name' => 'Prof Split', 'email' => 'prof.split@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $sectionCcs = $this->makeSection($term, $subjectCcs, $professor);
+        $sectionCoe = $this->makeSection($term, $subjectCoe, $professor);
+        $student1 = $this->makeStudent($curriculum, 'student.split1@grc.test', '2026-8004');
+        $student2 = $this->makeStudent($curriculum, 'student.split2@grc.test', '2026-8005');
+
+        $gradeCcs = AcademicGrade::create([
+            'student_id' => $student1->id, 'subject_id' => $subjectCcs->id, 'section_id' => $sectionCcs->id,
+            'academic_term_id' => $term->id, 'mark' => GradeMark::Excellent, 'status' => GradeStatus::Submitted,
+            'encoded_by' => $professor->id, 'submitted_at' => now(),
+        ]);
+        $gradeCoe = AcademicGrade::create([
+            'student_id' => $student2->id, 'subject_id' => $subjectCoe->id, 'section_id' => $sectionCoe->id,
+            'academic_term_id' => $term->id, 'mark' => GradeMark::VeryGood, 'status' => GradeStatus::Submitted,
+            'encoded_by' => $professor->id, 'submitted_at' => now(),
+        ]);
+
+        $registrarHead = User::create(['name' => 'Reg Head Split', 'email' => 'reg.head.split@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $token = $this->tokenFor($registrarHead);
+
+        // Lock CCS only
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
+            'academic_term_id' => $term->id,
+            'college' => 'ccs',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.locked_count', 1);
+
+        $this->assertEquals(GradeStatus::Locked, $gradeCcs->fresh()->status);
+        $this->assertEquals(GradeStatus::Submitted, $gradeCoe->fresh()->status);
+    }
+
+    public function test_lock_all_returns_zero_count_when_no_submitted_grades_awaiting_lock(): void
+    {
+        $term = $this->makeTerm();
+        $registrarHead = User::create(['name' => 'Reg Head Empty', 'email' => 'reg.head.empty@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $token = $this->tokenFor($registrarHead);
+
+        $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
+            'academic_term_id' => $term->id,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.locked_count', 0)
+            ->assertJsonPath('data.message', 'No submitted grades were found awaiting lock.');
     }
 }

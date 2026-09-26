@@ -181,7 +181,7 @@ export function AcademicTermWorkspace() {
             <Alert>
               <AlertDescription>
                 No current school year and semester yet. Create the next term
-                above to open enrollment planning for Program Chairs.
+                above to open enrollment planning for Program Heads.
               </AlertDescription>
             </Alert>
           )}
@@ -326,7 +326,14 @@ export function AcademicTermWorkspace() {
         {(terms) => (
           <DataTable
             caption="Every academic term, most recent first"
-            rows={terms}
+            rows={[...terms].sort((a, b) => {
+              if (a.is_actionable_current && !b.is_actionable_current) return -1
+              if (!a.is_actionable_current && b.is_actionable_current) return 1
+              if (a.school_year !== b.school_year) {
+                return b.school_year.localeCompare(a.school_year)
+              }
+              return b.semester.localeCompare(a.semester)
+            })}
             rowKey={(term) => term.id}
             emptyMessage="No academic terms exist yet — create the first one above."
             columns={[

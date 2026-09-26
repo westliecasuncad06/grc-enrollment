@@ -136,6 +136,27 @@ export const updateAcademicGradeInputSchema = z.union([
   z.object({ action: z.enum(["submit", "lock"]) }).strict(),
 ])
 
+export const lockAllAcademicGradesInputSchema = z
+  .object({
+    academic_term_id: z.number().int().positive().optional(),
+    college: z.string().trim().optional(),
+    grade_ids: z.array(z.number().int().positive()).optional(),
+  })
+  .strict()
+
+export const lockAllAcademicGradesResultSchema = z
+  .object({
+    locked_count: z.number().int().nonnegative(),
+    message: z.string().min(1),
+  })
+  .strict()
+
+export const lockAllAcademicGradesEnvelopeSchema = z
+  .object({
+    data: lockAllAcademicGradesResultSchema,
+  })
+  .strict()
+
 export type AcademicGrade = z.infer<typeof academicGradeSchema>
 export type AcademicGradeFilters = z.input<typeof academicGradeFiltersSchema>
 export type StoreAcademicGradeInput = z.infer<
@@ -143,6 +164,12 @@ export type StoreAcademicGradeInput = z.infer<
 >
 export type UpdateAcademicGradeInput = z.infer<
   typeof updateAcademicGradeInputSchema
+>
+export type LockAllAcademicGradesInput = z.infer<
+  typeof lockAllAcademicGradesInputSchema
+>
+export type LockAllAcademicGradesResult = z.infer<
+  typeof lockAllAcademicGradesResultSchema
 >
 export interface Paginated<T> {
   data: readonly T[]

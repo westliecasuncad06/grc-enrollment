@@ -4,7 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
 import { AccountingPaymentWorkspace } from "@/features/components/portal/accounting-payment-workspace"
+import { playQueueAlert } from "@/features/lib/queue-announcement"
 import { renderWithSession } from "@/tests/render-app"
+
+// The alert chime and voice use Web Audio / Speech Synthesis, which jsdom
+// does not have; the tests only care that the Cashier's buttons ask for it.
+vi.mock("@/features/lib/queue-announcement", () => ({
+  playQueueAlert: vi.fn(),
+}))
 
 const paginationLinks = {
   first: "https://api.test/queue-tickets?page=1",
@@ -82,6 +89,7 @@ const pendingPaymentEnrollment = {
   total_units: 10.5,
   requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
+  program_head_decided_at: null,
   registrar_decided_at: "2026-07-30T00:00:00Z",
   payment_confirmed_at: null,
   enrolled_at: null,
@@ -286,6 +294,91 @@ function mockRoutes(
   }
 }
 
+// Confirm payment now starts with the Payee/Scholar question (ADR 0025).
+async function continueAsRegularPayee(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+  const classification = await screen.findByRole("dialog", {
+    name: "Payment classification",
+  })
+  await user.click(within(classification).getByRole("radio", { name: /Regular payee/ }))
+  await user.click(within(classification).getByRole("button", { name: "Continue" }))
+}
+
+/** The pending-payment enrollment as the API returns it with a scholarship applied. */
+function enrollmentWithScholarship(percentage: number | null, base = 5775) {
+  const discount = percentage === null ? 0 : Math.round(base * percentage) / 100
+  return {
+    ...pendingPaymentEnrollment,
+    student_financial_status: percentage === null ? null : "scholar",
+    student_financial_status_label: percentage === null ? null : "Scholar",
+    assessment: {
+      ...pendingPaymentEnrollment.assessment,
+      total_amount: (base - discount).toFixed(2),
+      items:
+        percentage === null
+          ? assessmentItems
+          : [
+              ...assessmentItems,
+              {
+                id: 103,
+                category: "scholarship_discount",
+                category_label: "Scholarship discount",
+                label: `Scholarship discount (${percentage}%)`,
+                quantity: `${percentage}.0`,
+                unit_amount: null,
+                amount: `-${discount.toFixed(2)}`,
+              },
+            ],
+    },
+  }
+}
+
+/**
+ * Routes with a stateful scholarship: PUT applies a tier, DELETE removes it,
+ * and the pending-payment list always reflects the current state, like the API.
+ */
+function mockScholarshipRoutes(
+  calls: string[],
+  initial: number | null = null,
+  base = 5775,
+) {
+  let percentage = initial
+
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const target = url(input)
+
+    if (target.includes("/enrollments/9/scholarship-discount")) {
+      if (init?.method === "PUT") {
+        percentage = (JSON.parse(init.body as string) as { percentage: number }).percentage
+        calls.push(`PUT ${percentage}`)
+      } else {
+        percentage = null
+        calls.push("DELETE")
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: enrollmentWithScholarship(percentage, base) })),
+      )
+    }
+    if (
+      target.includes("/enrollments") &&
+      !target.includes("/payment") &&
+      (init?.method ?? "GET") === "GET"
+    ) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [enrollmentWithScholarship(percentage, base)],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    }
+
+    return mockRoutes()(input, init)
+  }
+}
+
 describe("AccountingPaymentWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
@@ -323,48 +416,14 @@ describe("AccountingPaymentWorkspace", () => {
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Call next →" }),
-    ).toBeInTheDocument()
+      screen.queryByRole("button", { name: "Call next →" }),
+    ).not.toBeInTheDocument()
 
     const waitingRow = await screen.findByRole("table", { name: "Waiting" })
     expect(within(waitingRow).getByText("Q002")).toBeInTheDocument()
   })
 
-  it("lets Accounting adjust the pending assessment before confirming payment", async () => {
-    fetchMock.mockImplementation(mockRoutes())
-    const user = userEvent.setup()
-    renderWithSession(<AccountingPaymentWorkspace />, {
-      session: accountingSession,
-    })
 
-    await user.click(await screen.findByRole("button", { name: "Adjust fees" }))
-    expect(screen.getByText("Adjust fee assessment")).toBeInTheDocument()
-    await user.clear(screen.getByLabelText("Tuition rate per unit"))
-    await user.type(screen.getByLabelText("Tuition rate per unit"), "250.00")
-    await user.type(
-      screen.getByLabelText("Adjustment reason"),
-      "Applied approved student fee adjustment.",
-    )
-    await user.click(screen.getByRole("button", { name: "Save adjusted fees" }))
-
-    await vi.waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/enrollments/9/assessment"),
-        expect.objectContaining({ method: "PATCH" }),
-      ),
-    )
-    const call = fetchMock.mock.calls.find(
-      ([target, init]) =>
-        url(target).includes("/enrollments/9/assessment") && init?.method === "PATCH",
-    )
-    expect(JSON.parse(call?.[1]?.body as string)).toEqual({
-      reason: "Applied approved student fee adjustment.",
-      items: [
-        { id: 101, unit_amount: "250.00" },
-        { id: 102, amount: "200.00" },
-      ],
-    })
-  })
 
   it("shows a cut-off banner and lets the cashier resume the queue", async () => {
     // A static `mockRoutes({ cycle })` override applies to every
@@ -650,7 +709,7 @@ describe("AccountingPaymentWorkspace", () => {
     })
 
     await screen.findByText("Q001")
-    await user.click(screen.getByRole("button", { name: "Confirm payment" }))
+    await continueAsRegularPayee(user)
     const dialog = screen.getByRole("alertdialog")
     expect(within(dialog).getByLabelText("Amount")).toHaveValue("5775.00")
     await user.click(
@@ -680,9 +739,7 @@ describe("AccountingPaymentWorkspace", () => {
       session: accountingSession,
     })
 
-    await user.click(
-      await screen.findByRole("button", { name: "Confirm payment" }),
-    )
+    await continueAsRegularPayee(user)
     await user.click(
       within(screen.getByRole("alertdialog")).getByRole("button", {
         name: "Confirm payment",
@@ -701,7 +758,8 @@ describe("AccountingPaymentWorkspace", () => {
       session: accountingSession,
     })
 
-    await user.type(screen.getByLabelText("Find student number"), "2026-0002")
+    const input = await screen.findByLabelText("Find student number")
+    await user.type(input, "2026-0002")
     await user.click(screen.getByRole("button", { name: "Find student" }))
 
     expect(await screen.findByText("Juan Dela Cruz")).toBeInTheDocument()
@@ -713,54 +771,45 @@ describe("AccountingPaymentWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("records a 500 balance payment without confirming the current enrollment or changing its ticket", async () => {
+  it("offers Confirm payment, Announce ticket and Skip on Now Serving, and no advance-payment actions", async () => {
     const user = userEvent.setup()
-    let accountRequest: RequestInit | undefined
-    let enrollmentRequest: RequestInit | undefined
-    let queueRequest: RequestInit | undefined
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    expect(await screen.findByRole("button", { name: "Confirm payment" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument()
+    // Advance payment has its own page; the Announce ticket button must stay.
+    expect(screen.queryByRole("button", { name: /Record balance/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /advance payment/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Adjust fees" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Complete" })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /Announce ticket/i }))
+    expect(playQueueAlert).toHaveBeenCalledWith("Q001")
+  })
+
+  it("sends the announcement to the server too, so the student's own device rings", async () => {
+    const user = userEvent.setup()
+    let announceBody: unknown = null
     fetchMock.mockImplementation((input, init) => {
-      const target = url(input)
-      if (target.includes("/students/4/account-payments")) {
-        accountRequest = init
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: { ...studentAccount, outstanding_balance: "7775.00" },
-            }),
-            { status: 201 },
-          ),
-        )
+      if (url(input).includes("/queue-tickets/") && init?.method === "PATCH") {
+        announceBody = JSON.parse(init.body as string)
+        return Promise.resolve(new Response(JSON.stringify({ data: servingTicket })))
       }
-      if (target.includes("/students/4/account"))
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: studentAccount })),
-        )
-      if (target.includes("/enrollments") && init?.method === "POST")
-        enrollmentRequest = init
-      if (target.includes("/queue-tickets/") && init?.method === "PATCH")
-        queueRequest = init
       return mockRoutes()(input, init)
     })
     renderWithSession(<AccountingPaymentWorkspace />, {
       session: accountingSession,
     })
 
-    await user.click(
-      await screen.findByRole("button", { name: /Record balance.*payment/i }),
-    )
-    const dialog = screen.getByRole("alertdialog")
-    await user.type(
-      within(dialog).getByLabelText(/Payment amount/i),
-      "500",
-    )
-    await user.click(
-      within(dialog).getByRole("button", { name: "Record payment" }),
-    )
+    await user.click(await screen.findByRole("button", { name: /Announce ticket/i }))
 
-    await vi.waitFor(() => expect(accountRequest).toBeDefined())
-    expect(JSON.parse(accountRequest?.body as string)).toEqual({ amount: 500 })
-    expect(enrollmentRequest).toBeUndefined()
-    expect(queueRequest).toBeUndefined()
+    // The Cashier still hears it locally at once...
+    expect(playQueueAlert).toHaveBeenCalledWith("Q001")
+    // ...and the student's polled queue view is told, via the announce counter.
+    await vi.waitFor(() => expect(announceBody).toEqual({ action: "announce" }))
   })
 
   it("requeues the currently serving ticket to the back of the waiting line", async () => {
@@ -909,5 +958,190 @@ describe("AccountingPaymentWorkspace", () => {
 
     await screen.findByText("Q001")
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("asks whether the student is a regular payee or a scholar before showing the payment method", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation(mockRoutes())
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+
+    const dialog = await screen.findByRole("dialog", { name: "Payment classification" })
+    expect(within(dialog).getByRole("radio", { name: /Regular payee/ })).toBeChecked()
+    expect(within(dialog).getByRole("radio", { name: /Scholar/ })).not.toBeChecked()
+    // The payment modal only comes after this choice.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
+  })
+
+  it("takes a regular payee to the payment modal, which states and enforces the ₱1,000 minimum", async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    fetchMock.mockImplementation(mockScholarshipRoutes(calls))
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await continueAsRegularPayee(user)
+    const dialog = await screen.findByRole("alertdialog")
+    const amount = within(dialog).getByLabelText("Amount")
+    const confirm = within(dialog).getByRole("button", { name: "Confirm payment" })
+
+    expect(within(dialog).getByText(/at least ₱1,000\.00/)).toBeInTheDocument()
+    await user.clear(amount)
+    await user.type(amount, "500")
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/must be at least ₱1,000\.00/)
+    expect(confirm).toBeDisabled()
+
+    await user.clear(amount)
+    await user.type(amount, "1000")
+    // ₱1,000 is below the assessed total, so it is a partial payment and needs
+    // a promissory note on file (stakeholder Doc 14, S24).
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/promissory note on file is required/)
+    expect(confirm).toBeDisabled()
+    await user.click(within(dialog).getByLabelText("Promissory note on file"))
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument()
+    expect(confirm).toBeEnabled()
+    // A payee with no scholarship needs no change on the server.
+    expect(calls).toEqual([])
+  })
+
+  it("lets a scholar pick a tier, deducts it automatically, and opens the payment modal on the net", async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    fetchMock.mockImplementation(mockScholarshipRoutes(calls))
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+    const classification = await screen.findByRole("dialog", { name: "Payment classification" })
+    await user.click(within(classification).getByRole("radio", { name: /Scholar/ }))
+    await user.click(within(classification).getByRole("button", { name: "Continue" }))
+
+    const tiers = await screen.findByRole("dialog", { name: "Scholarship classification" })
+    await user.click(within(tiers).getByRole("radio", { name: /40% Partial Scholarship/ }))
+    // 40% of 5,775.00 is 2,310.00, leaving 3,465.00.
+    expect(within(tiers).getByText("-₱2,310.00")).toBeInTheDocument()
+    expect(within(tiers).getByText("₱3,465.00")).toBeInTheDocument()
+    await user.click(within(tiers).getByRole("button", { name: "Apply scholarship" }))
+
+    const payment = await screen.findByRole("alertdialog")
+    expect(calls).toEqual(["PUT 40"])
+    expect(within(payment).getByLabelText("Amount")).toHaveValue("3465.00")
+    expect(within(payment).getByText("Scholarship discount (40%):")).toBeInTheDocument()
+    expect(within(payment).getByText("-₱2,310.00")).toBeInTheDocument()
+  })
+
+  it("needs no payment amount for a 100% scholarship and still confirms", async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    let paymentBody: unknown = null
+    const routes = mockScholarshipRoutes(calls)
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollments/9/payment") && init?.method === "POST") {
+        paymentBody = JSON.parse(init.body as string)
+      }
+      return routes(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+    let dialog = await screen.findByRole("dialog", { name: "Payment classification" })
+    await user.click(within(dialog).getByRole("radio", { name: /Scholar/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }))
+    dialog = await screen.findByRole("dialog", { name: "Scholarship classification" })
+    // 100% is the default tier.
+    expect(within(dialog).getByRole("radio", { name: /100% Full Academic/ })).toBeChecked()
+    await user.click(within(dialog).getByRole("button", { name: "Apply scholarship" }))
+
+    const payment = await screen.findByRole("alertdialog")
+    expect(calls).toEqual(["PUT 100"])
+    expect(within(payment).getByText(/No payment is due/)).toBeInTheDocument()
+    await user.click(within(payment).getByRole("button", { name: "Confirm payment" }))
+
+    await vi.waitFor(() => expect(paymentBody).not.toBeNull())
+    expect(paymentBody).toEqual({ promissory_note_on_file: false })
+  })
+
+  it("collects a net below ₱1,000 in full without asking for an amount", async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    let paymentBody: unknown = null
+    // 20% off a 750.00 assessment leaves 600.00, which is under the minimum.
+    const routes = mockScholarshipRoutes(calls, null, 750)
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollments/9/payment") && init?.method === "POST") {
+        paymentBody = JSON.parse(init.body as string)
+      }
+      return routes(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+    let dialog = await screen.findByRole("dialog", { name: "Payment classification" })
+    await user.click(within(dialog).getByRole("radio", { name: /Scholar/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }))
+    dialog = await screen.findByRole("dialog", { name: "Scholarship classification" })
+    await user.click(within(dialog).getByRole("radio", { name: /20% Partial Scholarship/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Apply scholarship" }))
+
+    const payment = await screen.findByRole("alertdialog")
+    const amount = within(payment).getByLabelText("Amount")
+    expect(amount).toHaveValue("600.00")
+    expect(amount).toHaveAttribute("readonly")
+    expect(within(payment).queryByRole("alert")).not.toBeInTheDocument()
+    await user.click(within(payment).getByRole("button", { name: "Confirm payment" }))
+
+    await vi.waitFor(() => expect(paymentBody).not.toBeNull())
+    expect(paymentBody).toEqual({ promissory_note_on_file: false })
+  })
+
+  it("removes an existing scholarship when the cashier chooses Regular payee", async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    fetchMock.mockImplementation(mockScholarshipRoutes(calls, 40))
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+    const dialog = await screen.findByRole("dialog", { name: "Payment classification" })
+    // The student is already a scholar, so that is what is offered first.
+    expect(within(dialog).getByRole("radio", { name: /Scholar/ })).toBeChecked()
+    await user.click(within(dialog).getByRole("radio", { name: /Regular payee/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }))
+
+    const payment = await screen.findByRole("alertdialog")
+    expect(calls).toEqual(["DELETE"])
+    expect(within(payment).getByLabelText("Amount")).toHaveValue("5775.00")
+    expect(within(payment).queryByText(/Scholarship discount/)).not.toBeInTheDocument()
+  })
+
+  it("shows why a scholarship could not be applied and stays on that step", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/scholarship-discount") && init?.method === "PUT") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "The given data was invalid.",
+                errors: { enrollment: ["A scholarship cannot be changed after payment confirmation."] },
+                request_id: "req-1",
+              },
+            }),
+            { status: 422 },
+          ),
+        )
+      }
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, { session: accountingSession })
+
+    await user.click(await screen.findByRole("button", { name: "Confirm payment" }))
+    let dialog = await screen.findByRole("dialog", { name: "Payment classification" })
+    await user.click(within(dialog).getByRole("radio", { name: /Scholar/ }))
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }))
+    dialog = await screen.findByRole("dialog", { name: "Scholarship classification" })
+    await user.click(within(dialog).getByRole("button", { name: "Apply scholarship" }))
+
+    expect(await within(dialog).findByText(/cannot be changed after payment confirmation/)).toBeInTheDocument()
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
   })
 })

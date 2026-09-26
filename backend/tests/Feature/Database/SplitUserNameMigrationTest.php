@@ -5,15 +5,17 @@ namespace Tests\Feature\Database;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\RollsBackThroughMigration;
 use Tests\TestCase;
 
 final class SplitUserNameMigrationTest extends TestCase
 {
     use RefreshDatabase;
+    use RollsBackThroughMigration;
 
     public function test_the_migration_backfills_first_middle_last_and_suffix_from_existing_names(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 1])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_26_000003_split_user_name_into_parts');
         self::assertFalse(Schema::hasColumn('users', 'first_name'));
 
         $cases = [

@@ -1,11 +1,15 @@
 import {
   academicGradeEnvelopeSchema,
   academicGradeFiltersSchema,
+  lockAllAcademicGradesEnvelopeSchema,
+  lockAllAcademicGradesInputSchema,
   paginatedAcademicGradesSchema,
   storeAcademicGradeInputSchema,
   updateAcademicGradeInputSchema,
   type AcademicGrade,
   type AcademicGradeFilters,
+  type LockAllAcademicGradesInput,
+  type LockAllAcademicGradesResult,
   type Paginated,
   type StoreAcademicGradeInput,
   type UpdateAcademicGradeInput,
@@ -76,3 +80,21 @@ export async function updateAcademicGrade(
   )
   return parse(academicGradeEnvelopeSchema, payload, "updated grade").data
 }
+
+export async function lockAllAcademicGrades(
+  input?: LockAllAcademicGradesInput,
+): Promise<LockAllAcademicGradesResult> {
+  const parsedInput = input
+    ? parse(lockAllAcademicGradesInputSchema, input, "lock-all request")
+    : {}
+  const payload = await postAuthenticatedJson(
+    `${ACADEMIC_GRADES_PATH}/lock-all`,
+    parsedInput,
+  )
+  return parse(
+    lockAllAcademicGradesEnvelopeSchema,
+    payload,
+    "lock-all result",
+  ).data
+}
+

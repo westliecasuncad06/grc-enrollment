@@ -5,8 +5,10 @@ import { Building2, CircleAlert, Mail, MapPin, UserRound } from "lucide-react"
 import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 
+import { AccordionCard } from "@/features/components/portal/accordion-card"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import {
   Alert,
   AlertDescription,
@@ -183,7 +185,7 @@ export function StudentInformationWorkspace() {
                   <p>
                     <strong>Year level</strong>
                     <br />
-                    Year {official.year_level}
+                    {formatYearLevel(official.year_level)}
                   </p>
                   <p>
                     <strong>Status</strong>
@@ -226,161 +228,156 @@ export function StudentInformationWorkspace() {
               </Card>
             )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle level={2}>
-                  {pending
-                    ? "Revise pending request"
-                    : "Request an information change"}
-                </CardTitle>
-                <CardDescription>
-                  Only your name, email, and complete address may be requested
-                  here.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={(event) => void handleSubmit(submit)(event)}>
-                  <FieldGroup className="grid gap-4 md:grid-cols-2">
-                    <Field data-invalid={Boolean(errors.first_name)}>
-                      <FieldLabel htmlFor="request-first-name">
-                        Proposed first name
-                      </FieldLabel>
-                      <Input
-                        id="request-first-name"
-                        {...register("first_name")}
-                      />
-                      <FieldError>{errors.first_name?.message}</FieldError>
-                    </Field>
-                    <Field data-invalid={Boolean(errors.last_name)}>
-                      <FieldLabel htmlFor="request-last-name">
-                        Proposed last name
-                      </FieldLabel>
-                      <Input
-                        id="request-last-name"
-                        {...register("last_name")}
-                      />
-                      <FieldError>{errors.last_name?.message}</FieldError>
-                    </Field>
-                    <Field data-invalid={Boolean(errors.middle_initial)}>
-                      <FieldLabel htmlFor="request-middle-initial">
-                        Proposed middle initial
-                      </FieldLabel>
-                      <Input
-                        id="request-middle-initial"
-                        maxLength={10}
-                        {...register("middle_initial")}
-                      />
-                      <FieldDescription>Optional.</FieldDescription>
-                      <FieldError>{errors.middle_initial?.message}</FieldError>
-                    </Field>
-                    <Field data-invalid={Boolean(errors.suffix)}>
-                      <FieldLabel htmlFor="request-suffix">
-                        Proposed suffix
-                      </FieldLabel>
-                      <Input
-                        id="request-suffix"
-                        placeholder="Jr., Sr., III…"
-                        maxLength={20}
-                        {...register("suffix")}
-                      />
-                      <FieldDescription>Optional.</FieldDescription>
-                      <FieldError>{errors.suffix?.message}</FieldError>
-                    </Field>
-                    <Field data-invalid={Boolean(errors.email)}>
-                      <FieldLabel htmlFor="request-email">
-                        Proposed email
-                      </FieldLabel>
-                      <Input
-                        id="request-email"
-                        type="email"
-                        {...register("email")}
-                      />
-                      <FieldError>{errors.email?.message}</FieldError>
-                    </Field>
-                    <Field
-                      className="md:col-span-2"
-                      data-invalid={Boolean(errors.address)}
+            {/* A 7-field form is a lot to meet at once on a phone: it starts
+                collapsed there (stakeholder Doc 13) and opens with one tap. */}
+            <AccordionCard
+              id="student-info-request"
+              title={
+                pending
+                  ? "Revise pending request"
+                  : "Request an information change"
+              }
+              description="Only your name, email, and complete address may be requested here."
+              collapseOnMobile
+            >
+              <form onSubmit={(event) => void handleSubmit(submit)(event)}>
+                <FieldGroup className="grid gap-4 md:grid-cols-2">
+                  <Field data-invalid={Boolean(errors.first_name)}>
+                    <FieldLabel htmlFor="request-first-name">
+                      Proposed first name
+                    </FieldLabel>
+                    <Input
+                      id="request-first-name"
+                      {...register("first_name")}
+                    />
+                    <FieldError>{errors.first_name?.message}</FieldError>
+                  </Field>
+                  <Field data-invalid={Boolean(errors.last_name)}>
+                    <FieldLabel htmlFor="request-last-name">
+                      Proposed last name
+                    </FieldLabel>
+                    <Input id="request-last-name" {...register("last_name")} />
+                    <FieldError>{errors.last_name?.message}</FieldError>
+                  </Field>
+                  <Field data-invalid={Boolean(errors.middle_initial)}>
+                    <FieldLabel htmlFor="request-middle-initial">
+                      Proposed middle initial
+                    </FieldLabel>
+                    <Input
+                      id="request-middle-initial"
+                      maxLength={10}
+                      {...register("middle_initial")}
+                    />
+                    <FieldDescription>Optional.</FieldDescription>
+                    <FieldError>{errors.middle_initial?.message}</FieldError>
+                  </Field>
+                  <Field data-invalid={Boolean(errors.suffix)}>
+                    <FieldLabel htmlFor="request-suffix">
+                      Proposed suffix
+                    </FieldLabel>
+                    <Input
+                      id="request-suffix"
+                      placeholder="Jr., Sr., III…"
+                      maxLength={20}
+                      {...register("suffix")}
+                    />
+                    <FieldDescription>Optional.</FieldDescription>
+                    <FieldError>{errors.suffix?.message}</FieldError>
+                  </Field>
+                  <Field data-invalid={Boolean(errors.email)}>
+                    <FieldLabel htmlFor="request-email">
+                      Proposed email
+                    </FieldLabel>
+                    <Input
+                      id="request-email"
+                      type="email"
+                      {...register("email")}
+                    />
+                    <FieldError>{errors.email?.message}</FieldError>
+                  </Field>
+                  <Field
+                    className="md:col-span-2"
+                    data-invalid={Boolean(errors.address)}
+                  >
+                    <FieldLabel htmlFor="request-address">
+                      Proposed complete address
+                    </FieldLabel>
+                    <Textarea id="request-address" {...register("address")} />
+                    <FieldError>{errors.address?.message}</FieldError>
+                  </Field>
+                  <Field
+                    className="md:col-span-2"
+                    data-invalid={Boolean(errors.reason)}
+                  >
+                    <FieldLabel htmlFor="request-reason">
+                      Reason for change
+                    </FieldLabel>
+                    <Textarea id="request-reason" {...register("reason")} />
+                    <FieldDescription>
+                      Explain what needs correction and bring supporting
+                      documents to Admission.
+                    </FieldDescription>
+                    <FieldError>{errors.reason?.message}</FieldError>
+                  </Field>
+                  {(create.isError || revise.isError) && (
+                    <Alert className="md:col-span-2" variant="destructive">
+                      <AlertDescription>
+                        The request could not be saved. Review the values and
+                        try again.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="flex flex-wrap gap-2 md:col-span-2">
+                    <Button
+                      type="submit"
+                      disabled={create.isPending || revise.isPending}
                     >
-                      <FieldLabel htmlFor="request-address">
-                        Proposed complete address
-                      </FieldLabel>
-                      <Textarea id="request-address" {...register("address")} />
-                      <FieldError>{errors.address?.message}</FieldError>
-                    </Field>
-                    <Field
-                      className="md:col-span-2"
-                      data-invalid={Boolean(errors.reason)}
-                    >
-                      <FieldLabel htmlFor="request-reason">
-                        Reason for change
-                      </FieldLabel>
-                      <Textarea id="request-reason" {...register("reason")} />
-                      <FieldDescription>
-                        Explain what needs correction and bring supporting
-                        documents to Admission.
-                      </FieldDescription>
-                      <FieldError>{errors.reason?.message}</FieldError>
-                    </Field>
-                    {(create.isError || revise.isError) && (
-                      <Alert className="md:col-span-2" variant="destructive">
-                        <AlertDescription>
-                          The request could not be saved. Review the values and
-                          try again.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    <div className="flex flex-wrap gap-2 md:col-span-2">
+                      {pending
+                        ? "Save revised request"
+                        : "Submit change request"}
+                    </Button>
+                    {pending && (
                       <Button
-                        type="submit"
-                        disabled={create.isPending || revise.isPending}
+                        type="button"
+                        variant="outline"
+                        disabled={cancel.isPending}
+                        onClick={() => void cancel.mutateAsync(pending.id)}
                       >
-                        {pending
-                          ? "Save revised request"
-                          : "Submit change request"}
+                        Cancel pending request
                       </Button>
-                      {pending && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={cancel.isPending}
-                          onClick={() => void cancel.mutateAsync(pending.id)}
-                        >
-                          Cancel pending request
-                        </Button>
-                      )}
-                    </div>
-                  </FieldGroup>
-                </form>
-              </CardContent>
-            </Card>
+                    )}
+                  </div>
+                </FieldGroup>
+              </form>
+            </AccordionCard>
 
             {requests.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle level={2}>Request history</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {requests.map((request) => (
-                    <div
-                      key={request.id}
-                      className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-start sm:justify-between"
-                    >
-                      <div>
-                        <p className="font-medium">{request.reason}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {request.decision_notes ??
-                            (request.status === "pending"
-                              ? "Visit Admission for verification."
-                              : "No decision notes.")}
-                        </p>
-                      </div>
-                      <Badge variant={statusVariant(request.status)}>
-                        {request.status_label}
-                      </Badge>
+              <AccordionCard
+                id="student-info-history"
+                title="Request history"
+                collapseOnMobile
+                contentClassName="space-y-3"
+              >
+                {requests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium">{request.reason}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {request.decision_notes ??
+                          (request.status === "pending"
+                            ? "Visit Admission for verification."
+                            : "No decision notes.")}
+                      </p>
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
+                    <Badge variant={statusVariant(request.status)}>
+                      {request.status_label}
+                    </Badge>
+                  </div>
+                ))}
+              </AccordionCard>
             )}
           </div>
         )}

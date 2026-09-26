@@ -67,6 +67,30 @@ final class SectionPolicy
         return $this->viewGrades($user, $section);
     }
 
+    /**
+     * The Dean may assign or unassign the professor of a section their college
+     * planned (ADR 0033). Only the professor; nothing else about the section.
+     */
+    public function assignProfessor(User $user, Section $section): bool
+    {
+        return $user->role === UserRole::Dean
+            && $user->college !== null
+            && $section->section_plan_id !== null
+            && $section->sectionPlan?->college === $user->college->value
+            && ! in_array($section->status, [SectionStatus::Closed, SectionStatus::Cancelled], true);
+    }
+
+    /**
+     * A published section is final for the Program Head (ADR 0032); a change
+     * request is how they ask the Registrar Head to alter it.
+     */
+    public function requestChange(User $user, Section $section): bool
+    {
+        return $user->role === UserRole::ProgramChair
+            && $section->status === SectionStatus::Published
+            && ($user->college === null || $section->section_plan_id === null || $section->sectionPlan?->college === $user->college->value);
+    }
+
     public function update(User $user, Section $section): bool
     {
         return $user->role === UserRole::ProgramChair

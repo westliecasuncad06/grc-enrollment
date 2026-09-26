@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Academic\ListAcademicGrades;
+use App\Actions\Academic\LockAllAcademicGrades;
 use App\Actions\Academic\RecordAcademicGrade;
 use App\Actions\Academic\SubmitSectionGrades;
 use App\Actions\Academic\UpdateAcademicGrade;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AcademicGrade\IndexAcademicGradeRequest;
+use App\Http\Requests\Api\V1\AcademicGrade\LockAllAcademicGradesRequest;
 use App\Http\Requests\Api\V1\AcademicGrade\StoreAcademicGradeRequest;
 use App\Http\Requests\Api\V1\AcademicGrade\UpdateAcademicGradeRequest;
 use App\Http\Resources\Api\V1\AcademicGradeResource;
@@ -104,6 +106,38 @@ final class AcademicGradeController extends Controller
         }
 
         return $this->cachePrivateResponse(AcademicGradeResource::make($grade)->response($request));
+    }
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function lockAll(
+        LockAllAcademicGradesRequest $request,
+        LockAllAcademicGrades $locker,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('lockAll', AcademicGrade::class);
+
+        $result = $locker->execute(
+            $request->validated(),
+            $actor,
+            $contextFactory->fromRequest($request),
+        );
+
+        $count = $result['locked_count'];
+        $message = $count > 0
+            ? "Successfully locked {$count} grade(s)."
+            : 'No submitted grades were found awaiting lock.';
+
+        $response = response()->json([
+            'data' => [
+                'locked_count' => $count,
+                'message' => $message,
+            ],
+        ]);
+
+        return $this->cachePrivateResponse($response);
     }
 
     /**

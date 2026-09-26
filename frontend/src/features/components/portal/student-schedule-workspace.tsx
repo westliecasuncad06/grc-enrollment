@@ -140,6 +140,7 @@ export function StudentScheduleWorkspace() {
           term={selectedTerm ?? null}
           isCurrentTerm={selectedTerm?.status === "semester_ongoing"}
           onSelectTerm={setSelectedTermId}
+          isLoading={termsQuery.isPending}
         />
         {selectedTerm && (
           <Badge variant="outline" className="text-xs">
@@ -202,10 +203,12 @@ export function StudentScheduleWorkspace() {
           ) : (
             <div className="grid gap-6">
               {/* Top Overview Cards */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* 2x2 and icon-free on a phone so the timetable is reached without
+                  scrolling past four tall cards (stakeholder Doc 13). */}
+              <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
                 <Card>
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                    <div className="hidden size-10 place-items-center rounded-lg bg-primary/10 text-primary sm:grid">
                       <CalendarDays className="size-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
@@ -220,8 +223,8 @@ export function StudentScheduleWorkspace() {
                 </Card>
 
                 <Card>
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                    <div className="hidden size-10 place-items-center rounded-lg bg-primary/10 text-primary sm:grid">
                       <BookOpen className="size-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
@@ -236,8 +239,8 @@ export function StudentScheduleWorkspace() {
                 </Card>
 
                 <Card>
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                    <div className="hidden size-10 place-items-center rounded-lg bg-primary/10 text-primary sm:grid">
                       <GraduationCap className="size-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
@@ -251,8 +254,8 @@ export function StudentScheduleWorkspace() {
                 </Card>
 
                 <Card>
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                    <div className="hidden size-10 place-items-center rounded-lg bg-primary/10 text-primary sm:grid">
                       <User className="size-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
@@ -380,7 +383,7 @@ export function StudentScheduleWorkspace() {
                                 className="size-3 text-muted-foreground"
                                 aria-hidden="true"
                               />
-                              {subj.professor_name ?? "To be confirmed"}
+                              {subj.professor_name ?? "Announced after enrollment"}
                             </span>
                           ),
                         },

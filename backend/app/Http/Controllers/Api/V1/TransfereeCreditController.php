@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Academic\CreateTransfereeCredit;
 use App\Actions\Academic\ListTransfereeCredits;
+use App\Actions\Academic\SuggestCreditSubjects;
 use App\Actions\Academic\UpdateTransfereeCredit;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\TransfereeCredit\IndexTransfereeCreditRequest;
 use App\Http\Requests\Api\V1\TransfereeCredit\StoreTransfereeCreditRequest;
 use App\Http\Requests\Api\V1\TransfereeCredit\UpdateTransfereeCreditRequest;
+use App\Http\Resources\Api\V1\CreditSubjectSuggestionResource;
 use App\Http\Resources\Api\V1\TransfereeCreditResource;
 use App\Models\TransfereeCredit;
 use App\Models\User;
@@ -21,8 +23,9 @@ final class TransfereeCreditController extends Controller
 {
     /**
      * Which Policy ability governs a PATCH, resolved from the request's
-     * `action` field — no `action` means a plain content edit. Same shape as
-     * `AcademicGradeController::ABILITY_FOR_ACTION`.
+     * `action` field. Registrar Staff decide (`approve`, `reject`); anything
+     * else — a content edit, `endorse`, `decline` — is the Program Chair's
+     * `update`. Same shape as `AcademicGradeController::ABILITY_FOR_ACTION`.
      *
      * @var array<string, string>
      */
@@ -47,6 +50,9 @@ final class TransfereeCreditController extends Controller
     }
 
     /**
+     * A request that repeats a still-open one returns that row (200) rather
+     * than a duplicate; a new one is 201.
+     *
      * @throws AuthenticationException
      */
     public function store(
@@ -60,7 +66,7 @@ final class TransfereeCreditController extends Controller
         $credit = $creator->execute($request->validated(), $actor, $contextFactory->fromRequest($request));
 
         $response = TransfereeCreditResource::make($credit)->response($request);
-        $response->setStatusCode(201);
+        $response->setStatusCode($credit->wasRecentlyCreated ? 201 : 200);
 
         return $this->cachePrivateResponse($response);
     }
@@ -81,11 +87,35 @@ final class TransfereeCreditController extends Controller
             ? self::ABILITY_FOR_ACTION[$action]
             : 'update';
 
-        $this->authorize($ability, TransfereeCredit::class);
+        $transfereeCredit->loadMissing('student.program');
+        $this->authorize($ability, $ability === 'update' ? $transfereeCredit : TransfereeCredit::class);
 
         $credit = $updater->execute($transfereeCredit, $request->validated(), $actor, $contextFactory->fromRequest($request));
 
         return $this->cachePrivateResponse(TransfereeCreditResource::make($credit)->response($request));
+    }
+
+    /**
+     * Which subjects of the student's curriculum this credit could be mapped
+     * to, best first. Advice for the Program Chair, computed on demand and
+     * never stored.
+     *
+     * @throws AuthenticationException
+     */
+    public function suggestions(
+        Request $request,
+        TransfereeCredit $transfereeCredit,
+        SuggestCreditSubjects $suggester,
+    ): JsonResponse {
+        $this->authenticatedUser($request);
+        $transfereeCredit->loadMissing('student.program');
+        $this->authorize('update', $transfereeCredit);
+
+        $response = CreditSubjectSuggestionResource::collection(
+            $suggester->execute($transfereeCredit),
+        )->response($request);
+
+        return $this->cachePrivateResponse($response);
     }
 
     /**

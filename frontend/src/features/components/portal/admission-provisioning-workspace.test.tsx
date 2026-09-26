@@ -325,7 +325,7 @@ describe("Student Records workspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        "Student number, program, entry year, year level, category, student type, financial status, and admission status are locked because this student already has an enrollment.",
+        "Student number, program, entry year, year level, category, student type, and admission status are locked because this student already has an enrollment.",
       ),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Student number")).not.toBeInTheDocument()

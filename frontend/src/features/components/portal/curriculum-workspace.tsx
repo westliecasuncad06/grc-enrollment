@@ -267,14 +267,19 @@ export function CurriculumWorkspace() {
   const selectedCurriculumId = selectedCurriculum?.id
   const maxUnitsValue = selectedCurriculum?.max_units
 
-  useEffect(() => {
+  // Sync the max-units input to the selected curriculum — adjusted during
+  // render (React's "adjusting state when a prop changes"), not in an effect.
+  const maxUnitsSource = `${selectedCurriculumId ?? ""}|${maxUnitsValue ?? ""}`
+  const [syncedMaxUnitsSource, setSyncedMaxUnitsSource] = useState<
+    string | null
+  >(null)
+  if (syncedMaxUnitsSource !== maxUnitsSource) {
+    setSyncedMaxUnitsSource(maxUnitsSource)
     if (selectedCurriculumId) {
-      setCustomMaxUnits(
-        maxUnitsValue != null ? String(maxUnitsValue) : "",
-      )
+      setCustomMaxUnits(maxUnitsValue != null ? String(maxUnitsValue) : "")
       setMaxUnitsFeedback("")
     }
-  }, [selectedCurriculumId, maxUnitsValue])
+  }
 
   const maxUnitsMutation = useMutation({
     mutationFn: (val: number | null) =>

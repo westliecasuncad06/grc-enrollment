@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Api\V1\Auth;
 
+use App\Domain\Organization\CollegeCode;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 final class FacultyAccountSetupRequest extends FormRequest
 {
@@ -16,8 +18,10 @@ final class FacultyAccountSetupRequest extends FormRequest
     {
         return [
             'email' => ['required', 'email', 'max:255'],
-            'code' => ['required', 'string', 'max:255'],
+            'code' => ['required', 'digits:6'],
             'name' => ['required', 'string', 'max:255'],
+            'college' => ['nullable', Rule::enum(CollegeCode::class)],
+            'masters_degree' => ['nullable', 'string', 'max:255'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ];
     }

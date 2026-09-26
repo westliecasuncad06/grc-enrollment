@@ -4,6 +4,7 @@ namespace App\Http\Resources\Api\V1;
 
 use App\Domain\Enrollment\EnrollmentBlock;
 use App\Models\Section;
+use App\Support\Http\ProfessorDisclosure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -77,7 +78,7 @@ final class EnrollmentBlockResource extends JsonResource
                 'ends_at_time' => $section->ends_at_time,
                 'room' => $section->room,
                 'modality' => $section->modality?->value,
-                'professor_name' => $section->professor?->name,
+                'professor_name' => ProfessorDisclosure::hiddenFrom($request, $section->academic_term_id) ? null : $section->professor?->name,
                 'capacity' => $section->capacity,
                 'enrolled_count' => $section->enrolled_count,
                 'remaining_seats' => $section->remainingSeats(),

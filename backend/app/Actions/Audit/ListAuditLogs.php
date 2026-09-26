@@ -7,6 +7,7 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\Audit\AuditChangeFormatter;
 use App\Support\Audit\AuditRecorder;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -73,6 +74,13 @@ final readonly class ListAuditLogs
             $paginator = $query
                 ->paginate($perPage, ['*'], 'page', $page)
                 ->withQueryString();
+
+            // One lookup for every professor/decider named on this page, so the
+            // change list can say who rather than "User #7".
+            $userNames = AuditChangeFormatter::userNamesFor($paginator->items());
+            foreach ($paginator->items() as $log) {
+                $log->setAttribute('user_names', $userNames);
+            }
 
             $this->auditRecorder->record(
                 $actor,

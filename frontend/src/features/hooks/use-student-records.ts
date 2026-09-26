@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type {
   DecideProfileChangeRequestInput,
   ProfileChangeRequestFilters,
@@ -15,6 +16,7 @@ import {
   cancelProfileChangeRequest,
   createProfileChangeRequest,
   decideProfileChangeRequest,
+  getRegistrarStudentProfile,
   getStudentProfile,
   listProfileChangeRequests,
   listStudentProfiles,
@@ -30,6 +32,10 @@ export const studentDirectoryQueryKey = (
 ) => ["student-directory", userId, filters] as const
 export const ownStudentProfileQueryKey = (userId: string | null) =>
   ["student-profile", userId] as const
+export const registrarStudentProfileQueryKey = (
+  userId: string | null,
+  studentId: number | null,
+) => ["registrar-student-profile", userId, studentId] as const
 export const profileChangeRequestsQueryKey = (
   userId: string | null,
   filters: ProfileChangeRequestFilters,
@@ -40,6 +46,7 @@ export function useStudentDirectoryQuery(filters: StudentProfileFilters) {
   return useQuery({
     queryKey: studentDirectoryQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listStudentProfiles(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: session?.role === "admission_staff",
   })
 }
@@ -53,6 +60,18 @@ export function useOwnStudentProfileQuery() {
   })
 }
 
+export function useRegistrarStudentProfileQuery(studentId: number | null) {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: registrarStudentProfileQueryKey(
+      session?.userId ?? null,
+      studentId,
+    ),
+    queryFn: ({ signal }) => getRegistrarStudentProfile(studentId!, signal),
+    enabled: session?.role === "registrar_head" && studentId !== null,
+  })
+}
+
 export function useProfileChangeRequestsQuery(
   filters: ProfileChangeRequestFilters,
 ) {
@@ -60,6 +79,7 @@ export function useProfileChangeRequestsQuery(
   return useQuery({
     queryKey: profileChangeRequestsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listProfileChangeRequests(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: session?.role === "student" || session?.role === "admission_staff",
   })
 }

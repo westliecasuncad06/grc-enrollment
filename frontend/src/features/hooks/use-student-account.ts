@@ -27,7 +27,8 @@ export function useOwnStudentAccountQuery({
     queryFn: ({ signal }) => getOwnStudentAccount(signal),
     enabled: enabled && session?.role === "student",
     refetchOnWindowFocus: "always",
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -54,10 +55,12 @@ export function useRecordStudentAccountPaymentMutation() {
     mutationFn: ({
       studentId,
       amount,
+      financial_status,
     }: {
       studentId: number
       amount: number
-    }) => recordStudentAccountPayment(studentId, { amount }),
+      financial_status?: "scholar" | "payee" | null
+    }) => recordStudentAccountPayment(studentId, { amount, financial_status }),
     onSuccess: (_account, variables) =>
       Promise.all([
         queryClient.invalidateQueries({

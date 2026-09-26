@@ -1,7 +1,19 @@
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import type {
   CertificateOfRegistration,
   CorSnapshot,
 } from "@/features/schemas/enrollment-document-schema"
+
+/**
+ * Issued snapshots keep the raw "Year N" wording (the COR endpoint re-saves a
+ * row whenever a rebuilt snapshot differs), so the institution-approved
+ * "1st Year" form is applied here when rendering, legacy snapshots included.
+ */
+function ordinalizeYearLevels(sentence: string): string {
+  return sentence.replace(/\bYear (\d+)\b/g, (_match, level: string) =>
+    formatYearLevel(level),
+  )
+}
 
 type RenderableCor = CertificateOfRegistration & { snapshot: CorSnapshot }
 type CorFeeItem = CorSnapshot["fees"]["other_fees"][number]
@@ -106,12 +118,16 @@ function FeeRows({
 /** Official immutable record rendered solely from the payment-time COR snapshot. */
 export function CertificateOfRegistrationDocument({
   cor,
+  watermark,
 }: {
   cor: RenderableCor
+  /** Set for an unofficial preview: shown as a banner above the document. */
+  watermark?: string
 }) {
   const { snapshot } = cor
   const { student, institution, term, fees } = snapshot
   const displayedOtherFees = otherFeesForDisplay(fees.other_fees)
+  const scholarshipDiscount = fees.scholarship_discount ?? []
 
   return (
     <article
@@ -119,6 +135,14 @@ export function CertificateOfRegistrationDocument({
       aria-label={`Certificate of Registration ${cor.document_number}`}
     >
       <section className="cor-document__page">
+        {watermark && (
+          <p
+            role="note"
+            className="mb-2 rounded border border-dashed border-destructive/60 bg-destructive/5 p-2 text-center text-xs font-semibold uppercase tracking-wide text-destructive"
+          >
+            {watermark}
+          </p>
+        )}
         <header className="cor-document__header">
           <p>{institution.name}</p>
           <small>{institution.address}</small>
@@ -129,20 +153,24 @@ export function CertificateOfRegistrationDocument({
           <dl>
             <dt>Student No.</dt>
             <dd>{student.student_number}</dd>
-            <dt>Student</dt>
+            <dt>Name</dt>
             <dd>{student.name}</dd>
-            <dt>Course</dt>
+            <dt>Degree</dt>
             <dd>{student.course}</dd>
+            <dt>Classification</dt>
+            <dd className="font-semibold text-primary">
+              {student.classification ?? "Payee"}
+            </dd>
             <dt>Address</dt>
             <dd>{student.address}</dd>
           </dl>
           <dl>
-            <dt>School Year</dt>
+            <dt>Academic Year</dt>
             <dd>{term.school_year}</dd>
             <dt>Semester</dt>
             <dd>{term.semester}</dd>
-            <dt>Level</dt>
-            <dd>{student.level}</dd>
+            <dt>Year Level</dt>
+            <dd>{formatYearLevel(student.level)}</dd>
             <dt>Platform</dt>
             <dd>{student.platform}</dd>
           </dl>
@@ -181,7 +209,7 @@ export function CertificateOfRegistrationDocument({
 
         <section className="cor-document__admission">
           <h2>ADMISSION FORM</h2>
-          <p>{snapshot.admission_certification}</p>
+          <p>{ordinalizeYearLevels(snapshot.admission_certification)}</p>
         </section>
 
         <section className="cor-document__assessment">
@@ -204,28 +232,45 @@ export function CertificateOfRegistrationDocument({
               </div>
             </div>
           </div>
+          {scholarshipDiscount.length > 0 && (
+            <div
+              className="cor-document__fee-total"
+              aria-label="Scholarship discount"
+            >
+              <FeeRows items={scholarshipDiscount} currency={fees.currency} />
+            </div>
+          )}
           <div className="cor-document__grand-total">
             <span>GRAND TOTAL</span>
             <strong>{money(fees.grand_total, fees.currency)}</strong>
           </div>
           <div className="mt-3 grid gap-2 rounded border bg-muted/20 p-3 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-muted-foreground uppercase tracking-wider">Amount Paid</span>
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider">
+                Amount Paid
+              </span>
               <strong className="text-sm font-semibold text-foreground">
                 {money(fees.amount_paid ?? fees.payment_amount, fees.currency)}
               </strong>
             </div>
-            {fees.remaining_balance !== undefined && fees.remaining_balance !== "0.00" ? (
+            {fees.remaining_balance !== undefined &&
+            fees.remaining_balance !== "0.00" ? (
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-destructive uppercase tracking-wider">Remaining Balance</span>
+                <span className="font-semibold text-destructive uppercase tracking-wider">
+                  Remaining Balance
+                </span>
                 <strong className="text-sm font-bold text-destructive">
                   {money(fees.remaining_balance, fees.currency)}
                 </strong>
               </div>
             ) : (
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-emerald-700 uppercase tracking-wider">Payment Status</span>
-                <strong className="text-xs font-bold text-emerald-700">PAID IN FULL</strong>
+                <span className="font-semibold text-emerald-700 uppercase tracking-wider">
+                  Payment Status
+                </span>
+                <strong className="text-xs font-bold text-emerald-700">
+                  PAID IN FULL
+                </strong>
               </div>
             )}
             {fees.promissory_note_on_file && (

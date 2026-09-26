@@ -3,13 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type {
   AcademicGradeFilters,
+  LockAllAcademicGradesInput,
   UpdateAcademicGradeInput,
 } from "@/features/schemas/academic-grade-schema"
 import {
   createAcademicGrade,
   listAcademicGrades,
+  lockAllAcademicGrades,
   updateAcademicGrade,
 } from "@/features/services/academic-grade-service"
 
@@ -27,6 +30,7 @@ export function useAcademicGradesQuery(
   return useQuery({
     queryKey: academicGradesQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listAcademicGrades(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }
@@ -64,3 +68,14 @@ export function useUpdateAcademicGradeMutation() {
     onSuccess: () => invalidate(),
   })
 }
+
+export function useLockAllAcademicGradesMutation() {
+  const invalidate = useInvalidateAcademicGradeQueries()
+
+  return useMutation({
+    mutationFn: (input?: LockAllAcademicGradesInput) =>
+      lockAllAcademicGrades(input),
+    onSuccess: () => invalidate(),
+  })
+}
+

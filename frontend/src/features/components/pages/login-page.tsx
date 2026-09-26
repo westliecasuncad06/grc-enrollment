@@ -190,6 +190,20 @@ export function LoginPage() {
     }
   }, [hasErrors])
 
+  // On a phone the two panels stack (globals.css, max-width: 45rem): the
+  // institutional panel fills the first screen and the credentials sit a full
+  // screen below it. Bring the form into view as soon as the page is ready
+  // (stakeholder Doc 13). Scroll only, never focus: focusing an input would open
+  // the on-screen keyboard uninvited. Scrolling the panel (not the animated card)
+  // avoids landing mid-tween, and smooth scrolling already honours
+  // prefers-reduced-motion through the stylesheet. Wide screens show both
+  // panels side by side, so nothing scrolls there.
+  useEffect(() => {
+    if (!window.matchMedia("(max-width: 45rem)").matches) return
+
+    formPanelRef.current?.scrollIntoView({ block: "start" })
+  }, [])
+
   return (
     <main className="login-shell">
       <section

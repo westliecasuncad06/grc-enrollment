@@ -23,6 +23,7 @@ final class ShowProspectusRequest extends FormRequest
     {
         return [
             'student_id' => ['sometimes', 'integer', 'exists:student_profiles,id'],
+            'student_number' => ['sometimes', 'string', 'max:255'],
         ];
     }
 }

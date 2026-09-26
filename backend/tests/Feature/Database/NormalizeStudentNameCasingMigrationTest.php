@@ -4,15 +4,17 @@ namespace Tests\Feature\Database;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\RollsBackThroughMigration;
 use Tests\TestCase;
 
 final class NormalizeStudentNameCasingMigrationTest extends TestCase
 {
     use RefreshDatabase;
+    use RollsBackThroughMigration;
 
     public function test_the_migration_normalizes_casing_for_existing_student_rows_only(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 2])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_27_000003_normalize_student_name_casing');
 
         $student = DB::table('users')->insertGetId([
             'name' => 'JUAN M. DELA CRUZ III',

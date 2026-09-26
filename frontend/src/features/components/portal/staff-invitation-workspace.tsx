@@ -41,7 +41,7 @@ import {
 
 const ROLE_OPTIONS: { value: StaffInvitableRole; label: string }[] = [
   { value: "faculty", label: "Professor / Faculty" },
-  { value: "program_chair", label: "Program Chair" },
+  { value: "program_chair", label: "Program Head" },
   { value: "dean", label: "Dean" },
   { value: "executive_director", label: "Executive Director" },
   { value: "registrar_head", label: "Registrar Head" },

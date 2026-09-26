@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?CarbonImmutable $served_at
  * @property ?int $served_by
  * @property ?CarbonImmutable $requeued_at
+ * @property int $announce_count
  * @property ?CarbonImmutable $created_at
  * @property ?CarbonImmutable $updated_at
  * @property-read Enrollment $enrollment
@@ -28,6 +29,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class QueueTicket extends Model
 {
+    /** Set by `preloadPositions()`; while set, `position()` answers from it without querying. */
+    private ?int $preloadedPosition = null;
+
+    private bool $hasPreloadedPosition = false;
+
     /** @var list<string> */
     protected $fillable = [
         'enrollment_id',
@@ -40,6 +46,7 @@ final class QueueTicket extends Model
         'served_at',
         'served_by',
         'requeued_at',
+        'announce_count',
     ];
 
     /**
@@ -53,6 +60,7 @@ final class QueueTicket extends Model
             'queue_date' => 'immutable_date',
             'served_at' => 'immutable_datetime',
             'requeued_at' => 'immutable_datetime',
+            'announce_count' => 'integer',
         ];
     }
 
@@ -124,6 +132,10 @@ final class QueueTicket extends Model
             return null;
         }
 
+        if ($this->hasPreloadedPosition) {
+            return $this->preloadedPosition;
+        }
+
         $waitingInCycle = self::query()
             ->where('queue_cycle_id', $this->queue_cycle_id)
             ->where('status', QueueTicketStatus::Waiting);
@@ -170,5 +182,80 @@ final class QueueTicket extends Model
         $regularAhead = $regularQuery->count();
 
         return $priorityAhead + $regularAhead;
+    }
+
+    /**
+     * Computes `position()` for a whole page of tickets from ONE query, so a
+     * list endpoint no longer pays one to three COUNT queries per waiting
+     * ticket on every poll (ADR 0029). Within a cycle a ticket's position is
+     * simply its index in the waiting line, ordered exactly as `position()` and
+     * `ListQueueTickets` order it: priority tier first, then `queue_date`, then
+     * `COALESCE(requeued_at, created_at)`, then never-requeued before requeued,
+     * then `id`. Tickets that are not waiting are skipped (their position is
+     * `null` anyway). The answer lives only on these instances, for the request
+     * at hand; `refresh()` drops it.
+     *
+     * @param  iterable<self>  $tickets
+     */
+    public static function preloadPositions(iterable $tickets): void
+    {
+        $waiting = [];
+        foreach ($tickets as $ticket) {
+            if ($ticket->status === QueueTicketStatus::Waiting) {
+                $waiting[] = $ticket;
+            }
+        }
+
+        if ($waiting === []) {
+            return;
+        }
+
+        $cycleIds = array_values(array_unique(array_map(
+            static fn (self $ticket): int => $ticket->queue_cycle_id,
+            $waiting,
+        )));
+
+        $positionById = [];
+        $rows = self::query()
+            ->whereIn('queue_cycle_id', $cycleIds)
+            ->where('status', QueueTicketStatus::Waiting)
+            ->get(['id', 'queue_cycle_id', 'priority', 'queue_date', 'requeued_at', 'created_at']);
+
+        foreach ($rows->groupBy('queue_cycle_id') as $cycleRows) {
+            $sorted = $cycleRows
+                ->sort(static fn (self $a, self $b): int => $a->lineOrderKey() <=> $b->lineOrderKey())
+                ->values();
+
+            foreach ($sorted as $index => $row) {
+                $positionById[$row->id] = $index;
+            }
+        }
+
+        foreach ($waiting as $ticket) {
+            if (isset($positionById[$ticket->id])) {
+                $ticket->preloadedPosition = $positionById[$ticket->id];
+                $ticket->hasPreloadedPosition = true;
+            }
+        }
+    }
+
+    /** @return array{0: int, 1: string, 2: string, 3: int, 4: int} */
+    private function lineOrderKey(): array
+    {
+        return [
+            $this->priority === QueueTicketPriority::Priority ? 0 : 1,
+            $this->queue_date->toDateString(),
+            $this->effectiveOrder()->format('Y-m-d H:i:s'),
+            $this->requeued_at !== null ? 1 : 0,
+            $this->id,
+        ];
+    }
+
+    public function refresh(): static
+    {
+        $this->hasPreloadedPosition = false;
+        $this->preloadedPosition = null;
+
+        return parent::refresh();
     }
 }

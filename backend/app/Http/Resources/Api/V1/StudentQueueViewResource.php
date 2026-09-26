@@ -16,7 +16,7 @@ final class StudentQueueViewResource extends JsonResource
      *     type: string,
      *     stage: string,
      *     can_claim: bool,
-     *     ticket: ?array{ticket_number: string, status: string, status_label: string, priority: string, priority_label: string, position: ?int},
+     *     ticket: ?array{ticket_number: string, status: string, status_label: string, priority: string, priority_label: string, position: ?int, announce_count: int},
      *     now_serving_ticket_number: ?string,
      *     upcoming_ticket_numbers: list<string>,
      *     cut_off_today: bool
@@ -37,6 +37,7 @@ final class StudentQueueViewResource extends JsonResource
                 'priority' => $ticket->priority->value,
                 'priority_label' => $ticket->priority->label(),
                 'position' => $ticket->position(),
+                'announce_count' => $ticket->announce_count,
             ],
             'now_serving_ticket_number' => $this->resource->nowServingTicketNumber,
             'upcoming_ticket_numbers' => $this->resource->upcomingTicketNumbers,

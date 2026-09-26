@@ -43,29 +43,53 @@ final class EnrollmentPolicy
 
     /**
      * Covers `registrar_approve` and `registrar_reject` — worked by Registrar Staff
-     * and Program Chair (for irregular student schedule checking). Approval issues
-     * the assessment and transitions to pending payment.
+     * and the Registrar Head for EVERY enrollment (ADR 0030). Approval issues the
+     * assessment and transitions to pending payment.
      */
     public function decideApproval(User $user): bool
     {
         return in_array($user->role, [
             UserRole::RegistrarStaff,
-            UserRole::ProgramChair,
+            UserRole::RegistrarHead,
         ], true);
     }
 
     /**
-     * Covers `void` — a distinct, later checkpoint: cancelling an enrollment
-     * that has already been approved (and issued a queue ticket) but not yet
-     * paid. This stays with the Registrar Head as the "authorized edge case"
-     * override PRD §3.7 describes, deliberately separate from the Registrar
-     * Staff's ordinary approval-queue decision. Scoping void to
-     * `pending_payment` keeps it non-overlapping with both `registrar_reject`
-     * (pre-approval) and the Phase 7b withdrawal flow (post-enrollment).
+     * Covers `program_head_approve` and `program_head_reject` — the first step of
+     * an irregular or overload enrollment. Record-level: only the Program Head of
+     * the student's own college, so a Program Head can never decide another
+     * college's student.
+     */
+    public function decideProgramHeadApproval(User $user, Enrollment $enrollment): bool
+    {
+        if ($user->role !== UserRole::ProgramChair || $user->college === null) {
+            return false;
+        }
+
+        return $enrollment->student->program->college?->value === $user->college->value;
+    }
+
+    /**
+     * Covers `void`: cancelling an enrollment at the Registrar's end, at any
+     * point before payment, usually because the student asked. Registrar Staff
+     * and the Registrar Head may both do it (stakeholder Doc 14, ADR 0030); once
+     * an enrollment is paid it is a withdrawal, not a void.
      */
     public function void(User $user): bool
     {
-        return $user->role === UserRole::RegistrarHead;
+        return in_array($user->role, [UserRole::RegistrarHead, UserRole::RegistrarStaff], true);
+    }
+
+    /**
+     * Covers `student_cancel`: the owning Student undoing their own submission
+     * until the Registrar approves it (for a wrong section choice). The status
+     * window itself is enforced by `UpdateEnrollmentRequest` and
+     * `TransitionEnrollment`.
+     */
+    public function cancel(User $user, Enrollment $enrollment): bool
+    {
+        return $user->role === UserRole::Student
+            && $enrollment->student->user_id === $user->id;
     }
 
     /**
@@ -77,6 +101,15 @@ final class EnrollmentPolicy
     public function confirmPayment(User $user): bool
     {
         return $user->role === UserRole::AccountingStaff;
+    }
+
+    public function viewCorPreview(User $user): bool
+    {
+        return in_array($user->role, [
+            UserRole::AccountingStaff,
+            UserRole::RegistrarHead,
+            UserRole::RegistrarStaff,
+        ], true);
     }
 
     /**

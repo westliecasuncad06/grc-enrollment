@@ -6,6 +6,7 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Billing\AssessmentItemCategory;
+use App\Domain\Billing\ScholarshipTier;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Models\Assessment;
 use App\Models\AssessmentItem;
@@ -59,9 +60,14 @@ final readonly class AdjustEnrollmentAssessment
 
             /** @var Collection<int, AssessmentItem> $items */
             $items = $assessment->items()->lockForUpdate()->get()->keyBy('id');
+            // A scholarship line (ADR 0025) is derived, never edited by hand: it
+            // is left out of the lines the Cashier submits and recomputed from
+            // the adjusted base below.
+            $discountItem = $items->first(fn (AssessmentItem $item): bool => $item->category === AssessmentItemCategory::ScholarshipDiscount);
+            $adjustable = $items->reject(fn (AssessmentItem $item): bool => $item->category === AssessmentItemCategory::ScholarshipDiscount);
             $submitted = collect($validated['items'])->keyBy('id');
 
-            if ($items->count() !== $submitted->count() || $items->keys()->sort()->values()->all() !== $submitted->keys()->sort()->values()->all()) {
+            if ($adjustable->count() !== $submitted->count() || $adjustable->keys()->sort()->values()->all() !== $submitted->keys()->sort()->values()->all()) {
                 throw ValidationException::withMessages([
                     'items' => 'Submit every fee line in this assessment exactly once.',
                 ]);
@@ -70,7 +76,7 @@ final readonly class AdjustEnrollmentAssessment
             $before = $this->auditValues($assessment, $items);
             $total = '0.00';
 
-            foreach ($items as $item) {
+            foreach ($adjustable as $item) {
                 /** @var array{id: int, amount?: ?string, unit_amount?: ?string} $input */
                 $input = $submitted->get($item->id);
 
@@ -97,6 +103,20 @@ final readonly class AdjustEnrollmentAssessment
                 }
 
                 $total = bcadd($total, $amount, 2);
+            }
+
+            if ($discountItem instanceof AssessmentItem) {
+                $tier = ScholarshipTier::fromStoredQuantity($discountItem->quantity);
+
+                if ($tier === null) {
+                    throw ValidationException::withMessages([
+                        'items' => 'The scholarship on this assessment is not recognised. Remove it and apply it again.',
+                    ]);
+                }
+
+                $discount = $tier->discountFor($total);
+                $discountItem->update(['amount' => bcmul($discount, '-1', 2)]);
+                $total = bcsub($total, $discount, 2);
             }
 
             $assessment->update(['total_amount' => $total]);

@@ -8,12 +8,14 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentStatus;
+use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\AcademicTermStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
@@ -24,6 +26,7 @@ use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
+use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Program;
 use App\Models\Section;
@@ -238,7 +241,9 @@ final class EnrollmentsEndpointTest extends TestCase
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
-        $response->assertJsonPath('data.status', 'pending_registrar_approval');
+        // An unclassified student picking subjects one by one is checked by the
+        // Program Head first (ADR 0030), then by the Registrar.
+        $response->assertJsonPath('data.status', 'pending_program_head_approval');
         $response->assertJsonPath('data.total_units', 3);
         $response->assertJsonCount(1, 'data.subjects');
         $response->assertJsonPath('data.subjects.0.subject_code', 'CS101');
@@ -283,9 +288,10 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertSame(
             [
                 'type', 'id', 'student_id', 'student_number', 'student_name', 'student_year_level',
-                'student_financial_status', 'student_financial_status_label', 'academic_term_id',
+                'student_financial_status', 'student_financial_status_label',
+                'student_enrollment_category', 'is_irregular', 'is_late_enrollee', 'academic_term_id',
                 'status', 'status_label', 'total_units', 'requires_overload_approval',
-                'submitted_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
+                'submitted_at', 'program_head_decided_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
                 'subjects', 'queue_ticket', 'assessment',
             ],
             array_keys($response->json('data')),
@@ -326,7 +332,7 @@ final class EnrollmentsEndpointTest extends TestCase
         }
     }
 
-    public function test_a_regular_student_submitting_a_prescribed_block_with_heavy_units_succeeds_and_auto_approves(): void
+    public function test_a_regular_student_submitting_a_prescribed_block_with_heavy_units_goes_to_the_registrar(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum('BSA');
@@ -344,9 +350,14 @@ final class EnrollmentsEndpointTest extends TestCase
         ]);
 
         $response->assertCreated();
-        $response->assertJsonPath('data.status', 'pending_payment');
+        // Registrar approval is back for regular students (ADR 0030): no
+        // auto-approval, no assessment and no queue ticket until she approves.
+        $response->assertJsonPath('data.status', 'pending_registrar_approval');
         $response->assertJsonPath('data.total_units', 30.5);
         $response->assertJsonPath('data.requires_overload_approval', false);
+        $response->assertJsonPath('data.assessment', null);
+        $response->assertJsonPath('data.queue_ticket', null);
+        $this->assertDatabaseCount('assessments', 0);
     }
 
     public function test_a_server_resolved_block_submission_is_not_rejected_for_a_schedule_conflict_between_its_own_subjects(): void
@@ -911,7 +922,7 @@ final class EnrollmentsEndpointTest extends TestCase
 
         $response->assertOk()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonCount(1, 'data');
-        $response->assertJsonPath('data.0.status', 'pending_registrar_approval');
+        $response->assertJsonPath('data.0.status', 'pending_program_head_approval');
     }
 
     public function test_a_second_students_enrollment_is_not_visible_to_the_first_student(): void
@@ -1129,7 +1140,7 @@ final class EnrollmentsEndpointTest extends TestCase
             ]);
     }
 
-    public function test_a_registrar_head_role_cannot_perform_registrar_approve(): void
+    public function test_a_registrar_head_can_approve_an_enrollment(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -1140,9 +1151,25 @@ final class EnrollmentsEndpointTest extends TestCase
         $response = $this->withToken($registrarToken)
             ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
 
-        $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
-        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+        $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
+        self::assertNotNull($enrollment->refresh()->registrar_decided_at);
+        $this->assertDatabaseCount('assessments', 1);
         $this->assertDatabaseCount('queue_tickets', 0);
+    }
+
+    public function test_a_program_chair_cannot_perform_the_registrar_approval(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $chairToken = $this->tokenForNewStaff(UserRole::ProgramChair, 'chair.noregistrar@grc.test');
+
+        $this->withToken($chairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve'])
+            ->assertForbidden();
+
+        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
         $this->assertDatabaseCount('assessments', 0);
     }
 
@@ -1190,22 +1217,187 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertSame(AuditAction::ENROLLMENT_VOIDED, AuditLog::query()->sole()->action);
     }
 
-    public function test_void_cannot_be_performed_from_pending_registrar_approval(): void
+    public function test_void_cannot_be_performed_on_an_enrolled_enrollment(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
-        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::Enrolled);
         $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.voidwrongstate@grc.test');
 
         $response = $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
             'action' => 'void',
-            'reason' => 'Attempted too early.',
+            'reason' => 'A paid enrollment is a withdrawal, not a void.',
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+        self::assertSame('enrolled', $enrollment->refresh()->status->value);
         $this->assertDatabaseCount('audit_logs', 0);
+    }
+
+    /**
+     * Submits one real section as the student (so a seat is genuinely taken)
+     * and returns [student token, enrollment id, section].
+     *
+     * @return array{0: string, 1: int, 2: Section}
+     */
+    private function submitOneSection(string $email = 'student.enroll@grc.test'): array
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101', 3.0);
+        $this->placeSubject($curriculum, $subject);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $id = (int) $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [['section_id' => $section->id]],
+        ])->assertCreated()->json('data.id');
+        self::assertSame(1, $section->refresh()->enrolled_count);
+
+        return [$token, $id, $section];
+    }
+
+    public function test_a_student_can_cancel_a_submitted_enrollment_and_the_seat_is_released_once(): void
+    {
+        [$token, $enrollmentId, $section] = $this->submitOneSection();
+
+        $response = $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollmentId}", [
+            'action' => 'student_cancel',
+            'reason' => 'Picked the wrong section.',
+        ]);
+
+        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+        self::assertSame(0, $section->refresh()->enrolled_count);
+        $this->assertDatabaseHas('enrollment_subjects', ['enrollment_id' => $enrollmentId, 'status' => 'dropped']);
+        $audit = AuditLog::query()->where('action', AuditAction::ENROLLMENT_CANCELLED_BY_STUDENT)->sole();
+        self::assertSame('Picked the wrong section.', $audit->reason);
+        self::assertSame([$section->id], $audit->after_values['released_section_ids']);
+
+        // A repeat is refused and cannot release the seat a second time.
+        $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollmentId}", [
+            'action' => 'student_cancel',
+            'reason' => 'Again.',
+        ])->assertUnprocessable();
+        self::assertSame(0, $section->refresh()->enrolled_count);
+    }
+
+    public function test_a_student_can_enroll_again_after_cancelling(): void
+    {
+        [$token, $enrollmentId, $section] = $this->submitOneSection();
+
+        $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollmentId}", [
+            'action' => 'student_cancel',
+            'reason' => 'Wrong section.',
+        ])->assertOk();
+
+        $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $section->academic_term_id,
+            'sections' => [['section_id' => $section->id]],
+        ])->assertCreated();
+        self::assertSame(1, $section->refresh()->enrolled_count);
+    }
+
+    public function test_a_student_cancellation_needs_a_reason(): void
+    {
+        [$token, $enrollmentId, $section] = $this->submitOneSection();
+
+        $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollmentId}", ['action' => 'student_cancel'])
+            ->assertUnprocessable();
+
+        self::assertSame(1, $section->refresh()->enrolled_count);
+    }
+
+    public function test_a_student_cannot_cancel_once_the_registrar_has_approved(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingPayment);
+        $token = $this->tokenFor($student);
+
+        $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'student_cancel',
+            'reason' => 'Too late.',
+        ])->assertUnprocessable();
+
+        self::assertSame('pending_payment', $enrollment->refresh()->status->value);
+    }
+
+    public function test_a_student_cannot_cancel_someone_elses_enrollment(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $other = $this->makeStudentWithEmail($curriculum, 'other.cancel@grc.test', '2026-0009');
+        $enrollment = $this->makeEnrollment($other, $term, EnrollmentStatus::PendingRegistrarApproval);
+        $token = $this->tokenFor($student);
+
+        $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'student_cancel',
+            'reason' => 'Not mine.',
+        ])->assertForbidden();
+
+        self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
+    }
+
+    /**
+     * An enrollment that already holds one seat, built with Eloquent so a
+     * test can then act as a different user (chaining `withToken()` for two
+     * users in one test silently keeps the first).
+     *
+     * @return array{0: Enrollment, 1: Section}
+     */
+    private function enrollmentHoldingASeat(EnrollmentStatus $status): array
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $subject = $this->makeSubject('CS101', 3.0);
+        $section = $this->makeSection($term, $subject);
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, $status);
+        EnrollmentSubject::create([
+            'enrollment_id' => $enrollment->id,
+            'section_id' => $section->id,
+            'status' => EnrollmentSubjectStatus::Selected,
+        ]);
+        $section->increment('enrolled_count');
+
+        return [$enrollment, $section];
+    }
+
+    public function test_registrar_staff_can_void_a_pending_enrollment_at_the_students_request_and_the_seat_is_released(): void
+    {
+        [$enrollment, $section] = $this->enrollmentHoldingASeat(EnrollmentStatus::PendingRegistrarApproval);
+        $enrollmentId = $enrollment->id;
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.void@grc.test');
+
+        $response = $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollmentId}", [
+            'action' => 'void',
+            'reason' => 'Student asked to change section.',
+            'requested_by_student' => true,
+        ]);
+
+        $response->assertOk()->assertJsonPath('data.status', 'cancelled');
+        self::assertSame(0, $section->refresh()->enrolled_count);
+        $audit = AuditLog::query()->where('action', AuditAction::ENROLLMENT_VOIDED)->sole();
+        self::assertTrue($audit->after_values['requested_by_student']);
+    }
+
+    public function test_a_registrar_rejection_gives_the_seat_back(): void
+    {
+        [$enrollment, $section] = $this->enrollmentHoldingASeat(EnrollmentStatus::PendingRegistrarApproval);
+        $enrollmentId = $enrollment->id;
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.reject.seat@grc.test');
+
+        $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollmentId}", [
+            'action' => 'registrar_reject',
+            'reason' => 'Incomplete requirements.',
+        ])->assertOk()->assertJsonPath('data.status', 'rejected');
+
+        self::assertSame(0, $section->refresh()->enrolled_count);
     }
 
     public function test_a_non_registrar_staff_role_cannot_perform_registrar_approve(): void
@@ -1241,19 +1433,130 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertSame('pending_payment', $enrollment->refresh()->status->value);
     }
 
-    public function test_a_program_chair_can_approve_an_irregular_enrollment(): void
+    private function tokenForProgramHead(string $email, ?CollegeCode $college): string
+    {
+        User::create([
+            'name' => 'Program Head', 'email' => $email, 'college' => $college,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+        ]);
+
+        return (string) $this->postJson('/api/v1/auth/login', [
+            'email' => $email, 'password' => self::PASSWORD,
+        ])->json('data.token');
+    }
+
+    public function test_a_program_head_approves_an_irregular_enrollment_forward_to_the_registrar(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $curriculum->program->update(['college' => CollegeCode::Ccs]);
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingProgramHeadApproval);
+        $chairToken = $this->tokenForProgramHead('head.forward@grc.test', CollegeCode::Ccs);
+
+        $response = $this->withToken($chairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'program_head_approve']);
+
+        $response->assertOk()->assertJsonPath('data.status', 'pending_registrar_approval');
+        $enrollment->refresh();
+        self::assertNotNull($enrollment->program_head_decided_at);
+        self::assertNull($enrollment->registrar_decided_at);
+        // Still no assessment: only the Registrar's approval creates one.
+        $this->assertDatabaseCount('assessments', 0);
+        self::assertSame(
+            1,
+            AuditLog::query()->where('action', AuditAction::ENROLLMENT_PROGRAM_HEAD_APPROVED)->count(),
+        );
+    }
+
+    public function test_a_program_head_rejection_needs_a_reason_and_ends_the_enrollment(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $curriculum->program->update(['college' => CollegeCode::Ccs]);
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingProgramHeadApproval);
+        $chairToken = $this->tokenForProgramHead('head.reject@grc.test', CollegeCode::Ccs);
+
+        $this->withToken($chairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'program_head_reject'])
+            ->assertUnprocessable();
+
+        $this->withToken($chairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'program_head_reject', 'reason' => 'Schedule clash'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'rejected');
+    }
+
+    public function test_a_program_head_cannot_decide_another_colleges_student(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $curriculum->program->update(['college' => CollegeCode::Ccs]);
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingProgramHeadApproval);
+        $otherChairToken = $this->tokenForProgramHead('head.other@grc.test', CollegeCode::Coe);
+
+        $this->withToken($otherChairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'program_head_approve'])
+            ->assertForbidden();
+
+        self::assertSame('pending_program_head_approval', $enrollment->refresh()->status->value);
+    }
+
+    public function test_a_program_head_without_an_assigned_college_cannot_decide(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
-        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingRegistrarApproval);
-        $chairToken = $this->tokenForNewStaff(UserRole::ProgramChair, 'chair.approve@grc.test');
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingProgramHeadApproval);
+        $chairToken = $this->tokenForProgramHead('head.nocollege@grc.test', null);
 
-        $response = $this->withToken($chairToken)
-            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve']);
+        $this->withToken($chairToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'program_head_approve'])
+            ->assertForbidden();
+    }
 
-        $response->assertOk()->assertJsonPath('data.status', 'pending_payment');
-        self::assertNotNull($enrollment->refresh()->registrar_decided_at);
-        $this->assertDatabaseCount('assessments', 1);
+    public function test_the_registrar_cannot_skip_the_program_head_stage(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingProgramHeadApproval);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.skip@grc.test');
+
+        $this->withToken($registrarToken)
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'registrar_approve'])
+            ->assertUnprocessable();
+
+        self::assertSame('pending_program_head_approval', $enrollment->refresh()->status->value);
+        $this->assertDatabaseCount('assessments', 0);
+    }
+
+    public function test_authorized_roles_can_preview_cor_without_persisting_document(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingPayment);
+
+        $acctToken = $this->tokenForNewStaff(UserRole::AccountingStaff, 'acct.cor@grc.test');
+        $studentToken = $this->tokenFor($student);
+
+        $response = $this->withToken($acctToken)
+            ->getJson("/api/v1/enrollments/{$enrollment->id}/cor-preview");
+
+        $response->assertOk();
+        $response->assertJsonPath('data.watermark', 'Preview — official COR is issued after payment confirmation');
+        $response->assertJsonStructure(['data' => ['snapshot', 'watermark']]);
+
+        $this->assertDatabaseCount('enrollment_documents', 0);
+
+        // One Sanctum actor per request chain: switch to the Student.
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+        $this->withToken($studentToken)
+            ->getJson("/api/v1/enrollments/{$enrollment->id}/cor-preview")
+            ->assertForbidden();
     }
 }

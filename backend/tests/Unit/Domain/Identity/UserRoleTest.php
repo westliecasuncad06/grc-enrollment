@@ -45,7 +45,7 @@ final class UserRoleTest extends TestCase
 
     public function test_role_labels_are_stable_and_human_readable(): void
     {
-        self::assertSame('Program Chair', UserRole::ProgramChair->label());
+        self::assertSame('Program Head', UserRole::ProgramChair->label());
         self::assertSame('Accounting Staff', UserRole::AccountingStaff->label());
     }
 

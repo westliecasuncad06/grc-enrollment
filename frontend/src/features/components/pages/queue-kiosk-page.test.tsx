@@ -79,7 +79,7 @@ function renderPage() {
   })
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <QueueKioskPage />
+      <QueueKioskPage requirePassword={false} />
     </QueryClientProvider>,
   )
   return { ...result, queryClient }
@@ -105,7 +105,10 @@ describe("QueueKioskPage", () => {
     vi.stubGlobal("fetch", fetchMock)
   })
 
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    fetchMock.mockReset()
+  })
 
   it("moves from the restore status to the device sign-in form", async () => {
     let resolveRestore: ((response: Response) => void) | undefined
@@ -141,6 +144,38 @@ describe("QueueKioskPage", () => {
     expect(await axe(container)).toHaveNoViolations()
   })
 
+  it("asks for the device password before signing the device out (default)", async () => {
+    fetchMock.mockResolvedValueOnce(auth("kiosk-token", kioskUser))
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <QueueKioskPage />
+      </QueryClientProvider>,
+    )
+    await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
+    await user.type(screen.getByLabelText("Device email"), "kiosk@grc.test")
+    await user.type(screen.getByLabelText("Device password"), "secret")
+    await user.click(
+      screen.getByRole("button", { name: "Open Student sign-in" }),
+    )
+    await screen.findByRole("heading", { name: "Student sign-in" })
+
+    await user.click(screen.getByRole("button", { name: "Sign out device" }))
+
+    expect(
+      await screen.findByRole("heading", { name: "Confirm Device Sign Out" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Password")).toBeInTheDocument()
+    // The page behind the dialog is still the signed-in kiosk (hidden from the
+    // accessibility tree while the modal is open) until the password is confirmed.
+    expect(
+      screen.getByRole("heading", { name: "Student sign-in", hidden: true }),
+    ).toBeInTheDocument()
+  })
+
   it("persists a device session, then uses the in-memory Student token to request queue status", async () => {
     fetchMock
       .mockResolvedValueOnce(auth("kiosk-token", kioskUser))
@@ -153,7 +188,7 @@ describe("QueueKioskPage", () => {
     await signInDeviceAndStudent(user)
 
     await screen.findByText(
-      "Registrar approval is required before a queue number can be issued.",
+      "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
     )
     expect(localStorage.getItem(kioskTokenStorageKey)).toBe("kiosk-token")
     expect(localStorage.getItem("grc.auth-token.v1")).toBeNull()
@@ -169,7 +204,7 @@ describe("QueueKioskPage", () => {
     ],
     [
       "pending_registrar_approval",
-      "Registrar approval is required before a queue number can be issued.",
+      "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
     ],
     ["enrolled", "Payment has been confirmed and your enrollment is complete."],
   ] as const)(
@@ -508,7 +543,7 @@ describe("QueueKioskPage", () => {
     await user.click(retry)
     expect(
       await screen.findByText(
-        "Registrar approval is required before a queue number can be issued.",
+        "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
       ),
     ).toBeInTheDocument()
   })
@@ -582,7 +617,7 @@ describe("QueueKioskPage", () => {
     await user.keyboard("{Enter}")
     expect(
       await screen.findByText(
-        "Registrar approval is required before a queue number can be issued.",
+        "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
       ),
     ).toBeInTheDocument()
   })
@@ -761,7 +796,7 @@ describe("QueueKioskPage", () => {
     await user.click(screen.getByRole("button", { name: "View queue" }))
     expect(
       await screen.findByText(
-        "Registrar approval is required before a queue number can be issued.",
+        "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
       ),
     ).toBeInTheDocument()
     resolveClaim?.(
@@ -795,7 +830,7 @@ describe("QueueKioskPage", () => {
     await screen.findByRole("heading", { name: "Queue Kiosk sign-in" })
     await signInDeviceAndStudent(user)
     await screen.findByText(
-      "Registrar approval is required before a queue number can be issued.",
+      "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk.",
     )
     let settleCancel: (() => void) | undefined
     const cancel = vi.spyOn(queryClient, "cancelQueries").mockImplementation(

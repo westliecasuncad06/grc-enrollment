@@ -245,7 +245,7 @@ describe("DemandForecastDialog", () => {
     expect(within(rationale).getByText(/IT201/)).toBeInTheDocument()
     expect(
       within(rationale).getByText(
-        "Manually planned by the Program Chair — no demand forecast was available for this subject.",
+        "Manually planned by the Program Head — no demand forecast was available for this subject.",
       ),
     ).toBeInTheDocument()
 

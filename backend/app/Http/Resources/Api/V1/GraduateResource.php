@@ -43,4 +43,3 @@ final class GraduateResource extends JsonResource
         ];
     }
 }
-

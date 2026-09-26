@@ -285,7 +285,7 @@ describe("PortalNotificationSheet", () => {
 
     message = "New Dean review request"
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(30_000)
     })
 
     expect(
@@ -579,4 +579,179 @@ describe("PortalNotificationSheet", () => {
       }),
     ).toBeInTheDocument()
   })
+
+  it("drops the unread badge as soon as a notification is clicked, without waiting for the server", async () => {
+    const user = userEvent.setup()
+    // The PATCH is held open so the badge can only have changed optimistically.
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return new Promise<Response>(() => undefined)
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ...notificationEnvelope,
+            data: [
+              {
+                ...notificationEnvelope.data[0],
+                notification_type: "schedule_returned",
+                message: "CCS's schedule was returned.",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+
+    renderWithSession(<PortalNotificationSheet />, {
+      session: { ...testSession, role: "program_chair" },
+    })
+    expect(
+      await screen.findByRole("button", { name: "Notifications, 21 unread" }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /notifications/i }))
+    await user.click(
+      await screen.findByRole("button", {
+        name: /CCS's schedule was returned/,
+      }),
+    )
+
+    expect(
+      await screen.findByRole("button", { name: "Notifications, 20 unread" }),
+    ).toBeInTheDocument()
+  })
+
+  it("marks a notification with no destination for the role read when its card is clicked", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...notificationEnvelope.data[0],
+                read_at: "2026-07-29T10:03:00Z",
+              },
+            }),
+            { status: 200 },
+          ),
+        )
+
+      return Promise.resolve(
+        new Response(JSON.stringify(notificationEnvelope), { status: 200 }),
+      )
+    })
+
+    // `schedule_published` has no destination for a student.
+    renderWithSession(<PortalNotificationSheet />, {
+      session: { ...testSession, role: "student" },
+    })
+    await user.click(screen.getByRole("button", { name: /notifications/i }))
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Schedule published for your review/,
+      }),
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/notifications/7/read"),
+      expect.objectContaining({ method: "PATCH" }),
+    )
+    expect(routerMock.push).not.toHaveBeenCalled()
+  })
+
+  it("opens Irregular Advising when a Program Chair clicks an irregular student's submission alert", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...notificationEnvelope.data[0],
+                read_at: "2026-07-29T10:03:00Z",
+              },
+            }),
+            { status: 200 },
+          ),
+        )
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ...notificationEnvelope,
+            data: [
+              {
+                ...notificationEnvelope.data[0],
+                notification_type: "enrollment_submitted",
+                message:
+                  "Irregular student 2026-06-01722 submitted an enrollment for 2027-2028 1st and is awaiting Program Head schedule checking.",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+
+    renderWithSession(<PortalNotificationSheet />, {
+      session: { ...testSession, role: "program_chair" },
+    })
+    await user.click(screen.getByRole("button", { name: /notifications/i }))
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Irregular student 2026-06-01722 submitted an enrollment/,
+      }),
+    )
+
+    expect(routerMock.push).toHaveBeenCalledWith(
+      "/portal/irregular-enrollments",
+    )
+  })
+
+  it.each([
+    ["program_chair", "transferee_credit_requested", "Student 2026-0002 asked for a credit mapping: Intro to Computing from TIP.", "/portal/credit-mappings"],
+    ["registrar_staff", "transferee_credit_endorsed", "A transferee credit for student 2026-0002 (Intro to Computing) was endorsed by the Program Head and awaits your approval.", "/portal/credit-mappings"],
+    ["student", "transferee_credit_approved", "Your transferee credit has been approved.", "/portal/grades"],
+  ] as const)(
+    "sends a %s who opens a %s notification to the module that handles it",
+    async (role, notificationType, message, destination) => {
+      const user = userEvent.setup()
+      fetchMock.mockImplementation((_input, init) => {
+        if (init?.method === "PATCH")
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: { ...notificationEnvelope.data[0], read_at: "2026-07-29T10:03:00Z" },
+              }),
+              { status: 200 },
+            ),
+          )
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ...notificationEnvelope,
+              data: [
+                { ...notificationEnvelope.data[0], notification_type: notificationType, message },
+              ],
+            }),
+            { status: 200 },
+          ),
+        )
+      })
+
+      renderWithSession(<PortalNotificationSheet />, {
+        session: { ...testSession, role },
+      })
+      await user.click(screen.getByRole("button", { name: /notifications/i }))
+      await user.click(
+        await screen.findByRole("button", { name: new RegExp(message.slice(0, 30)) }),
+      )
+
+      expect(routerMock.push).toHaveBeenCalledWith(destination)
+    },
+  )
 })

@@ -1,6 +1,7 @@
 import {
   confirmPaymentInputSchema,
   adjustEnrollmentAssessmentInputSchema,
+  scholarshipDiscountInputSchema,
   eligibleSubjectsEnvelopeSchema,
   enrollmentEnvelopeSchema,
   enrollmentFiltersSchema,
@@ -10,6 +11,7 @@ import {
   updateEnrollmentInputSchema,
   type ConfirmPaymentInput,
   type AdjustEnrollmentAssessmentInput,
+  type ScholarshipPercentage,
   type EligibleSubject,
   type Enrollment,
   type EnrollmentFilters,
@@ -19,13 +21,19 @@ import {
   type UpdateEnrollmentInput,
 } from "@/features/schemas/enrollment-schema"
 import {
+  corPreviewEnvelopeSchema,
+  type CorPreviewResponse,
+} from "@/features/schemas/enrollment-document-schema"
+import {
   enrollmentBlocksEnvelopeSchema,
   type EnrollmentBlock,
 } from "@/features/schemas/enrollment-block-schema"
 import {
   ApiClientError,
   getAuthenticatedJson,
+  deleteAuthenticatedJson,
   patchAuthenticatedJson,
+  putAuthenticatedJson,
   postAuthenticatedJson,
 } from "@/features/services/api-client"
 
@@ -165,4 +173,45 @@ export async function adjustEnrollmentAssessment(
     ),
   )
   return parse(enrollmentEnvelopeSchema, payload, "adjusted assessment").data
+}
+
+/**
+ * ADR 0025: Accounting-only, pre-payment. Assigns (or replaces) the scholarship
+ * tier as a negative assessment line and marks the student a Scholar. The API
+ * computes the discount; the client only ever sends one of the three tiers.
+ */
+export async function applyScholarshipDiscount(
+  id: number,
+  percentage: ScholarshipPercentage,
+): Promise<Enrollment> {
+  const payload = await putAuthenticatedJson(
+    `${ENROLLMENTS_PATH}/${id}/scholarship-discount`,
+    parse(
+      scholarshipDiscountInputSchema,
+      { percentage },
+      "scholarship discount request",
+    ),
+  )
+  return parse(enrollmentEnvelopeSchema, payload, "scholarship discount").data
+}
+
+/** The Cashier's "Regular payee" choice: removes any scholarship and marks the student a Payee. */
+export async function removeScholarshipDiscount(
+  id: number,
+): Promise<Enrollment> {
+  const payload = await deleteAuthenticatedJson(
+    `${ENROLLMENTS_PATH}/${id}/scholarship-discount`,
+  )
+  return parse(enrollmentEnvelopeSchema, payload, "scholarship removal").data
+}
+
+export async function getCorPreview(
+  enrollmentId: number,
+  signal?: AbortSignal,
+): Promise<CorPreviewResponse> {
+  const payload = await getAuthenticatedJson(
+    `${ENROLLMENTS_PATH}/${enrollmentId}/cor-preview`,
+    signal,
+  )
+  return parse(corPreviewEnvelopeSchema, payload, "COR preview").data
 }

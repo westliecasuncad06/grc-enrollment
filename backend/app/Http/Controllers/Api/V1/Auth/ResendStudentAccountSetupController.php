@@ -44,4 +44,3 @@ final class ResendStudentAccountSetupController extends Controller
         ])->header('Cache-Control', 'no-store, private');
     }
 }
-

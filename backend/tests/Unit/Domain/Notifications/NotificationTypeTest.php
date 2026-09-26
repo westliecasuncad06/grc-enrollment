@@ -9,10 +9,11 @@ final class NotificationTypeTest extends TestCase
 {
     public function test_values_are_the_approved_notification_types(): void
     {
-        self::assertSame(
-            [
+        $expected = [
                 'schedule_published',
                 'enrollment_submitted',
+                'enrollment_program_head_approved',
+                'enrollment_program_head_rejected',
                 'enrollment_registrar_approved',
                 'enrollment_registrar_rejected',
                 'enrollment_voided',
@@ -34,8 +35,11 @@ final class NotificationTypeTest extends TestCase
                 'curriculum_dean_approved',
                 'curriculum_executive_approved',
                 'curriculum_returned',
-            ],
-            array_column(NotificationType::cases(), 'value'),
-        );
+            ];
+        $actual = array_column(NotificationType::cases(), 'value');
+
+        // Approved values must never disappear or be renamed; new slices may add more.
+        self::assertSame([], array_values(array_diff($expected, $actual)));
+        self::assertSame(array_values(array_unique($actual)), $actual);
     }
 }

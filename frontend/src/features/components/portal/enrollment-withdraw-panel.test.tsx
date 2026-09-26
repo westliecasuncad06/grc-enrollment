@@ -40,6 +40,7 @@ const enrolledEnrollment: Enrollment = {
   total_units: 3,
   requires_overload_approval: false,
   submitted_at: "2026-07-30T00:00:00Z",
+  program_head_decided_at: null,
   registrar_decided_at: "2026-07-30T00:00:00Z",
   payment_confirmed_at: "2026-07-30T00:00:00Z",
   enrolled_at: "2026-07-30T00:00:00Z",

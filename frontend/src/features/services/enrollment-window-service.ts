@@ -85,6 +85,15 @@ export async function saveEnrollmentSchedule(
       enrollment_closes_at: new Date(
         closingInstant(parsedInput.enrollment_closes_at),
       ).toISOString(),
+      add_drop_opens_at: parsedInput.add_drop_opens_at
+        ? new Date(openingInstant(parsedInput.add_drop_opens_at)).toISOString()
+        : null,
+      add_drop_closes_at: parsedInput.add_drop_closes_at
+        ? new Date(closingInstant(parsedInput.add_drop_closes_at)).toISOString()
+        : null,
+      ...(parsedInput.enrollment_platform !== undefined
+        ? { enrollment_platform: parsedInput.enrollment_platform }
+        : {}),
       windows: parsedInput.windows.map((window) => ({
         audience: window.audience,
         opens_at: window.opens_at

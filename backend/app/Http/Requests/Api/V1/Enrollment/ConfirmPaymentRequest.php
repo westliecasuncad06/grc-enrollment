@@ -58,6 +58,17 @@ final class ConfirmPaymentRequest extends FormRequest
                     "it is currently '{$enrollment->status->value}'.",
                 );
             }
+
+            $amount = $this->input('amount');
+            $promissoryNoteOnFile = (bool) $this->input('promissory_note_on_file', false);
+            $totalDue = $enrollment->assessment?->total_amount;
+
+            if ($amount !== null && $totalDue !== null && bccomp((string) $amount, (string) $totalDue, 2) === -1 && ! $promissoryNoteOnFile) {
+                $validator->errors()->add(
+                    'promissory_note_on_file',
+                    'A promissory note on file is required for partial payments.',
+                );
+            }
         });
     }
 }

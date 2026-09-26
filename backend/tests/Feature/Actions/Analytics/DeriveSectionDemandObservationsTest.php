@@ -78,6 +78,16 @@ final class DeriveSectionDemandObservationsTest extends TestCase
 
         $this->seed(AcademicTermSeeder::class);
 
+        // StudentRosterSeeder attributes its enrollment_category audit rows to a Registrar Head
+        // and refuses to run without one.
+        User::create([
+            'name' => 'Registrar Head',
+            'email' => 'registrar.head.demand@grc.test',
+            'password' => 'correct-horse-battery-staple',
+            'role' => UserRole::RegistrarHead,
+            'status' => UserStatus::Active,
+        ]);
+
         foreach (self::CURRICULUM_SUBJECTS as $definition) {
             $college = self::PROGRAMS[$definition['program']]['college'];
             $subject = Subject::create([

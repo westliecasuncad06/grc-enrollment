@@ -10,6 +10,7 @@ import {
   PrintDocument,
 } from "@/features/components/portal/print-document"
 import { ProspectusDocument } from "@/features/components/portal/prospectus-document"
+import { StudentCreditMappingDialog } from "@/features/components/portal/student-credit-mapping-dialog"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -32,11 +33,8 @@ import {
   ToggleGroupItem,
 } from "@/features/components/ui/toggle-group"
 import { useAcademicRecordQuery } from "@/features/hooks/use-academic-record"
-import {
-  markTone,
-  markToneBadgeVariant,
-  markToneRowClass,
-} from "@/features/lib/grade-presentation"
+import { markTone, markToneBadgeVariant, markToneRowClass } from "@/features/lib/grade-presentation"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import { cn } from "@/features/lib/utils"
 import type {
   AcademicRecord,
@@ -137,75 +135,31 @@ function AcademicRecordBody({
   record: AcademicRecord
   studentId?: number
 }) {
-  const [selectedTermId, setSelectedTermId] = useState<number | null>(
-    record.terms[0]?.academic_term_id ?? null,
-  )
+  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
   const [view, setView] = useState<"table" | "tiles">("table")
   const [prospectusOpen, setProspectusOpen] = useState(false)
 
   const selectedTerm = record.terms.find(
     (term) => term.academic_term_id === selectedTermId,
   )
+  const gradeSlipModalOpen = selectedTermId !== null
   const schoolYears = groupBySchoolYear(record.terms)
+
+  function openTerm(termId: number) {
+    setSelectedTermId(termId)
+  }
+
+  function closeGradeSlip() {
+    setSelectedTermId(null)
+  }
 
   return (
     <div className="grid min-w-0 gap-4">
-      {/* Top bar: school years selector on the left, Prospectus + view toggle on the right */}
-      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
-        <Card className="h-fit flex-1 min-w-0 max-w-sm">
-          <CardHeader className="py-3">
-            <CardTitle>School years</CardTitle>
-            <CardDescription>Latest school year first</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 pb-3">
-            {schoolYears.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No terms recorded yet.
-              </p>
-            )}
-            {schoolYears.map(([schoolYear, terms]) => {
-              const isActiveYear = terms.some(
-                (term) => term.academic_term_id === selectedTermId,
-              )
-
-              return (
-                <div
-                  key={schoolYear}
-                  className="grid gap-1.5 border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
-                >
-                  <p
-                    className={
-                      isActiveYear
-                        ? "text-sm font-semibold text-foreground"
-                        : "text-sm font-medium text-muted-foreground"
-                    }
-                  >
-                    {schoolYear}
-                  </p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {terms.map((term) => (
-                      <Button
-                        key={term.academic_term_id}
-                        type="button"
-                        size="sm"
-                        variant={
-                          term.academic_term_id === selectedTermId
-                            ? "default"
-                            : "outline"
-                        }
-                        aria-pressed={term.academic_term_id === selectedTermId}
-                        onClick={() => setSelectedTermId(term.academic_term_id)}
-                      >
-                        {term.semester}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-
+      {/* Top bar: Prospectus + view toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <p className="text-sm text-muted-foreground">
+          Select a semester below to view its grade slip.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -214,6 +168,7 @@ function AcademicRecordBody({
           >
             Prospectus
           </Button>
+          {studentId === undefined && <StudentCreditMappingDialog />}
           <ToggleGroup
             type="single"
             value={view}
@@ -236,24 +191,86 @@ function AcademicRecordBody({
         </div>
       </div>
 
-      {/* Grade slip — full width below the header bar */}
-      {selectedTerm ? (
-        view === "table" ? (
-          <GradeSlipDocument slip={toGradeSlip(record, selectedTerm)} />
-        ) : (
-          <GradeTiles slip={toGradeSlip(record, selectedTerm)} />
-        )
-      ) : schoolYears.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No grades have been recorded yet. Open the Prospectus above to
-          see the subjects you still need to take.
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Select a school year and semester to view its grades.
-        </p>
-      )}
+      {/* School years / semester selector */}
+      <Card className="print:hidden">
+        <CardHeader className="py-3">
+          <CardTitle>School years</CardTitle>
+          <CardDescription>Latest school year first — click a semester to view grades</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 pb-3">
+          {schoolYears.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No grades have been recorded yet. Open the Prospectus above to
+              see the subjects you still need to take.
+            </p>
+          )}
+          {schoolYears.map(([schoolYear, terms]) => {
+            const isActiveYear = terms.some(
+              (term) => term.academic_term_id === selectedTermId,
+            )
 
+            return (
+              <div
+                key={schoolYear}
+                className="grid gap-1.5 border-b border-border/60 pb-3 last:border-b-0 last:pb-0"
+              >
+                <p
+                  className={
+                    isActiveYear
+                      ? "text-sm font-semibold text-foreground"
+                      : "text-sm font-medium text-muted-foreground"
+                  }
+                >
+                  {schoolYear}
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {terms.map((term) => (
+                    <Button
+                      key={term.academic_term_id}
+                      type="button"
+                      size="sm"
+                      variant={
+                        term.academic_term_id === selectedTermId
+                          ? "default"
+                          : "outline"
+                      }
+                      aria-pressed={term.academic_term_id === selectedTermId}
+                      onClick={() => openTerm(term.academic_term_id)}
+                    >
+                      {term.semester}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </CardContent>
+      </Card>
+
+      {/* Grade Slip Modal */}
+      <Dialog open={gradeSlipModalOpen} onOpenChange={(open) => { if (!open) closeGradeSlip() }}>
+        <DialogContent className="grid max-h-[92dvh] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+          <DialogHeader className="px-4 pt-4 pr-12 sm:px-6 sm:pt-6 sm:pr-14">
+            <DialogTitle>
+              Grade Slip {selectedTerm ? `— ${selectedTerm.term_label}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {record.student_number} · {record.program_name} ({record.program_code})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-6">
+            {selectedTerm && (
+              view === "table" ? (
+                <GradeSlipDocument slip={toGradeSlip(record, selectedTerm)} />
+              ) : (
+                <GradeTiles slip={toGradeSlip(record, selectedTerm)} />
+              )
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Prospectus Modal */}
       <Dialog open={prospectusOpen} onOpenChange={setProspectusOpen}>
         <DialogContent className="grid max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-5xl">
           <DialogHeader className="px-4 pt-4 pr-12 sm:px-6 sm:pt-6 sm:pr-14">
@@ -276,7 +293,7 @@ function GradeTiles({ slip }: { slip: GradeSlip }) {
   return (
     <PrintDocument
       title={`Grade slip — ${slip.term_label}`}
-      actions={<PrintButton />}
+      actions={<PrintButton label="Print Grade" />}
     >
       <div className="mb-3 grid gap-1 text-sm">
         <p>
@@ -284,7 +301,7 @@ function GradeTiles({ slip }: { slip: GradeSlip }) {
           {slip.program_code})
         </p>
         <p>
-          Year {slip.year_level}
+          {formatYearLevel(slip.year_level)}
           {slip.enrollment_category_label
             ? ` · ${slip.enrollment_category_label}`
             : ""}{" "}

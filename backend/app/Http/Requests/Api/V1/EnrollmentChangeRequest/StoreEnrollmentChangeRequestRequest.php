@@ -9,6 +9,7 @@ use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Scheduling\SectionConflictDetector;
 use App\Domain\Scheduling\SectionStatus;
+use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
 use App\Models\EnrollmentChangeRequest as EnrollmentChangeRequestModel;
 use App\Models\EnrollmentSubject;
@@ -27,11 +28,12 @@ use Illuminate\Validation\Rule;
  * `SubmitEnrollment` use.
  *
  * Deliberately scoped narrower than `StoreEnrollmentRequest`: this does not
- * re-run `BuildEligibleSubjectPool`'s prerequisite/curriculum-placement
- * checks for the target subject — only that the target section exists,
- * is published, is in the same term, and does not schedule-conflict with
- * the student's other currently-held sections. Full eligibility
- * re-verification for an ad-hoc add/drop is out of scope for this slice.
+ * re-run `BuildEligibleSubjectPool`'s prerequisite checks for the target
+ * subject — only that the target subject is in the student's own curriculum
+ * (Doc 12, same code + units counts, as in the pool), and that the target
+ * section exists, is published, is in the same term, and does not
+ * schedule-conflict with the student's other currently-held sections. Full
+ * eligibility re-verification for an ad-hoc add/drop is out of scope.
  */
 final class StoreEnrollmentChangeRequestRequest extends FormRequest
 {
@@ -90,6 +92,7 @@ final class StoreEnrollmentChangeRequestRequest extends FormRequest
                 $term->add_drop_deadline_at,
                 now()->toImmutable(),
                 true, // student is already enrolled; skip EnrollmentStillOpen check
+                $term->add_drop_opens_at,
             );
 
             if (! $availability->isOpen) {
@@ -141,22 +144,27 @@ final class StoreEnrollmentChangeRequestRequest extends FormRequest
         }
     }
 
-    private function validateFromSection(Validator $validator, Enrollment $enrollment, ?Section $fromSection): void
-    {
+    private function validateFromSection(
+        Validator $validator,
+        Enrollment $enrollment,
+        ?Section $fromSection,
+    ): void {
         if ($fromSection === null) {
+            $validator->errors()->add('from_section_id', 'The selected current section was not found.');
+
             return;
         }
 
-        $currentlyHeld = EnrollmentSubject::query()
+        $held = EnrollmentSubject::query()
             ->where('enrollment_id', $enrollment->id)
             ->where('section_id', $fromSection->id)
             ->where('status', '!=', EnrollmentSubjectStatus::Dropped->value)
             ->exists();
 
-        if (! $currentlyHeld) {
+        if (! $held) {
             $validator->errors()->add(
                 'from_section_id',
-                'This section is not currently part of your enrollment.',
+                'You cannot drop or change a section you are not actively enrolled in.',
             );
         }
     }
@@ -169,11 +177,13 @@ final class StoreEnrollmentChangeRequestRequest extends FormRequest
         ?Section $toSection,
     ): void {
         if ($toSection === null) {
+            $validator->errors()->add('to_section_id', 'The selected target section was not found.');
+
             return;
         }
 
         if ($toSection->academic_term_id !== $enrollment->academic_term_id) {
-            $validator->errors()->add('to_section_id', 'The target section must belong to the same academic term.');
+            $validator->errors()->add('to_section_id', 'The target section does not belong to this enrollment term.');
 
             return;
         }
@@ -190,11 +200,34 @@ final class StoreEnrollmentChangeRequestRequest extends FormRequest
             return;
         }
 
-        if ($type === EnrollmentChangeRequestType::ChangeSection && $fromSection !== null
-            && $toSection->subject_id !== $fromSection->subject_id) {
-            $validator->errors()->add('to_section_id', 'A section change must stay within the same subject.');
+        // A subject can only be added (or swapped in) from the student's OWN
+        // curriculum (Doc 12): the picker already offers nothing else, and this
+        // keeps a hand-built request from reaching another curriculum's subject.
+        // A different section of the subject already held is fine by definition.
+        $isSameSubjectAsHeld = $type === EnrollmentChangeRequestType::ChangeSection
+            && $fromSection !== null
+            && $toSection->subject_id === $fromSection->subject_id;
+
+        if (! $isSameSubjectAsHeld && ! $this->isInStudentsCurriculum($enrollment, $toSection)) {
+            $validator->errors()->add('to_section_id', 'That subject is not part of your curriculum.');
 
             return;
+        }
+
+        if ($type === EnrollmentChangeRequestType::ChangeSection && $fromSection !== null
+            && $toSection->subject_id !== $fromSection->subject_id) {
+            $alreadyHeld = EnrollmentSubject::query()
+                ->where('enrollment_id', $enrollment->id)
+                ->where('status', '!=', EnrollmentSubjectStatus::Dropped->value)
+                ->where('section_id', '!=', $fromSection->id)
+                ->whereHas('section', fn ($sectionQuery) => $sectionQuery->where('subject_id', $toSection->subject_id))
+                ->exists();
+
+            if ($alreadyHeld) {
+                $validator->errors()->add('to_section_id', 'This subject is already part of your enrollment.');
+
+                return;
+            }
         }
 
         if ($toSection->remainingSeats() < 1) {
@@ -238,6 +271,23 @@ final class StoreEnrollmentChangeRequestRequest extends FormRequest
                 $validator->errors()->add('to_section_id', 'This subject is already part of your enrollment.');
             }
         }
+    }
+
+    /**
+     * Same equivalence `BuildEligibleSubjectPool` uses for cross-department
+     * sections: a subject row with the same code and units as a curriculum
+     * placement counts as that placement (GE subjects exist once per college).
+     */
+    private function isInStudentsCurriculum(Enrollment $enrollment, Section $toSection): bool
+    {
+        $subject = $toSection->subject;
+
+        return CurriculumSubject::query()
+            ->where('curriculum_id', $enrollment->student->curriculum_id)
+            ->whereHas('subject', fn ($query) => $query
+                ->where('code', $subject->code)
+                ->where('units', $subject->units))
+            ->exists();
     }
 
     private function rejectDuplicatePendingRequest(Validator $validator, Enrollment $enrollment, int $subjectId, string $errorField): void

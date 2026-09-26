@@ -1492,7 +1492,11 @@ paths:
     patch:
       operationId: patchSection
       summary: Replace a section's fields
-      description: Program Chair only. Full replace, not a partial update.
+      description: >
+        Program Head only. Full replace, not a partial update. Once a section
+        is `published` a Program Head can change only its professor here (the
+        Registrar Head is notified); any other change returns 403 and must go
+        through POST /sections/{section}/change-requests (ADR 0032).
       security:
         - bearerAuth: []
       tags:
@@ -1546,6 +1550,255 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/sections/{section}/professor:
+    put:
+      operationId: putSectionProfessor
+      summary: Assign or remove the professor of a section
+      description: >
+        Dean only, for sections their own college planned (ADR 0033). Changes
+        the professor and nothing else about the section. `professor_id` is
+        required and may be null to remove the professor. The professor must
+        be a Faculty user of the same college who is not already teaching at
+        that time. It needs no approval, even for a published section, but the
+        Registrar Head is notified and the audit record is
+        `section.professor_reassigned`. Assigning who is already assigned
+        changes nothing. A section that came from a schedule generation run
+        needs `override_reason`.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: section
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [professor_id]
+              properties:
+                professor_id:
+                  type: ["integer", "null"]
+                override_reason:
+                  type: ["string", "null"]
+                  maxLength: 1000
+      responses:
+        "200":
+          description: The section after the change.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No section exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The professor is double-booked, belongs to another college, or a reason is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/sections/{section}/change-requests:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: section
+        in: path
+        required: true
+        description: Section ID.
+        schema:
+          type: integer
+    post:
+      operationId: createSectionChangeRequest
+      summary: Ask the Registrar Head to change a published section
+      description: >
+        Program Head only (ADR 0032). A published section is final: PATCH
+        /sections/{section} refuses any change except the professor, so the
+        schedule is changed by filing this request. Only `schedule_days`,
+        `starts_at_time`, `ends_at_time`, `room`, `modality`, `capacity`, and
+        `viability_threshold` may be requested. The request is refused when
+        nothing differs, when the proposed slot clashes with another class,
+        or when a request for the section is already pending. The Registrar
+        Head is notified.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSectionChangeRequestRequest"
+      responses:
+        "201":
+          description: The pending change request.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SectionChangeRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No section exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The request is invalid, changes nothing, clashes with another class, or one is already pending.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/section-change-requests:
+    get:
+      operationId: listSectionChangeRequests
+      summary: List section change requests
+      description: >
+        Registrar Head sees every request. A Program Head sees the requests
+        for their own college's sections plus any they filed. Pending first,
+        then newest first; at most 200.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: section_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The visible change requests.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SectionChangeRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The status or section filter is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/section-change-requests/{sectionChangeRequest}:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: sectionChangeRequest
+        in: path
+        required: true
+        description: Change request ID.
+        schema:
+          type: integer
+    patch:
+      operationId: decideSectionChangeRequest
+      summary: Approve, reject, or withdraw a section change request
+      description: >
+        `approve` and `reject` are the Registrar Head's; `cancel` is the
+        Program Head who filed a still-pending request. Approving re-checks
+        that the section is still published and unchanged since the request
+        and that the new slot does not clash, then applies the change and the
+        decision in one transaction. Rejecting requires `decision_reason`.
+        Repeating a decision on an already-decided request returns it
+        unchanged; the opposite decision is refused with 422.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecideSectionChangeRequestRequest"
+      responses:
+        "200":
+          description: The request after the decision.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SectionChangeRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No change request exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: A reason is missing, the request was already decided the other way, or it can no longer be applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/schedule-proposals:
     get:
       operationId: getScheduleProposals
@@ -1845,6 +2098,309 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/students/{studentProfile}/subject-waivers:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: studentProfile
+        in: path
+        required: true
+        description: Student profile ID.
+        schema:
+          type: integer
+    get:
+      operationId: listStudentSubjectWaivers
+      summary: List a student's prerequisite waivers and blocked subjects for one term
+      description: >
+        Registrar Head only (ADR 0031). `data` is every waiver for the student
+        and term, active and revoked; `meta.blocked_subjects` lists the
+        subjects the student is blocked from only because of an unmet
+        prerequisite, which is what a waiver can lift.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      parameters:
+        - name: academic_term_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The waivers and the blocked subjects.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SubjectWaiver"
+                  meta:
+                    type: object
+                    required:
+                      - blocked_subjects
+                    properties:
+                      blocked_subjects:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - subject_id
+                            - subject_code
+                            - subject_title
+                            - reasons
+                          properties:
+                            subject_id:
+                              type: integer
+                            subject_code:
+                              type: string
+                            subject_title:
+                              type: string
+                            reasons:
+                              type: array
+                              items:
+                                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    post:
+      operationId: grantStudentSubjectWaiver
+      summary: Waive an unmet prerequisite for one subject and term
+      description: >
+        Registrar Head only (ADR 0031). `reason` is required and audited. The
+        subject must be in the student's curriculum. Idempotent: `201` when a
+        waiver is created or re-activated, `200` when it was already active.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - subject_id
+                - academic_term_id
+                - reason
+              properties:
+                subject_id:
+                  type: integer
+                academic_term_id:
+                  type: integer
+                reason:
+                  type: string
+                  minLength: 3
+                  maxLength: 1000
+      responses:
+        "200":
+          description: The waiver was already active.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SubjectWaiver"
+        "201":
+          description: The waiver was created or re-activated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SubjectWaiver"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/subject-waivers/{waiver}:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: waiver
+        in: path
+        required: true
+        description: Waiver ID.
+        schema:
+          type: integer
+    delete:
+      operationId: revokeSubjectWaiver
+      summary: Take a prerequisite waiver back
+      description: >
+        Registrar Head only (ADR 0031). Revokes rather than deletes, so the
+        history stays; revoking an already-revoked waiver changes nothing.
+      security:
+        - bearerAuth: []
+      tags:
+        - Enrollment
+      responses:
+        "200":
+          description: The revoked waiver.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SubjectWaiver"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No waiver exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/academic-terms/{academicTerm}/lecture-lab-adjacency:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: academicTerm
+        in: path
+        required: true
+        description: Academic term ID.
+        schema:
+          type: integer
+    get:
+      operationId: listLectureLabAdjacency
+      summary: Lecture/laboratory pairs that are not back-to-back
+      description: >
+        Program Head only, own college (stakeholder Doc 14). Review information:
+        it never blocks a save or a submission. A pair is listed only when
+        both sections are fully scheduled; each entry names the two subjects,
+        the section code, why (`no_shared_day` or `not_back_to_back`), and the
+        days that are apart.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      responses:
+        "200":
+          description: The pairs that are not adjacent (empty when all are).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - section_code
+                        - first
+                        - second
+                        - reason
+                        - days
+                        - message
+                      properties:
+                        section_code:
+                          type: string
+                        first:
+                          type: object
+                          properties:
+                            section_id:
+                              type: integer
+                            subject_code:
+                              type: string
+                        second:
+                          type: object
+                          properties:
+                            section_id:
+                              type: integer
+                            subject_code:
+                              type: string
+                        reason:
+                          type: string
+                          enum:
+                            - no_shared_day
+                            - not_back_to_back
+                        days:
+                          type: array
+                          items:
+                            type: string
+                        message:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/students/{studentProfile}/registrar-profile:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: studentProfile
+        in: path
+        required: true
+        description: Student profile ID.
+        schema:
+          type: integer
+    get:
+      operationId: getStudentProfileForRegistrar
+      summary: View one student's profile as the Registrar Head
+      description: >
+        Narrow read used by the Registrar Head's enrollment review (stakeholder
+        Doc 14). It does not open the general student-profile directory, which
+        stays with Admission Staff.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      responses:
+        "200":
+          description: The requested student record.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No student profile exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/student-profiles/{studentProfile}:
     parameters:
       - $ref: "#/components/parameters/RequestId"
@@ -2640,6 +3196,7 @@ paths:
             type: string
             enum:
               - draft
+              - pending_program_head_approval
               - pending_registrar_approval
               - pending_payment
               - enrolled
@@ -2766,8 +3323,11 @@ paths:
       operationId: patchEnrollment
       summary: Apply one Registrar Head decision to an enrollment
       description: >
-        No `role:` middleware gates this route — `registrar_approve` and
-        `registrar_reject` (the approval-queue checkpoint) and `void` (a
+        No `role:` middleware gates this route — `program_head_approve` /
+        `program_head_reject` (the Program Head's first step for an irregular
+        or overload enrollment, own college only), `registrar_approve` and
+        `registrar_reject` (the Registrar Staff / Registrar Head checkpoint
+        for every enrollment, ADR 0030) and `void` (a
         later, distinct checkpoint: cancelling an already-approved but unpaid
         enrollment) are each resolved by EnrollmentPolicy per request (see
         ADR 0011). `reason` is required exactly for `registrar_reject` and
@@ -2898,6 +3458,59 @@ paths:
           description: >
             The submitted data is invalid, or the enrollment is not
             currently `pending_payment` and has no existing payment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/enrollments/{enrollment}/cor-preview:
+    get:
+      operationId: getEnrollmentCorPreview
+      summary: Preview the COR snapshot for an enrollment without persisting a document
+      description: >
+        Accounting Staff, Registrar Head, and Registrar Staff only. Returns the
+        unpersisted COR snapshot array and a watermark string for frontend preview.
+      security:
+        - bearerAuth: []
+      tags:
+        - Payments
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: enrollment
+          in: path
+          required: true
+          description: Enrollment ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The unpersisted COR snapshot preview.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      snapshot:
+                        type: object
+                      watermark:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No enrollment exists with the given ID.
           content:
             application/json:
               schema:
@@ -3041,8 +3654,8 @@ paths:
       operationId: patchWithdrawalRequest
       summary: Approve or reject a pending withdrawal request
       description: >
-        Registrar Staff only (PRD §3.8's literal role assignment; the
-        Registrar Head reads every request but does not decide one). No
+        Registrar Staff or Registrar Head (PRD §3.8 names Registrar Staff;
+        stakeholder Doc 14 gives the Registrar Head the same decision). No
         `role:` middleware — WithdrawalRequestPolicy resolves the ability.
         `approve`, in one transaction: the request moves to `approved`; the
         enrollment moves to `withdrawn`; every still-active enrolled subject
@@ -3178,12 +3791,21 @@ paths:
           $ref: "#/components/responses/InternalError"
     post:
       operationId: postTransfereeCredit
-      summary: Record a transferee credit
+      summary: Ask for, or record, a transferee credit
       description: >
-        Registrar Staff only. `subject_id` is optional — a transferred
-        subject may not map onto any local subject — and `source_grade`
-        stays a free string with no equivalence rule encoded. Always
-        created with status pending.
+        A Student asks for one for themselves (the student is always the
+        caller: any `student_id` is ignored, `subject_id` is prohibited, and
+        `source_school_year` and `source_semester` are required); a Program
+        Chair records one for a student in their own college and may map it
+        (`subject_id`). Registrar Staff and Registrar Head cannot create one
+        (ADR 0026). `source_subject_code` may be left blank and
+        `credited_units` may be fractional. `source_grade` stays a free
+        string with no equivalence rule encoded. Always created `pending`;
+        the API never guesses `subject_id`. A request identical to a
+        still-open one (same student, school, subject title and code)
+        returns that row with 200 instead of creating a duplicate. A
+        Student's request notifies the Program Chairs of the student's
+        college.
       security:
         - bearerAuth: []
       tags:
@@ -3197,6 +3819,17 @@ paths:
             schema:
               $ref: "#/components/schemas/StoreTransfereeCreditRequest"
       responses:
+        "200":
+          description: An identical open request already existed; it is returned unchanged.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransfereeCreditResponse"
         "201":
           description: The recorded, pending transferee credit.
           headers:
@@ -3225,16 +3858,23 @@ paths:
   /api/v1/transferee-credits/{transfereeCredit}:
     patch:
       operationId: patchTransfereeCredit
-      summary: Edit a pending transferee credit, or approve/reject it
+      summary: Map, endorse or decline a credit (Program Chair); approve or reject it (Registrar Staff)
       description: >
-        Registrar Staff only — no ownership dimension, unlike
-        AcademicGradePolicy's own-section check. No `role:` middleware —
-        TransfereeCreditPolicy resolves the ability. With no `action`, this
-        is a plain content edit, allowed only while the credit is still
-        pending. `action: approve` or `action: reject` is a pure status
-        transition requiring the credit currently be pending; `reject`
-        requires a reason, recorded only in the audit row. Every write is
-        audited, including plain edits (FR-FIN-003).
+        No `role:` middleware — TransfereeCreditPolicy resolves the ability
+        (ADR 0026). A Program Chair may only act on a credit of a student in
+        their own college. With no `action`, the Program Chair edits or maps
+        a credit, allowed only while it is `pending`. `action: endorse`
+        (Program Chair, `pending` → `endorsed`) needs a mapped subject, which
+        the same request may set through `subject_id`, and notifies Registrar
+        Staff. `action: decline` (Program Chair, `pending` → `rejected`)
+        requires a reason and notifies the Student. `action: approve` or
+        `action: reject` is Registrar Staff only and requires the credit to
+        currently be `endorsed`; `reject` requires a reason. A reason is
+        recorded in the audit row. Each step re-checks the status under a
+        row lock, so a repeated request changes nothing a second time. An
+        approved credit that is mapped to a subject counts as credited for
+        eligibility, standing, promotion and the prospectus; it carries no
+        GRC grade. Every write is audited (FR-FIN-003).
       security:
         - bearerAuth: []
       tags:
@@ -3280,6 +3920,57 @@ paths:
             The submitted data is invalid, the credit is no longer
             editable, or the action does not match the credit's current
             status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transferee-credits/{transfereeCredit}/suggestions:
+    get:
+      operationId: getTransfereeCreditSuggestions
+      summary: Suggested subjects for a credit (Program Chair)
+      description: >
+        Program Chair only, and only for a credit of a student in their own
+        college. Up to five subjects of the student's own curriculum that the
+        credit could be mapped to, best match first, scored on subject code,
+        title and units. Subjects the student already passed, is credited
+        with, or has mapped through another open or approved credit are left
+        out. Advice only: computed on every request, never stored, and never
+        written to `subject_id` — the mapping is the Program Chair's
+        decision (ADR 0026).
+      security:
+        - bearerAuth: []
+      tags:
+        - Transferee Credits
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: transfereeCredit
+          in: path
+          required: true
+          description: Transferee credit ID.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The ranked suggestions (possibly empty).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditSubjectSuggestionsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No transferee credit exists with the given ID.
           content:
             application/json:
               schema:
@@ -4103,7 +4794,10 @@ paths:
         `waiting`, stamping a fresh `requeued_at` so the ticket moves to the
         back of its own priority tier instead of losing its place;
         `action: mark_priority` flags a `waiting` ticket `priority` without
-        changing its status. §17 leaves reset cadence and priority
+        changing its status; `action: announce` (only while `serving`) adds one
+        to the ticket's `announce_count` so the Student's polled queue view
+        can ring their own device again (ADR 0027) — it changes nothing else
+        and writes no audit row. §17 leaves reset cadence and priority
         eligibility unconfirmed.
       security:
         - bearerAuth: []
@@ -4292,6 +4986,16 @@ paths:
     get:
       operationId: getAttritionReport
       summary: Get aggregate first-to-second semester attrition
+      description: >
+        Attrition means students who will not continue (stakeholder Doc 14).
+        Of the students enrolled in the baseline term, `retained` enrolled in
+        the comparison term; `attrited` withdrew, or did not enroll in the
+        comparison term after its enrollment window closed (`enrollment_closes_at`,
+        else the add/drop deadline, else a closed or archived term). Graduates
+        (`graduated_count`) and students still deciding or enrolling
+        (`undecided_count`: no enrollment yet while the window is open, or an
+        enrollment in progress) are left out of `baseline_count` and are never
+        counted as attrition. Predictive attrition risk stays advisory.
       security: [{ bearerAuth: [] }]
       tags: [Analytics]
       parameters:
@@ -4305,6 +5009,578 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/analytics/enrollment-movements:
+    get:
+      operationId: getEnrollmentMovements
+      summary: Drops, withdrawals, or course shifts for one term
+      description: >
+        Registrar Head, Registrar Staff, and Program Head (own college only),
+        stakeholder Doc 14 / ADR 0034. Aggregate counts only, no student is
+        identified. `drops` counts approved drop requests, `withdrawals`
+        approved withdrawal requests (distinct students, per course of study),
+        and `shifts` recorded course shifts grouped from course to course. A
+        Program Head sees a shift out of, or into, their own college.
+      security:
+        - bearerAuth: []
+      tags:
+        - Analytics
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academic_term_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [drops, withdrawals, shifts]
+        - name: college
+          in: query
+          required: false
+          description: Registrar roles only; a Program Head is always limited to their own college.
+          schema:
+            type: string
+            enum: [ccs, coe, coa, cbae]
+      responses:
+        "200":
+          description: The counts.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [type, movement, academic_term_id, total, by_department, groups]
+                    properties:
+                      type:
+                        type: string
+                        const: enrollment_movements
+                      movement:
+                        type: string
+                        enum: [drops, withdrawals, shifts]
+                      academic_term_id:
+                        type: integer
+                      total:
+                        type: integer
+                      by_department:
+                        type: array
+                        items:
+                          type: object
+                          required: [college, label, count]
+                          properties:
+                            college:
+                              type: string
+                            label:
+                              type: string
+                            count:
+                              type: integer
+                      groups:
+                        type: array
+                        items:
+                          type: object
+                          required: [label, count, from_program_code, to_program_code]
+                          properties:
+                            label:
+                              type: string
+                            count:
+                              type: integer
+                            from_program_code:
+                              type: ["string", "null"]
+                            to_program_code:
+                              type: ["string", "null"]
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The term or type is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/program-shifts:
+    post:
+      operationId: createProgramShift
+      summary: Record a student's course shift
+      description: >
+        Registrar Head or Registrar Staff (ADR 0034). The "from" course is the
+        student's course when the shift is recorded. It is a record for
+        Enrollment Analytics: it does not change the student's program or
+        curriculum. Recording the same shift for the same student and term
+        again returns the existing record (200) and writes no second audit
+        record.
+      security:
+        - bearerAuth: []
+      tags:
+        - Analytics
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [student_number, to_program_id, academic_term_id, reason]
+              properties:
+                student_number:
+                  type: string
+                to_program_id:
+                  type: integer
+                academic_term_id:
+                  type: integer
+                reason:
+                  type: string
+                  minLength: 3
+                  maxLength: 1000
+      responses:
+        "201":
+          description: The shift was recorded.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramShiftResponse"
+        "200":
+          description: The same shift was already recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramShiftResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Unknown student, same course, demo account, or a missing reason.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/room-occupancy-summary:
+    get:
+      operationId: getRoomOccupancySummary
+      summary: Every room's class count and days used this term
+      description: >
+        Program Head or Registrar Head (stakeholder Doc 14). One grouped read for
+        the Rooms screen tiles, across every college's bookings like the per-room
+        endpoint. Only rooms with at least one scheduled class appear, so a room
+        that is absent is empty. `days` are ISO weekdays (1 = Monday .. 7 = Sunday).
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academic_term_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The rooms in use.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [room, classes_count, days]
+                      properties:
+                        room:
+                          type: string
+                        classes_count:
+                          type: integer
+                        days:
+                          type: array
+                          items:
+                            type: integer
+                            minimum: 1
+                            maximum: 7
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The term is missing or unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/me/statement-of-account:
+    get:
+      operationId: getMyStatementOfAccount
+      summary: Statement of Account
+      description: >
+        Student only, own record. Derived from assessments and payments (nothing stored): per term the
+        assessment lines, scholarship discount, payments with the promissory-note
+        flag, and the running balance. `academic_term_id` narrows the listed terms
+        but balances still include every earlier term (ADR 0036).
+      security:
+        - bearerAuth: []
+      tags:
+        - Billing
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The statement.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementOfAccountResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The term does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/me/statement-of-account/pdf:
+    get:
+      operationId: getMyStatementOfAccountPdf
+      summary: Download the Statement of Account as a PDF
+      description: >
+        Student only, own record. Derived from assessments and payments (nothing stored): per term the
+        assessment lines, scholarship discount, payments with the promissory-note
+        flag, and the running balance. `academic_term_id` narrows the listed terms
+        but balances still include every earlier term (ADR 0036).
+      security:
+        - bearerAuth: []
+      tags:
+        - Billing
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The PDF.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The term does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/students/{student}/statement-of-account:
+    get:
+      operationId: getStudentStatementOfAccount
+      summary: Statement of Account
+      description: >
+        Accounting Staff only. Derived from assessments and payments (nothing stored): per term the
+        assessment lines, scholarship discount, payments with the promissory-note
+        flag, and the running balance. `academic_term_id` narrows the listed terms
+        but balances still include every earlier term (ADR 0036).
+      security:
+        - bearerAuth: []
+      tags:
+        - Billing
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: student
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The statement.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementOfAccountResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The term does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/students/{student}/statement-of-account/pdf:
+    get:
+      operationId: getStudentStatementOfAccountPdf
+      summary: Download the Statement of Account as a PDF
+      description: >
+        Accounting Staff only. Derived from assessments and payments (nothing stored): per term the
+        assessment lines, scholarship discount, payments with the promissory-note
+        flag, and the running balance. `academic_term_id` narrows the listed terms
+        but balances still include every earlier term (ADR 0036).
+      security:
+        - bearerAuth: []
+      tags:
+        - Billing
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: student
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The PDF.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The term does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/me/admission-requirements:
+    get:
+      operationId: getMyAdmissionRequirements
+      summary: The signed-in Student's Admission requirements checklist
+      description: >
+        Student only, own record, read-only. The category matching the student
+        type (Freshman or Transferee; none when the type is unset) plus Additional (ADR 0037).
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: The checklist.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdmissionRequirementsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/student-profiles/{studentProfile}/admission-requirements:
+    get:
+      operationId: getStudentAdmissionRequirements
+      summary: A student's Admission requirements checklist
+      description: Admission Staff only (ADR 0037).
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The checklist.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdmissionRequirementsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/student-profiles/{studentProfile}/admission-requirements/{requirementType}:
+    put:
+      operationId: setStudentAdmissionRequirement
+      summary: Tick or untick one requirement for a student
+      description: >
+        Admission Staff only. Idempotent: setting the state a requirement already
+        has changes nothing and writes no audit row; a real change is audited with
+        before and after. A requirement of the other student type is refused (ADR 0037).
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: studentProfile
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: requirementType
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_submitted]
+              properties:
+                is_submitted:
+                  type: boolean
+      responses:
+        "200":
+          description: The checklist.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdmissionRequirementsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/admission-requirement-types:
+    post:
+      operationId: createAdmissionRequirementType
+      summary: Add a requirement to the shared Admission list
+      description: >
+        Admission Staff only. Appears for every student of that category. A name
+        already in the category is refused (ADR 0037).
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 160
+                category:
+                  type: string
+                  enum: [freshman, transferee, additional]
+      responses:
+        "201":
+          description: The new requirement.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      type: { type: string, const: admission_requirement_type }
+                      id: { type: integer }
+                      category: { type: string }
+                      name: { type: string }
+                      is_system: { type: boolean }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/reports/honors:
     get:
       operationId: getHonorsReport
@@ -4375,6 +5651,444 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/academic-terms/{academicTerm}/faculty-load-limits/{employmentType}:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: academicTerm
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: employmentType
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [full_time, part_time]
+    put:
+      operationId: putFacultyLoadLimit
+      summary: Set the maximum teaching units for an employment type
+      description: >
+        Program Head or Dean, for their own college only (ADR 0033). No number
+        is invented: until one is set, that employment type has no limit and
+        nobody of that type is flagged as overloaded. Saving the value already
+        in place changes nothing and writes no audit record.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [max_units]
+              properties:
+                max_units:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 99
+      responses:
+        "200":
+          description: The limit now in force.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [type, academic_term_id, college, employment_type, max_units]
+                    properties:
+                      type:
+                        type: string
+                        const: faculty_load_limit
+                      academic_term_id:
+                        type: integer
+                      college:
+                        type: string
+                      employment_type:
+                        type: string
+                        enum: [full_time, part_time]
+                      max_units:
+                        type: number
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Unknown term or employment type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The value is not a positive number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/academic-terms/{academicTerm}/faculty-load-overrides/{professor}:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: academicTerm
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: professor
+        in: path
+        required: true
+        description: The professor's user ID.
+        schema:
+          type: integer
+    put:
+      operationId: putFacultyLoadOverride
+      summary: Set one professor's own maximum teaching units for a term
+      description: >
+        Program Head or Dean, for a professor of their own college (ADR 0033).
+        A reason is required and lands in the audit record. The override
+        outranks the employment-type limit and the college default. Saving
+        what is already in place changes nothing.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [max_units, reason]
+              properties:
+                max_units:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 99
+                reason:
+                  type: string
+                  minLength: 3
+                  maxLength: 1000
+      responses:
+        "200":
+          description: The override now in force.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [type, academic_term_id, professor_id, max_units, reason]
+                    properties:
+                      type:
+                        type: string
+                        const: faculty_load_override
+                      academic_term_id:
+                        type: integer
+                      professor_id:
+                        type: integer
+                      max_units:
+                        type: number
+                      reason:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Missing reason, not a professor, or a professor of another college.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteFacultyLoadOverride
+      summary: Remove a professor's override
+      description: >
+        Same authority as setting one. The normal limit applies again.
+        Removing an override that is not there changes nothing.
+      security:
+        - bearerAuth: []
+      tags:
+        - Section Planning
+      responses:
+        "204":
+          description: No override remains.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: The professor belongs to another college or is not a professor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/faculty-members/{professor}/profile:
+    get:
+      operationId: getFacultyProfile
+      summary: A professor's teaching profile
+      description: >
+        Registrar Head only (stakeholder Doc 14). Read-only. Returns who the
+        professor is, every term they have taught (sections and units), and,
+        for one term, each section with its schedule, seats, and grade
+        submission counts (draft, submitted, locked). Counts only: no student
+        is named. Without `academic_term_id` it uses the ongoing term if the
+        professor teaches in it, otherwise their most recent term;
+        `selected_term` is null for a professor with no sections.
+      security:
+        - bearerAuth: []
+      tags:
+        - Faculty
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: professor
+          in: path
+          required: true
+          description: The professor's user ID.
+          schema:
+            type: integer
+        - name: academic_term_id
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The professor's teaching profile.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [professor, terms, selected_term]
+                    properties:
+                      professor:
+                        type: object
+                        required: [id, name, college, status, employment_type, employment_type_label, masters_degree]
+                        properties:
+                          id:
+                            type: integer
+                          name:
+                            type: string
+                          college:
+                            type: ["string", "null"]
+                          status:
+                            type: string
+                          employment_type:
+                            type: ["string", "null"]
+                            enum: [full_time, part_time, null]
+                          employment_type_label:
+                            type: ["string", "null"]
+                          masters_degree:
+                            type: ["string", "null"]
+                      terms:
+                        type: array
+                        items:
+                          type: object
+                          required: [academic_term_id, label, sections_count, total_units]
+                          properties:
+                            academic_term_id:
+                              type: integer
+                            label:
+                              type: string
+                            sections_count:
+                              type: integer
+                            total_units:
+                              type: number
+                      selected_term:
+                        type: ["object", "null"]
+                        required: [academic_term_id, label, total_units, sections]
+                        properties:
+                          academic_term_id:
+                            type: integer
+                          label:
+                            type: string
+                          total_units:
+                            type: number
+                          sections:
+                            type: array
+                            items:
+                              type: object
+                              required:
+                                - section_id
+                                - section_code
+                                - subject_code
+                                - subject_title
+                                - units
+                                - schedule_days
+                                - starts_at_time
+                                - ends_at_time
+                                - room
+                                - modality
+                                - status
+                                - enrolled_count
+                                - capacity
+                                - grades
+                              properties:
+                                section_id:
+                                  type: integer
+                                section_code:
+                                  type: string
+                                subject_code:
+                                  type: string
+                                subject_title:
+                                  type: string
+                                units:
+                                  type: number
+                                schedule_days:
+                                  type: ["string", "null"]
+                                starts_at_time:
+                                  type: ["string", "null"]
+                                ends_at_time:
+                                  type: ["string", "null"]
+                                room:
+                                  type: ["string", "null"]
+                                modality:
+                                  type: ["string", "null"]
+                                status:
+                                  type: string
+                                enrolled_count:
+                                  type: integer
+                                capacity:
+                                  type: integer
+                                grades:
+                                  type: object
+                                  required: [draft, submitted, locked, total]
+                                  properties:
+                                    draft:
+                                      type: integer
+                                    submitted:
+                                      type: integer
+                                    locked:
+                                      type: integer
+                                    total:
+                                      type: integer
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No user exists with the given ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The term does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/audit-logs/actors:
+    get:
+      operationId: getAuditActors
+      summary: Audit activity grouped by user
+      description: >
+        Registrar Head only. One row per user who has audit records, newest
+        activity first, with how many records match the filters. Read that
+        user's records with `GET /audit-logs?actor_user_id=`. Accepts the same
+        filters as `GET /audit-logs` except the actor. Each successful view
+        creates an `audit_log.list_viewed` record.
+      security:
+        - bearerAuth: []
+      tags:
+        - Audit
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: auditable_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: One row per acting user.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStorePrivate"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, links, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditActor"
+                  links:
+                    $ref: "#/components/schemas/PaginationLinks"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: A query parameter failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/audit-logs:
     get:
       operationId: getAuditLogs
@@ -4406,6 +6120,11 @@ paths:
               - faculty_subject_preference.deleted
               - section.created
               - section.updated
+              - section.professor_reassigned
+              - section_change_request.requested
+              - section_change_request.approved
+              - section_change_request.rejected
+              - section_change_request.cancelled
               - schedule_proposal.created
               - schedule_proposal.dean_approved
               - schedule_proposal.dean_returned
@@ -4418,9 +6137,14 @@ paths:
               - audit_log.list_viewed
               - faculty_directory.list_viewed
               - enrollment.submitted
+              - enrollment.program_head_approved
+              - enrollment.program_head_rejected
               - enrollment.registrar_approved
               - enrollment.registrar_rejected
               - enrollment.voided
+              - enrollment.cancelled_by_student
+              - enrollment_subject_waiver.granted
+              - enrollment_subject_waiver.revoked
               - academic_grade.created
               - academic_grade.updated
               - academic_grade.submitted
@@ -4433,6 +6157,7 @@ paths:
               - withdrawal_request.rejected
               - transferee_credit.created
               - transferee_credit.updated
+              - transferee_credit.endorsed
               - transferee_credit.approved
               - transferee_credit.rejected
         - name: auditable_type
@@ -4445,6 +6170,7 @@ paths:
               - faculty_availability
               - faculty_subject_preference
               - section
+              - section_change_request
               - schedule_proposal
               - student_profile
               - audit_log
@@ -5235,6 +6961,16 @@ components:
         enrollment_closes_at:
           type: ["string", "null"]
           format: date-time
+        enrollment_platform:
+          type: [string, 'null']
+          enum: [online, face_to_face, null]
+          description: >
+            How classes are delivered for everyone enrolling this term, set by
+            the Registrar Head through PATCH /academic-terms/{id}/enrollment-schedule
+            and printed on each Certificate of Registration. Null until set.
+        enrollment_platform_label:
+          type: [string, 'null']
+          description: Online or Face-to-Face; null when the platform is not set.
         closed_at:
           type: [string, 'null']
           format: date-time
@@ -5636,6 +7372,8 @@ components:
           enum:
             - schedule_published
             - enrollment_submitted
+            - enrollment_program_head_approved
+            - enrollment_program_head_rejected
             - enrollment_registrar_approved
             - enrollment_registrar_rejected
             - enrollment_voided
@@ -5645,6 +7383,8 @@ components:
             - withdrawal_request_rejected
             - transferee_credit_approved
             - transferee_credit_rejected
+            - transferee_credit_requested
+            - transferee_credit_endorsed
             - schedule_submitted_for_dean
             - schedule_dean_approved
             - schedule_executive_approved
@@ -5685,6 +7425,7 @@ components:
         - type
         - id
         - actor_user_id
+        - actor_name
         - actor_role
         - actor_role_label
         - action
@@ -5692,6 +7433,7 @@ components:
         - auditable_id
         - before_values
         - after_values
+        - changes
         - reason
         - request_id
         - ip_address
@@ -5706,6 +7448,9 @@ components:
         actor_user_id:
           type: integer
           minimum: 1
+        actor_name:
+          type: string
+          description: Registrar Head only; email addresses are never returned.
         actor_role:
           type: string
           enum:
@@ -5739,6 +7484,26 @@ components:
             - object
             - "null"
           additionalProperties: true
+        changes:
+          type: array
+          description: >
+            Readable field-by-field comparison of the two snapshots. `changed`
+            is false for a field that kept its value. Professor and decider
+            ids are shown as names; any field whose key looks like a name,
+            email, password, token, or secret is shown as `Hidden`.
+          items:
+            type: object
+            additionalProperties: false
+            required: [field, label, old, new, changed]
+            properties:
+              field:
+                type: string
+              label:
+                type: string
+              old: {}
+              new: {}
+              changed:
+                type: boolean
         reason:
           type:
             - string
@@ -5756,6 +7521,36 @@ components:
           type:
             - string
             - "null"
+          format: date-time
+    AuditActor:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - actor_user_id
+        - actor_name
+        - actor_role
+        - actor_role_label
+        - entries_count
+        - last_activity_at
+      properties:
+        type:
+          type: string
+          const: audit_actor
+        actor_user_id:
+          type: integer
+          minimum: 1
+        actor_name:
+          type: string
+        actor_role:
+          type: string
+        actor_role_label:
+          type: string
+        entries_count:
+          type: integer
+          minimum: 1
+        last_activity_at:
+          type: ["string", "null"]
           format: date-time
     PaginationLinks:
       type: object
@@ -6304,6 +8099,7 @@ components:
             - already_selected
             - prerequisite
             - prerequisite_advisory
+            - prerequisite_waived
             - no_sections_available
             - block_restricted
           description: >
@@ -6354,6 +8150,7 @@ components:
         - total_units
         - requires_overload_approval
         - submitted_at
+        - program_head_decided_at
         - registrar_decided_at
         - payment_confirmed_at
         - enrolled_at
@@ -6396,6 +8193,7 @@ components:
             App\Domain\Enrollment\EnrollmentStatus.
           enum:
             - draft
+            - pending_program_head_approval
             - pending_registrar_approval
             - pending_payment
             - enrolled
@@ -6418,6 +8216,12 @@ components:
         submitted_at:
           type: ["string", "null"]
           format: date-time
+        program_head_decided_at:
+          type: ["string", "null"]
+          format: date-time
+          description: >
+            When the Program Head decided an irregular or overload enrollment
+            (ADR 0030). Null for enrollments that never needed that step.
         registrar_decided_at:
           type: ["string", "null"]
           format: date-time
@@ -6607,18 +8411,30 @@ components:
         action:
           type: string
           enum:
+            - program_head_approve
+            - program_head_reject
             - registrar_approve
             - registrar_reject
             - void
+            - student_cancel
+        requested_by_student:
+          type: boolean
+          description: >
+            Only meaningful for void: the Registrar is acting on the
+            student's request. Recorded in the audit row.
         reason:
           type: ["string", "null"]
-          description: Required exactly when action is registrar_reject or void.
+          description: >
+            Required exactly when action is program_head_reject,
+            registrar_reject, void or student_cancel (the owning student's own
+            cancellation, allowed until the Registrar approves).
         overload_acknowledged:
           type: boolean
           description: >
-            Required true when action is registrar_approve AND the target
-            enrollment's own requires_overload_approval is true (FR-ENR-004).
-            Ignored otherwise.
+            Required true when action is program_head_approve (or
+            registrar_approve on an enrollment the Program Head never saw) AND
+            the target enrollment's own requires_overload_approval is true
+            (FR-ENR-004). Ignored otherwise.
     PaginatedAcademicGradeCollection:
       type: object
       additionalProperties: false
@@ -6958,34 +8774,49 @@ components:
       type: object
       additionalProperties: false
       required:
-        - student_id
         - source_institution
-        - source_subject_code
         - source_subject_title
         - credited_units
       properties:
         student_id:
-          type: integer
+          type: ["integer", "null"]
+          description: >
+            Required for a Program Chair (a student in their own college).
+            Ignored for a Student, whose request is always for themselves.
         source_institution:
           type: string
+          maxLength: 255
         source_subject_code:
-          type: string
+          type: ["string", "null"]
+          maxLength: 50
+          description: Optional; stored as an empty string when left out.
         source_subject_title:
           type: string
+          maxLength: 255
         source_grade:
           type: ["string", "null"]
+          maxLength: 20
           description: >
             A free string with no equivalence rule encoded — PRD §17
             leaves cross-institution grade equivalence unresolved.
         credited_units:
-          type: integer
-          minimum: 1
-          maximum: 255
+          type: number
+          exclusiveMinimum: 0
+          maximum: 99.9
+          description: One decimal place at most (for example 1.5).
+        source_school_year:
+          type: ["string", "null"]
+          maxLength: 32
+          description: Required for a Student.
+        source_semester:
+          type: ["string", "null"]
+          maxLength: 32
+          description: Required for a Student.
         subject_id:
           type: ["integer", "null"]
           description: >
-            Optional — a transferred subject may not map onto any local
-            subject.
+            Program Chair only (prohibited for a Student). Optional — a
+            transferred subject may not map onto any local subject yet.
     UpdateTransfereeCreditRequest:
       type: object
       additionalProperties: false
@@ -6993,31 +8824,43 @@ components:
         action:
           type: string
           enum:
+            - endorse
+            - decline
             - approve
             - reject
         reason:
           type: ["string", "null"]
-          description: Required exactly when action is reject.
+          maxLength: 1000
+          description: Required exactly when action is decline or reject.
         source_institution:
           type: string
-          description: Prohibited when action is approve or reject.
+          description: Prohibited when action is approve, reject or decline.
         source_subject_code:
-          type: string
-          description: Prohibited when action is approve or reject.
+          type: ["string", "null"]
+          description: Prohibited when action is approve, reject or decline.
         source_subject_title:
           type: string
-          description: Prohibited when action is approve or reject.
+          description: Prohibited when action is approve, reject or decline.
         source_grade:
           type: ["string", "null"]
-          description: Prohibited when action is approve or reject.
+          description: Prohibited when action is approve, reject or decline.
+        source_school_year:
+          type: ["string", "null"]
+          description: Prohibited when action is approve, reject or decline.
+        source_semester:
+          type: ["string", "null"]
+          description: Prohibited when action is approve, reject or decline.
         credited_units:
-          type: integer
-          minimum: 1
-          maximum: 255
-          description: Prohibited when action is approve or reject.
+          type: number
+          exclusiveMinimum: 0
+          maximum: 99.9
+          description: Prohibited when action is approve, reject or decline.
         subject_id:
           type: ["integer", "null"]
-          description: Prohibited when action is approve or reject.
+          description: >
+            The subject of the student's curriculum the credit counts as.
+            Prohibited when action is approve, reject or decline. `endorse`
+            needs one, from this request or already on the credit.
     PaginatedTransfereeCreditCollection:
       type: object
       additionalProperties: false
@@ -7050,15 +8893,21 @@ components:
         - id
         - student_id
         - student_number
+        - student_name
         - source_institution
         - source_subject_code
         - source_subject_title
         - source_grade
         - credited_units
+        - source_school_year
+        - source_semester
         - subject_id
         - subject_code
+        - subject_title
+        - requested_by_student
         - status
         - status_label
+        - endorsed_at
         - processed_at
         - created_at
       properties:
@@ -7071,34 +8920,100 @@ components:
           type: integer
         student_number:
           type: string
+        student_name:
+          type: string
         source_institution:
           type: string
         source_subject_code:
           type: string
+          description: Empty when the student did not know the code.
         source_subject_title:
           type: string
         source_grade:
           type: ["string", "null"]
         credited_units:
-          type: integer
+          type: number
+        source_school_year:
+          type: ["string", "null"]
+        source_semester:
+          type: ["string", "null"]
         subject_id:
           type: ["integer", "null"]
         subject_code:
           type: ["string", "null"]
+        subject_title:
+          type: ["string", "null"]
+        requested_by_student:
+          type: boolean
+          description: >
+            Whether the Student asked for it themselves, as opposed to a
+            Program Chair recording it. Who did is never exposed.
         status:
           type: string
           enum:
             - pending
+            - endorsed
             - approved
             - rejected
         status_label:
           type: string
+        endorsed_at:
+          type: ["string", "null"]
+          format: date-time
         processed_at:
           type: ["string", "null"]
           format: date-time
         created_at:
           type: ["string", "null"]
           format: date-time
+    CreditSubjectSuggestionsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/CreditSubjectSuggestion"
+    CreditSubjectSuggestion:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - subject_id
+        - subject_code
+        - subject_title
+        - units
+        - year_level
+        - semester
+        - score
+        - reasons
+      properties:
+        type:
+          type: string
+          const: credit_subject_suggestion
+        subject_id:
+          type: integer
+        subject_code:
+          type: string
+        subject_title:
+          type: string
+        units:
+          type: number
+        year_level:
+          type: integer
+        semester:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        reasons:
+          type: array
+          items:
+            type: string
     PaginatedClassRosterCollection:
       type: object
       additionalProperties: false
@@ -7219,6 +9134,7 @@ components:
           type: string
           enum:
             - no_active_enrollment
+            - pending_program_head_approval
             - pending_registrar_approval
             - pending_payment
             - enrolled
@@ -7237,6 +9153,7 @@ components:
             - priority
             - priority_label
             - position
+            - announce_count
           properties:
             ticket_number:
               type: string
@@ -7262,6 +9179,13 @@ components:
             position:
               type: [integer, 'null']
               minimum: 0
+            announce_count:
+              type: integer
+              minimum: 0
+              description: >
+                How many times the Cashier has called this ticket out while it
+                was `serving`. The Student's device rings again when this
+                number increases between polls.
         now_serving_ticket_number:
           type: [string, 'null']
           minLength: 1
@@ -7383,6 +9307,7 @@ components:
             - complete
             - skip
             - mark_priority
+            - announce
     PaginatedPaymentCollection:
       type: object
       additionalProperties: false
@@ -7787,6 +9712,302 @@ components:
           $ref: "#/components/schemas/PaginationLinks"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
+    CreateSectionChangeRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, changes]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+        changes:
+          type: object
+          additionalProperties: false
+          minProperties: 1
+          properties:
+            schedule_days:
+              type: ["string", "null"]
+              maxLength: 255
+            starts_at_time:
+              type: ["string", "null"]
+              description: H:i:s
+            ends_at_time:
+              type: ["string", "null"]
+              description: H:i:s
+            room:
+              type: ["string", "null"]
+              maxLength: 255
+            modality:
+              type: ["string", "null"]
+            capacity:
+              type: integer
+              minimum: 1
+            viability_threshold:
+              type: ["integer", "null"]
+              minimum: 1
+    DecideSectionChangeRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject, cancel]
+        decision_reason:
+          type: ["string", "null"]
+          maxLength: 1000
+          description: Required when `action` is `reject`.
+    SectionChangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - section_id
+        - section_code
+        - subject_code
+        - subject_title
+        - academic_term_id
+        - status
+        - status_label
+        - reason
+        - requested_by_name
+        - changes
+        - decided_by_name
+        - decided_at
+        - decision_reason
+        - created_at
+      properties:
+        type:
+          type: string
+          const: section_change_request
+        id:
+          type: integer
+        section_id:
+          type: integer
+        section_code:
+          type: string
+        subject_code:
+          type: string
+        subject_title:
+          type: string
+        academic_term_id:
+          type: integer
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+        status_label:
+          type: string
+        reason:
+          type: string
+        requested_by_name:
+          type: string
+        changes:
+          type: array
+          description: Old (as the requester saw the section) versus new.
+          items:
+            type: object
+            additionalProperties: false
+            required: [field, label, old, new]
+            properties:
+              field:
+                type: string
+              label:
+                type: string
+              old: {}
+              new: {}
+        decided_by_name:
+          type: ["string", "null"]
+        decided_at:
+          type: ["string", "null"]
+          format: date-time
+        decision_reason:
+          type: ["string", "null"]
+        created_at:
+          type: ["string", "null"]
+          format: date-time
+    ProgramShiftResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [type, id, from_program_id, to_program_id, academic_term_id]
+          properties:
+            type:
+              type: string
+              const: program_shift
+            id:
+              type: integer
+            from_program_id:
+              type: integer
+            to_program_id:
+              type: integer
+            academic_term_id:
+              type: integer
+    StatementOfAccountResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, student, academic_term_id, summary, terms, credits, generated_at]
+          properties:
+            type:
+              type: string
+              const: statement_of_account
+            student:
+              type: object
+              properties:
+                student_profile_id: { type: integer }
+                student_number: { type: string }
+                name: { type: string }
+                program_code: { type: string }
+                program_name: { type: string }
+            academic_term_id:
+              type: ["integer", "null"]
+            summary:
+              type: object
+              properties:
+                total_assessed: { type: string }
+                total_paid: { type: string }
+                outstanding_balance: { type: string }
+                advance_payment_balance: { type: string }
+            terms:
+              type: array
+              items:
+                type: object
+                properties:
+                  academic_term_id: { type: integer }
+                  label: { type: string }
+                  enrollment_id: { type: integer }
+                  enrollment_status: { type: string }
+                  lines:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category: { type: string }
+                        label: { type: string }
+                        quantity: { type: ["string", "null"] }
+                        unit_amount: { type: ["string", "null"] }
+                        amount: { type: string }
+                  scholarship_discount: { type: string }
+                  assessment_total: { type: string }
+                  payments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind: { type: string, enum: [enrollment_payment, balance_payment] }
+                        label: { type: string }
+                        reference_number: { type: string }
+                        amount: { type: string }
+                        promissory_note_on_file: { type: boolean }
+                        paid_at: { type: ["string", "null"], format: date-time }
+                  paid_total: { type: string }
+                  outstanding: { type: string }
+                  prior_balance: { type: string }
+                  running_balance: { type: string }
+            credits:
+              type: array
+              items:
+                type: object
+                properties:
+                  reference_number: { type: string }
+                  amount: { type: string }
+                  received_at: { type: ["string", "null"], format: date-time }
+            generated_at:
+              type: string
+              format: date-time
+    AdmissionRequirementsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, student, categories, summary]
+          properties:
+            type:
+              type: string
+              const: admission_requirements
+            student:
+              type: object
+              properties:
+                student_profile_id: { type: integer }
+                student_number: { type: string }
+                name: { type: string }
+                student_type: { type: ["string", "null"] }
+                student_type_label: { type: ["string", "null"] }
+                admission_status: { type: string }
+            categories:
+              type: array
+              items:
+                type: object
+                properties:
+                  category: { type: string, enum: [freshman, transferee, additional] }
+                  label: { type: string }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        requirement_type_id: { type: integer }
+                        name: { type: string }
+                        is_system: { type: boolean }
+                        is_submitted: { type: boolean }
+                        submitted_at: { type: ["string", "null"], format: date-time }
+            summary:
+              type: object
+              properties:
+                required_count: { type: integer }
+                submitted_count: { type: integer }
+                missing_count: { type: integer }
+                complete: { type: boolean }
+    SubjectWaiver:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - student_id
+        - subject_id
+        - subject_code
+        - subject_title
+        - academic_term_id
+        - reason
+        - is_active
+        - granted_at
+        - revoked_at
+      properties:
+        type:
+          type: string
+          const: subject_waiver
+        id:
+          type: integer
+        student_id:
+          type: integer
+        subject_id:
+          type: integer
+        subject_code:
+          type: string
+        subject_title:
+          type: string
+        academic_term_id:
+          type: integer
+        reason:
+          type: string
+        is_active:
+          type: boolean
+        granted_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: ["string", "null"]
+          format: date-time
     StudentProfileResponse:
       type: object
       additionalProperties: false

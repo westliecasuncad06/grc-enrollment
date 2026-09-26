@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import type { AttritionReport } from "@/features/schemas/attrition-honors-schema"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 
 interface AttritionCohortChartProps {
   report: AttritionReport
@@ -35,7 +36,7 @@ export function AttritionCohortChart({ report }: AttritionCohortChartProps) {
   }))
 
   const yearLevelData = report.groups.year_levels.map((y) => ({
-    name: `Year ${y.year_level}`,
+    name: formatYearLevel(y.year_level),
     retained: y.retained_count,
     attrited: y.attrited_count,
     baseline: y.baseline_count,

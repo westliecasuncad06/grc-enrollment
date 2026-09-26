@@ -4,6 +4,7 @@ namespace App\Http\Resources\Api\V1;
 
 use App\Domain\Scheduling\CanonicalScheduleDays;
 use App\Models\Section;
+use App\Support\Http\ProfessorDisclosure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -41,6 +42,10 @@ final class SectionResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        // A Student does not see the professor until the enrollment and add/drop
+        // windows are over (ProfessorVisibility); the keys stay, the values are null.
+        $hideProfessor = ProfessorDisclosure::hiddenFrom($request, $this->resource->academic_term_id);
+
         return [
             'type' => 'section',
             'id' => $this->resource->id,
@@ -48,8 +53,8 @@ final class SectionResource extends JsonResource
             'section_plan_id' => $this->resource->section_plan_id,
             'subject_id' => $this->resource->subject_id,
             'section_code' => $this->resource->section_code,
-            'professor_id' => $this->resource->professor_id,
-            'professor_name' => $this->resource->professor?->name,
+            'professor_id' => $hideProfessor ? null : $this->resource->professor_id,
+            'professor_name' => $hideProfessor ? null : $this->resource->professor?->name,
             'schedule_days' => (new CanonicalScheduleDays)->normalize($this->resource->schedule_days),
             'starts_at_time' => $this->resource->starts_at_time,
             'ends_at_time' => $this->resource->ends_at_time,

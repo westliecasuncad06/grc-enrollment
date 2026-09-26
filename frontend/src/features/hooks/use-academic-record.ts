@@ -7,6 +7,7 @@ import {
   getAcademicRecord,
   getGradeSlip,
   getProspectus,
+  searchAcademicRecordStudents,
 } from "@/features/services/academic-record-service"
 
 export const prospectusQueryKey = (
@@ -69,3 +70,40 @@ export function useGradeSlipQuery(
     enabled: enabled && session !== null && academicTermId !== null,
   })
 }
+
+export const academicRecordStudentsQueryKey = (
+  userId: string | null,
+  search: string,
+  by: string | undefined,
+) => ["academic-record-students", userId, search, by ?? "all"] as const
+
+export function useAcademicRecordStudentSearchQuery(
+  params: {
+    search: string
+    by?: "all" | "student_number" | "name"
+    limit?: number
+  },
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { session } = useAuth()
+  const trimmed = params.search.trim()
+
+  return useQuery({
+    queryKey: academicRecordStudentsQueryKey(
+      session?.userId ?? null,
+      trimmed,
+      params.by,
+    ),
+    queryFn: ({ signal }) =>
+      searchAcademicRecordStudents(
+        {
+          search: trimmed,
+          by: params.by,
+          limit: params.limit,
+        },
+        signal,
+      ),
+    enabled: enabled && session !== null && trimmed.length > 0,
+  })
+}
+

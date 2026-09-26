@@ -1,7 +1,13 @@
 "use client"
 
 import { useGSAP } from "@gsap/react"
-import { LayoutDashboard, LogOut, Menu } from "lucide-react"
+import {
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react"
 import Link from "next/link"
 import { useParams, usePathname, useRouter } from "next/navigation"
 import { startTransition, useRef, type ReactNode } from "react"
@@ -19,13 +25,13 @@ import {
   SheetClose,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/features/components/ui/sheet"
 import { PortalNotificationSheet } from "@/features/components/portal/portal-notification-sheet"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
-import { useAcademicTermWorkflowsQuery } from "@/features/hooks/use-academic-term-workflows"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
 import { cn } from "@/features/lib/utils"
 import {
@@ -38,6 +44,7 @@ import {
   type RolePortalDefinition,
 } from "@/features/portal/role-capabilities"
 import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
+import { useSidebarCollapsed } from "@/features/hooks/use-sidebar-collapsed"
 import { gsap } from "@/features/lib/gsap"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
 
@@ -50,12 +57,17 @@ function NavigationLink({
   children,
   href,
   mobile = false,
-  locked = false,
+  title,
+  attention = false,
 }: {
   children: ReactNode
   href: string
   mobile?: boolean
-  locked?: boolean
+  /** Hover hint; only set while the desktop sidebar is folded to icons. */
+  title?: string
+  /** Shows a dot on the icon while the labels are folded away (a returned
+      schedule would otherwise lose its "Returned" badge). */
+  attention?: boolean
 }) {
   const pathname = usePathname()
   // react-router's NavLink used `end` only for "/portal"; module routes have no
@@ -65,17 +77,10 @@ function NavigationLink({
   const link = (
     <Link
       href={href}
+      title={title}
+      data-attention={attention ? "true" : undefined}
       aria-current={isActive ? "page" : undefined}
-      aria-disabled={locked ? "true" : undefined}
-      title={locked ? "Complete Enrollment steps first" : undefined}
-      onClick={(event) => {
-        if (locked) event.preventDefault()
-      }}
-      className={cn(
-        "portal-nav-link",
-        isActive && "portal-nav-link--active",
-        locked && "portal-nav-link--locked",
-      )}
+      className={cn("portal-nav-link", isActive && "portal-nav-link--active")}
     >
       {children}
     </Link>
@@ -87,10 +92,12 @@ function NavigationLink({
 function PortalNavigation({
   definition,
   mobile = false,
-  enrollmentLinksLocked = false,
+  collapsed = false,
   hasReturnedSchedule = false,
 }: PortalNavigationProps & {
-  enrollmentLinksLocked?: boolean
+  /** Desktop sidebar folded to an icon rail: labels stay in the DOM for
+      assistive tech and are shown as a hover title. */
+  collapsed?: boolean
   hasReturnedSchedule?: boolean
 }) {
   return (
@@ -100,7 +107,11 @@ function PortalNavigation({
         mobile ? "Mobile role portal navigation" : "Role portal navigation"
       }
     >
-      <NavigationLink href="/portal" mobile={mobile}>
+      <NavigationLink
+        href="/portal"
+        mobile={mobile}
+        title={collapsed ? "GRC Connect" : undefined}
+      >
         <LayoutDashboard data-icon="inline-start" aria-hidden="true" />
         <span>GRC Connect</span>
       </NavigationLink>
@@ -114,9 +125,9 @@ function PortalNavigation({
               key={module.id}
               href={`/portal/${module.id}`}
               mobile={mobile}
-              locked={
-                enrollmentLinksLocked &&
-                ["schedule-proposals"].includes(module.id)
+              title={collapsed ? module.label : undefined}
+              attention={
+                hasReturnedSchedule && module.id === "program-chair-enrollment"
               }
             >
               <Icon data-icon="inline-start" aria-hidden="true" />
@@ -150,10 +161,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
     enabled: session !== null,
   })
   const activeAcademicTerm = getActiveAcademicTerm(academicTermsQuery.data)
-  const workflowsQuery = useAcademicTermWorkflowsQuery(
-    activeAcademicTerm?.id ?? 0,
-    session?.role === "program_chair" && activeAcademicTerm !== null,
-  )
   const scheduleProposalsQuery = useScheduleProposalsQuery({
     enabled: session?.role === "program_chair",
   })
@@ -163,6 +170,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const reducedMotion = useReducedMotion()
   const sidebarRef = useRef<HTMLElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } =
+    useSidebarCollapsed()
 
   // ── Sidebar nav links: stagger-in on first mount ─────────────────────────
   useGSAP(
@@ -203,13 +212,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const moduleId = typeof params.moduleId === "string" ? params.moduleId : null
   const definition = rolePortalDefinitions[session.role]
   const activeModule = moduleId ? getRoleModule(session.role, moduleId) : null
-  const chairWorkflow =
-    workflowsQuery.data?.find((item) => item.college === session.college) ??
-    workflowsQuery.data?.[0]
-  const enrollmentLinksLocked =
-    session.role === "program_chair" &&
-    chairWorkflow?.stage !== "schedule_preparation" &&
-    chairWorkflow?.stage !== "for_dean_approval"
   const hasReturnedSchedule =
     session.role === "program_chair" &&
     (scheduleProposalsQuery.data ?? []).some((proposal) => proposal.is_returned)
@@ -236,20 +238,46 @@ export function PortalShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="portal-app">
+    <div
+      className="portal-app"
+      data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}
+    >
       <a className="skip-link" href="#portal-content">
         Skip to portal content
       </a>
 
-      <aside className="portal-sidebar" ref={sidebarRef}>
+      <aside id="portal-sidebar" className="portal-sidebar" ref={sidebarRef}>
         <div>
-          <PortalIdentity />
-          <Badge variant="secondary">GRC Connect</Badge>
+          {!sidebarCollapsed && <PortalIdentity />}
+          <div className="portal-sidebar__toolbar">
+            {!sidebarCollapsed && (
+              <Badge variant="secondary">GRC Connect</Badge>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="portal-sidebar__toggle"
+              onClick={toggleSidebar}
+              aria-controls="portal-sidebar"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={
+                sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+              }
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen aria-hidden="true" />
+              ) : (
+                <PanelLeftClose aria-hidden="true" />
+              )}
+            </Button>
+          </div>
         </div>
 
         <PortalNavigation
           definition={definition}
-          enrollmentLinksLocked={enrollmentLinksLocked}
+          collapsed={sidebarCollapsed}
           hasReturnedSchedule={hasReturnedSchedule}
         />
 
@@ -262,7 +290,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
                 : "No active academic term"}
           </p>
           <Separator />
-          <div className="portal-profile">
+          <div className="portal-profile" title={session.displayName}>
             <Avatar>
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
@@ -302,10 +330,32 @@ export function PortalShell({ children }: { children: ReactNode }) {
                   <PortalNavigation
                     definition={definition}
                     mobile
-                    enrollmentLinksLocked={enrollmentLinksLocked}
                     hasReturnedSchedule={hasReturnedSchedule}
                   />
                 </div>
+                <SheetFooter className="portal-mobile-sheet__footer">
+                  <div className="portal-profile">
+                    <Avatar>
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <strong>{session.displayName}</strong>
+                      <span>{definition.roleLabel}</span>
+                    </div>
+                  </div>
+                  <SheetClose asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="portal-mobile-signout"
+                      onClick={handleSignOut}
+                      aria-label="Sign out"
+                    >
+                      <LogOut data-icon="inline-start" aria-hidden="true" />
+                      Sign out
+                    </Button>
+                  </SheetClose>
+                </SheetFooter>
               </SheetContent>
             </Sheet>
 
@@ -323,11 +373,18 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
           <div className="portal-topbar__actions">
             <PortalNotificationSheet />
-            <Separator orientation="vertical" />
+            {/* Desktop only: whenever the hamburger drawer exists (<= 64rem) it
+                carries Sign out at its bottom instead, so the bell alone takes
+                the right-hand spot (stakeholder Doc 13). */}
+            <Separator
+              orientation="vertical"
+              className="portal-topbar__signout"
+            />
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="portal-topbar__signout"
               onClick={handleSignOut}
               aria-label="Sign out"
             >

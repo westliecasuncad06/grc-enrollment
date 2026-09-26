@@ -383,6 +383,7 @@ final class DemoEnrollmentSeederTest extends TestCase
 
         $curriculum = Curriculum::query()->where('program_id', Program::where('code', 'BSIT')->sole()->id)->where('status', 'active')->sole();
         $placements = CurriculumSubject::query()
+            ->with('subject')
             ->where('curriculum_id', $curriculum->id)
             ->where('year_level', $yearLevel)
             ->where('semester', '2nd')

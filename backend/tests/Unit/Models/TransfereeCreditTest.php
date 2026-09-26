@@ -17,13 +17,14 @@ final class TransfereeCreditTest extends TestCase
             'source_institution' => 'Synthetic Partner College',
             'source_subject_code' => 'ITE-101',
             'source_subject_title' => 'Introduction to Information Technology',
-            'credited_units' => '3',
+            'credited_units' => '1.5',
             'status' => 'approved',
             'processed_at' => '2026-08-05 09:00:00',
         ]);
 
         self::assertSame(TransfereeCreditStatus::Approved, $credit->status);
-        self::assertSame(3, $credit->credited_units);
+        // Fractional units are allowed (decimal(4,1)), so the cast is a float.
+        self::assertSame(1.5, $credit->credited_units);
         self::assertInstanceOf(CarbonImmutable::class, $credit->processed_at);
     }
 }

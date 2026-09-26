@@ -65,6 +65,7 @@ export const itControlStudentAccountSchema = z
     current_term_enrollment_status: z
       .enum([
         "draft",
+        "pending_program_head_approval",
         "pending_registrar_approval",
         "pending_payment",
         "enrolled",

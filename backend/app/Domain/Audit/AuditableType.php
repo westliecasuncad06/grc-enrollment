@@ -68,6 +68,24 @@ final class AuditableType
 
     public const QUEUE_KIOSK_CREDENTIAL = 'queue_kiosk_credential';
 
+    public const ENROLLMENT_STATUS_DASHBOARD = 'enrollment_status_dashboard';
+
+    public const ENROLLMENT_SUBJECT_WAIVER = 'enrollment_subject_waiver';
+
+    public const STUDENT_ADMISSION_REQUIREMENT = 'student_admission_requirement';
+
+    public const ADMISSION_REQUIREMENT_TYPE = 'admission_requirement_type';
+
+    public const SECTION_CHANGE_REQUEST = 'section_change_request';
+
+    public const PROGRAM_SHIFT = 'program_shift';
+
+    public const FEE_SCHEDULE = 'fee_schedule';
+
+    public const FACULTY_LOAD_LIMIT = 'faculty_load_limit';
+
+    public const FACULTY_LOAD_OVERRIDE = 'faculty_load_override';
+
     /**
      * @return list<string>
      */
@@ -106,6 +124,15 @@ final class AuditableType
             self::STUDENT_SCHEDULE_PREFERENCE,
             self::QUEUE_CYCLE,
             self::QUEUE_KIOSK_CREDENTIAL,
+            self::ENROLLMENT_STATUS_DASHBOARD,
+            self::ENROLLMENT_SUBJECT_WAIVER,
+            self::STUDENT_ADMISSION_REQUIREMENT,
+            self::ADMISSION_REQUIREMENT_TYPE,
+            self::SECTION_CHANGE_REQUEST,
+            self::PROGRAM_SHIFT,
+            self::FEE_SCHEDULE,
+            self::FACULTY_LOAD_LIMIT,
+            self::FACULTY_LOAD_OVERRIDE,
         ];
     }
 }

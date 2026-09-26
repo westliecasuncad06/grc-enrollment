@@ -19,7 +19,7 @@ final class EnrollmentChangeRequestTypeTest extends TestCase
     {
         self::assertSame('Add subject', EnrollmentChangeRequestType::Add->label());
         self::assertSame('Drop subject', EnrollmentChangeRequestType::Drop->label());
-        self::assertSame('Change section', EnrollmentChangeRequestType::ChangeSection->label());
+        self::assertSame('Change subject', EnrollmentChangeRequestType::ChangeSection->label());
     }
 
     public function test_only_add_omits_a_from_section(): void

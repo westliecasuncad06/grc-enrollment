@@ -7,6 +7,7 @@ import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
+import { AdmissionRequirementsChecklist } from "@/features/components/portal/admission-requirements-checklist"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
@@ -71,6 +72,7 @@ import {
 } from "@/features/hooks/use-student-records"
 import { useProgramsQuery } from "@/features/hooks/use-reference-data"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import { generateStudentNumber } from "@/features/lib/student-number"
 import {
   provisionStudentSchema,
@@ -292,7 +294,7 @@ function CreateAccountPanel() {
                       <SelectContent>
                         {YEAR_LEVEL_OPTIONS.map((year) => (
                           <SelectItem key={year} value={String(year)}>
-                            {year}
+                            {formatYearLevel(year)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -343,32 +345,6 @@ function CreateAccountPanel() {
                   )}
                 />
                 <FieldError>{errors.student_type?.message}</FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="record-financial">
-                  Financial status
-                </FieldLabel>
-                <Controller
-                  control={control}
-                  name="financial_status"
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ?? "unset"}
-                      onValueChange={(value) =>
-                        field.onChange(value === "unset" ? null : value)
-                      }
-                    >
-                      <SelectTrigger id="record-financial" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unset">Not set</SelectItem>
-                        <SelectItem value="scholar">Scholar</SelectItem>
-                        <SelectItem value="payee">Payee</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
               </Field>
               <Field
                 className="md:col-span-2"
@@ -518,7 +494,6 @@ function StudentRecordDialog({
             year_level: profile.year_level,
             enrollment_category: profile.enrollment_category ?? "regular",
             student_type: profile.student_type ?? "freshman",
-            financial_status: profile.financial_status,
             admission_status: profile.admission_status,
           }
         : {}),
@@ -698,32 +673,6 @@ function StudentRecordDialog({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="edit-financial">
-                      Financial status
-                    </FieldLabel>
-                    <Controller
-                      control={control}
-                      name="financial_status"
-                      render={({ field }) => (
-                        <Select
-                          value={field.value ?? "unset"}
-                          onValueChange={(value) =>
-                            field.onChange(value === "unset" ? null : value)
-                          }
-                        >
-                          <SelectTrigger id="edit-financial" className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="unset">Not set</SelectItem>
-                            <SelectItem value="scholar">Scholar</SelectItem>
-                            <SelectItem value="payee">Payee</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                  </Field>
-                  <Field>
                     <FieldLabel htmlFor="edit-admission">
                       Admission status
                     </FieldLabel>
@@ -754,7 +703,7 @@ function StudentRecordDialog({
                 <Alert className="md:col-span-2">
                   <AlertDescription>
                     Student number, program, entry year, year level, category,
-                    student type, financial status, and admission status are
+                    student type, and admission status are
                     locked because this student already has an enrollment.
                   </AlertDescription>
                 </Alert>
@@ -819,6 +768,21 @@ function StudentRecordDialog({
               )}
             </div>
           </form>
+        )}
+        {profile && (
+          <section
+            aria-labelledby="admission-requirements-heading"
+            className="grid gap-3 border-t pt-4"
+          >
+            <h3 id="admission-requirements-heading" className="font-semibold">
+              Admission requirements
+            </h3>
+            <AdmissionRequirementsChecklist
+              key={profile.id}
+              studentId={profile.id}
+              editable
+            />
+          </section>
         )}
       </DialogContent>
     </Dialog>

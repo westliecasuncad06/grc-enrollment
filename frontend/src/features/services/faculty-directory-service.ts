@@ -1,4 +1,8 @@
 import {
+  facultyProfileEnvelopeSchema,
+  type FacultyProfile,
+} from "@/features/schemas/faculty-profile-schema"
+import {
   facultyMemberEnvelopeSchema,
   facultyMembersEnvelopeSchema,
   facultyWorkforceProfileInputSchema,
@@ -50,6 +54,30 @@ export async function updateFacultyWorkforceProfile(
     kind: "contract",
     message:
       "The API responded, but its faculty workforce update did not match the published v1 contract.",
+    cause: result.error,
+  })
+}
+
+/**
+ * The Registrar Head's read-only view of one professor: terms taught and, for
+ * one term, sections with grade-submission counts. Counts only.
+ */
+export async function getFacultyProfile(
+  professorId: number,
+  academicTermId?: number,
+  signal?: AbortSignal,
+): Promise<FacultyProfile> {
+  const query = academicTermId ? `?academic_term_id=${academicTermId}` : ""
+  const payload = await getAuthenticatedJson(
+    `${FACULTY_MEMBERS_PATH}/${professorId}/profile${query}`,
+    signal,
+  )
+  const result = facultyProfileEnvelopeSchema.safeParse(payload)
+  if (result.success) return result.data.data
+  throw new ApiClientError({
+    kind: "contract",
+    message:
+      "The API responded, but its faculty profile did not match the published v1 contract.",
     cause: result.error,
   })
 }

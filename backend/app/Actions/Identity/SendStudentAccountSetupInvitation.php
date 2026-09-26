@@ -11,14 +11,17 @@ use App\Mail\StudentAccountSetupMail;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
 final class SendStudentAccountSetupInvitation
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly AccountSetupCodes $setupCodes,
+    ) {}
 
     public function handle(
         StudentProfile $profile,
@@ -36,7 +39,7 @@ final class SendStudentAccountSetupInvitation
             ]);
         }
 
-        $setupCode = Password::broker()->createToken($student);
+        $setupCode = $this->setupCodes->issue($student);
 
         $origin = request()?->header('Origin');
         $referer = request()?->header('Referer');
@@ -59,7 +62,7 @@ final class SendStudentAccountSetupInvitation
             $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
         }
 
-        $setupUrl = rtrim($baseUrl, '/').'/account-setup';
+        $setupUrl = rtrim($baseUrl, '/');
 
         try {
             Mail::to($student->email)->send(new StudentAccountSetupMail(

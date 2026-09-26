@@ -34,6 +34,7 @@ final readonly class ListStuckEnrollments
 {
     private const IN_PROGRESS_STATUSES = [
         EnrollmentStatus::Draft,
+        EnrollmentStatus::PendingProgramHeadApproval,
         EnrollmentStatus::PendingRegistrarApproval,
         EnrollmentStatus::PendingPayment,
     ];
@@ -55,7 +56,8 @@ final readonly class ListStuckEnrollments
             ->map(function (Enrollment $enrollment) use ($now, $thresholdDays): StuckEnrollmentRow {
                 $statedSince = match ($enrollment->status) {
                     EnrollmentStatus::PendingPayment => $enrollment->registrar_decided_at,
-                    EnrollmentStatus::PendingRegistrarApproval, EnrollmentStatus::Draft => $enrollment->submitted_at,
+                    EnrollmentStatus::PendingRegistrarApproval => $enrollment->program_head_decided_at ?? $enrollment->submitted_at,
+                    EnrollmentStatus::PendingProgramHeadApproval, EnrollmentStatus::Draft => $enrollment->submitted_at,
                     default => $enrollment->submitted_at,
                 } ?? $enrollment->submitted_at ?? $now;
 

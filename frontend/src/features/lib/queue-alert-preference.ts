@@ -14,6 +14,24 @@ export function readQueueCallSoundPreference(): boolean {
   }
 }
 
+/**
+ * The saved choice, or `null` when the student never made one (as opposed to
+ * an explicit "off"). A surface can default sound on without overriding a
+ * student who turned it off.
+ */
+export function readQueueCallSoundChoice(): boolean | null {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const stored = window.localStorage.getItem(QUEUE_CALL_SOUND_PREFERENCE_KEY)
+    return stored === "true" ? true : stored === "false" ? false : null
+  } catch {
+    return null
+  }
+}
+
 export function writeQueueCallSoundPreference(enabled: boolean): void {
   if (typeof window === "undefined") {
     return

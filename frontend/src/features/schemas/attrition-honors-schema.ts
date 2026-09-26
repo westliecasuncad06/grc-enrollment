@@ -9,6 +9,13 @@ const metricsSchema = z
   })
   .strict()
 
+// The report's own summary adds two informational counts that are never part of
+// attrition: students still deciding (or enrolling) and graduates.
+const attritionSummarySchema = metricsSchema.extend({
+  undecided_count: z.number().int().nonnegative().optional(),
+  graduated_count: z.number().int().nonnegative().optional(),
+})
+
 export const attritionReportEnvelopeSchema = z
   .object({
     data: z
@@ -29,7 +36,7 @@ export const attritionReportEnvelopeSchema = z
           })
           .strict(),
         generated_at: z.string(),
-        summary: metricsSchema,
+        summary: attritionSummarySchema,
         groups: z
           .object({
             colleges: z.array(

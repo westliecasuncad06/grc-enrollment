@@ -80,7 +80,7 @@ final class AutoAssignSectionScheduleReferences
     ): Collection {
         $college = $actor->college?->value;
         if ($college === null) {
-            throw ValidationException::withMessages(['college' => 'A college-scoped Program Chair is required.']);
+            throw ValidationException::withMessages(['college' => 'A college-scoped Program Head is required.']);
         }
         $this->assertCurriculumBelongsToCollege($curriculumId, $actor, $college);
 

@@ -2,8 +2,10 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Domain\Enrollment\EnrollmentStatus;
 use App\Models\QueueCycle;
 use App\Models\QueueTicket;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 /**
@@ -52,8 +54,12 @@ final readonly class ListQueueTickets
 
         return QueueTicket::query()
             ->with(['enrollment.student'])
-            ->when($queueDate !== null, fn ($query) => $query->whereDate('queue_date', $queueDate))
+            // `queue_date` is a DATE column: compare it directly (after normalising a
+            // looser `date` input such as "2026-08-01 10:00" to Y-m-d) instead of
+            // `whereDate()`, whose `DATE(queue_date)` wrapper defeats the index (ADR 0029).
+            ->when($queueDate !== null, fn ($query) => $query->where('queue_date', CarbonImmutable::parse($queueDate)->toDateString()))
             ->when($status !== null, fn ($query) => $query->where('status', $status))
+            ->when($status === 'waiting', fn ($query) => $query->whereDoesntHave('enrollment', fn ($eq) => $eq->where('status', EnrollmentStatus::Enrolled)))
             ->when($cycle === 'open', function ($query) use ($openCycleId) {
                 if ($openCycleId === null) {
                     // No open cycle exists (fresh install, or everything has

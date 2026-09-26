@@ -5,11 +5,13 @@ namespace App\Http\Resources\Api\V1;
 use App\Domain\Academic\Prospectus;
 use App\Domain\Academic\ProspectusEntry;
 use App\Domain\Academic\ProspectusSemester;
+use App\Domain\Academic\TransfereeCreditStatus;
 use App\Models\AcademicGrade;
 use App\Models\CurriculumMigration;
 use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubjectEquivalency;
 use App\Models\SubjectPrerequisite;
+use App\Models\TransfereeCredit;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -35,6 +37,7 @@ final class ProspectusResource extends JsonResource
      *     enrollment_category_label: ?string,
      *     enrollment_category_derived_at: ?string,
      *     curriculum_transition: ?array<string, mixed>,
+     *     transferee_credits: list<array<string, mixed>>,
      *     semesters: list<mixed>,
      *     unplaced_entries: list<mixed>
      * }
@@ -49,6 +52,17 @@ final class ProspectusResource extends JsonResource
             ->with(['sourceCurriculum', 'targetCurriculum', 'credits.equivalency.sourceSubject', 'credits.equivalency.targetSubject'])
             ->latest('migrated_at')
             ->first();
+
+        // Subjects credited from another school (approved, and mapped to a
+        // GRC subject). Listed beside the curriculum transition: like it, they
+        // carry no GRC grade (ADR 0026).
+        $transfereeCredits = TransfereeCredit::query()
+            ->where('student_id', $student->id)
+            ->where('status', TransfereeCreditStatus::Approved->value)
+            ->whereNotNull('subject_id')
+            ->with('subject')
+            ->orderBy('id')
+            ->get();
 
         return [
             'type' => 'prospectus',
@@ -89,6 +103,19 @@ final class ProspectusResource extends JsonResource
                     ->values()
                     ->all(),
             ],
+            'transferee_credits' => array_values($transfereeCredits
+                ->map(static fn (TransfereeCredit $credit): array => [
+                    'source_institution' => $credit->source_institution,
+                    'source_subject_code' => $credit->source_subject_code,
+                    'source_subject_title' => $credit->source_subject_title,
+                    'source_grade' => $credit->source_grade,
+                    'credited_units' => $credit->credited_units,
+                    'source_school_year' => $credit->source_school_year,
+                    'source_semester' => $credit->source_semester,
+                    'target_code' => $credit->subject?->code,
+                    'target_title' => $credit->subject?->title,
+                ])
+                ->all()),
             'semesters' => array_map(
                 fn (ProspectusSemester $semester): array => $this->semesterToArray($semester),
                 $this->resource->semesters,

@@ -6,6 +6,7 @@ use App\Actions\Identity\InviteStaffAccount;
 use App\Actions\Identity\ListStaffInvitations;
 use App\Actions\Identity\SendStaffAccountSetupInvitation;
 use App\Domain\Identity\UserRole;
+use App\Domain\Organization\CollegeCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StaffInvitation\StoreStaffInvitationRequest;
 use App\Http\Resources\Api\V1\StaffInvitationResource;
@@ -34,12 +35,15 @@ final class StaffInvitationController extends Controller
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
+        $college = $request->validated('college') ? CollegeCode::tryFrom($request->validated('college')) : null;
 
         $staff = $inviteStaff->handle(
             $request->validated('email'),
             UserRole::from((string) $request->validated('role')),
             $actor,
             $contextFactory->fromRequest($request),
+            $college,
+            $request->validated('masters_degree'),
         );
 
         return $this->cachePrivateResponse(

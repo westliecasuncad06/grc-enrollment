@@ -9,7 +9,7 @@ final class UpdateFeeScheduleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === UserRole::RegistrarHead;
+        return $this->user()?->role === UserRole::AccountingStaff;
     }
 
     /**

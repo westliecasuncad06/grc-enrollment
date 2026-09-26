@@ -20,6 +20,7 @@ const sampleEnrollment = {
   total_units: 18,
   requires_overload_approval: false,
   submitted_at: "2026-08-01T08:30:00Z",
+  program_head_decided_at: null,
   registrar_decided_at: null,
   payment_confirmed_at: null,
   enrolled_at: null,

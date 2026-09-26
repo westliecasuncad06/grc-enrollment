@@ -54,7 +54,7 @@
                                 Set up your account
                             </h1>
                             <p style="margin:0 0 16px 0; color:#374151; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:1.6;">
-                                Your Program Chair has invited you to a GRC faculty account. To finish setting it up, open the account setup page, enter your full name, and create your own private password using the one-time code below.
+                                Your Program Head has invited you to a GRC faculty account. To finish setting it up, open the account setup page, enter your full name, and create your own private password using the one-time code below.
                             </p>
                         </td>
                     </tr>
@@ -96,7 +96,7 @@
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff7ed; border:1px solid #fde3cb; border-radius:6px;">
                                 <tr>
                                     <td style="padding:14px 18px; color:#9a5b13; font-family:Arial, Helvetica, sans-serif; font-size:13px; line-height:1.6;">
-                                        This code expires in {{ config('auth.passwords.users.expire') }} minutes and can be used only once. If you did not expect a GRC faculty account, you can safely ignore this email.
+                                        This code expires in {{ intdiv((int) config('auth.passwords.users.expire'), 60) }} hours and can be used only once. If you did not expect a GRC faculty account, you can safely ignore this email.
                                     </td>
                                 </tr>
                             </table>

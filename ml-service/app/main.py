@@ -85,7 +85,7 @@ async def health() -> HealthResponse:
     tags=["section-demand"],
     summary="Predict section demand from aggregate historical observations",
 )
-async def predict_section_demand(
+def predict_section_demand(
     request: SectionDemandPredictionRequest,
 ) -> SectionDemandPredictionResponse:
     return SectionDemandPredictionResponse(
@@ -103,7 +103,7 @@ async def predict_section_demand(
     tags=["attrition"],
     summary="Predict student attrition risk using XGBoost",
 )
-async def predict_attrition(
+def predict_attrition(
     request: AttritionPredictionRequest,
 ) -> AttritionPredictionResponse:
     return AttritionPredictionResponse(

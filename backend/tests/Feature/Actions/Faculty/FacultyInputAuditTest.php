@@ -56,7 +56,6 @@ final class FacultyInputAuditTest extends TestCase
             null,
             [
                 'professor_id' => $professor->id,
-                'academic_term_id' => $term->id,
                 'day_of_week' => 2,
                 'starts_at_time' => '08:00:00',
                 'ends_at_time' => '10:00:00',
@@ -89,14 +88,12 @@ final class FacultyInputAuditTest extends TestCase
             $professor,
             [
                 'professor_id' => $professor->id,
-                'academic_term_id' => $term->id,
                 'day_of_week' => 1,
                 'starts_at_time' => '08:00:00',
                 'ends_at_time' => '09:00:00',
             ],
             [
                 'professor_id' => $professor->id,
-                'academic_term_id' => $term->id,
                 'day_of_week' => 3,
                 'starts_at_time' => '10:00:00',
                 'ends_at_time' => '11:00:00',
@@ -124,7 +121,6 @@ final class FacultyInputAuditTest extends TestCase
             $professor,
             [
                 'professor_id' => $professor->id,
-                'academic_term_id' => $term->id,
                 'day_of_week' => 4,
                 'starts_at_time' => '13:00:00',
                 'ends_at_time' => '15:00:00',

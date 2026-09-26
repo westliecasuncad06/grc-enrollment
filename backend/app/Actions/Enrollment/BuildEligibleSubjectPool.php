@@ -2,6 +2,7 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Academic\ResolveCreditedSubjectIds;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Domain\Academic\PrerequisiteVerdict;
@@ -10,16 +11,16 @@ use App\Domain\Curriculum\SemesterSlot;
 use App\Domain\Enrollment\BlockSectionAccessPolicy;
 use App\Domain\Enrollment\EligibleSubjectEntry;
 use App\Domain\Enrollment\EnrollmentAccessContext;
-use App\Domain\Enrollment\EnrollmentCategory;
+use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\SchedulePreferenceScorer;
 use App\Domain\Scheduling\SectionStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
-use App\Models\CurriculumMigrationCredit;
 use App\Models\CurriculumSubject;
 use App\Models\EnrollmentSubject;
+use App\Models\EnrollmentSubjectWaiver;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedulePreference;
@@ -76,7 +77,16 @@ final readonly class BuildEligibleSubjectPool
         // composite '1st|2nd' string) matches on whichever of its two
         // ordinals falls in either window, per
         // App\Domain\Curriculum\SemesterCoverage's own contract.
-        if ($student->enrollment_category !== null && strtolower($student->enrollment_category) === EnrollmentCategory::Irregular->value) {
+        //
+        // Resolved once for the whole pool: which audience windows are open
+        // is a property of the term, not of any single placement. It also
+        // carries the student's LIVE audience (ADR 0028) - the stored
+        // `enrollment_category` can still be stale on the very request that
+        // self-heals it (e.g. right after promotion), and would otherwise let
+        // a newly Irregular student see the whole curriculum for one request.
+        $context = $this->accessContext->execute($term, $student);
+
+        if ($context->viewerAudience === EnrollmentAudience::Irregular) {
             $currentOrdinal = (SemesterSlot::tryFrom($term->semester) ?? SemesterSlot::First)->ordinal($student->year_level);
 
             $placements = $placements->filter(function (CurriculumSubject $placement) use ($currentOrdinal): bool {
@@ -91,27 +101,43 @@ final readonly class BuildEligibleSubjectPool
             })->values();
         }
 
-        // Resolved once for the whole pool: which audience windows are open
-        // is a property of the term, not of any single placement.
-        $context = $this->accessContext->execute($term, $student);
-
         // Loaded once for the whole pool, not per placement — one row per
         // student, and every entry is scored against the same preference.
         $preference = StudentSchedulePreference::query()->where('student_id', $student->id)->first();
-        $creditedSubjectIds = CurriculumMigrationCredit::query()
-            ->whereHas('migration', fn ($query) => $query
+        // Subjects the student already has without a GRC grade, each with where
+        // the credit came from: an old-curriculum migration or an approved
+        // credit for a subject taken at another school (ADR 0026).
+        $credits = new ResolveCreditedSubjectIds;
+        $creditedSubjectIds = [];
+        foreach (array_keys($credits->fromApprovedTransfereeCredits([$student->id])[$student->id] ?? []) as $subjectId) {
+            $creditedSubjectIds[$subjectId] = 'previous_school';
+        }
+        foreach (array_keys($credits->fromCurriculumMigrations([$student->id], $student->curriculum_id)[$student->id] ?? []) as $subjectId) {
+            $creditedSubjectIds[$subjectId] = 'curriculum';
+        }
+
+        // Prerequisite waivers the Registrar Head granted for this student and
+        // term (ADR 0031): they lift the `prerequisite` exclusion only.
+        $waivedSubjectIds = array_fill_keys(
+            EnrollmentSubjectWaiver::query()
+                ->active()
                 ->where('student_id', $student->id)
-                ->where('target_curriculum_id', $student->curriculum_id))
-            ->pluck('target_subject_id')
-            ->flip()
-            ->all();
+                ->where('academic_term_id', $term->id)
+                ->pluck('subject_id')
+                ->all(),
+            true,
+        );
 
         return array_values(array_map(
-            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference, $creditedSubjectIds),
+            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference, $creditedSubjectIds, $waivedSubjectIds),
             $placements->all(),
         ));
     }
 
+    /**
+     * @param  array<int, string>  $creditedSubjectIds  subject id => where the credit came from ('curriculum' or 'previous_school')
+     * @param  array<int, true>  $waivedSubjectIds  subject id => a Registrar Head prerequisite waiver is active for this student and term
+     */
     private function evaluatePlacement(
         StudentProfile $student,
         AcademicTerm $term,
@@ -119,6 +145,7 @@ final readonly class BuildEligibleSubjectPool
         EnrollmentAccessContext $context,
         ?StudentSchedulePreference $preference,
         array $creditedSubjectIds,
+        array $waivedSubjectIds = [],
     ): EligibleSubjectEntry {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
@@ -128,7 +155,9 @@ final readonly class BuildEligibleSubjectPool
 
         $ownGrade = $this->latestLockedGrade($student->id, $siblingSubjectIds);
         if (isset($creditedSubjectIds[$placement->subject_id])) {
-            $reasons[] = ['code' => 'completed', 'message' => 'This subject was credited from the student\'s prior curriculum.'];
+            $reasons[] = ['code' => 'completed', 'message' => $creditedSubjectIds[$placement->subject_id] === 'previous_school'
+                ? 'This subject was credited from the student\'s previous school.'
+                : 'This subject was credited from the student\'s prior curriculum.'];
             $excluded = true;
         } elseif ($this->verdictFor($ownGrade, (string) config('enrollment.grading.passing_grade'))->isSatisfied()) {
             $reasons[] = ['code' => 'completed', 'message' => 'This subject has already been completed with a passing grade.'];
@@ -140,6 +169,7 @@ final readonly class BuildEligibleSubjectPool
             $excluded = true;
         }
 
+        $waiverNoted = false;
         foreach ($placement->prerequisites as $edge) {
             if (isset($creditedSubjectIds[$edge->prerequisite_subject_id])) {
                 continue;
@@ -150,7 +180,15 @@ final readonly class BuildEligibleSubjectPool
             );
             $verdict = $this->verdictFor($prerequisiteGrade, $edge->minimum_grade);
 
-            if ($verdict->status->value === 'not_satisfied') {
+            if ($verdict->status->value === 'not_satisfied' && $this->isWaived($siblingSubjectIds, $waivedSubjectIds)) {
+                if (! $waiverNoted) {
+                    $reasons[] = [
+                        'code' => 'prerequisite_waived',
+                        'message' => 'The Registrar Head waived an unmet prerequisite for this subject this term.',
+                    ];
+                    $waiverNoted = true;
+                }
+            } elseif ($verdict->status->value === 'not_satisfied') {
                 $reasons[] = [
                     'code' => 'prerequisite',
                     'message' => sprintf('%s: %s', $edge->prerequisiteSubject->code, $verdict->reason),
@@ -223,6 +261,21 @@ final readonly class BuildEligibleSubjectPool
             preferenceScore: $scoring['score'],
             preferenceReasons: $scoring['reasons'],
         );
+    }
+
+    /**
+     * @param  list<int>  $siblingSubjectIds
+     * @param  array<int, true>  $waivedSubjectIds
+     */
+    private function isWaived(array $siblingSubjectIds, array $waivedSubjectIds): bool
+    {
+        foreach ($siblingSubjectIds as $subjectId) {
+            if (isset($waivedSubjectIds[$subjectId])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

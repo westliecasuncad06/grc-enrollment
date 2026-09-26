@@ -7,6 +7,7 @@ use App\Models\AssessmentItem;
 use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
 use App\Models\User;
+use App\Support\Http\ProfessorDisclosure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -50,6 +51,7 @@ final class EnrollmentResource extends JsonResource
      *     total_units: float,
      *     requires_overload_approval: bool,
      *     submitted_at: ?string,
+     *     program_head_decided_at: ?string,
      *     registrar_decided_at: ?string,
      *     payment_confirmed_at: ?string,
      *     enrolled_at: ?string,
@@ -90,6 +92,9 @@ final class EnrollmentResource extends JsonResource
             UserRole::ProgramChair,
         ], true);
         $student = $this->resource->student;
+        // A Student does not see the professor until the enrollment and add/drop
+        // windows are over (ProfessorVisibility).
+        $hideProfessor = ProfessorDisclosure::hiddenFrom($request, $this->resource->academic_term_id);
 
         return [
             'type' => 'enrollment',
@@ -109,6 +114,7 @@ final class EnrollmentResource extends JsonResource
             'total_units' => $this->resource->total_units,
             'requires_overload_approval' => $this->resource->requires_overload_approval,
             'submitted_at' => $this->resource->submitted_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'program_head_decided_at' => $this->resource->program_head_decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'registrar_decided_at' => $this->resource->registrar_decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'payment_confirmed_at' => $this->resource->payment_confirmed_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'enrolled_at' => $this->resource->enrolled_at?->utc()->format('Y-m-d\TH:i:s\Z'),
@@ -125,7 +131,7 @@ final class EnrollmentResource extends JsonResource
                         'ends_at_time' => $enrollmentSubject->section->ends_at_time,
                         'room' => $enrollmentSubject->section->room,
                         'modality' => $enrollmentSubject->section->modality?->value,
-                        'professor_name' => $enrollmentSubject->section->professor?->name,
+                        'professor_name' => $hideProfessor ? null : $enrollmentSubject->section->professor?->name,
                         'status' => $enrollmentSubject->status->value,
                         'status_label' => $enrollmentSubject->status->label(),
                     ])

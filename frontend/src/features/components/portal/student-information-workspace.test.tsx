@@ -99,7 +99,10 @@ function bodyOf(init: RequestInit | undefined): Record<string, unknown> {
 }
 
 describe("StudentInformationWorkspace", () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
 
   it("separates official and pending values and lets the student revise the single pending request", async () => {
     const fetchMock = vi
@@ -180,6 +183,67 @@ describe("StudentInformationWorkspace", () => {
     })
     expect(
       screen.getByRole("button", { name: "Cancel pending request" }),
+    ).toBeInTheDocument()
+  })
+
+  it("keeps the long request form collapsed on a phone until it is opened", async () => {
+    // Stakeholder Doc 13: not everything at once on a phone.
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: query.includes("max-width: 47.99rem"),
+          media: query,
+          onchange: null,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockImplementation((input) => {
+        const url = urlOf(input)
+        if (url.endsWith("/api/v1/student-profile")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: profile })),
+          )
+        }
+        if (url.includes("student-profile-change-requests")) {
+          return Promise.resolve(new Response(JSON.stringify(page)))
+        }
+        return Promise.reject(new Error(`Unexpected request: ${url}`))
+      }),
+    )
+    const user = userEvent.setup()
+    renderWithSession(<StudentInformationWorkspace />, {
+      session: {
+        userId: "41",
+        displayName: profile.name,
+        role: "student",
+        signedInAt: "2026-08-26T00:00:00Z",
+      },
+    })
+
+    await screen.findByText(/go to the Admission Office/i)
+    // The essentials are visible straight away...
+    expect(screen.getByText(profile.address)).toBeInTheDocument()
+    expect(screen.getByText("Awaiting Admission")).toBeInTheDocument()
+    // ...the 7-field form and the history are one tap away.
+    const form = screen.getByRole("button", { name: "Revise pending request" })
+    expect(form).toHaveAttribute("aria-expanded", "false")
+    expect(
+      screen.queryByLabelText("Proposed complete address"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Request history" }),
+    ).toHaveAttribute("aria-expanded", "false")
+
+    await user.click(form)
+
+    expect(
+      await screen.findByLabelText("Proposed complete address"),
     ).toBeInTheDocument()
   })
 })

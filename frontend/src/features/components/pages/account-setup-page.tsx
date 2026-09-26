@@ -5,7 +5,7 @@ import { KeyRound, MailCheck, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { useForm, type Resolver } from "react-hook-form"
+import { Controller, useForm, type Resolver } from "react-hook-form"
 
 import {
   Alert,
@@ -21,6 +21,13 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { accountSetupSchema } from "@/features/schemas/admission-schema"
 import { facultyAccountSetupSchema } from "@/features/schemas/faculty-invitation-schema"
@@ -36,9 +43,21 @@ interface AccountSetupFormValues {
   email: string
   code: string
   name?: string
+  college?: "ccs" | "coe" | "coa" | "cbae"
+  masters_degree?: string
   password: string
   password_confirmation: string
 }
+
+const COLLEGE_OPTIONS = [
+  { value: "ccs", label: "CCS — College of Computer Studies" },
+  { value: "coe", label: "COE — College of Education" },
+  { value: "coa", label: "COA — College of Accountancy" },
+  {
+    value: "cbae",
+    label: "CBAE — College of Business Administration and Entrepreneurship",
+  },
+] as const
 
 interface AccountSetupPageProps {
   /** Faculty and staff supply a name here since the inviting Chair/Registrar Head only gave an email — the Student flow never needed this field. */
@@ -56,11 +75,11 @@ const COPY = {
   faculty: {
     eyebrow: "Faculty account",
     inviterLine:
-      "Use the one-time code delivered separately in your Program Chair's invitation email.",
+      "Use the one-time code delivered separately in your Program Head's invitation email.",
     enterLine:
-      "Enter the email and one-time code from your Program Chair's invitation.",
+      "Enter the email and one-time code from your Program Head's invitation.",
     nameHint:
-      "Your Program Chair invited you by email only — tell us your name here.",
+      "Your Program Head invited you by email only — tell us your name here.",
   },
   staff: {
     eyebrow: "Staff account",
@@ -73,7 +92,9 @@ const COPY = {
   },
 } as const
 
-export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps) {
+export function AccountSetupPage({
+  variant = "student",
+}: AccountSetupPageProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const emailParam = searchParams.get("email") ?? ""
@@ -89,6 +110,7 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
   const [resendMessage, setResendMessage] = useState("")
 
   const {
+    control,
     formState: { errors, isSubmitting },
     getValues,
     handleSubmit,
@@ -106,7 +128,13 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
     defaultValues: {
       email: emailParam,
       code: codeParam,
-      ...(needsName ? { name: "" } : {}),
+      ...(needsName
+        ? {
+            name: "",
+            college: undefined,
+            masters_degree: "",
+          }
+        : {}),
       password: "",
       password_confirmation: "",
     },
@@ -165,6 +193,8 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
           email: values.email,
           code: values.code,
           name: values.name ?? "",
+          college: values.college,
+          masters_degree: values.masters_degree?.trim() || undefined,
           password: values.password,
           password_confirmation: values.password_confirmation,
         })
@@ -173,6 +203,8 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
           email: values.email,
           code: values.code,
           name: values.name ?? "",
+          college: values.college,
+          masters_degree: values.masters_degree?.trim() || undefined,
           password: values.password,
           password_confirmation: values.password_confirmation,
         })
@@ -235,9 +267,8 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
             <div>
               <strong>One use only</strong>
               <span>
-                {variant === "student"
-                  ? "The code expires after 24 hours and cannot be reused."
-                  : "The code expires after 60 minutes and cannot be reused."}
+                The 6-digit code expires after 24 hours, allows only a few wrong
+                attempts, and cannot be reused.
               </span>
             </div>
           </li>
@@ -329,28 +360,91 @@ export function AccountSetupPage({ variant = "student" }: AccountSetupPageProps)
                     <Input
                       id="setup-code"
                       autoComplete="one-time-code"
+                      inputMode="numeric"
+                      maxLength={6}
                       disabled={isSubmitting}
                       {...register("code")}
                     />
                     <FieldDescription>
-                      {variant === "student"
-                        ? "Codes expire 24 hours after the latest invitation."
-                        : "Codes expire 60 minutes after the latest invitation."}
+                      The 6-digit code expires 24 hours after the latest
+                      invitation. Too many wrong attempts lock it; ask for a new
+                      invitation.
                     </FieldDescription>
                     <FieldError>{errors.code?.message}</FieldError>
                   </Field>
                   {needsName && (
-                    <Field data-invalid={Boolean(errors.name)}>
-                      <FieldLabel htmlFor="setup-name">Full name</FieldLabel>
-                      <Input
-                        id="setup-name"
-                        autoComplete="name"
-                        disabled={isSubmitting}
-                        {...register("name")}
-                      />
-                      <FieldDescription>{copy.nameHint}</FieldDescription>
-                      <FieldError>{errors.name?.message}</FieldError>
-                    </Field>
+                    <>
+                      <Field data-invalid={Boolean(errors.name)}>
+                        <FieldLabel htmlFor="setup-name">Full name</FieldLabel>
+                        <Input
+                          id="setup-name"
+                          autoComplete="name"
+                          disabled={isSubmitting}
+                          {...register("name")}
+                        />
+                        <FieldDescription>{copy.nameHint}</FieldDescription>
+                        <FieldError>{errors.name?.message}</FieldError>
+                      </Field>
+                      <Field data-invalid={Boolean(errors.college)}>
+                        <FieldLabel htmlFor="setup-college">
+                          Department / College
+                        </FieldLabel>
+                        <Controller
+                          control={control}
+                          name="college"
+                          render={({ field }) => (
+                            <Select
+                              value={field.value ?? ""}
+                              onValueChange={(val) =>
+                                field.onChange(val === "" ? undefined : val)
+                              }
+                              disabled={isSubmitting}
+                            >
+                              <SelectTrigger
+                                id="setup-college"
+                                className="w-full"
+                                aria-label="Department / College"
+                              >
+                                <SelectValue placeholder="Select department / college" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {COLLEGE_OPTIONS.map((college) => (
+                                  <SelectItem
+                                    key={college.value}
+                                    value={college.value}
+                                  >
+                                    {college.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        <FieldDescription>
+                          Select the department or college (CCS, COE, COA,
+                          CBAE).
+                        </FieldDescription>
+                        <FieldError>{errors.college?.message}</FieldError>
+                      </Field>
+                      <Field data-invalid={Boolean(errors.masters_degree)}>
+                        <FieldLabel htmlFor="setup-masters-degree">
+                          Master&apos;s degree in teaching
+                        </FieldLabel>
+                        <Input
+                          id="setup-masters-degree"
+                          placeholder="e.g., Master in Information Technology, MAEd, MBA"
+                          disabled={isSubmitting}
+                          {...register("masters_degree")}
+                        />
+                        <FieldDescription>
+                          Specify master&apos;s degree or teaching
+                          specialization if applicable.
+                        </FieldDescription>
+                        <FieldError>
+                          {errors.masters_degree?.message}
+                        </FieldError>
+                      </Field>
+                    </>
                   )}
                   <Field data-invalid={Boolean(errors.password)}>
                     <FieldLabel htmlFor="setup-password">

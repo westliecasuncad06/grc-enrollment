@@ -5,11 +5,13 @@ namespace Tests\Feature\Database;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\RollsBackThroughMigration;
 use Tests\TestCase;
 
 final class PairSubjectsMigrationTest extends TestCase
 {
     use RefreshDatabase;
+    use RollsBackThroughMigration;
 
     /**
      * `--step=3`, not 2: `2026_08_29_000001_add_status_to_faculty_specializations_table`
@@ -19,7 +21,7 @@ final class PairSubjectsMigrationTest extends TestCase
      */
     public function test_the_migration_pairs_lecture_and_laboratory_subjects_by_code_and_title(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 3])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_27_000002_add_paired_subject_id_to_subjects');
         self::assertFalse(Schema::hasColumn('subjects', 'paired_subject_id'));
 
         $insert = fn (array $overrides) => DB::table('subjects')->insertGetId(array_merge([

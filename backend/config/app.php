@@ -58,6 +58,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Lazy-Loading (N+1) Violations
+    |--------------------------------------------------------------------------
+    |
+    | Outside production, lazy-loading a relation on a model that came from a
+    | multi-row query is treated as an N+1 bug (PRD §8.1). "throw" fails the
+    | request/test; "log" only writes a warning so a whole suite run can
+    | inventory every violation at once. Local development always logs.
+    |
+    */
+
+    'lazy_loading_violations' => env('LAZY_LOADING_VIOLATIONS', 'throw'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

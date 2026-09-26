@@ -10,14 +10,17 @@ use App\Domain\Identity\UserStatus;
 use App\Mail\FacultyAccountSetupMail;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
 final class SendFacultyAccountSetupInvitation
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly AccountSetupCodes $setupCodes,
+    ) {}
 
     public function handle(
         User $faculty,
@@ -34,7 +37,7 @@ final class SendFacultyAccountSetupInvitation
             ]);
         }
 
-        $setupCode = Password::broker()->createToken($faculty);
+        $setupCode = $this->setupCodes->issue($faculty);
 
         $origin = request()?->header('Origin');
         $referer = request()?->header('Referer');

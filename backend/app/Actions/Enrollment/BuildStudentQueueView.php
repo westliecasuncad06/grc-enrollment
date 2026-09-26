@@ -61,6 +61,7 @@ final readonly class BuildStudentQueueView
         }
 
         return match ($enrollment->status) {
+            EnrollmentStatus::PendingProgramHeadApproval => 'pending_program_head_approval',
             EnrollmentStatus::Draft, EnrollmentStatus::PendingRegistrarApproval => 'pending_registrar_approval',
             EnrollmentStatus::PendingPayment => 'pending_payment',
             EnrollmentStatus::Enrolled => 'enrolled',

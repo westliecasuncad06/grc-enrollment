@@ -10,14 +10,17 @@ use App\Domain\Identity\UserStatus;
 use App\Mail\StaffAccountSetupMail;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
 final class SendStaffAccountSetupInvitation
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly AccountSetupCodes $setupCodes,
+    ) {}
 
     public function handle(
         User $staff,
@@ -34,12 +37,33 @@ final class SendStaffAccountSetupInvitation
             ]);
         }
 
-        $setupCode = Password::broker()->createToken($staff);
+        $setupCode = $this->setupCodes->issue($staff);
+
+        $origin = request()?->header('Origin');
+        $referer = request()?->header('Referer');
+        $baseUrl = null;
+        if (is_string($origin) && filter_var($origin, FILTER_VALIDATE_URL)) {
+            $parsed = parse_url($origin);
+            if (isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
+                $baseUrl = $parsed['scheme'].'://'.$parsed['host'].$port;
+            }
+        } elseif (is_string($referer) && filter_var($referer, FILTER_VALIDATE_URL)) {
+            $parsed = parse_url($referer);
+            if (isset($parsed['scheme'], $parsed['host'])) {
+                $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
+                $baseUrl = $parsed['scheme'].'://'.$parsed['host'].$port;
+            }
+        }
+
+        if ($baseUrl === null) {
+            $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
+        }
 
         try {
             Mail::to($staff->email)->send(new StaffAccountSetupMail(
                 $staff->role,
-                rtrim((string) config('app.frontend_url'), '/').'/staff-account-setup',
+                rtrim($baseUrl, '/').'/staff-account-setup',
                 $setupCode,
             ));
 

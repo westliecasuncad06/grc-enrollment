@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type {
   EnrollmentChangeRequestFilters,
   StoreEnrollmentChangeRequestInput,
@@ -28,6 +29,7 @@ export function useEnrollmentChangeRequestsQuery(
   return useQuery({
     queryKey: enrollmentChangeRequestsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listEnrollmentChangeRequests(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }

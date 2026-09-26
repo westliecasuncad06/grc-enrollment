@@ -66,6 +66,7 @@ final readonly class UpdateAcademicGrade
     public function __construct(
         private AuditRecorder $auditRecorder,
         private ReclassifyStudentEnrollmentCategory $reclassifier,
+        private PromoteEligibleStudents $promoter,
     ) {}
 
     /**
@@ -123,6 +124,11 @@ final readonly class UpdateAcademicGrade
                     'message' => "Your grade for {$lockedGrade->subject->code} has been finalized.",
                 ]);
 
+                // Locking the last grade of a year moves the student up right away
+                // (ADR 0028) so the reclassification below already sees their new
+                // year level; the daily command is only the backstop.
+                $this->promoter->promoteStudent($lockedGrade->student, $actor, $context);
+
                 // Reclassification needs a "now" to measure the student's
                 // completed semesters against. With no term currently
                 // semester_ongoing (e.g. between terms, or a historical
@@ -130,7 +136,11 @@ final readonly class UpdateAcademicGrade
                 // skip rather than guess.
                 $currentTerm = AcademicTerm::query()
                     ->where('status', AcademicTermStatus::SemesterOngoing)
-                    ->first();
+                    ->first()
+                    ?? AcademicTerm::query()
+                        ->whereIn('status', [AcademicTermStatus::ForDeanApproval, AcademicTermStatus::Draft])
+                        ->latest('id')
+                        ->first();
 
                 if ($currentTerm !== null) {
                     $this->reclassifier->execute($lockedGrade->student, $currentTerm, $actor, $context);
@@ -157,7 +167,7 @@ final readonly class UpdateAcademicGrade
                         ->where('status', AcademicTermStatus::SemesterOngoing)
                         ->first();
                     $gradeTerm = $lockedGrade->academicTerm;
-                    if ($currentTerm !== null && $gradeTerm !== null) {
+                    if ($currentTerm !== null) {
                         $elapsed = $currentTerm->termsElapsedSince($gradeTerm);
                         if ($elapsed <= 3) {
                             $isIncCompletion = true;
@@ -205,6 +215,9 @@ final readonly class UpdateAcademicGrade
             );
 
             if ($isIncCompletion && $mark !== null && $mark !== GradeMark::Incomplete) {
+                // Resolving an INC can complete the year (ADR 0028), same as a fresh lock.
+                $this->promoter->promoteStudent($lockedGrade->student, $actor, $context);
+
                 $currentTerm = AcademicTerm::query()
                     ->where('status', AcademicTermStatus::SemesterOngoing)
                     ->first();

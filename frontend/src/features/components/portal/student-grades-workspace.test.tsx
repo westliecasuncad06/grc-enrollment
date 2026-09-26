@@ -116,23 +116,44 @@ describe("StudentGradesWorkspace", () => {
     ).toBeInTheDocument()
   })
 
-  it("defaults to the latest term's grade slip, with the numeric mark shown", async () => {
-    vi.stubGlobal("fetch", mockFetch())
-    renderWithSession(<StudentGradesWorkspace />, { session: studentSession })
-
-    expect(await screen.findByText("CS201")).toBeInTheDocument()
-    expect(screen.queryByText("CS101")).not.toBeInTheDocument()
-    expect(screen.getAllByText("1.50").length).toBeGreaterThan(0)
-  })
-
-  it("switches to another semester's grade slip when clicked", async () => {
+  it("shows semester buttons and opens the grade slip in a modal when clicked", async () => {
     const user = userEvent.setup()
     vi.stubGlobal("fetch", mockFetch())
     renderWithSession(<StudentGradesWorkspace />, { session: studentSession })
 
-    await screen.findByText("CS201")
-    await user.click(screen.getByRole("button", { name: "1st" }))
+    // Grades are NOT shown inline — semester buttons must be clicked first
+    const semesterButtons = await screen.findAllByRole("button", { name: /1st|2nd/i })
+    expect(semesterButtons.length).toBeGreaterThan(0)
+    expect(screen.queryByText("CS201")).not.toBeInTheDocument()
 
+    // Click the 2nd semester button to open the grade slip modal
+    await user.click(screen.getByRole("button", { name: "2nd" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText("CS201")).toBeInTheDocument()
+    expect(within(dialog).getAllByText("1.50").length).toBeGreaterThan(0)
+    expect(within(dialog).queryByText("CS101")).not.toBeInTheDocument()
+  })
+
+  it("switches to another semester's grade slip when a different semester is clicked", async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal("fetch", mockFetch())
+    renderWithSession(<StudentGradesWorkspace />, { session: studentSession })
+
+    await screen.findAllByRole("button", { name: /1st|2nd/i })
+
+    // Open the 2nd semester modal first
+    await user.click(screen.getByRole("button", { name: "2nd" }))
+    expect(await screen.findByText("CS201")).toBeInTheDocument()
+
+    // Close the dialog
+    await user.keyboard("{Escape}")
+    await vi.waitFor(() =>
+      expect(screen.queryByText("CS201")).not.toBeInTheDocument(),
+    )
+
+    // Open the 1st semester modal
+    await user.click(screen.getByRole("button", { name: "1st" }))
     expect(await screen.findByText("CS101")).toBeInTheDocument()
     expect(screen.queryByText("CS201")).not.toBeInTheDocument()
   })
@@ -142,7 +163,8 @@ describe("StudentGradesWorkspace", () => {
     vi.stubGlobal("fetch", mockFetch())
     renderWithSession(<StudentGradesWorkspace />, { session: studentSession })
 
-    await screen.findByText("CS201")
+    // Wait for the component to render
+    await screen.findByRole("button", { name: "Prospectus" })
     await user.click(screen.getByRole("button", { name: "Prospectus" }))
 
     const dialog = await screen.findByRole("dialog")
@@ -155,7 +177,8 @@ describe("StudentGradesWorkspace", () => {
       session: studentSession,
     })
 
-    await screen.findByText("CS201")
+    // Wait for the school years card to render
+    await screen.findByText("School years")
     expect(await axe(container)).toHaveNoViolations()
   })
 })

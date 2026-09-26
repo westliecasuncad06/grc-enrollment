@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property float $total_units
  * @property bool $requires_overload_approval
  * @property ?CarbonImmutable $submitted_at
+ * @property ?CarbonImmutable $program_head_decided_at
  * @property ?CarbonImmutable $registrar_decided_at
  * @property ?CarbonImmutable $payment_confirmed_at
  * @property ?CarbonImmutable $enrolled_at
@@ -52,6 +53,7 @@ final class Enrollment extends Model
         'total_units',
         'requires_overload_approval',
         'submitted_at',
+        'program_head_decided_at',
         'registrar_decided_at',
         'payment_confirmed_at',
         'enrolled_at',
@@ -67,6 +69,7 @@ final class Enrollment extends Model
             'total_units' => 'float',
             'requires_overload_approval' => 'boolean',
             'submitted_at' => 'immutable_datetime',
+            'program_head_decided_at' => 'immutable_datetime',
             'registrar_decided_at' => 'immutable_datetime',
             'payment_confirmed_at' => 'immutable_datetime',
             'enrolled_at' => 'immutable_datetime',

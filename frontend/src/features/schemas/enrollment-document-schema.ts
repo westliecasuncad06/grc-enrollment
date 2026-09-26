@@ -80,8 +80,9 @@ export const corSnapshotSchema = z
         course: z.string().min(1),
         level: z.string().min(1),
         platform: z.string().min(1),
+        classification: z.string().optional(),
       })
-      .strict(),
+      .passthrough(),
     term: z
       .object({ school_year: z.string().min(1), semester: z.string().min(1) })
       .strict(),
@@ -107,6 +108,10 @@ export const corSnapshotSchema = z
         other_fees: z.array(corMoneyItemSchema),
         total_tuition: z.string(),
         total_other_fees: z.string(),
+        // ADR 0025: a scholarship is a negative line; snapshots made before it
+        // have neither field.
+        scholarship_discount: z.array(corMoneyItemSchema).optional(),
+        total_scholarship_discount: z.string().optional(),
         grand_total: z.string(),
         payment_amount: z.union([z.string(), z.number()]).transform((val) => String(val)),
         amount_paid: z.union([z.string(), z.number()]).transform((val) => String(val)).optional(),
@@ -149,3 +154,15 @@ export interface Paginated<T> {
   links: z.infer<typeof paginationLinksSchema>
   meta: z.infer<typeof paginationMetaSchema>
 }
+
+export const corPreviewEnvelopeSchema = z
+  .object({
+    data: z.object({
+      snapshot: corSnapshotSchema,
+      watermark: z.string(),
+    }).strict(),
+  })
+  .strict()
+
+export type CorPreviewResponse = z.infer<typeof corPreviewEnvelopeSchema>["data"]
+

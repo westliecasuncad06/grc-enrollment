@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Actions\Auth\ActivateStaffAccount;
+use App\Domain\Organization\CollegeCode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\StaffAccountSetupRequest;
 use App\Support\Audit\AuditRequestContextFactory;
@@ -15,12 +16,16 @@ final class StaffAccountSetupController extends Controller
         ActivateStaffAccount $activate,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
+        $college = $request->validated('college') ? CollegeCode::tryFrom($request->validated('college')) : null;
+
         $activate->handle(
             $request->validated('email'),
             $request->validated('code'),
             $request->validated('password'),
             $request->validated('name'),
             $contextFactory->fromRequest($request),
+            $college,
+            $request->validated('masters_degree'),
         );
 
         return response()->json([

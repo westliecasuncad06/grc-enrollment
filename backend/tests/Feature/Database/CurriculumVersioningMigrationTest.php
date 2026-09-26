@@ -6,11 +6,13 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\RollsBackThroughMigration;
 use Tests\TestCase;
 
 final class CurriculumVersioningMigrationTest extends TestCase
 {
     use RefreshDatabase;
+    use RollsBackThroughMigration;
 
     public function test_curricula_table_gains_the_effective_year_range_columns(): void
     {
@@ -40,7 +42,7 @@ final class CurriculumVersioningMigrationTest extends TestCase
         // Eight later migrations currently follow the effective-year
         // migration. Roll back through it so rerunning the migration executes
         // the backfill against the inserted legacy row.
-        $this->artisan('migrate:rollback', ['--step' => 9])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_07_000001_add_effective_year_range_to_curricula');
         $this->artisan('migrate')->assertExitCode(0);
 
         $row = DB::table('curricula')->where('id', $curriculumId)->first();
@@ -75,7 +77,7 @@ final class CurriculumVersioningMigrationTest extends TestCase
     public function test_migrations_are_fully_reversible(): void
     {
         // --step 9 -- see test_backfill_parses_the_existing_effective_school_year_string.
-        $this->artisan('migrate:rollback', ['--step' => 9])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_07_000001_add_effective_year_range_to_curricula');
 
         $this->assertFalse(Schema::hasColumn('curricula', 'effective_start_year'));
         $this->assertFalse(Schema::hasColumn('student_profiles', 'entry_year'));

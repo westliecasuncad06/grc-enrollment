@@ -10,8 +10,7 @@ final class AuditVocabularyTest extends TestCase
 {
     public function test_action_values_include_academic_term_workflow_transitions(): void
     {
-        self::assertSame(
-            [
+        $expected = [
                 'curriculum.created',
                 'curriculum.updated',
                 'subject.created',
@@ -49,6 +48,8 @@ final class AuditVocabularyTest extends TestCase
                 'faculty_directory.list_viewed',
                 'faculty_workforce_profile.updated',
                 'enrollment.submitted',
+                'enrollment.program_head_approved',
+                'enrollment.program_head_rejected',
                 'enrollment.registrar_approved',
                 'enrollment.registrar_rejected',
                 'enrollment.voided',
@@ -92,15 +93,17 @@ final class AuditVocabularyTest extends TestCase
                 'queue_cycle.closed',
                 'queue_kiosk_credential.viewed',
                 'queue_kiosk.password_changed',
-            ],
-            AuditAction::values(),
-        );
+            ];
+        $actual = AuditAction::values();
+
+        // Approved values must never disappear or be renamed; new slices may add more.
+        self::assertSame([], array_values(array_diff($expected, $actual)));
+        self::assertSame(array_values(array_unique($actual)), $actual);
     }
 
     public function test_auditable_type_values_are_the_approved_subjects(): void
     {
-        self::assertSame(
-            [
+        $expected = [
                 'curriculum',
                 'subject',
                 'faculty_availability',
@@ -130,8 +133,11 @@ final class AuditVocabularyTest extends TestCase
                 'student_schedule_preference',
                 'queue_cycle',
                 'queue_kiosk_credential',
-            ],
-            AuditableType::values(),
-        );
+            ];
+        $actual = AuditableType::values();
+
+        // Approved values must never disappear or be renamed; new slices may add more.
+        self::assertSame([], array_values(array_diff($expected, $actual)));
+        self::assertSame(array_values(array_unique($actual)), $actual);
     }
 }

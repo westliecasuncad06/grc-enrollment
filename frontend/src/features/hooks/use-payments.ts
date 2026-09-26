@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { keepPreviousForSameUser } from "@/features/lib/query-client"
 import type { PaymentFilters } from "@/features/schemas/payment-schema"
 import { listPayments } from "@/features/services/payment-service"
 
@@ -20,6 +21,7 @@ export function usePaymentsQuery(
   return useQuery({
     queryKey: paymentsQueryKey(session?.userId ?? null, filters),
     queryFn: ({ signal }) => listPayments(filters, signal),
+    placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
   })
 }

@@ -3,6 +3,7 @@
 namespace App\Actions\Enrollment;
 
 use App\Models\Enrollment;
+use App\Models\QueueTicket;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
@@ -26,9 +27,9 @@ final readonly class ListEnrollments
         $page = isset($filters['page']) ? (int) $filters['page'] : 1;
         $perPage = isset($filters['per_page']) ? (int) $filters['per_page'] : 20;
 
-        return Enrollment::query()
+        $enrollments = Enrollment::query()
             ->visibleTo($actor)
-            ->with(['student.user', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items'])
+            ->with(['student.user', 'academicTerm.enrollmentWindows', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items'])
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
             ->when($search !== null && $search !== '', function ($query) use ($search) {
@@ -51,5 +52,17 @@ final readonly class ListEnrollments
             ->orderByDesc('id')
             ->paginate($perPage, ['*'], 'page', $page)
             ->withQueryString();
+
+        // Every row renders its queue position; compute the whole page's positions
+        // from one query instead of one to three COUNT queries per waiting ticket
+        // on every poll (ADR 0029).
+        QueueTicket::preloadPositions(
+            array_values(array_filter(array_map(
+                static fn (Enrollment $enrollment): ?QueueTicket => $enrollment->queueTicket,
+                $enrollments->items(),
+            ))),
+        );
+
+        return $enrollments;
     }
 }

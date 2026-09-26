@@ -49,7 +49,45 @@ final class StudentProfilePolicy
             || $user->role === UserRole::AccountingStaff;
     }
 
+    /**
+     * The Registrar Head's read of one student's profile while reviewing an
+     * enrollment (stakeholder Doc 14). Like `viewAccount`, this is a narrow
+     * ability: it does not open the general student-profile directory, which
+     * stays with Admission Staff.
+     */
+    public function viewForRegistrar(User $user, StudentProfile $profile): bool
+    {
+        return $user->role === UserRole::RegistrarHead;
+    }
+
+    /**
+     * The Admission requirements checklist (ADR 0037): a Student reads their
+     * own, Admission Staff read any.
+     */
+    public function viewAdmissionRequirements(User $user, StudentProfile $profile): bool
+    {
+        return ($user->role === UserRole::Student && $user->id === $profile->user_id)
+            || $user->role === UserRole::AdmissionStaff;
+    }
+
+    /**
+     * Ticking requirements off is the Admission Staff's alone.
+     */
+    public function manageAdmissionRequirements(User $user, StudentProfile $profile): bool
+    {
+        return $user->role === UserRole::AdmissionStaff;
+    }
+
     public function recordAccountPayment(User $user, StudentProfile $profile): bool
+    {
+        return $user->role === UserRole::AccountingStaff;
+    }
+
+    /**
+     * The Cashier's general student search (Advance Payment). A class-level
+     * ability: there is no single profile to authorize against yet.
+     */
+    public function searchForCashier(User $user): bool
     {
         return $user->role === UserRole::AccountingStaff;
     }

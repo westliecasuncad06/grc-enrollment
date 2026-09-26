@@ -92,6 +92,26 @@ export const prospectusSchema = z
       })
       .nullable()
       .optional(),
+    // Subjects credited from another school (approved by the Registrar and
+    // mapped to a GRC subject by the Program Chair; ADR 0026). They carry no
+    // GRC grade. Defaults to none for a server that predates the field.
+    transferee_credits: z
+      .array(
+        z
+          .object({
+            source_institution: z.string().min(1),
+            source_subject_code: z.string(),
+            source_subject_title: z.string().min(1),
+            source_grade: z.string().nullable(),
+            credited_units: z.number(),
+            source_school_year: z.string().nullable(),
+            source_semester: z.string().nullable(),
+            target_code: z.string().nullable(),
+            target_title: z.string().nullable(),
+          })
+          .strict(),
+      )
+      .default([]),
     semesters: z.array(prospectusSemesterSchema),
     unplaced_entries: z.array(prospectusUnplacedEntrySchema),
   })
@@ -173,6 +193,7 @@ export const academicRecordSchema = z
     type: z.literal("academic_record"),
     student_id: z.number().int().positive(),
     student_number: z.string().min(1),
+    student_name: z.string().optional(),
     program_code: z.string().min(1),
     program_name: z.string().min(1),
     year_level: z.number().int().min(1).max(4),
@@ -187,6 +208,30 @@ export const academicRecordEnvelopeSchema = z
   .object({ data: academicRecordSchema })
   .strict()
 
+export const academicRecordStudentLookupSchema = z
+  .object({
+    type: z.literal("academic_record_student"),
+    id: z.number().int().positive(),
+    student_id: z.number().int().positive(),
+    student_number: z.string().min(1),
+    name: z.string().min(1),
+    first_name: z.string().min(1),
+    last_name: z.string().optional().default(""),
+    email: z.string().email(),
+    program_code: z.string().min(1),
+    program_name: z.string().min(1),
+    year_level: z.number().int().min(1).max(4),
+    enrollment_category: z.string().nullable(),
+    enrollment_category_label: z.string().nullable(),
+    academic_standing: z.string(),
+    academic_standing_label: z.string(),
+  })
+  .strict()
+
+export const academicRecordStudentLookupEnvelopeSchema = z
+  .object({ data: z.array(academicRecordStudentLookupSchema) })
+  .strict()
+
 export type ProspectusEntry = z.infer<typeof prospectusEntrySchema>
 export type ProspectusSemester = z.infer<typeof prospectusSemesterSchema>
 export type ProspectusUnplacedEntry = z.infer<
@@ -197,3 +242,6 @@ export type GradeSlipRow = z.infer<typeof gradeSlipRowSchema>
 export type GradeSlip = z.infer<typeof gradeSlipSchema>
 export type AcademicRecordTerm = z.infer<typeof academicRecordTermSchema>
 export type AcademicRecord = z.infer<typeof academicRecordSchema>
+export type AcademicRecordStudentLookup = z.infer<
+  typeof academicRecordStudentLookupSchema
+>

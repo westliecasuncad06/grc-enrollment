@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Billing\AdjustEnrollmentAssessment;
+use App\Actions\Enrollment\BuildCorSnapshot;
 use App\Actions\Enrollment\ConfirmPayment;
 use App\Actions\Enrollment\ListEnrollments;
 use App\Actions\Enrollment\RequestWithdrawal;
@@ -37,9 +38,12 @@ final class EnrollmentController extends Controller
      * @var array<string, string>
      */
     private const ABILITY_FOR_ACTION = [
+        'program_head_approve' => 'decideProgramHeadApproval',
+        'program_head_reject' => 'decideProgramHeadApproval',
         'registrar_approve' => 'decideApproval',
         'registrar_reject' => 'decideApproval',
         'void' => 'void',
+        'student_cancel' => 'cancel',
     ];
 
     /**
@@ -106,7 +110,12 @@ final class EnrollmentController extends Controller
         $action = $request->validated('action');
         $ability = self::ABILITY_FOR_ACTION[$action];
 
-        $this->authorize($ability, Enrollment::class);
+        // The Program Head's decision is record-level (own college only); the
+        // Registrar-side abilities are role-level.
+        $this->authorize(
+            $ability,
+            in_array($ability, ['decideProgramHeadApproval', 'cancel'], true) ? $enrollment : Enrollment::class,
+        );
 
         $enrollment = $transitioner->execute(
             $enrollment,
@@ -114,6 +123,7 @@ final class EnrollmentController extends Controller
             $actor,
             $request->validated('reason'),
             $contextFactory->fromRequest($request),
+            $request->boolean('requested_by_student'),
         );
 
         $response = EnrollmentResource::make($enrollment)->response($request);
@@ -194,6 +204,36 @@ final class EnrollmentController extends Controller
         $response->setStatusCode(201);
 
         return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * @throws AuthenticationException
+     */
+    public function corPreview(
+        Request $request,
+        Enrollment $enrollment,
+        BuildCorSnapshot $buildCorSnapshot,
+    ): JsonResponse {
+        $this->authenticatedUser($request);
+        $this->authorize('viewCorPreview', Enrollment::class);
+
+        $enrollment->loadMissing([
+            'student.user',
+            'student.program',
+            'academicTerm',
+            'enrollmentSubjects.section.subject',
+            'assessment.items',
+            'payment.confirmer',
+        ]);
+
+        $snapshot = $buildCorSnapshot->execute($enrollment, $enrollment->payment);
+
+        return $this->cachePrivateResponse(response()->json([
+            'data' => [
+                'snapshot' => $snapshot,
+                'watermark' => 'Preview — official COR is issued after payment confirmation',
+            ],
+        ]));
     }
 
     /**

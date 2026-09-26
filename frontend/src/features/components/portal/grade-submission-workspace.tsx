@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock3,
   FolderOpen,
+  History,
   Save,
   Send,
   ShieldCheck,
@@ -47,6 +48,13 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import { Input } from "@/features/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -559,26 +567,53 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
 
 interface AssignedClassesContentProps {
   sections: readonly GradeSectionSummary[]
-  selectedTermId: number | null
+  viewingHistory: boolean
+  selectedHistoryTermId: number | null
   sectionId: number | null
-  onSelectTerm: (id: number) => void
+  onOpenHistory: () => void
+  onCloseHistory: () => void
+  onSelectHistoryTerm: (id: number) => void
   onSelectSection: (id: number) => void
 }
 
 function AssignedClassesContent({
   sections,
-  selectedTermId,
+  viewingHistory,
+  selectedHistoryTermId,
   sectionId,
-  onSelectTerm,
+  onOpenHistory,
+  onCloseHistory,
+  onSelectHistoryTerm,
   onSelectSection,
 }: AssignedClassesContentProps) {
-  // Build a School Year → semesters map
-  const schoolYearMap = useMemo(() => {
+  // Current term is determined by highest/latest school year and term ID
+  const currentTermId = useMemo(() => {
+    if (sections.length === 0) return null
+    const sorted = [...sections].sort((a, b) => {
+      const syCmp = b.academic_term.school_year.localeCompare(a.academic_term.school_year)
+      if (syCmp !== 0) return syCmp
+      return b.academic_term.id - a.academic_term.id
+    })
+    return sorted[0].academic_term.id
+  }, [sections])
+
+  const currentSections = useMemo(() => {
+    if (currentTermId === null) return sections
+    return sections.filter((s) => s.academic_term.id === currentTermId)
+  }, [sections, currentTermId])
+
+  const historySections = useMemo(() => {
+    if (currentTermId === null) return []
+    return sections.filter((s) => s.academic_term.id !== currentTermId)
+  }, [sections, currentTermId])
+
+  // Build a School Year → historical semesters map
+  const historySchoolYearMap = useMemo(() => {
     const syMap = new Map<
       string,
       Map<number, { id: number; label: string; semester: string; count: number }>
     >()
-    for (const s of sections) {
+    for (const s of historySections) {
       const term = s.academic_term
       const sy = term.school_year
       if (!syMap.has(sy)) syMap.set(sy, new Map())
@@ -595,107 +630,175 @@ function AssignedClassesContent({
         })
       }
     }
-    // Sort school years descending
     return Array.from(syMap.entries()).sort(([a], [b]) => b.localeCompare(a))
-  }, [sections])
+  }, [historySections])
 
-  const selectedTermLabel = useMemo(() => {
-    if (selectedTermId === null) return null
-    for (const [, semMap] of schoolYearMap) {
-      const found = semMap.get(selectedTermId)
+  const selectedHistoryTermLabel = useMemo(() => {
+    if (selectedHistoryTermId === null) return null
+    for (const [, semMap] of historySchoolYearMap) {
+      const found = semMap.get(selectedHistoryTermId)
       if (found) return found.label
     }
     return null
-  }, [selectedTermId, schoolYearMap])
+  }, [selectedHistoryTermId, historySchoolYearMap])
 
-  const filteredSections =
-    selectedTermId === null
+  const filteredHistorySections =
+    selectedHistoryTermId === null
       ? []
-      : sections.filter((s) => s.academic_term.id === selectedTermId)
+      : historySections.filter((s) => s.academic_term.id === selectedHistoryTermId)
 
-  // === SEMESTER SELECTION SCREEN ===
-  if (selectedTermId === null) {
+  // === HISTORICAL SEMESTERS: FOLDER SELECTION ===
+  if (viewingHistory && selectedHistoryTermId === null) {
     return (
-      <div
-        className="space-y-5"
-        role="list"
-        aria-label="Available school years and semesters"
-      >
-        {schoolYearMap.map(([schoolYear, semMap]) => {
-          const semesters = Array.from(semMap.values()).sort((a, b) =>
-            a.semester.localeCompare(b.semester),
-          )
-          return (
-            <div key={schoolYear} role="listitem">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {schoolYear}
-              </p>
-              <div className="flex flex-col gap-2">
-                {semesters.map((term) => (
-                  <button
-                    key={term.id}
-                    type="button"
-                    className="group flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3 text-left shadow-xs transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    onClick={() => onSelectTerm(term.id)}
-                  >
-                    <span className="flex items-center gap-3">
-                      <FolderOpen
-                        className="size-5 shrink-0 text-primary"
-                        aria-hidden
-                      />
-                      <span>
-                        <span className="block text-sm font-semibold text-foreground">
-                          {term.semester} Semester
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {term.count}{" "}
-                          {term.count === 1 ? "class" : "classes"}
+      <div className="space-y-5">
+        <div
+          className="space-y-5"
+          role="list"
+          aria-label="Previous school years and semesters"
+        >
+          {historySchoolYearMap.map(([schoolYear, semMap]) => {
+            const semesters = Array.from(semMap.values()).sort((a, b) =>
+              a.semester.localeCompare(b.semester),
+            )
+            return (
+              <div key={schoolYear} role="listitem">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {schoolYear}
+                </p>
+                <div className="flex flex-col gap-2">
+                  {semesters.map((term) => (
+                    <button
+                      key={term.id}
+                      type="button"
+                      className="group flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3 text-left shadow-xs transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      onClick={() => onSelectHistoryTerm(term.id)}
+                    >
+                      <span className="flex items-center gap-3">
+                        <FolderOpen
+                          className="size-5 shrink-0 text-primary"
+                          aria-hidden
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-foreground">
+                            {term.semester} Semester
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {term.count}{" "}
+                            {term.count === 1 ? "class" : "classes"}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <ChevronRight
-                      className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-                      aria-hidden
-                    />
-                  </button>
-                ))}
+                      <ChevronRight
+                        className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+                        aria-hidden
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+
+        {/* Lower Right Return Button */}
+        <div className="flex justify-end pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="portal-module-page__return"
+            onClick={onCloseHistory}
+          >
+            <ArrowLeft className="size-4" data-icon="inline-start" aria-hidden="true" />
+            Return to Current Semester
+          </Button>
+        </div>
       </div>
     )
   }
 
-  // === CLASSES LIST FOR SELECTED SEMESTER ===
+  // === HISTORICAL SEMESTERS: CLASSES LIST FOR SELECTED PAST SEMESTER ===
+  if (viewingHistory && selectedHistoryTermId !== null) {
+    return (
+      <div className="space-y-4">
+        {selectedHistoryTermLabel && (
+          <div
+            className="flex items-center gap-2 rounded-lg border bg-primary/5 px-3 py-2"
+            aria-label="Filtered past semester"
+            role="group"
+          >
+            <FolderOpen className="size-4 shrink-0 text-primary" aria-hidden />
+            <span className="text-sm font-semibold text-primary">
+              {selectedHistoryTermLabel}
+            </span>
+            <Badge
+              variant="secondary"
+              className="ml-auto px-1.5 py-0 text-[10px]"
+            >
+              {filteredHistorySections.length}
+            </Badge>
+          </div>
+        )}
+
+        {filteredHistorySections.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No classes found in this semester folder.
+          </p>
+        ) : (
+          <div className="grid gap-3 xl:grid-cols-2">
+            {filteredHistorySections.map((section) => (
+              <GradeSectionCard
+                key={section.section_id}
+                section={section}
+                selected={section.section_id === sectionId}
+                onSelect={() => onSelectSection(section.section_id)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Lower Right Return Button */}
+        <div className="flex justify-end pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="portal-module-page__return"
+            onClick={onCloseHistory}
+          >
+            <ArrowLeft className="size-4" data-icon="inline-start" aria-hidden="true" />
+            Return to Current Semester
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // === DEFAULT: CURRENT SEMESTER ASSIGNED CLASSES ===
+  const currentTermSummary = currentSections[0]?.academic_term
+  const currentTermLabel = currentTermSummary
+    ? `${currentTermSummary.school_year} · ${currentTermSummary.semester} Semester`
+    : null
+
   return (
     <div className="space-y-4">
-      {selectedTermLabel && (
-        <div
-          className="flex items-center gap-2 rounded-lg border bg-primary/5 px-3 py-2"
-          aria-label="Filter by semester"
-          role="group"
-        >
-          <FolderOpen className="size-4 shrink-0 text-primary" aria-hidden />
-          <span className="text-sm font-semibold text-primary">
-            {selectedTermLabel}
-          </span>
-          <Badge
-            variant="secondary"
-            className="ml-auto px-1.5 py-0 text-[10px]"
-          >
-            {filteredSections.length}
+      {currentTermLabel && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Active semester:</span>
+          <Badge variant="outline" className="font-medium text-foreground">
+            {currentTermLabel}
           </Badge>
+          <span className="ml-auto">
+            {currentSections.length} assigned {currentSections.length === 1 ? "class" : "classes"}
+          </span>
         </div>
       )}
 
-      {filteredSections.length === 0 ? (
+      {currentSections.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No classes found in this semester folder.
+          No classes are currently assigned to your account for this semester.
         </p>
       ) : (
         <div className="grid gap-3 xl:grid-cols-2">
-          {filteredSections.map((section) => (
+          {currentSections.map((section) => (
             <GradeSectionCard
               key={section.section_id}
               section={section}
@@ -703,6 +806,21 @@ function AssignedClassesContent({
               onSelect={() => onSelectSection(section.section_id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Lower Right: Previous Semesters Button (styled like Return to GRC Connect) */}
+      {historySections.length > 0 && (
+        <div className="flex justify-end pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="portal-module-page__return"
+            onClick={onOpenHistory}
+          >
+            <History className="size-4" data-icon="inline-start" aria-hidden="true" />
+            Previous Semesters
+          </Button>
         </div>
       )}
     </div>
@@ -713,19 +831,32 @@ export function GradeSubmissionWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "faculty"
   const [sectionId, setSectionId] = useState<number | null>(null)
-  // null = semester selection screen; number = specific term selected
-  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
+  const [viewingHistory, setViewingHistory] = useState(false)
+  const [selectedHistoryTermId, setSelectedHistoryTermId] = useState<number | null>(null)
+
   const sectionsQuery = useGradeSubmissionSectionsQuery({
     enabled: authorized,
   })
 
-  const handleSelectTerm = (id: number) => {
-    setSelectedTermId(id)
+  const handleOpenHistory = () => {
+    setViewingHistory(true)
+    setSelectedHistoryTermId(null)
     setSectionId(null)
   }
 
-  const handleBack = () => {
-    setSelectedTermId(null)
+  const handleCloseHistory = () => {
+    setViewingHistory(false)
+    setSelectedHistoryTermId(null)
+    setSectionId(null)
+  }
+
+  const handleSelectHistoryTerm = (id: number) => {
+    setSelectedHistoryTermId(id)
+    setSectionId(null)
+  }
+
+  const handleBackToHistoryFolders = () => {
+    setSelectedHistoryTermId(null)
     setSectionId(null)
   }
 
@@ -739,21 +870,38 @@ export function GradeSubmissionWorkspace() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <div className="flex items-center gap-2">
-            {selectedTermId !== null && (
+            {viewingHistory && selectedHistoryTermId !== null && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 className="h-8 gap-1.5 px-2 text-xs"
                 aria-label="Back to semester selection"
-                onClick={handleBack}
+                onClick={handleBackToHistoryFolders}
+              >
+                <ArrowLeft className="size-3.5" aria-hidden />
+                Back
+              </Button>
+            )}
+            {viewingHistory && selectedHistoryTermId === null && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                aria-label="Back to current classes"
+                onClick={handleCloseHistory}
               >
                 <ArrowLeft className="size-3.5" aria-hidden />
                 Back
               </Button>
             )}
             <CardTitle level={2}>
-              {selectedTermId === null ? "Assigned classes" : "Classes"}
+              {viewingHistory
+                ? selectedHistoryTermId === null
+                  ? "Previous Semesters"
+                  : "Historical Classes"
+                : "Assigned classes"}
             </CardTitle>
           </div>
         </CardHeader>
@@ -767,9 +915,12 @@ export function GradeSubmissionWorkspace() {
             {(sections) => (
               <AssignedClassesContent
                 sections={sections}
-                selectedTermId={selectedTermId}
+                viewingHistory={viewingHistory}
+                selectedHistoryTermId={selectedHistoryTermId}
                 sectionId={sectionId}
-                onSelectTerm={handleSelectTerm}
+                onOpenHistory={handleOpenHistory}
+                onCloseHistory={handleCloseHistory}
+                onSelectHistoryTerm={handleSelectHistoryTerm}
                 onSelectSection={setSectionId}
               />
             )}
@@ -777,9 +928,24 @@ export function GradeSubmissionWorkspace() {
         </CardContent>
       </Card>
 
-      {sectionId !== null && (
-        <SectionGradeSheetPanel key={sectionId} sectionId={sectionId} />
-      )}
+      <Dialog
+        open={sectionId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSectionId(null)
+        }}
+      >
+        <DialogContent className="max-h-[92dvh] max-w-6xl overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Section Grade Sheet</DialogTitle>
+            <DialogDescription>
+              Input and submit grades for the selected section
+            </DialogDescription>
+          </DialogHeader>
+          {sectionId !== null && (
+            <SectionGradeSheetPanel key={sectionId} sectionId={sectionId} />
+          )}
+        </DialogContent>
+      </Dialog>
     </WorkspacePage>
   )
 }

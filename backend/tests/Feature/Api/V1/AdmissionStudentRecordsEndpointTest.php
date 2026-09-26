@@ -18,7 +18,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
+use App\Support\Auth\AccountSetupCodes;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -269,7 +269,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
         $active = $this->student('Active Student', 'active.student@grc.test', '2026-08-01091');
         $active->user->forceFill(['account_setup_completed_at' => now()])->save();
         Mail::fake();
-        $oldCode = Password::broker()->createToken($pending->user);
+        $oldCode = app(AccountSetupCodes::class)->issue($pending->user);
         Sanctum::actingAs($admission);
 
         $this->postJson('/api/v1/student-profiles/'.$pending->id.'/account-setup-invitations')
@@ -279,7 +279,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             ->assertJsonMissingPath('data.setup_code');
 
         Mail::assertSentCount(1);
-        self::assertFalse(Password::broker()->tokenExists($pending->user->fresh(), $oldCode));
+        self::assertFalse(app(AccountSetupCodes::class)->attempt($pending->user->fresh(), $oldCode));
 
         $this->postJson('/api/v1/student-profiles/'.$active->id.'/account-setup-invitations')
             ->assertUnprocessable()

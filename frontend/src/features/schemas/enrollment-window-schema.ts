@@ -51,6 +51,7 @@ const audienceAvailabilitySchema = z
 export const addDropAvailabilityReasonSchema = z.enum([
   "term_not_ongoing",
   "enrollment_still_open",
+  "before_window",
   "deadline_not_configured",
   "deadline_passed",
   "open",
@@ -104,6 +105,13 @@ export const saveEnrollmentScheduleInputSchema = z
   .object({
     enrollment_opens_at: localDateSchema,
     enrollment_closes_at: localDateSchema,
+    add_drop_opens_at: z.string().trim().optional(),
+    add_drop_closes_at: z.string().trim().optional(),
+    // `null` clears the platform; leaving it out keeps what was saved.
+    enrollment_platform: z
+      .enum(["online", "face_to_face"])
+      .nullable()
+      .optional(),
     windows: z
       .array(
         z

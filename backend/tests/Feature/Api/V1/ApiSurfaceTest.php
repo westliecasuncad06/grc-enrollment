@@ -21,27 +21,39 @@ final class ApiSurfaceTest extends TestCase
             ->all();
 
         $this->assertSame([
+            'DELETE api/v1/academic-terms/{academicTerm}/faculty-load-overrides/{professor}',
+            'DELETE api/v1/enrollments/{enrollment}/scholarship-discount',
             'DELETE api/v1/faculty-availabilities/{facultyAvailability}',
             'DELETE api/v1/faculty-curriculum-subject-preferences/{facultyCurriculumPreference}',
             'DELETE api/v1/faculty-specializations/{facultySpecialization}',
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'DELETE api/v1/student-profile-change-requests/{studentProfileChangeRequest}',
+            'DELETE api/v1/subject-waivers/{waiver}',
             'GET|HEAD api/v1/academic-grades',
             'GET|HEAD api/v1/academic-record',
+            'GET|HEAD api/v1/academic-record/students',
             'GET|HEAD api/v1/academic-term-section-plans',
             'GET|HEAD api/v1/academic-term-workflows',
             'GET|HEAD api/v1/academic-terms',
             'GET|HEAD api/v1/academic-terms/{academicTerm}/enrollment-windows',
             'GET|HEAD api/v1/academic-terms/{academicTerm}/faculty-load-report',
+            'GET|HEAD api/v1/academic-terms/{academicTerm}/lecture-lab-adjacency',
             'GET|HEAD api/v1/academic-terms/{academicTerm}/schedule-generation-runs/latest',
             'GET|HEAD api/v1/analytics/attrition',
+            'GET|HEAD api/v1/analytics/enrollment-movements',
             'GET|HEAD api/v1/audit-logs',
+            'GET|HEAD api/v1/audit-logs/actors',
             'GET|HEAD api/v1/auth/me',
             'GET|HEAD api/v1/cashier-payment-candidates',
+            'GET|HEAD api/v1/cashier-student-lookup',
             'GET|HEAD api/v1/cashier-transactions',
             'GET|HEAD api/v1/class-rosters',
             'GET|HEAD api/v1/curricula',
             'GET|HEAD api/v1/curricula/{curriculum}/migration-preview',
+            'GET|HEAD api/v1/dashboards/enrollment-status',
+            'GET|HEAD api/v1/dashboards/enrollment-status/sections',
+            'GET|HEAD api/v1/dashboards/enrollment-status/students',
+            'GET|HEAD api/v1/dashboards/enrollment-status/students/{studentProfile}',
             'GET|HEAD api/v1/dashboards/enrollment-summary',
             'GET|HEAD api/v1/dashboards/institution-summary',
             'GET|HEAD api/v1/dashboards/policy-settings',
@@ -53,10 +65,12 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/enrollment-documents/{enrollmentDocument}',
             'GET|HEAD api/v1/enrollment-documents/{enrollmentDocument}/pdf',
             'GET|HEAD api/v1/enrollments',
+            'GET|HEAD api/v1/enrollments/{enrollment}/cor-preview',
             'GET|HEAD api/v1/faculty-availabilities',
             'GET|HEAD api/v1/faculty-curriculum-subject-preferences',
             'GET|HEAD api/v1/faculty-invitations',
             'GET|HEAD api/v1/faculty-members',
+            'GET|HEAD api/v1/faculty-members/{professor}/profile',
             'GET|HEAD api/v1/faculty-preference-catalog',
             'GET|HEAD api/v1/faculty-specializations',
             'GET|HEAD api/v1/faculty-subject-preferences',
@@ -69,6 +83,9 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/it-control/automation-runs/{run}',
             'GET|HEAD api/v1/it-control/faculty',
             'GET|HEAD api/v1/it-control/students',
+            'GET|HEAD api/v1/me/admission-requirements',
+            'GET|HEAD api/v1/me/statement-of-account',
+            'GET|HEAD api/v1/me/statement-of-account/pdf',
             'GET|HEAD api/v1/notifications',
             'GET|HEAD api/v1/payments',
             'GET|HEAD api/v1/programs',
@@ -80,10 +97,12 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/queue-tickets',
             'GET|HEAD api/v1/reports/honors',
             'GET|HEAD api/v1/room-occupancy',
+            'GET|HEAD api/v1/room-occupancy-summary',
             'GET|HEAD api/v1/room-options',
             'GET|HEAD api/v1/schedule-generation-runs/{scheduleGenerationRun}',
             'GET|HEAD api/v1/schedule-proposals',
             'GET|HEAD api/v1/schedule-proposals/{scheduleProposal}/sections',
+            'GET|HEAD api/v1/section-change-requests',
             'GET|HEAD api/v1/sections',
             'GET|HEAD api/v1/sections/grade-submission',
             'GET|HEAD api/v1/sections/{section}/grades',
@@ -94,11 +113,17 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/student-profile-change-requests',
             'GET|HEAD api/v1/student-profiles',
             'GET|HEAD api/v1/student-profiles/{studentProfile}',
+            'GET|HEAD api/v1/student-profiles/{studentProfile}/admission-requirements',
             'GET|HEAD api/v1/student-schedule-preferences',
+            'GET|HEAD api/v1/students/{studentProfile}/registrar-profile',
+            'GET|HEAD api/v1/students/{studentProfile}/subject-waivers',
             'GET|HEAD api/v1/students/{student}/account',
+            'GET|HEAD api/v1/students/{student}/statement-of-account',
+            'GET|HEAD api/v1/students/{student}/statement-of-account/pdf',
             'GET|HEAD api/v1/subject-offerings',
             'GET|HEAD api/v1/subjects',
             'GET|HEAD api/v1/transferee-credits',
+            'GET|HEAD api/v1/transferee-credits/{transfereeCredit}/suggestions',
             'GET|HEAD api/v1/withdrawal-requests',
             'PATCH api/v1/academic-grades/{academicGrade}',
             'PATCH api/v1/academic-term-workflows/{workflow}',
@@ -116,9 +141,11 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/faculty-members/{facultyMember}/workforce-profile',
             'PATCH api/v1/faculty-specializations/{facultySpecialization}',
             'PATCH api/v1/faculty-subject-preferences/{facultySubjectPreference}',
+            'PATCH api/v1/notifications/read-all',
             'PATCH api/v1/notifications/{notification}/read',
             'PATCH api/v1/queue-tickets/{queueTicket}',
             'PATCH api/v1/schedule-proposals/{scheduleProposal}',
+            'PATCH api/v1/section-change-requests/{sectionChangeRequest}',
             'PATCH api/v1/sections/{section}',
             'PATCH api/v1/student-profile-change-requests/{studentProfileChangeRequest}',
             'PATCH api/v1/student-profile-change-requests/{studentProfileChangeRequest}/decision',
@@ -126,12 +153,14 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/transferee-credits/{transfereeCredit}',
             'PATCH api/v1/withdrawal-requests/{withdrawalRequest}',
             'POST api/v1/academic-grades',
+            'POST api/v1/academic-grades/lock-all',
             'POST api/v1/academic-terms',
             'POST api/v1/academic-terms/{academicTerm}/archive-and-create-next',
             'POST api/v1/academic-terms/{academicTerm}/schedule-generation-runs',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/auto-assign',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/release',
             'POST api/v1/academic-terms/{academicTerm}/section-plan/submit',
+            'POST api/v1/admission-requirement-types',
             'POST api/v1/auth/account-setup',
             'POST api/v1/auth/faculty-account-setup',
             'POST api/v1/auth/login',
@@ -152,11 +181,13 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/faculty-specializations',
             'POST api/v1/faculty-subject-preferences',
             'POST api/v1/it-control/automation-runs',
+            'POST api/v1/program-shifts',
             'POST api/v1/queue-cycle/cut-off',
             'POST api/v1/queue-cycle/resume',
             'POST api/v1/queue-tickets',
             'POST api/v1/schedule-proposals',
             'POST api/v1/sections',
+            'POST api/v1/sections/{section}/change-requests',
             'POST api/v1/sections/{section}/grades',
             'POST api/v1/sections/{section}/grades/submit',
             'POST api/v1/staff-invitations',
@@ -164,12 +195,19 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/student-profile-change-requests',
             'POST api/v1/student-profiles',
             'POST api/v1/student-profiles/{studentProfile}/account-setup-invitations',
+            'POST api/v1/students/{studentProfile}/subject-waivers',
             'POST api/v1/students/{student}/account-payments',
             'POST api/v1/subject-offerings',
             'POST api/v1/transferee-credits',
+            'PUT api/v1/academic-terms/{academicTerm}/faculty-load-limits/{employmentType}',
+            'PUT api/v1/academic-terms/{academicTerm}/faculty-load-overrides/{professor}',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-threshold',
+            'PUT api/v1/curricula/{curriculum}/max-units',
+            'PUT api/v1/enrollments/{enrollment}/scholarship-discount',
             'PUT api/v1/fee-schedules',
             'PUT api/v1/queue-kiosk-credential',
+            'PUT api/v1/sections/{section}/professor',
+            'PUT api/v1/student-profiles/{studentProfile}/admission-requirements/{requirementType}',
             'PUT api/v1/student-schedule-preferences',
         ], $routes);
     }
@@ -182,6 +220,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.cashier-payment-candidates.show',
             'api.v1.cashier-transactions.index',
             'api.v1.analytics.attrition',
+            'api.v1.audit-logs.actors',
             'api.v1.audit-logs.index',
             'api.v1.class-rosters.index',
             'api.v1.notifications.index',
@@ -218,6 +257,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.transferee-credits.index',
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
+            'api.v1.transferee-credits.suggestions',
             'api.v1.enrollment-documents.index',
             'api.v1.enrollment-documents.show',
             'api.v1.payments.index',
@@ -253,6 +293,9 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.faculty-subject-preferences.store',
             'api.v1.faculty-subject-preferences.update',
             'api.v1.faculty-subject-preferences.destroy',
+            'api.v1.section-change-requests.index',
+            'api.v1.section-change-requests.update',
+            'api.v1.sections.change-requests.store',
             'api.v1.sections.index',
             'api.v1.sections.grade-submission.index',
             'api.v1.sections.grades.show',
@@ -267,6 +310,10 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.student-account.show-own',
             'api.v1.students.account.show',
             'api.v1.students.account-payments.store',
+            'api.v1.students.registrar-profile.show',
+            'api.v1.students.subject-waivers.index',
+            'api.v1.students.subject-waivers.store',
+            'api.v1.subject-waivers.destroy',
             'api.v1.student-profile-change-requests.index',
             'api.v1.student-profile-change-requests.store',
             'api.v1.student-profile-change-requests.update',
@@ -277,6 +324,10 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.student-profiles.show',
             'api.v1.student-profiles.update',
             'api.v1.student-profiles.account-setup-invitations.store',
+            'api.v1.student-profiles.admission-requirements.show',
+            'api.v1.student-profiles.admission-requirements.update',
+            'api.v1.admission-requirement-types.store',
+            'api.v1.me.admission-requirements.show',
             'api.v1.student-schedule-preferences.show',
             'api.v1.student-schedule-preferences.update',
             'api.v1.dashboards.enrollment-summary',
@@ -528,7 +579,7 @@ final class ApiSurfaceTest extends TestCase
         $route = Route::getRoutes()->getByName('api.v1.faculty-members.index');
 
         $this->assertNotNull($route);
-        $this->assertContains('role:program_chair,registrar_head', $route->gatherMiddleware());
+        $this->assertContains('role:program_chair,registrar_head,faculty', $route->gatherMiddleware());
     }
 
     /**
@@ -579,6 +630,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.enrollments.store',
             'api.v1.enrollments.update',
             'api.v1.enrollments.payment',
+            'api.v1.enrollments.cor-preview',
             'api.v1.enrollment-documents.index',
         ];
 
@@ -673,9 +725,11 @@ final class ApiSurfaceTest extends TestCase
     }
 
     /**
-     * No ownership dimension — Registrar Staff manages every transferee
-     * credit — so, like the withdrawal routes, none of the three carry
-     * `role:` middleware. `TransfereeCreditPolicy` resolves each ability.
+     * Who may do what depends on the action, and on the credit's college for
+     * a Program Chair (the Student asks, the Program Chair maps and
+     * endorses, Registrar Staff approve; ADR 0026), so, like the withdrawal
+     * routes, none of these carry `role:` middleware.
+     * `TransfereeCreditPolicy` resolves each ability.
      */
     public function test_transferee_credit_routes_carry_no_role_middleware(): void
     {
@@ -683,6 +737,7 @@ final class ApiSurfaceTest extends TestCase
             'api.v1.transferee-credits.index',
             'api.v1.transferee-credits.store',
             'api.v1.transferee-credits.update',
+            'api.v1.transferee-credits.suggestions',
         ];
 
         foreach ($names as $name) {
@@ -728,7 +783,17 @@ final class ApiSurfaceTest extends TestCase
     {
         $enrollmentSummary = Route::getRoutes()->getByName('api.v1.dashboards.enrollment-summary');
         $this->assertNotNull($enrollmentSummary);
-        $this->assertContains('role:dean,executive_director', $enrollmentSummary->gatherMiddleware());
+        $this->assertContains('role:dean,executive_director,registrar_head,program_chair', $enrollmentSummary->gatherMiddleware());
+
+        foreach ([
+            'overview', 'sections', 'students', 'student',
+        ] as $level) {
+            $drillDown = Route::getRoutes()->getByName("api.v1.dashboards.enrollment-status.{$level}");
+            $this->assertNotNull($drillDown, "Missing enrollment-status {$level} route.");
+            // The status dashboard also serves Registrar, Accounting, and Admission
+            // Staff, each limited to its own stage by EnrollmentStatusPopulation.
+            $this->assertContains('role:dean,executive_director,registrar_head,program_chair,registrar_staff,accounting_staff,admission_staff', $drillDown->gatherMiddleware());
+        }
 
         $institutionSummary = Route::getRoutes()->getByName('api.v1.dashboards.institution-summary');
         $this->assertNotNull($institutionSummary);
@@ -740,7 +805,7 @@ final class ApiSurfaceTest extends TestCase
 
         $stuckEnrollments = Route::getRoutes()->getByName('api.v1.stuck-enrollments.index');
         $this->assertNotNull($stuckEnrollments);
-        $this->assertContains('role:dean', $stuckEnrollments->gatherMiddleware());
+        $this->assertContains('role:dean,registrar_head', $stuckEnrollments->gatherMiddleware());
     }
 
     public function test_the_login_route_is_throttled(): void

@@ -7,16 +7,20 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\CollegeCode;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 
 final class ActivateFacultyAccount
 {
-    public function __construct(private readonly AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private readonly AuditRecorder $auditRecorder,
+        private readonly AccountSetupCodes $setupCodes,
+    ) {}
 
     public function handle(
         string $email,
@@ -24,6 +28,8 @@ final class ActivateFacultyAccount
         string $password,
         string $name,
         AuditRequestContext $context,
+        ?CollegeCode $college = null,
+        ?string $mastersDegree = null,
     ): User {
         $candidate = User::query()->where('email', $email)->first();
 
@@ -36,39 +42,44 @@ final class ActivateFacultyAccount
             $this->invalidCode();
         }
 
-        $activated = null;
-        $status = Password::broker()->reset([
-            'email' => $email,
-            'password' => $password,
-            'password_confirmation' => $password,
-            'token' => $code,
-        ], function (User $user, string $newPassword) use ($name, &$activated): void {
-            $activated = DB::transaction(function () use ($user, $newPassword, $name): User {
-                $locked = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
-
-                if (
-                    $locked->role !== UserRole::Faculty
-                    || $locked->status !== UserStatus::Disabled
-                    || $locked->account_setup_completed_at !== null
-                ) {
-                    $this->invalidCode();
-                }
-
-                $locked->forceFill([
-                    'name' => $name,
-                    'password' => Hash::make($newPassword),
-                    'status' => UserStatus::Active,
-                    'account_setup_completed_at' => now(),
-                ])->save();
-                $locked->tokens()->delete();
-
-                return $locked->refresh();
-            });
-        });
-
-        if ($status !== Password::PASSWORD_RESET || ! $activated instanceof User) {
+        // A wrong guess is committed inside attempt(), so it still counts
+        // against the code when this method then throws.
+        if (! $this->setupCodes->attempt($candidate, $code)) {
             $this->invalidCode();
         }
+
+        $activated = DB::transaction(function () use ($candidate, $password, $name, $college, $mastersDegree): User {
+            $locked = User::query()->whereKey($candidate->id)->lockForUpdate()->firstOrFail();
+
+            if (
+                $locked->role !== UserRole::Faculty
+                || $locked->status !== UserStatus::Disabled
+                || $locked->account_setup_completed_at !== null
+                || ! $this->setupCodes->consume($locked)
+            ) {
+                $this->invalidCode();
+            }
+
+            $attributes = [
+                'name' => $name,
+                'password' => Hash::make($password),
+                'status' => UserStatus::Active,
+                'account_setup_completed_at' => now(),
+            ];
+
+            if ($college !== null) {
+                $attributes['college'] = $college;
+            }
+
+            if ($mastersDegree !== null) {
+                $attributes['masters_degree'] = $mastersDegree;
+            }
+
+            $locked->forceFill($attributes)->save();
+            $locked->tokens()->delete();
+
+            return $locked->refresh();
+        });
 
         $this->auditRecorder->record(
             $activated,
@@ -76,7 +87,11 @@ final class ActivateFacultyAccount
             AuditableType::FACULTY_ACCOUNT,
             $activated->id,
             ['account_setup_status' => 'pending'],
-            ['account_setup_status' => 'active'],
+            [
+                'account_setup_status' => 'active',
+                'college' => $activated->college?->value,
+                'masters_degree' => $activated->masters_degree,
+            ],
             null,
             $context,
         );

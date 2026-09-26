@@ -146,7 +146,7 @@ describe("CurriculumApprovalsWorkspace", () => {
     expect(screen.getByText(/reason is required/i)).toBeInTheDocument()
 
     await user.type(
-      screen.getByLabelText(/notes for program chair/i),
+      screen.getByLabelText(/notes for program head/i),
       "Missing PATHFIT 2.",
     )
     await user.click(screen.getByRole("button", { name: "Confirm return" }))

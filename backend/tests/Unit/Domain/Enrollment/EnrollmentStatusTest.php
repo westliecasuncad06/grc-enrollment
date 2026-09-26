@@ -11,7 +11,7 @@ final class EnrollmentStatusTest extends TestCase
     {
         self::assertSame(
             [
-                'draft', 'pending_registrar_approval', 'pending_payment', 'enrolled',
+                'draft', 'pending_program_head_approval', 'pending_registrar_approval', 'pending_payment', 'enrolled',
                 'rejected', 'cancelled', 'withdrawn',
             ],
             array_column(EnrollmentStatus::cases(), 'value'),
@@ -21,6 +21,7 @@ final class EnrollmentStatusTest extends TestCase
     public function test_labels_are_stable_and_human_readable(): void
     {
         self::assertSame('Draft', EnrollmentStatus::Draft->label());
+        self::assertSame('Pending Program Head Approval', EnrollmentStatus::PendingProgramHeadApproval->label());
         self::assertSame('Pending Registrar Approval', EnrollmentStatus::PendingRegistrarApproval->label());
         self::assertSame('Pending Payment', EnrollmentStatus::PendingPayment->label());
         self::assertSame('Enrolled', EnrollmentStatus::Enrolled->label());
@@ -32,6 +33,7 @@ final class EnrollmentStatusTest extends TestCase
     public function test_only_rejected_cancelled_and_withdrawn_are_terminal(): void
     {
         self::assertFalse(EnrollmentStatus::Draft->isTerminal());
+        self::assertFalse(EnrollmentStatus::PendingProgramHeadApproval->isTerminal());
         self::assertFalse(EnrollmentStatus::PendingRegistrarApproval->isTerminal());
         self::assertFalse(EnrollmentStatus::PendingPayment->isTerminal());
         self::assertFalse(EnrollmentStatus::Enrolled->isTerminal());

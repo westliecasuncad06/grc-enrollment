@@ -26,7 +26,7 @@ final class InviteFacultyAccount
     ): User {
         if ($actor->college === null) {
             throw ValidationException::withMessages([
-                'email' => 'Only a Program Chair with an assigned college can invite a professor.',
+                'email' => 'Only a Program Head with an assigned college can invite a professor.',
             ]);
         }
 

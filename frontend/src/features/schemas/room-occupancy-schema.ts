@@ -24,4 +24,24 @@ export const roomOccupancyEnvelopeSchema = z
   .object({ data: z.array(roomOccupancyEntrySchema) })
   .strict()
 
+// One room's use this term, for the Rooms screen tiles (stakeholder Doc 14).
+// A room nobody has a class in is simply not in the list.
+export const roomOccupancySummaryEnvelopeSchema = z
+  .object({
+    data: z.array(
+      z
+        .object({
+          room: z.string().min(1),
+          classes_count: z.number().int().positive(),
+          // ISO weekdays, 1 = Monday .. 7 = Sunday.
+          days: z.array(z.number().int().min(1).max(7)),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+
 export type RoomOccupancyEntry = z.infer<typeof roomOccupancyEntrySchema>
+export type RoomOccupancySummaryEntry = z.infer<
+  typeof roomOccupancySummaryEnvelopeSchema
+>["data"][number]

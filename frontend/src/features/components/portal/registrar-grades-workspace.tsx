@@ -2,19 +2,22 @@
 
 import { useState } from "react"
 import {
-  BookOpenText,
   Clock3,
   History,
+  Lock,
   Search,
-  UserCheck,
+  User,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AcademicRecordView } from "@/features/components/portal/academic-record-view"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
+import { GradeApprovalsDrilldown } from "@/features/components/portal/grade-approvals-drilldown"
 import { Paginator } from "@/features/components/portal/paginator"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -36,11 +39,22 @@ import {
 import { Field, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/features/components/ui/tabs"
+import {
   useAcademicGradesQuery,
+  useLockAllAcademicGradesMutation,
   useUpdateAcademicGradeMutation,
 } from "@/features/hooks/use-academic-grades"
+import { useAcademicTermSelection } from "@/features/hooks/use-academic-term-selection"
 import { gradeBadgeVariant } from "@/features/lib/grade-presentation"
 import type { AcademicGrade } from "@/features/schemas/academic-grade-schema"
+import type { AcademicRecordStudentLookup } from "@/features/schemas/academic-record-schema"
+import { searchAcademicRecordStudents } from "@/features/services/academic-record-service"
+import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
 const workspaceHeadings: Record<string, string> = {
   "grade-approvals": "Grade approvals",
@@ -54,71 +68,6 @@ const departments = [
   { id: "coe", label: "COE" },
   { id: "coa", label: "COA" },
 ] as const
-
-interface SubjectGradeGroup {
-  subjectId: number
-  subjectCode: string
-  subjectTitle: string
-  sectionId: number | null
-  sectionCode: string | null
-  grades: AcademicGrade[]
-}
-
-interface ProfessorGradeGroup {
-  professorId: number | null
-  professorName: string
-  college: string | null
-  subjects: SubjectGradeGroup[]
-  totalGrades: number
-}
-
-function groupGradesByProfessor(
-  grades: readonly AcademicGrade[],
-): ProfessorGradeGroup[] {
-  const profMap = new Map<string, ProfessorGradeGroup>()
-
-  for (const grade of grades) {
-    const profKey = String(
-      grade.professor_id ?? grade.professor_name ?? "unassigned",
-    )
-    const profName = grade.professor_name || "Unassigned Faculty"
-    const college = grade.college || null
-
-    let profGroup = profMap.get(profKey)
-    if (!profGroup) {
-      profGroup = {
-        professorId: grade.professor_id ?? null,
-        professorName: profName,
-        college,
-        subjects: [],
-        totalGrades: 0,
-      }
-      profMap.set(profKey, profGroup)
-    }
-
-    profGroup.totalGrades += 1
-
-    let subjectGroup = profGroup.subjects.find(
-      (s) =>
-        s.subjectId === grade.subject_id && s.sectionId === grade.section_id,
-    )
-    if (!subjectGroup) {
-      subjectGroup = {
-        subjectId: grade.subject_id,
-        subjectCode: grade.subject_code,
-        subjectTitle: grade.subject_title || grade.subject_code,
-        sectionId: grade.section_id,
-        sectionCode: grade.section_code || null,
-        grades: [],
-      }
-      profGroup.subjects.push(subjectGroup)
-    }
-
-    subjectGroup.grades.push(grade)
-  }
-
-  return Array.from(profMap.values())
-}
 
 /**
  * Locking is permanent — there is no unlock/reject/return in the grade state
@@ -144,7 +93,9 @@ export function RegistrarGradesWorkspace({
   )
   const [approvalsDepartment, setApprovalsDepartment] = useState<string>("all")
   const [approvalsPage, setApprovalsPage] = useState(1)
+  const { term } = useAcademicTermSelection()
   const [lockTarget, setLockTarget] = useState<AcademicGrade | null>(null)
+  const [confirmLockAll, setConfirmLockAll] = useState(false)
   const [error, setError] = useState("")
 
   const [historyDepartment, setHistoryDepartment] = useState<string>("all")
@@ -152,9 +103,18 @@ export function RegistrarGradesWorkspace({
   const [historySearchInput, setHistorySearchInput] = useState("")
   const [historySearch, setHistorySearch] = useState("")
 
+  const [lookupTab, setLookupTab] = useState<"number" | "name">("number")
   const [studentIdInput, setStudentIdInput] = useState("")
   const [studentId, setStudentId] = useState<number | null>(null)
   const [studentIdError, setStudentIdError] = useState("")
+  const [nameInput, setNameInput] = useState("")
+  const [nameError, setNameError] = useState("")
+  const [candidateStudents, setCandidateStudents] = useState<
+    AcademicRecordStudentLookup[]
+  >([])
+  const [selectedStudent, setSelectedStudent] =
+    useState<AcademicRecordStudentLookup | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
 
   const approvalsQuery = useAcademicGradesQuery(
     {
@@ -178,6 +138,7 @@ export function RegistrarGradesWorkspace({
   )
 
   const lockMutation = useUpdateAcademicGradeMutation()
+  const lockAllMutation = useLockAllAcademicGradesMutation()
 
   const confirmLock = async () => {
     if (!lockTarget) return
@@ -195,14 +156,122 @@ export function RegistrarGradesWorkspace({
     }
   }
 
-  const viewStudent = () => {
-    const parsed = Number(studentIdInput)
-    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+  const confirmLockAllGrades = async () => {
+    setError("")
+    try {
+      const result = await lockAllMutation.mutateAsync({
+        academic_term_id: term?.id,
+        college:
+          approvalsDepartment === "all" ? undefined : approvalsDepartment,
+      })
+      setConfirmLockAll(false)
+      toast.success(
+        result.message || `Successfully locked ${result.locked_count} grades.`,
+      )
+    } catch {
+      setError("Failed to lock all grades. Check the connection and try again.")
+    }
+  }
+
+  const viewStudent = async () => {
+    const raw = studentIdInput.trim()
+    if (!raw) {
       setStudentIdError("Enter a valid student ID.")
       return
     }
+
+    const isValidFormat =
+      /^\d+$/.test(raw) ||
+      /^\d{4}-\d{2}-\d{5}$/.test(raw) ||
+      /^STU-\d+$/i.test(raw)
+    if (!isValidFormat) {
+      setStudentIdError("Enter a valid student ID.")
+      return
+    }
+
     setStudentIdError("")
-    setStudentId(parsed)
+    setIsSearching(true)
+    try {
+      const results = await searchAcademicRecordStudents({
+        search: raw,
+        by: "student_number",
+      })
+      if (results.length === 1 && results[0]) {
+        setSelectedStudent(results[0])
+        setStudentId(results[0].id)
+        setCandidateStudents([])
+      } else if (results.length > 1) {
+        setCandidateStudents(results)
+        setSelectedStudent(null)
+      } else {
+        const parsed = Number(raw)
+        if (Number.isSafeInteger(parsed) && parsed > 0 && parsed < 1000000) {
+          setSelectedStudent(null)
+          setStudentId(parsed)
+          setCandidateStudents([])
+        } else {
+          setStudentIdError(
+            "No student record found matching this student number.",
+          )
+        }
+      }
+    } catch {
+      const parsed = Number(raw)
+      if (Number.isSafeInteger(parsed) && parsed > 0) {
+        setSelectedStudent(null)
+        setStudentId(parsed)
+        setCandidateStudents([])
+      } else {
+        setStudentIdError(
+          "The student record could not be found. Check the ID and try again.",
+        )
+      }
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const searchByName = async () => {
+    const raw = nameInput.trim()
+    if (!raw) {
+      setNameError("Enter a student name to search.")
+      return
+    }
+
+    setNameError("")
+    setIsSearching(true)
+    try {
+      const results = await searchAcademicRecordStudents({
+        search: raw,
+        by: "name",
+      })
+      setCandidateStudents(results)
+      if (results.length === 0) {
+        setNameError(`No students found matching "${raw}".`)
+      }
+    } catch {
+      setNameError(
+        "Failed to search students. Check your connection and try again.",
+      )
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const selectCandidate = (student: AcademicRecordStudentLookup) => {
+    setSelectedStudent(student)
+    setStudentId(student.id)
+    setCandidateStudents([])
+    setStudentIdError("")
+    setNameError("")
+  }
+
+  const resetSelection = () => {
+    setSelectedStudent(null)
+    setStudentId(null)
+    setCandidateStudents([])
+    setStudentIdError("")
+    setNameError("")
   }
 
   return (
@@ -263,33 +332,55 @@ export function RegistrarGradesWorkspace({
             <Card>
               <CardHeader className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle level={2}>Submitted grades awaiting lock</CardTitle>
+                  <CardTitle level={2}>
+                    Submitted grades awaiting lock
+                  </CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Grouped by Department → Professor → Submitted Subjects
+                    Professor → Subjects → Students → a student's grades.
+                    Department is a filter.
                   </p>
                 </div>
-                <div
-                  className="flex flex-wrap items-center gap-1.5"
-                  role="group"
-                  aria-label="Filter by department"
-                >
-                  {departments.map((dept) => (
-                    <Button
-                      key={dept.id}
-                      type="button"
-                      variant={
-                        approvalsDepartment === dept.id ? "default" : "outline"
-                      }
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => {
-                        setApprovalsDepartment(dept.id)
-                        setApprovalsPage(1)
-                      }}
-                    >
-                      {dept.label}
-                    </Button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className="flex flex-wrap items-center gap-1.5"
+                    role="group"
+                    aria-label="Filter by department"
+                  >
+                    {departments.map((dept) => (
+                      <Button
+                        key={dept.id}
+                        type="button"
+                        variant={
+                          approvalsDepartment === dept.id
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setApprovalsDepartment(dept.id)
+                          setApprovalsPage(1)
+                        }}
+                      >
+                        {dept.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {approvalsQuery.data?.meta.total !== undefined &&
+                    approvalsQuery.data.meta.total > 0 && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs font-medium"
+                        disabled={lockAllMutation.isPending}
+                        onClick={() => setConfirmLockAll(true)}
+                      >
+                        <Lock className="size-3.5" aria-hidden />
+                        Lock all grades for this semester
+                      </Button>
+                    )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -302,161 +393,18 @@ export function RegistrarGradesWorkspace({
                   emptyMessage="No submitted grades are awaiting lock."
                   loadingLabel="Loading submitted grades…"
                 >
-                  {(grades) => {
-                    const professorGroups = groupGradesByProfessor(grades)
-
-                    return (
-                      <div className="space-y-6">
-                        {professorGroups.map((profGroup) => (
-                          <Card
-                            key={
-                              profGroup.professorId ?? profGroup.professorName
-                            }
-                            className="overflow-hidden border-border/80"
-                          >
-                            <CardHeader className="bg-muted/30 border-b pb-3">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="rounded-md bg-primary/10 p-1.5 text-primary">
-                                    <UserCheck className="size-4" aria-hidden />
-                                  </div>
-                                  <div>
-                                    <CardTitle
-                                      level={3}
-                                      className="text-base font-semibold"
-                                    >
-                                      {profGroup.professorName}
-                                    </CardTitle>
-                                    <p className="text-xs text-muted-foreground">
-                                      {profGroup.college
-                                        ? profGroup.college.toUpperCase()
-                                        : "Faculty"}{" "}
-                                      · {profGroup.subjects.length} subject(s)
-                                      submitted
-                                    </p>
-                                  </div>
-                                </div>
-                                <Badge variant="secondary">
-                                  {profGroup.totalGrades} grade(s) awaiting lock
-                                </Badge>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="space-y-4 pt-4">
-                              {profGroup.subjects.map((subject) => (
-                                <div
-                                  key={`${subject.subjectId}_${subject.sectionId}`}
-                                  className="rounded-lg border bg-card p-3 shadow-2xs"
-                                >
-                                  <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-                                    <div className="flex items-center gap-2">
-                                      <BookOpenText
-                                        className="size-4 text-primary"
-                                        aria-hidden
-                                      />
-                                      <span className="font-semibold text-sm">
-                                        {subject.subjectCode} —{" "}
-                                        {subject.subjectTitle}
-                                      </span>
-                                      {subject.sectionCode && (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-xs"
-                                        >
-                                          Section {subject.sectionCode}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">
-                                      {subject.grades.length} student(s)
-                                    </span>
-                                  </div>
-                                  <DataTable
-                                    caption="Submitted grades awaiting lock"
-                                    rowKey={(grade) => grade.id}
-                                    rows={subject.grades}
-                                    columns={[
-                                      {
-                                        key: "student",
-                                        header: "Student",
-                                        render: (grade) => (
-                                          <div className="flex flex-col">
-                                            <span className="font-medium text-foreground">
-                                              {grade.student_name ||
-                                                grade.student_number}
-                                            </span>
-                                            {grade.student_name && (
-                                              <span className="font-mono text-xs text-muted-foreground">
-                                                {grade.student_number}
-                                              </span>
-                                            )}
-                                          </div>
-                                        ),
-                                      },
-                                      {
-                                        key: "subject",
-                                        header: "Subject",
-                                        render: (grade) => grade.subject_code,
-                                      },
-                                      {
-                                        key: "section",
-                                        header: "Section",
-                                        render: (grade) =>
-                                          grade.section_code ??
-                                          (grade.section_id
-                                            ? `#${grade.section_id}`
-                                            : "—"),
-                                      },
-                                      {
-                                        key: "mark",
-                                        header: "Mark",
-                                        render: (grade) =>
-                                          grade.mark_label ??
-                                          grade.mark ??
-                                          "—",
-                                      },
-                                      {
-                                        key: "status",
-                                        header: "Status",
-                                        render: (grade) => (
-                                          <Badge
-                                            variant={gradeBadgeVariant(
-                                              grade.status,
-                                            )}
-                                          >
-                                            {grade.status_label}
-                                          </Badge>
-                                        ),
-                                      },
-                                      {
-                                        key: "actions",
-                                        header: "Actions",
-                                        render: (grade) => (
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            disabled={
-                                              lockMutation.isPending &&
-                                              lockTarget?.id === grade.id
-                                            }
-                                            onClick={() => {
-                                              setLockTarget(grade)
-                                              setError("")
-                                            }}
-                                          >
-                                            Lock
-                                          </Button>
-                                        ),
-                                      },
-                                    ]}
-                                  />
-                                </div>
-                              ))}
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    )
-                  }}
+                  {(grades) => (
+                    <GradeApprovalsDrilldown
+                      grades={grades}
+                      lockingGradeId={
+                        lockMutation.isPending ? (lockTarget?.id ?? null) : null
+                      }
+                      onLock={(grade) => {
+                        setLockTarget(grade)
+                        setError("")
+                      }}
+                    />
+                  )}
                 </AsyncBoundary>
                 <div className="mt-4">
                   <Paginator
@@ -599,7 +547,9 @@ export function RegistrarGradesWorkspace({
                           header: "Dept",
                           render: (grade) => (
                             <Badge variant="outline" className="text-xs">
-                              {grade.college ? grade.college.toUpperCase() : "—"}
+                              {grade.college
+                                ? grade.college.toUpperCase()
+                                : "—"}
                             </Badge>
                           ),
                         },
@@ -673,47 +623,212 @@ export function RegistrarGradesWorkspace({
       )}
 
       {showTranscripts && (
-        <>
+        <div className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <CardTitle level={2}>Look up a student</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Search by Student Number (with or without dashes) or search by
+                Student Name to review their complete academic transcript.
+              </p>
             </CardHeader>
-            <CardContent>
-              <Field data-invalid={studentIdError !== ""}>
-                <FieldLabel htmlFor="transcript-student-id">
-                  Student ID
-                </FieldLabel>
-                <div className="flex flex-wrap gap-2">
-                  <Input
-                    id="transcript-student-id"
-                    inputMode="numeric"
-                    value={studentIdInput}
-                    onChange={(event) =>
-                      setStudentIdInput(event.target.value)
-                    }
-                    aria-describedby={
-                      studentIdError ? "transcript-student-id-error" : undefined
-                    }
-                    className="max-w-xs"
-                  />
-                  <Button type="button" onClick={viewStudent}>
-                    View records
-                  </Button>
-                </div>
-                {studentIdError && (
-                  <p
-                    id="transcript-student-id-error"
-                    className="text-sm text-destructive"
+            <CardContent className="space-y-4">
+              <Tabs
+                value={lookupTab}
+                onValueChange={(val) => {
+                  setLookupTab(val as "number" | "name")
+                  setCandidateStudents([])
+                  setStudentIdError("")
+                  setNameError("")
+                }}
+              >
+                <TabsList>
+                  <TabsTrigger value="number">By Student Number</TabsTrigger>
+                  <TabsTrigger value="name">By Student Name</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="number" className="pt-3">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void viewStudent()
+                    }}
+                    className="space-y-2"
                   >
-                    {studentIdError}
+                    <Field data-invalid={studentIdError !== ""}>
+                      <FieldLabel htmlFor="transcript-student-id">
+                        Student ID
+                      </FieldLabel>
+                      <div className="flex flex-wrap gap-2">
+                        <Input
+                          id="transcript-student-id"
+                          aria-label="Student ID"
+                          placeholder="e.g. 2024-06-01298 or 20240601298"
+                          value={studentIdInput}
+                          onChange={(event) =>
+                            setStudentIdInput(event.target.value)
+                          }
+                          aria-describedby={
+                            studentIdError
+                              ? "transcript-student-id-error"
+                              : undefined
+                          }
+                          className="max-w-xs"
+                        />
+                        <Button type="submit" disabled={isSearching}>
+                          {isSearching ? "Searching…" : "View records"}
+                        </Button>
+                      </div>
+                      {studentIdError && (
+                        <p
+                          id="transcript-student-id-error"
+                          className="text-sm text-destructive"
+                        >
+                          {studentIdError}
+                        </p>
+                      )}
+                    </Field>
+                  </form>
+                </TabsContent>
+
+                <TabsContent value="name" className="pt-3">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void searchByName()
+                    }}
+                    className="space-y-2"
+                  >
+                    <Field data-invalid={nameError !== ""}>
+                      <FieldLabel htmlFor="transcript-student-name">
+                        Student Name
+                      </FieldLabel>
+                      <div className="flex flex-wrap gap-2">
+                        <Input
+                          id="transcript-student-name"
+                          aria-label="Student Name"
+                          placeholder="e.g. Bonifacio, Pangilinan, Ramirez…"
+                          value={nameInput}
+                          onChange={(event) => setNameInput(event.target.value)}
+                          aria-describedby={
+                            nameError
+                              ? "transcript-student-name-error"
+                              : undefined
+                          }
+                          className="max-w-xs"
+                        />
+                        <Button type="submit" disabled={isSearching}>
+                          {isSearching ? "Searching…" : "Search"}
+                        </Button>
+                      </div>
+                      {nameError && (
+                        <p
+                          id="transcript-student-name-error"
+                          className="text-sm text-destructive"
+                        >
+                          {nameError}
+                        </p>
+                      )}
+                    </Field>
+                  </form>
+                </TabsContent>
+              </Tabs>
+
+              {candidateStudents.length > 0 && (
+                <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Matching Students ({candidateStudents.length})
                   </p>
-                )}
-              </Field>
+                  <div className="divide-y rounded-md border bg-card">
+                    {candidateStudents.map((candidate) => (
+                      <div
+                        key={candidate.id}
+                        className="flex flex-wrap items-center justify-between gap-3 p-3 transition hover:bg-muted/40"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm">
+                              {candidate.name}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-xs"
+                            >
+                              {candidate.student_number}
+                            </Badge>
+                            {candidate.enrollment_category_label && (
+                              <Badge variant="secondary" className="text-xs">
+                                {candidate.enrollment_category_label}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {candidate.program_name} ({candidate.program_code})
+                            · {formatYearLevel(candidate.year_level)} ·{" "}
+                            {candidate.academic_standing_label}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => selectCandidate(candidate)}
+                        >
+                          View transcript
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {studentId !== null && <AcademicRecordView studentId={studentId} />}
-        </>
+          {studentId !== null && (
+            <div className="space-y-4">
+              {selectedStudent && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <User className="size-4" aria-hidden />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm">
+                          {selectedStudent.name}
+                        </span>
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {selectedStudent.student_number}
+                        </Badge>
+                        {selectedStudent.enrollment_category_label && (
+                          <Badge variant="secondary" className="text-xs">
+                            {selectedStudent.enrollment_category_label}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedStudent.program_name} (
+                        {selectedStudent.program_code}) ·{" "}
+                        {formatYearLevel(selectedStudent.year_level)} ·{" "}
+                        {selectedStudent.academic_standing_label}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={resetSelection}
+                  >
+                    <Search className="size-3.5 mr-1" aria-hidden />
+                    Search another student
+                  </Button>
+                </div>
+              )}
+
+              <AcademicRecordView studentId={studentId} />
+            </div>
+          )}
+        </div>
       )}
 
       <AlertDialog
@@ -729,8 +844,8 @@ export function RegistrarGradesWorkspace({
               {lockTarget && (
                 <>
                   Locking <strong>{lockTarget.subject_code}</strong> for{" "}
-                  <strong>{lockTarget.student_number}</strong> is permanent —
-                  it can never be unlocked, edited, or re-submitted. This also
+                  <strong>{lockTarget.student_number}</strong> is permanent — it
+                  can never be unlocked, edited, or re-submitted. This also
                   triggers the student&apos;s Regular/Irregular
                   reclassification.
                 </>
@@ -747,6 +862,50 @@ export function RegistrarGradesWorkspace({
               onClick={() => void confirmLock()}
             >
               {lockMutation.isPending ? "Locking" : "Lock grade"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmLockAll}
+        onOpenChange={(open) => {
+          if (!open && !lockAllMutation.isPending) setConfirmLockAll(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Lock all submitted grades for this semester?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              {term && (
+                <span className="block font-medium text-foreground">
+                  Semester: {formatAcademicTerm(term)}
+                  {approvalsDepartment !== "all" &&
+                    ` (${approvalsDepartment.toUpperCase()})`}
+                </span>
+              )}
+              <span>
+                Locking all submitted grades is permanent — they can never be
+                unlocked, edited, or re-submitted. This will finalize{" "}
+                <strong>{approvalsQuery.data?.meta.total ?? 0}</strong>{" "}
+                submitted grade(s), notify all affected students, and reclassify
+                their enrollment category (Regular / Irregular).
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={lockAllMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={lockAllMutation.isPending}
+              onClick={() => void confirmLockAllGrades()}
+            >
+              {lockAllMutation.isPending ? "Locking all…" : "Lock all grades"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

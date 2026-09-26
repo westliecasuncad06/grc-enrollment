@@ -4,10 +4,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
+import { AccordionCard } from "@/features/components/portal/accordion-card"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable } from "@/features/components/portal/data-table"
 import { EligibleSubjectTable } from "@/features/components/portal/eligible-subject-table"
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
+import { EnrollmentCancelPanel } from "@/features/components/portal/enrollment-cancel-panel"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { EnrollmentCategoryExplanation } from "@/features/components/portal/enrollment-category-explanation"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
@@ -23,6 +25,12 @@ import {
   SectionScheduleCalendar,
   type SectionScheduleItem,
 } from "@/features/components/portal/section-schedule-calendar"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/features/components/ui/accordion"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import {
   AlertDialog,
@@ -142,6 +150,56 @@ function buildSelectedEntries(
     )
 }
 
+type SelectedEntry = ReturnType<typeof buildSelectedEntries>[number]
+
+/** The first pair of picked sections whose meeting times overlap, if any. */
+function findScheduleConflict(
+  entries: readonly SelectedEntry[],
+): { subjectA: EligibleSubject; subjectB: EligibleSubject } | null {
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      const a = entries[i]
+      const b = entries[j]
+      if (hasScheduleConflict(a.section, b.section)) {
+        return { subjectA: a.subject, subjectB: b.subject }
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * A lecture/lab pairing violation message — the paired component is
+ * missing, or picked in a different section — or null when all pairs agree.
+ */
+function findUnpairedComponent(
+  entries: readonly SelectedEntry[],
+  subjects: readonly EligibleSubject[],
+): string | null {
+  const sectionCodeBySubjectId = new Map<number, string>()
+  for (const entry of entries) {
+    sectionCodeBySubjectId.set(
+      entry.subject.subject_id,
+      entry.section.section_code,
+    )
+  }
+
+  for (const entry of entries) {
+    const pairedId = entry.subject.paired_subject_id
+    if (pairedId !== null) {
+      const pairedCode = sectionCodeBySubjectId.get(pairedId)
+      const pairedSubject = subjects.find((s) => s.subject_id === pairedId)
+      if (!pairedCode) {
+        return `${entry.subject.code} requires its paired component (${pairedSubject?.code ?? "paired component"}) to be selected together.`
+      }
+      if (pairedCode !== entry.section.section_code) {
+        return `${entry.subject.code} and ${pairedSubject?.code ?? "its paired component"} must be enrolled in the same section (${entry.section.section_code}).`
+      }
+    }
+  }
+  return null
+}
+
 /**
  * The single progress indicator for the whole enrollment process — from
  * picking a block/subjects through to being fully `enrolled`. Replaces the
@@ -155,6 +213,7 @@ function overallStages(
   isRegular: boolean,
 ): readonly StatusStepperStage[] {
   const submitted = enrollment !== undefined
+  const programHeadApproved = enrollment?.program_head_decided_at != null
   const approved = enrollment?.registrar_decided_at != null
   const paid = enrollment?.payment_confirmed_at != null
   const enrolled = enrollment?.enrolled_at != null
@@ -162,23 +221,70 @@ function overallStages(
   if (isRegular) {
     return [
       { label: selectionLabel, done: submitted, current: !submitted },
-      { label: "Submitted", done: submitted, current: submitted && !paid },
+      { label: "Submitted", done: submitted, current: submitted && !approved },
+      {
+        label: "Registrar approved",
+        done: approved,
+        current: approved && !paid,
+      },
       { label: "Payment confirmed", done: paid, current: paid && !enrolled },
       { label: "Enrolled", done: enrolled, current: false },
     ]
   }
 
+  // Irregular or overload: the Program Head checks the schedule first, then
+  // the Registrar approves (ADR 0030).
   return [
     { label: selectionLabel, done: submitted, current: !submitted },
-    { label: "Submitted", done: submitted, current: submitted && !approved },
     {
-      label: "Program chair approved",
+      label: "Submitted",
+      done: submitted,
+      current: submitted && !programHeadApproved,
+    },
+    {
+      label: "Program Head approved",
+      done: programHeadApproved,
+      current: programHeadApproved && !approved,
+    },
+    {
+      label: "Registrar approved",
       done: approved,
       current: approved && !paid,
     },
     { label: "Payment confirmed", done: paid, current: paid && !enrolled },
     { label: "Enrolled", done: enrolled, current: false },
   ]
+}
+
+const SUBMIT_FAILED_MESSAGE =
+  "Your enrollment could not be submitted. Check the connection and try again."
+
+/**
+ * What the student is told when a submit fails. The server's own sentence is
+ * used where it is written for the student (a 409 "this section filled up",
+ * a 422 without a field list); the rest get a fixed, readable explanation
+ * instead of one generic "check the connection" line for every failure.
+ */
+function submitFailureMessage(error: unknown): string {
+  if (!isApiClientError(error)) {
+    return error instanceof Error && error.message
+      ? error.message
+      : SUBMIT_FAILED_MESSAGE
+  }
+  if (error.status === 403) {
+    return "Your account is not allowed to submit this enrollment."
+  }
+  if (error.status === 404) {
+    return "Your student record could not be found. Please contact the Registrar."
+  }
+  if (error.status === 409 || error.status === 422) {
+    return error.message || SUBMIT_FAILED_MESSAGE
+  }
+  if (error.status !== undefined && error.status >= 500) {
+    return "The server had a problem submitting your enrollment. Please try again in a moment."
+  }
+
+  return SUBMIT_FAILED_MESSAGE
 }
 
 export function EnrollmentWorkspace() {
@@ -336,6 +442,9 @@ export function EnrollmentWorkspace() {
     }))
   }, [activeEnrollment])
 
+  // Plain derived values — the React Compiler memoizes them. Manual
+  // `useMemo`s here passed `selectedEntries` items into helpers the compiler
+  // must assume could mutate them, which made it skip this whole component.
   const selectedEntries = buildSelectedEntries(effectiveSelections, subjects)
 
   const totalUnits = selectedEntries.reduce(
@@ -343,69 +452,46 @@ export function EnrollmentWorkspace() {
     0,
   )
 
-  const scheduleConflict = useMemo(() => {
-    if (isRegularAudience) return null
-    for (let i = 0; i < selectedEntries.length; i++) {
-      for (let j = i + 1; j < selectedEntries.length; j++) {
-        const a = selectedEntries[i]
-        const b = selectedEntries[j]
-        if (hasScheduleConflict(a.section, b.section)) {
-          return { subjectA: a.subject, subjectB: b.subject }
-        }
-      }
-    }
-    return null
-  }, [isRegularAudience, selectedEntries])
+  const scheduleConflict = isRegularAudience
+    ? null
+    : findScheduleConflict(selectedEntries)
 
-  const unpairedComponent = useMemo(() => {
-    if (isRegularAudience) return null
-    const sectionCodeBySubjectId = new Map<number, string>()
-    for (const entry of selectedEntries) {
-      sectionCodeBySubjectId.set(
-        entry.subject.subject_id,
-        entry.section.section_code,
-      )
-    }
+  const unpairedComponent = isRegularAudience
+    ? null
+    : findUnpairedComponent(selectedEntries, subjects)
 
-    for (const entry of selectedEntries) {
-      const pairedId = entry.subject.paired_subject_id
-      if (pairedId !== null) {
-        const pairedCode = sectionCodeBySubjectId.get(pairedId)
-        const pairedSubject = subjects.find((s) => s.subject_id === pairedId)
-        if (!pairedCode) {
-          return `${entry.subject.code} requires its paired component (${pairedSubject?.code ?? "paired component"}) to be selected together.`
-        }
-        if (pairedCode !== entry.section.section_code) {
-          return `${entry.subject.code} and ${pairedSubject?.code ?? "its paired component"} must be enrolled in the same section (${entry.section.section_code}).`
-        }
-      }
-    }
-    return null
-  }, [isRegularAudience, selectedEntries, subjects])
+  const validationError = isRegularAudience
+    ? null
+    : totalUnits > effectiveMaxUnits
+      ? `Total units (${totalUnits}) exceeds the maximum allowed limit of ${effectiveMaxUnits.toFixed(1)} units. Please remove some subjects before submitting.`
+      : scheduleConflict
+        ? `Schedule conflict detected: ${scheduleConflict.subjectA.code} conflicts with ${scheduleConflict.subjectB.code}. Please choose non-conflicting sections.`
+        : unpairedComponent
 
-  const validationError = useMemo(() => {
-    if (isRegularAudience) return null
-    if (totalUnits > 30.0) {
-      return `Total units (${totalUnits}) exceeds the maximum allowed limit of 30.0 units. Please remove some subjects before submitting.`
-    }
-    if (scheduleConflict) {
-      return `Schedule conflict detected: ${scheduleConflict.subjectA.code} conflicts with ${scheduleConflict.subjectB.code}. Please choose non-conflicting sections.`
-    }
-    if (unpairedComponent) {
-      return unpairedComponent
-    }
-    return null
-  }, [isRegularAudience, totalUnits, scheduleConflict, unpairedComponent])
+  // One source for both the dialog's sentence and its Confirm button. The
+  // sentence used to read the pruned selection while the button read the raw
+  // one, so the dialog could say "0 subjects, 0 units" over a live button.
+  const nothingToSubmit = isRegularAudience
+    ? selectedBlock === undefined
+    : selectedEntries.length === 0
+  const confirmErrors =
+    fieldErrors.length > 0
+      ? fieldErrors
+      : submitError
+        ? [submitError]
+        : validationError
+          ? [validationError]
+          : []
 
   const mutation = useMutation({
     mutationFn: (payload: {
       blockCode: string | null
       sectionIds: readonly number[]
     }) =>
-      isRegularAudience
+      payload.blockCode
         ? createEnrollment({
             academic_term_id: selectedTermId!,
-            block_code: payload.blockCode!,
+            block_code: payload.blockCode,
           })
         : createEnrollment({
             academic_term_id: selectedTermId!,
@@ -471,6 +557,19 @@ export function EnrollmentWorkspace() {
    * before building the payload — and building it from that fresh result,
    * not from render state — closes that gap.
    */
+  // Every failure below keeps the confirm dialog open and reports inside it:
+  // for a regular student the section picker is itself a dialog, and a page
+  // banner behind it (the old behaviour) was never seen, so Confirm looked
+  // dead.
+  const openConfirm = () => {
+    setSubmitError("")
+    setFieldErrors([])
+    // The window can close while the page sits open; refresh it so the dialog
+    // does not offer a submit that the server is about to refuse.
+    void scheduleQuery.refetch()
+    setConfirmOpen(true)
+  }
+
   const submit = async () => {
     setReceipt(false)
     setSubmitError("")
@@ -485,18 +584,49 @@ export function EnrollmentWorkspace() {
       let payload: { blockCode: string | null; sectionIds: readonly number[] }
 
       if (isRegularAudience) {
+        if (!selectedBlockCode) {
+          setFieldErrors(["Please select a section before submitting."])
+          return
+        }
         const freshBlocks = (await blocksQuery.refetch()).data ?? blocks
+        const validBlockCode = pruneBlockCode(selectedBlockCode, freshBlocks)
+        if (!validBlockCode) {
+          setFieldErrors([
+            `Section ${selectedBlockCode} is no longer available or has filled up. Please choose an open section.`,
+          ])
+          setSelectedBlockCode(null)
+          return
+        }
+        const block = freshBlocks.find((b) => b.block_code === validBlockCode)
+        if (!block || block.subjects.length === 0 || block.total_units === 0) {
+          setFieldErrors([
+            `Section ${validBlockCode} has no available subjects or units. Please choose another section.`,
+          ])
+          return
+        }
         payload = {
-          blockCode: pruneBlockCode(selectedBlockCode, freshBlocks),
+          blockCode: validBlockCode,
           sectionIds: [],
         }
       } else {
+        if (Object.keys(selections).length === 0) {
+          setFieldErrors([
+            "Please select at least one subject section before submitting.",
+          ])
+          return
+        }
         const freshSubjects =
           (await eligibleSubjectsQuery.refetch()).data ?? subjects
         const freshEntries = buildSelectedEntries(
           pruneSelections(selections, freshSubjects),
           freshSubjects,
         )
+        if (freshEntries.length === 0) {
+          setFieldErrors([
+            "Your selected subject sections are no longer available. Please review the available sections and try again.",
+          ])
+          return
+        }
         payload = {
           blockCode: null,
           sectionIds: freshEntries.map((entry) => entry.section.id),
@@ -504,13 +634,14 @@ export function EnrollmentWorkspace() {
       }
 
       await mutation.mutateAsync(payload)
+      setConfirmOpen(false)
     } catch (error) {
       if (
         isApiClientError(error) &&
-        error.status === 422 &&
-        error.fieldErrors
+        error.fieldErrors &&
+        Object.keys(error.fieldErrors).length > 0
       ) {
-        const messages = Object.values(error.fieldErrors).flat()
+        const messages = [...new Set(Object.values(error.fieldErrors).flat())]
         const hasStaleConflict = messages.some((message) =>
           message.includes(CONFLICT_ERROR_SUBSTRING),
         )
@@ -523,9 +654,7 @@ export function EnrollmentWorkspace() {
             : messages,
         )
       } else {
-        setSubmitError(
-          "Your enrollment could not be submitted. Check the connection and try again.",
-        )
+        setSubmitError(submitFailureMessage(error))
       }
     }
   }
@@ -555,9 +684,9 @@ export function EnrollmentWorkspace() {
     ) : receipt ? (
       <Alert>
         <AlertDescription>
-          Enrollment submitted and pending registrar approval. Its status is
-          shown below — once approved, please proceed in person to the school
-          Cashier kiosk on campus to claim your queuing ticket for payment.
+          {isRegularAudience
+            ? "Enrollment submitted and pending Registrar approval. Its status is shown below — once approved, please proceed in person to the school Cashier kiosk on campus to claim your queuing ticket for payment."
+            : "Enrollment submitted and pending Program Head approval, then Registrar approval. Its status is shown below — once approved, please proceed in person to the school Cashier kiosk on campus to claim your queuing ticket for payment."}
         </AlertDescription>
       </Alert>
     ) : null
@@ -612,7 +741,7 @@ export function EnrollmentWorkspace() {
             if (balance > 10000) {
               setOutstandingBalancePromptOpen(true)
             } else {
-              setConfirmOpen(true)
+              openConfirm()
             }
           }}
           disabled={mutation.isPending || enrollmentWindowClosed || hasBlocker}
@@ -639,9 +768,9 @@ export function EnrollmentWorkspace() {
             activeEnrollment,
             activeEnrollment?.is_irregular != null
               ? !activeEnrollment.is_irregular
-              : (activeEnrollment?.student_enrollment_category != null
-                  ? activeEnrollment.student_enrollment_category === "regular"
-                  : isRegularAudience),
+              : activeEnrollment?.student_enrollment_category != null
+                ? activeEnrollment.student_enrollment_category === "regular"
+                : isRegularAudience,
           )}
         />
       )}
@@ -649,7 +778,8 @@ export function EnrollmentWorkspace() {
       <EnrollmentAvailabilityBanner viewer={viewer} />
       <EnrollmentCategoryExplanation viewer={viewer} />
 
-      {banner}
+      {/* While the confirm dialog is open its errors render inside it. */}
+      {!confirmOpen && banner}
 
       {selectedTermId === null ? (
         <p>Select an academic term to begin enrollment.</p>
@@ -659,7 +789,10 @@ export function EnrollmentWorkspace() {
           <div className="grid gap-4">
             <AsyncBoundary
               query={{
-                isPending: termsQuery.isPending || blocksQuery.isFetching,
+                // isPending, not isFetching: a background refetch (the one
+                // submit() does first) must not unmount the section picker,
+                // whose remount re-portals it above the confirm dialog.
+                isPending: termsQuery.isPending || blocksQuery.isPending,
                 isError: termsQuery.isError || blocksQuery.isError,
                 error: termsQuery.error ?? blocksQuery.error,
                 data: blocksQuery.data,
@@ -669,21 +802,26 @@ export function EnrollmentWorkspace() {
                 },
               }}
               isEmpty={(all) => all.length === 0}
-              emptyMessage="No sections were generated for your year level and curriculum yet. Contact the Registrar."
+              emptyMessage="No sections were generated for your year level and curriculum yet. Contact the Program Head."
               loadingLabel="Loading your sections…"
               loadingFallback={<Skeleton className="h-48" />}
             >
               {() => (
-                <EnrollmentSectionTable
-                  blocks={blocks}
-                  selectedBlockCode={effectiveSelectedBlockCode}
-                  onChoose={chooseBlock}
-                  onChangeSection={() => setSelectedBlockCode(null)}
-                  disabled={enrollmentWindowClosed}
-                  renderSelectedFooter={(block) =>
-                    submitFooter(block.total_units)
-                  }
-                />
+                <AccordionCard
+                  id="available-sections"
+                  title="Available sections"
+                >
+                  <EnrollmentSectionTable
+                    blocks={blocks}
+                    selectedBlockCode={effectiveSelectedBlockCode}
+                    onChoose={chooseBlock}
+                    onChangeSection={() => setSelectedBlockCode(null)}
+                    disabled={enrollmentWindowClosed}
+                    renderSelectedFooter={(block) =>
+                      submitFooter(block.total_units)
+                    }
+                  />
+                </AccordionCard>
               )}
             </AsyncBoundary>
           </div>
@@ -692,7 +830,7 @@ export function EnrollmentWorkspace() {
             <AsyncBoundary
               query={{
                 isPending:
-                  termsQuery.isPending || eligibleSubjectsQuery.isFetching,
+                  termsQuery.isPending || eligibleSubjectsQuery.isPending,
                 isError: termsQuery.isError || eligibleSubjectsQuery.isError,
                 error: termsQuery.error ?? eligibleSubjectsQuery.error,
                 data: eligibleSubjectsQuery.data,
@@ -713,32 +851,29 @@ export function EnrollmentWorkspace() {
               loadingFallback={<Skeleton className="h-48" />}
             >
               {() => (
-                <Card>
-                  <CardHeader>
-                    <CardTitle level={2}>Eligible subjects</CardTitle>
-                    <CardDescription>
-                      Pick a section for each subject you want to enrol in.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid min-w-0 gap-4">
-                    <EligibleSubjectTable
-                      subjects={selectableSubjects}
-                      selections={effectiveSelections}
-                      onChoose={chooseSection}
-                      onClear={clearSection}
-                      onBatchChoose={batchChooseSections}
-                      disabled={enrollmentWindowClosed}
-                      currentYearLevel={currentYearLevel}
-                      currentSemester={currentSemester}
-                      maxUnits={effectiveMaxUnits}
-                    />
-                    {selectedEntries.length > 0 && (
-                      <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">
-                        {submitFooter(totalUnits)}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <AccordionCard
+                  id="eligible-subjects"
+                  title="Eligible subjects"
+                  description="Pick a section for each subject you want to enrol in."
+                  contentClassName="min-w-0"
+                >
+                  <EligibleSubjectTable
+                    subjects={selectableSubjects}
+                    selections={effectiveSelections}
+                    onChoose={chooseSection}
+                    onClear={clearSection}
+                    onBatchChoose={batchChooseSections}
+                    disabled={enrollmentWindowClosed}
+                    currentYearLevel={currentYearLevel}
+                    currentSemester={currentSemester}
+                    maxUnits={effectiveMaxUnits}
+                  />
+                  {selectedEntries.length > 0 && (
+                    <div className="grid gap-3 border-t pt-4 sm:flex sm:items-center sm:justify-between">
+                      {submitFooter(totalUnits)}
+                    </div>
+                  )}
+                </AccordionCard>
               )}
             </AsyncBoundary>
           </div>
@@ -755,7 +890,13 @@ export function EnrollmentWorkspace() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm enrollment submission</AlertDialogTitle>
             <AlertDialogDescription>
-              {isRegularAudience && selectedBlock ? (
+              {nothingToSubmit ? (
+                <>
+                  {isRegularAudience
+                    ? "No section is selected any more (it may have filled up or been withdrawn). Cancel and choose a section before submitting."
+                    : "No subjects are selected. Cancel and choose at least one subject section before submitting."}{" "}
+                </>
+              ) : isRegularAudience && selectedBlock ? (
                 <>
                   This enrolls you in all {selectedBlock.subjects.length}{" "}
                   subjects of section {selectedBlock.block_code}, totaling{" "}
@@ -773,19 +914,50 @@ export function EnrollmentWorkspace() {
                     termsQuery.data.find((term) => term.id === selectedTermId)!,
                   )
                 : "the selected term"}
-              . This action is recorded in the operational audit log and sent
-              for registrar approval — once approved, please proceed in person to
-              the school Cashier kiosk on campus to claim your queuing ticket for
-              payment.
+              {nothingToSubmit ? null : (
+                <>
+                  . This action is recorded in the operational audit log and
+                  sent
+                  {isRegularAudience
+                    ? " for Registrar approval — once approved, please proceed in person to"
+                    : " for Program Head and then Registrar approval — once approved, please proceed in person to"}{" "}
+                  the school Cashier kiosk on campus to claim your queuing
+                  ticket for payment.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {enrollmentWindowClosed && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Enrollment is not open for you right now, so this cannot be
+                submitted.
+              </AlertDescription>
+            </Alert>
+          )}
+          {confirmErrors.length > 0 && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <ul className="grid gap-1">
+                  {confirmErrors.map((message, index) => (
+                    <li key={index}>{message}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
           <AlertDialogFooter className="[&_button]:w-full sm:[&_button]:w-auto">
             <AlertDialogCancel disabled={mutation.isPending}>
               Cancel
             </AlertDialogCancel>
             <Button
               type="button"
-              disabled={mutation.isPending}
+              disabled={
+                mutation.isPending ||
+                nothingToSubmit ||
+                enrollmentWindowClosed ||
+                validationError !== null
+              }
               onClick={() => void submit()}
             >
               {mutation.isPending ? "Submitting" : "Confirm submission"}
@@ -804,9 +976,11 @@ export function EnrollmentWorkspace() {
           <AlertDialogHeader>
             <AlertDialogTitle>Outstanding balance notice</AlertDialogTitle>
             <AlertDialogDescription>
-              You currently have an outstanding balance exceeding ₱10,000.00
-              ({studentAccountQuery.data?.outstanding_balance ? `₱${studentAccountQuery.data.outstanding_balance}` : ""}).
-              Are you willing to pay your remaining balance?
+              You currently have an outstanding balance exceeding ₱10,000.00 (
+              {studentAccountQuery.data?.outstanding_balance
+                ? `₱${studentAccountQuery.data.outstanding_balance}`
+                : ""}
+              ). Are you willing to pay your remaining balance?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="[&_button]:w-full sm:[&_button]:w-auto">
@@ -819,7 +993,7 @@ export function EnrollmentWorkspace() {
               type="button"
               onClick={() => {
                 setOutstandingBalancePromptOpen(false)
-                setConfirmOpen(true)
+                openConfirm()
               }}
             >
               Yes, proceed
@@ -840,133 +1014,174 @@ export function EnrollmentWorkspace() {
           loadingLabel="Loading your account balance…"
           loadingFallback={<Skeleton className="h-40" />}
         >
-          {(account) => <StudentAccountBalancePanel account={account} />}
+          {(account) => (
+            <StudentAccountBalancePanel account={account} defaultOpen={false} />
+          )}
         </AsyncBoundary>
       )}
 
+      {/* Sections start open only for the step the student is on: the queue
+          ticket while the enrollment is in progress, the timetable once it is
+          confirmed. Everything else starts collapsed and can be opened. */}
       {activeEnrollment && (
-        <EnrollmentQueuePaymentPanel enrollment={activeEnrollment} />
+        <EnrollmentCancelPanel enrollment={activeEnrollment} />
+      )}
+
+      {activeEnrollment && (
+        <EnrollmentQueuePaymentPanel
+          enrollment={activeEnrollment}
+          defaultOpen={activeEnrollment.status !== "enrolled"}
+        />
       )}
 
       {activeEnrollment && activeEnrollment.subjects.length > 0 && (
         <Card role="region" aria-label="Enrolled class schedule">
-          <CardHeader className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle
-                level={2}
-                className="flex items-center gap-2 text-lg font-bold"
-              >
-                <CalendarDays
-                  className="size-5 text-primary"
-                  aria-hidden="true"
-                />
-                Enrolled Class Schedule
-              </CardTitle>
-              <CardDescription>
-                Weekly class timetable and professor assignments for{" "}
-                {selectedTerm
-                  ? formatAcademicTerm(selectedTerm)
-                  : "the selected term"}
-                .
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">{activeEnrollment.status_label}</Badge>
-              <Badge variant="outline">
-                {activeEnrollment.total_units} units
-              </Badge>
-              <ToggleGroup
-                type="single"
-                value={enrolledScheduleView}
-                onValueChange={(val) => {
-                  if (val === "table" || val === "calendar")
-                    setEnrolledScheduleView(val)
-                }}
-                variant="outline"
-                size="sm"
-                aria-label="Enrolled schedule layout"
-              >
-                <ToggleGroupItem value="table" aria-label="Schedule list">
-                  <ListIcon data-icon="inline-start" aria-hidden="true" />
-                  Schedule list
-                </ToggleGroupItem>
-                <ToggleGroupItem value="calendar" aria-label="View in calendar">
-                  <CalendarDays data-icon="inline-start" aria-hidden="true" />
-                  View in calendar
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {enrolledScheduleView === "calendar" ? (
-              <SectionScheduleCalendar
-                items={activeEnrollmentCalendarItems}
-                disabled={true}
-                emptyMessage="No timetable slots found for enrolled subjects."
-              />
-            ) : (
-              <DataTable
-                caption="Enrolled subjects schedule"
-                rowKey={(subj) => subj.section_id}
-                rows={activeEnrollment.subjects}
-                columns={[
-                  {
-                    key: "code",
-                    header: "Subject code",
-                    render: (subj) => subj.subject_code,
-                  },
-                  {
-                    key: "title",
-                    header: "Description",
-                    render: (subj) => subj.subject_title,
-                  },
-                  {
-                    key: "units",
-                    header: "Units",
-                    render: (subj) => subj.units ?? "—",
-                  },
-                  {
-                    key: "section",
-                    header: "Section",
-                    render: (subj) => subj.section_code ?? "—",
-                  },
-                  {
-                    key: "day",
-                    header: "Day",
-                    render: (subj) => subj.schedule_days ?? "To be confirmed",
-                  },
-                  {
-                    key: "time",
-                    header: "Time",
-                    render: (subj) =>
-                      subj.starts_at_time && subj.ends_at_time
-                        ? formatTimeRange(
-                            subj.starts_at_time,
-                            subj.ends_at_time,
-                          )
-                        : "To be confirmed",
-                  },
-                  {
-                    key: "room",
-                    header: "Room",
-                    render: (subj) => subj.room ?? "To be confirmed",
-                  },
-                  {
-                    key: "professor",
-                    header: "Professor",
-                    render: (subj) => subj.professor_name ?? "To be confirmed",
-                  },
-                  {
-                    key: "status",
-                    header: "Status",
-                    render: (subj) => (
-                      <Badge variant="outline">{subj.status_label}</Badge>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </CardContent>
+          <Accordion
+            type="single"
+            collapsible
+            defaultValue={
+              activeEnrollment.status === "enrolled" ? "schedule" : undefined
+            }
+          >
+            <AccordionItem value="schedule" className="border-none">
+              <CardHeader className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <AccordionTrigger className="hover:no-underline py-0 text-left">
+                    <div>
+                      <CardTitle
+                        level={2}
+                        className="flex items-center gap-2 text-lg font-bold"
+                      >
+                        <CalendarDays
+                          className="size-5 text-primary"
+                          aria-hidden="true"
+                        />
+                        Enrolled Class Schedule
+                      </CardTitle>
+                      <CardDescription className="text-xs font-normal">
+                        Weekly class timetable and professor assignments for{" "}
+                        {selectedTerm
+                          ? formatAcademicTerm(selectedTerm)
+                          : "the selected term"}
+                        .
+                      </CardDescription>
+                    </div>
+                  </AccordionTrigger>
+                </div>
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Badge variant="secondary">
+                    {activeEnrollment.status_label}
+                  </Badge>
+                  <Badge variant="outline">
+                    {activeEnrollment.total_units} units
+                  </Badge>
+                  <ToggleGroup
+                    type="single"
+                    value={enrolledScheduleView}
+                    onValueChange={(val) => {
+                      if (val === "table" || val === "calendar")
+                        setEnrolledScheduleView(val)
+                    }}
+                    variant="outline"
+                    size="sm"
+                    aria-label="Enrolled schedule layout"
+                  >
+                    <ToggleGroupItem value="table" aria-label="Schedule list">
+                      <ListIcon data-icon="inline-start" aria-hidden="true" />
+                      Schedule list
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="calendar"
+                      aria-label="View in calendar"
+                    >
+                      <CalendarDays
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />
+                      View in calendar
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              </CardHeader>
+              <AccordionContent className="pt-4 pb-0">
+                <CardContent className="pt-0">
+                  {enrolledScheduleView === "calendar" ? (
+                    <SectionScheduleCalendar
+                      items={activeEnrollmentCalendarItems}
+                      disabled={true}
+                      emptyMessage="No timetable slots found for enrolled subjects."
+                    />
+                  ) : (
+                    <DataTable
+                      caption="Enrolled subjects schedule"
+                      rowKey={(subj) => subj.section_id}
+                      rows={activeEnrollment.subjects}
+                      columns={[
+                        {
+                          key: "code",
+                          header: "Subject code",
+                          render: (subj) => subj.subject_code,
+                        },
+                        {
+                          key: "title",
+                          header: "Description",
+                          render: (subj) => subj.subject_title,
+                        },
+                        {
+                          key: "units",
+                          header: "Units",
+                          render: (subj) => subj.units ?? "—",
+                        },
+                        {
+                          key: "section",
+                          header: "Section",
+                          render: (subj) => subj.section_code ?? "—",
+                        },
+                        {
+                          key: "day",
+                          header: "Day",
+                          render: (subj) =>
+                            subj.schedule_days ?? "To be confirmed",
+                        },
+                        {
+                          key: "time",
+                          header: "Time",
+                          render: (subj) =>
+                            subj.starts_at_time && subj.ends_at_time
+                              ? formatTimeRange(
+                                  subj.starts_at_time,
+                                  subj.ends_at_time,
+                                )
+                              : "To be confirmed",
+                        },
+                        {
+                          key: "room",
+                          header: "Room",
+                          render: (subj) => subj.room ?? "To be confirmed",
+                        },
+                        {
+                          key: "professor",
+                          header: "Professor",
+                          render: (subj) =>
+                            subj.professor_name ?? "Announced after enrollment",
+                        },
+                        {
+                          key: "status",
+                          header: "Status",
+                          render: (subj) => (
+                            <Badge variant="outline">{subj.status_label}</Badge>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </CardContent>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
       )}
 
@@ -978,54 +1193,63 @@ export function EnrollmentWorkspace() {
             addDrop?.reason_message ?? "Loading add/drop availability…"
           }
           windowClosesAt={addDrop?.closes_at ?? null}
+          defaultOpen={false}
         />
       )}
 
       {(enrollmentsQuery.data ?? []).length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle level={2}>Your enrollments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              caption="Your enrollments"
-              rowKey={(enrollment) => enrollment.id}
-              rows={enrollmentsQuery.data ?? []}
-              columns={[
-                {
-                  key: "term",
-                  header: "Term",
-                  render: (enrollment) => {
-                    const term = termsQuery.data?.find(
-                      (candidate) =>
-                        candidate.id === enrollment.academic_term_id,
-                    )
-                    return term
-                      ? formatAcademicTerm(term)
-                      : enrollment.academic_term_id
-                  },
-                },
-                {
-                  key: "status",
-                  header: "Status",
-                  render: (enrollment) => (
-                    <Badge>{enrollment.status_label}</Badge>
-                  ),
-                },
-                {
-                  key: "units",
-                  header: "Units",
-                  render: (enrollment) => enrollment.total_units,
-                },
-                {
-                  key: "queue_ticket",
-                  header: "Queue ticket",
-                  render: (enrollment) =>
-                    enrollment.queue_ticket?.ticket_number ?? "—",
-                },
-              ]}
-            />
-          </CardContent>
+          <Accordion type="single" collapsible>
+            <AccordionItem value="enrollments" className="border-none">
+              <CardHeader className="py-3">
+                <AccordionTrigger className="hover:no-underline py-0 text-left">
+                  <CardTitle level={2}>Your enrollments</CardTitle>
+                </AccordionTrigger>
+              </CardHeader>
+              <AccordionContent className="pb-0">
+                <CardContent className="pt-2">
+                  <DataTable
+                    caption="Your enrollments"
+                    rowKey={(enrollment) => enrollment.id}
+                    rows={enrollmentsQuery.data ?? []}
+                    columns={[
+                      {
+                        key: "term",
+                        header: "Term",
+                        render: (enrollment) => {
+                          const term = termsQuery.data?.find(
+                            (candidate) =>
+                              candidate.id === enrollment.academic_term_id,
+                          )
+                          return term
+                            ? formatAcademicTerm(term)
+                            : enrollment.academic_term_id
+                        },
+                      },
+                      {
+                        key: "status",
+                        header: "Status",
+                        render: (enrollment) => (
+                          <Badge>{enrollment.status_label}</Badge>
+                        ),
+                      },
+                      {
+                        key: "units",
+                        header: "Units",
+                        render: (enrollment) => enrollment.total_units,
+                      },
+                      {
+                        key: "queue_ticket",
+                        header: "Queue ticket",
+                        render: (enrollment) =>
+                          enrollment.queue_ticket?.ticket_number ?? "—",
+                      },
+                    ]}
+                  />
+                </CardContent>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
       )}
     </WorkspacePage>

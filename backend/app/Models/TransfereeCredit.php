@@ -16,8 +16,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $source_subject_code
  * @property string $source_subject_title
  * @property ?string $source_grade
- * @property int $credited_units
+ * @property float $credited_units
+ * @property ?string $source_school_year
+ * @property ?string $source_semester
  * @property ?int $subject_id
+ * @property ?int $requested_by
+ * @property ?int $endorsed_by
+ * @property ?CarbonImmutable $endorsed_at
  * @property TransfereeCreditStatus $status
  * @property ?int $processed_by
  * @property ?CarbonImmutable $processed_at
@@ -26,6 +31,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property-read StudentProfile $student
  * @property-read ?Subject $subject
  * @property-read ?User $processor
+ * @property-read ?User $requester
+ * @property-read ?User $endorser
  */
 final class TransfereeCredit extends Model
 {
@@ -37,7 +44,12 @@ final class TransfereeCredit extends Model
         'source_subject_title',
         'source_grade',
         'credited_units',
+        'source_school_year',
+        'source_semester',
         'subject_id',
+        'requested_by',
+        'endorsed_by',
+        'endorsed_at',
         'status',
         'processed_by',
         'processed_at',
@@ -50,7 +62,8 @@ final class TransfereeCredit extends Model
     {
         return [
             'status' => TransfereeCreditStatus::class,
-            'credited_units' => 'integer',
+            'credited_units' => 'float',
+            'endorsed_at' => 'immutable_datetime',
             'processed_at' => 'immutable_datetime',
         ];
     }
@@ -80,16 +93,32 @@ final class TransfereeCredit extends Model
     }
 
     /**
-     * PRD §3.8 assigns processing transferee credits to Registrar Staff; the
-     * Registrar Head also reads every credit (the same "keeper of the
-     * official record" visibility `Enrollment`/`AcademicGrade`/
-     * `WithdrawalRequest` already grant it), but does not write one — see
-     * `TransfereeCreditPolicy`'s docblock for that literal-reading choice.
+     * @return BelongsTo<User, $this>
+     */
+    public function requester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'requested_by');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function endorser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'endorsed_by');
+    }
+
+    /**
+     * Who may see which credits (ADR 0026): Registrar Staff and Registrar
+     * Head read every credit (Registrar Head never writes one), a Program
+     * Chair reads their own college's students' credits, and a Student reads
+     * their own.
      *
-     * Approved credits are never read by `BuildEligibleSubjectPool` — this
-     * table records and displays credited units only; whether a credit
-     * satisfies a prerequisite is an open PRD §17 decision, not something
-     * this scope (or any other code path) resolves.
+     * An `approved` credit that is mapped to a subject counts as credited for
+     * eligibility, standing, promotion and the prospectus (see
+     * `App\Actions\Academic\ResolveCreditedSubjectIds`); it carries no GRC
+     * grade, so PRD §17's cross-institution grade equivalence stays open and
+     * nothing here feeds a GWA.
      *
      * @param  Builder<TransfereeCredit>  $query
      * @return Builder<TransfereeCredit>
@@ -97,6 +126,17 @@ final class TransfereeCredit extends Model
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if (in_array($user->role, [UserRole::RegistrarStaff, UserRole::RegistrarHead], true)) {
+            return $query;
+        }
+
+        if ($user->role === UserRole::ProgramChair) {
+            if ($user->college !== null) {
+                return $query->whereHas(
+                    'student.program',
+                    fn ($programQuery) => $programQuery->where('college', $user->college->value),
+                );
+            }
+
             return $query;
         }
 

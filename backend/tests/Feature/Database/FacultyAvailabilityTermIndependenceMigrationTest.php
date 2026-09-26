@@ -10,15 +10,17 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\RollsBackThroughMigration;
 use Tests\TestCase;
 
 final class FacultyAvailabilityTermIndependenceMigrationTest extends TestCase
 {
     use RefreshDatabase;
+    use RollsBackThroughMigration;
 
     public function test_it_aborts_before_mutation_when_non_sunday_slots_would_collide(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 1])->assertExitCode(0);
+        $this->rollbackThrough('2026_08_10_000001_make_faculty_availabilities_term_independent');
 
         $professor = User::create([
             'name' => 'Collision Test Faculty',

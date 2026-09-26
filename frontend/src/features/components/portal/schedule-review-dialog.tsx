@@ -46,6 +46,8 @@ interface ScheduleReviewDialogProps {
   actorRole: UserRole
   proposal: ScheduleProposal | null
   decisionPending: boolean
+  /** Hides every decision button, for roles that only look at a schedule. */
+  readOnly?: boolean
   onOpenChange: (open: boolean) => void
   onDecision: (proposal: ScheduleProposal, action: ScheduleAction) => void
 }
@@ -233,6 +235,7 @@ export function ScheduleReviewDialog({
   actorRole,
   proposal,
   decisionPending,
+  readOnly = false,
   onOpenChange,
   onDecision,
 }: ScheduleReviewDialogProps) {
@@ -240,9 +243,8 @@ export function ScheduleReviewDialog({
   const sections = sectionsQuery.data ?? []
   const sectionCount = new Set(sections.map((section) => section.section_code))
     .size
-  const actions = proposal
-    ? availableScheduleActions(actorRole, proposal)
-    : []
+  const actions =
+    proposal && !readOnly ? availableScheduleActions(actorRole, proposal) : []
   const presentation = proposal ? scheduleProposalPresentation(proposal) : null
   const priorReturn = proposal
     ? [...(proposal.decision_history ?? [])]
@@ -260,7 +262,7 @@ export function ScheduleReviewDialog({
                 Review schedule · {proposal?.college_label ?? proposal?.college?.toUpperCase() ?? "Department"}
               </DialogTitle>
               <DialogDescription>
-                {proposal?.academic_term_label ?? "Academic term"} · Submitted by {proposal?.submitted_by_name ?? "Program Chair"}
+                {proposal?.academic_term_label ?? "Academic term"} · Submitted by {proposal?.submitted_by_name ?? "Program Head"}
               </DialogDescription>
             </div>
             {proposal && presentation && (

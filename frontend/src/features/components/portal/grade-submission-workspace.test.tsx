@@ -207,21 +207,12 @@ function stubSectionGradeRoutes(
   })
 }
 
-async function selectSemester(
-  user: ReturnType<typeof userEvent.setup>,
-  label = /1st Semester/i,
-) {
-  const semesterBtn = await screen.findByRole("button", { name: label })
-  await user.click(semesterBtn)
-}
-
 async function openClass(
   user: ReturnType<typeof userEvent.setup>,
   name = /CS101.*Programming 1/i,
-  semesterLabel = /1st Semester/i,
 ) {
-  await selectSemester(user, semesterLabel)
-  await user.click(await screen.findByRole("button", { name }))
+  const classCard = await screen.findByRole("button", { name })
+  await user.click(classCard)
   return screen.findByRole("table", { name: "Section grade sheet" })
 }
 
@@ -243,11 +234,7 @@ describe("GradeSubmissionWorkspace", () => {
 
   it("shows assigned class cards with subject, section, term, schedule, and progress", async () => {
     stubSectionGradeRoutes(fetchMock)
-    const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
-
-    // First select the 2026-2027 semester picker
-    await user.click(await screen.findByRole("button", { name: /1st Semester/i }))
 
     const classCard = await screen.findByRole("button", {
       name: /CS101.*Programming 1/i,
@@ -288,9 +275,9 @@ describe("GradeSubmissionWorkspace", () => {
     expect(await screen.findByText("Conflict")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Try again" }))
 
-    // After retry, semester picker should appear
+    // After retry, assigned classes should appear
     expect(
-      await screen.findByRole("button", { name: /1st Semester/i }),
+      await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
     ).toBeInTheDocument()
   })
 
@@ -298,8 +285,6 @@ describe("GradeSubmissionWorkspace", () => {
     stubSectionGradeRoutes(fetchMock)
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
-
-    await selectSemester(user)
 
     const classCard = await screen.findByRole("button", {
       name: /CS101.*Programming 1/i,
@@ -488,7 +473,6 @@ describe("GradeSubmissionWorkspace", () => {
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
 
-    await selectSemester(user)
     await user.click(
       await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
     )
@@ -500,7 +484,7 @@ describe("GradeSubmissionWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("shows the semester selection screen and navigates into a semester then back", async () => {
+  it("separates current semester classes and navigates into previous semesters via lower right button", async () => {
     const term2Summary: GradeSectionSummary = {
       ...sectionSummary,
       section_id: 46,
@@ -524,37 +508,25 @@ describe("GradeSubmissionWorkspace", () => {
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
 
-    // Default view: semester selection screen shows school years
-    expect(await screen.findByText("2026-2027")).toBeInTheDocument()
-    expect(screen.getByText("2025-2026")).toBeInTheDocument()
-
-    // Classes are NOT shown yet
-    expect(
-      screen.queryByRole("button", { name: /CS101.*Programming 1/i }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /CS102.*Data Structures/i }),
-    ).not.toBeInTheDocument()
-
-    // Select 2026-2027 · 1st Semester
-    await user.click(screen.getByRole("button", { name: /1st Semester/i }))
-
-    // Now only 2026-2027 classes appear
+    // Default view: Current semester classes (2026-2027 · 1st) are shown directly
     expect(
       await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
     ).toBeInTheDocument()
+    // Past semester classes are NOT shown in the current view
     expect(
       screen.queryByRole("button", { name: /CS102.*Data Structures/i }),
     ).not.toBeInTheDocument()
 
-    // Go back to semester selection
-    await user.click(screen.getByRole("button", { name: "Back to semester selection" }))
+    // "Previous Semesters" button appears in the lower right
+    const prevSemestersBtn = screen.getByRole("button", { name: /Previous Semesters/i })
+    expect(prevSemestersBtn).toBeInTheDocument()
 
-    // Semester picker is visible again; no class cards
-    expect(await screen.findByText("2026-2027")).toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: /CS101.*Programming 1/i }),
-    ).not.toBeInTheDocument()
+    // Click Previous Semesters
+    await user.click(prevSemestersBtn)
+
+    // Now in Previous Semesters view: shows 2025-2026 folder
+    expect(await screen.findByText("2025-2026")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /2nd Semester/i })).toBeInTheDocument()
 
     // Select 2025-2026 · 2nd Semester
     await user.click(screen.getByRole("button", { name: /2nd Semester/i }))
@@ -564,6 +536,14 @@ describe("GradeSubmissionWorkspace", () => {
     expect(
       screen.queryByRole("button", { name: /CS101.*Programming 1/i }),
     ).not.toBeInTheDocument()
+
+    // Click Return to Current Semester
+    await user.click(screen.getByRole("button", { name: /Return to Current Semester/i }))
+
+    // Back to current semester classes
+    expect(
+      await screen.findByRole("button", { name: /CS101.*Programming 1/i }),
+    ).toBeInTheDocument()
   })
 
   it("allows faculty to update and save completion grades for locked INC students", async () => {

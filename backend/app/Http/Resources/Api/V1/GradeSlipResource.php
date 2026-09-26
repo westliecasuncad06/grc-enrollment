@@ -3,8 +3,11 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Domain\Academic\GradeSlip;
+use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\SubjectGwaExclusionRule;
 use App\Models\AcademicGrade;
+use App\Models\CurriculumSubject;
+use App\Models\Enrollment;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
@@ -47,16 +50,68 @@ final class GradeSlipResource extends JsonResource
         $student = $this->resource->student;
         $term = $this->resource->term;
 
+        $enrollment = Enrollment::query()
+            ->where('student_id', $student->id)
+            ->where('academic_term_id', $term->id)
+            ->with('documents')
+            ->first();
+
+        $yearLevel = $student->year_level;
+        $enrollmentCategory = $student->enrollment_category;
+
+        if ($enrollment !== null) {
+            $cor = $enrollment->documents->first(fn ($d) => (is_string($d->type) ? $d->type : $d->type?->value) === 'cor');
+            if ($cor !== null && isset($cor->content['student']['year_level'])) {
+                $yearLevel = (int) $cor->content['student']['year_level'];
+            }
+            if ($enrollment->block_code !== null) {
+                $enrollmentCategory = 'regular';
+            } else {
+                $hasPriorDeficiency = AcademicGrade::query()
+                    ->where('student_id', $student->id)
+                    ->where('academic_term_id', '<', $term->id)
+                    ->where('status', GradeStatus::Locked)
+                    ->whereNotNull('mark')
+                    ->get()
+                    ->contains(fn (AcademicGrade $g): bool => ! ($g->mark?->isPassing() ?? true));
+
+                $enrollmentCategory = $hasPriorDeficiency ? 'irregular' : 'regular';
+            }
+        } else {
+            $hasPriorDeficiency = AcademicGrade::query()
+                ->where('student_id', $student->id)
+                ->where('academic_term_id', '<', $term->id)
+                ->where('status', GradeStatus::Locked)
+                ->whereNotNull('mark')
+                ->get()
+                ->contains(fn (AcademicGrade $g): bool => ! ($g->mark?->isPassing() ?? true));
+
+            $enrollmentCategory = $hasPriorDeficiency ? 'irregular' : 'regular';
+        }
+
+        // When viewing a historical term, if the enrolled subjects belong to a specific curriculum year level (e.g. 1st year subjects),
+        // use that subject placement year level so historical grade slips show the year level at which the subjects were taken:
+        if (count($this->resource->grades) > 0) {
+            $firstGrade = $this->resource->grades[0];
+            $cs = CurriculumSubject::query()
+                ->where('curriculum_id', $student->curriculum_id)
+                ->where('subject_id', $firstGrade->subject_id)
+                ->first();
+            if ($cs !== null) {
+                $yearLevel = $cs->year_level;
+            }
+        }
+
         return [
             'type' => 'grade_slip',
             'student_id' => $student->id,
             'student_number' => $student->student_number,
             'program_code' => $student->program->code,
             'program_name' => $student->program->name,
-            'year_level' => $student->year_level,
-            'enrollment_category' => $student->enrollment_category,
-            'enrollment_category_label' => $student->enrollment_category !== null
-                ? ucfirst($student->enrollment_category)
+            'year_level' => $yearLevel,
+            'enrollment_category' => $enrollmentCategory,
+            'enrollment_category_label' => $enrollmentCategory !== null
+                ? ucfirst($enrollmentCategory)
                 : null,
             'academic_term_id' => $term->id,
             'school_year' => $term->school_year,

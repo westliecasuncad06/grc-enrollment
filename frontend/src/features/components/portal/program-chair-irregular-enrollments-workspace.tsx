@@ -45,7 +45,7 @@ import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 import { updateEnrollment } from "@/features/services/enrollment-service"
 
-type DecisionAction = "registrar_approve" | "registrar_reject"
+type DecisionAction = "program_head_approve" | "program_head_reject"
 
 function statusBadgeVariant(
   status: Enrollment["status"],
@@ -61,8 +61,13 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<
-    "pending_registrar_approval" | "pending_payment" | "enrolled" | "rejected" | "all"
-  >("pending_registrar_approval")
+    | "pending_program_head_approval"
+    | "pending_registrar_approval"
+    | "pending_payment"
+    | "enrolled"
+    | "rejected"
+    | "all"
+  >("pending_program_head_approval")
 
   const [reviewingEnrollment, setReviewingEnrollment] =
     useState<Enrollment | null>(null)
@@ -142,9 +147,9 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
   }
 
   const reasonRequired =
-    pendingDecision?.action === "registrar_reject" && reason.trim() === ""
+    pendingDecision?.action === "program_head_reject" && reason.trim() === ""
   const overloadAcknowledgementRequired =
-    pendingDecision?.action === "registrar_approve" &&
+    pendingDecision?.action === "program_head_approve" &&
     Boolean(pendingDecision.enrollment.requires_overload_approval) &&
     !overloadAcknowledged
 
@@ -164,7 +169,9 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
   const filteredRows = search.trim()
     ? rawRows.filter(
         (e) =>
-          e.student_number.toLowerCase().includes(search.toLowerCase().trim()) ||
+          e.student_number
+            .toLowerCase()
+            .includes(search.toLowerCase().trim()) ||
           (e.student_name &&
             e.student_name.toLowerCase().includes(search.toLowerCase().trim())),
       )
@@ -243,7 +250,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
               Prospectus
             </Button>
           )}
-          {enrollment.status === "pending_registrar_approval" && (
+          {enrollment.status === "pending_program_head_approval" && (
             <>
               <Button
                 type="button"
@@ -253,7 +260,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                 onClick={() => {
                   setPendingDecision({
                     enrollment,
-                    action: "registrar_approve",
+                    action: "program_head_approve",
                   })
                   setReason("")
                   setOverloadAcknowledged(false)
@@ -270,7 +277,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                 onClick={() => {
                   setPendingDecision({
                     enrollment,
-                    action: "registrar_reject",
+                    action: "program_head_reject",
                   })
                   setReason("")
                   setOverloadAcknowledged(false)
@@ -289,7 +296,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
   return (
     <WorkspacePage
       title="Irregular Student Advising & Approvals"
-      description="Check submitted schedules for irregular students, verify their curriculum prospectus, and approve or reject submissions."
+      description="Check submitted schedules for irregular students, verify their curriculum prospectus, and approve or reject submissions. Approved submissions go on to the Registrar."
     >
       {error && (
         <Alert variant="destructive">
@@ -302,10 +309,26 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
           <div className="grid gap-1">
             <CardTitle level={2}>Submissions Queue</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Review irregular student subject loads before confirming enrollment.
+              Review irregular student subject loads before confirming
+              enrollment.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={
+                statusFilter === "pending_program_head_approval"
+                  ? "default"
+                  : "outline"
+              }
+              onClick={() => {
+                setStatusFilter("pending_program_head_approval")
+                setPage(1)
+              }}
+            >
+              Pending Review
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -319,12 +342,14 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                 setPage(1)
               }}
             >
-              Pending Review
+              With Registrar
             </Button>
             <Button
               type="button"
               size="sm"
-              variant={statusFilter === "pending_payment" ? "default" : "outline"}
+              variant={
+                statusFilter === "pending_payment" ? "default" : "outline"
+              }
               onClick={() => {
                 setStatusFilter("pending_payment")
                 setPage(1)
@@ -422,7 +447,8 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
         <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
-              Curriculum Prospectus — {prospectusStudent?.name} ({prospectusStudent?.studentNumber})
+              Curriculum Prospectus — {prospectusStudent?.name} (
+              {prospectusStudent?.studentNumber})
             </DialogTitle>
           </DialogHeader>
           {prospectusStudent && (
@@ -441,20 +467,22 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingDecision?.action === "registrar_approve"
+              {pendingDecision?.action === "program_head_approve"
                 ? "Approve irregular student enrollment?"
                 : "Reject irregular student enrollment"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingDecision?.action === "registrar_approve"
-                ? "Approving this enrollment will compute fee assessments and transition the student to pending payment."
+              {pendingDecision?.action === "program_head_approve"
+                ? "Approving this enrollment sends it on to the Registrar, who makes the final approval before the student can pay."
                 : "Rejecting this enrollment requires providing a reason explaining what schedule corrections the student must make."}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          {pendingDecision?.action === "registrar_reject" && (
+          {pendingDecision?.action === "program_head_reject" && (
             <Field data-invalid={reasonRequired}>
-              <FieldLabel htmlFor="decision-reason">Reason for rejection</FieldLabel>
+              <FieldLabel htmlFor="decision-reason">
+                Reason for rejection
+              </FieldLabel>
               <Textarea
                 id="decision-reason"
                 value={reason}
@@ -464,29 +492,35 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                 required
               />
               {reasonRequired && (
-                <FieldError>A reason is required to reject an enrollment.</FieldError>
+                <FieldError>
+                  A reason is required to reject an enrollment.
+                </FieldError>
               )}
             </Field>
           )}
 
-          {pendingDecision?.action === "registrar_approve" &&
+          {pendingDecision?.action === "program_head_approve" &&
             Boolean(pendingDecision.enrollment.requires_overload_approval) && (
               <Alert variant="destructive">
                 <AlertDescription>
                   <p>
-                    This enrollment totals {pendingDecision.enrollment.total_units} units,
-                    which exceeds the regular load. Approving it requires explicit overload
-                    acknowledgement.
+                    This enrollment totals{" "}
+                    {pendingDecision.enrollment.total_units} units, which
+                    exceeds the regular load. Approving it requires explicit
+                    overload acknowledgement.
                   </p>
                   <label className="mt-2 flex items-center gap-2 text-sm font-normal">
                     <input
                       type="checkbox"
                       checked={overloadAcknowledged}
-                      onChange={(e) => setOverloadAcknowledged(e.target.checked)}
+                      onChange={(e) =>
+                        setOverloadAcknowledged(e.target.checked)
+                      }
                       disabled={mutation.isPending}
                     />
                     <span>
-                      I acknowledge this enrollment exceeds the regular unit load.
+                      I acknowledge this enrollment exceeds the regular unit
+                      load.
                     </span>
                   </label>
                 </AlertDescription>
@@ -500,7 +534,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
             <Button
               type="button"
               variant={
-                pendingDecision?.action === "registrar_approve"
+                pendingDecision?.action === "program_head_approve"
                   ? "default"
                   : "destructive"
               }
@@ -513,7 +547,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
             >
               {mutation.isPending
                 ? "Saving decision…"
-                : pendingDecision?.action === "registrar_approve"
+                : pendingDecision?.action === "program_head_approve"
                   ? "Confirm Approval"
                   : "Confirm Rejection"}
             </Button>

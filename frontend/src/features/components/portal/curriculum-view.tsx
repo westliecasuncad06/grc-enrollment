@@ -24,6 +24,7 @@ import type {
   Curriculum,
   Program,
 } from "@/features/schemas/reference-data-schema"
+import { formatYearLevel } from "@/features/lib/format-year-level"
 
 const yearFilterOptions = [
   { value: "all", label: "All years" },
@@ -38,11 +39,6 @@ const semesterFilterOptions = [
   { value: "2nd", label: "2nd Semester" },
 ]
 
-/** Deliberately not imported from curriculum-workspace.tsx — importing it back
- * would create a cycle once that file imports CurriculumView (Task 3). */
-function yearLabel(year: number) {
-  return `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"} Year`
-}
 
 /** The most recent version (by effective_school_year) is "New curriculum";
  * every earlier version for that program is "Old curriculum" — mirrors the
@@ -311,7 +307,7 @@ export function CurriculumView({
             {rows.flatMap((row) => [
               <TableRow key={`${row.year_level}-${row.semester}-heading`}>
                 <TableCell colSpan={4} className="bg-muted/40 font-medium">
-                  {yearLabel(row.year_level)} · {row.semester} Semester
+                  {formatYearLevel(row.year_level)} · {row.semester} Semester
                 </TableCell>
               </TableRow>,
               ...row.subjects.map((subject) => (
@@ -346,7 +342,7 @@ export function CurriculumView({
         rows.map((row) => (
           <Table key={`${row.year_level}-${row.semester}`}>
             <TableCaption>
-              {yearLabel(row.year_level)} · {row.semester} Semester
+              {formatYearLevel(row.year_level)} · {row.semester} Semester
             </TableCaption>
             <TableHeader>
               <TableRow>

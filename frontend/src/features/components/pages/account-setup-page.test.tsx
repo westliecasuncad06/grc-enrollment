@@ -16,7 +16,7 @@ function urlOf(input: RequestInfo | URL): string {
 
 async function completeForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Email address"), "student@grc.test")
-  await user.type(screen.getByLabelText("One-time setup code"), "one-time-code")
+  await user.type(screen.getByLabelText("One-time setup code"), "123456")
   await user.type(screen.getByLabelText("New password"), "secure-password")
   await user.type(
     screen.getByLabelText("Confirm new password"),
@@ -54,12 +54,12 @@ describe("AccountSetupPage", () => {
         : {}
     expect(body).toEqual({
       email: "student@grc.test",
-      code: "one-time-code",
+      code: "123456",
       password: "secure-password",
       password_confirmation: "secure-password",
     })
     const requestUrl = fetchMock.mock.calls[0]?.[0]
-    expect(requestUrl ? urlOf(requestUrl) : "").not.toContain("one-time-code")
+    expect(requestUrl ? urlOf(requestUrl) : "").not.toContain("123456")
 
     await user.click(
       screen.getByRole("button", { name: "Continue to sign in" }),
@@ -111,18 +111,39 @@ describe("AccountSetupPage", () => {
 
   it("pre-populates email and code from URL search parameters and shows 24-hour expiration", () => {
     renderWithAuthProvider(<AccountSetupPage />, {
-      route:
-        "/account-setup?email=baluyotdandan%40gmail.com&code=sample-setup-token-123",
+      route: "/account-setup?email=baluyotdandan%40gmail.com&code=123456",
     })
 
     expect(screen.getByLabelText("Email address")).toHaveValue(
       "baluyotdandan@gmail.com",
     )
-    expect(screen.getByLabelText("One-time setup code")).toHaveValue(
-      "sample-setup-token-123",
-    )
+    expect(screen.getByLabelText("One-time setup code")).toHaveValue("123456")
     expect(
-      screen.getByText("Codes expire 24 hours after the latest invitation."),
+      screen.getByText(/The 6-digit code expires 24 hours after the latest/),
+    ).toBeInTheDocument()
+  })
+
+  it("asks for a numeric 6-digit code and rejects anything else before calling the API", async () => {
+    const user = userEvent.setup()
+    renderWithAuthProvider(<AccountSetupPage />, { route: "/account-setup" })
+
+    const codeInput = screen.getByLabelText("One-time setup code")
+    expect(codeInput).toHaveAttribute("inputmode", "numeric")
+    expect(codeInput).toHaveAttribute("maxlength", "6")
+
+    await user.type(screen.getByLabelText("Email address"), "student@grc.test")
+    await user.type(codeInput, "12345")
+    await user.type(screen.getByLabelText("New password"), "secure-password")
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "secure-password",
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Create password and activate" }),
+    )
+
+    expect(
+      await screen.findByText("Enter the 6-digit code from your email."),
     ).toBeInTheDocument()
   })
 
@@ -164,15 +185,13 @@ describe("AccountSetupPage", () => {
   })
 
   it("lets a professor supply their name and posts to the faculty setup endpoint", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: { type: "faculty-account-setup", status: "active" },
-          }),
-        ),
-      )
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: { type: "faculty-account-setup", status: "active" },
+        }),
+      ),
+    )
     vi.stubGlobal("fetch", fetchMock)
     const user = userEvent.setup()
     renderWithAuthProvider(<AccountSetupPage variant="faculty" />, {
@@ -181,8 +200,11 @@ describe("AccountSetupPage", () => {
 
     expect(screen.getByText("Faculty account")).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText("Email address"), "professor@grc.test")
-    await user.type(screen.getByLabelText("One-time setup code"), "one-time-code")
+    await user.type(
+      screen.getByLabelText("Email address"),
+      "professor@grc.test",
+    )
+    await user.type(screen.getByLabelText("One-time setup code"), "123456")
     await user.type(screen.getByLabelText("Full name"), "Prof. Juan Dela Cruz")
     await user.type(screen.getByLabelText("New password"), "secure-password")
     await user.type(
@@ -207,7 +229,7 @@ describe("AccountSetupPage", () => {
         : {}
     expect(body).toEqual({
       email: "professor@grc.test",
-      code: "one-time-code",
+      code: "123456",
       name: "Prof. Juan Dela Cruz",
       password: "secure-password",
       password_confirmation: "secure-password",
@@ -215,15 +237,13 @@ describe("AccountSetupPage", () => {
   })
 
   it("lets an invited staff member supply their name and posts to the staff setup endpoint", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: { type: "staff-account-setup", status: "active" },
-          }),
-        ),
-      )
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: { type: "staff-account-setup", status: "active" },
+        }),
+      ),
+    )
     vi.stubGlobal("fetch", fetchMock)
     const user = userEvent.setup()
     renderWithAuthProvider(<AccountSetupPage variant="staff" />, {
@@ -233,7 +253,7 @@ describe("AccountSetupPage", () => {
     expect(screen.getByText("Staff account")).toBeInTheDocument()
 
     await user.type(screen.getByLabelText("Email address"), "dean@grc.test")
-    await user.type(screen.getByLabelText("One-time setup code"), "one-time-code")
+    await user.type(screen.getByLabelText("One-time setup code"), "123456")
     await user.type(screen.getByLabelText("Full name"), "Aurora Dean Santos")
     await user.type(screen.getByLabelText("New password"), "secure-password")
     await user.type(
@@ -258,7 +278,7 @@ describe("AccountSetupPage", () => {
         : {}
     expect(body).toEqual({
       email: "dean@grc.test",
-      code: "one-time-code",
+      code: "123456",
       name: "Aurora Dean Santos",
       password: "secure-password",
       password_confirmation: "secure-password",

@@ -27,7 +27,14 @@ export const academicTermSchema = z
     ends_at: optionalUtcDateTimeSchema,
     enrollment_opens_at: optionalUtcDateTimeSchema,
     enrollment_closes_at: optionalUtcDateTimeSchema,
+    add_drop_opens_at: optionalUtcDateTimeSchema.optional(),
     add_drop_deadline_at: optionalUtcDateTimeSchema,
+    // Set once per term by the Registrar Head; printed on every COR of the term.
+    enrollment_platform: z
+      .enum(["online", "face_to_face"])
+      .nullable()
+      .optional(),
+    enrollment_platform_label: z.string().nullable().optional(),
     grading_deadline_at: optionalUtcDateTimeSchema,
     closed_at: optionalUtcDateTimeSchema.optional(),
     archived_at: optionalUtcDateTimeSchema.optional(),
@@ -45,6 +52,7 @@ export const academicTermSchema = z
         school_year: z.string(),
         semester: z.enum(["1st", "2nd"]),
       })
+      .nullable()
       .optional(),
   })
   .strict()
@@ -173,7 +181,10 @@ export const curriculumSchema = z
     max_units: z.number().nullable().optional(),
     default_max_units: z.number().optional(),
     effective_max_units: z.number().optional(),
-    year_level_max_units: z.record(z.string(), z.number()).or(z.array(z.number())).optional(),
+    year_level_max_units: z
+      .record(z.string(), z.number())
+      .or(z.array(z.number()))
+      .optional(),
     decided_at: z.string().nullable(),
     last_decision_reason: z.string().nullable(),
     subjects: z.array(curriculumSubjectSchema),

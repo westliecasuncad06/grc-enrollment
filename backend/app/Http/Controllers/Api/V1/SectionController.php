@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Scheduling\CreateSection;
 use App\Actions\Scheduling\UpdateSection;
+use App\Domain\Scheduling\PublishedSectionLock;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Section\StoreSectionRequest;
 use App\Http\Requests\Api\V1\Section\UpdateSectionRequest;
@@ -28,6 +29,7 @@ final class SectionController extends Controller
 
         $sections = Section::query()
             ->visibleTo($user)
+            ->with('professor:id,name')
             ->orderBy('academic_term_id')
             ->orderBy('subject_id')
             ->orderBy('section_code')
@@ -75,10 +77,12 @@ final class SectionController extends Controller
         UpdateSectionRequest $request,
         Section $section,
         UpdateSection $action,
+        PublishedSectionLock $lock,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $user = $this->authenticatedUser($request);
         $this->authorize('update', $section);
+        $lock->assertAllowed($user, $section, $request->validated());
 
         $section = $action->execute($user, [
             'academic_term_id' => $request->validated('academic_term_id'),

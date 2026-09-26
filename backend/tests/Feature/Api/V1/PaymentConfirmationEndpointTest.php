@@ -326,6 +326,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
         $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
             'amount' => 2000.00,
+            'promissory_note_on_file' => true,
         ]);
 
         $response->assertCreated();
@@ -381,6 +382,27 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $this->assertDatabaseCount('enrollment_documents', 1);
     }
 
+    public function test_partial_payment_without_promissory_note_is_rejected(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $this->makeAssessment($enrollment, '2400.00');
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.nopromissory@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", [
+            'amount' => 1000,
+            'promissory_note_on_file' => false,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('error.errors.promissory_note_on_file.0', 'A promissory note on file is required for partial payments.');
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('enrollment_documents', 0);
+        self::assertSame(EnrollmentStatus::PendingPayment, $enrollment->refresh()->status);
+    }
+
     public function test_an_omitted_amount_with_no_assessment_stays_null(): void
     {
         // The legacy path: an enrollment created directly (not through
@@ -410,5 +432,34 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
         $response->assertUnprocessable();
         $this->assertDatabaseCount('payments', 0);
+    }
+
+    public function test_confirming_payment_completes_active_queue_ticket_and_removes_from_waiting_list(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term);
+        $cycle = \App\Models\QueueCycle::create(['opened_on' => '2026-08-01', 'last_ticket_sequence' => 1]);
+        $ticket = \App\Models\QueueTicket::create([
+            'enrollment_id' => $enrollment->id,
+            'queue_cycle_id' => $cycle->id,
+            'ticket_sequence' => 1,
+            'ticket_number' => 'Q001',
+            'queue_date' => '2026-08-01',
+            'status' => \App\Domain\Enrollment\QueueTicketStatus::Waiting,
+            'priority' => \App\Domain\Enrollment\QueueTicketPriority::Regular,
+        ]);
+        $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.queueremove@grc.test');
+
+        $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", []);
+        $response->assertCreated();
+
+        self::assertSame(\App\Domain\Enrollment\QueueTicketStatus::Served, $ticket->refresh()->status);
+        self::assertNotNull($ticket->served_at);
+
+        $listResponse = $this->withToken($token)->getJson('/api/v1/queue-tickets?status=waiting');
+        $listResponse->assertOk();
+        $listResponse->assertJsonCount(0, 'data');
     }
 }

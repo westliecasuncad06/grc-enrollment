@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers\Api\V1\Billing;
 
+use App\Actions\Billing\SnapshotFeeSchedule;
+use App\Domain\Audit\AuditableType;
+use App\Domain\Audit\AuditAction;
 use App\Domain\Identity\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Billing\UpdateFeeScheduleRequest;
 use App\Http\Resources\Api\V1\Billing\FeeScheduleResource;
 use App\Models\FeeSchedule;
 use App\Models\User;
+use App\Support\Audit\AuditRecorder;
+use App\Support\Audit\AuditRequestContextFactory;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,22 +45,27 @@ final class FeeScheduleController extends Controller
     /**
      * @throws AuthenticationException
      */
-    public function update(UpdateFeeScheduleRequest $request): JsonResponse
-    {
+    public function update(
+        UpdateFeeScheduleRequest $request,
+        AuditRecorder $auditRecorder,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
         $actor = $request->user();
         if (! $actor instanceof User) {
             throw new AuthenticationException;
         }
 
         abort_unless(
-            $actor->role === UserRole::RegistrarHead,
+            $actor->role === UserRole::AccountingStaff,
             403,
-            'Only the Registrar Head may configure fee schedules.',
+            'Only Accounting Staff may configure fee schedules.',
         );
 
         $validated = $request->validated();
 
-        DB::transaction(function () use ($validated): void {
+        DB::transaction(function () use ($validated, $actor, $auditRecorder, $contextFactory, $request): void {
+            $before = SnapshotFeeSchedule::current();
+
             // 1. Update or create tuition rate per unit
             FeeSchedule::updateOrCreate(
                 ['category' => 'tuition'],
@@ -110,6 +120,22 @@ final class FeeScheduleController extends Controller
                 ->where('category', 'miscellaneous')
                 ->whereNotIn('id', $submittedIds)
                 ->delete();
+
+            $after = SnapshotFeeSchedule::current();
+
+            // A save that changes nothing leaves no audit record.
+            if ($before !== $after) {
+                $auditRecorder->record(
+                    $actor,
+                    AuditAction::FEE_SCHEDULE_UPDATED,
+                    AuditableType::FEE_SCHEDULE,
+                    null,
+                    $before,
+                    $after,
+                    null,
+                    $contextFactory->fromRequest($request),
+                );
+            }
         });
 
         $schedules = FeeSchedule::query()->orderBy('sort_order')->get();

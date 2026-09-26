@@ -18,6 +18,27 @@ interface AcademicTermSelectorProps {
   term: AcademicTerm | null
   isCurrentTerm: boolean
   onSelectTerm: (id: number) => void
+  /** True while the terms are still being fetched, so "none yet" is not read as "none exist". */
+  isLoading?: boolean
+}
+
+function selectorDescription(
+  hasTerms: boolean,
+  term: AcademicTerm | null,
+  isCurrentTerm: boolean,
+  isLoading: boolean,
+): string {
+  if (!hasTerms) {
+    return isLoading
+      ? "Loading school years and semesters…"
+      : "No academic terms are available right now."
+  }
+  if (term === null) {
+    return "Choose a school year and semester to view its schedule."
+  }
+  return isCurrentTerm
+    ? "Viewing the current term. Assignments are editable."
+    : "Viewing an archived schedule — read-only. Switch back to the current term to make changes."
 }
 
 export function AcademicTermSelector({
@@ -25,27 +46,45 @@ export function AcademicTermSelector({
   term,
   isCurrentTerm,
   onSelectTerm,
+  isLoading = false,
 }: AcademicTermSelectorProps) {
+  const hasTerms = sortedTerms.length > 0
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-4">
-      <div className="flex items-center gap-2">
-        <History className="size-4 text-primary" aria-hidden="true" />
-        <div>
+      <div className="flex min-w-0 items-center gap-2">
+        <History className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        <div className="min-w-0">
           <p className="font-medium">School year and semester</p>
           <p className="text-sm text-muted-foreground">
-            {isCurrentTerm
-              ? "Viewing the current term. Assignments are editable."
-              : "Viewing an archived schedule — read-only. Switch back to the current term to make changes."}
+            {selectorDescription(hasTerms, term, isCurrentTerm, isLoading)}
           </p>
         </div>
       </div>
-      <label className="grid gap-1 text-sm font-medium">
+      <label className="grid w-full min-w-0 gap-1 text-sm font-medium sm:w-auto">
         <span className="sr-only">Academic term</span>
         <select
           value={term?.id ?? ""}
-          onChange={(event) => onSelectTerm(Number(event.target.value))}
-          className="h-9 rounded-md border bg-background px-2"
+          disabled={!hasTerms}
+          aria-busy={isLoading && !hasTerms ? true : undefined}
+          onChange={(event) => {
+            const id = Number(event.target.value)
+            if (Number.isInteger(id) && id > 0) onSelectTerm(id)
+          }}
+          className="h-9 w-full min-w-0 max-w-full rounded-md border bg-background px-2 disabled:cursor-not-allowed disabled:opacity-60"
         >
+          {!hasTerms && (
+            <option value="">
+              {isLoading
+                ? "Loading academic terms…"
+                : "No academic terms available"}
+            </option>
+          )}
+          {hasTerms && term === null && (
+            <option value="" disabled>
+              Select a school year and semester
+            </option>
+          )}
           {sortedTerms.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
               {formatAcademicTerm(candidate)}

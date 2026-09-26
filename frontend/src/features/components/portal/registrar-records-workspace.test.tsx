@@ -49,6 +49,19 @@ const pendingCredit = {
   created_at: "2026-07-01T00:00:00Z",
 }
 
+// What reaches the Registrar: a credit the Program Chair mapped and endorsed.
+const endorsedCredit = {
+  ...pendingCredit,
+  id: 3,
+  student_name: "Test Student",
+  subject_id: 10,
+  subject_code: "MATH101G",
+  subject_title: "Calculus 1",
+  status: "endorsed",
+  status_label: "Endorsed",
+  endorsed_at: "2026-07-02T00:00:00Z",
+}
+
 const pendingWithdrawal = {
   type: "withdrawal_request",
   id: 2,
@@ -95,8 +108,12 @@ describe("RegistrarRecordsWorkspace", () => {
       await screen.findByRole("heading", { name: "Credit mappings" }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("heading", { name: "Record a transferee credit" }),
+      screen.getByRole("heading", { name: "Transferee credits" }),
     ).toBeInTheDocument()
+    // Recording and mapping credits is the Program Chair's work now.
+    expect(
+      screen.queryByRole("heading", { name: "Record a transferee credit" }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("heading", { name: "Withdrawal requests" }),
     ).not.toBeInTheDocument()
@@ -120,7 +137,37 @@ describe("RegistrarRecordsWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("lists pending transferee credits with Approve/Reject actions", async () => {
+  it("lists endorsed transferee credits with what they will be credited as, and Approve/Reject actions", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = requestUrl(input)
+      if (url.includes("/transferee-credits")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(paginated([endorsedCredit]))),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(paginated([]))))
+    })
+    renderWithSession(
+      <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />,
+      { session: registrarSession },
+    )
+
+    const table = await screen.findByRole("table", {
+      name: "Transferee credits",
+    })
+    expect(
+      within(table).getByText(/Test Student \(2026-0002\)/),
+    ).toBeInTheDocument()
+    expect(within(table).getByText("MATH101G — Calculus 1")).toBeInTheDocument()
+    expect(
+      within(table).getByRole("button", { name: "Approve" }),
+    ).toBeInTheDocument()
+    expect(
+      within(table).getByRole("button", { name: "Reject" }),
+    ).toBeInTheDocument()
+  })
+
+  it("offers no decision on a credit the Program Chair has not endorsed", async () => {
     fetchMock.mockImplementation((input) => {
       const url = requestUrl(input)
       if (url.includes("/transferee-credits")) {
@@ -138,13 +185,57 @@ describe("RegistrarRecordsWorkspace", () => {
     const table = await screen.findByRole("table", {
       name: "Transferee credits",
     })
-    expect(within(table).getByText("2026-0002")).toBeInTheDocument()
+    expect(within(table).getByText("Not mapped")).toBeInTheDocument()
     expect(
-      within(table).getByRole("button", { name: "Approve" }),
-    ).toBeInTheDocument()
+      within(table).queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument()
     expect(
-      within(table).getByRole("button", { name: "Reject" }),
-    ).toBeInTheDocument()
+      within(table).queryByRole("button", { name: "Reject" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("approves an endorsed credit with a single-step decision", async () => {
+    let decisionBody: unknown = null
+    fetchMock.mockImplementation((input, init) => {
+      const url = requestUrl(input)
+      if (url.includes("/transferee-credits/3") && init?.method === "PATCH") {
+        decisionBody = JSON.parse(init.body as string)
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...endorsedCredit,
+                status: "approved",
+                status_label: "Approved",
+              },
+            }),
+          ),
+        )
+      }
+      if (url.includes("/transferee-credits")) {
+        return Promise.resolve(
+          new Response(JSON.stringify(paginated([endorsedCredit]))),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify(paginated([]))))
+    })
+    const user = userEvent.setup()
+    renderWithSession(
+      <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />,
+      { session: registrarSession },
+    )
+
+    const table = await screen.findByRole("table", {
+      name: "Transferee credits",
+    })
+    await user.click(within(table).getByRole("button", { name: "Approve" }))
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Confirm decision",
+      }),
+    )
+
+    await vi.waitFor(() => expect(decisionBody).toEqual({ action: "approve" }))
   })
 
   it("requires a reason before confirming a rejection, with a visible message", async () => {
@@ -152,7 +243,7 @@ describe("RegistrarRecordsWorkspace", () => {
       const url = requestUrl(input)
       if (url.includes("/transferee-credits")) {
         return Promise.resolve(
-          new Response(JSON.stringify(paginated([pendingCredit]))),
+          new Response(JSON.stringify(paginated([endorsedCredit]))),
         )
       }
       return Promise.resolve(new Response(JSON.stringify(paginated([]))))
@@ -292,7 +383,9 @@ describe("RegistrarRecordsWorkspace", () => {
     )
 
     expect(
-      await screen.findByText("No transferee credits have been recorded yet."),
+      await screen.findByText(
+        "No credit requests have reached the Registrar yet.",
+      ),
     ).toBeInTheDocument()
   })
 
@@ -412,5 +505,24 @@ describe("RegistrarRecordsWorkspace", () => {
 
     await screen.findByRole("table", { name: "Transferee credits" })
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("is not available to a Program Chair: credit mapping has its own workspace", () => {
+    renderWithSession(
+      <RegistrarRecordsWorkspace initialModuleId="credit-mappings" />,
+      {
+        session: {
+          userId: "12",
+          displayName: "Prof. Chair",
+          role: "program_chair",
+          signedInAt: "2026-07-29T12:00:00Z",
+        },
+      },
+    )
+
+    expect(
+      screen.getByText("This workspace is not available for your role."),
+    ).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

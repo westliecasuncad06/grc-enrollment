@@ -8,6 +8,7 @@ use App\Domain\Identity\UserStatus;
 use App\Mail\StaffAccountSetupMail;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -177,7 +178,7 @@ final class StaffInvitationsEndpointTest extends TestCase
         Mail::assertSent(StaffAccountSetupMail::class, function (StaffAccountSetupMail $mail) use (&$setupCode): bool {
             $setupCode = $mail->setupCode;
 
-            return $mail->setupUrl === 'http://localhost:3000/staff-account-setup';
+            return $mail->setupUrl === 'http://192.168.1.101:3000/staff-account-setup';
         });
         self::assertIsString($setupCode);
 
@@ -212,7 +213,7 @@ final class StaffInvitationsEndpointTest extends TestCase
 
         $this->postJson('/api/v1/auth/staff-account-setup', [
             'email' => 'bad.code.staff@grc.test',
-            'code' => 'definitely-not-the-code',
+            'code' => '123456',
             'name' => 'Someone',
             'password' => 'new-secure-password',
             'password_confirmation' => 'new-secure-password',
@@ -227,13 +228,11 @@ final class StaffInvitationsEndpointTest extends TestCase
             'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Disabled,
             'account_setup_completed_at' => null,
         ]);
-        DB::table('password_reset_tokens')->insert([
-            'email' => $student->email, 'token' => bcrypt('some-code'), 'created_at' => now(),
-        ]);
+        $studentCode = app(AccountSetupCodes::class)->issue($student);
 
         $this->postJson('/api/v1/auth/staff-account-setup', [
             'email' => 'a.student@grc.test',
-            'code' => 'some-code',
+            'code' => $studentCode,
             'name' => 'Someone',
             'password' => 'new-secure-password',
             'password_confirmation' => 'new-secure-password',

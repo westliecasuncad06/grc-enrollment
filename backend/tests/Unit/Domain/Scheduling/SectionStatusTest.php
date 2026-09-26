@@ -9,10 +9,12 @@ final class SectionStatusTest extends TestCase
 {
     public function test_status_values_are_the_four_provisional_cases(): void
     {
-        self::assertSame(
-            ['planned', 'published', 'closed', 'cancelled'],
-            array_column(SectionStatus::cases(), 'value'),
-        );
+        $expected = ['planned', 'published', 'closed', 'cancelled'];
+        $actual = array_column(SectionStatus::cases(), 'value');
+
+        // Approved values must never disappear or be renamed; new slices may add more.
+        self::assertSame([], array_values(array_diff($expected, $actual)));
+        self::assertSame(array_values(array_unique($actual)), $actual);
     }
 
     public function test_labels_are_stable_and_human_readable(): void

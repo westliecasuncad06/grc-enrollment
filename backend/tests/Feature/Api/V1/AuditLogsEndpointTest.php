@@ -143,6 +143,7 @@ final class AuditLogsEndpointTest extends TestCase
             'type',
             'id',
             'actor_user_id',
+            'actor_name',
             'actor_role',
             'actor_role_label',
             'action',
@@ -150,13 +151,22 @@ final class AuditLogsEndpointTest extends TestCase
             'auditable_id',
             'before_values',
             'after_values',
+            'changes',
             'reason',
             'request_id',
             'ip_address',
             'created_at',
         ], array_keys($response->json('data.0')));
-        $response->assertDontSee($actor->name);
+        // The Registrar Head sees who acted (stakeholder Doc 14), never their email.
+        $response->assertJsonPath('data.0.actor_name', $actor->name);
         $response->assertDontSee($actor->email);
+        $response->assertJsonPath('data.0.changes.0', [
+            'field' => 'capacity',
+            'label' => 'Seats',
+            'old' => 30,
+            'new' => 35,
+            'changed' => true,
+        ]);
 
         self::assertSame(22, AuditLog::query()->count());
         self::assertDatabaseHas('audit_logs', [
@@ -164,6 +174,108 @@ final class AuditLogsEndpointTest extends TestCase
             'action' => AuditAction::AUDIT_LOG_LIST_VIEWED,
             'request_id' => 'audit-list-response-id',
         ]);
+    }
+
+    public function test_changes_name_the_professor_mark_unchanged_fields_and_hide_name_like_fields(): void
+    {
+        $reader = $this->makeUser('changes-reader', UserRole::RegistrarHead);
+        $actor = $this->makeUser('changes-actor', UserRole::ProgramChair);
+        $oldProfessor = $this->makeUser('old-professor', UserRole::Faculty);
+        $newProfessor = $this->makeUser('new-professor', UserRole::Faculty);
+        $this->makeAuditLog(
+            $actor,
+            AuditAction::SECTION_UPDATED,
+            AuditableType::SECTION,
+            '2026-07-10 09:00:00',
+            7,
+            ['professor_id' => $oldProfessor->id, 'room' => 'R101', 'student_name' => 'Real Person'],
+            ['professor_id' => $newProfessor->id, 'room' => 'R101', 'student_name' => 'Other Person'],
+        );
+
+        $response = $this->withToken($this->tokenFor($reader))
+            ->getJson('/api/v1/audit-logs?action='.AuditAction::SECTION_UPDATED);
+
+        $response->assertOk();
+        $byField = collect($response->json('data.0.changes'))->keyBy('field');
+        self::assertSame('Professor', $byField['professor_id']['label']);
+        self::assertSame($oldProfessor->name, $byField['professor_id']['old']);
+        self::assertSame($newProfessor->name, $byField['professor_id']['new']);
+        self::assertTrue($byField['professor_id']['changed']);
+        self::assertFalse($byField['room']['changed']);
+        self::assertSame('Hidden', $byField['student_name']['old']);
+        self::assertSame('Hidden', $byField['student_name']['new']);
+        // The readable change list never carries a name-like value.
+        self::assertStringNotContainsString('Real Person', (string) json_encode($response->json('data.0.changes')));
+        self::assertStringNotContainsString('Other Person', (string) json_encode($response->json('data.0.changes')));
+    }
+
+    public function test_actor_summaries_group_entries_per_user_newest_activity_first(): void
+    {
+        $reader = $this->makeUser('actors-reader', UserRole::RegistrarHead);
+        $busy = $this->makeUser('busy-actor', UserRole::ProgramChair);
+        $recent = $this->makeUser('recent-actor', UserRole::Dean);
+        $this->makeAuditLog($busy, AuditAction::SECTION_CREATED, AuditableType::SECTION, '2026-07-01 09:00:00');
+        $this->makeAuditLog($busy, AuditAction::SECTION_UPDATED, AuditableType::SECTION, '2026-07-02 09:00:00');
+        $this->makeAuditLog($busy, AuditAction::SECTION_UPDATED, AuditableType::SECTION, '2026-07-03 09:00:00');
+        $this->makeAuditLog($recent, AuditAction::SECTION_UPDATED, AuditableType::SECTION, '2026-07-10 09:00:00');
+
+        $response = $this->withToken($this->tokenFor($reader))
+            ->withHeader(AssignRequestId::HEADER, 'audit-actors-response-id')
+            ->getJson('/api/v1/audit-logs/actors');
+
+        $response
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('data.0.type', 'audit_actor')
+            ->assertJsonPath('data.0.actor_user_id', $recent->id)
+            ->assertJsonPath('data.0.actor_name', $recent->name)
+            ->assertJsonPath('data.0.actor_role', UserRole::Dean->value)
+            ->assertJsonPath('data.0.entries_count', 1)
+            ->assertJsonPath('data.0.last_activity_at', '2026-07-10T09:00:00Z')
+            ->assertJsonPath('data.1.actor_user_id', $busy->id)
+            ->assertJsonPath('data.1.entries_count', 3)
+            ->assertJsonPath('data.1.last_activity_at', '2026-07-03T09:00:00Z');
+        $response->assertDontSee($busy->email);
+        self::assertSame([
+            'type',
+            'actor_user_id',
+            'actor_name',
+            'actor_role',
+            'actor_role_label',
+            'entries_count',
+            'last_activity_at',
+        ], array_keys($response->json('data.0')));
+
+        // Reading the summary is itself audited, like the entry list.
+        self::assertDatabaseHas('audit_logs', [
+            'actor_user_id' => $reader->id,
+            'action' => AuditAction::AUDIT_LOG_LIST_VIEWED,
+            'request_id' => 'audit-actors-response-id',
+        ]);
+    }
+
+    public function test_actor_summaries_respect_the_action_and_date_filters(): void
+    {
+        $reader = $this->makeUser('actors-filter-reader', UserRole::RegistrarHead);
+        $one = $this->makeUser('filter-one', UserRole::ProgramChair);
+        $two = $this->makeUser('filter-two', UserRole::Dean);
+        $this->makeAuditLog($one, AuditAction::SECTION_CREATED, AuditableType::SECTION, '2026-07-01 09:00:00');
+        $this->makeAuditLog($two, AuditAction::SECTION_UPDATED, AuditableType::SECTION, '2026-07-10 09:00:00');
+
+        $byAction = $this->withToken($this->tokenFor($reader))
+            ->getJson('/api/v1/audit-logs/actors?action='.AuditAction::SECTION_CREATED);
+        $byAction->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.actor_user_id', $one->id);
+    }
+
+    #[DataProvider('nonRegistrarRoleProvider')]
+    public function test_actor_summaries_are_forbidden_to_every_other_role(UserRole $role): void
+    {
+        $user = $this->makeUser('actors-forbidden-'.$role->value, $role);
+
+        $this->withToken($this->tokenFor($user))
+            ->getJson('/api/v1/audit-logs/actors')
+            ->assertForbidden();
     }
 
     public function test_action_filter_is_applied(): void
