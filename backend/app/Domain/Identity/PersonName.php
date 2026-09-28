@@ -28,6 +28,48 @@ final class PersonName
     }
 
     /**
+     * Best-effort structured parts for a display name that was written without them (a seeder, a
+     * script, an import). Same rules the split-name backfill migration applied to existing rows:
+     * "SURNAME,GIVEN" or "First [Middle...] Last [Suffix]"; a single word is both first and last.
+     *
+     * @return array{first_name: string, middle_initial: ?string, last_name: string, suffix: ?string}
+     */
+    public static function split(string $fullName): array
+    {
+        $name = trim($fullName);
+
+        if (str_contains($name, ',')) {
+            $parts = array_map('trim', explode(',', $name, 2));
+            $last = $parts[0];
+            $first = trim((string) preg_replace('/\([^)]*\)/', '', $parts[1]));
+
+            return [
+                'first_name' => $first !== '' ? $first : $last,
+                'middle_initial' => null,
+                'last_name' => $last !== '' ? $last : $first,
+                'suffix' => null,
+            ];
+        }
+
+        $tokens = preg_split('/\s+/', $name, -1, PREG_SPLIT_NO_EMPTY) ?: [$name];
+
+        $suffix = null;
+        if (count($tokens) > 1 && preg_match('/^(Jr\.?|Sr\.?|II|III|IV|V)$/i', (string) end($tokens))) {
+            $suffix = array_pop($tokens);
+        }
+
+        if (count($tokens) === 1) {
+            return ['first_name' => $tokens[0], 'middle_initial' => null, 'last_name' => $tokens[0], 'suffix' => $suffix];
+        }
+
+        $first = array_shift($tokens) ?? '';
+        $last = array_pop($tokens) ?? $first;
+        $middleInitial = $tokens !== [] ? mb_strtoupper(mb_substr($tokens[0], 0, 1)) : null;
+
+        return ['first_name' => $first, 'middle_initial' => $middleInitial, 'last_name' => $last, 'suffix' => $suffix];
+    }
+
+    /**
      * Title-cases a first/middle/last name part regardless of how it was
      * typed (ALL CAPS, all lowercase, mixed) — capitalizes the first letter
      * of every letter-run and lowercases the rest, leaving separators

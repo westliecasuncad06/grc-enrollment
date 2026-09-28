@@ -74,6 +74,29 @@ describe("StudentDigitalComWorkspace", () => {
     ).toBeGreaterThan(0)
   })
 
+  it("keeps payments off the COR page and points to the Statement of Account", async () => {
+    vi.stubGlobal("fetch", mockFetch())
+    renderWithSession(<StudentDigitalComWorkspace />, {
+      session: studentSession,
+    })
+
+    await screen.findByText(/COR000009/)
+    expect(screen.queryByText(/Payment & Account Summary/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Remaining Balance/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Amount Paid/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("table", { name: "Student payment transactions" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: "Statement of Account" }),
+    ).toHaveAttribute("href", "/portal/statement-of-account")
+    // Only the Certificate of Registration is requested, never the student's account.
+    const fetchMock = vi.mocked(fetch)
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("student-account")),
+    ).toBe(false)
+  })
+
   it("shows an empty message when no Certificate of Registration has been generated", async () => {
     vi.stubGlobal("fetch", mockFetch([]))
     renderWithSession(<StudentDigitalComWorkspace />, {

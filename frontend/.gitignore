@@ -33,3 +33,5 @@ desktop.ini
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+.next-e2e/

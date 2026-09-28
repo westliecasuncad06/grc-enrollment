@@ -278,7 +278,7 @@ final class DemoEnrollmentSeeder extends Seeder
         ['number' => '2023-06-00005', 'email' => 'student5.seed@grc.test', 'name' => 'Seed Student Five', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['MATHWRLD' => '5.00'], 'omit' => []],
         ['number' => '2023-06-00006', 'email' => 'student6.seed@grc.test', 'name' => 'Seed Student Six', 'yearLevel' => 2, 'completedOrdinals' => 3, 'overrides' => ['PROG1' => 'INC'], 'omit' => []],
         ['number' => '2023-06-00007', 'email' => 'student7.seed@grc.test', 'name' => 'Seed Student Seven', 'yearLevel' => 3, 'completedOrdinals' => 5, 'overrides' => ['LEAD 5' => 'NC'], 'omit' => []],
-        ['number' => '2023-06-00008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => [], 'omit' => ['SPI']],
+        ['number' => '2023-06-00008', 'email' => 'student8.seed@grc.test', 'name' => 'Seed Student Eight', 'yearLevel' => 4, 'completedOrdinals' => 7, 'overrides' => ['SPI' => '5.00'], 'omit' => []],
     ];
 
     /**

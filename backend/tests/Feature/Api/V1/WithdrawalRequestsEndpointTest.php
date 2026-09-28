@@ -160,6 +160,26 @@ final class WithdrawalRequestsEndpointTest extends TestCase
         self::assertSame('enrolled', $enrollment->refresh()->status->value);
     }
 
+    public function test_a_withdrawal_request_notifies_registrar_staff_and_the_registrar_head(): void
+    {
+        $staff = User::create(['name' => 'Notify Staff', 'email' => 'registrar.staff.wd@grc.test', 'password' => 'correct-horse-battery-staple', 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active]);
+        $head = User::create(['name' => 'Notify Head', 'email' => 'registrar.head.wd@grc.test', 'password' => 'correct-horse-battery-staple', 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum);
+        [$enrollment] = $this->makeEnrolledEnrollmentWithSeat($student, $term);
+
+        $this->withToken($this->tokenFor($student->user))
+            ->postJson("/api/v1/enrollments/{$enrollment->id}/withdraw", ['reason' => 'Relocating to another institution.'])
+            ->assertCreated();
+
+        foreach ([$staff, $head] as $registrar) {
+            $notification = Notification::query()->where('user_id', $registrar->id)->sole();
+            self::assertSame(NotificationType::WithdrawalRequestSubmitted, $notification->type);
+            self::assertStringContainsString($student->student_number, $notification->message);
+        }
+    }
+
     public function test_a_student_cannot_withdraw_another_students_enrollment(): void
     {
         $term = $this->makeTerm();

@@ -174,6 +174,17 @@ final readonly class SubmitEnrollment
             );
 
             if (! $needsProgramHead) {
+                $this->notificationRecorder->recordManyForRoles(
+                    [UserRole::RegistrarStaff, UserRole::RegistrarHead],
+                    NotificationType::EnrollmentSubmitted,
+                    sprintf(
+                        'Student %s submitted an enrollment for %s %s and is awaiting Registrar approval.',
+                        $student->student_number,
+                        $term->school_year,
+                        $term->semester,
+                    ),
+                );
+
                 Notification::create([
                     'user_id' => $actor->id,
                     'type' => NotificationType::EnrollmentSubmitted,

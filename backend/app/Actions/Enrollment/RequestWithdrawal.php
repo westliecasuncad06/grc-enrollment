@@ -6,10 +6,13 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\WithdrawalStatus;
+use App\Domain\Identity\UserRole;
+use App\Domain\Notifications\NotificationType;
 use App\Models\Enrollment;
 use App\Models\User;
 use App\Models\WithdrawalRequest;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Notifications\NotificationRecorder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -21,7 +24,10 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class RequestWithdrawal
 {
-    public function __construct(private AuditRecorder $auditRecorder) {}
+    public function __construct(
+        private AuditRecorder $auditRecorder,
+        private NotificationRecorder $notificationRecorder,
+    ) {}
 
     public function execute(
         Enrollment $enrollment,
@@ -48,6 +54,13 @@ final readonly class RequestWithdrawal
                 ],
                 null,
                 $context,
+            );
+
+            // Registrar Staff and the Registrar Head both decide withdrawals (ADR 0030 amendment, S07).
+            $this->notificationRecorder->recordManyForRoles(
+                [UserRole::RegistrarStaff, UserRole::RegistrarHead],
+                NotificationType::WithdrawalRequestSubmitted,
+                "{$enrollment->student->student_number} submitted a withdrawal request.",
             );
 
             return $request->refresh()->load('enrollment.student');

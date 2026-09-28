@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Actions\Enrollment\BuildCorSnapshot;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Domain\Enrollment\EnrollmentStatus;
@@ -12,6 +13,8 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Models\AcademicTerm;
+use App\Models\AccountPayment;
+use App\Models\Assessment;
 use App\Models\Curriculum;
 use App\Models\Enrollment;
 use App\Models\EnrollmentDocument;
@@ -403,6 +406,28 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         }
     }
 
+    public function test_the_printed_cor_is_the_bill_only_with_no_payment_or_balance(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.pdfbill@grc.test', '2026-0205');
+        $document = $this->makeDocument($student, $term);
+
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+        // A snapshot that does carry payment figures must still not print them.
+        $snapshot['fees']['amount_paid'] = '1000.00';
+        $snapshot['fees']['remaining_balance'] = '500.00';
+
+        $html = view('pdf.certificate-of-registration', ['document' => $document, 'snapshot' => $snapshot])->render();
+
+        $this->assertStringContainsString('GRAND TOTAL', $html);
+        $this->assertStringNotContainsString('AMOUNT PAID', $html);
+        $this->assertStringNotContainsString('REMAINING BALANCE', $html);
+    }
+
     public function test_a_student_cannot_download_another_students_cor_pdf(): void
     {
         $term = $this->makeTerm();
@@ -482,13 +507,13 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             'enrolled_at' => now(),
         ]);
 
-        \App\Models\Assessment::create([
+        Assessment::create([
             'enrollment_id' => $enrollment->id,
             'total_amount' => '5000.00',
             'currency' => 'PHP',
         ]);
 
-        \App\Models\Payment::create([
+        Payment::create([
             'enrollment_id' => $enrollment->id,
             'confirmed_by' => $student->user->id,
             'amount' => '1500.00',
@@ -500,7 +525,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             'document_type' => EnrollmentDocumentType::Cor,
             'document_number' => sprintf('COR%06d', $enrollment->id),
             'generated_at' => now(),
-            'snapshot' => app(\App\Actions\Enrollment\BuildCorSnapshot::class)->execute($enrollment, $enrollment->payment),
+            'snapshot' => app(BuildCorSnapshot::class)->execute($enrollment, $enrollment->payment),
         ]);
 
         // Prior to additional payment, remaining balance is 3500.00
@@ -511,7 +536,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             ->assertJsonPath('data.snapshot.fees.remaining_balance', '3500.00');
 
         // Cashier records an additional account payment of 1000.00
-        \App\Models\AccountPayment::create([
+        AccountPayment::create([
             'student_id' => $student->id,
             'enrollment_id' => $enrollment->id,
             'received_by' => $student->user->id,

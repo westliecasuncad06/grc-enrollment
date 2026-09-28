@@ -13,6 +13,7 @@ enum NotificationType: string
     case EnrollmentProgramHeadRejected = 'enrollment_program_head_rejected';
     case AcademicGradeLocked = 'academic_grade_locked';
     case EnrollmentPaymentConfirmed = 'enrollment_payment_confirmed';
+    case WithdrawalRequestSubmitted = 'withdrawal_request_submitted';
     case WithdrawalRequestApproved = 'withdrawal_request_approved';
     case WithdrawalRequestRejected = 'withdrawal_request_rejected';
     case TransfereeCreditApproved = 'transferee_credit_approved';

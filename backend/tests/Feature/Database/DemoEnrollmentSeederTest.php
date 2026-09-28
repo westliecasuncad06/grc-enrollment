@@ -69,7 +69,6 @@ final class DemoEnrollmentSeederTest extends TestCase
     private const IRREGULAR_BACKLOG_SUBJECTS = [
         '2023-06-00005' => ['MATHWRLD'],
         '2023-06-00006' => ['PROG1'],
-        '2023-06-00008' => ['SPI'],
     ];
 
     /**
@@ -160,7 +159,7 @@ final class DemoEnrollmentSeederTest extends TestCase
             '0005 year 2 irregular (failed subject)' => ['2023-06-00005', 2, 'irregular'],
             '0006 year 2 irregular (incomplete)' => ['2023-06-00006', 2, 'irregular'],
             '0007 year 3 irregular (NC on Leadership)' => ['2023-06-00007', 3, 'irregular'],
-            '0008 year 4 irregular (missing required subject)' => ['2023-06-00008', 4, 'irregular'],
+            '0008 year 4 irregular (failed back subject)' => ['2023-06-00008', 4, 'irregular'],
         ];
     }
 
@@ -219,9 +218,8 @@ final class DemoEnrollmentSeederTest extends TestCase
             '0005 — 3 completed semesters' => ['2023-06-00005', 14 + 13 + 15],
             '0006 — 3 completed semesters' => ['2023-06-00006', 14 + 13 + 15],
             '0007 — 5 completed semesters' => ['2023-06-00007', 14 + 13 + 15 + 15 + 13],
-            // 7 completed ordinals' worth of subjects, minus the one
-            // deliberately omitted required subject.
-            '0008 — 7 completed semesters, one omitted' => ['2023-06-00008', 14 + 13 + 15 + 15 + 13 + 13 + 7 - 1],
+            // 7 completed ordinals' worth of subjects; the one it failed still has a mark.
+            '0008 — 7 completed semesters, one failed' => ['2023-06-00008', 14 + 13 + 15 + 15 + 13 + 13 + 7],
         ];
     }
 
@@ -238,21 +236,15 @@ final class DemoEnrollmentSeederTest extends TestCase
     }
 
     /**
-     * The old cumulative-lifetime classifier's `missing_required_subject`
-     * reason code no longer exists under the term-scoped
-     * `ClassifyEnrollmentStanding` rule (Task 2) — a subject the student
-     * never got graded for only matters if it is also this term's own
-     * open backlog subject, in which case the real code is
-     * `needs_adding_backlog` (see `publishBacklogSections()`'s own
-     * docblock for why 0008 needs one for SPI specifically, and why the
-     * seed must run twice).
+     * A subject the student never took no longer makes anyone Irregular; a back subject does (ADR
+     * 0028): a required subject from an earlier point in the curriculum that the student took in a
+     * prior term and did not pass. 0008 failed SPI (year 4, 1st semester) and is in 2nd semester,
+     * so the reason is `needs_adding_backlog` whether or not a section is offered.
      */
-    public function test_the_missing_subject_irregular_student_carries_the_expected_classification_reason(): void
+    public function test_the_failed_back_subject_irregular_student_carries_the_expected_classification_reason(): void
     {
         $this->seed(DatabaseSeeder::class);
         $this->seedOngoingTerm();
-        $this->seed(DemoEnrollmentSeeder::class);
-        $this->publishBacklogSections(self::IRREGULAR_BACKLOG_SUBJECTS['2023-06-00008']);
         $this->seed(DemoEnrollmentSeeder::class);
 
         $profile = StudentProfile::query()->where('student_number', '2023-06-00008')->firstOrFail();
@@ -393,7 +385,7 @@ final class DemoEnrollmentSeederTest extends TestCase
         $this->assertNotEmpty($placements, "Expected at least one named-professor subject for year {$yearLevel}.");
 
         foreach ($placements as $placement) {
-            $professor = User::query()->where('name', $placement->reference_professor_name)->where('role', 'faculty')->first();
+            $professor = User::query()->where('name', $placement->reference_professor_name)->where('role', 'faculty')->where('college', 'ccs')->first();
             $this->assertNotNull($professor, "Expected a Faculty account named '{$placement->reference_professor_name}'.");
 
             $sections = Section::query()
@@ -425,11 +417,16 @@ final class DemoEnrollmentSeederTest extends TestCase
             ->get();
 
         foreach ($placements as $placement) {
-            $professor = User::query()->where('name', $placement->reference_professor_name)->where('role', 'faculty')->sole();
+            $professor = User::query()->where('name', $placement->reference_professor_name)->where('role', 'faculty')->where('college', 'ccs')->sole();
 
+            // Scoped to DemoEnrollmentSeeder's own fixed 08:00-17:00 window: a name that also
+            // matches a real catalog professor (WorkbookFacultyProfileSeeder) can carry that
+            // professor's own real availability rows too, at different times, which must not
+            // count against this seeder's own idempotent 5-weekday guarantee.
             $this->assertSame(
                 5,
-                FacultyAvailability::query()->where('professor_id', $professor->id)->count(),
+                FacultyAvailability::query()->where('professor_id', $professor->id)
+                    ->where('starts_at_time', '08:00:00')->where('ends_at_time', '17:00:00')->count(),
                 "{$placement->reference_professor_name} should have one declared availability window per weekday.",
             );
 
@@ -468,12 +465,14 @@ final class DemoEnrollmentSeederTest extends TestCase
             ->whereNotNull('reference_professor_name')
             ->pluck('reference_professor_name')
             ->unique();
-        $professorCount = User::query()->whereIn('name', $names)->where('role', 'faculty')->count();
+        // A professor who teaches in two colleges legitimately has one account per college, so the
+        // connected accounts this seeder owns are the CCS ones.
+        $professorCount = User::query()->whereIn('name', $names)->where('role', 'faculty')->where('college', 'ccs')->count();
 
         $this->seed(DemoEnrollmentSeeder::class);
 
         $this->assertSame($names->count(), $professorCount);
-        $this->assertSame($professorCount, User::query()->whereIn('name', $names)->where('role', 'faculty')->count());
+        $this->assertSame($professorCount, User::query()->whereIn('name', $names)->where('role', 'faculty')->where('college', 'ccs')->count());
     }
 
     /**

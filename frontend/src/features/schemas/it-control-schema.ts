@@ -31,6 +31,8 @@ const paginationLinkSchema = z
   .object({
     url: z.string().url().nullable(),
     label: z.string().min(1),
+    // Laravel's paginator adds the page number to each link; optional so older payloads still parse.
+    page: z.number().int().positive().nullable().optional(),
     active: z.boolean(),
   })
   .strict()

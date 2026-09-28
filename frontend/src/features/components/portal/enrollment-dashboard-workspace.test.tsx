@@ -316,6 +316,37 @@ describe("EnrollmentDashboardWorkspace", () => {
     expect(screen.getByText(/Locked: 2/)).toBeInTheDocument()
   })
 
+  it("shows an empty state, not an error, when no term is in session", async () => {
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            url(input).includes("academic-terms")
+              ? {
+                  data: terms.data.map((term) => ({
+                    ...term,
+                    status: "semester_closed",
+                    status_label: "Semester Closed",
+                  })),
+                }
+              : {},
+          ),
+        ),
+      ),
+    )
+    renderWithSession(<EnrollmentDashboardWorkspace />, { session: dean })
+
+    expect(
+      await screen.findByText(/No enrollment term is open right now/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        url(input).includes("enrollment-status"),
+      ),
+    ).toBe(false)
+  })
+
   it("never asks for stuck-student data", async () => {
     mockDashboardFetch(fetchMock)
     renderWithSession(<EnrollmentDashboardWorkspace />, {

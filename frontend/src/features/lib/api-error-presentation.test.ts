@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { z } from "zod"
 
 import { getStatePresentation } from "@/features/lib/api-error-presentation"
 import { ApiClientError } from "@/features/services/api-client"
@@ -9,6 +10,18 @@ describe("getStatePresentation", () => {
 
     expect(presentation.title).toBe("Connection interrupted")
     expect(presentation.action).toBeUndefined()
+  })
+
+  it("presents a schema mismatch as a contract problem, not a lost connection", () => {
+    const result = z
+      .object({ id: z.number() })
+      .strict()
+      .safeParse({ id: 1, extra: true })
+    if (result.success) throw new Error("expected the payload to fail")
+
+    const presentation = getStatePresentation(result.error)
+
+    expect(presentation.title).toBe("Unexpected API response")
   })
 
   it("presents a 403 as an authorization error", () => {

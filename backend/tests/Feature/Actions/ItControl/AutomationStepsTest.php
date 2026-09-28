@@ -53,22 +53,36 @@ final class AutomationStepsTest extends TestCase
 
     private User $itAdmin;
 
+    private string $lastFailure = '';
+
     public function test_the_six_steps_carry_the_whole_cohort_from_planning_to_enrolled(): void
     {
         $this->openEnrollmentTerm();
+        // The prediction service is not part of this test: its health check passes and its forecasts are
+        // unavailable, so generation falls back to the editable historical-baseline draft.
+        Http::fake(fn (Request $request) => $request->method() === 'GET'
+            ? Http::response(['data' => ['service' => 'grc-prediction-service', 'status' => 'ok', 'schema_version' => 'v1']], 200)
+            : Http::response(null, 503));
 
         foreach (AutomationStep::cases() as $step) {
             $run = $this->runStep($step);
-            $this->assertContains($run->fresh()->status, [AutomationRunStatus::Succeeded, AutomationRunStatus::Partial]);
+            $this->assertContains(
+                $run->fresh()->status,
+                [AutomationRunStatus::Succeeded, AutomationRunStatus::Partial],
+                $step->value.': '.$this->lastFailure.' '.$run->fresh()->error_summary.' '.implode(' ', $run->fresh()->warnings ?? []),
+            );
         }
 
         $this->assertSame(0, Enrollment::where('academic_term_id', $this->term->id)
             ->whereIn('status', ['draft', 'pending_registrar_approval', 'pending_payment'])->count());
-        $this->assertGreaterThan(0, EnrollmentDocument::where('document_type', 'com')->count());
-        $this->assertSame(
-            StudentProfile::count(),
-            Enrollment::where('academic_term_id', $this->term->id)->where('status', 'enrolled')->count(),
-        );
+        // Payment confirmation issues the COR (the COM comes later, after grades).
+        $this->assertGreaterThan(0, EnrollmentDocument::where('document_type', 'cor')->count());
+        // Every student who received an enrollment finished enrolled; the students the seeded catalog has no
+        // published section for stay without one (reported as warnings) rather than being stuck mid-flow.
+        $enrolled = Enrollment::where('academic_term_id', $this->term->id)->where('status', 'enrolled')->count();
+        $this->assertGreaterThan(0, $enrolled);
+        $this->assertSame($enrolled, Enrollment::where('academic_term_id', $this->term->id)->count());
+        $this->assertSame($enrolled, EnrollmentDocument::where('document_type', 'cor')->count());
     }
 
     public function test_a_step_records_a_warning_instead_of_failing_the_whole_run(): void
@@ -283,7 +297,8 @@ final class AutomationStepsTest extends TestCase
         $this->makeTermAndItAdmin();
         $this->makeProgramChairs();
         [$curriculum, $subjects] = $this->makePredictableCcsCurriculum();
-        $keys = array_map(fn (Subject $subject, int $yearLevel): string => "{$curriculum->id}:{$subject->id}:{$yearLevel}", $subjects, range(1, 4));
+        // One forecast per program/curriculum/year cohort (the key is curriculum:year), copied to that cohort's subjects.
+        $keys = array_map(fn (int $yearLevel): string => "{$curriculum->id}:{$yearLevel}", range(1, 4));
         Http::fake(function (Request $request) use ($keys) {
             if ($request->method() === 'GET') {
                 return Http::response(['data' => ['service' => 'grc-prediction-service', 'status' => 'ok', 'schema_version' => 'v1']], 200);
@@ -363,13 +378,19 @@ final class AutomationStepsTest extends TestCase
     private function openEnrollmentTerm(): void
     {
         $this->seed(DatabaseSeeder::class);
-        $this->makeTermAndItAdmin();
+        // The seeded enrollment history ends with 2026-2027 1st, which is the history the 2nd semester forecasts from.
+        $this->makeTermAndItAdmin('2026-2027');
+        // Chair generation forecasts only from demand derived from real enrollments. The test database has no
+        // enrollment history, so the seeded 2026-2027 1st history stands in as if it had been derived.
+        SectionDemandObservation::query()
+            ->whereHas('academicTerm', fn ($terms) => $terms->where('school_year', '2026-2027')->where('semester', '1st'))
+            ->update(['source' => 'derived_from_enrollments']);
     }
 
-    private function makeTermAndItAdmin(): void
+    private function makeTermAndItAdmin(string $schoolYear = '2027-2028'): void
     {
         $this->term = AcademicTerm::create([
-            'school_year' => '2027-2028',
+            'school_year' => $schoolYear,
             'semester' => '2nd',
             'status' => AcademicTermStatus::SemesterOngoing,
         ]);
@@ -585,11 +606,18 @@ final class AutomationStepsTest extends TestCase
             SectionDemandObservation::create([
                 'academic_term_id' => $history->id, 'program_id' => $program->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
                 'college' => 'ccs', 'year_level' => $yearLevel, 'cohort_size' => 40, 'enrolled_count' => 40, 'section_count' => 1, 'offered_capacity' => 40,
-                'source' => 'test',
+                'source' => 'derived_from_enrollments', // the forecast trusts only history derived from real enrollments
             ]);
             $faculty = User::create(['name' => "Predictable Faculty {$yearLevel}", 'email' => "predictable.faculty.{$yearLevel}@grc.test", 'password' => 'password', 'role' => UserRole::Faculty, 'college' => 'ccs', 'status' => UserStatus::Active]);
             FacultyCurriculumSubjectPreference::create(['professor_id' => $faculty->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id, 'semester' => '2nd', 'rank' => 1, 'origin' => 'test']);
             FacultyAvailability::create(['professor_id' => $faculty->id, 'day_of_week' => 1, 'starts_at_time' => $start, 'ends_at_time' => $end, 'origin' => 'test']);
+
+            // Chair generation plans only from cohorts that exist in the current term, so each year level needs a student.
+            $student = User::create(['name' => "Predictable Student {$yearLevel}", 'email' => "predictable.student.{$yearLevel}@student.grc.test", 'password' => 'password', 'role' => UserRole::Student, 'status' => UserStatus::Active]);
+            StudentProfile::create([
+                'user_id' => $student->id, 'student_number' => "PRD-00{$yearLevel}", 'program_id' => $program->id, 'curriculum_id' => $curriculum->id,
+                'year_level' => $yearLevel, 'admission_status' => AdmissionStatus::Admitted, 'academic_standing' => AcademicStanding::Good,
+            ]);
         }
 
         return [$curriculum, $subjects];
@@ -690,8 +718,9 @@ final class AutomationStepsTest extends TestCase
 
         try {
             (new RunItControlAutomationStep($run->id))->handle();
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
             // Queue workers retry after the durable failure state is written.
+            $this->lastFailure = $exception::class.': '.$exception->getMessage();
         }
 
         return $run->fresh();

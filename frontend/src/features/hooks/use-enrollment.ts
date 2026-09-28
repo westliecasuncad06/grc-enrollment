@@ -147,6 +147,22 @@ function useInvalidateEnrollmentQueries() {
       queryClient.invalidateQueries({
         queryKey: ["student-account"],
       }),
+      // A cancelled or voided enrollment frees its seats and makes the student's sections
+      // selectable again; without this the Choose buttons stay disabled until a reload.
+      queryClient.invalidateQueries({
+        queryKey: ["enrollment-blocks", session?.userId ?? null],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["eligible-subjects", session?.userId ?? null],
+      }),
+      // Confirming payment marks the student's queue ticket served on the server, and a void or
+      // cancel cancels it; the Cashier's queue must show that without a reload.
+      queryClient.invalidateQueries({
+        queryKey: ["queue-tickets", session?.userId ?? null],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["cashier-payment-candidate", session?.userId ?? null],
+      }),
     ])
 }
 

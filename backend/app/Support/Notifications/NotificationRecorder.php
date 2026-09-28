@@ -57,8 +57,19 @@ final class NotificationRecorder
      */
     public function recordManyForRole(UserRole $role, NotificationType $type, string $message): void
     {
+        $this->recordManyForRoles([$role], $type, $message);
+    }
+
+    /**
+     * Same broadcast for several roles at once (e.g. Registrar Staff and Registrar Head, who both
+     * decide the Registrar stage), each active user notified once.
+     *
+     * @param  list<UserRole>  $roles
+     */
+    public function recordManyForRoles(array $roles, NotificationType $type, string $message): void
+    {
         $recipientIds = User::query()
-            ->where('role', $role->value)
+            ->whereIn('role', array_map(static fn (UserRole $role): string => $role->value, $roles))
             ->where('status', UserStatus::Active->value)
             ->pluck('id')
             ->map(static fn (mixed $id): int => (int) $id)

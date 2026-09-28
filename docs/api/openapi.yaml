@@ -7379,6 +7379,7 @@ components:
             - enrollment_voided
             - academic_grade_locked
             - enrollment_payment_confirmed
+            - withdrawal_request_submitted
             - withdrawal_request_approved
             - withdrawal_request_rejected
             - transferee_credit_approved

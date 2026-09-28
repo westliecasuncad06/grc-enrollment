@@ -9,6 +9,7 @@ use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
 use App\Domain\Enrollment\QueueTicketStatus;
+use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Assessment;
 use App\Models\Enrollment;
@@ -17,6 +18,7 @@ use App\Models\Notification;
 use App\Models\Section;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
+use App\Support\Notifications\NotificationRecorder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -121,6 +123,7 @@ final class TransitionEnrollment
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
         private readonly AssessEnrollment $assessEnrollment,
+        private readonly NotificationRecorder $notificationRecorder,
     ) {}
 
     public function execute(
@@ -214,6 +217,18 @@ final class TransitionEnrollment
                     'type' => self::NOTIFICATION_TYPE[$action],
                     'message' => self::notificationMessage($action, $lockedEnrollment, $reason),
                 ]);
+            }
+
+            // The Program Head stage is done, so the enrollment now waits on the Registrar.
+            if ($action === 'program_head_approve') {
+                $this->notificationRecorder->recordManyForRoles(
+                    [UserRole::RegistrarStaff, UserRole::RegistrarHead],
+                    NotificationType::EnrollmentProgramHeadApproved,
+                    sprintf(
+                        'Student %s: the Program Head approved the enrollment schedule; it now awaits Registrar approval.',
+                        $lockedEnrollment->student->student_number,
+                    ),
+                );
             }
 
             return $lockedEnrollment->refresh()->load([

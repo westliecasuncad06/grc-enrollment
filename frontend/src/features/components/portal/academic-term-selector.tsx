@@ -20,6 +20,8 @@ interface AcademicTermSelectorProps {
   onSelectTerm: (id: number) => void
   /** True while the terms are still being fetched, so "none yet" is not read as "none exist". */
   isLoading?: boolean
+  /** For viewers who cannot edit the schedule (a Student): the description must not promise edits. */
+  readOnly?: boolean
 }
 
 function selectorDescription(
@@ -27,6 +29,7 @@ function selectorDescription(
   term: AcademicTerm | null,
   isCurrentTerm: boolean,
   isLoading: boolean,
+  readOnly: boolean,
 ): string {
   if (!hasTerms) {
     return isLoading
@@ -35,6 +38,11 @@ function selectorDescription(
   }
   if (term === null) {
     return "Choose a school year and semester to view its schedule."
+  }
+  if (readOnly) {
+    return isCurrentTerm
+      ? "Viewing the current term."
+      : "Viewing a past term. Choose another school year and semester to switch."
   }
   return isCurrentTerm
     ? "Viewing the current term. Assignments are editable."
@@ -47,6 +55,7 @@ export function AcademicTermSelector({
   isCurrentTerm,
   onSelectTerm,
   isLoading = false,
+  readOnly = false,
 }: AcademicTermSelectorProps) {
   const hasTerms = sortedTerms.length > 0
 
@@ -57,7 +66,13 @@ export function AcademicTermSelector({
         <div className="min-w-0">
           <p className="font-medium">School year and semester</p>
           <p className="text-sm text-muted-foreground">
-            {selectorDescription(hasTerms, term, isCurrentTerm, isLoading)}
+            {selectorDescription(
+              hasTerms,
+              term,
+              isCurrentTerm,
+              isLoading,
+              readOnly,
+            )}
           </p>
         </div>
       </div>

@@ -446,14 +446,11 @@ export function AccountingPaymentWorkspace() {
       setProcessedEnrollmentId(result.enrollment.id)
       setStep("closed")
       setAmountOverride(null)
-      if (nowServingEnrollment?.student_id) {
-        void accountQuery.refetch()
-      }
-      try {
-        await ticketMutation.mutateAsync({ id: nowServing.id, action: "complete" })
-      } catch {
-        // Ticket completion failure shouldn't mask successful payment
-      }
+      // The payment mutation invalidates the student's account. Refetching it from here would run after
+      // the served ticket has left the queue, when this query no longer has a student id (a 404 for
+      // /students/null/account).
+      // No ticket call here: the payment confirmation already marks the ticket served on the
+      // server, and the payment mutation's invalidation refreshes the queue.
     } catch {
       setError(
         "The payment could not be confirmed. Check the connection and try again.",

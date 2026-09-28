@@ -96,6 +96,30 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(screen.getByText("COR000009")).toBeInTheDocument()
   })
 
+  it("shows the bill only: no payment, remaining balance or promissory note, even when the snapshot carries them", () => {
+    const withPayment = {
+      ...cor,
+      snapshot: {
+        ...cor.snapshot,
+        fees: {
+          ...cor.snapshot.fees,
+          amount_paid: "1000.00",
+          remaining_balance: "1900.00",
+          promissory_note_on_file: true,
+          payment_reference: "OR-EP000001",
+        },
+      },
+    }
+    render(<CertificateOfRegistrationDocument cor={withPayment} />)
+
+    expect(screen.getByText("GRAND TOTAL")).toBeInTheDocument()
+    expect(screen.queryByText(/Amount Paid/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Remaining Balance/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Payment Status|PAID IN FULL/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Promissory/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/OR-EP000001/)).not.toBeInTheDocument()
+  })
+
   it("uses the approved labels and the ordinal year level, even for a legacy 'Year N' snapshot", () => {
     const legacy = {
       ...cor,

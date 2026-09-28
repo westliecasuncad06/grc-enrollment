@@ -1,3 +1,5 @@
+import { ZodError } from "zod"
+
 import { isApiClientError } from "@/features/services/api-client"
 
 export interface ErrorPresentation {
@@ -26,6 +28,16 @@ export function getStatePresentation(
   options: { onRetry?: () => void } = {},
 ): ErrorPresentation {
   const action = buildAction(options.onRetry)
+
+  // A payload that fails a service's schema is a contract problem, not a lost connection.
+  if (error instanceof ZodError) {
+    return {
+      title: "Unexpected API response",
+      message:
+        "The API responded, but the data did not match the published v1 contract.",
+      action,
+    }
+  }
 
   if (!isApiClientError(error)) {
     return {

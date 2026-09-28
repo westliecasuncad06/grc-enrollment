@@ -79,7 +79,9 @@ export function EnrollmentDashboardWorkspace() {
     session?.role === "admission_staff"
   const termsQuery = useAcademicTermsQuery({ enabled: authorized })
   const activeTerm = getActiveAcademicTerm(termsQuery.data)
-  const enabled = authorized && termsQuery.isSuccess
+  // Between terms nothing is in session; the counts are then an empty state, not a failed request.
+  const noActiveTerm = termsQuery.isSuccess && !activeTerm
+  const enabled = authorized && termsQuery.isSuccess && !noActiveTerm
   const overviewQuery = useEnrollmentStatusOverviewQuery(
     activeTerm?.id,
     enabled,
@@ -92,16 +94,17 @@ export function EnrollmentDashboardWorkspace() {
   const combinedQuery = {
     isPending:
       termsQuery.isPending ||
-      overviewQuery.isPending ||
-      (canViewSummary && summaryQuery.isPending),
+      (!noActiveTerm &&
+        (overviewQuery.isPending ||
+          (canViewSummary && summaryQuery.isPending))),
     isError:
       termsQuery.isError ||
-      overviewQuery.isError ||
-      (canViewSummary && summaryQuery.isError),
+      (!noActiveTerm &&
+        (overviewQuery.isError || (canViewSummary && summaryQuery.isError))),
     error:
       termsQuery.error ??
-      overviewQuery.error ??
-      (canViewSummary ? summaryQuery.error : null),
+      (noActiveTerm ? null : overviewQuery.error) ??
+      (canViewSummary && !noActiveTerm ? summaryQuery.error : null),
     data:
       overviewQuery.data && (!canViewSummary || summaryQuery.data)
         ? {
@@ -130,6 +133,7 @@ export function EnrollmentDashboardWorkspace() {
       <AsyncBoundary
         query={combinedQuery}
         loadingLabel="Loading the enrollment dashboard…"
+        emptyMessage="No enrollment term is open right now. The counts appear here once the Registrar opens a term."
       >
         {({ overview, summary }) => (
           <>

@@ -210,7 +210,7 @@ export function EnrollmentReviewDialog({
                 <span className="text-xs text-muted-foreground">units</span>
               </div>
               <span className="text-xs text-muted-foreground">
-                Assessed for Term 6
+                Assessed for this term
               </span>
             </div>
 

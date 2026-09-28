@@ -101,4 +101,28 @@ final class PersonNameTest extends TestCase
     {
         self::assertNull(PersonName::normalizeSuffix(null));
     }
+
+    public function test_split_reads_first_middle_last_and_suffix_from_a_display_name(): void
+    {
+        self::assertSame(
+            ['first_name' => 'Aurora', 'middle_initial' => 'S', 'last_name' => 'Lopez', 'suffix' => 'Jr.'],
+            PersonName::split('Aurora Santos Lopez Jr.'),
+        );
+    }
+
+    public function test_split_treats_a_single_word_as_first_and_last(): void
+    {
+        self::assertSame(
+            ['first_name' => 'Madonna', 'middle_initial' => null, 'last_name' => 'Madonna', 'suffix' => null],
+            PersonName::split('Madonna'),
+        );
+    }
+
+    public function test_split_reads_a_surname_comma_given_name_import_value(): void
+    {
+        self::assertSame(
+            ['first_name' => 'JUAN', 'middle_initial' => null, 'last_name' => 'DELA CRUZ', 'suffix' => null],
+            PersonName::split('DELA CRUZ,JUAN(MS)'),
+        );
+    }
 }

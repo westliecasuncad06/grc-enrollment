@@ -141,6 +141,7 @@ export function StudentScheduleWorkspace() {
           isCurrentTerm={selectedTerm?.status === "semester_ongoing"}
           onSelectTerm={setSelectedTermId}
           isLoading={termsQuery.isPending}
+          readOnly
         />
         {selectedTerm && (
           <Badge variant="outline" className="text-xs">

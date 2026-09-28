@@ -33,6 +33,8 @@ final class DatabaseSeeder extends Seeder
             // seeder's docblock.
             GrcSubjectCatalogSeeder::class,
             GrcOlderSubjectCatalogSeeder::class,
+            // LEC/LAB companions, linked once every catalog subject exists.
+            SubjectPairingSeeder::class,
             GrcCurriculumSeeder::class,
             GrcPrerequisiteSeeder::class,
             GrcCurriculumScheduleReferenceSeeder::class,

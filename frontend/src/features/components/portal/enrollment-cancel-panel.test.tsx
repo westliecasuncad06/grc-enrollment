@@ -129,6 +129,49 @@ describe("EnrollmentCancelPanel", () => {
     )
   })
 
+  it("refreshes the student's sections after cancelling so they can choose again", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((_input, init) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data:
+              init?.method === "PATCH"
+                ? { ...enrollmentWith("cancelled"), status_label: "Cancelled" }
+                : [],
+          }),
+        ),
+      ),
+    )
+    const { queryClient } = renderWithSession(
+      <EnrollmentCancelPanel
+        enrollment={enrollmentWith("pending_registrar_approval")}
+      />,
+      { session: studentSession },
+    )
+    queryClient.setQueryData(["enrollment-blocks", "1", 2], [])
+    queryClient.setQueryData(["eligible-subjects", "1", 2], [])
+
+    await user.click(screen.getByRole("button", { name: "Cancel enrollment" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.type(
+      within(dialog).getByLabelText("Why are you cancelling?"),
+      "Picked the wrong section.",
+    )
+    await user.click(
+      within(dialog).getByRole("button", { name: "Cancel enrollment" }),
+    )
+
+    await waitFor(() => {
+      expect(
+        queryClient.getQueryState(["enrollment-blocks", "1", 2])?.isInvalidated,
+      ).toBe(true)
+      expect(
+        queryClient.getQueryState(["eligible-subjects", "1", 2])?.isInvalidated,
+      ).toBe(true)
+    })
+  })
+
   it("shows the server's message and keeps the dialog open when cancelling fails", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation((_input, init) => {

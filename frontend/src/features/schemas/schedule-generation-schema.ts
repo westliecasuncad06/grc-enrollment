@@ -10,6 +10,10 @@ const facultyLoadAssignmentSchema = z
     units: z.number().nonnegative(),
     professor_id: z.number().int().positive().nullable(),
     professor_name: z.string().nullable(),
+    professor_employment_type: z
+      .enum(["full_time", "part_time"])
+      .nullable()
+      .optional(),
     recommended_professor_id: z.number().int().positive().nullable(),
     rationale: z.array(z.string()),
     override_reason: z.string().nullable(),

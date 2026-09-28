@@ -114,6 +114,7 @@ final class UpdateSection
                 && $previousProfessorId !== $newProfessorId;
             if ($reassignedAfterPublish) {
                 $this->notifyRegistrarHeads($actor, $section, $previousProfessorId, $newProfessorId);
+                $this->notifyProfessors($section, $previousProfessorId, $newProfessorId);
             }
 
             $this->auditRecorder->record(
@@ -129,6 +130,34 @@ final class UpdateSection
 
             return $section;
         });
+    }
+
+    /**
+     * After publication the professors are told about the swap too: the new one gets the section on
+     * their teaching schedule, and the one it was taken from should not find out by an empty roster.
+     * (Before publication only a first assignment is announced, as above.)
+     */
+    private function notifyProfessors(Section $section, ?int $fromId, ?int $toId): void
+    {
+        $section->loadMissing('subject');
+        $label = "{$section->subject->code} section {$section->section_code}";
+
+        // A first assignment (no previous professor) is already announced by the caller.
+        if ($toId !== null && $fromId !== null) {
+            Notification::create([
+                'user_id' => $toId,
+                'type' => NotificationType::SectionAssigned,
+                'message' => "You have been assigned to teach {$label}. Please check your teaching schedule.",
+            ]);
+        }
+
+        if ($fromId !== null) {
+            Notification::create([
+                'user_id' => $fromId,
+                'type' => NotificationType::SectionProfessorReassigned,
+                'message' => "You no longer teach {$label}; it was assigned to another professor.",
+            ]);
+        }
     }
 
     private function notifyRegistrarHeads(User $actor, Section $section, ?int $fromId, ?int $toId): void

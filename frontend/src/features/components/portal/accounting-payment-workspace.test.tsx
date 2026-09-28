@@ -732,6 +732,32 @@ describe("AccountingPaymentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
+  it("leaves the ticket to the payment confirmation instead of completing it a second time", async () => {
+    const user = userEvent.setup()
+    const ticketPatches: string[] = []
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/queue-tickets/") && init?.method === "PATCH") {
+        ticketPatches.push(url(input))
+      }
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<AccountingPaymentWorkspace />, {
+      session: accountingSession,
+    })
+
+    await continueAsRegularPayee(user)
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Confirm payment",
+      }),
+    )
+
+    await screen.findByRole("button", { name: "Payment processed" })
+    // The server marks the ticket served when it confirms the payment; a second PATCH would only
+    // be refused ("currently 'served'") and leave the Cashier's queue stale.
+    expect(ticketPatches).toEqual([])
+  })
+
   it("disables payment confirmation for the enrollment after it succeeds", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRoutes())

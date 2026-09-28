@@ -264,6 +264,17 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertSame(1, $section->enrolled_count);
     }
 
+    private function makeRegistrarUser(UserRole $role, string $email): User
+    {
+        return User::create([
+            'name' => 'Notify '.$role->value,
+            'email' => $email,
+            'password' => 'correct-horse-battery-staple',
+            'role' => $role,
+            'status' => UserStatus::Active,
+        ]);
+    }
+
     public function test_the_enrollment_resource_has_the_exact_key_set(): void
     {
         // Nothing else in this suite pins EnrollmentResource's full shape —
@@ -358,6 +369,30 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertJsonPath('data.assessment', null);
         $response->assertJsonPath('data.queue_ticket', null);
         $this->assertDatabaseCount('assessments', 0);
+    }
+
+    public function test_a_regular_submission_notifies_registrar_staff_and_the_registrar_head_but_nobody_else(): void
+    {
+        $staff = $this->makeRegistrarUser(UserRole::RegistrarStaff, 'registrar.staff.notify@grc.test');
+        $head = $this->makeRegistrarUser(UserRole::RegistrarHead, 'registrar.head.notify@grc.test');
+        $accounting = $this->makeRegistrarUser(UserRole::AccountingStaff, 'accounting.notify@grc.test');
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum('BSA');
+        [, $sections] = $this->makeBlock($term, $curriculum, 'BSA101', ['ACT101']);
+        $student = $this->makeStudent($curriculum);
+
+        $this->withToken($this->tokenFor($student))->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'block_code' => 'BSA101',
+        ])->assertCreated();
+
+        foreach ([$staff, $head] as $registrar) {
+            $notification = Notification::query()->where('user_id', $registrar->id)->sole();
+            self::assertSame(NotificationType::EnrollmentSubmitted, $notification->type);
+            self::assertStringContainsString($student->student_number, $notification->message);
+            self::assertStringContainsString('awaiting Registrar approval', $notification->message);
+        }
+        $this->assertDatabaseMissing('notifications', ['user_id' => $accounting->id]);
     }
 
     public function test_a_server_resolved_block_submission_is_not_rejected_for_a_schedule_conflict_between_its_own_subjects(): void
@@ -1467,6 +1502,24 @@ final class EnrollmentsEndpointTest extends TestCase
             1,
             AuditLog::query()->where('action', AuditAction::ENROLLMENT_PROGRAM_HEAD_APPROVED)->count(),
         );
+    }
+
+    public function test_a_program_head_approval_tells_the_registrar_the_enrollment_is_waiting(): void
+    {
+        $staff = $this->makeRegistrarUser(UserRole::RegistrarStaff, 'registrar.staff.forward@grc.test');
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $curriculum->program->update(['college' => CollegeCode::Ccs]);
+        $student = $this->makeStudent($curriculum);
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::PendingProgramHeadApproval);
+
+        $this->withToken($this->tokenForProgramHead('head.notify.forward@grc.test', CollegeCode::Ccs))
+            ->patchJson("/api/v1/enrollments/{$enrollment->id}", ['action' => 'program_head_approve'])
+            ->assertOk();
+
+        $notification = Notification::query()->where('user_id', $staff->id)->sole();
+        self::assertSame(NotificationType::EnrollmentProgramHeadApproved, $notification->type);
+        self::assertStringContainsString($student->student_number, $notification->message);
     }
 
     public function test_a_program_head_rejection_needs_a_reason_and_ends_the_enrollment(): void

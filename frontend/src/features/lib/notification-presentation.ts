@@ -90,6 +90,11 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "neutral",
     icon: FileCheck,
   },
+  withdrawal_request_submitted: {
+    label: "Withdrawal requested",
+    tone: "neutral",
+    icon: FileCheck,
+  },
   withdrawal_request_approved: {
     label: "Withdrawal approved",
     tone: "success",
@@ -248,25 +253,31 @@ export function notificationDestinationPath(
       if (role === "program_chair") return "/portal/program-chair-enrollment"
       if (role === "faculty") return "/portal/teaching-schedule"
       return null
+    // Curriculum reviews live in "Curriculum Approvals" for the Dean and Executive Director; the
+    // Program Head authors in the Curriculum Editor.
     case "curriculum_submitted_for_dean":
-      return role === "dean" ? "/portal/curricula" : null
+      return role === "dean" ? "/portal/curriculum-approvals" : null
     case "curriculum_dean_approved":
-      if (role === "executive_director" || role === "program_chair")
-        return "/portal/curricula"
+      if (role === "executive_director") return "/portal/curriculum-approvals"
+      if (role === "program_chair") return "/portal/subjects-prerequisites"
       return null
     case "curriculum_executive_approved":
     case "curriculum_returned":
-      if (role === "dean" || role === "program_chair")
-        return "/portal/curricula"
+      if (role === "dean") return "/portal/curriculum-approvals"
+      if (role === "program_chair") return "/portal/subjects-prerequisites"
       return null
     case "section_assigned":
       return role === "faculty" ? "/portal/teaching-schedule" : null
     case "section_change_requested":
-      return role === "registrar_head" ? "/portal/section-change-requests" : null
+      return role === "registrar_head"
+        ? "/portal/section-change-requests"
+        : null
     case "section_change_approved":
     case "section_change_rejected":
       return role === "program_chair" ? "/portal/schedule" : null
     case "section_professor_reassigned":
+      // The Registrar Head reviews the change; a professor it was taken from checks their own schedule.
+      if (role === "faculty") return "/portal/teaching-schedule"
       return role === "registrar_head" ? "/portal/submitted-schedules" : null
     case "enrollment_payment_confirmed":
       return role === "student" ? "/portal/digital-com" : null
@@ -280,24 +291,37 @@ export function notificationDestinationPath(
       // planner.
       if (role === "program_chair") return "/portal/irregular-enrollments"
       if (role === "student") return "/portal/enrollment"
+      if (role === "registrar_staff" || role === "registrar_head")
+        return "/portal/enrollment-approvals"
       return null
     case "enrollment_program_head_approved":
+      // Students read the outcome in Enrollment; the Registrar's copy means it now awaits them.
+      if (role === "registrar_staff" || role === "registrar_head")
+        return "/portal/enrollment-approvals"
+      return role === "student" ? "/portal/enrollment" : null
     case "enrollment_program_head_rejected":
     case "enrollment_registrar_approved":
     case "enrollment_registrar_rejected":
     case "enrollment_voided":
     case "enrollment_category_reclassified":
       return role === "student" ? "/portal/enrollment" : null
+    // A Student's add/drop/change-section and withdrawal requests are made and followed in Enrollment.
     case "enrollment_change_request_submitted":
       if (role === "program_chair") return "/portal/program-chair-enrollment"
-      if (role === "student") return "/portal/enrollment-change-requests"
+      if (role === "registrar_head" || role === "registrar_staff")
+        return "/portal/enrollment-requests"
+      if (role === "student") return "/portal/enrollment"
       return null
     case "enrollment_change_request_approved":
     case "enrollment_change_request_rejected":
-      return role === "student" ? "/portal/enrollment-change-requests" : null
+      return role === "student" ? "/portal/enrollment" : null
+    case "withdrawal_request_submitted":
+      return role === "registrar_head" || role === "registrar_staff"
+        ? "/portal/enrollment-requests"
+        : null
     case "withdrawal_request_approved":
     case "withdrawal_request_rejected":
-      return role === "student" ? "/portal/drops-withdrawals" : null
+      return role === "student" ? "/portal/enrollment" : null
     case "transferee_credit_requested":
       return role === "program_chair" ? "/portal/credit-mappings" : null
     case "transferee_credit_endorsed":

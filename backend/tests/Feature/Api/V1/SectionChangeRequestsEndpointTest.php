@@ -157,6 +157,39 @@ final class SectionChangeRequestsEndpointTest extends TestCase
         self::assertSame($professor->id, $audit->after_values['professor_id']);
     }
 
+    public function test_swapping_the_professor_of_a_published_section_tells_both_professors(): void
+    {
+        $section = $this->published();
+        $original = $this->professor('prof.original@grc.test');
+        $replacement = $this->professor('prof.replacement@grc.test');
+        $section->update(['professor_id' => $original->id]);
+        $head = $this->user(UserRole::ProgramChair, 'ph.swap@grc.test', CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($head))
+            ->patchJson("/api/v1/sections/{$section->id}", $this->fullUpdate($section, ['professor_id' => $replacement->id]))
+            ->assertOk();
+
+        $gained = Notification::query()->where('user_id', $replacement->id)->sole();
+        self::assertSame(NotificationType::SectionAssigned, $gained->type);
+        self::assertStringContainsString('CS101', $gained->message);
+        $lost = Notification::query()->where('user_id', $original->id)->sole();
+        self::assertSame(NotificationType::SectionProfessorReassigned, $lost->type);
+        self::assertStringContainsString('no longer teach', $lost->message);
+    }
+
+    public function test_a_first_assignment_after_publication_is_announced_to_the_professor_only_once(): void
+    {
+        $section = $this->published();
+        $professor = $this->professor('prof.once@grc.test');
+        $head = $this->user(UserRole::ProgramChair, 'ph.once@grc.test', CollegeCode::Ccs);
+
+        $this->withToken($this->tokenFor($head))
+            ->patchJson("/api/v1/sections/{$section->id}", $this->fullUpdate($section, ['professor_id' => $professor->id]))
+            ->assertOk();
+
+        self::assertSame(1, Notification::query()->where('user_id', $professor->id)->count());
+    }
+
     // --- filing a request ----------------------------------------------
 
     public function test_a_program_head_files_a_change_request_and_the_registrar_head_is_notified(): void

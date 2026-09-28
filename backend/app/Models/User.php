@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Identity\FacultyEmploymentType;
+use App\Domain\Identity\PersonName;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
@@ -66,6 +68,21 @@ final class User extends Authenticatable implements CanResetPasswordContract
         'account_setup_invitation_sent_at',
         'account_setup_invitation_failed_at',
     ];
+
+    protected static function booted(): void
+    {
+        // A user written with only a display name (a seeder, a script, an import) gets its structured
+        // parts derived, because the API contracts require first and last name. Parts that were
+        // supplied are never touched, and `name` itself is never rewritten here. The column check
+        // guards a handful of migration-reversibility tests that roll the `users` table back to
+        // before the columns existed and still create a User against that older schema.
+        self::saving(function (self $user): void {
+            if (blank($user->first_name) && blank($user->last_name) && filled($user->name)
+                && Schema::hasColumn($user->getTable(), 'first_name')) {
+                $user->fill(PersonName::split((string) $user->name));
+            }
+        });
+    }
 
     /** @var list<string> */
     protected $hidden = [

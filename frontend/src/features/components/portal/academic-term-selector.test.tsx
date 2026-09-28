@@ -121,6 +121,21 @@ describe("AcademicTermSelector", () => {
     )
   })
 
+  it("does not promise edits to a viewer who cannot edit the schedule", () => {
+    render(
+      <AcademicTermSelector
+        sortedTerms={[CURRENT, ARCHIVED]}
+        term={CURRENT}
+        isCurrentTerm
+        onSelectTerm={() => undefined}
+        readOnly
+      />,
+    )
+
+    expect(screen.getByText("Viewing the current term.")).toBeInTheDocument()
+    expect(screen.queryByText(/editable/)).not.toBeInTheDocument()
+  })
+
   it("reports the chosen term id and ignores the empty placeholder", async () => {
     const user = userEvent.setup()
     const onSelectTerm = vi.fn()
