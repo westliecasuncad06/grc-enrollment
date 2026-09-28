@@ -3065,11 +3065,23 @@
   color: var(--primary-foreground);
   background: rgb(255 255 255 / 12%);
   border-color: rgb(255 255 255 / 20%);
+  transition:
+    background-color 150ms ease,
+    transform 100ms ease;
 }
 
 .portal-sidebar__toggle:hover {
   color: var(--primary-foreground);
   background: rgb(255 255 255 / 20%);
+}
+
+.portal-sidebar__toggle:active {
+  background: rgb(255 255 255 / 26%);
+  transform: scale(0.94);
+}
+
+.portal-sidebar__toggle svg {
+  transition: transform 180ms ease;
 }
 
 @media (min-width: 64.01rem) {
@@ -3096,9 +3108,20 @@
 
   .portal-app[data-sidebar="collapsed"] .portal-navigation {
     width: 100%;
+    /* `overflow-y: auto` (set unconditionally above) forces the computed
+       `overflow-x` to `auto` too, per the CSS Overflow spec's "not visible
+       unless both are" rule — without this override the hover-reveal pill
+       below is clipped to the rail's own width instead of extending past
+       it. Collapsed role menus are short enough that losing the vertical
+       scrollbar here in exchange is an easy trade. */
+    overflow: visible;
   }
 
-  /* Labels stay in the DOM (accessible names) and only leave the layout. */
+  /* Labels stay in the DOM (accessible names). Visually, on hover/focus the
+     icon grows a pill that wipes open left-to-right to reveal the name —
+     the icon itself stays put and on top (z-index), the pill is an overlay
+     anchored at the icon's own position, clipped to zero width and
+     revealed with `clip-path` rather than a separate floating tooltip. */
   .portal-app[data-sidebar="collapsed"] .portal-nav-link {
     position: relative;
     grid-template-columns: 1fr;
@@ -3107,13 +3130,57 @@
     padding-inline: 0;
   }
 
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:hover,
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:focus-visible {
+    z-index: 40;
+  }
+
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link svg {
+    position: relative;
+    z-index: 2;
+  }
+
   .portal-app[data-sidebar="collapsed"] .portal-nav-link > span {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    height: 100%;
+    width: max-content;
+    max-width: 16rem;
+    align-items: center;
+    padding-left: 2.5rem;
+    padding-right: 0.9rem;
+    /* Opaque, not a translucent tint: this pill overflows past the maroon
+       rail onto whatever the main content underneath happens to be (often
+       the page's light background), so a semi-transparent white fill reads
+       fine over the rail but goes invisible-on-white the moment it crosses
+       the edge — white text on white. A solid brand maroon (matching the
+       rail's own gradient stop) plus a shadow for lift reads correctly no
+       matter what it's floating over. */
+    background: #870615;
+    border-radius: var(--radius);
+    color: #ffffff;
+    box-shadow: 0 8px 20px -6px rgb(0 0 0 / 35%);
+    font-size: 0.72rem;
+    font-weight: 620;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
     white-space: nowrap;
-    clip-path: inset(50%);
+    overflow: hidden;
+    clip-path: inset(0 100% 0 0 round var(--radius));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      clip-path 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 120ms ease;
+  }
+
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:hover > span,
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:focus-visible > span {
+    clip-path: inset(0 0 0 0 round var(--radius));
+    opacity: 1;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-nav-link[data-attention]::after {

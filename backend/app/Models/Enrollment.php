@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property EnrollmentStatus $status
  * @property float $total_units
  * @property bool $requires_overload_approval
+ * @property ?string $program_head_comment
  * @property ?CarbonImmutable $submitted_at
  * @property ?CarbonImmutable $program_head_decided_at
  * @property ?CarbonImmutable $registrar_decided_at
@@ -52,6 +53,7 @@ final class Enrollment extends Model
         'status',
         'total_units',
         'requires_overload_approval',
+        'program_head_comment',
         'submitted_at',
         'program_head_decided_at',
         'registrar_decided_at',

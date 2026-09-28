@@ -148,6 +148,8 @@ final class AuditAction
 
     public const ENROLLMENT_CANCELLED_BY_STUDENT = 'enrollment.cancelled_by_student';
 
+    public const ENROLLMENT_PROGRAM_HEAD_SUBJECTS_REVISED = 'enrollment.program_head_subjects_revised';
+
     public const PROGRAM_SHIFT_RECORDED = 'program_shift.recorded';
 
     public const FEE_SCHEDULE_UPDATED = 'fee_schedule.updated';
@@ -316,6 +318,7 @@ final class AuditAction
             self::ENROLLMENT_REGISTRAR_REJECTED,
             self::ENROLLMENT_VOIDED,
             self::ENROLLMENT_CANCELLED_BY_STUDENT,
+            self::ENROLLMENT_PROGRAM_HEAD_SUBJECTS_REVISED,
             self::PROGRAM_SHIFT_RECORDED,
             self::FEE_SCHEDULE_UPDATED,
             self::ENROLLMENT_SUBJECT_WAIVER_GRANTED,

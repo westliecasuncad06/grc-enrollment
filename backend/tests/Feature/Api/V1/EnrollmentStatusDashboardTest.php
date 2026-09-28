@@ -33,8 +33,9 @@ use Tests\TestCase;
 /**
  * The Enrollment Dashboard drill-down (ADR 0024): overview → sections →
  * students → one student. Numbers are per *student*, sections are a partition,
- * Dean/Program Chair are limited to their own college, and every opened
- * student list / detail is audited.
+ * Program Chair is limited to their own college (Dean is institution-wide
+ * here, stakeholder Doc 15), and every opened student list / detail is
+ * audited.
  */
 final class EnrollmentStatusDashboardTest extends TestCase
 {
@@ -238,16 +239,16 @@ final class EnrollmentStatusDashboardTest extends TestCase
         self::assertStringNotContainsString('Student a1', (string) $body);
     }
 
-    public function test_a_dean_and_a_program_chair_only_see_their_own_college(): void
+    public function test_a_dean_sees_every_department_but_a_program_chair_only_their_own(): void
     {
         $this->scenario();
 
+        // Read-only monitoring, institution-wide, same as Registrar Head/Executive Director — a
+        // Dean's own-college *approval* authority elsewhere is a separate concern this does not touch.
         $this->actingAsUser($this->user(UserRole::Dean, 'dean', CollegeCode::Ccs));
         $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()
-            ->assertJsonPath('data.total_students', 4)
-            ->assertJsonPath('data.groups.enrolled', 1)
-            ->assertJsonCount(1, 'data.departments')
-            ->assertJsonPath('data.departments.0.department', 'ccs');
+            ->assertJsonPath('data.total_students', 6)
+            ->assertJsonCount(4, 'data.departments');
 
         $this->actingAsUser($this->user(UserRole::ProgramChair, 'chair', CollegeCode::Coe));
         $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()
@@ -256,7 +257,7 @@ final class EnrollmentStatusDashboardTest extends TestCase
             ->assertJsonPath('data.departments.0.department', 'coe');
     }
 
-    public function test_a_program_chair_without_a_college_is_unscoped_but_a_dean_without_one_fails_closed(): void
+    public function test_a_program_chair_without_a_college_is_unscoped_and_so_is_a_dean_without_one(): void
     {
         $this->scenario();
 
@@ -264,8 +265,11 @@ final class EnrollmentStatusDashboardTest extends TestCase
         $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()
             ->assertJsonPath('data.total_students', 6);
 
+        // A Dean carries no college scope for this read-only dashboard at all, so one with no
+        // college assigned sees the same institution-wide numbers as one with a college.
         $this->actingAsUser($this->user(UserRole::Dean, 'dean-none'));
-        $this->getJson('/api/v1/dashboards/enrollment-status')->assertForbidden();
+        $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()
+            ->assertJsonPath('data.total_students', 6);
     }
 
     public function test_a_student_with_a_cancelled_and_a_live_enrollment_is_counted_once(): void
@@ -326,13 +330,13 @@ final class EnrollmentStatusDashboardTest extends TestCase
             ->assertJsonPath('data.sections.0.section_code', 'AA100');
     }
 
-    public function test_a_dean_cannot_open_another_colleges_sections_or_students(): void
+    public function test_a_dean_can_open_any_departments_sections_or_students(): void
     {
         $this->scenario();
         $this->actingAsUser($this->user(UserRole::Dean, 'dean', CollegeCode::Ccs));
 
-        $this->getJson('/api/v1/dashboards/enrollment-status/sections?department=coe')->assertForbidden();
-        $this->getJson('/api/v1/dashboards/enrollment-status/students?department=coe')->assertForbidden();
+        $this->getJson('/api/v1/dashboards/enrollment-status/sections?department=coe')->assertOk();
+        $this->getJson('/api/v1/dashboards/enrollment-status/students?department=coe')->assertOk();
         $this->getJson('/api/v1/dashboards/enrollment-status/sections?department=ccs')->assertOk();
     }
 
@@ -460,12 +464,14 @@ final class EnrollmentStatusDashboardTest extends TestCase
             ->assertJsonCount(0, 'data.subjects');
     }
 
-    public function test_a_dean_cannot_open_a_student_from_another_college_and_demo_students_are_hidden(): void
+    public function test_a_dean_can_open_a_student_from_any_college_but_demo_students_stay_hidden(): void
     {
         $this->scenario();
         $this->actingAsUser($this->user(UserRole::Dean, 'dean', CollegeCode::Ccs));
 
-        $this->getJson('/api/v1/dashboards/enrollment-status/students/'.$this->students['b1']->id)->assertNotFound();
+        // b1 is College of Education, not the Dean's own CCS: still visible, institution-wide.
+        $this->getJson('/api/v1/dashboards/enrollment-status/students/'.$this->students['b1']->id)->assertOk();
+        // a7 is a demo account, hidden from every role regardless of college scope.
         $this->getJson('/api/v1/dashboards/enrollment-status/students/'.$this->students['a7']->id)->assertNotFound();
         $this->getJson('/api/v1/dashboards/enrollment-status/students/'.$this->students['a1']->id)->assertOk();
         $this->getJson('/api/v1/dashboards/enrollment-status/students/999999')->assertNotFound();
@@ -556,7 +562,7 @@ final class EnrollmentStatusDashboardTest extends TestCase
         $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()->assertJsonPath('data.total_students', 7);
 
         $this->actingAsUser($this->user(UserRole::Dean, 'dean-all', CollegeCode::Ccs));
-        $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()->assertJsonPath('data.total_students', 5);
+        $this->getJson('/api/v1/dashboards/enrollment-status')->assertOk()->assertJsonPath('data.total_students', 7);
     }
 
     public function test_the_in_progress_group_is_now_called_ongoing(): void

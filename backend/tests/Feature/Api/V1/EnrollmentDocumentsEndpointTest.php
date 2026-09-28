@@ -406,6 +406,24 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         }
     }
 
+    public function test_the_cor_pdf_uses_a_font_that_can_print_the_peso_sign(): void
+    {
+        // The base-14 PDF fonts (Helvetica/Arial) have no glyph for \u20b1 and DomPDF prints "?" in
+        // its place; DejaVu Sans (bundled with DomPDF) does. Regression guard for that swap.
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.pdfpeso@grc.test', '2026-0206');
+        $document = $this->makeDocument($student, $term);
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        $html = view('pdf.certificate-of-registration', ['document' => $document, 'snapshot' => $snapshot])->render();
+
+        $this->assertStringContainsString("font-family: 'DejaVu Sans', sans-serif;", $html);
+    }
+
     public function test_the_printed_cor_is_the_bill_only_with_no_payment_or_balance(): void
     {
         $term = $this->makeTerm();
@@ -426,6 +444,26 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $this->assertStringContainsString('GRAND TOTAL', $html);
         $this->assertStringNotContainsString('AMOUNT PAID', $html);
         $this->assertStringNotContainsString('REMAINING BALANCE', $html);
+    }
+
+    public function test_the_student_signs_above_the_cashier_and_registrar_who_sign_level_with_each_other(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.pdftriangle@grc.test', '2026-0207');
+        $document = $this->makeDocument($student, $term);
+        $snapshot = $this->withToken($this->tokenFor($student->user))
+            ->getJson("/api/v1/enrollment-documents/{$document->id}")
+            ->assertOk()
+            ->json('data.snapshot');
+
+        $html = view('pdf.certificate-of-registration', ['document' => $document, 'snapshot' => $snapshot])->render();
+
+        $studentRow = strpos($html, 'class="signature-student ');
+        $cashierRegistrarRow = strpos($html, 'class="signature-table ');
+        self::assertNotFalse($studentRow);
+        self::assertNotFalse($cashierRegistrarRow);
+        self::assertLessThan($cashierRegistrarRow, $studentRow, 'The student signature block must come before the Cashier/Registrar row.');
     }
 
     public function test_a_student_cannot_download_another_students_cor_pdf(): void

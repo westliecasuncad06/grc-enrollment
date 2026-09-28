@@ -6,6 +6,7 @@ use App\Domain\Billing\AssessmentComputation;
 use App\Models\Assessment;
 use App\Models\AssessmentItem;
 use App\Models\Enrollment;
+use App\Models\FeeSchedule;
 use RuntimeException;
 
 /**
@@ -76,7 +77,9 @@ final readonly class AssessEnrollment
      */
     private function resolveTuitionPerUnit(): string
     {
-        $activeTuition = \App\Models\FeeSchedule::query()
+        // Tuition stays one global per-unit rate — only miscellaneous fees can be scoped to a
+        // semester (the sync in FeeScheduleController never writes a semester on the tuition row).
+        $activeTuition = FeeSchedule::query()
             ->where('category', 'tuition')
             ->where('is_active', true)
             ->first();
@@ -102,11 +105,13 @@ final readonly class AssessEnrollment
     private function miscellaneousFees(Enrollment $enrollment): array
     {
         $programCode = $enrollment->student()->with('program:id,code')->firstOrFail()->program->code;
+        $semester = $enrollment->academicTerm()->value('semester');
         $fees = [];
 
-        $dbFees = \App\Models\FeeSchedule::query()
+        $dbFees = FeeSchedule::query()
             ->where('category', 'miscellaneous')
             ->where('is_active', true)
+            ->where(fn ($query) => $query->whereNull('semester')->orWhere('semester', $semester))
             ->orderBy('sort_order')
             ->get();
 

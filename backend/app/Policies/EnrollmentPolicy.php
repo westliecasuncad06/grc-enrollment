@@ -70,6 +70,18 @@ final class EnrollmentPolicy
     }
 
     /**
+     * Covers `PATCH .../subjects`: the Program Head adding or removing whole
+     * subjects from a student's proposed schedule while it sits at their own
+     * review stage. Exactly the same record-level scope as
+     * `decideProgramHeadApproval` — own college only — the status window
+     * itself is enforced by `ReviseEnrollmentSubjects` under a lock.
+     */
+    public function reviseSubjects(User $user, Enrollment $enrollment): bool
+    {
+        return $this->decideProgramHeadApproval($user, $enrollment);
+    }
+
+    /**
      * Covers `void`: cancelling an enrollment at the Registrar's end, at any
      * point before payment, usually because the student asked. Registrar Staff
      * and the Registrar Head may both do it (stakeholder Doc 14, ADR 0030); once

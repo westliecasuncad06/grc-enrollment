@@ -65,6 +65,11 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "destructive",
     icon: Ban,
   },
+  enrollment_program_head_subjects_revised: {
+    label: "Schedule revised",
+    tone: "warning",
+    icon: FileCheck,
+  },
   enrollment_registrar_approved: {
     label: "Enrollment approved",
     tone: "success",
@@ -300,6 +305,7 @@ export function notificationDestinationPath(
         return "/portal/enrollment-approvals"
       return role === "student" ? "/portal/enrollment" : null
     case "enrollment_program_head_rejected":
+    case "enrollment_program_head_subjects_revised":
     case "enrollment_registrar_approved":
     case "enrollment_registrar_rejected":
     case "enrollment_voided":

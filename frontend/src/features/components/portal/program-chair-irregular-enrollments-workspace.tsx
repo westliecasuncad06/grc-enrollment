@@ -82,6 +82,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
     action: DecisionAction
   } | null>(null)
   const [reason, setReason] = useState("")
+  const [comment, setComment] = useState("")
   const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
   const [error, setError] = useState("")
 
@@ -100,17 +101,20 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       enrollmentId,
       action,
       decisionReason,
+      decisionComment,
       overloadAcknowledged,
     }: {
       enrollmentId: number
       action: DecisionAction
       decisionReason?: string
+      decisionComment?: string
       overloadAcknowledged?: boolean
     }) => {
       return updateEnrollment(enrollmentId, {
         action,
         reason: decisionReason,
         overload_acknowledged: overloadAcknowledged,
+        program_head_comment: decisionComment,
       })
     },
     onSuccess: async () => {
@@ -119,6 +123,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       })
       setPendingDecision(null)
       setReason("")
+      setComment("")
       setOverloadAcknowledged(false)
       setError("")
     },
@@ -161,6 +166,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
       enrollmentId: pendingDecision.enrollment.id,
       action: pendingDecision.action,
       decisionReason: reason.trim() ? reason.trim() : undefined,
+      decisionComment: comment.trim() ? comment.trim() : undefined,
       overloadAcknowledged,
     })
   }
@@ -172,8 +178,9 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
           e.student_number
             .toLowerCase()
             .includes(search.toLowerCase().trim()) ||
-          (e.student_name &&
-            e.student_name.toLowerCase().includes(search.toLowerCase().trim())),
+          e.student_name
+            ?.toLowerCase()
+            .includes(search.toLowerCase().trim()),
       )
     : rawRows
 
@@ -263,6 +270,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                     action: "program_head_approve",
                   })
                   setReason("")
+                  setComment("")
                   setOverloadAcknowledged(false)
                   setError("")
                 }}
@@ -280,6 +288,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
                     action: "program_head_reject",
                   })
                   setReason("")
+                  setComment("")
                   setOverloadAcknowledged(false)
                   setError("")
                 }}
@@ -429,9 +438,19 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
         </CardContent>
       </Card>
 
-      {/* Review Dialog with Schedule */}
+      {/* Review Dialog with Schedule — editable: a Program Head may add or
+          remove whole subjects before deciding on the enrollment. */}
       <EnrollmentReviewDialog
         enrollment={reviewingEnrollment}
+        editable={reviewingEnrollment?.status === "pending_program_head_approval"}
+        onRevised={(revised) => {
+          setReviewingEnrollment(revised)
+          setPendingDecision((current) =>
+            current?.enrollment.id === revised.id
+              ? { ...current, enrollment: revised }
+              : current,
+          )
+        }}
         onOpenChange={(open) => {
           if (!open) setReviewingEnrollment(null)
         }}
@@ -498,6 +517,19 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
               )}
             </Field>
           )}
+
+          <Field>
+            <FieldLabel htmlFor="decision-comment">
+              Note for the student (optional)
+            </FieldLabel>
+            <Textarea
+              id="decision-comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="e.g. Swapped IT201 for IT205 since the former was full — please double-check your schedule."
+              disabled={mutation.isPending}
+            />
+          </Field>
 
           {pendingDecision?.action === "program_head_approve" &&
             Boolean(pendingDecision.enrollment.requires_overload_approval) && (

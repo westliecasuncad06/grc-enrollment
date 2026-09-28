@@ -80,6 +80,7 @@ const enrollmentFixture = {
       status_label: "Enrolled",
       total_units: 6,
       requires_overload_approval: false,
+      program_head_comment: null,
       submitted_at: "2026-09-01T08:00:00Z",
       program_head_decided_at: null,
       registrar_decided_at: "2026-09-02T09:00:00Z",

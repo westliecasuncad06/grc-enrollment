@@ -6,6 +6,10 @@ import { useAuth } from "@/features/auth/use-auth"
 import { AcademicTermSelector } from "@/features/components/portal/academic-term-selector"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import {
+  FacultyLoadAssignmentsDialog,
+  type FacultyLoadAssignmentsTarget,
+} from "@/features/components/portal/faculty-load-assignments-dialog"
+import {
   FacultyLoadOverrideDialog,
   type FacultyLoadOverrideTarget,
 } from "@/features/components/portal/faculty-load-override-dialog"
@@ -118,6 +122,8 @@ export function DeanFacultyLoadWorkspace() {
     useState<FacultyLoadOverrideTarget | null>(null)
   const [sectionTarget, setSectionTarget] =
     useState<SectionProfessorTarget | null>(null)
+  const [assignmentsTarget, setAssignmentsTarget] =
+    useState<FacultyLoadAssignmentsTarget | null>(null)
 
   const report = reportQuery.data
   const rows = useMemo<Row[]>(
@@ -239,7 +245,19 @@ export function DeanFacultyLoadWorkspace() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
-                              <p className="font-medium">{row.name}</p>
+                              <button
+                                type="button"
+                                className="font-medium underline-offset-2 hover:underline"
+                                onClick={() =>
+                                  setAssignmentsTarget({
+                                    professorName: row.name,
+                                    totalUnits: row.totalUnits,
+                                    assignments: row.assignments,
+                                  })
+                                }
+                              >
+                                {row.name}
+                              </button>
                               <p className="text-sm text-muted-foreground">
                                 {row.employmentTypeLabel ??
                                   "Employment type not recorded"}
@@ -409,6 +427,13 @@ export function DeanFacultyLoadWorkspace() {
           </div>
         )}
       </AsyncBoundary>
+
+      <FacultyLoadAssignmentsDialog
+        target={assignmentsTarget}
+        onOpenChange={(open) => {
+          if (!open) setAssignmentsTarget(null)
+        }}
+      />
 
       <FacultyLoadOverrideDialog
         target={overrideTarget}

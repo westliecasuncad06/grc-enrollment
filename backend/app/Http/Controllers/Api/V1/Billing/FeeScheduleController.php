@@ -97,6 +97,7 @@ final class FeeScheduleController extends Controller
                     $feeSchedule->update([
                         'label' => $fee['label'],
                         'amount' => $fee['amount'],
+                        'semester' => $fee['semester'] ?? null,
                         'program_codes' => $fee['program_codes'] ?? null,
                         'is_active' => $fee['is_active'] ?? true,
                         'sort_order' => $fee['sort_order'] ?? $order++,
@@ -107,6 +108,7 @@ final class FeeScheduleController extends Controller
                         'category' => 'miscellaneous',
                         'label' => $fee['label'],
                         'amount' => $fee['amount'],
+                        'semester' => $fee['semester'] ?? null,
                         'program_codes' => $fee['program_codes'] ?? null,
                         'is_active' => $fee['is_active'] ?? true,
                         'sort_order' => $fee['sort_order'] ?? $order++,

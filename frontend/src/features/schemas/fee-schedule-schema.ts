@@ -4,6 +4,7 @@ export const feeScheduleSchema = z
   .object({
     id: z.number().int().positive(),
     category: z.enum(["tuition", "miscellaneous"]),
+    semester: z.enum(["1st", "2nd"]).nullable(),
     label: z.string().min(1),
     amount: z.string(),
     program_codes: z.array(z.string()).nullable(),
@@ -28,6 +29,7 @@ export const updateFeeSchedulePayloadSchema = z
         id: z.number().int().positive().nullable().optional(),
         label: z.string().min(1),
         amount: z.string().min(1),
+        semester: z.enum(["1st", "2nd"]).nullable().optional(),
         program_codes: z.array(z.string()).nullable().optional(),
         is_active: z.boolean().optional(),
         sort_order: z.number().int().nonnegative().optional(),

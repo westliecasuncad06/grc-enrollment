@@ -133,6 +133,7 @@ final class TransitionEnrollment
         ?string $reason,
         AuditRequestContext $context,
         bool $requestedByStudent = false,
+        ?string $programHeadComment = null,
     ): Enrollment {
         if (! isset(self::TARGET_STATUS[$action])) {
             throw new InvalidArgumentException('Unknown enrollment transition.');
@@ -147,7 +148,7 @@ final class TransitionEnrollment
             ]);
         }
 
-        return DB::transaction(function () use ($enrollment, $action, $actingUser, $reason, $context, $requestedByStudent): Enrollment {
+        return DB::transaction(function () use ($enrollment, $action, $actingUser, $reason, $context, $requestedByStudent, $programHeadComment): Enrollment {
             $lockedEnrollment = Enrollment::query()
                 ->whereKey($enrollment->id)
                 ->lockForUpdate()
@@ -172,6 +173,9 @@ final class TransitionEnrollment
             $attributes = ['status' => self::TARGET_STATUS[$action]];
             if ($action !== 'student_cancel') {
                 $attributes[str_starts_with($action, 'program_head_') ? 'program_head_decided_at' : 'registrar_decided_at'] = now();
+            }
+            if (str_starts_with($action, 'program_head_') && $programHeadComment !== null && trim($programHeadComment) !== '') {
+                $attributes['program_head_comment'] = trim($programHeadComment);
             }
 
             $lockedEnrollment->update($attributes);
@@ -270,7 +274,7 @@ final class TransitionEnrollment
     }
 
     /**
-     * @param  array{student_id: int, academic_term_id: int, status: string, program_head_decided_at: ?string, registrar_decided_at: ?string}  $afterValues
+     * @param  array{student_id: int, academic_term_id: int, status: string, program_head_decided_at: ?string, registrar_decided_at: ?string, program_head_comment: ?string}  $afterValues
      * @return array<string, mixed>
      */
     private static function auditAfterValues(array $afterValues, ?Assessment $assessment): array
@@ -284,9 +288,12 @@ final class TransitionEnrollment
 
     private static function notificationMessage(string $action, Enrollment $enrollment, ?string $reason): string
     {
+        $comment = $enrollment->program_head_comment;
+        $commentSuffix = $comment !== null ? " Program Head note: {$comment}" : '';
+
         return match ($action) {
-            'program_head_approve' => 'Your Program Head approved your enrollment schedule. It now waits for Registrar approval.',
-            'program_head_reject' => "Your enrollment was not approved by your Program Head. Reason: {$reason}",
+            'program_head_approve' => "Your Program Head approved your enrollment schedule. It now waits for Registrar approval.{$commentSuffix}",
+            'program_head_reject' => "Your enrollment was not approved by your Program Head. Reason: {$reason}{$commentSuffix}",
             'registrar_approve' => 'Your enrollment has been approved by the Registrar and is now pending payment. Visit the Cashier to claim your queue ticket.',
             'registrar_reject' => "Your enrollment was rejected by the Registrar. Reason: {$reason}",
             'void' => "Your enrollment has been voided by the Registrar. Reason: {$reason}",
@@ -295,7 +302,7 @@ final class TransitionEnrollment
     }
 
     /**
-     * @return array{student_id: int, academic_term_id: int, status: string, program_head_decided_at: ?string, registrar_decided_at: ?string}
+     * @return array{student_id: int, academic_term_id: int, status: string, program_head_decided_at: ?string, registrar_decided_at: ?string, program_head_comment: ?string}
      */
     private static function snapshot(Enrollment $enrollment): array
     {
@@ -305,6 +312,7 @@ final class TransitionEnrollment
             'status' => $enrollment->status->value,
             'program_head_decided_at' => $enrollment->program_head_decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),
             'registrar_decided_at' => $enrollment->registrar_decided_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+            'program_head_comment' => $enrollment->program_head_comment,
         ];
     }
 }

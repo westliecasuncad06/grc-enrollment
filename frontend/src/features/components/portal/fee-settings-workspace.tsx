@@ -43,6 +43,7 @@ interface EditableMiscFee {
   label: string
   amount: string
   program_code: string // "ALL" or program code like "BSIT"
+  semester: string // "ALL", "1st", or "2nd"
   is_active: boolean
 }
 
@@ -78,6 +79,7 @@ export function FeeSettingsWorkspace() {
         label: f.label,
         amount: f.amount,
         program_code: f.program_codes && f.program_codes.length > 0 ? f.program_codes[0] : "ALL",
+        semester: f.semester ?? "ALL",
         is_active: f.is_active,
       }))
     setMiscFees(misc)
@@ -96,6 +98,7 @@ export function FeeSettingsWorkspace() {
         label: "New Fee Particular",
         amount: "0.00",
         program_code: "ALL",
+        semester: "ALL",
         is_active: true,
       },
     ])
@@ -128,6 +131,7 @@ export function FeeSettingsWorkspace() {
           label: f.label.trim(),
           amount: (parseFloat(f.amount) || 0).toFixed(2),
           program_codes: f.program_code === "ALL" ? null : [f.program_code],
+          semester: f.semester === "1st" || f.semester === "2nd" ? f.semester : null,
           is_active: f.is_active,
           sort_order: index + 2,
         })),
@@ -242,9 +246,10 @@ export function FeeSettingsWorkspace() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[45%]">Fee Particular / Label</TableHead>
-                        <TableHead className="w-[25%]">Amount (₱)</TableHead>
-                        <TableHead className="w-[20%]">Applies To</TableHead>
+                        <TableHead className="w-[35%]">Fee Particular / Label</TableHead>
+                        <TableHead className="w-[20%]">Amount (₱)</TableHead>
+                        <TableHead className="w-[15%]">Applies To</TableHead>
+                        <TableHead className="w-[15%]">Semester</TableHead>
                         <TableHead className="w-[10%] text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -290,6 +295,21 @@ export function FeeSettingsWorkspace() {
                               </SelectContent>
                             </Select>
                           </TableCell>
+                          <TableCell>
+                            <Select
+                              value={fee.semester}
+                              onValueChange={(val) => handleUpdateMiscFee(index, "semester", val)}
+                            >
+                              <SelectTrigger className="w-full text-xs">
+                                <SelectValue placeholder="Every Semester" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ALL">Every Semester</SelectItem>
+                                <SelectItem value="1st">1st Semester Only</SelectItem>
+                                <SelectItem value="2nd">2nd Semester Only</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button
                               type="button"
@@ -306,7 +326,7 @@ export function FeeSettingsWorkspace() {
                       ))}
                       {miscFees.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                             No miscellaneous fees configured. Click &quot;Add Fee Particular&quot; above.
                           </TableCell>
                         </TableRow>

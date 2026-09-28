@@ -140,6 +140,7 @@ export const enrollmentSchema = z
     status_label: z.string().min(1),
     total_units: z.number().nonnegative(),
     requires_overload_approval: z.boolean(),
+    program_head_comment: z.string().nullable(),
     submitted_at: z.iso.datetime().nullable(),
     program_head_decided_at: z.iso.datetime().nullable(),
     registrar_decided_at: z.iso.datetime().nullable(),
@@ -229,6 +230,19 @@ export const updateEnrollmentInputSchema = z
     // Required only when the target enrollment's own
     // requires_overload_approval is true — see UpdateEnrollmentRequest.
     overload_acknowledged: z.boolean().optional(),
+    // Only meaningful for the two Program Head decisions: an optional note
+    // for the student.
+    program_head_comment: z.string().max(2000).optional(),
+  })
+  .strict()
+
+/**
+ * A Program Head's full replacement list of section ids for a pending
+ * enrollment — see `ReviseEnrollmentSubjects` on the backend.
+ */
+export const reviseEnrollmentSubjectsInputSchema = z
+  .object({
+    section_ids: z.array(z.number().int().positive()).min(1),
   })
   .strict()
 
@@ -315,6 +329,9 @@ export type EnrollmentAssessmentItem = z.infer<typeof assessmentItemSchema>
 export type EnrollmentFilters = z.input<typeof enrollmentFiltersSchema>
 export type StoreEnrollmentInput = z.infer<typeof storeEnrollmentInputSchema>
 export type UpdateEnrollmentInput = z.infer<typeof updateEnrollmentInputSchema>
+export type ReviseEnrollmentSubjectsInput = z.infer<
+  typeof reviseEnrollmentSubjectsInputSchema
+>
 export type ConfirmPaymentInput = z.infer<typeof confirmPaymentInputSchema>
 export type AdjustEnrollmentAssessmentInput = z.infer<
   typeof adjustEnrollmentAssessmentInputSchema

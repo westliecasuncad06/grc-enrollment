@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Button } from "@/features/components/ui/button"
 import { Checkbox } from "@/features/components/ui/checkbox"
 import {
@@ -166,12 +167,21 @@ export function AdmissionRequirementsChecklist({
                   style={{ width: `${percent}%` }}
                 />
               </div>
-              {checklist.student.student_type_label === null && (
-                <p className="text-xs text-muted-foreground">
-                  No student type is recorded, so only the additional
-                  requirements are listed.
-                </p>
-              )}
+              {checklist.student.student_type_label === null &&
+                (editable ? (
+                  <Alert className="border-warning/40 bg-warning/5">
+                    <AlertDescription className="text-warning">
+                      No student type is recorded, so only the additional
+                      requirements are listed. Set Freshman or Transferee above
+                      to complete this checklist.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No student type is recorded, so only the additional
+                    requirements are listed.
+                  </p>
+                ))}
             </div>
 
             {checklist.categories.map((group) => {

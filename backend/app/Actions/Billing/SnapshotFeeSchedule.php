@@ -30,11 +30,13 @@ final class SnapshotFeeSchedule
             $codes = is_array($fee->program_codes) && $fee->program_codes !== []
                 ? ' ['.implode(', ', $fee->program_codes).']'
                 : '';
+            $semester = $fee->semester !== null ? " ({$fee->semester} sem only)" : '';
             $snapshot["misc_fee_{$fee->id}"] = sprintf(
-                '%s: %s%s%s',
+                '%s: %s%s%s%s',
                 $fee->label,
                 number_format((float) $fee->amount, 2, '.', ''),
                 $codes,
+                $semester,
                 $fee->is_active ? '' : ' (inactive)',
             );
         }

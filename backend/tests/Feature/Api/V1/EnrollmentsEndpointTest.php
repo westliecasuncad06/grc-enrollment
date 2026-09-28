@@ -301,7 +301,7 @@ final class EnrollmentsEndpointTest extends TestCase
                 'type', 'id', 'student_id', 'student_number', 'student_name', 'student_year_level',
                 'student_financial_status', 'student_financial_status_label',
                 'student_enrollment_category', 'is_irregular', 'is_late_enrollee', 'academic_term_id',
-                'status', 'status_label', 'total_units', 'requires_overload_approval',
+                'status', 'status_label', 'total_units', 'requires_overload_approval', 'program_head_comment',
                 'submitted_at', 'program_head_decided_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
                 'subjects', 'queue_ticket', 'assessment',
             ],

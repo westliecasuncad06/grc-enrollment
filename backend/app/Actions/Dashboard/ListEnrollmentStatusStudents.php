@@ -18,9 +18,10 @@ use Illuminate\Support\Facades\DB;
  * Third level of the drill-down: the students of one department, optionally
  * narrowed to a section (or to "no section yet") and to one group. This is the
  * first place the dashboard exposes identities to Dean and Executive Director,
- * under ADR 0024: read-only, own college for Dean/Program Chair, a fixed narrow
- * field set, and an audit entry whenever a list is opened (first page only, so
- * paging through one list is one audit row).
+ * under ADR 0024: read-only, institution-wide for Dean/Executive Director/
+ * Registrar Head, own college for Program Chair, a fixed narrow field set, and
+ * an audit entry whenever a list is opened (first page only, so paging through
+ * one list is one audit row).
  */
 final readonly class ListEnrollmentStatusStudents
 {

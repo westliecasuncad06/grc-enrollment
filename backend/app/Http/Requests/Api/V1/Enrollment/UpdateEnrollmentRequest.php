@@ -60,6 +60,11 @@ final class UpdateEnrollmentRequest extends FormRequest
                 'string',
             ],
             'overload_acknowledged' => ['sometimes', 'boolean'],
+            // Only meaningful for the two Program Head decisions: an optional note
+            // for the student (e.g. why a subject was swapped, or what to take
+            // instead). Silently ignored by `TransitionEnrollment` for every other
+            // action rather than rejected here, matching `overload_acknowledged`.
+            'program_head_comment' => ['sometimes', 'nullable', 'string', 'max:2000'],
             // Only meaningful for `void`: the Registrar is acting on the student's request.
             'requested_by_student' => ['sometimes', 'boolean'],
         ];

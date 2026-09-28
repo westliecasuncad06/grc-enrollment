@@ -175,6 +175,19 @@ describe("DeanFacultyLoadWorkspace", () => {
     expect(screen.getByText("0 units")).toBeInTheDocument()
   })
 
+  it("opens a professor's subject loads by clicking their name", async () => {
+    const user = userEvent.setup()
+    renderWithSession(<DeanFacultyLoadWorkspace />, { session: dean })
+
+    await user.click(await screen.findByRole("button", { name: "Prof. Reyes" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText("Prof. Reyes")).toBeInTheDocument()
+    expect(within(dialog).getByText(/2 sections/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/IT101/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/IT102/)).toBeInTheDocument()
+  })
+
   it("filters by load status", async () => {
     const user = userEvent.setup()
     renderWithSession(<DeanFacultyLoadWorkspace />, { session: dean })

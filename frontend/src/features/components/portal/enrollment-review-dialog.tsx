@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react"
 
-import { CalendarDays, CheckCircle2, ListIcon, TriangleAlert } from "lucide-react"
+import {
+  CalendarDays,
+  CheckCircle2,
+  ListIcon,
+  Plus,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react"
 
 import {
   DataTable,
@@ -13,6 +20,7 @@ import {
   SectionScheduleCalendar,
   type SectionScheduleItem,
 } from "@/features/components/portal/section-schedule-calendar"
+import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
 import {
@@ -22,20 +30,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/features/components/ui/dialog"
+import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import { Skeleton } from "@/features/components/ui/skeleton"
 import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/features/components/ui/toggle-group"
+import { useReviseEnrollmentSubjectsMutation } from "@/features/hooks/use-enrollment"
 import {
   useSectionsQuery,
   useSubjectsQuery,
 } from "@/features/hooks/use-reference-data"
 import { formatYearLevelOrdinal } from "@/features/lib/curriculum-ordinal"
 import { findConflictingIds } from "@/features/lib/room-calendar"
+import { isApiClientError } from "@/features/services/api-client"
 import type { Enrollment } from "@/features/schemas/enrollment-schema"
 
-type EnrollmentReviewRow = Enrollment["subjects"][number] & {
+interface EnrollmentReviewRow {
+  section_id: number
+  subject_code: string
+  subject_title: string
+  section_code: string | null
   units: number | null
   schedule_days: string | null
   starts_at_time: string | null
@@ -52,7 +67,10 @@ function formatTimeRange(
   return `${startsAt.slice(0, 5)}–${endsAt.slice(0, 5)}`
 }
 
-function scheduleColumns(): DataTableColumn<EnrollmentReviewRow>[] {
+function scheduleColumns(options?: {
+  onRemove: (sectionId: number) => void
+  canRemove: boolean
+}): DataTableColumn<EnrollmentReviewRow>[] {
   return [
     {
       key: "subject-code",
@@ -85,6 +103,27 @@ function scheduleColumns(): DataTableColumn<EnrollmentReviewRow>[] {
       header: "Room",
       render: (row) => row.room ?? "Not assigned",
     },
+    ...(options
+      ? [
+          {
+            key: "revise-action",
+            header: "",
+            render: (row: EnrollmentReviewRow) => (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={!options.canRemove}
+                onClick={() => options.onRemove(row.section_id)}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="size-4" />
+                <span className="sr-only">Remove {row.subject_code}</span>
+              </Button>
+            ),
+          } satisfies DataTableColumn<EnrollmentReviewRow>,
+        ]
+      : []),
   ]
 }
 
@@ -100,36 +139,134 @@ function scheduleColumns(): DataTableColumn<EnrollmentReviewRow>[] {
 export function EnrollmentReviewDialog({
   enrollment,
   onOpenChange,
+  editable = false,
+  onRevised,
 }: {
   enrollment: Enrollment | null
   onOpenChange: (open: boolean) => void
+  /** Program Head only: lets the reviewer add or remove whole subjects
+      before deciding on the enrollment. */
+  editable?: boolean
+  /** Called with the freshly revised enrollment once a subject change saves. */
+  onRevised?: (enrollment: Enrollment) => void
 }) {
   const [prospectusOpen, setProspectusOpen] = useState(false)
   const sectionsQuery = useSectionsQuery({ enabled: enrollment !== null })
   const subjectsQuery = useSubjectsQuery({ enabled: enrollment !== null })
   const isLoading = sectionsQuery.isPending || subjectsQuery.isPending
 
-  const rows = useMemo(() => {
+  const originalSectionIds = useMemo(
+    () => (enrollment?.subjects ?? []).map((s) => s.section_id),
+    [enrollment],
+  )
+  // Adjusted during render (not an effect) when a different enrollment opens
+  // — the same pattern `FeeSettingsWorkspace` uses to (re)seed local edit
+  // state from freshly-arrived data.
+  const [pendingSectionIds, setPendingSectionIds] = useState<number[] | null>(
+    null,
+  )
+  const [initializedFor, setInitializedFor] = useState<number | null>(null)
+  if (enrollment && initializedFor !== enrollment.id) {
+    setInitializedFor(enrollment.id)
+    setPendingSectionIds(null)
+  }
+  const currentSectionIds = pendingSectionIds ?? originalSectionIds
+
+  const reviseMutation = useReviseEnrollmentSubjectsMutation()
+  const [reviseError, setReviseError] = useState<string | null>(null)
+
+  const rows: EnrollmentReviewRow[] = useMemo(() => {
     if (!enrollment) return []
     const sections = sectionsQuery.data ?? []
     const subjects = subjectsQuery.data ?? []
 
-    return enrollment.subjects.map((enrolled) => {
-      const section = sections.find((item) => item.id === enrolled.section_id)
+    return currentSectionIds.map((sectionId) => {
+      const section = sections.find((item) => item.id === sectionId)
       const subject = section
         ? subjects.find((item) => item.id === section.subject_id)
         : undefined
+      const original = enrollment.subjects.find(
+        (s) => s.section_id === sectionId,
+      )
 
       return {
-        ...enrolled,
-        units: subject?.units ?? null,
+        section_id: sectionId,
+        subject_code: subject?.code ?? original?.subject_code ?? `#${sectionId}`,
+        subject_title: subject?.title ?? original?.subject_title ?? "—",
+        section_code: section?.section_code ?? original?.section_code ?? null,
+        units: subject?.units ?? original?.units ?? null,
         schedule_days: section?.schedule_days ?? null,
         starts_at_time: section?.starts_at_time ?? null,
         ends_at_time: section?.ends_at_time ?? null,
         room: section?.room ?? null,
       }
     })
-  }, [enrollment, sectionsQuery.data, subjectsQuery.data])
+  }, [enrollment, sectionsQuery.data, subjectsQuery.data, currentSectionIds])
+
+  const addableOptions = useMemo(() => {
+    if (!enrollment) return []
+    const subjects = subjectsQuery.data ?? []
+
+    return (sectionsQuery.data ?? [])
+      .filter((s) => s.academic_term_id === enrollment.academic_term_id)
+      .filter((s) => !currentSectionIds.includes(s.id))
+      .filter((s) => s.remaining_seats > 0)
+      .map((s) => {
+        const subject = subjects.find((subj) => subj.id === s.subject_id)
+        const schedule =
+          s.schedule_days && s.starts_at_time
+            ? ` · ${s.schedule_days} ${s.starts_at_time.slice(0, 5)}`
+            : ""
+
+        return {
+          value: String(s.id),
+          label: `${subject?.code ?? "Subject"} — Section ${s.section_code}${schedule}`,
+        }
+      })
+  }, [enrollment, sectionsQuery.data, subjectsQuery.data, currentSectionIds])
+
+  const hasPendingChanges =
+    pendingSectionIds !== null &&
+    JSON.stringify([...pendingSectionIds].sort((a, b) => a - b)) !==
+      JSON.stringify([...originalSectionIds].sort((a, b) => a - b))
+
+  function handleAddSection(value: string) {
+    const sectionId = Number(value)
+    if (!Number.isInteger(sectionId)) return
+    setPendingSectionIds([...currentSectionIds, sectionId])
+    setReviseError(null)
+  }
+
+  function handleRemoveSection(sectionId: number) {
+    if (currentSectionIds.length <= 1) return
+    setPendingSectionIds(currentSectionIds.filter((id) => id !== sectionId))
+    setReviseError(null)
+  }
+
+  function handleSaveRevision() {
+    if (!enrollment) return
+    setReviseError(null)
+    reviseMutation.mutate(
+      { id: enrollment.id, sectionIds: currentSectionIds },
+      {
+        onSuccess: (updated) => {
+          setPendingSectionIds(null)
+          onRevised?.(updated)
+        },
+        onError: (err: unknown) => {
+          const fieldErrors = isApiClientError(err)
+            ? Object.values(err.fieldErrors ?? {}).flat()
+            : []
+          setReviseError(
+            fieldErrors[0] ??
+              (err instanceof Error
+                ? err.message
+                : "The revision could not be saved. Try again."),
+          )
+        },
+      },
+    )
+  }
 
   const [view, setView] = useState<"table" | "calendar">("table")
   const totalUnits = rows.reduce((sum, row) => sum + (row.units ?? 0), 0)
@@ -157,7 +294,16 @@ export function EnrollmentReviewDialog({
 
   return (
     <>
-      <Dialog open={enrollment !== null} onOpenChange={onOpenChange}>
+      <Dialog
+        open={enrollment !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingSectionIds(null)
+            setReviseError(null)
+          }
+          onOpenChange(open)
+        }}
+      >
         <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-6xl">
           <DialogHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -165,7 +311,7 @@ export function EnrollmentReviewDialog({
                 Review enrollment{enrollment ? ` #${enrollment.id}` : ""}
               </DialogTitle>
               <DialogDescription>
-                {enrollment ? `${enrollment.total_units} total units` : ""}
+                {enrollment ? `${totalUnits} total units` : ""}
               </DialogDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -257,6 +403,55 @@ export function EnrollmentReviewDialog({
             </div>
           </div>
 
+          {editable && (
+            <div className="grid gap-3 rounded-lg border bg-muted/10 p-3">
+              {reviseError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{reviseError}</AlertDescription>
+                </Alert>
+              )}
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[16rem] flex-1">
+                  <SearchableCombobox
+                    id="add-subject-picker"
+                    label="Add a subject"
+                    options={addableOptions}
+                    value=""
+                    onValueChange={handleAddSection}
+                    placeholder="Search a subject or section to add…"
+                    emptyMessage="No other open sections in this term."
+                  />
+                </div>
+                {hasPendingChanges && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={reviseMutation.isPending}
+                      onClick={() => {
+                        setPendingSectionIds(null)
+                        setReviseError(null)
+                      }}
+                    >
+                      Discard changes
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={reviseMutation.isPending}
+                      onClick={handleSaveRevision}
+                      className="gap-1.5"
+                    >
+                      <Plus className="size-4" aria-hidden="true" />
+                      {reviseMutation.isPending
+                        ? "Saving changes…"
+                        : "Save subject changes"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* View Switcher Controls */}
           <div className="flex items-center justify-between border-b pb-2 pt-1">
             <h3 className="text-sm font-semibold text-foreground">
@@ -300,7 +495,14 @@ export function EnrollmentReviewDialog({
             <>
               <DataTable
                 caption={`Enrollment #${enrollment?.id ?? "—"} schedule`}
-                columns={scheduleColumns()}
+                columns={scheduleColumns(
+                  editable
+                    ? {
+                        onRemove: handleRemoveSection,
+                        canRemove: currentSectionIds.length > 1,
+                      }
+                    : undefined,
+                )}
                 rowKey={(row) => row.section_id}
                 rows={rows}
               />

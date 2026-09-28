@@ -5,7 +5,8 @@
     <title>Statement of Account - {{ $statement['student']['student_number'] }}</title>
     <style>
         @page { size: a4 portrait; margin: 12mm 12mm; }
-        body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #000; margin: 0; }
+        {{-- DejaVu Sans (bundled with DomPDF) has a Peso-sign glyph; Helvetica/Arial do not and print "?". --}}
+        body { font-family: 'DejaVu Sans', sans-serif; font-size: 9pt; color: #000; margin: 0; }
         h1 { font-size: 14pt; text-align: center; margin: 0 0 2pt 0; }
         .sub { text-align: center; font-size: 8pt; margin-bottom: 8pt; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; }

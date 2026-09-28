@@ -11,6 +11,7 @@ enum NotificationType: string
     case EnrollmentVoided = 'enrollment_voided';
     case EnrollmentProgramHeadApproved = 'enrollment_program_head_approved';
     case EnrollmentProgramHeadRejected = 'enrollment_program_head_rejected';
+    case EnrollmentProgramHeadSubjectsRevised = 'enrollment_program_head_subjects_revised';
     case AcademicGradeLocked = 'academic_grade_locked';
     case EnrollmentPaymentConfirmed = 'enrollment_payment_confirmed';
     case WithdrawalRequestSubmitted = 'withdrawal_request_submitted';

@@ -92,6 +92,41 @@ final class FeeScheduleEndpointTest extends TestCase
         ]);
     }
 
+    public function test_a_miscellaneous_fee_can_be_scoped_to_one_semester(): void
+    {
+        $token = $this->tokenFor(UserRole::AccountingStaff, 'acct.staff.semester@grc.test');
+
+        $this->withToken($token)->putJson('/api/v1/fee-schedules', [
+            'tuition_rate_per_unit' => '200.00',
+            'miscellaneous_fees' => [
+                ['label' => 'Registration', 'amount' => '200.00', 'is_active' => true],
+                ['label' => 'Graduation Fee', 'amount' => '500.00', 'semester' => '2nd', 'is_active' => true],
+            ],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('fee_schedules', ['label' => 'Registration', 'semester' => null]);
+        $this->assertDatabaseHas('fee_schedules', ['label' => 'Graduation Fee', 'semester' => '2nd']);
+
+        $response = $this->withToken($token)->getJson('/api/v1/fee-schedules')->assertOk();
+        $graduationFee = collect($response->json('data'))->firstWhere('label', 'Graduation Fee');
+        self::assertSame('2nd', $graduationFee['semester']);
+    }
+
+    public function test_an_invalid_semester_is_rejected(): void
+    {
+        $token = $this->tokenFor(UserRole::AccountingStaff, 'acct.staff.badsemester@grc.test');
+
+        $response = $this->withToken($token)->putJson('/api/v1/fee-schedules', [
+            'tuition_rate_per_unit' => '200.00',
+            'miscellaneous_fees' => [
+                ['label' => 'Registration', 'amount' => '200.00', 'semester' => 'summer', 'is_active' => true],
+            ],
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('miscellaneous_fees.0.semester', $response->json('error.errors'));
+    }
+
     public function test_registrar_head_can_view_fee_schedules_but_cannot_update_them(): void
     {
         $token = $this->tokenFor(UserRole::RegistrarHead, 'reg.head@grc.test');

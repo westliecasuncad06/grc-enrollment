@@ -233,6 +233,11 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // per `action`. See ADR 0011.
         Route::patch('/enrollments/{enrollment}', [EnrollmentController::class, 'update'])->name('enrollments.update');
 
+        // Program Head only, own college, and only while the enrollment sits
+        // at their own review stage: add/remove whole subjects from a
+        // student's proposed schedule before deciding on it.
+        Route::patch('/enrollments/{enrollment}/subjects', [EnrollmentController::class, 'reviseSubjects'])->name('enrollments.subjects.update');
+
         // FR-FIN-007–009: Accounting-only, idempotent payment confirmation
         // + COR generation. No `role:` middleware — EnrollmentPolicy
         // resolves `confirmPayment` the same way it resolves the other two

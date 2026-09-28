@@ -17,6 +17,7 @@ final class FeeScheduleResource extends JsonResource
         return [
             'id' => $this->resource->id,
             'category' => $this->resource->category,
+            'semester' => $this->resource->semester,
             'label' => $this->resource->label,
             'amount' => (string) $this->resource->amount,
             'program_codes' => $this->resource->program_codes,

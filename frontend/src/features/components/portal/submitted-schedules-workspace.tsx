@@ -13,6 +13,14 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/features/components/ui/table"
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -28,6 +36,38 @@ import { useCurriculaQuery } from "@/features/hooks/use-curricula"
 import { useScheduleProposalsQuery } from "@/features/hooks/use-scheduling"
 import { useSectionPlansQuery } from "@/features/hooks/use-section-plans"
 import { getActiveAcademicTerm } from "@/features/services/reference-data-service"
+import type { ScheduleProposal } from "@/features/schemas/scheduling-schema"
+
+interface HistoryEntry {
+  key: string
+  termLabel: string
+  collegeLabel: string
+  actionLabel: string
+  actorName: string
+  decidedAt: string
+  notes: string | null
+}
+
+/** Every Dean/Executive Director decision across every submitted plan, newest first \u2014 the log a
+ * per-proposal "decision history" panel cannot show on its own, since it only covers one proposal. */
+function flattenHistory(
+  proposals: readonly ScheduleProposal[],
+): HistoryEntry[] {
+  return proposals
+    .flatMap((proposal) =>
+      (proposal.decision_history ?? []).map((entry, index) => ({
+        key: `${proposal.id}-${index}`,
+        termLabel:
+          proposal.academic_term_label ?? `Term #${proposal.academic_term_id}`,
+        collegeLabel: proposal.college_label ?? "\u2014",
+        actionLabel: entry.action_label,
+        actorName: entry.actor_name,
+        decidedAt: entry.decided_at,
+        notes: entry.notes,
+      })),
+    )
+    .sort((a, b) => b.decidedAt.localeCompare(a.decidedAt))
+}
 
 /**
  * The Registrar Head's read-only window onto the schedules Program Heads
@@ -95,6 +135,7 @@ export function SubmittedSchedulesWorkspace() {
         <TabsList aria-label="Submitted schedule views">
           <TabsTrigger value="submitted">Submitted plans</TabsTrigger>
           <TabsTrigger value="published">Published sections</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="submitted">
@@ -121,6 +162,75 @@ export function SubmittedSchedulesWorkspace() {
                     readOnly
                   />
                 )}
+              </AsyncBoundary>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle level={2}>Decision history</CardTitle>
+              <CardDescription>
+                Every Dean and Executive Director decision across every
+                submitted plan, newest first \u2014 across every school year and
+                semester, not only the current one.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AsyncBoundary
+                query={submittedProposalsQuery}
+                isEmpty={(proposals) => flattenHistory(proposals).length === 0}
+                emptyMessage="No decision has been recorded yet."
+                loadingLabel="Loading decision history\u2026"
+              >
+                {(proposals) => {
+                  const history = flattenHistory(proposals)
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <Table
+                        data-stack-mobile
+                        aria-label="Schedule decision history"
+                      >
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Term</TableHead>
+                            <TableHead>College</TableHead>
+                            <TableHead>Decision</TableHead>
+                            <TableHead>By</TableHead>
+                            <TableHead>When</TableHead>
+                            <TableHead>Notes</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {history.map((entry) => (
+                            <TableRow key={entry.key}>
+                              <TableCell data-label="Term">
+                                {entry.termLabel}
+                              </TableCell>
+                              <TableCell data-label="College">
+                                {entry.collegeLabel}
+                              </TableCell>
+                              <TableCell data-label="Decision">
+                                {entry.actionLabel}
+                              </TableCell>
+                              <TableCell data-label="By">
+                                {entry.actorName}
+                              </TableCell>
+                              <TableCell data-label="When">
+                                {new Date(entry.decidedAt).toLocaleString()}
+                              </TableCell>
+                              <TableCell data-label="Notes">
+                                {entry.notes ?? "\u2014"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )
+                }}
               </AsyncBoundary>
             </CardContent>
           </Card>

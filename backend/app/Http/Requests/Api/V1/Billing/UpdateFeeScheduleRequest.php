@@ -23,6 +23,7 @@ final class UpdateFeeScheduleRequest extends FormRequest
             'miscellaneous_fees.*.id' => ['nullable', 'integer'],
             'miscellaneous_fees.*.label' => ['required', 'string', 'max:255'],
             'miscellaneous_fees.*.amount' => ['required', 'numeric', 'min:0', 'max:999999.99'],
+            'miscellaneous_fees.*.semester' => ['nullable', 'in:1st,2nd'],
             'miscellaneous_fees.*.program_codes' => ['nullable', 'array'],
             'miscellaneous_fees.*.program_codes.*' => ['string', 'max:50'],
             'miscellaneous_fees.*.is_active' => ['nullable', 'boolean'],

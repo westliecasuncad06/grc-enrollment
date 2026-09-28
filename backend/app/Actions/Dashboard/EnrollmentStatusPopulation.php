@@ -11,7 +11,6 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\CollegeCode;
 use App\Models\AcademicTerm;
 use App\Models\User;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -40,17 +39,16 @@ final readonly class EnrollmentStatusPopulation
 {
     /**
      * The department this actor is limited to, or null for institution-wide.
-     * Dean and Program Chair are limited to their own college. A Program Chair
-     * with no assigned college is unscoped, matching `Section::scopeVisibleTo`;
-     * a Dean with none fails closed rather than seeing every college.
-     *
-     * @throws AuthorizationException
+     * Program Chair is limited to their own college (unscoped when they have
+     * none assigned, matching `Section::scopeVisibleTo`). The Dean monitors
+     * every department here, same as Registrar Head/Executive Director —
+     * this is read-only reporting, distinct from the Dean's own-college
+     * *approval* authority elsewhere (schedule/curriculum approvals, faculty
+     * load overrides), which this method does not touch.
      */
     public function scopeFor(User $actor): ?CollegeCode
     {
         return match ($actor->role) {
-            UserRole::Dean => $actor->college
-                ?? throw new AuthorizationException('A Dean must be assigned to a college to view this dashboard.'),
             UserRole::ProgramChair => $actor->college,
             default => null,
         };

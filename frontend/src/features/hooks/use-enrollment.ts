@@ -18,6 +18,7 @@ import {
   getEnrollments,
   listEnrollments,
   removeScholarshipDiscount,
+  reviseEnrollmentSubjects,
   updateEnrollment,
 } from "@/features/services/enrollment-service"
 
@@ -176,6 +177,7 @@ export function useUpdateEnrollmentMutation() {
       reason,
       overload_acknowledged,
       requested_by_student,
+      program_head_comment,
     }: {
       id: number
       action:
@@ -188,13 +190,29 @@ export function useUpdateEnrollmentMutation() {
       reason?: string
       overload_acknowledged?: boolean
       requested_by_student?: boolean
+      program_head_comment?: string
     }) =>
       updateEnrollment(id, {
         action,
         reason,
         overload_acknowledged,
         requested_by_student,
+        program_head_comment,
       }),
+    onSuccess: () => invalidate(),
+  })
+}
+
+/**
+ * Program Head adding/removing whole subjects from a student's proposed
+ * schedule while it sits at their own review stage.
+ */
+export function useReviseEnrollmentSubjectsMutation() {
+  const invalidate = useInvalidateEnrollmentQueries()
+
+  return useMutation({
+    mutationFn: ({ id, sectionIds }: { id: number; sectionIds: number[] }) =>
+      reviseEnrollmentSubjects(id, { section_ids: sectionIds }),
     onSuccess: () => invalidate(),
   })
 }
@@ -234,7 +252,7 @@ export function useAdjustEnrollmentAssessmentMutation() {
     }: {
       id: number
       reason: string
-      items: Array<{ id: number; amount?: string; unit_amount?: string }>
+      items: { id: number; amount?: string; unit_amount?: string }[]
     }) => adjustEnrollmentAssessment(id, { reason, items }),
     onSuccess: () => invalidate(),
   })

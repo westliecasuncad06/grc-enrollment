@@ -19,6 +19,7 @@ const sampleEnrollment = {
   status_label: "Pending registrar approval",
   total_units: 18,
   requires_overload_approval: false,
+  program_head_comment: null,
   submitted_at: "2026-08-01T08:30:00Z",
   program_head_decided_at: null,
   registrar_decided_at: null,

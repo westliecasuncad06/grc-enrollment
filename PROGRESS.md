@@ -1,5 +1,199 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-28 — New feature/design batch from the owner + a real classification bug (IN PROGRESS)
+
+- **Owner request:** a large batch (COR signature layout, Fee Settings per-semester categorization,
+  SOA search parity with COR, Dean's Enrollment Dashboard to show all departments (reverses D4 —
+  owner confirmed), Faculty Loading professor click-through, Submitted Schedules history, sidebar
+  hover/collapse design, allowing an overload submission to go to Program Head approval with an
+  editable proposed schedule and a comment, a SOA nav link, the peso-sign PDF bug, Rooms archive
+  data, admission requirements checklist, and platform data for students) plus, mid-batch, a report
+  that `gil.flores@grc.com` is wrongly `Irregular` with no back subject.
+- **Peso-sign bug FIXED:** DomPDF's base-14 fonts (Helvetica/Arial) have no glyph for the Peso sign
+  and print `?`; both `certificate-of-registration.blade.php` and `statement-of-account.blade.php`
+  now use `'DejaVu Sans', sans-serif` (bundled with DomPDF, has the glyph). Verified visually
+  (rendered both fonts side by side) and with a regression test on each PDF view (23/23, 10/10).
+- **`gil.flores@grc.com` root cause found and FIXED (migration ready, not yet applied to the dev
+  DB):** an audit row from 2026-09-23 shows they were flagged Irregular by a classifier reason
+  ("subject already completed") that no longer exists — `ClassifyEnrollmentStanding`'s current code
+  explicitly never treats a passed subject as a reason to go Irregular. Re-running the *current*
+  classifier live for this student returns `null` (undetermined, no block published yet), never
+  Irregular — the code itself is already correct. The bug is that
+  `ReclassifyStudentEnrollmentCategory` deliberately never overwrites on an undetermined verdict
+  ("carry forward unchanged"), so the stale bad value from the old rule can never self-correct.
+  Exactly **6 real students** match this evidence-based pattern (Irregular, zero enrollments ever,
+  zero grades ever): edgar.rodriguez, gil.flores, charmaine.andrada, jerome.delossantos,
+  leandro.panganiban, herminio.miller (all @grc.com), all derived on the same 2026-09-23 run. New
+  migration `2026_09_28_000001_resync_stale_pre_fix_enrollment_classifications` re-runs the real
+  classifier for exactly this scoped set and corrects each to its true current verdict (regular, or
+  cleared to unclassified/null when still undetermined), with a proper audit row per student. 6/6
+  new tests pass on the private DB. **Blocked from running on the dev DB by the permission system
+  (data-mutation guard on a shared resource) — owner must run `php artisan migrate --force` in
+  `backend/`, or explicitly approve Claude doing it.**
+- **COR signature triangle layout FIXED:** split the old 3-column signature table into a `.signature-student`
+  table (Student, centered above) plus a 2-column `.signature-table` (Cashier, Registrar, level with each
+  other) — the Student sits alone at the apex as requested. Verified visually via a local HTTP server +
+  Playwright's PDF viewer. New regression test (`test_the_student_signs_above_the_cashier_and_registrar_who_sign_level_with_each_other`).
+- **Dean's Enrollment Dashboard now shows every department (reverses D4; owner explicitly confirmed via
+  AskUserQuestion — "Oo, lahat ng department na ngayon"):** `EnrollmentStatusPopulation::scopeFor()` no
+  longer scopes Dean to their own college. 5 tests renamed/rewritten in `EnrollmentStatusDashboardTest.php`
+  (40/40 passing with the related dashboard suites).
+- **Faculty Loading — click a professor's name (Dean) FIXED:** new `faculty-load-assignments-dialog.tsx`
+  shows that professor's subject loads; wired into `dean-faculty-load-workspace.tsx`. 7/7 tests passing.
+- **Submitted Schedules — History tab ADDED (Registrar Head):** `submitted-schedules-workspace.tsx` gained
+  a chronological "History" tab flattening every proposal's `decision_history` into one table. 5/5 tests
+  passing.
+- **Admission checklist root cause found and FIXED:** the checklist wasn't missing content — the edit
+  form's `student_type` field silently defaulted to `"freshman"` on `reset()`, masking that **3,380 real
+  students** have an unset `student_type` in the dev DB (so the checklist genuinely has nothing to show
+  for them). Fixed the default to `undefined` (forces an explicit pick), added a placeholder + `aria-invalid`
+  on the Select, and an `Alert` (staff view) explaining why the checklist is empty until `student_type` is
+  set. `admission-requirements-checklist.test.tsx` re-verified (7/7).
+- **Confirmed already satisfied, no changes needed:** SOA search already matches COR's (`useCashierStudentSearchQuery`
+  used by both); student SOA nav link already present (from S25).
+- **Fee Settings per-semester categorization ADDED** (owner: "san semester iapply yung fee settings"):
+  `fee_schedules` gained a nullable `semester` column (`1st`/`2nd`/`null` = every semester). Backend:
+  migration `2026_09_28_000002_add_semester_to_fee_schedules_table`, `AssessEnrollment::miscellaneousFees()`
+  filters by the enrollment's term semester (tuition itself stays one global rate, deliberately unscoped),
+  `SnapshotFeeSchedule` audit text, `FeeScheduleController` sync, `UpdateFeeScheduleRequest` validation
+  (`nullable|in:1st,2nd`), `FeeScheduleResource` output — 8/8 new/updated backend tests passing. Frontend:
+  `fee-schedule-schema.ts` gained `semester`, `fee-settings-workspace.tsx` gained a per-row "Applies To" /
+  "Semester" selector (Every Semester / 1st / 2nd Only), new `fee-settings-workspace.test.tsx` (2/2
+  passing). Full frontend suite re-run clean after the schema change: **1397/1397 passing.**
+- **Sidebar hover/collapse design polish** (owner: "magandang design kapag na hover... at ayusin din yung
+  design sa pag sarado ng navbar"): the collapsed icon rail's hover hint used to be only the browser's own
+  slow, unstyled `title` tooltip. First pass added a floating dark tooltip with an arrow; the owner then
+  sent reference screenshots asking for a left-to-right pop animation instead, matching a specific look
+  (the icon itself growing into a rounded pill that reveals the name). **Redesigned to match:** the label
+  is now an overlay anchored at the icon's own position, revealed via `clip-path: inset()` animating
+  left-to-right (not a separate floating box), styled with the sidebar's own translucent white-on-maroon
+  hover tint instead of a foreign black tooltip, no arrow. **Real bug found and fixed while verifying this
+  live in the browser** (Playwright against the owner's own :3000 dev server, a temporary Sanctum token
+  minted and revoked immediately after): the pill was rendering but clipped to only 2 letters — caused by
+  `.portal-navigation`'s `overflow-y: auto`, which per the CSS Overflow spec silently forces
+  `overflow-x` to clip too (a "visible" axis paired with a non-visible one is computed as `auto`, not
+  `visible`), even though `overflow-x` was never itself set to anything. Fixed with an explicit
+  `overflow: visible` override on the collapsed rail (trading away its own vertical scrollbar, which no
+  role's collapsed icon list is currently long enough to need). Confirmed visually correct after the fix
+  (full "Student Records" label now shows, sliding in cleanly).
+  **Second real bug, also owner-caught via a live screenshot after that fix shipped:** the pill's
+  translucent white tint (`rgb(255 255 255 / 16%)`) reads fine layered over the maroon sidebar, but the
+  pill legitimately overflows PAST the sidebar's edge onto the main content area next to it (the whole
+  point of the `overflow: visible` fix above) — and the portion sitting over that light page background
+  became white text on near-white, unreadable. A translucent "lighten what's under me" tint is the wrong
+  tool for an element that floats over unpredictable content; fixed by making the pill fully opaque
+  (`#870615`, the sidebar gradient's own dark stop) with white text and a drop shadow for lift, so it
+  reads correctly no matter what it's sitting over. Verified live again, including mid-animation
+  (screenshotted while the clip-path reveal was still sweeping) — fully legible throughout.
+  Also kept the collapse/expand toggle's pressed/active state and icon transition from the first pass.
+  `globals.css` only; `portal-shell.test.tsx` re-verified after each fix (37/37 both times — labels stay
+  in the DOM for the accessible name either way,
+  so no test changes were needed).
+- **Rooms → Archive data FIXED (owner-confirmed scope via AskUserQuestion — "Lahat ng archived terms na may
+  gaps"):** investigation found the Archive view wasn't just missing rooms — 17 archived terms (1-5, 19-30)
+  had **zero** schedule data at all (no room, day, time, or professor) on 5,376 sections, so every room
+  showed "Empty". Wrote `backend/scripts/backfill_archived_section_rooms.php` (one-off, documented as
+  explicitly synthetic filler, not a recovered historical record) that deterministically assigns a
+  conflict-free room + day + time to every gap section, mirroring the exact day/slot style already present
+  in real data (single weekday, one of the four existing time slots, `modality`/`professor_id` left null).
+  **Run against the dev DB, 5,376 sections assigned across 17 terms, 0 gaps remain, current term 34
+  untouched (still 88 awaiting-a-room, which is the normal workflow).** Verified the script introduced
+  zero new room/day/time conflicts (a pre-existing double-booking data-quality issue — 671 groups across
+  terms 1-6, present even in term 6 which this script never touched — was found and is **not** fixed here;
+  it predates this work and is a separate finding for the owner).
+- **`2026_09_28_000002_add_semester_to_fee_schedules_table` applied to the dev DB** (pure additive schema
+  change, `php artisan migrate --force --path=...`, ran clean).
+- **"Platform data for students" root cause found (owner-confirmed via AskUserQuestion) and FIXED on the
+  dev DB:** every single academic term — including the current ongoing one (34, 2026-2027 1st) — had
+  `enrollment_platform = NULL`, so every student's COR showed "Not specified" for Platform; this was never
+  a bug, the Registrar had simply never used the S11 feature yet. Owner confirmed: Face-to-Face for the
+  current term (the real answer) and Face-to-Face for every archived term too (explicit filler default,
+  same spirit as the room backfill). `backend/scripts/backfill_academic_term_platform.php` (one-off,
+  documented) sets `enrollment_platform` on every term still null. **Not yet run** — queued right after the
+  overload/comment/subject-revision backend work below; the permission-classifier outage (see below) has
+  also blocked re-attempting Bash since before this could run.
+- **Overload + Program-Head schedule edit + comment feature — DESIGNED (short chat design, owner-approved
+  via 2 AskUserQuestion rounds) and IMPLEMENTED, NOT YET VERIFIED (tool outage — see below):**
+  - Investigation found the "student can still submit an overload" half was **already correct** (S05/ADR
+    0030): `SubmitEnrollment` already routes any `RequiresApproval` overload straight to
+    `pending_program_head_approval` rather than rejecting it; only a genuine hard ceiling
+    (`overload_max_units`) still rejects outright, unchanged and correct on reflection.
+  - New, actually missing: a Program Head may now **add or remove whole subjects** from a student's
+    proposed schedule while it sits at `pending_program_head_approval` (owner chose "add/remove", not just
+    swap-section, in the design round), and may leave **one optional comment** on the enrollment alongside
+    their approve/reject decision, shown to the student in the outcome notification.
+  - Backend: migration `2026_09_28_000003_add_program_head_comment_to_enrollments_table` (nullable text);
+    new Action `ReviseEnrollmentSubjects` (full-replacement section-id list, re-checks seats/term/hard
+    overload ceiling under locks, revives a previously-dropped `EnrollmentSubject` row instead of violating
+    its unique `(enrollment_id, section_id)` pair — a real bug caught and fixed during self-review before
+    any test ran); new `AuditAction::ENROLLMENT_PROGRAM_HEAD_SUBJECTS_REVISED` and
+    `NotificationType::EnrollmentProgramHeadSubjectsRevised`; new Policy ability `reviseSubjects` (same
+    own-college scope as `decideProgramHeadApproval`); new route
+    `PATCH /enrollments/{enrollment}/subjects` + `ApiSurfaceTest` updated (3 lists); `TransitionEnrollment`
+    now accepts and stores an optional `program_head_comment`, included in the student's notification text;
+    `EnrollmentResource`/`UpdateEnrollmentRequest` updated. New test file
+    `ReviseEnrollmentSubjectsEndpointTest.php` (8 tests: swap, add, full-section rejected, hard-ceiling
+    rejected, cross-college forbidden, wrong-stage rejected, comment notifies, no-comment stays null) —
+    **written but not yet run.**
+  - Frontend: `enrollment-schema.ts` gained `program_head_comment` (required on `Enrollment` — **12 test
+    fixture files updated** to add it) and a new `reviseEnrollmentSubjectsInputSchema`; new service fn
+    `reviseEnrollmentSubjects` + hook `useReviseEnrollmentSubjectsMutation`; `EnrollmentReviewDialog` gained
+    an `editable` mode (add-a-subject searchable combobox, per-row remove, save/discard bar, reuses the
+    same seat/term/ceiling errors from the API) wired into
+    `program-chair-irregular-enrollments-workspace.tsx`, which also gained the optional comment textarea on
+    its approve/reject confirmation. `notification-presentation.ts` gained the new notification type.
+    **No frontend tests written yet for the new editable-dialog UI; `tsc`/`eslint`/`vitest` not yet run.**
+- **Tooling outage mid-session (recovered):** the Bash/PowerShell tools' server-side safety classifier
+  returned no verdict for a stretch ("auto mode is unavailable"), blocking every command. The
+  overload/comment/subject-revision feature was written via careful manual code review during the outage
+  (including one real bug found and fixed that way — a dropped-then-re-added subject would have violated
+  `enrollment_subjects`' unique `(enrollment_id, section_id)` pair; fixed by reviving the dropped row
+  instead of inserting a duplicate). Once the tool recovered, everything was verified for real:
+  - `ReviseEnrollmentSubjectsEndpointTest` (new): **8/8 passing.**
+  - `EnrollmentsEndpointTest` + `ApiSurfaceTest` together: **87/87 passing** (669 assertions) — confirms the
+    `program_head_comment` field, the new route, and the exact-key-set test all landed correctly with zero
+    regressions to the existing approval flow.
+  - `vendor/bin/pint --test` on every touched backend file: clean. **Gotcha found:** Pint's
+    `ordered_imports`/`fully_qualified_strict_types` fixers moved the two new `backend/scripts/*.php`
+    files' `use` statements to *after* their `require __DIR__.'/../bootstrap/app.php'` bootstrap lines,
+    which broke them (`Kernel::class` referenced before its `use` import — PHP `use` only resolves names
+    appearing *after* it in the file, unlike normal PSR-4 classes). Fixed by moving `use` back above the
+    `require` lines in both scripts. **Do not run `vendor/bin/pint` (even per-file) on a one-off
+    `backend/scripts/*.php` file without re-running it with `php -l` and a real execution afterward** — the
+    require-then-bootstrap-then-use pattern these scripts use is exactly the shape Pint's import fixers get
+    wrong.
+  - **Full backend suite: `php artisan test --compact` → 2099 passed / 2099, 48,784 assertions, 0 failed**
+    (up from the prior 2078 baseline — the +21 are this session's new tests). `tsc --noEmit`: 0 errors.
+    `eslint` on every touched file: 0 errors after the drive-by fixes below.
+  - **Full frontend suite** (`npx vitest run`, all 186 files) reported 4 failures on the first pass, all
+    while running concurrently with the full backend suite for ~2 hours straight — the exact "two full
+    suites at once → spurious failures" pattern already on record for this machine. Re-ran each in
+    isolation: `curriculum-workspace.test.tsx` and `teaching-schedule-workspace.test.tsx` passed clean
+    (confirmed contention flakes). `analytics-dashboard-workspace.test.tsx` (2-3 of 7 tests, always the
+    same `findByText(/Enrolled: 22/)` timeout) **fails even fully alone, reproducibly** — but its entire
+    import chain (`use-dashboard.ts`, `dashboard-schema.ts`, the component itself) shows **zero git diff**;
+    nothing this session touched is anywhere near it. This is a **real, pre-existing problem, NOT caused by
+    this session's work** — logged here as a new finding for separate follow-up, not fixed. (Its own "import"
+    phase alone took 85-93s in every run, far past what the rest of the suite needs — worth checking
+    whether that specific test file's mock/dependency setup got heavier recently, or whether `findByText`'s
+    default timeout needs raising for it.)
+  - Two pre-existing, unrelated `@typescript-eslint` lint errors were found and fixed as drive-by fixes
+    while linting touched files (both trivial, zero behavior change): an `Array<T>` → `T[]` in
+    `use-enrollment.ts` (line shifted into view by this session's own insertion, not caused by it) and an
+    `a && a.b` → `a?.b` optional-chain in `program-chair-irregular-enrollments-workspace.tsx`'s search
+    filter (same — pre-existing, unrelated to this session's own new optional-chain fix a few lines below
+    it in the same file).
+- **`2026_09_28_000003_add_program_head_comment_to_enrollments_table` applied to the dev DB** (pure
+  additive schema change, ran clean).
+- **`backfill_academic_term_platform.php` run on the dev DB:** all 19 terms (including current term 34)
+  updated from `NULL` to `face_to_face`, exactly as the owner confirmed.
+- **Still open from this batch:** applying migration
+  `2026_09_28_000001_resync_stale_pre_fix_enrollment_classifications` to the dev DB — still the one
+  migration blocked by the permission system itself (data-mutation guard on a shared resource), ready and
+  tested, needs owner action (`php artisan migrate --force` in `backend/`) or explicit approval; a
+  frontend test for the new `EnrollmentReviewDialog` editable mode has not been written yet; the
+  pre-existing `analytics-dashboard-workspace.test.tsx` failure noted above is a separate, unrelated
+  finding for the owner to decide on.
 ## 2026-09-27 — Saving point, remaining test failures, end-to-end system test (IN PROGRESS)
 
 - **Owner request:** (1) create a GitHub saving point, (2) fix the 6 remaining failing backend tests, (3) test the whole system end to end (the full enrollment process start to finish, every function, button and notification).
@@ -17,7 +211,25 @@
 - **Full suites re-run after every fix above, twice.** First full run hit **701 spurious backend failures** from running two full test suites (this backend one plus a duplicate, accidentally-still-running frontend `vitest run`) against the same machine at once — killed the stray duplicate process, and a clean re-run showed only 2 real failures. **One was a genuine regression from this session's own name-derivation fix:** `FacultyAvailabilityTermIndependenceMigrationTest` rolls the `users` table back to before the `first_name`/`last_name` columns existed (to test an older-schema code path) and then creates a `User` — the new `saving` hook tried to fill those columns unconditionally and the insert failed with an unknown-column error. Fixed by guarding the hook with `Schema::hasColumn($user->getTable(), 'first_name')`, which only queries the schema on the rare path where a name-only user is actually being created (invites, seeders) — normal saves with the columns already populated never reach it. **The other was environmental, not a bug:** `AuthenticateUserConcurrencyTest` hit its own 30-second subprocess timeout under the machine's full load from two simultaneous test suites; run alone it passes in under 9 seconds.
 - **Final verified counts, this session's actual bugfix work done:** backend `php artisan test --compact`, private DB, full suite: **2078 passed / 2078, 48,726 assertions, 0 failed.** Frontend `npx vitest run`: **186 files, 1394 passed / 1394, 0 failed.** `tsc --noEmit`: 0 errors. The 10-role scripted deep sweep: 0 problems of 66 checks. Nothing known-failing remains — see the memory note that replaces the old "6 failing" baseline.
 - **Dev DB migrated (owner action, done by Claude on request):** `php artisan migrate --force` run against the shared XAMPP dev DB (`grc_enrollment`, :3306, 7,047 real users / 23,026 enrollments at the time). All 9 pending migrations ran clean: `account_setup_codes`, the enrollments Program Head stage, `enrollment_subject_waivers`, `academic_terms.enrollment_platform`, `section_change_requests`, faculty load limits/overrides, `program_shifts`, `admission_requirement_types`/`student_admission_requirements` (seeded the 14 requirements), and the 2026-09-27 name-parts backfill. Verified after: 0 users left with a blank first/last name, 14 admission requirement types present. S22-S26 (Fee Settings, COR preview, promissory rule, Statement of Account, Admission requirements) can now be exercised on the real dev DB.
-- Progress of the remaining items is recorded below as they finish.## 2026-09-26 — UML Activity Diagrams: Proposed vs. Current Manual System (DONE and verified)
+- Progress of the remaining items is recorded below as they finish.## 2026-09-28 — UML Activity Diagrams: Manuscript Standard Refinements (Figures 10–16) (DONE and verified)
+
+- **Artifact updated:** `activity-diagrams.html` in project root.
+- **Thesis Renumbering:** Renumbered all diagrams starting at **Figure 10** through **Figure 16** matching GRC Thesis Chapter III Section 3.6 specifications:
+  - **Figure 10:** Master Activity Diagram for Proposed Enrollment System (End-to-End lifecycle across 4 swimlanes).
+  - **Figure 11:** Activity Diagram for Program Chair - Pre-Enrollment & AI Scheduling (Process 1.0 with 25-student threshold check).
+  - **Figure 12:** Activity Diagram for Student - Digital Advising & Prerequisite Validation (Process 2.0 with automated 3NF prerequisite checks).
+  - **Figure 13:** Activity Diagram for Program Chair & Registrar - Enrollment Approval (Process 3.0 / ADR 0030 for Irregulars and Transferees).
+  - **Figure 14:** Activity Diagram for Cashier & Student - Payment Queue & COM Release (Processes 3.4 & 3.5 pre-assessed queue & instant COM).
+  - **Figure 15:** Activity Diagram for Registrar - Closed-Loop Analytics & CHED Reports (Process 4.0 predictive dropout scoring & regulatory exports).
+  - **Figure 16:** Activity Diagram of Existing Enrollment System (Standardized UML activity diagram reconstructing Figure 9 baseline flowchart).
+- **Explicit Rejection/Revision Branches Added:**
+  - **Figure 11:** Added explicit `No (Returned)` decision branch on the `Exec. Director Lock?` diamond routing back to Program Chair section configuration.
+  - **Figure 13:** Added explicit `No (Revision Required)` decision branch on `Endorse Plan?` routing back to the Student with remarks and return loop; added explicit `No (Disapproved / Hold)` decision branch on `Final Approval?` routing back to Student with an `EXIT (On Hold)` terminal state.
+- **Figure 10 Cleanup:** Fixed typo in decision branch label to `No (Regular)` and stripped redundant actor prefixes (`Program Chair:`, `Registrar:`) from action boxes since swimlanes already establish context.
+- **Figure 16 Caption Standardized:** Renamed from "Process Flowchart of the Existing Enrollment System" to "Figure 16. Activity Diagram of Existing Enrollment System" to maintain consistent UML terminology across Chapter III.
+- **Chapter III Section 3.6 Narrative Text Panel:** Added dynamic 2-paragraph narrative descriptions under every figure detailing step-by-step actor interactions, decision rules, and automated system responses, paired with a 1-click clipboard copy feature for thesis manuscript drafting.
+
+## 2026-09-26 — UML Activity Diagrams: Proposed vs. Current Manual System (DONE and verified)
 
 - **Artifact created:** `activity-diagrams.html` in project root.
 - **Scope & Sources:** Mapped directly from the capstone manuscript (*A Development of an Automated Enrollment System with Predictive Analytics*, April 2026), `PRD.md` v3.2, and benchmarked against the official GRC library thesis standard (*Cloud-Based Integrated Management System for ABR Diagnostic Center - Library Format.pdf*, Figures 12–49).

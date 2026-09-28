@@ -9,7 +9,9 @@
             margin: 8mm 10mm;
         }
         body {
-            font-family: Helvetica, Arial, sans-serif;
+            /* DejaVu Sans (bundled with DomPDF) has a Peso-sign glyph; the base-14 PDF fonts
+               (Helvetica/Arial) do not and DomPDF prints "?" in its place. */
+            font-family: 'DejaVu Sans', sans-serif;
             font-size: 7.5pt;
             line-height: 1.25;
             color: #000;
@@ -155,14 +157,30 @@
             margin-bottom: 3.5pt;
             text-align: justify;
         }
-        .signature-table {
+        /* Student signs above; Cashier and Registrar sign level with each other below, so the three
+           names read as a triangle with the student at the point, not three names in one flat row.
+           DomPDF's `margin: auto` centering on tables is unreliable, so the student row is centered
+           with two empty flanking cells instead — a plain table width/text-align it always honors. */
+        .signature-student {
             width: 100%;
             margin-top: 28pt;
+            border-collapse: collapse;
+        }
+        .signature-student td {
+            width: 30%;
+        }
+        .signature-student td.signature-student-cell {
+            width: 40%;
+            text-align: center;
+        }
+        .signature-table {
+            width: 100%;
+            margin-top: 20pt;
             text-align: center;
             border-collapse: collapse;
         }
         .signature-table td {
-            width: 33.33%;
+            width: 50%;
             padding: 0 8pt;
             vertical-align: bottom;
         }
@@ -357,15 +375,21 @@
             </ol>
         </div>
 
+        <table class="signature-student avoid-break">
+            <tr>
+                <td></td>
+                <td class="signature-student-cell">
+                    <div class="signature-line">{{ $snapshot['student']['name'] }}</div>
+                    <div class="signature-title">Student's Signature Over Printed Name</div>
+                </td>
+                <td></td>
+            </tr>
+        </table>
         <table class="signature-table avoid-break">
             <tr>
                 <td>
                     <div class="signature-line">{{ $snapshot['signatories']['cashier'] ?? 'CASHIER' }}</div>
                     <div class="signature-title">Cashier</div>
-                </td>
-                <td>
-                    <div class="signature-line">{{ $snapshot['student']['name'] }}</div>
-                    <div class="signature-title">Student's Signature Over Printed Name</div>
                 </td>
                 <td>
                     <div class="signature-line">{{ $snapshot['signatories']['registrar'] ?? 'REGISTRAR' }}</div>

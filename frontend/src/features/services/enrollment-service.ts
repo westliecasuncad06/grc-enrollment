@@ -7,6 +7,7 @@ import {
   enrollmentFiltersSchema,
   paginatedEnrollmentsSchema,
   paymentConfirmationEnvelopeSchema,
+  reviseEnrollmentSubjectsInputSchema,
   storeEnrollmentInputSchema,
   updateEnrollmentInputSchema,
   type ConfirmPaymentInput,
@@ -17,6 +18,7 @@ import {
   type EnrollmentFilters,
   type Paginated,
   type PaymentConfirmation,
+  type ReviseEnrollmentSubjectsInput,
   type StoreEnrollmentInput,
   type UpdateEnrollmentInput,
 } from "@/features/schemas/enrollment-schema"
@@ -138,6 +140,21 @@ export async function updateEnrollment(
     parse(updateEnrollmentInputSchema, input, "enrollment decision"),
   )
   return parse(enrollmentEnvelopeSchema, payload, "updated enrollment").data
+}
+
+/**
+ * Program Head adding/removing whole subjects from a student's proposed
+ * schedule while it sits at their own review stage.
+ */
+export async function reviseEnrollmentSubjects(
+  id: number,
+  input: ReviseEnrollmentSubjectsInput,
+): Promise<Enrollment> {
+  const payload = await patchAuthenticatedJson(
+    `${ENROLLMENTS_PATH}/${id}/subjects`,
+    parse(reviseEnrollmentSubjectsInputSchema, input, "enrollment subject revision"),
+  )
+  return parse(enrollmentEnvelopeSchema, payload, "revised enrollment").data
 }
 
 export async function confirmPayment(

@@ -7,12 +7,14 @@ use App\Actions\Enrollment\BuildCorSnapshot;
 use App\Actions\Enrollment\ConfirmPayment;
 use App\Actions\Enrollment\ListEnrollments;
 use App\Actions\Enrollment\RequestWithdrawal;
+use App\Actions\Enrollment\ReviseEnrollmentSubjects;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Actions\Enrollment\TransitionEnrollment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Enrollment\AdjustEnrollmentAssessmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\ConfirmPaymentRequest;
 use App\Http\Requests\Api\V1\Enrollment\IndexEnrollmentRequest;
+use App\Http\Requests\Api\V1\Enrollment\ReviseEnrollmentSubjectsRequest;
 use App\Http\Requests\Api\V1\Enrollment\StoreEnrollmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\UpdateEnrollmentRequest;
 use App\Http\Requests\Api\V1\WithdrawalRequest\StoreWithdrawalRequestRequest;
@@ -124,11 +126,38 @@ final class EnrollmentController extends Controller
             $request->validated('reason'),
             $contextFactory->fromRequest($request),
             $request->boolean('requested_by_student'),
+            $request->validated('program_head_comment'),
         );
 
         $response = EnrollmentResource::make($enrollment)->response($request);
 
         return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * Program Head adding/removing whole subjects from a student's proposed
+     * schedule while it sits at their own review stage (owner-requested,
+     * 2026-09-28). See `ReviseEnrollmentSubjects` for the full rules.
+     *
+     * @throws AuthenticationException
+     */
+    public function reviseSubjects(
+        ReviseEnrollmentSubjectsRequest $request,
+        Enrollment $enrollment,
+        ReviseEnrollmentSubjects $reviseEnrollmentSubjects,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('reviseSubjects', $enrollment);
+
+        $updated = $reviseEnrollmentSubjects->execute(
+            $enrollment,
+            $request->resolvedSectionIds(),
+            $actor,
+            $contextFactory->fromRequest($request),
+        );
+
+        return $this->cachePrivateResponse(EnrollmentResource::make($updated)->response($request));
     }
 
     /**

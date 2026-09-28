@@ -39,6 +39,7 @@ const enrolledEnrollment: Enrollment = {
   status_label: "Enrolled",
   total_units: 3,
   requires_overload_approval: false,
+  program_head_comment: null,
   submitted_at: "2026-07-30T00:00:00Z",
   program_head_decided_at: null,
   registrar_decided_at: "2026-07-30T00:00:00Z",

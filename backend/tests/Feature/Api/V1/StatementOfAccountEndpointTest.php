@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Actions\Billing\BuildStatementOfAccount;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Identity\AcademicStanding;
@@ -201,6 +202,20 @@ final class StatementOfAccountEndpointTest extends TestCase
 
         $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
         self::assertStringContainsString('SOA-', (string) $response->headers->get('Content-Disposition'));
+    }
+
+    public function test_the_pdf_uses_a_font_that_can_print_the_peso_sign(): void
+    {
+        // The base-14 PDF fonts (Helvetica/Arial) have no glyph for the Peso sign and DomPDF prints
+        // "?" in its place; DejaVu Sans (bundled with DomPDF) does. Regression guard for that swap.
+        $student = $this->student();
+        $term = $this->term('2025-2026', '1st', '2025-08-01');
+        $this->assessed($student, $term, '600.00', '400.00');
+        $statement = app(BuildStatementOfAccount::class)->execute($student->load(['user', 'program']), null);
+
+        $html = view('pdf.statement-of-account', ['statement' => $statement])->render();
+
+        $this->assertStringContainsString("font-family: 'DejaVu Sans', sans-serif;", $html);
     }
 
     public function test_a_student_cannot_read_another_students_statement(): void

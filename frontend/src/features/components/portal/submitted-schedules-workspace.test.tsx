@@ -47,7 +47,27 @@ function proposal(id: number, overrides: Record<string, unknown>) {
 
 const proposals = {
   data: [
-    proposal(9, { college_label: "College of Accountancy" }),
+    proposal(9, {
+      college_label: "College of Accountancy",
+      decision_history: [
+        {
+          action: "dean_approve",
+          action_label: "Approved by Dean",
+          actor_name: "Seed Dean",
+          actor_role: "dean",
+          decided_at: "2026-07-28T09:00:00Z",
+          notes: null,
+        },
+        {
+          action: "executive_approve",
+          action_label: "Approved by Executive Director",
+          actor_name: "Seed Executive Director",
+          actor_role: "executive_director",
+          decided_at: "2026-07-29T12:00:00Z",
+          notes: "Looks good.",
+        },
+      ],
+    }),
     proposal(10, {
       college: "ccs",
       college_label: "College of Computer Studies",
@@ -152,6 +172,34 @@ describe("SubmittedSchedulesWorkspace", () => {
     expect(
       await screen.findByText("No Program Head has submitted a schedule yet."),
     ).toBeInTheDocument()
+  })
+
+  it("lists every proposal's decisions in one chronological history table", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input) =>
+      Promise.resolve(new Response(JSON.stringify(routeFixtures(input)))),
+    )
+    renderWithSession(<SubmittedSchedulesWorkspace />, {
+      session: registrarHead,
+    })
+    await screen.findByText("College of Accountancy")
+
+    await user.click(screen.getByRole("tab", { name: "History" }))
+
+    const table = await screen.findByRole("table", {
+      name: "Schedule decision history",
+    })
+    const rows = within(table).getAllByRole("row")
+    // Header + 2 decisions, newest (Executive Director) first.
+    expect(rows).toHaveLength(3)
+    expect(
+      within(rows[1]).getByText("Approved by Executive Director"),
+    ).toBeInTheDocument()
+    expect(
+      within(rows[1]).getByText("Seed Executive Director"),
+    ).toBeInTheDocument()
+    expect(within(rows[1]).getByText("Looks good.")).toBeInTheDocument()
+    expect(within(rows[2]).getByText("Approved by Dean")).toBeInTheDocument()
   })
 
   it("is unavailable to other roles and makes no schedule requests", () => {

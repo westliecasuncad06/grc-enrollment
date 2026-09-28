@@ -493,7 +493,10 @@ function StudentRecordDialog({
             entry_year: profile.entry_year ?? new Date().getFullYear(),
             year_level: profile.year_level,
             enrollment_category: profile.enrollment_category ?? "regular",
-            student_type: profile.student_type ?? "freshman",
+            // Never a silent guess: a null value here means the checklist can only show the
+            // Additional requirements (not knowing Freshman vs Transferee), so the Select must
+            // show that it is genuinely unset rather than defaulting to "Freshman" unnoticed.
+            student_type: profile.student_type ?? undefined,
             admission_status: profile.admission_status,
           }
         : {}),
@@ -659,8 +662,9 @@ function StudentRecordDialog({
                           <SelectTrigger
                             id="edit-student-type"
                             className="w-full"
+                            aria-invalid={field.value === undefined}
                           >
-                            <SelectValue />
+                            <SelectValue placeholder="Not yet set — pick one to complete the requirements checklist" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="freshman">Freshman</SelectItem>
@@ -703,8 +707,8 @@ function StudentRecordDialog({
                 <Alert className="md:col-span-2">
                   <AlertDescription>
                     Student number, program, entry year, year level, category,
-                    student type, and admission status are
-                    locked because this student already has an enrollment.
+                    student type, and admission status are locked because this
+                    student already has an enrollment.
                   </AlertDescription>
                 </Alert>
               )}
