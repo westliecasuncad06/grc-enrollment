@@ -2,6 +2,13 @@
 
 ## 2026-09-28 — New feature/design batch from the owner + a real classification bug (IN PROGRESS)
 
+- **Saving point: commit `68f34d3` pushed to `origin/main`** (65 files, owner-requested). Deliberately NOT
+  committed: `.claude/settings.json` (local tool setting), `activity-diagrams.html` (modified by a
+  different, concurrent agent session on an unrelated subject), the third-party thesis PDF, and 9 untracked
+  one-off `backend/scripts/*.php` files that are not this session's own (they hard-code demo student
+  accounts) — only this session's own two scripts (`backfill_academic_term_platform.php`,
+  `backfill_archived_section_rooms.php`) were included.
+
 - **Owner request:** a large batch (COR signature layout, Fee Settings per-semester categorization,
   SOA search parity with COR, Dean's Enrollment Dashboard to show all departments (reverses D4 —
   owner confirmed), Faculty Loading professor click-through, Submitted Schedules history, sidebar
