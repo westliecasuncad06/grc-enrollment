@@ -1,5 +1,35 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-30 — Enrollment-confirmation email (DONE)
+
+- **Owner request:** email the student automatically once their enrollment process is complete. Bounded
+  task, brainstorming-skill flow followed: explored `ConfirmPayment`/`EnrollmentController`/`BuildCorSnapshot`
+  first, asked one clarifying question on what "complete" means, owner confirmed the trigger is the moment
+  `ConfirmPayment` succeeds (payment confirmed + COR ready), presented a short design in chat, owner said go.
+- **Implemented:** new `App\Actions\Enrollment\SendEnrollmentConfirmationEmail` (swallow-and-report-on-failure,
+  same convention as `SendPasswordResetCode` — a delivery hiccup must never make payment confirmation itself
+  appear to fail), new `App\Mail\EnrollmentConfirmedMail` + `resources/views/mail/enrollment-confirmed.blade.php`
+  (student name, COR document number, subject list, total units, payment summary, a "View your enrollment"
+  link into `/portal/enrollment` — no PDF attachment, per `BuildCorSnapshot`'s own "no PDF pipeline" note; the
+  mail reuses the exact snapshot array `ConfirmPayment` already built and stored on the `EnrollmentDocument`,
+  nothing is recomputed). Two new `AuditAction` constants: `ENROLLMENT_CONFIRMATION_EMAIL_SENT`,
+  `ENROLLMENT_CONFIRMATION_EMAIL_SEND_FAILED`.
+- **Wired into `EnrollmentController::confirmPayment()`**, called right after `ConfirmPayment::execute()`
+  returns and gated on `$result['created'] === true` — a repeat/idempotent confirm-payment call (the existing
+  `payments.enrollment_id` unique-constraint idempotency path) never resends the email, since no new records
+  were created. Lives outside `ConfirmPayment`'s own DB transaction, matching the established pattern for
+  transactional emails in this codebase.
+- **Verified:** `PaymentConfirmationEndpointTest` extended with `Mail::fake()` assertions — the email is sent
+  exactly once on a real confirmation and never resent on the idempotent second call; 15/15 passing. Audit-log
+  count assertions in that file updated for the new second audit row (payment confirmed + email sent).
+  Confirmed no regression in the other suites that also hit this endpoint: `EnrollmentLifecycleTest`,
+  `ScholarshipDiscountEndpointTest`, `ApiSurfaceTest` — 45/45 passing. `AuditVocabularyTest` passing (accepts
+  the 2 new constants). `vendor/bin/pint --test` clean (one formatting fix applied to the new Mailable).
+  **Full backend suite: 2173/2173 passing, 49,046 assertions** — the definitive check before calling this
+  done. No frontend changes were needed (the email is a pure backend side effect; no UI surfaces it).
+- Not yet committed/pushed — still batched with the other post-`d90a898` fixes awaiting the owner's go-ahead
+  (see the 2026-09-29 entry below for the full list still pending a saving point).
+
 ## 2026-09-29 — Authentication hardening batch: Google Sign-In, Forgot Password, Login OTP, security baseline (DONE)
 
 - **Owner request:** add real security to the login system — Google one-click sign-in, a forgot-password
@@ -220,6 +250,88 @@
   written into the plan file) so they can create real `GOOGLE_CLIENT_ID`/`NEXT_PUBLIC_GOOGLE_CLIENT_ID`
   values; and, before real production go-live, revisit the "Known transitional gap" noted at the top of this
   section (legacy accounts never forced through the new password-complexity rule).
+- **Google Cloud OAuth setup walked through live with the owner, real dev credentials configured, DONE.**
+  Fixed a duplicated-suffix typo in the owner's pasted Client ID (both `backend/.env` and
+  `frontend/.env.local` read `...apps.googleusercontent.com.apps.googleusercontent.com`). Confirmed the
+  backend can reach Google's real JWKS endpoint. Corrected earlier guidance: **Google Cloud Console rejects
+  any raw IP address as an Authorized JavaScript origin, LAN or public** ("must end with a public top-level
+  domain") — the setup guide's suggestion to add every origin the frontend runs from was wrong for LAN IPs;
+  only `localhost` (same machine) or a real domain works. Verified live in the owner's own browser after a
+  Google-side propagation delay: Google Sign-In signs a matched account in successfully end to end.
+  - **Two pending migrations run against the real dev DB that had been sitting unapplied since Slice 5**
+    (`add_last_otp_verified_at_to_users_table`, `create_login_otp_challenges_table`) — login itself would
+    have started failing the moment the owner's next real login hit the login-OTP code path, since neither
+    the column nor the table existed there yet. Caught and fixed only because the owner asked to test.
+  - Deleted one leftover manual test account (`westliecasuncad06work@gmail.com`, id 7101, `program_chair`,
+    created during earlier Google testing) at the owner's request, after confirming it with them first — its
+    one audit-log row (`actor_user_id` is `restrictOnDelete`) was removed first.
+- **Real, owner-corrected scope gap found via live testing: the login-OTP grandfather exemption was
+  incomplete — DONE and verified.** The owner tested login on several pre-existing accounts
+  (`chair.cbae@grc.test`, `queenie.cuenco@grc.com`) and got an OTP challenge they said should never appear for
+  accounts that already existed before this batch — the "existing accounts are not retroactively subjected to
+  the new security" principle, which Slice 1 already applied to password complexity, had not been extended to
+  login OTP (Slice 5's plan explicitly chose the opposite: "every existing user's very next login... expected,
+  one-time, not a bug"). The owner's now-explicit correction supersedes that: existing accounts must never be
+  challenged at all, not just once. Fixed by adding `auth.login_otp.enforced_after` (config +
+  `LOGIN_OTP_ENFORCED_AFTER` env var, defaulting to the exact moment this fix shipped) — `LoginOtpPolicy`
+  now treats any account whose `created_at` predates that cutoff as permanently exempt from OTP, regardless of
+  `last_otp_verified_at`. Same temporary-allowance framing as the password-complexity gap; tracked for the
+  same production-go-live revisit. Caught a real bug while building this: `User.created_at` is a plain
+  (mutable) `Carbon`, not the `CarbonImmutable` this codebase casts its own OTP columns to — an `instanceof`
+  check against the wrong class would have silently made the exemption never apply to anyone.
+  - New tests: `test_an_account_created_before_the_enforcement_cutoff_is_grandfathered_in`,
+    `test_an_account_created_after_the_enforcement_cutoff_still_requires_otp` in `LoginEndpointTest.php`.
+- **Owner-reported gap: the login rate-limit had no visible feedback on the frontend — DONE and verified.**
+  The backend's 5-attempts/60-second throttle (Slice 3) was always working correctly (verified live: attempts
+  1-5 return 401, attempt 6 returns 429 with a `Retry-After` header), but `login-page.tsx` funneled a 429 into
+  the same generic "email or password not recognized" message as a wrong password, with no indication the
+  account was temporarily locked and no way to tell when it would unlock — the user could keep typing and
+  submitting into a silently-rejecting form. Fixed: `login-page.tsx` now detects a 429 specifically, shows a
+  dedicated "Too many attempts — please wait Ns" message (reading the real `Retry-After` value off
+  `ApiClientError.retryAfterSeconds`, already plumbed through since Slice 3/4), disables the email/password
+  fields and submit button, and ticks the countdown down once a second via a `useEffect`, re-enabling the form
+  automatically at zero — no page reload needed. Owner confirmed the underlying 5-attempts/60-second numbers
+  themselves are fine as-is; only the missing UI feedback needed fixing.
+  - New test: `login-page.test.tsx`'s "locks the form and shows a countdown after a rate-limit response".
+    A second test attempting to cover the countdown ticking down to zero via `vi.useFakeTimers()` was
+    abandoned and removed — it leaked fake-timer state into every later test in the file (9 unrelated tests
+    started timing out at 10s each) even after an `afterEach(() => vi.useRealTimers())` cleanup, and this
+    codebase uses no fake timers anywhere else. Not worth the fragility for a plain one-second `setTimeout`
+    decrement; the "shows the locked state correctly" test already covers the actually-reported bug.
+  - Verified: backend **2173/2173 passing** (49,044 assertions, includes the OTP grandfather-exemption fix),
+    `pint --test` clean. Frontend: `tsc --noEmit` clean, `eslint` clean, `login-page.test.tsx` 20/20, full
+    `npx vitest run` **1419/1419 passing**.
+- **Owner request: sign-in page headline replaced with the institution's own motto, DONE.**
+  `login-page.tsx`'s institutional-panel headline changed from placeholder editorial copy ("One identity.
+  The right work in view.") to "Touching Hearts, Renewing Minds, Transforming Lives" (rendered uppercase via
+  CSS, kept normal-case in the markup for screen readers). The longer text overflowed the shared
+  `.login-purpose h2` rule (tuned for the old short headline — `max-width: 11ch`, up to `6rem` font-size),
+  clipping past the panel edge. Fixed with a new `.login-motto` modifier class (plus its own mobile
+  breakpoint override) scoped to just this headline, so `account-setup-page.tsx`/`forgot-password-page.tsx`/
+  `reset-password-page.tsx` — which share the same base class with their own short headlines — are
+  unaffected. One clause per line (`<br />` between each) mirrors the motto's own three-part structure.
+  Verified visually via Playwright at both desktop and a 375px mobile width — fits cleanly, no overflow.
+  `tsc --noEmit`/`eslint` clean, `login-page.test.tsx` still 20/20.
+- **Owner-reported bug: the Google Sign-In button sometimes disappeared entirely until a manual page
+  refresh — DONE and verified.** Root cause: `next/script` dedupes the Google Identity Services script tag by
+  `src` and does not reliably re-fire `onLoad` for a `GoogleSignInButton` instance that remounts after the
+  script was already loaded by an earlier mount (e.g. navigating away from `/login` and back via the app's own
+  client-side routing, not a full page load) — `scriptLoaded` stayed `false` forever for that mount, so the
+  button's own init effect never ran. Fixed two ways: (1) the `scriptLoaded` state now lazily initializes to
+  `true` if `window.google` is already present at mount; (2) a short-lived (200ms) polling fallback keeps
+  checking for the global directly whenever `scriptLoaded` is still `false`, self-healing within a fraction of
+  a second instead of relying solely on the `onLoad` event. Also memoized `login-page.tsx`'s
+  `handleGoogleSignedIn` with `useCallback` — previously a new function identity on every render (including
+  every one-second tick of the rate-limit countdown added earlier this session) needlessly re-ran the button's
+  init effect on an unrelated timer.
+  - Reproduced and confirmed fixed live via Playwright: navigated `/login` → landing page → `/login` again
+    using the app's own in-page links (a real SPA remount, not a hard reload) — the button now appears
+    immediately every time, matching the owner's exact reported repro ("nawawala hanggang mag-refresh").
+  - Noted, not fixed: Google's own `GSI_LOGGER` now warns `initialize() is called multiple times... only the
+    last initialized instance will be used` when the component remounts within one browser session — expected
+    and harmless per Google's own docs (a global, page-level registration naturally re-registers on an SPA
+    remount; the *last* call is what the visible button actually uses), not worth suppressing further.
+  - Verified: `tsc --noEmit`/`eslint` clean, `google-sign-in-button.test.tsx` + `login-page.test.tsx` 25/25.
 
 ## 2026-09-28 — New feature/design batch from the owner + a real classification bug (IN PROGRESS)
 

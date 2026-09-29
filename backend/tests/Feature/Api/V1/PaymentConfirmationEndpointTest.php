@@ -17,6 +17,7 @@ use App\Domain\Notifications\NotificationType;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Domain\Scheduling\SectionStatus;
+use App\Mail\EnrollmentConfirmedMail;
 use App\Models\AcademicTerm;
 use App\Models\Assessment;
 use App\Models\AssessmentItem;
@@ -35,6 +36,7 @@ use App\Models\StudentProfile;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 final class PaymentConfirmationEndpointTest extends TestCase
@@ -207,6 +209,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
     public function test_confirming_payment_transitions_enrollment_and_generates_cor(): void
     {
+        Mail::fake();
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
@@ -233,8 +236,16 @@ final class PaymentConfirmationEndpointTest extends TestCase
             'Certificate of Registration',
             EnrollmentDocument::query()->sole()->snapshot['document_title'],
         );
-        self::assertSame(AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
+        self::assertEqualsCanonicalizing(
+            [AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditAction::ENROLLMENT_CONFIRMATION_EMAIL_SENT],
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->pluck('action')->all(),
+        );
         self::assertSame(NotificationType::EnrollmentPaymentConfirmed, Notification::query()->sole()->type);
+        Mail::assertSent(
+            EnrollmentConfirmedMail::class,
+            fn (EnrollmentConfirmedMail $mail): bool => $mail->hasTo($student->user->email)
+                && $mail->documentNumber === sprintf('COR%06d', $enrollment->id),
+        );
     }
 
     public function test_confirming_payment_moves_selected_subjects_to_enrolled_but_leaves_dropped_ones_alone(): void
@@ -269,6 +280,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
 
     public function test_confirming_payment_is_idempotent_and_creates_no_duplicate(): void
     {
+        Mail::fake();
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
@@ -291,11 +303,13 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $second->assertJsonPath('data.payment.promissory_note_on_file', true);
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('enrollment_documents', 1);
-        self::assertSame(1, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
+        self::assertSame(2, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         $this->assertDatabaseCount('notifications', 1);
         self::assertSame(Payment::query()->sole()->external_reference, 'OR-000123');
         self::assertTrue(Payment::query()->sole()->promissory_note_on_file);
         self::assertSame(EnrollmentDocument::query()->count(), 1);
+        // The repeat/idempotent second call must never resend the email.
+        Mail::assertSentTimes(EnrollmentConfirmedMail::class, 1);
     }
 
     public function test_an_omitted_amount_defaults_to_the_assessed_total(): void

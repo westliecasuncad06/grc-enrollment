@@ -264,6 +264,10 @@ final class AuditAction
 
     public const LOGIN_OTP_FAILED = 'login_otp.failed';
 
+    public const ENROLLMENT_CONFIRMATION_EMAIL_SENT = 'enrollment.confirmation_email_sent';
+
+    public const ENROLLMENT_CONFIRMATION_EMAIL_SEND_FAILED = 'enrollment.confirmation_email_send_failed';
+
     /**
      * @return list<string>
      */
@@ -400,6 +404,8 @@ final class AuditAction
             self::STAFF_ACCOUNT_SETUP_INVITATION_SENT,
             self::STAFF_ACCOUNT_SETUP_INVITATION_FAILED,
             self::STAFF_ACCOUNT_ACTIVATED,
+            self::ENROLLMENT_CONFIRMATION_EMAIL_SENT,
+            self::ENROLLMENT_CONFIRMATION_EMAIL_SEND_FAILED,
         ];
     }
 }

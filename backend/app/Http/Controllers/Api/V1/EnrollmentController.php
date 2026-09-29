@@ -8,8 +8,10 @@ use App\Actions\Enrollment\ConfirmPayment;
 use App\Actions\Enrollment\ListEnrollments;
 use App\Actions\Enrollment\RequestWithdrawal;
 use App\Actions\Enrollment\ReviseEnrollmentSubjects;
+use App\Actions\Enrollment\SendEnrollmentConfirmationEmail;
 use App\Actions\Enrollment\SubmitEnrollment;
 use App\Actions\Enrollment\TransitionEnrollment;
+use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Enrollment\AdjustEnrollmentAssessmentRequest;
 use App\Http\Requests\Api\V1\Enrollment\ConfirmPaymentRequest;
@@ -172,12 +174,23 @@ final class EnrollmentController extends Controller
         ConfirmPaymentRequest $request,
         Enrollment $enrollment,
         ConfirmPayment $confirmPayment,
+        SendEnrollmentConfirmationEmail $sendConfirmationEmail,
         AuditRequestContextFactory $contextFactory,
     ): JsonResponse {
         $actor = $this->authenticatedUser($request);
         $this->authorize('confirmPayment', Enrollment::class);
 
-        $result = $confirmPayment->execute($enrollment, $request->validated(), $actor, $contextFactory->fromRequest($request));
+        $context = $contextFactory->fromRequest($request);
+        $result = $confirmPayment->execute($enrollment, $request->validated(), $actor, $context);
+
+        // Only the call that actually confirmed payment sends the email — a
+        // repeat/idempotent call (`created: false`) must never resend it.
+        if ($result['created']) {
+            $document = $result['enrollment']->documents->firstWhere('document_type', EnrollmentDocumentType::Cor);
+            if ($document !== null) {
+                $sendConfirmationEmail->handle($result['enrollment'], $document, $actor, $context);
+            }
+        }
 
         $response = PaymentConfirmationResource::make($result['enrollment'])->response($request);
         $response->setStatusCode($result['created'] ? 201 : 200);
