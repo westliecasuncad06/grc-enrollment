@@ -27,6 +27,12 @@ export function createStubGateway(
 ): AuthGateway {
   return {
     signIn: () => Promise.resolve(testSession),
+    verifyLoginOtp: () =>
+      Promise.reject(new Error("verifyLoginOtp: not implemented in stub")),
+    resendLoginOtp: () =>
+      Promise.reject(new Error("resendLoginOtp: not implemented in stub")),
+    signInWithGoogle: () =>
+      Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
     restore: () => Promise.resolve(null),
     signOut: () => Promise.resolve(),
     clearSession: () => undefined,
@@ -82,6 +88,12 @@ export function renderWithSession(
     routeParams = {},
     session = testSession,
     signIn = () => Promise.resolve(testSession),
+    verifyLoginOtp = () =>
+      Promise.reject(new Error("verifyLoginOtp: not implemented in stub")),
+    resendLoginOtp = () =>
+      Promise.reject(new Error("resendLoginOtp: not implemented in stub")),
+    signInWithGoogle = () =>
+      Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
     signOut = () => undefined,
     status = "authenticated",
     storageAvailable = true,
@@ -93,6 +105,9 @@ export function renderWithSession(
   const value: AuthContextValue = {
     session,
     signIn,
+    verifyLoginOtp,
+    resendLoginOtp,
+    signInWithGoogle,
     signOut,
     status,
     storageAvailable,

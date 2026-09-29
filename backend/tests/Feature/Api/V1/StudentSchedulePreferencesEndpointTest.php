@@ -38,7 +38,7 @@ final class StudentSchedulePreferencesEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -138,7 +138,7 @@ final class StudentSchedulePreferencesEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Faculty', 'email' => 'faculty.prefs@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => 'faculty.prefs@grc.test', 'password' => self::PASSWORD,

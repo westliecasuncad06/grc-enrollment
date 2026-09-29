@@ -109,6 +109,7 @@ final class FacultyAccountsEndpointTest extends TestCase
             'college' => $college,
             'employment_type' => $employmentType,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

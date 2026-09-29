@@ -53,7 +53,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => $name, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -78,7 +78,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -189,6 +189,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::AccountingStaff,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $enrollment = Enrollment::create([
             'student_id' => $student->id,

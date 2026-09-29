@@ -80,7 +80,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => 'student.revise@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -123,7 +123,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Program Head', 'email' => $email, 'college' => $college,
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

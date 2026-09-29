@@ -235,7 +235,7 @@ final class ScheduleProposalAuditTest extends TestCase
 
             self::assertSame(SectionStatus::Published, $alreadyPublished->refresh()->status);
 
-            $audits = AuditLog::query()->orderBy('id')->get();
+            $audits = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->orderBy('id')->get();
 
             self::assertSame(
                 [
@@ -318,7 +318,7 @@ final class ScheduleProposalAuditTest extends TestCase
             ->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'publish'])
             ->assertUnprocessable();
 
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         $this->assertDatabaseCount('notifications', 0);
         self::assertSame(ScheduleProposalStatus::Draft, $proposal->refresh()->status);
     }
@@ -336,7 +336,7 @@ final class ScheduleProposalAuditTest extends TestCase
         });
 
         $this->assertDatabaseCount('schedule_proposals', 0);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_failure_rolls_back_publication_and_every_section(): void
@@ -354,7 +354,7 @@ final class ScheduleProposalAuditTest extends TestCase
             self::assertSame(SectionStatus::Planned, $section->refresh()->status);
         }
 
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         $this->assertDatabaseCount('notifications', 0);
     }
 
@@ -386,7 +386,7 @@ final class ScheduleProposalAuditTest extends TestCase
             self::assertSame(SectionStatus::Planned, $section->refresh()->status);
         }
 
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         $this->assertDatabaseCount('notifications', 0);
     }
 
@@ -403,7 +403,7 @@ final class ScheduleProposalAuditTest extends TestCase
         ?string $reason,
         string $requestId,
     ): void {
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
 
         self::assertSame($action, $audit->action);
         self::assertSame(AuditableType::SCHEDULE_PROPOSAL, $audit->auditable_type);
@@ -460,6 +460,7 @@ final class ScheduleProposalAuditTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

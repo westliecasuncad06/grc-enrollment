@@ -120,6 +120,43 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | One-time Password Reset Codes
+    |--------------------------------------------------------------------------
+    |
+    | An already-active account's self-service password reset (see
+    | App\Support\Auth\PasswordResetCodes), the same six-digit-code-plus-
+    | guess-limit shape as `setup_codes` above but deliberately its own
+    | config key — a change to one must never silently retune the other.
+    |
+    */
+
+    'password_reset' => [
+        'expire' => (int) env('AUTH_PASSWORD_RESET_CODE_EXPIRE', 60),
+        'max_attempts' => (int) env('AUTH_PASSWORD_RESET_MAX_ATTEMPTS', 5),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Login Email OTP (Second Factor)
+    |--------------------------------------------------------------------------
+    |
+    | A six-digit email code required at login (see App\Support\Auth\
+    | LoginOtpChallenges / LoginOtpPolicy), unless the account verified one
+    | within the last `grace_minutes` — so it is not required on every single
+    | login. Per-account, not per-device, by design (auth-hardening batch,
+    | 2026-09-29, owner-delegated trade-off). `queue_kiosk` accounts never
+    | require it.
+    |
+    */
+
+    'login_otp' => [
+        'grace_minutes' => (int) env('LOGIN_OTP_GRACE_MINUTES', 30),
+        'max_attempts' => (int) env('LOGIN_OTP_MAX_ATTEMPTS', 5),
+        'challenge_ttl_minutes' => (int) env('LOGIN_OTP_CHALLENGE_TTL_MINUTES', 10),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |

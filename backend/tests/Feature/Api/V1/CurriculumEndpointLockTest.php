@@ -31,6 +31,7 @@ final class CurriculumEndpointLockTest extends TestCase
             'role' => UserRole::ProgramChair,
             'college' => CollegeCode::Ccs,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

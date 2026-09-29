@@ -11,6 +11,7 @@ import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
 import {
   fetchCurrentUser,
   login,
+  loginBehindQueueKiosk,
   logout,
 } from "@/features/services/auth-service"
 
@@ -115,9 +116,9 @@ export function useQueueKioskSession({
   const signInDevice = useCallback(
     async (credentials: Credentials) => {
       const operation = ++operationRef.current
-      let payload: Awaited<ReturnType<typeof login>>
+      let result: Awaited<ReturnType<typeof login>>
       try {
-        payload = await login({
+        result = await login({
           email: credentials.email.trim().toLowerCase(),
           password: credentials.password,
         })
@@ -127,6 +128,19 @@ export function useQueueKioskSession({
         }
         return
       }
+
+      if (result.kind === "otp_required") {
+        // A queue_kiosk account is always exempt from OTP server-side
+        // (LoginOtpPolicy), so this should be unreachable for the device
+        // role — treated as a role mismatch rather than left to crash on
+        // the absent token/user fields.
+        if (operation === operationRef.current) {
+          setState({ status: "device-login", error: deviceRoleError })
+        }
+        return
+      }
+
+      const payload = result.session
 
       if (operation !== operationRef.current) {
         revokeToken(payload.token)
@@ -166,18 +180,34 @@ export function useQueueKioskSession({
       if (state.status !== "student-login") return
       const currentDevice = state
       const operation = ++operationRef.current
-      let payload: Awaited<ReturnType<typeof login>>
+      let result: Awaited<ReturnType<typeof loginBehindQueueKiosk>>
       try {
-        payload = await login({
-          email: credentials.email.trim().toLowerCase(),
-          password: credentials.password,
-        })
+        result = await loginBehindQueueKiosk(
+          {
+            email: credentials.email.trim().toLowerCase(),
+            password: credentials.password,
+          },
+          currentDevice.kioskToken,
+        )
       } catch {
         if (operation === operationRef.current) {
           setState({ ...currentDevice, error: credentialError })
         }
         return
       }
+
+      if (result.kind === "otp_required") {
+        // The kiosk-token proof carried above makes this unreachable in
+        // practice (see LoginController::isVerifiedByKioskDevice) — surfaced
+        // as a generic credential failure rather than left to crash on the
+        // absent token/user fields.
+        if (operation === operationRef.current) {
+          setState({ ...currentDevice, error: credentialError })
+        }
+        return
+      }
+
+      const payload = result.session
 
       if (operation !== operationRef.current) {
         revokeToken(payload.token)

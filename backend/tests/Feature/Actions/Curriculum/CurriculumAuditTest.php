@@ -217,7 +217,7 @@ final class CurriculumAuditTest extends TestCase
             ])
             ->assertForbidden();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_failure_rolls_back_curriculum_creation_and_its_entire_graph(): void
@@ -341,7 +341,7 @@ final class CurriculumAuditTest extends TestCase
         array $afterValues,
         string $requestId,
     ): void {
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
 
         self::assertSame($action, $audit->action);
         self::assertSame(AuditableType::CURRICULUM, $audit->auditable_type);
@@ -370,7 +370,7 @@ final class CurriculumAuditTest extends TestCase
             self::fail('The injected audit write failure must escape the action transaction.');
         } catch (RuntimeException $exception) {
             self::assertSame('Injected audit write failure.', $exception->getMessage());
-            self::assertSame(0, AuditLog::query()->count());
+            self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         } finally {
             AuditLog::flushEventListeners();
             AuditLog::clearBootedModels();
@@ -387,6 +387,7 @@ final class CurriculumAuditTest extends TestCase
             'role' => $role,
             'college' => CollegeCode::Ccs,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => $email,

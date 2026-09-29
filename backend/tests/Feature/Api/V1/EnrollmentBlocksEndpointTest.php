@@ -58,7 +58,7 @@ final class EnrollmentBlocksEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -94,7 +94,7 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         ]);
         $faculty = User::create([
             'name' => 'Prof '.$subjectCode, 'email' => strtolower($subjectCode).'.prof@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         $section = Section::create(array_merge([
@@ -155,10 +155,10 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $plan = $this->makePlan($term, $curriculum);
-        [$subject, ] = $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
+        [$subject] = $this->makeBlockSection($term, $plan, 'IT101', 'CS101');
         CurriculumSubject::where('curriculum_id', $curriculum->id)->where('subject_id', $subject->id)->update(['semester' => '1st|2nd']);
         $student = $this->makeStudent($curriculum);
-        $registrar = User::create(['name' => 'Registrar', 'email' => 'registrar.dualsem@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $registrar = User::create(['name' => 'Registrar', 'email' => 'registrar.dualsem@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         AcademicGrade::create([
             'student_id' => $student->id, 'subject_id' => $subject->id, 'academic_term_id' => $term->id,
             'mark' => '2.00', 'status' => GradeStatus::Locked, 'encoded_by' => $registrar->id,
@@ -211,7 +211,7 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         $token = $this->tokenFor($student);
         User::create([
             'name' => 'Registrar', 'email' => 'registrar.blockpool@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         $response = $this->withToken($token)->getJson('/api/v1/enrollment-blocks?academic_term_id='.$term->id);
@@ -365,7 +365,7 @@ final class EnrollmentBlocksEndpointTest extends TestCase
         $term = $this->makeTerm();
         $registrar = User::create([
             'name' => 'Registrar', 'email' => 'registrar.blocks@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => $registrar->email, 'password' => self::PASSWORD,

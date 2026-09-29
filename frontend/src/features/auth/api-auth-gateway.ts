@@ -4,15 +4,20 @@ import type {
   AuthGateway,
   AuthSession,
   Credentials,
+  LoginOtpChallenge,
 } from "@/features/auth/auth-types"
+import { LoginOtpRequiredError } from "@/features/auth/login-otp-error"
 import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
 import { isApiClientError } from "@/features/services/api-client"
 import {
   fetchCurrentUser,
   login,
   logout,
+  resendLoginOtp as resendLoginOtpRequest,
+  verifyLoginOtp as verifyLoginOtpRequest,
   type AuthSessionPayload,
 } from "@/features/services/auth-service"
+import { loginWithGoogleCredential } from "@/features/services/google-login-service"
 
 function toSession(
   user: AuthenticatedUser,
@@ -36,12 +41,31 @@ function toSession(
 export function createApiAuthGateway(tokenStore: AuthTokenStore): AuthGateway {
   let lastWriteSucceeded = true
 
+  /** Shared by signIn/verifyLoginOtp: rejects the queue_kiosk role (it must
+   * sign in through the Device Portal) and otherwise persists the token. */
+  async function establishSession(
+    payload: AuthSessionPayload,
+  ): Promise<AuthSession> {
+    if (payload.user.role === "queue_kiosk") {
+      await logout(undefined, {
+        token: payload.token,
+        suppressUnauthorizedHandler: true,
+      }).catch(() => undefined)
+
+      throw new AuthError("QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL")
+    }
+
+    lastWriteSucceeded = tokenStore.write(payload.token)
+
+    return toSession(payload.user)
+  }
+
   return {
     async signIn(credentials: Credentials): Promise<AuthSession> {
-      let payload: AuthSessionPayload
+      let result: Awaited<ReturnType<typeof login>>
 
       try {
-        payload = await login({
+        result = await login({
           email: credentials.email.trim().toLowerCase(),
           password: credentials.password,
         })
@@ -56,18 +80,50 @@ export function createApiAuthGateway(tokenStore: AuthTokenStore): AuthGateway {
         throw cause
       }
 
-      if (payload.user.role === "queue_kiosk") {
-        await logout(undefined, {
-          token: payload.token,
-          suppressUnauthorizedHandler: true,
-        }).catch(() => undefined)
-
-        throw new AuthError("QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL")
+      if (result.kind === "otp_required") {
+        // No token was ever issued — nothing to persist or roll back.
+        throw new LoginOtpRequiredError({
+          challengeToken: result.challengeToken,
+          email: result.email,
+          expiresAt: result.expiresAt,
+        })
       }
 
-      lastWriteSucceeded = tokenStore.write(payload.token)
+      return establishSession(result.session)
+    },
 
-      return toSession(payload.user)
+    async verifyLoginOtp(
+      challengeToken: string,
+      code: string,
+    ): Promise<AuthSession> {
+      // A wrong/expired code surfaces as the API's own 422 field error
+      // (`error.errors.code`) rather than an AuthError — the OTP form
+      // applies it the same way reset-password-page applies its code error.
+      return establishSession(await verifyLoginOtpRequest(challengeToken, code))
+    },
+
+    async resendLoginOtp(challengeToken: string): Promise<LoginOtpChallenge> {
+      return resendLoginOtpRequest(challengeToken)
+    },
+
+    async signInWithGoogle(credential: string): Promise<AuthSession> {
+      let session: AuthSessionPayload
+
+      try {
+        session = await loginWithGoogleCredential(credential)
+      } catch (cause) {
+        if (isApiClientError(cause) && cause.status === 404) {
+          throw new AuthError("GOOGLE_ACCOUNT_NOT_FOUND")
+        }
+
+        if (isApiClientError(cause) && cause.status === 401) {
+          throw new AuthError("INVALID_CREDENTIALS")
+        }
+
+        throw cause
+      }
+
+      return establishSession(session)
     },
 
     persistenceAvailable(): boolean {

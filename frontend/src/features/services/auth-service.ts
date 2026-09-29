@@ -1,5 +1,7 @@
 import {
   authEnvelopeSchema,
+  loginOtpChallengeEnvelopeSchema,
+  loginResponseEnvelopeSchema,
   userEnvelopeSchema,
   type AuthenticatedUser,
 } from "@/features/schemas/auth-schema"
@@ -14,6 +16,8 @@ import {
 export const AUTH_LOGIN_PATH = "/api/v1/auth/login"
 export const AUTH_LOGOUT_PATH = "/api/v1/auth/logout"
 export const AUTH_ME_PATH = "/api/v1/auth/me"
+export const AUTH_VERIFY_LOGIN_OTP_PATH = "/api/v1/auth/login/verify-otp"
+export const AUTH_RESEND_LOGIN_OTP_PATH = "/api/v1/auth/login/resend-otp"
 
 export interface LoginCredentials {
   email: string
@@ -26,6 +30,16 @@ export interface AuthSessionPayload {
   user: AuthenticatedUser
 }
 
+export interface LoginOtpChallengePayload {
+  challengeToken: string
+  email: string
+  expiresAt: string
+}
+
+export type LoginResult =
+  | { kind: "authenticated"; session: AuthSessionPayload }
+  | ({ kind: "otp_required" } & LoginOtpChallengePayload)
+
 function contractError(cause: unknown): ApiClientError {
   return new ApiClientError({
     kind: "contract",
@@ -35,11 +49,72 @@ function contractError(cause: unknown): ApiClientError {
   })
 }
 
+function toLoginResult(payload: unknown): LoginResult {
+  const parsed = loginResponseEnvelopeSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw contractError(parsed.error)
+  }
+
+  const { data } = parsed.data
+
+  if (data.type === "login-otp-challenge") {
+    return {
+      kind: "otp_required",
+      challengeToken: data.challenge_token,
+      email: data.email,
+      expiresAt: data.expires_at,
+    }
+  }
+
+  return {
+    kind: "authenticated",
+    session: {
+      token: data.token,
+      expiresAt: data.expires_at,
+      user: data.user,
+    },
+  }
+}
+
 export async function login(
   credentials: LoginCredentials,
   signal?: AbortSignal,
+): Promise<LoginResult> {
+  return toLoginResult(await postJson(AUTH_LOGIN_PATH, credentials, signal))
+}
+
+/**
+ * The Queue Kiosk's own claim-ticket flow: a Student types their own
+ * credentials directly into an already-authenticated physical kiosk device
+ * to identify themselves. Carries the kiosk's own live token as proof of
+ * physical possession (mirrors `claimQueueTicket`'s `X-Queue-Kiosk-Token`
+ * convention) so the backend can skip the email-OTP step a walk-up kiosk has
+ * no realistic way to complete — see `LoginController::isVerifiedByKioskDevice()`.
+ */
+export async function loginBehindQueueKiosk(
+  credentials: LoginCredentials,
+  kioskToken: string,
+  signal?: AbortSignal,
+): Promise<LoginResult> {
+  return toLoginResult(
+    await postAuthenticatedJson(AUTH_LOGIN_PATH, credentials, signal, {
+      headers: { "X-Queue-Kiosk-Token": kioskToken },
+      suppressUnauthorizedHandler: true,
+    }),
+  )
+}
+
+export async function verifyLoginOtp(
+  challengeToken: string,
+  code: string,
+  signal?: AbortSignal,
 ): Promise<AuthSessionPayload> {
-  const payload = await postJson(AUTH_LOGIN_PATH, credentials, signal)
+  const payload = await postJson(
+    AUTH_VERIFY_LOGIN_OTP_PATH,
+    { challenge_token: challengeToken, code },
+    signal,
+  )
   const parsed = authEnvelopeSchema.safeParse(payload)
 
   if (!parsed.success) {
@@ -50,6 +125,28 @@ export async function login(
     token: parsed.data.data.token,
     expiresAt: parsed.data.data.expires_at,
     user: parsed.data.data.user,
+  }
+}
+
+export async function resendLoginOtp(
+  challengeToken: string,
+  signal?: AbortSignal,
+): Promise<LoginOtpChallengePayload> {
+  const payload = await postJson(
+    AUTH_RESEND_LOGIN_OTP_PATH,
+    { challenge_token: challengeToken },
+    signal,
+  )
+  const parsed = loginOtpChallengeEnvelopeSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw contractError(parsed.error)
+  }
+
+  return {
+    challengeToken: parsed.data.data.challenge_token,
+    email: parsed.data.data.email,
+    expiresAt: parsed.data.data.expires_at,
   }
 }
 

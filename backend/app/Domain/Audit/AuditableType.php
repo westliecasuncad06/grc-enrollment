@@ -86,6 +86,9 @@ final class AuditableType
 
     public const FACULTY_LOAD_OVERRIDE = 'faculty_load_override';
 
+    /** Role-agnostic — login applies to every role, unlike the role-specific *_ACCOUNT constants above. */
+    public const USER_ACCOUNT = 'user_account';
+
     /**
      * @return list<string>
      */
@@ -133,6 +136,7 @@ final class AuditableType
             self::FEE_SCHEDULE,
             self::FACULTY_LOAD_LIMIT,
             self::FACULTY_LOAD_OVERRIDE,
+            self::USER_ACCOUNT,
         ];
     }
 }

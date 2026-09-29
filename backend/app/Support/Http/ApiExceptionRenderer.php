@@ -2,7 +2,10 @@
 
 namespace App\Support\Http;
 
+use App\Domain\Identity\Exceptions\GoogleAccountNotFoundException;
 use App\Domain\Identity\Exceptions\InvalidCredentialsException;
+use App\Domain\Identity\Exceptions\InvalidGoogleCredentialException;
+use App\Domain\Identity\Exceptions\LoginOtpDeliveryFailedException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
@@ -39,6 +42,36 @@ final class ApiExceptionRenderer
                 ApiErrorCode::Unauthenticated,
                 'The provided credentials are incorrect.',
                 401,
+            );
+        }
+
+        if ($exception instanceof LoginOtpDeliveryFailedException) {
+            return ApiErrorResponse::make(
+                $request,
+                ApiErrorCode::ServerError,
+                'We could not send your verification code. Please try again in a moment.',
+                503,
+            );
+        }
+
+        if ($exception instanceof InvalidGoogleCredentialException) {
+            return ApiErrorResponse::make(
+                $request,
+                ApiErrorCode::Unauthenticated,
+                'Your Google sign-in could not be verified. Please try again.',
+                401,
+            );
+        }
+
+        // Deliberately identical whether the Google email matches no account
+        // at all or matches a Disabled one — same enumeration-safety
+        // reasoning as InvalidCredentialsException above.
+        if ($exception instanceof GoogleAccountNotFoundException) {
+            return ApiErrorResponse::make(
+                $request,
+                ApiErrorCode::NotFound,
+                $exception->getMessage(),
+                404,
             );
         }
 

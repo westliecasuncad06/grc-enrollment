@@ -1,5 +1,226 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-09-29 — Authentication hardening batch: Google Sign-In, Forgot Password, Login OTP, security baseline (DONE)
+
+- **Owner request:** add real security to the login system — Google one-click sign-in, a forgot-password
+  flow, and "all important security features so the system isn't easy to hack." Full design (6 slices,
+  owner decisions D1-D5, a Google Cloud OAuth setup guide) written to
+  `docs/superpowers/plans/2026-09-29-auth-hardening-*.md`-equivalent plan file and approved by the owner
+  via plan mode. **Known transitional gap, explicitly owner-confirmed:** existing accounts keep their
+  current password exactly as-is — the new password-complexity rule only ever applies going forward, at
+  the moment a NEW password is set (account setup, and later the new reset-password flow). This is a
+  **temporary allowance for a smooth rollout, not a permanent decision** — revisit before real production
+  go-live: decide whether every legacy account should eventually be forced through a one-time password
+  reset so everyone, not just newly-created/reset accounts, is covered by the new rules.
+- **Slice 1 — Password complexity rule for new passwords, DONE and verified:** new
+  `backend/app/Support/Auth/PasswordPolicy.php` (Laravel's own `Password::min(8)->mixedCase()->numbers()->symbols()`,
+  previously unused in this codebase), wired into `AccountSetupRequest`/`FacultyAccountSetupRequest`/`StaffAccountSetupRequest`.
+  Frontend: new `strongPasswordSchema` (`frontend/src/features/schemas/password-schema.ts`), wired into the
+  matching 3 Zod schemas (`admission-schema.ts`, `faculty-invitation-schema.ts`, `staff-invitation-schema.ts`).
+  Existing hashes/the login path/the `User` model are untouched, per design.
+  - Fixing this surfaced weak fixture passwords (e.g. `'new-secure-password'`, all-lowercase) across
+    several existing tests that POST to the 3 account-setup endpoints — updated to a compliant password in
+    `AccountSetupCodesTest.php`, `StudentProfilesEndpointTest.php`, `FacultyInvitationsEndpointTest.php`,
+    `StaffInvitationsEndpointTest.php`, and the frontend's `account-setup-page.test.tsx`/`admission-service.test.ts`.
+    **Non-obvious bug this uncovered:** several "wrong/expired code" tests asserted
+    `error.errors.code.0 === 'The setup code is invalid or expired.'` but got `null` — because that message
+    comes from the *Action* (`Activate{Student,Faculty,Staff}Account`), only reached *after* Form Request
+    validation passes; a weak password in the same payload now fails validation first, so the Action (and
+    its code-specific error) never runs. Fixed by giving every such test fixture a compliant password too,
+    so the intended "code" failure path is actually the one being exercised again.
+  - Verified: `AccountSetupCodesTest` + `StudentProfilesEndpointTest` + `FacultyInvitationsEndpointTest` +
+    `StaffInvitationsEndpointTest` = **58/58 passing** (319 assertions), including 6 new password-complexity
+    tests. `vendor/bin/pint --test` clean on every file this slice actually touched (2 pre-existing,
+    unrelated pint issues confirmed via `git stash` in `FacultyInvitationsEndpointTest.php`/
+    `StaffInvitationsEndpointTest.php` — left alone, not caused by this work). Frontend:
+    `account-setup-page.test.tsx` (9/9) + `admission-service.test.ts` all passing, `tsc --noEmit` clean,
+    `eslint` clean (one pre-existing, unrelated `no-unsafe-assignment` nearby fixed as a drive-by, zero
+    behavior change).
+- **Slice 2 — Security response headers, DONE and verified:** new
+  `backend/app/Http/Middleware/ApplySecurityHeaders.php` (X-Content-Type-Options, X-Frame-Options,
+  Referrer-Policy, a maximal CSP), appended globally in `bootstrap/app.php`. New
+  `tests/Feature/Http/SecurityHeadersTest.php`. Verified: 15/15 passing (this + `HealthEndpointTest` +
+  `CompressJsonResponseTest`, confirming no header interplay regression), `pint --test` clean.
+- **Slice 3 — Login audit logging + `AuthenticateUser`/`IssueSanctumToken` split, DONE and verified:**
+  `AuthenticateUser` now only verifies credentials (durably audits `LOGIN_FAILED` for a known account before
+  throwing, records nothing for an unknown email); new `IssueSanctumToken` action issues the token, stamps
+  `last_login_at`, and audits `LOGIN_SUCCEEDED` with `after_values.method` (`'password'` now, `'password_otp'`/
+  `'google'` once Slices 5-6 land). New `AuditAction::LOGIN_SUCCEEDED`/`LOGIN_FAILED`,
+  `AuditableType::USER_ACCOUNT`. `LoginController` updated to call both actions in sequence.
+  - **Correction found during implementation:** planned to give the rate-limit response a custom
+    non-enumerating message — turned out `ApiExceptionRenderer` already substitutes one fixed message for
+    every 429 in the app regardless of the thrown exception's own text, and that fixed message is already
+    fine, so this was reverted as dead code rather than special-cased (would have required touching shared
+    exception-rendering code other throttled routes' tests already pin an exact string to).
+  - **Also fixed:** a concurrency test (`AuthenticateUserConcurrencyTest`) spawns a real child PHP process
+    that called `AuthenticateUser::handle()` directly with the old 3-string-argument signature — updated the
+    subprocess script (`tests/Support/authenticate-user-after-observation.php`) to call both new actions in
+    sequence (mirroring `LoginController` exactly), which was actually necessary to preserve the test's real
+    intent: with the split, `AuthenticateUser` alone never issues a token, so without also calling
+    `IssueSanctumToken` the test's "a stale password must not survive to issue a token" assertion would have
+    trivially always passed for the wrong reason.
+  - Verified: `LoginEndpointTest` 19/19 (15 pre-existing unmodified + 4 new audit-logging tests),
+    `AuthenticateUserConcurrencyTest` still passing (confirms the race-safety property survived the
+    refactor), new `IssueSanctumTokenTest` 2/2, `AuditVocabularyTest`/`NotificationTypeTest`/`ApiSurfaceTest`
+    28/28 (no route-surface change), `pint --test` clean on every touched file.
+- **Slice 4 — Forgot / reset password, DONE and verified:** new `password_reset_codes` table (migration run
+  against the dev DB), `PasswordResetCode` model, `PasswordResetCodes` support class (bcrypt-hashed 6-digit
+  code, durable wrong-guess counting, race-guarded consume — a direct clone of `AccountSetupCodes`'
+  established pattern), own config block (`auth.password_reset.expire`/`max_attempts`).
+  `POST /auth/forgot-password` (`ForgotPasswordController` + `SendPasswordResetCode` action + `PasswordResetMail`)
+  always returns the identical generic 200 regardless of whether the email matches an active, non-kiosk
+  account — no account enumeration. `POST /auth/reset-password` (`ResetPasswordController` + `ResetPassword`
+  action) requires the code, applies `PasswordPolicy::rules()` to the new password, and — per D5 — deletes
+  every one of the user's existing Sanctum tokens on success, then audits `PASSWORD_RESET_COMPLETED`. New
+  `AuditAction` constants: `PASSWORD_RESET_CODE_SENT`, `PASSWORD_RESET_CODE_SEND_FAILED`,
+  `PASSWORD_RESET_COMPLETED`. Both routes added to `ApiSurfaceTest`'s exhaustive route list.
+  - Frontend: new `/forgot-password` and `/reset-password` routes (`AnonymousOnly`-guarded, same as
+    `/login`/`/account-setup`), `forgot-password-page.tsx` (single email field, always the same generic
+    success message), `reset-password-page.tsx` (structural near-clone of `account-setup-page.tsx`'s student
+    variant — email + 6-digit code + `strongPasswordSchema` password/confirm), `forgot-password-schema.ts`/
+    `reset-password-schema.ts`/`password-reset-service.ts` following the existing validate-in/validate-out
+    `.strict()` Zod + `postJson` service-module pattern. Added a "Forgot password?" link under the password
+    field on `login-page.tsx`; flipped `login-page.test.tsx`'s old "no forgot-password link exists yet"
+    negative assertion to confirm the link is now present and points at `/forgot-password`.
+  - Verified: `ForgotPasswordEndpointTest` 6/6, `ResetPasswordEndpointTest` 7/7, `PasswordResetCodesTest`
+    (Support-class test) 5/5, `pint --test` clean. Frontend: `tsc --noEmit` clean, `eslint` clean on every
+    new/touched file, `forgot-password-page.test.tsx` + `reset-password-page.test.tsx` + `login-page.test.tsx`
+    = 22/22 passing; full `npx vitest run` re-confirmed green afterwards.
+- **Slice 5 — Login email OTP (second factor), DONE and verified:** new `users.last_otp_verified_at`
+  (`timestamp`, nullable) + `login_otp_challenges` table (`dateTime` columns, matching `account_setup_codes`'
+  MariaDB `ON UPDATE CURRENT_TIMESTAMP` reasoning), `LoginOtpChallenge` model, `LoginOtpChallenges` support
+  class (six-digit bcrypt code + a SHA-256-hashed 32-byte opaque `challenge_token` — a fast lookup key, not a
+  low-entropy secret, so no bcrypt needed there), `LoginOtpPolicy` (`isRequired()`: false for `queue_kiosk`,
+  false within `auth.login_otp.grace_minutes` (default 30) of the account's last verified OTP, true
+  otherwise). `SendLoginOtp` action **does not** swallow a mail-delivery failure (unlike the account-setup/
+  password-reset invitations) — it throws `LoginOtpDeliveryFailedException` (503, wired into
+  `ApiExceptionRenderer`), since the user is actively waiting at the sign-in screen. `VerifyLoginOtp` action
+  checks the code (durably auditing `LOGIN_OTP_FAILED` on a wrong guess against a known challenge), consumes
+  it, stamps `last_otp_verified_at`, and calls `IssueSanctumToken` with `method: 'password_otp'`.
+  `LoginController` now branches on `LoginOtpPolicy::isRequired()`: returns a new `LoginOtpChallengeResource`
+  (`{type:"login-otp-challenge", otp_required:true, challenge_token, email, expires_at}`) instead of a token
+  when required. New routes `POST /auth/login/verify-otp` and `POST /auth/login/resend-otp`
+  (`VerifyLoginOtpController`/`ResendLoginOtpController`; resend rotates the challenge — old token stops
+  working). New `AuditAction` constants: `LOGIN_OTP_CHALLENGE_ISSUED`, `LOGIN_OTP_CHALLENGE_SEND_FAILED`,
+  `LOGIN_OTP_FAILED`. New config `auth.login_otp.{grace_minutes,max_attempts,challenge_ttl_minutes}`.
+  - **Real, owner-confirmed scope addition found mid-slice:** the Queue Kiosk page has a *second*, separate
+    login surface — a Student types their own real credentials directly into an already-authenticated
+    physical kiosk device to claim a queue ticket (`use-queue-kiosk-session.ts`'s `signInStudent`). Unlike
+    the shared `queue_kiosk` device credential (excluded from OTP entirely by role), this is a genuine
+    Student account login that would otherwise be OTP-gated with no realistic way to check email at a
+    walk-up kiosk. Owner chose (asked via clarifying question mid-implementation): exempt this flow from OTP,
+    verified via the same physical-possession proof `EnsureStudentQueueClaimUsesKiosk` already uses for
+    ticket claims — `LoginController` now also accepts an `X-Queue-Kiosk-Token` header; if it resolves to a
+    live, ability-scoped, Active `queue_kiosk` Sanctum token, `LoginOtpPolicy` is bypassed for that login
+    (`LoginOtpPolicy::isRequired($user, $viaVerifiedKioskDevice)`). Frontend: new
+    `loginBehindQueueKiosk()` in `auth-service.ts` (same `/auth/login` call, `postAuthenticatedJson` with the
+    kiosk's own token as the `X-Queue-Kiosk-Token` header, mirroring `claimQueueTicket`'s existing
+    convention); `use-queue-kiosk-session.ts`'s `signInStudent` now calls it instead of the plain `login()`.
+  - **Frontend rework:** `auth-schema.ts` split into `authSessionDataSchema`/`loginOtpChallengeDataSchema`
+    combined via `z.discriminatedUnion`; `auth-service.ts`'s `login()` now returns a `LoginResult` union
+    (`{kind:"authenticated"}` | `{kind:"otp_required"}`), plus new `verifyLoginOtp()`/`resendLoginOtp()`.
+    New `LoginOtpRequiredError`/`isLoginOtpRequiredError()` (`login-otp-error.ts`, sibling to `auth-error.ts`)
+    — `AuthGateway.signIn()` throws this instead of resolving when a challenge is required (no token exists
+    yet, nothing to persist). `AuthGateway`/`AuthContext` gained `verifyLoginOtp`/`resendLoginOtp`.
+    `login-page.tsx` now has an inline code-entry step (no navigation) with resend, mirroring
+    `account-setup-page.tsx`'s resend pattern; a wrong code applies the API's own 422 field error the same
+    way `reset-password-page.tsx` does. `render-app.tsx`'s `createStubGateway`/`renderWithSession` gained
+    default stubs for both new gateway methods (needed by every existing test using these helpers once the
+    interfaces grew required members) — plus 5 other files directly constructing an `AuthContextValue` for
+    tests needed the same two stub entries.
+  - **Two significant regressions found only by running the full suite (never run end-to-end since Slice 3
+    shipped) — both fixed, not carried forward:**
+    1. **~150 test files' `tokenFor()`-style helpers broke almost the entire suite (762 failures) the moment
+       real logins started succeeding again.** Every one of these helpers creates a throwaway user then logs
+       it in via the *real* `POST /auth/login` to get a bearer token for authorization tests — since a
+       freshly created user's `last_otp_verified_at` is null, every one of these calls now got an
+       OTP-challenge response instead of a token, so `withToken('')` 401'd everywhere. Fixed by adding
+       `'last_otp_verified_at' => now()` to every affected `User::create()` call (every shape: whole-line,
+       compact single-line, no-trailing-comma, parameterized-default) — a mechanical, scripted, then
+       individually-verified fix across roughly 70 test files. **This is a pre-existing test-suite
+       convention this batch could not avoid touching**; every insertion was verified syntax-valid
+       (`php -l`) and Pint-clean before the suite was re-run.
+    2. **A second, independent latent bug — present since Slice 3, never caught because the full suite was
+       never run against a real login until this slice — surfaced once (1) was fixed: ~28 test files assert
+       "exactly N audit rows" or "zero audit rows" for their own business action using a bare, unscoped
+       `AuditLog::query()`.** Once `tokenFor()` logins started actually succeeding, every one of those now
+       legitimately also produces a `LOGIN_SUCCEEDED` row, which a bare `->sole()`/`->count()`/
+       `assertDatabaseCount('audit_logs', N)`/`->orderBy()->get()` query cannot distinguish from the
+       business event under test. Fixed by scoping every such bare query to
+       `->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)` (or the query-based equivalent in place of
+       `assertDatabaseCount`, which has no filter parameter) — confirmed via the actual full-suite failure
+       log line-by-line, not applied blindly (tests correctly counting real, non-login-adjacent totals, e.g.
+       `AuditLogsEndpointTest`/`ListAuditLogsTest`/before-after delta comparisons, were left untouched).
+  - **Process note for future sessions:** running `php artisan test` (or any DB migration/pint-with-writes
+    command) concurrently with another one against the same dev/test MariaDB reliably corrupts that run's
+    results (deadlocks, "table already exists", spurious rollback-assertion failures) — confirmed the hard
+    way twice this slice. Always let one full-suite run finish before starting another, and never edit a
+    backend file while a background `php artisan test` is still in flight (a stray `git stash` mid-run once
+    briefly reverted tracked files back to HEAD while a suite was executing, invalidating that run entirely).
+  - Verified, in order, on a fully clean (no concurrent DB access) final pass: backend **2157/2157 passing**
+    (49,011 assertions), `vendor/bin/pint --test` clean on every file this slice touched (a full-repo Pint
+    sweep separately confirmed a large amount of *pre-existing*, unrelated formatting debt across
+    `scripts/*.php`/older migrations/seeders — left untouched, not caused by this batch). Frontend:
+    `tsc --noEmit` clean, `eslint` clean, new `forgot-password`-adjacent and `login-page.test.tsx` OTP-flow
+    cases all passing, full `npx vitest run` **1412/1412 passing** (3 tests in unrelated dashboard/schedule
+    workspaces flaked once under concurrent backend-suite CPU load and were individually re-confirmed
+    passing in isolation — not a regression).
+- **Slice 6 — Google Sign-In, DONE and verified. This completes the 6-slice auth-hardening batch.** New
+  composer dependency `firebase/php-jwt` (the only new backend dependency in this whole batch). New
+  `App\Support\Auth\GoogleIdTokenVerifier` interface + `JwksGoogleIdTokenVerifier` implementation (fetches
+  Google's JWKS, cached 6 hours; `JWT::decode()` validates signature/`exp`/`nbf`; `aud`/`iss`/`email_verified`
+  checked explicitly), bound in `AppServiceProvider::register()` — the one seam
+  `GoogleLoginEndpointTest` swaps for a fake. New `InvalidGoogleCredentialException` (401) and
+  `GoogleAccountNotFoundException` (404, the owner-mandated "contact Admission or the Registrar's Office"
+  message) wired into `ApiExceptionRenderer`; a Google-matched-but-Disabled or `queue_kiosk` account gets the
+  identical not-found message as a true non-match (same enumeration-safety precedent as password login).
+  New `AuthenticateWithGoogle` action verifies the token, matches the verified email to an existing Active,
+  non-`queue_kiosk` account (case-insensitive), **never creates a `User` row** (D1), stamps
+  `last_otp_verified_at` (Google's own authentication of that inbox extends the same login-OTP grace window
+  to a subsequent password login), and issues a session via `IssueSanctumToken` with `method: 'google'` —
+  reuses `LOGIN_SUCCEEDED`, no new `AuditAction` constants needed. New route `POST /auth/google`
+  (`throttle:20,1` — a coarse flood guard only; the credential itself is Google-signed and can't be
+  brute-forced). New config `services.google.client_id`; **no client secret anywhere in this flow.**
+  - Frontend: new `google-login-service.ts` (`loginWithGoogleCredential`, reuses the existing
+    `authEnvelopeSchema`). `AuthGateway`/`AuthContext` gained `signInWithGoogle`; a 404 maps to a new
+    `AuthError("GOOGLE_ACCOUNT_NOT_FOUND")` code. New `GoogleSignInButton` (`features/components/ui/`) loads
+    `https://accounts.google.com/gsi/client` via `next/script`, calls Google Identity Services'
+    `initialize()`/`renderButton()`, and shows the not-found message inline on that one error code (a generic
+    message otherwise); renders nothing when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is unset, so an unconfigured
+    environment shows no broken button. Wired into `login-page.tsx` below the password form with a plain "or"
+    divider. `render-app.tsx`'s stub gateway/context helpers and 4 other test files directly constructing an
+    `AuthGateway`/`AuthContextValue` needed a `signInWithGoogle` stub (same growing-interface pattern as
+    Slice 5's `verifyLoginOtp`/`resendLoginOtp`).
+  - **Environment quirks hit and fixed while building this, all confirmed local-machine-only, none shipped:**
+    (1) this XAMPP install's `bootstrap/cache` folder had Windows' ReadOnly directory attribute set, which
+    made every `artisan` command fail past `composer require` with a `PackageManifest` "must be present and
+    writable" error even though the folder was genuinely writable — cleared via PowerShell
+    (`(Get-Item $path).Attributes = ... -band -bnot [System.IO.FileAttributes]::ReadOnly`), a one-time local
+    fix, not a code or config change; (2) this PHP build's `openssl_pkey_new()`/`openssl_pkey_export()` can't
+    find `openssl.cnf` via their normal search path (a known XAMPP-on-Windows gap) — only
+    `JwksGoogleIdTokenVerifierTest` needs real key generation for its own throwaway test keypair, so it now
+    falls back to a couple of well-known XAMPP config paths (or `OPENSSL_CONF` if set) when the unconfigured
+    call fails, entirely inside the test itself; (3) a genuine PHP/ext-openssl engine quirk — exporting a key
+    straight into an uninitialized typed class property by reference throws once a 4th (`$options`) argument
+    is also passed to `openssl_pkey_export()` — worked around by exporting into a local variable first.
+  - **A real, owner-confirmed scope question resolved mid-slice:** none this time (D1–D5 covered Google
+    Sign-In completely as originally scoped).
+  - **One real pre-existing gap this slice's full-suite run caught:** `auth-service.test.ts`'s own
+    `login()` unit test still asserted the flat pre-Slice-5 return shape (`{token, expiresAt, user}`) rather
+    than the discriminated-union shape (`{kind: "authenticated", session: {...}}`) Slice 5 introduced —
+    missed at the time because that test wasn't in any of Slice 5's touched-file runs. Fixed here.
+  - Verified, in order, on a fully clean final pass: backend **2171/2171 passing** (49,041 assertions),
+    `vendor/bin/pint --test` clean on every file this batch actually touched (a repo-wide sweep separately
+    reconfirmed the same pre-existing, unrelated formatting debt noted after Slice 5 — still untouched, still
+    not caused by this work). Frontend: `tsc --noEmit` clean, `eslint` clean, new
+    `google-sign-in-button.test.tsx` (5 cases) and a `login-page.test.tsx` Google-not-found case all passing,
+    full `npx vitest run` **1418/1418 passing**.
+- **This closes out the entire 6-slice authentication-hardening batch approved 2026-09-29.** Remaining
+  follow-up, tracked and deliberately not done now: hand the owner the Google Cloud OAuth setup guide (already
+  written into the plan file) so they can create real `GOOGLE_CLIENT_ID`/`NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+  values; and, before real production go-live, revisit the "Known transitional gap" noted at the top of this
+  section (legacy accounts never forced through the new password-complexity rule).
+
 ## 2026-09-28 — New feature/design batch from the owner + a real classification bug (IN PROGRESS)
 
 - **Saving point: commit `68f34d3` pushed to `origin/main`** (65 files, owner-requested). Deliberately NOT

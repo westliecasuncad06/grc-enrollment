@@ -60,7 +60,7 @@ final class ReplaceSubjectOfferingsAuditTest extends TestCase
             ])
             ->assertOk();
 
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
 
         self::assertSame(AuditAction::SUBJECT_OFFERINGS_REPLACED, $audit->action);
         self::assertSame(AuditableType::SUBJECT_OFFERING, $audit->auditable_type);
@@ -103,7 +103,7 @@ final class ReplaceSubjectOfferingsAuditTest extends TestCase
             'offerings' => [],
         ])->assertForbidden();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_failure_rolls_back_the_entire_replacement(): void
@@ -150,7 +150,7 @@ final class ReplaceSubjectOfferingsAuditTest extends TestCase
             AuditLog::clearBootedModels();
         }
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         $this->assertDatabaseHas('subject_offerings', ['id' => $existing->id, 'min_section_capacity' => 10]);
         $this->assertDatabaseCount('subject_offerings', 1);
     }
@@ -189,6 +189,7 @@ final class ReplaceSubjectOfferingsAuditTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => $email,

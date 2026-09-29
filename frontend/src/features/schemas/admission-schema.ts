@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { strongPasswordSchema } from "@/features/schemas/password-schema"
+
 export const enrollmentCategorySchema = z.enum(["regular", "irregular"])
 export const studentTypeSchema = z.enum(["freshman", "transferee"])
 export const financialStatusSchema = z.enum(["scholar", "payee"])
@@ -237,7 +239,7 @@ export const accountSetupSchema = z
       .string()
       .trim()
       .regex(/^[0-9]{6}$/, "Enter the 6-digit code from your email."),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
     password_confirmation: z.string().min(8),
   })
   .strict()

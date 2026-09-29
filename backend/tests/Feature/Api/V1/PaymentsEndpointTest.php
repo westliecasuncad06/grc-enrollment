@@ -47,7 +47,7 @@ final class PaymentsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -70,7 +70,7 @@ final class PaymentsEndpointTest extends TestCase
         $accountant = User::query()->where('role', UserRole::AccountingStaff)->first()
             ?? User::create([
                 'name' => 'Test Accounting', 'email' => 'accounting.payments.setup@grc.test',
-                'password' => self::PASSWORD, 'role' => UserRole::AccountingStaff, 'status' => UserStatus::Active,
+                'password' => self::PASSWORD, 'role' => UserRole::AccountingStaff, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
             ]);
 
         return Payment::create([
@@ -86,7 +86,7 @@ final class PaymentsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

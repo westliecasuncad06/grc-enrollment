@@ -62,7 +62,7 @@ final class LectureLabAdjacencyEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Program Head', 'email' => $email, 'college' => $college,
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -128,7 +128,7 @@ final class LectureLabAdjacencyEndpointTest extends TestCase
 
         $noCollege = User::create([
             'name' => 'No College', 'email' => 'head.nocollege.adj@grc.test', 'college' => null,
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => $noCollege->email, 'password' => self::PASSWORD,
@@ -141,7 +141,7 @@ final class LectureLabAdjacencyEndpointTest extends TestCase
     {
         $student = User::create([
             'name' => 'Student', 'email' => 'student.adjacency@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => $student->email, 'password' => self::PASSWORD,

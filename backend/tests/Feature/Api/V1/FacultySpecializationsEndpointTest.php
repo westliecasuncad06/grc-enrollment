@@ -27,6 +27,7 @@ final class FacultySpecializationsEndpointTest extends TestCase
             'role' => UserRole::Faculty,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         $token = (string) $this->postJson('/api/v1/auth/login', [
@@ -58,6 +59,7 @@ final class FacultySpecializationsEndpointTest extends TestCase
             'role' => UserRole::ProgramChair,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         $token = (string) $this->postJson('/api/v1/auth/login', [

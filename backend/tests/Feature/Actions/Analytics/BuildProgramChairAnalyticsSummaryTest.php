@@ -61,6 +61,7 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Student,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -109,6 +110,7 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
             'role' => UserRole::ProgramChair,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 
@@ -120,6 +122,7 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::RegistrarHead,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 
@@ -394,7 +397,7 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
 
         $dean = User::create([
             'name' => 'Dean', 'email' => 'dean.analytics@grc.test', 'password' => self::PASSWORD,
-            'role' => UserRole::Dean, 'status' => UserStatus::Active,
+            'role' => UserRole::Dean, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $this->withToken($this->tokenFor($dean))
             ->getJson('/api/v1/dashboards/program-chair-analytics-summary')
@@ -472,7 +475,7 @@ final class BuildProgramChairAnalyticsSummaryTest extends TestCase
 
         $chair = User::create([
             'name' => 'No College Chair', 'email' => 'no-college.chair@grc.test', 'password' => self::PASSWORD,
-            'role' => UserRole::ProgramChair, 'college' => null, 'status' => UserStatus::Active,
+            'role' => UserRole::ProgramChair, 'college' => null, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         $this->withToken($this->tokenFor($chair))

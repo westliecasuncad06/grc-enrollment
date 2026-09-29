@@ -36,6 +36,7 @@ final class FacultySubjectPreferencesEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         $token = (string) $this->postJson('/api/v1/auth/login', [
@@ -82,7 +83,7 @@ final class FacultySubjectPreferencesEndpointTest extends TestCase
             'action' => AuditAction::FACULTY_SUBJECT_PREFERENCE_CREATED,
             'auditable_id' => $response->json('data.id'),
         ]);
-        self::assertSame(1, AuditLog::query()->count());
+        self::assertSame(1, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_a_non_faculty_role_cannot_create_a_preference(): void

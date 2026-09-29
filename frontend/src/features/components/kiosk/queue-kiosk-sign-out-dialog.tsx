@@ -37,13 +37,20 @@ export function QueueKioskSignOutDialog({
     setLoading(true)
     setError(null)
     try {
-      const payload = await login({
+      const result = await login({
         email: kioskEmail.trim().toLowerCase(),
         password,
       })
+      // A queue_kiosk account is always exempt from OTP server-side, so this
+      // should never resolve as a challenge — treated as a failed
+      // verification rather than left to crash on the absent token field.
+      if (result.kind === "otp_required") {
+        setError("Incorrect password. Device sign-out aborted.")
+        return
+      }
       // Revoke the verification token
       void logout(undefined, {
-        token: payload.token,
+        token: result.session.token,
         suppressUnauthorizedHandler: true,
       }).catch(() => undefined)
       setPassword("")

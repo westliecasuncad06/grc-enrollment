@@ -37,7 +37,7 @@ final class AttritionAndHonorsEndpointsTest extends TestCase
 
     private function user(UserRole $role, string $email): User
     {
-        return User::create(['name' => $role->value, 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active]);
+        return User::create(['name' => $role->value, 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
     }
 
     private function token(User $user): string

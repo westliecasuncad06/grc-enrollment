@@ -37,8 +37,8 @@ final class AccountSetupCodesTest extends TestCase
         return [
             'email' => $user->email,
             'code' => $code,
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ];
     }
 
@@ -164,6 +164,54 @@ final class AccountSetupCodesTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
         $this->assertSame(UserStatus::Disabled, $user->fresh()->status);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function weakPasswordProvider(): array
+    {
+        return [
+            'too short' => ['Short1!'],
+            'missing uppercase' => ['new-secure-password1!'],
+            'missing lowercase' => ['NEW-SECURE-PASSWORD1!'],
+            'missing a number' => ['New-Secure-Password!'],
+            'missing a symbol' => ['NewSecurePassword1'],
+        ];
+    }
+
+    /**
+     * @dataProvider weakPasswordProvider
+     */
+    public function test_a_password_that_does_not_meet_the_complexity_rule_is_rejected(string $weakPassword): void
+    {
+        $user = $this->pendingStudent();
+        $code = app(AccountSetupCodes::class)->issue($user);
+
+        $response = $this->postJson('/api/v1/auth/account-setup', [
+            'email' => $user->email,
+            'code' => $code,
+            'password' => $weakPassword,
+            'password_confirmation' => $weakPassword,
+        ]);
+
+        $response->assertUnprocessable();
+        self::assertArrayHasKey('password', $response->json('error.errors'));
+        // A rejected password must never consume the one-time code — the
+        // student can simply retry with a stronger password.
+        $this->assertSame(UserStatus::Disabled, $user->fresh()->status);
+        $this->assertSame(1, AccountSetupCode::query()->where('user_id', $user->id)->count());
+    }
+
+    public function test_a_password_meeting_every_complexity_class_is_accepted(): void
+    {
+        $user = $this->pendingStudent();
+        $code = app(AccountSetupCodes::class)->issue($user);
+
+        $this->postJson('/api/v1/auth/account-setup', $this->activationPayload($user, $code))
+            ->assertOk();
+
+        $this->assertSame(UserStatus::Active, $user->fresh()->status);
     }
 
     public function test_the_endpoint_rejects_a_code_that_is_not_six_digits(): void

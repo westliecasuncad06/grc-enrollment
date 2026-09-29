@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { strongPasswordSchema } from "@/features/schemas/password-schema"
+
 export const facultyInvitationSchema = z
   .object({
     type: z.literal("faculty_invitation"),
@@ -36,7 +38,7 @@ export const facultyAccountSetupSchema = z
     name: z.string().trim().min(1),
     college: z.enum(["ccs", "coe", "coa", "cbae"]).optional().nullable(),
     masters_degree: z.string().trim().max(255).optional().nullable(),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
     password_confirmation: z.string().min(8),
   })
   .strict()

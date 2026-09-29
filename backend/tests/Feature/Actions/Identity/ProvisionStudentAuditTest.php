@@ -106,7 +106,7 @@ final class ProvisionStudentAuditTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['email' => 'denied.student@grc.test']);
         $this->assertDatabaseCount('student_profiles', 0);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_validation_rejection_creates_no_student_or_audit(): void
@@ -128,7 +128,7 @@ final class ProvisionStudentAuditTest extends TestCase
 
         $this->assertDatabaseMissing('users', ['email' => 'invalid.student@grc.test']);
         $this->assertDatabaseCount('student_profiles', 0);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_failure_rolls_back_both_user_and_student_profile(): void
@@ -167,7 +167,7 @@ final class ProvisionStudentAuditTest extends TestCase
         self::assertSame('Injected student audit write failure.', $caughtException->getMessage());
         $this->assertDatabaseMissing('users', ['email' => 'rollback.student@grc.test']);
         $this->assertDatabaseMissing('student_profiles', ['student_number' => '2027-08-30002']);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     /** @return array{User, string} */
@@ -179,6 +179,7 @@ final class ProvisionStudentAuditTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => $email,

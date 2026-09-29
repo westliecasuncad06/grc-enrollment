@@ -33,6 +33,7 @@ final class ArchiveAndCreateNextTermTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

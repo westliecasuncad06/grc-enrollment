@@ -54,7 +54,7 @@ final class AcademicRecordEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -79,7 +79,7 @@ final class AcademicRecordEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return $this->tokenFor($user);
@@ -89,7 +89,7 @@ final class AcademicRecordEndpointTest extends TestCase
     {
         $professor = User::firstOrCreate(
             ['email' => 'prof.academicrecord@grc.test'],
-            ['name' => 'Prof', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active],
+            ['name' => 'Prof', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()],
         );
         $section = Section::create([
             'academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'A',
@@ -245,7 +245,7 @@ final class AcademicRecordEndpointTest extends TestCase
         $otherStudent->user->update(['name' => 'Alex Cruz']);
         $chair = User::create([
             'name' => 'Chair', 'email' => 'chair.search@grc.test', 'password' => self::PASSWORD,
-            'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'college' => CollegeCode::Ccs,
+            'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(), 'college' => CollegeCode::Ccs,
         ]);
 
         $response = $this->withToken($this->tokenFor($chair))

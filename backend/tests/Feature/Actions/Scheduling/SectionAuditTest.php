@@ -173,7 +173,7 @@ final class SectionAuditTest extends TestCase
             ])
             ->assertForbidden();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_failure_rolls_back_section_creation(): void
@@ -257,7 +257,7 @@ final class SectionAuditTest extends TestCase
         array $afterValues,
         string $requestId,
     ): void {
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
 
         self::assertSame($action, $audit->action);
         self::assertSame(AuditableType::SECTION, $audit->auditable_type);
@@ -286,7 +286,7 @@ final class SectionAuditTest extends TestCase
             self::fail('The injected audit write failure must escape the action transaction.');
         } catch (RuntimeException $exception) {
             self::assertSame('Injected audit write failure.', $exception->getMessage());
-            self::assertSame(0, AuditLog::query()->count());
+            self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         } finally {
             AuditLog::flushEventListeners();
             AuditLog::clearBootedModels();
@@ -316,6 +316,7 @@ final class SectionAuditTest extends TestCase
             // denies section writes to a chair with no college.
             'college' => $role === UserRole::ProgramChair ? CollegeCode::Ccs : null,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

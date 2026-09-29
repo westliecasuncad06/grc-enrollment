@@ -321,6 +321,7 @@ final class NotificationsEndpointTest extends TestCase
             'password' => 'irrelevant-password',
             'role' => UserRole::Student,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

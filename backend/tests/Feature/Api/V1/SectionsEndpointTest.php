@@ -36,6 +36,7 @@ final class SectionsEndpointTest extends TestCase
             // denies section writes to a chair with no college.
             'college' => $role === UserRole::ProgramChair ? CollegeCode::Ccs : null,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -118,7 +119,7 @@ final class SectionsEndpointTest extends TestCase
         for ($i = $from; $i < $to; $i++) {
             $professor = User::create([
                 'name' => 'Prof '.$i, 'email' => "prof.sectionquery{$i}@grc.test",
-                'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+                'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
             ]);
             Section::create([
                 'academic_term_id' => $term->id, 'subject_id' => $this->makeSubject('SQ'.(100 + $i))->id,
@@ -150,6 +151,7 @@ final class SectionsEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Faculty,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $otherFaculty = User::create([
             'name' => 'Other Faculty',
@@ -157,6 +159,7 @@ final class SectionsEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Faculty,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         $ownPublished = Section::create([
@@ -241,7 +244,7 @@ final class SectionsEndpointTest extends TestCase
         $this->assertDatabaseHas('sections', ['section_code' => 'A', 'capacity' => 40]);
         self::assertSame(
             AuditAction::SECTION_CREATED,
-            AuditLog::query()->sole()->action,
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action,
         );
     }
 
@@ -291,7 +294,7 @@ final class SectionsEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         $this->assertDatabaseMissing('sections', ['section_code' => 'A']);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_the_same_section_code_cannot_repeat_for_one_subject_in_one_term(): void
@@ -321,7 +324,7 @@ final class SectionsEndpointTest extends TestCase
         $term = $this->makeTerm();
         $professor = User::create([
             'name' => 'Professor', 'email' => 'professor.conflict@grc.test',
-            'password' => 'irrelevant', 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => 'irrelevant', 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = $this->tokenFor(UserRole::ProgramChair, 'chair.conflict@grc.test');
 
@@ -350,7 +353,7 @@ final class SectionsEndpointTest extends TestCase
         $term = $this->makeTerm();
         $professor = User::create([
             'name' => 'Professor', 'email' => 'professor.nonoverlap@grc.test',
-            'password' => 'irrelevant', 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => 'irrelevant', 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = $this->tokenFor(UserRole::ProgramChair, 'chair.nonoverlap@grc.test');
 
@@ -403,7 +406,7 @@ final class SectionsEndpointTest extends TestCase
         $subject = $this->makeSubject('CS101');
         $professor = User::create([
             'name' => 'Professor', 'email' => 'professor.selfupdate@grc.test',
-            'password' => 'irrelevant', 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => 'irrelevant', 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = $this->tokenFor(UserRole::ProgramChair, 'chair.selfupdate@grc.test');
 
@@ -439,7 +442,7 @@ final class SectionsEndpointTest extends TestCase
 
         $response->assertForbidden();
         $this->assertDatabaseHas('sections', ['id' => $section->id, 'capacity' => 40]);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_cannot_assign_overlapping_schedule_to_different_subjects_in_same_block_section(): void

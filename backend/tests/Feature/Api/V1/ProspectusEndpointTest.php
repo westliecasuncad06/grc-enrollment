@@ -68,7 +68,7 @@ final class ProspectusEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -93,7 +93,7 @@ final class ProspectusEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return $this->tokenFor($user);
@@ -120,7 +120,7 @@ final class ProspectusEndpointTest extends TestCase
         $this->placeSubject($curriculum, $taken, 1, '1st');
         $this->placeSubject($curriculum, $untaken, 1, '2nd');
         $student = $this->makeStudent($curriculum);
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.prospectus@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.prospectus@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         AcademicGrade::create([
             'student_id' => $student->id, 'subject_id' => $taken->id, 'academic_term_id' => $term->id,
             'mark' => '1.75', 'status' => GradeStatus::Locked, 'encoded_by' => $professor->id,
@@ -198,7 +198,7 @@ final class ProspectusEndpointTest extends TestCase
         $student = $this->makeStudent($target, 'migrated.prospectus@grc.test');
         $chair = User::create([
             'name' => 'Chair', 'email' => 'chair.migrated.prospectus@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $grade = AcademicGrade::create([
             'student_id' => $student->id, 'subject_id' => $oldSubject->id, 'academic_term_id' => $term->id,
@@ -310,7 +310,7 @@ final class ProspectusEndpointTest extends TestCase
         $curriculum = $this->makeCurriculum();
         $unplacedSubject = $this->makeSubject('TRANSFER101');
         $student = $this->makeStudent($curriculum);
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.unplaced@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.unplaced@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         AcademicGrade::create([
             'student_id' => $student->id, 'subject_id' => $unplacedSubject->id, 'academic_term_id' => $term->id,
             'mark' => '2.00', 'status' => GradeStatus::Locked, 'encoded_by' => $professor->id,

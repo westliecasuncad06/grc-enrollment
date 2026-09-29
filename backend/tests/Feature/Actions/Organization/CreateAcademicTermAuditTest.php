@@ -36,7 +36,7 @@ final class CreateAcademicTermAuditTest extends TestCase
 
         self::assertSame(4, AcademicTermCollegeWorkflow::where('academic_term_id', $termId)->count());
 
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
 
         self::assertSame(AuditAction::ACADEMIC_TERM_CREATED, $audit->action);
         self::assertSame(AuditableType::ACADEMIC_TERM, $audit->auditable_type);
@@ -73,7 +73,7 @@ final class CreateAcademicTermAuditTest extends TestCase
             ->postJson('/api/v1/academic-terms', [])
             ->assertUnprocessable();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_forbidden_creation_requests_do_not_create_audit_rows(): void
@@ -85,7 +85,7 @@ final class CreateAcademicTermAuditTest extends TestCase
             ->postJson('/api/v1/academic-terms', $this->validPayload())
             ->assertForbidden();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_creation_failure_rolls_back_the_term_creation(): void
@@ -117,7 +117,7 @@ final class CreateAcademicTermAuditTest extends TestCase
         }
 
         self::assertSame(0, AcademicTerm::query()->count());
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     /**
@@ -146,6 +146,7 @@ final class CreateAcademicTermAuditTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

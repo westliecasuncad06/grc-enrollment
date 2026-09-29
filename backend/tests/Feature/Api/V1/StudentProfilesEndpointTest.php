@@ -33,6 +33,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -232,14 +233,14 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $this->postJson('/api/v1/auth/login', [
             'email' => 'pending.student@grc.test',
-            'password' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
         ])->assertUnauthorized();
 
         $this->postJson('/api/v1/auth/account-setup', [
             'email' => 'pending.student@grc.test',
             'code' => $setupCode,
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertOk()
             ->assertJsonPath('data.type', 'account-setup')
             ->assertJsonPath('data.status', 'active')
@@ -255,14 +256,14 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $this->postJson('/api/v1/auth/login', [
             'email' => 'pending.student@grc.test',
-            'password' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
         ])->assertOk();
 
         $this->postJson('/api/v1/auth/account-setup', [
             'email' => 'pending.student@grc.test',
             'code' => $setupCode,
-            'password' => 'another-secure-password',
-            'password_confirmation' => 'another-secure-password',
+            'password' => 'Another-Secure-Password1!',
+            'password_confirmation' => 'Another-Secure-Password1!',
         ])->assertUnprocessable();
     }
 
@@ -299,8 +300,8 @@ final class StudentProfilesEndpointTest extends TestCase
             $this->postJson('/api/v1/auth/account-setup', [
                 'email' => 'expiring.student@grc.test',
                 'code' => $code,
-                'password' => 'new-secure-password',
-                'password_confirmation' => 'new-secure-password',
+                'password' => 'New-Secure-Password1!',
+                'password_confirmation' => 'New-Secure-Password1!',
             ])->assertUnprocessable()
                 ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
         }
@@ -464,7 +465,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         $this->assertDatabaseMissing('users', ['email' => 'blocked.student@grc.test']);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_provisioning_fails_cleanly_when_no_curriculum_covers_the_entry_year(): void
@@ -537,7 +538,7 @@ final class StudentProfilesEndpointTest extends TestCase
     public function test_duplicate_email_is_rejected(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
-        User::create(['name' => 'Existing', 'email' => 'existing@grc.test', 'password' => 'irrelevant', 'role' => UserRole::Student, 'status' => UserStatus::Active]);
+        User::create(['name' => 'Existing', 'email' => 'existing@grc.test', 'password' => 'irrelevant', 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.dup@grc.test');
 
         $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
@@ -554,7 +555,7 @@ final class StudentProfilesEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     /**
@@ -569,7 +570,7 @@ final class StudentProfilesEndpointTest extends TestCase
 
         $student = User::create([
             'name' => 'Reader Student', 'email' => 'reader.student@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         StudentProfile::create([
             'user_id' => $student->id, 'student_number' => 'STU-2027-0005',
@@ -593,14 +594,14 @@ final class StudentProfilesEndpointTest extends TestCase
     {
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
 
-        $studentA = User::create(['name' => 'A', 'email' => 'student.a@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active]);
+        $studentA = User::create(['name' => 'A', 'email' => 'student.a@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         StudentProfile::create([
             'user_id' => $studentA->id, 'student_number' => 'STU-A', 'program_id' => $program->id,
             'curriculum_id' => $curriculum->id, 'year_level' => 1,
             'admission_status' => 'admitted', 'academic_standing' => 'good',
         ]);
 
-        $studentB = User::create(['name' => 'B', 'email' => 'student.b@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active]);
+        $studentB = User::create(['name' => 'B', 'email' => 'student.b@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         StudentProfile::create([
             'user_id' => $studentB->id, 'student_number' => 'STU-B', 'program_id' => $program->id,
             'curriculum_id' => $curriculum->id, 'year_level' => 3,

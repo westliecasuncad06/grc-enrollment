@@ -33,6 +33,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property UserStatus $status
  * @property ?string $deactivation_reason
  * @property ?CarbonImmutable $last_login_at
+ * @property ?CarbonImmutable $last_otp_verified_at
  * @property ?CarbonImmutable $account_setup_completed_at
  * @property ?CarbonImmutable $account_setup_invitation_sent_at
  * @property ?CarbonImmutable $account_setup_invitation_failed_at
@@ -64,6 +65,7 @@ final class User extends Authenticatable implements CanResetPasswordContract
         'status',
         'deactivation_reason',
         'last_login_at',
+        'last_otp_verified_at',
         'account_setup_completed_at',
         'account_setup_invitation_sent_at',
         'account_setup_invitation_failed_at',
@@ -101,6 +103,7 @@ final class User extends Authenticatable implements CanResetPasswordContract
             'employment_type' => FacultyEmploymentType::class,
             'status' => UserStatus::class,
             'last_login_at' => 'immutable_datetime',
+            'last_otp_verified_at' => 'immutable_datetime',
             'account_setup_completed_at' => 'immutable_datetime',
             'account_setup_invitation_sent_at' => 'immutable_datetime',
             'account_setup_invitation_failed_at' => 'immutable_datetime',

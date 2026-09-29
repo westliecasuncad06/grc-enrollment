@@ -40,4 +40,20 @@ return [
         'timeout' => (int) env('PREDICTION_SERVICE_TIMEOUT', 30),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Google Sign-In (auth-hardening batch, 2026-09-29)
+    |--------------------------------------------------------------------------
+    |
+    | Google Identity Services hands the frontend a signed ID token directly;
+    | the backend only ever checks its signature and this Client ID as the
+    | expected audience (see App\Support\Auth\JwksGoogleIdTokenVerifier).
+    | There is no client secret anywhere in this flow.
+    |
+    */
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+    ],
+
 ];

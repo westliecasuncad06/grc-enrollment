@@ -158,8 +158,8 @@ describe("admission-service", () => {
       setupStudentAccount({
         email: profile.email,
         code: "123456",
-        password: "secure-password",
-        password_confirmation: "secure-password",
+        password: "New-Secure-Password1!",
+        password_confirmation: "New-Secure-Password1!",
       }),
     ).resolves.toBe("active")
     await decideProfileChangeRequest(7, {

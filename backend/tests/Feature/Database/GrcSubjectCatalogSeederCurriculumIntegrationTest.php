@@ -4,7 +4,9 @@ namespace Tests\Feature\Database;
 
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AcademicTerm;
 use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
@@ -31,14 +33,14 @@ final class GrcSubjectCatalogSeederCurriculumIntegrationTest extends TestCase
 
         $program = Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active, 'college' => 'ccs']);
         // A curriculum is created against the current or latest academic term.
-        \App\Models\AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => \App\Domain\Organization\AcademicTermStatus::SemesterOngoing, 'starts_at' => '2026-08-01']);
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st', 'status' => AcademicTermStatus::SemesterOngoing, 'starts_at' => '2026-08-01']);
 
         $intro = Subject::where('code', 'ITC')->sole();
         $hardware = Subject::where('code', 'ITP1')->sole();
 
         User::create([
             'name' => 'Chair', 'email' => 'chair.ccs@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'college' => 'ccs', 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'college' => 'ccs', 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => 'chair.ccs@grc.test', 'password' => self::PASSWORD,

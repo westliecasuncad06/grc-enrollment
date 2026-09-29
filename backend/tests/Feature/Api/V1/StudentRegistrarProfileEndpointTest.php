@@ -29,7 +29,7 @@ final class StudentRegistrarProfileEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -47,7 +47,7 @@ final class StudentRegistrarProfileEndpointTest extends TestCase
         ]);
         $user = User::create([
             'name' => 'Sample Student', 'email' => 'sample.student@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([

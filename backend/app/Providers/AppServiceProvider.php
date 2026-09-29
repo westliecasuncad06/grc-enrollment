@@ -15,6 +15,8 @@ use App\Policies\ItControlPolicy;
 use App\Policies\SectionPolicy;
 use App\Policies\StuckEnrollmentPolicy;
 use App\Policies\StudentProfilePolicy;
+use App\Support\Auth\GoogleIdTokenVerifier;
+use App\Support\Auth\JwksGoogleIdTokenVerifier;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\LazyLoadingViolationException;
 use Illuminate\Support\Facades\Gate;
@@ -36,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
             config('enrollment.grading.comparison'),
             config('enrollment.grading.special_marks', []),
         ));
+
+        // The one seam GoogleLoginEndpointTest swaps for a fake — no test in
+        // the suite contacts Google except JwksGoogleIdTokenVerifierTest,
+        // which fakes the HTTP layer instead of this binding.
+        $this->app->bind(GoogleIdTokenVerifier::class, JwksGoogleIdTokenVerifier::class);
     }
 
     /**

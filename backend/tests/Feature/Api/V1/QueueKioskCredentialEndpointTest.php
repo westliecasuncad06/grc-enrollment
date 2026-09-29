@@ -51,7 +51,7 @@ final class QueueKioskCredentialEndpointTest extends TestCase
                 'password' => 'current-pass',
             ]]);
 
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
         self::assertSame($actor->id, $audit->actor_user_id);
         self::assertSame(AuditAction::QUEUE_KIOSK_CREDENTIAL_VIEWED, $audit->action);
         self::assertSame(AuditableType::QUEUE_KIOSK_CREDENTIAL, $audit->auditable_type);
@@ -99,7 +99,7 @@ final class QueueKioskCredentialEndpointTest extends TestCase
         self::assertSame($oldCiphertext, $credential->fresh()?->secret_ciphertext);
         self::assertSame($oldUpdater, $credential->fresh()?->updated_by);
         self::assertSame($oldTokenIds, $kiosk->tokens()->pluck('id')->all());
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_accounting_staff_rotation_updates_both_secret_representations_revokes_kiosk_tokens_and_audits_safe_metadata(): void
@@ -126,7 +126,7 @@ final class QueueKioskCredentialEndpointTest extends TestCase
         self::assertSame('new-pass', Crypt::decryptString($credential->fresh()->secret_ciphertext));
         self::assertSame(0, $kiosk->fresh()->tokens()->count());
 
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
         self::assertSame(AuditAction::QUEUE_KIOSK_PASSWORD_CHANGED, $audit->action);
         self::assertSame(AuditableType::QUEUE_KIOSK_CREDENTIAL, $audit->auditable_type);
         self::assertSame([
@@ -184,7 +184,7 @@ final class QueueKioskCredentialEndpointTest extends TestCase
         self::assertSame($oldCiphertext, $credential->fresh()?->secret_ciphertext);
         self::assertSame($priorUpdater->id, $credential->fresh()?->updated_by);
         self::assertSame($oldTokenIds, $kiosk->tokens()->pluck('id')->all());
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     /**
@@ -220,6 +220,7 @@ final class QueueKioskCredentialEndpointTest extends TestCase
             'password' => 'current-pass',
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

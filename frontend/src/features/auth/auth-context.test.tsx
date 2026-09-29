@@ -18,6 +18,12 @@ const validSession: AuthSession = {
 function createGateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
   return {
     signIn: () => Promise.resolve(validSession),
+    verifyLoginOtp: () =>
+      Promise.reject(new Error("verifyLoginOtp: not implemented in stub")),
+    resendLoginOtp: () =>
+      Promise.reject(new Error("resendLoginOtp: not implemented in stub")),
+    signInWithGoogle: () =>
+      Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
     restore: () => Promise.resolve(null),
     signOut: () => Promise.resolve(),
     clearSession: () => undefined,

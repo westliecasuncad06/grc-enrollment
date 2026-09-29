@@ -87,7 +87,7 @@ final class EnrollmentsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => 'student.enroll@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -130,7 +130,7 @@ final class EnrollmentsEndpointTest extends TestCase
                 'room' => 'LAB-1',
                 'professor_id' => User::create([
                     'name' => 'Prof '.$subjectCode, 'email' => strtolower($subjectCode).'.prof@grc.test',
-                    'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+                    'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
                 ])->id,
                 'capacity' => 40,
                 'is_block_exclusive' => true,
@@ -152,7 +152,7 @@ final class EnrollmentsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Another Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -170,7 +170,7 @@ final class EnrollmentsEndpointTest extends TestCase
     {
         User::create([
             'name' => $role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -212,7 +212,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $section = $this->makeSection($term, $subject);
         User::create([
             'name' => 'Faculty', 'email' => 'faculty.enroll@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => 'faculty.enroll@grc.test', 'password' => self::PASSWORD,
@@ -254,7 +254,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $this->assertDatabaseCount('enrollments', 1);
         $this->assertDatabaseCount('enrollment_subjects', 1);
         $this->assertDatabaseCount('queue_tickets', 0);
-        self::assertSame(AuditAction::ENROLLMENT_SUBMITTED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ENROLLMENT_SUBMITTED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
         self::assertSame(
             NotificationType::EnrollmentSubmitted,
             Notification::query()->sole()->type,
@@ -272,6 +272,7 @@ final class EnrollmentsEndpointTest extends TestCase
             'password' => 'correct-horse-battery-staple',
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 
@@ -335,8 +336,8 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertCreated();
         $response->assertJsonCount(2, 'data.subjects');
         $this->assertDatabaseCount('enrollment_subjects', 2);
-        self::assertSame(AuditAction::ENROLLMENT_SUBMITTED, AuditLog::query()->sole()->action);
-        self::assertSame('IT101', AuditLog::query()->sole()->after_values['block_code'] ?? null);
+        self::assertSame(AuditAction::ENROLLMENT_SUBMITTED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
+        self::assertSame('IT101', AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->after_values['block_code'] ?? null);
 
         foreach ($sections as $section) {
             self::assertSame(1, $section->refresh()->enrolled_count);
@@ -453,7 +454,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $student = $this->makeStudent($curriculum);
         $faculty = User::create([
             'name' => 'Grade Encoder', 'email' => 'encoder.repeat@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         AcademicGrade::create([
             'student_id' => $student->id,
@@ -1132,7 +1133,7 @@ final class EnrollmentsEndpointTest extends TestCase
         self::assertNotNull($enrollment->refresh()->registrar_decided_at);
         self::assertSame(
             AuditAction::ENROLLMENT_REGISTRAR_APPROVED,
-            AuditLog::query()->sole()->action,
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action,
         );
         self::assertSame(
             NotificationType::EnrollmentRegistrarApproved,
@@ -1228,7 +1229,7 @@ final class EnrollmentsEndpointTest extends TestCase
         $withReason->assertOk()->assertJsonPath('data.status', 'rejected');
         self::assertSame(
             'Missing prerequisite documentation.',
-            AuditLog::query()->sole()->reason,
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->reason,
         );
     }
 
@@ -1249,7 +1250,7 @@ final class EnrollmentsEndpointTest extends TestCase
             'reason' => 'Duplicate submission created in error.',
         ]);
         $response->assertOk()->assertJsonPath('data.status', 'cancelled');
-        self::assertSame(AuditAction::ENROLLMENT_VOIDED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ENROLLMENT_VOIDED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_void_cannot_be_performed_on_an_enrolled_enrollment(): void
@@ -1267,7 +1268,7 @@ final class EnrollmentsEndpointTest extends TestCase
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
         self::assertSame('enrolled', $enrollment->refresh()->status->value);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     /**
@@ -1448,7 +1449,7 @@ final class EnrollmentsEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         self::assertSame('pending_registrar_approval', $enrollment->refresh()->status->value);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_an_accounting_staff_role_cannot_void_an_enrollment(): void
@@ -1472,7 +1473,7 @@ final class EnrollmentsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Program Head', 'email' => $email, 'college' => $college,
-            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

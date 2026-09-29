@@ -21,8 +21,33 @@ export interface Credentials {
  * injected `AuthTokenStore` and rebuilds the session from the server on reload.
  * `AuthProvider` never touches storage itself.
  */
+export interface LoginOtpChallenge {
+  challengeToken: string
+  email: string
+  expiresAt: string
+}
+
 export interface AuthGateway {
+  /**
+   * Throws `LoginOtpRequiredError` (never resolves with a partial session)
+   * when the account requires a fresh email OTP — no token exists yet, so
+   * the caller must complete the challenge via `verifyLoginOtp`.
+   */
   signIn(credentials: Credentials): Promise<AuthSession>
+
+  /** Completes a login-OTP challenge and establishes the session. */
+  verifyLoginOtp(challengeToken: string, code: string): Promise<AuthSession>
+
+  /** Rotates a still-live login-OTP challenge and re-sends the code. */
+  resendLoginOtp(challengeToken: string): Promise<LoginOtpChallenge>
+
+  /**
+   * Google Sign-In: exchanges a Google Identity Services ID token for a
+   * session. Throws `AuthError("GOOGLE_ACCOUNT_NOT_FOUND")` when the
+   * verified Google email matches no active GRC account — this never
+   * creates one.
+   */
+  signInWithGoogle(credential: string): Promise<AuthSession>
 
   /** Rebuilds the session from the stored token on page load. */
   restore(): Promise<AuthSession | null>

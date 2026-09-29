@@ -33,6 +33,12 @@ function createWrapper(queryClient: QueryClient, session: AuthSession | null) {
           value={{
             session,
             signIn: () => Promise.resolve(accountingSession),
+            verifyLoginOtp: () =>
+              Promise.reject(new Error("verifyLoginOtp: not implemented in stub")),
+            resendLoginOtp: () =>
+              Promise.reject(new Error("resendLoginOtp: not implemented in stub")),
+            signInWithGoogle: () =>
+              Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
             signOut: () => undefined,
             status: session ? "authenticated" : "anonymous",
             storageAvailable: true,
@@ -187,6 +193,12 @@ describe("useQueueKioskCredential", () => {
           value={{
             session: activeSession,
             signIn: () => Promise.resolve(accountingSession),
+            verifyLoginOtp: () =>
+              Promise.reject(new Error("verifyLoginOtp: not implemented in stub")),
+            resendLoginOtp: () =>
+              Promise.reject(new Error("resendLoginOtp: not implemented in stub")),
+            signInWithGoogle: () =>
+              Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
             signOut: () => undefined,
             status: "authenticated",
             storageAvailable: true,

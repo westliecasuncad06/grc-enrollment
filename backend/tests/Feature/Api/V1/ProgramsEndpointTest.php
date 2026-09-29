@@ -26,6 +26,7 @@ final class ProgramsEndpointTest extends TestCase
             'role' => $role,
             'college' => $college,
             'status' => $status,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

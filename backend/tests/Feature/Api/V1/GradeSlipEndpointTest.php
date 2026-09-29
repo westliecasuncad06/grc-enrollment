@@ -55,7 +55,7 @@ final class GradeSlipEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -80,7 +80,7 @@ final class GradeSlipEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return $this->tokenFor($user);
@@ -105,7 +105,7 @@ final class GradeSlipEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.gradeslip@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.gradeslip@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
 
         $numericSubject = $this->makeSubject('CS101', 3.0);
         $leadSubject = $this->makeSubject('LEAD 6', 1.5);

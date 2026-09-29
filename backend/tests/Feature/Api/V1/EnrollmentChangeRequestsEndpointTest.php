@@ -68,7 +68,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -93,7 +93,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -182,7 +182,7 @@ final class EnrollmentChangeRequestsEndpointTest extends TestCase
 
         $response->assertCreated()->assertJsonPath('data.status', 'pending');
         $response->assertJsonPath('data.request_type', 'add');
-        self::assertSame(AuditAction::ENROLLMENT_CHANGE_REQUEST_CREATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ENROLLMENT_CHANGE_REQUEST_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_adding_a_subject_from_another_curriculum_is_rejected(): void

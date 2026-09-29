@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ApplySecurityHeaders;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\CompressJsonResponse;
 use App\Http\Middleware\EnsureUserHasRole;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->prepend(AssignRequestId::class);
         $middleware->append(CompressJsonResponse::class);
+        $middleware->append(ApplySecurityHeaders::class);
         $middleware->alias(['role' => EnsureUserHasRole::class]);
 
         // This is a JSON-only API with no `login` named route. Laravel's

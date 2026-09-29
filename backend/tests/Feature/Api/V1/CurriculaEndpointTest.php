@@ -37,6 +37,7 @@ final class CurriculaEndpointTest extends TestCase
             'role' => $role,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -329,7 +330,7 @@ final class CurriculaEndpointTest extends TestCase
         $this->assertDatabaseCount('subject_prerequisites', 1);
         self::assertSame(
             AuditAction::CURRICULUM_CREATED,
-            AuditLog::query()->sole()->action,
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action,
         );
     }
 
@@ -347,7 +348,7 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         $this->assertDatabaseMissing('curricula', ['name' => 'Should Not Exist']);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     /**
@@ -376,7 +377,7 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
         $this->assertDatabaseMissing('curricula', ['name' => 'Cyclic Curriculum']);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_a_program_chair_cannot_create_a_transitive_prerequisite_cycle(): void
@@ -405,7 +406,7 @@ final class CurriculaEndpointTest extends TestCase
         ]);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_updating_a_curriculum_fully_replaces_its_subject_placements(): void
@@ -570,7 +571,7 @@ final class CurriculaEndpointTest extends TestCase
 
         $response->assertForbidden();
         $this->assertDatabaseHas('curricula', ['name' => 'Existing']);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_a_program_chair_cannot_update_a_curriculum_from_another_college(): void

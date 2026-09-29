@@ -58,7 +58,7 @@ final class WithdrawalRequestsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -83,7 +83,7 @@ final class WithdrawalRequestsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -156,14 +156,14 @@ final class WithdrawalRequestsEndpointTest extends TestCase
         ]);
 
         $response->assertCreated()->assertJsonPath('data.status', 'pending');
-        self::assertSame(AuditAction::WITHDRAWAL_REQUEST_CREATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::WITHDRAWAL_REQUEST_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
         self::assertSame('enrolled', $enrollment->refresh()->status->value);
     }
 
     public function test_a_withdrawal_request_notifies_registrar_staff_and_the_registrar_head(): void
     {
-        $staff = User::create(['name' => 'Notify Staff', 'email' => 'registrar.staff.wd@grc.test', 'password' => 'correct-horse-battery-staple', 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active]);
-        $head = User::create(['name' => 'Notify Head', 'email' => 'registrar.head.wd@grc.test', 'password' => 'correct-horse-battery-staple', 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $staff = User::create(['name' => 'Notify Staff', 'email' => 'registrar.staff.wd@grc.test', 'password' => 'correct-horse-battery-staple', 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $head = User::create(['name' => 'Notify Head', 'email' => 'registrar.head.wd@grc.test', 'password' => 'correct-horse-battery-staple', 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);

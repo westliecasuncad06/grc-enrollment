@@ -29,7 +29,7 @@ final class AcademicTermSectionPlansEndpointTest extends TestCase
 
     private function tokenForNewUser(UserRole $role, string $email): string
     {
-        $user = User::create(['name' => 'Test User', 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active]);
+        $user = User::create(['name' => 'Test User', 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
 
         return (string) $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => self::PASSWORD])->json('data.token');
     }

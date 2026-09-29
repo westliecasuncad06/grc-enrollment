@@ -42,6 +42,7 @@ final class SectionChangeRequestsEndpointTest extends TestCase
             'role' => $role,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

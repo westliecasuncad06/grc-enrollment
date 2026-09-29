@@ -28,6 +28,7 @@ use App\Models\Program;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
+use App\Models\SubjectPrerequisite;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -74,7 +75,7 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -93,7 +94,7 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
     {
         return User::create([
             'name' => 'Registrar', 'email' => 'registrar.reclassify@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
     }
 
@@ -243,14 +244,14 @@ final class ReclassifyStudentEnrollmentCategoryTest extends TestCase
         $prereq = $this->makeSubject('CS-PREREQ');
         $this->placeSubject($curriculum, $prereq, 1, '1st');
         $backlogPlacement = $this->placeSubject($curriculum, $this->makeSubject('CS-BACKLOG'), 1, '1st');
-        \App\Models\SubjectPrerequisite::create([
+        SubjectPrerequisite::create([
             'curriculum_subject_id' => $backlogPlacement->id,
             'prerequisite_subject_id' => $prereq->id,
             'minimum_grade' => '3.00',
         ]);
         $this->makePlainSection($term, Subject::where('code', 'CS-BACKLOG')->sole());
         $student = $this->makeStudent($curriculum, 'endpoint@grc.test', yearLevel: 2, category: 'regular');
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.reclassify@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.reclassify@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $registrar = $this->makeRegistrarHead();
         $grade = AcademicGrade::create([
             'student_id' => $student->id, 'subject_id' => $prereq->id, 'academic_term_id' => $term->id,

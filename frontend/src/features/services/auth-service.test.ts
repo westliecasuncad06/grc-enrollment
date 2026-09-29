@@ -48,9 +48,12 @@ describe("auth-service", () => {
     await expect(
       login({ email: "registrar-head.seed@grc.test", password: "secret" }),
     ).resolves.toEqual({
-      token: "1|plaintext-token-value",
-      expiresAt: "2026-07-27T18:46:36Z",
-      user: validUser,
+      kind: "authenticated",
+      session: {
+        token: "1|plaintext-token-value",
+        expiresAt: "2026-07-27T18:46:36Z",
+        user: validUser,
+      },
     })
 
     expect(fetchMock).toHaveBeenCalledWith(

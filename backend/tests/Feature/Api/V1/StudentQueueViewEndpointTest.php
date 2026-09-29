@@ -204,7 +204,7 @@ final class StudentQueueViewEndpointTest extends TestCase
         ]);
         $user = User::create([
             'name' => 'Queue View Student', 'email' => 'student.'.$studentNumber.'@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $student = StudentProfile::create([
             'user_id' => $user->id, 'student_number' => $studentNumber,
@@ -222,7 +222,7 @@ final class StudentQueueViewEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'No Enrollment Student', 'email' => 'noenroll.'.$studentNumber.'@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         StudentProfile::create([
             'user_id' => $user->id, 'student_number' => $studentNumber,
@@ -243,7 +243,7 @@ final class StudentQueueViewEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

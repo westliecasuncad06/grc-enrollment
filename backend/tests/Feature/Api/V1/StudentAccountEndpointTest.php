@@ -55,6 +55,7 @@ final class StudentAccountEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Student,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -113,6 +114,7 @@ final class StudentAccountEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::AccountingStaff,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return $this->tokenFor($accounting);
@@ -180,7 +182,7 @@ final class StudentAccountEndpointTest extends TestCase
         $this->assertDatabaseMissing('account_payments', ['enrollment_id' => $newer->id]);
         self::assertSame(QueueTicketStatus::Waiting, $ticket->refresh()->status);
         self::assertNull($ticket->refresh()->requeued_at);
-        self::assertSame(AuditAction::ACCOUNT_PAYMENT_RECORDED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ACCOUNT_PAYMENT_RECORDED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_an_accounting_payment_spans_enrollments_in_oldest_first_order_when_needed(): void

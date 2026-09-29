@@ -33,7 +33,7 @@ final class AutoAssignSectionScheduleEndpointTest extends TestCase
 
     private function tokenForNewUser(UserRole $role, string $email, ?CollegeCode $college = null): string
     {
-        $user = User::create(['name' => 'Test User', 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'college' => $college, 'status' => UserStatus::Active]);
+        $user = User::create(['name' => 'Test User', 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'college' => $college, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
 
         return (string) $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => self::PASSWORD])->json('data.token');
     }
@@ -79,7 +79,7 @@ final class AutoAssignSectionScheduleEndpointTest extends TestCase
         $section->refresh();
         $this->assertNull($section->schedule_days);
         $this->assertNull($section->professor_id);
-        $this->assertSame(0, AuditLog::query()->count());
+        $this->assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_a_non_program_chair_role_cannot_auto_assign(): void

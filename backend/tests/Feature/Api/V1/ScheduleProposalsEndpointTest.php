@@ -41,6 +41,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -74,7 +75,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
             'status' => SectionPlanStatus::Submitted,
         ]);
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Programming 1', 'units' => 3, 'status' => SubjectStatus::Active]);
-        $professor = User::create(['name' => 'Professor Santos', 'email' => 'professor.review@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Professor Santos', 'email' => 'professor.review@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = Section::create([
             'academic_term_id' => $term->id,
             'section_plan_id' => $plan->id,
@@ -89,7 +90,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
             'capacity' => 40,
             'status' => SectionStatus::Planned,
         ]);
-        $chair = User::create(['name' => 'CCS Program Chair', 'email' => 'chair.review@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'CCS Program Chair', 'email' => 'chair.review@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'college' => CollegeCode::Ccs, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create([
             'academic_term_id' => $term->id,
             'college' => CollegeCode::Ccs->value,
@@ -121,7 +122,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonPath('data.status', 'draft');
         $this->assertDatabaseHas('schedule_proposals', ['academic_term_id' => $term->id, 'status' => 'draft']);
-        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CREATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_non_program_chair_role_cannot_submit_a_proposal(): void
@@ -134,7 +135,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         ]);
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_a_term_cannot_have_two_active_proposals(): void
@@ -158,7 +159,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
     public function test_a_new_proposal_is_allowed_once_the_prior_one_is_closed(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.reopen@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.reopen@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Closed]);
 
         $token = (string) $this->postJson('/api/v1/auth/login', [
@@ -170,13 +171,13 @@ final class ScheduleProposalsEndpointTest extends TestCase
         ]);
 
         $response->assertCreated();
-        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CREATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_learner_scoped_role_does_not_see_a_draft_proposal(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.visibility@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.visibility@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Draft]);
         $token = $this->tokenFor(UserRole::Student, 'student.visibility@grc.test');
 
@@ -196,7 +197,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
     public function test_dean_approve_transitions_a_draft_proposal(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.deanapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.deanapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Draft]);
         $deanToken = $this->tokenFor(UserRole::Dean, 'dean.deanapprove@grc.test');
 
@@ -213,7 +214,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         self::assertNotNull($proposal->refresh()->decided_by);
         self::assertSame(
             AuditAction::SCHEDULE_PROPOSAL_DEAN_APPROVED,
-            AuditLog::query()->sole()->action,
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action,
         );
     }
 
@@ -226,14 +227,14 @@ final class ScheduleProposalsEndpointTest extends TestCase
     public function test_executive_approve_is_no_longer_a_valid_action(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.execapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.execapprove@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.execapprove@grc.test');
 
         $response = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_approve']);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         self::assertSame('dean_approved', $proposal->refresh()->status->value);
     }
 
@@ -249,7 +250,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         $term = $this->makeTerm();
         $subject = Subject::create(['code' => 'CS101', 'title' => 'Test', 'units' => 3, 'status' => SubjectStatus::Active]);
         $section = Section::create(['academic_term_id' => $term->id, 'subject_id' => $subject->id, 'section_code' => 'A', 'capacity' => 40, 'status' => SectionStatus::Planned]);
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.publish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.publish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.publish@grc.test');
 
@@ -261,7 +262,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         self::assertSame('published', $section->refresh()->status->value);
         self::assertSame(
             [AuditAction::SECTION_PUBLISHED, AuditAction::SCHEDULE_PROPOSAL_PUBLISHED],
-            AuditLog::query()->orderBy('id')->pluck('action')->all(),
+            AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->orderBy('id')->pluck('action')->all(),
         );
         self::assertSame([$chair->id], Notification::query()->pluck('user_id')->all());
     }
@@ -269,33 +270,33 @@ final class ScheduleProposalsEndpointTest extends TestCase
     public function test_close_transitions_a_published_proposal(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.close@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.close@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Published]);
         $registrarToken = $this->tokenFor(UserRole::RegistrarHead, 'registrar.close@grc.test');
 
         $response = $this->withToken($registrarToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'close']);
 
         $response->assertOk()->assertJsonPath('data.status', 'closed');
-        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CLOSED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::SCHEDULE_PROPOSAL_CLOSED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_dean_cannot_approve_a_proposal_that_is_not_in_draft(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.wrongstate@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.wrongstate@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $deanToken = $this->tokenFor(UserRole::Dean, 'dean.wrongstate@grc.test');
 
         $response = $this->withToken($deanToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'dean_approve']);
 
         $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_an_executive_director_cannot_perform_the_deans_approval(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.wrongrole@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.wrongrole@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::Draft]);
         $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.wrongrole@grc.test');
 
@@ -303,19 +304,19 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response->assertForbidden()->assertJsonPath('error.code', 'FORBIDDEN');
         self::assertSame('draft', $proposal->refresh()->status->value);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_returning_a_proposal_to_draft_requires_a_reason(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.reason@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.reason@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $executiveToken = $this->tokenFor(UserRole::ExecutiveDirector, 'executive.reason@grc.test');
 
         $withoutReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", ['action' => 'executive_return']);
         $withoutReason->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
 
         $withReason = $this->withToken($executiveToken)->patchJson("/api/v1/schedule-proposals/{$proposal->id}", [
             'action' => 'executive_return',
@@ -323,7 +324,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
         ]);
         $withReason->assertOk()->assertJsonPath('data.status', 'draft');
         $withReason->assertJsonPath('data.decision_reason', 'Missing a required general education subject.');
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
         self::assertSame(AuditAction::SCHEDULE_PROPOSAL_EXECUTIVE_RETURNED, $audit->action);
         self::assertSame('Missing a required general education subject.', $audit->reason);
     }
@@ -331,7 +332,7 @@ final class ScheduleProposalsEndpointTest extends TestCase
     public function test_a_registrar_head_cannot_publish(): void
     {
         $term = $this->makeTerm();
-        $chair = User::create(['name' => 'Chair', 'email' => 'chair.registrarpublish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active]);
+        $chair = User::create(['name' => 'Chair', 'email' => 'chair.registrarpublish@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::ProgramChair, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $proposal = ScheduleProposal::create(['academic_term_id' => $term->id, 'submitted_by' => $chair->id, 'status' => ScheduleProposalStatus::DeanApproved]);
         $registrarToken = $this->tokenFor(UserRole::RegistrarHead, 'registrar.registrarpublish@grc.test');
 
@@ -339,6 +340,6 @@ final class ScheduleProposalsEndpointTest extends TestCase
 
         $response->assertForbidden();
         self::assertSame('dean_approved', $proposal->refresh()->status->value);
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 }

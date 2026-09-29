@@ -58,7 +58,7 @@ final class ClaimQueueTicketEndpointTest extends TestCase
             ->assertJsonPath('data.ticket_number', 'Q001')
             ->assertJsonPath('data.status', 'waiting')
             ->assertJsonPath('data.enrollment_id', $enrollment->id);
-        self::assertSame(AuditAction::QUEUE_TICKET_CLAIMED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::QUEUE_TICKET_CLAIMED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_student_cannot_claim_with_a_fabricated_kiosk_token(): void
@@ -255,7 +255,7 @@ final class ClaimQueueTicketEndpointTest extends TestCase
         ]);
         $user = User::create([
             'name' => 'Claim Test Student', 'email' => 'claim.'.$studentNumber.'@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $student = StudentProfile::create([
             'user_id' => $user->id, 'student_number' => $studentNumber,
@@ -278,7 +278,7 @@ final class ClaimQueueTicketEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

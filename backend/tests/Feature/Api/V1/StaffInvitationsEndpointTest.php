@@ -10,7 +10,6 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Tests\TestCase;
@@ -25,7 +24,7 @@ final class StaffInvitationsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -105,7 +104,7 @@ final class StaffInvitationsEndpointTest extends TestCase
     public function test_duplicate_email_is_rejected(): void
     {
         $token = $this->tokenFor(UserRole::RegistrarHead, 'registrar.head.dup@grc.test');
-        User::create(['name' => 'Existing', 'email' => 'existing.staff@grc.test', 'password' => 'irrelevant', 'role' => UserRole::Dean, 'status' => UserStatus::Active]);
+        User::create(['name' => 'Existing', 'email' => 'existing.staff@grc.test', 'password' => 'irrelevant', 'role' => UserRole::Dean, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
 
         $this->withToken($token)->postJson('/api/v1/staff-invitations', [
             'email' => 'existing.staff@grc.test', 'role' => 'dean',
@@ -186,8 +185,8 @@ final class StaffInvitationsEndpointTest extends TestCase
             'email' => 'pending.dean@grc.test',
             'code' => $setupCode,
             'name' => 'Aurora Dean Santos',
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertOk()
             ->assertJsonPath('data.type', 'staff-account-setup')
             ->assertJsonPath('data.status', 'active');
@@ -199,7 +198,7 @@ final class StaffInvitationsEndpointTest extends TestCase
         self::assertSame(1, AuditLog::query()->where('action', AuditAction::STAFF_ACCOUNT_ACTIVATED)->count());
 
         $this->postJson('/api/v1/auth/login', [
-            'email' => 'pending.dean@grc.test', 'password' => 'new-secure-password',
+            'email' => 'pending.dean@grc.test', 'password' => 'New-Secure-Password1!',
         ])->assertOk();
     }
 
@@ -215,8 +214,8 @@ final class StaffInvitationsEndpointTest extends TestCase
             'email' => 'bad.code.staff@grc.test',
             'code' => '123456',
             'name' => 'Someone',
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertUnprocessable()
             ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
     }
@@ -234,8 +233,8 @@ final class StaffInvitationsEndpointTest extends TestCase
             'email' => 'a.student@grc.test',
             'code' => $studentCode,
             'name' => 'Someone',
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertUnprocessable()
             ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
     }

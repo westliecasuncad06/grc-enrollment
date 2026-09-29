@@ -231,6 +231,7 @@ final class AutomationRunsEndpointTest extends TestCase
             'password' => 'password',
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

@@ -84,6 +84,40 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
     [gateway],
   )
 
+  const verifyLoginOtp = useCallback(
+    async (challengeToken: string, code: string) => {
+      const authenticatedSession = await gateway.verifyLoginOtp(
+        challengeToken,
+        code,
+      )
+
+      setStorageAvailable(gateway.persistenceAvailable())
+      setSession(authenticatedSession)
+      setStatus("authenticated")
+
+      return authenticatedSession
+    },
+    [gateway],
+  )
+
+  const resendLoginOtp = useCallback(
+    (challengeToken: string) => gateway.resendLoginOtp(challengeToken),
+    [gateway],
+  )
+
+  const signInWithGoogle = useCallback(
+    async (credential: string) => {
+      const authenticatedSession = await gateway.signInWithGoogle(credential)
+
+      setStorageAvailable(gateway.persistenceAvailable())
+      setSession(authenticatedSession)
+      setStatus("authenticated")
+
+      return authenticatedSession
+    },
+    [gateway],
+  )
+
   const signOut = useCallback(() => {
     // Revoke server-side, but clear locally without waiting: a failed or slow
     // revoke must never leave the user stuck in a signed-in UI. The rejection
@@ -99,11 +133,23 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
     () => ({
       session,
       signIn,
+      verifyLoginOtp,
+      resendLoginOtp,
+      signInWithGoogle,
       signOut,
       status,
       storageAvailable,
     }),
-    [session, signIn, signOut, status, storageAvailable],
+    [
+      session,
+      signIn,
+      verifyLoginOtp,
+      resendLoginOtp,
+      signInWithGoogle,
+      signOut,
+      status,
+      storageAvailable,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

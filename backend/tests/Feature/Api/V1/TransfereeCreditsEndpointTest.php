@@ -61,7 +61,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
         $this->sequence++;
         $user = User::create([
             'name' => 'Test Student '.$this->sequence, 'email' => "student.transfer{$this->sequence}@grc.test",
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -81,7 +81,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
 
         return User::create([
             'name' => 'Test '.$role->value, 'email' => "{$role->value}.transfer{$this->sequence}@grc.test",
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
             'college' => $college,
         ]);
     }
@@ -158,7 +158,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame($student->id, $credit->student_id);
         self::assertSame($student->user_id, $credit->requested_by);
         self::assertNull($credit->subject_id);
-        self::assertSame(AuditAction::TRANSFEREE_CREDIT_CREATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::TRANSFEREE_CREDIT_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_student_can_never_request_a_credit_for_someone_else(): void
@@ -348,7 +348,7 @@ final class TransfereeCreditsEndpointTest extends TestCase
         self::assertSame(4.5, $credit->credited_units);
         self::assertSame($subject->id, $credit->subject_id);
         self::assertSame(TransfereeCreditStatus::Pending, $credit->status);
-        self::assertSame(AuditAction::TRANSFEREE_CREDIT_UPDATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::TRANSFEREE_CREDIT_UPDATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_program_chair_cannot_touch_another_colleges_credit(): void

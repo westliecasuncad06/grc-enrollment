@@ -60,7 +60,7 @@ final class ProfessorHiddenFromStudentsTest extends TestCase
         ]);
         $professor = User::create([
             'name' => 'Prof. Reveal Later', 'email' => 'prof.reveal@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $this->section = Section::create([
             'academic_term_id' => $this->term->id, 'subject_id' => $subject->id, 'section_code' => 'A',
@@ -68,7 +68,7 @@ final class ProfessorHiddenFromStudentsTest extends TestCase
         ]);
         $user = User::create([
             'name' => 'Hidden Student', 'email' => 'student.hidden@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $this->student = StudentProfile::create([
             'user_id' => $user->id, 'student_number' => '2026-0001',
@@ -88,7 +88,7 @@ final class ProfessorHiddenFromStudentsTest extends TestCase
     {
         User::create([
             'name' => 'Staff '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return $this->login($email);

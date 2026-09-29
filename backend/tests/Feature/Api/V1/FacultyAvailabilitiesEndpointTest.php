@@ -25,6 +25,7 @@ final class FacultyAvailabilitiesEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         $token = (string) $this->postJson('/api/v1/auth/login', [
@@ -59,7 +60,7 @@ final class FacultyAvailabilitiesEndpointTest extends TestCase
             'action' => AuditAction::FACULTY_AVAILABILITY_CREATED,
             'auditable_id' => $response->json('data.id'),
         ]);
-        self::assertSame(1, AuditLog::query()->count());
+        self::assertSame(1, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_it_stores_an_availability_window_without_an_academic_term(): void

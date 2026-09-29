@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { strongPasswordSchema } from "@/features/schemas/password-schema"
+
 /** Every role a Registrar Head may invite through this flow — mirrors `UserRole::registrarInvitableCases()`. */
 export const staffInvitableRoleSchema = z.enum([
   "faculty",
@@ -51,7 +53,7 @@ export const staffAccountSetupSchema = z
     name: z.string().trim().min(1),
     college: z.enum(["ccs", "coe", "coa", "cbae"]).optional().nullable(),
     masters_degree: z.string().trim().max(255).optional().nullable(),
-    password: z.string().min(8),
+    password: strongPasswordSchema,
     password_confirmation: z.string().min(8),
   })
   .strict()

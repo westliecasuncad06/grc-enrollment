@@ -4,9 +4,20 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AuthError } from "@/features/auth/auth-error"
 import type { AuthSession } from "@/features/auth/auth-types"
+import { LoginOtpRequiredError } from "@/features/auth/login-otp-error"
 import { LoginPage } from "@/features/components/pages/login-page"
+import { ApiClientError } from "@/features/services/api-client"
 import { routerMock } from "@/tests/navigation-mock"
 import { createStubGateway, renderWithAuthProvider } from "@/tests/render-app"
+
+vi.mock("next/script", () => ({
+  // The real component only needs the load callback to fire; jsdom never
+  // actually loads the external script.
+  default: ({ onLoad }: { onLoad?: () => void }) => {
+    onLoad?.()
+    return null
+  },
+}))
 
 const studentSession: AuthSession = {
   userId: "1",
@@ -29,7 +40,7 @@ async function enterCredentials(
 }
 
 describe("LoginPage", () => {
-  it("renders an accessible institutional form without unimplemented account actions", async () => {
+  it("renders an accessible institutional form with a forgot-password link and no unimplemented account actions", async () => {
     renderLogin()
 
     expect(
@@ -46,7 +57,9 @@ describe("LoginPage", () => {
     expect(
       screen.getByText("docs/testing/SEEDED_IDENTITIES.md"),
     ).toBeInTheDocument()
-    expect(screen.queryByText(/forgot password/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /forgot password/i }),
+    ).toHaveAttribute("href", "/forgot-password")
     expect(
       screen.queryByText(/register|create account/i),
     ).not.toBeInTheDocument()
@@ -229,6 +242,214 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(routerMock.replace).toHaveBeenCalledWith("/portal")
+    })
+  })
+
+  describe("login-OTP challenge", () => {
+    function otpChallenge() {
+      return new LoginOtpRequiredError({
+        challengeToken: "challenge-token-a",
+        email: "student.seed@grc.test",
+        expiresAt: "2026-07-26T12:10:00.000Z",
+      })
+    }
+
+    it("shows the code step instead of a generic credential error", async () => {
+      const user = userEvent.setup()
+      renderLogin(
+        "/login",
+        createStubGateway({ signIn: () => Promise.reject(otpChallenge()) }),
+      )
+      await enterCredentials(user)
+
+      await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+      expect(
+        await screen.findByRole("heading", { name: "Check your email" }),
+      ).toBeInTheDocument()
+      expect(screen.getByText("student.seed@grc.test")).toBeInTheDocument()
+      expect(screen.getByLabelText("Verification code")).toBeInTheDocument()
+      expect(
+        screen.queryByText(
+          "The email or password you entered was not recognized.",
+        ),
+      ).not.toBeInTheDocument()
+    })
+
+    it("submits the code and completes sign-in", async () => {
+      const user = userEvent.setup()
+      let verifiedWith: { challengeToken: string; code: string } | null = null
+      renderLogin(
+        "/login?returnTo=%2Fportal%2Fenrollment",
+        createStubGateway({
+          signIn: () => Promise.reject(otpChallenge()),
+          verifyLoginOtp: (challengeToken, code) => {
+            verifiedWith = { challengeToken, code }
+            return Promise.resolve(studentSession)
+          },
+        }),
+      )
+      await enterCredentials(user)
+      await user.click(screen.getByRole("button", { name: "Sign in" }))
+      await screen.findByRole("heading", { name: "Check your email" })
+
+      await user.type(screen.getByLabelText("Verification code"), "123456")
+      await user.click(
+        screen.getByRole("button", { name: "Verify and sign in" }),
+      )
+
+      await waitFor(() => {
+        expect(routerMock.replace).toHaveBeenCalledWith("/portal/enrollment")
+      })
+      expect(verifiedWith).toEqual({
+        challengeToken: "challenge-token-a",
+        code: "123456",
+      })
+    })
+
+    it("shows a field error for a rejected code without leaving the code step", async () => {
+      const user = userEvent.setup()
+      renderLogin(
+        "/login",
+        createStubGateway({
+          signIn: () => Promise.reject(otpChallenge()),
+          verifyLoginOtp: () =>
+            Promise.reject(
+              new ApiClientError({
+                kind: "http",
+                message: "The submitted data is invalid.",
+                status: 422,
+                fieldErrors: {
+                  code: ["This verification code is invalid or expired."],
+                },
+              }),
+            ),
+        }),
+      )
+      await enterCredentials(user)
+      await user.click(screen.getByRole("button", { name: "Sign in" }))
+      await screen.findByRole("heading", { name: "Check your email" })
+
+      await user.type(screen.getByLabelText("Verification code"), "000000")
+      await user.click(
+        screen.getByRole("button", { name: "Verify and sign in" }),
+      )
+
+      expect(
+        await screen.findByText(
+          "This verification code is invalid or expired.",
+        ),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("heading", { name: "Check your email" }),
+      ).toBeInTheDocument()
+      expect(routerMock.replace).not.toHaveBeenCalled()
+    })
+
+    it("resend swaps the token transparently and lets a code from the new token verify", async () => {
+      const user = userEvent.setup()
+      let verifiedToken: string | null = null
+      renderLogin(
+        "/login",
+        createStubGateway({
+          signIn: () => Promise.reject(otpChallenge()),
+          resendLoginOtp: () =>
+            Promise.resolve({
+              challengeToken: "challenge-token-b",
+              email: "student.seed@grc.test",
+              expiresAt: "2026-07-26T12:20:00.000Z",
+            }),
+          verifyLoginOtp: (challengeToken) => {
+            verifiedToken = challengeToken
+            return Promise.resolve(studentSession)
+          },
+        }),
+      )
+      await enterCredentials(user)
+      await user.click(screen.getByRole("button", { name: "Sign in" }))
+      await screen.findByRole("heading", { name: "Check your email" })
+
+      await user.click(screen.getByRole("button", { name: "Resend code" }))
+      expect(
+        await screen.findByText("A new code was sent to your email."),
+      ).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText("Verification code"), "654321")
+      await user.click(
+        screen.getByRole("button", { name: "Verify and sign in" }),
+      )
+
+      await waitFor(() => {
+        expect(routerMock.replace).toHaveBeenCalledWith("/portal")
+      })
+      expect(verifiedToken).toBe("challenge-token-b")
+    })
+
+    it("returns to the credentials form via \"Use a different account\"", async () => {
+      const user = userEvent.setup()
+      renderLogin(
+        "/login",
+        createStubGateway({ signIn: () => Promise.reject(otpChallenge()) }),
+      )
+      await enterCredentials(user)
+      await user.click(screen.getByRole("button", { name: "Sign in" }))
+      await screen.findByRole("heading", { name: "Check your email" })
+
+      await user.click(
+        screen.getByRole("button", { name: "Use a different account" }),
+      )
+
+      expect(
+        await screen.findByRole("heading", { name: "Sign in to your portal" }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  describe("Google sign-in", () => {
+    const originalClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    const CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+
+    function stubGoogleIdentityServices() {
+      const initialize = vi.fn<
+        (config: {
+          client_id: string
+          callback: (response: { credential: string }) => void
+        }) => void
+      >()
+      const renderButton = vi.fn<
+        (parent: HTMLElement, options: Record<string, unknown>) => void
+      >()
+      window.google = { accounts: { id: { initialize, renderButton } } }
+
+      return { initialize, renderButton }
+    }
+
+    afterEach(() => {
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID = originalClientId
+      delete (window as { google?: unknown }).google
+    })
+
+    it("shows the contact-Admission message when the Google email matches no account", async () => {
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID = CLIENT_ID
+      const { initialize } = stubGoogleIdentityServices()
+      renderLogin(
+        "/login",
+        createStubGateway({
+          signInWithGoogle: () =>
+            Promise.reject(new AuthError("GOOGLE_ACCOUNT_NOT_FOUND")),
+        }),
+      )
+      await screen.findByRole("heading", { name: "Sign in to your portal" })
+
+      const { callback } = initialize.mock.calls[0]?.[0] as {
+        callback: (response: { credential: string }) => void
+      }
+      callback({ credential: "fake-google-credential" })
+
+      expect(
+        await screen.findByText(/contact Admission/i),
+      ).toBeInTheDocument()
+      expect(routerMock.replace).not.toHaveBeenCalled()
     })
   })
 

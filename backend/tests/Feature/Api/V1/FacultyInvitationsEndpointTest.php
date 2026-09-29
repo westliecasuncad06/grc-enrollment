@@ -9,10 +9,10 @@ use App\Domain\Organization\CollegeCode;
 use App\Mail\FacultyAccountSetupMail;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use App\Support\Auth\AccountSetupCodes;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -31,6 +31,7 @@ final class FacultyInvitationsEndpointTest extends TestCase
             'role' => UserRole::ProgramChair,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -47,6 +48,7 @@ final class FacultyInvitationsEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -171,8 +173,8 @@ final class FacultyInvitationsEndpointTest extends TestCase
             'email' => 'pending.professor@grc.test',
             'code' => $setupCode,
             'name' => 'Prof. Juan Dela Cruz',
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertOk()
             ->assertJsonPath('data.type', 'faculty-account-setup')
             ->assertJsonPath('data.status', 'active')
@@ -190,15 +192,15 @@ final class FacultyInvitationsEndpointTest extends TestCase
 
         $this->postJson('/api/v1/auth/login', [
             'email' => 'pending.professor@grc.test',
-            'password' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
         ])->assertOk();
 
         $this->postJson('/api/v1/auth/faculty-account-setup', [
             'email' => 'pending.professor@grc.test',
             'code' => $setupCode,
             'name' => 'Someone Else',
-            'password' => 'another-secure-password',
-            'password_confirmation' => 'another-secure-password',
+            'password' => 'Another-Secure-Password1!',
+            'password_confirmation' => 'Another-Secure-Password1!',
         ])->assertUnprocessable();
     }
 
@@ -226,8 +228,8 @@ final class FacultyInvitationsEndpointTest extends TestCase
                 'email' => 'expiring.professor@grc.test',
                 'code' => $code,
                 'name' => 'Prof. Late',
-                'password' => 'new-secure-password',
-                'password_confirmation' => 'new-secure-password',
+                'password' => 'New-Secure-Password1!',
+                'password_confirmation' => 'New-Secure-Password1!',
             ])->assertUnprocessable()
                 ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
         }
@@ -267,8 +269,8 @@ final class FacultyInvitationsEndpointTest extends TestCase
         $this->postJson('/api/v1/auth/account-setup', [
             'email' => 'crossrole.professor@grc.test',
             'code' => $facultyCode,
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertUnprocessable()
             ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
 
@@ -277,8 +279,8 @@ final class FacultyInvitationsEndpointTest extends TestCase
             'email' => 'crossrole.student@grc.test',
             'code' => $studentCode,
             'name' => 'Should Not Apply',
-            'password' => 'new-secure-password',
-            'password_confirmation' => 'new-secure-password',
+            'password' => 'New-Secure-Password1!',
+            'password_confirmation' => 'New-Secure-Password1!',
         ])->assertUnprocessable()
             ->assertJsonPath('error.errors.code.0', 'The setup code is invalid or expired.');
 

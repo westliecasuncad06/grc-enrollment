@@ -10,8 +10,8 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicGrade;
 use App\Models\AcademicTerm;
-use App\Models\AuditLog;
 use App\Models\AcademicTermEnrollmentWindow;
+use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\Program;
@@ -57,6 +57,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -73,6 +74,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Student,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $program = Program::query()->firstOrCreate(
             ['code' => 'BSCS'],
@@ -276,7 +278,7 @@ final class EnrollmentScheduleEndpointTest extends TestCase
         ]);
         $encoder = User::create([
             'name' => 'Encoder', 'email' => 'encoder.backsubject@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         AcademicGrade::create([
             'student_id' => $profile->id, 'subject_id' => $backSubject->id, 'academic_term_id' => $priorTerm->id,

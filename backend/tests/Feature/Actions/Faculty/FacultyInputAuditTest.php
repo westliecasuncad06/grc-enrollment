@@ -246,7 +246,7 @@ final class FacultyInputAuditTest extends TestCase
             ])
             ->assertForbidden();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_invalid_subject_preference_requests_do_not_create_audit_rows(): void
@@ -263,7 +263,7 @@ final class FacultyInputAuditTest extends TestCase
             ])
             ->assertUnprocessable();
 
-        self::assertSame(0, AuditLog::query()->count());
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_audit_creation_failure_rolls_back_every_availability_mutation(): void
@@ -350,7 +350,7 @@ final class FacultyInputAuditTest extends TestCase
         string $requestId,
         string $ipAddress,
     ): void {
-        $audit = AuditLog::query()->sole();
+        $audit = AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole();
 
         self::assertSame($action, $audit->action);
         self::assertSame($auditableType, $audit->auditable_type);
@@ -376,7 +376,7 @@ final class FacultyInputAuditTest extends TestCase
             self::fail('The injected audit write failure must escape the action transaction.');
         } catch (RuntimeException $exception) {
             self::assertSame('Injected audit write failure.', $exception->getMessage());
-            self::assertSame(0, AuditLog::query()->count());
+            self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         } finally {
             AuditLog::flushEventListeners();
             AuditLog::clearBootedModels();
@@ -403,6 +403,7 @@ final class FacultyInputAuditTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

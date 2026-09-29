@@ -459,6 +459,7 @@ final class AuditLogsEndpointTest extends TestCase
             'password' => 'irrelevant-password',
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

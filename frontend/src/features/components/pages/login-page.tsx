@@ -18,7 +18,9 @@ import { z } from "zod"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { isAuthError } from "@/features/auth/auth-error"
+import { isLoginOtpRequiredError } from "@/features/auth/login-otp-error"
 import { Button } from "@/features/components/ui/button"
+import { GoogleSignInButton } from "@/features/components/ui/google-sign-in-button"
 import {
   Field,
   FieldDescription,
@@ -28,8 +30,10 @@ import {
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
 import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
+import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { gsap } from "@/features/lib/gsap"
 import { getSafeReturnPath } from "@/features/router/safe-return-path"
+import { isApiClientError } from "@/features/services/api-client"
 
 const loginSchema = z.object({
   email: z
@@ -42,6 +46,20 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>
 
+const otpSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6}$/, "Enter the 6-digit code from your email."),
+})
+
+type OtpValues = z.infer<typeof otpSchema>
+
+interface OtpChallengeState {
+  challengeToken: string
+  email: string
+}
+
 /**
  * One generic message for every rejected credential. The API returns the same
  * 401 whether the account was missing, the password wrong, or the account
@@ -51,6 +69,8 @@ const invalidCredentialsMessage =
   "The email or password you entered was not recognized."
 const queueKioskSurfaceMessage =
   "This device identity must sign in through the Queue Kiosk."
+const expiredOtpSessionMessage =
+  "Your sign-in session expired. Please sign in again."
 
 const copy = {
   eyebrow: "Enrollment portal",
@@ -80,8 +100,13 @@ const trustStatements = [
 ] as const
 
 export function LoginPage() {
-  const { signIn } = useAuth()
+  const { signIn, verifyLoginOtp, resendLoginOtp } = useAuth()
   const [passwordVisible, setPasswordVisible] = useState(false)
+  const [challenge, setChallenge] = useState<OtpChallengeState | null>(null)
+  const [resendStatus, setResendStatus] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle")
+  const [resendMessage, setResendMessage] = useState("")
   const errorSummaryRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -102,6 +127,17 @@ export function LoginPage() {
       email: "",
       password: "",
     },
+  })
+
+  const {
+    formState: { errors: otpErrors, isSubmitting: otpSubmitting },
+    handleSubmit: handleOtpSubmit,
+    register: registerOtp,
+    setError: setOtpError,
+    reset: resetOtpForm,
+  } = useForm<OtpValues>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: { code: "" },
   })
 
   // ── Institutional panel: brand + purpose + trust list stagger-reveal ────
@@ -161,6 +197,15 @@ export function LoginPage() {
     try {
       await signIn(values)
     } catch (cause) {
+      if (isLoginOtpRequiredError(cause)) {
+        setChallenge({ challengeToken: cause.challengeToken, email: cause.email })
+        resetOtpForm()
+        setResendStatus("idle")
+        setResendMessage("")
+
+        return
+      }
+
       const requiresDevicePortal =
         isAuthError(cause) &&
         cause.code === "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL"
@@ -175,6 +220,70 @@ export function LoginPage() {
     }
 
     router.replace(getSafeReturnPath(searchParams.get("returnTo")))
+  }
+
+  const submitOtp = async (values: OtpValues) => {
+    if (!challenge) return
+
+    try {
+      await verifyLoginOtp(challenge.challengeToken, values.code)
+    } catch (error) {
+      if (!applyApiFieldErrors(error, setOtpError)) {
+        setOtpError("code", {
+          message: "This verification code is invalid or expired.",
+        })
+      }
+
+      return
+    }
+
+    router.replace(getSafeReturnPath(searchParams.get("returnTo")))
+  }
+
+  const handleResendOtp = async () => {
+    if (!challenge) return
+    setResendStatus("sending")
+    setResendMessage("")
+
+    try {
+      const rotated = await resendLoginOtp(challenge.challengeToken)
+      setChallenge({
+        challengeToken: rotated.challengeToken,
+        email: rotated.email,
+      })
+      resetOtpForm()
+      setResendStatus("sent")
+      setResendMessage("A new code was sent to your email.")
+    } catch (error) {
+      // An expired/unknown challenge token means the whole sign-in attempt is
+      // gone — there is nothing left to rotate, so return to credentials.
+      if (isApiClientError(error) && error.status === 422) {
+        setChallenge(null)
+        setResendStatus("idle")
+        setResendMessage("")
+        setError("root.credentials", { message: expiredOtpSessionMessage })
+
+        return
+      }
+
+      setResendStatus("error")
+      setResendMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to resend the code. Please try again.",
+      )
+    }
+  }
+
+  const handleGoogleSignedIn = () => {
+    router.replace(getSafeReturnPath(searchParams.get("returnTo")))
+  }
+
+  const handleBackToCredentials = () => {
+    setChallenge(null)
+    resetOtpForm()
+    setResendStatus("idle")
+    setResendMessage("")
   }
 
   const errorMessages = [
@@ -256,118 +365,230 @@ export function LoginPage() {
         ref={formPanelRef}
       >
         <div className="login-form-card">
-          <div>
-            <p className="eyebrow">{copy.eyebrow}</p>
-            <h1 id="login-title">Sign in to your portal</h1>
-            <p className="login-form-intro">{copy.formIntro}</p>
-          </div>
+          {challenge ? (
+            <>
+              <div>
+                <p className="eyebrow">{copy.eyebrow}</p>
+                <h1 id="login-title">Check your email</h1>
+                <p className="login-form-intro">
+                  We sent a 6-digit verification code to{" "}
+                  <strong>{challenge.email}</strong>. Enter it below to finish
+                  signing in.
+                </p>
+              </div>
 
-          {hasErrors && (
-            <div
-              ref={errorSummaryRef}
-              className="login-error-summary"
-              role="alert"
-              aria-label="Sign-in errors"
-              tabIndex={-1}
-            >
-              <strong>Check the sign-in details.</strong>
-              <ul>
-                {errorMessages.map((message) => (
-                  <li key={message}>{message}</li>
-                ))}
-              </ul>
-              {errors.root?.credentials?.message ===
-                queueKioskSurfaceMessage && (
-                <Link href="/queue">Open Queue Kiosk</Link>
-              )}
-            </div>
-          )}
+              <form
+                noValidate
+                onSubmit={(event) => void handleOtpSubmit(submitOtp)(event)}
+              >
+                <FieldGroup>
+                  <Field data-invalid={Boolean(otpErrors.code)}>
+                    <FieldLabel htmlFor="login-otp-code">
+                      Verification code
+                    </FieldLabel>
+                    <Input
+                      id="login-otp-code"
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      maxLength={6}
+                      aria-invalid={Boolean(otpErrors.code)}
+                      aria-describedby={
+                        otpErrors.code ? "login-otp-code-error" : undefined
+                      }
+                      disabled={otpSubmitting}
+                      {...registerOtp("code")}
+                    />
+                    <FieldError id="login-otp-code-error">
+                      {otpErrors.code?.message}
+                    </FieldError>
+                  </Field>
+                </FieldGroup>
 
-          <form
-            noValidate
-            onSubmit={(event) => void handleSubmit(submitLogin)(event)}
-          >
-            <FieldGroup>
-              <Field data-invalid={Boolean(errors.email)}>
-                <FieldLabel htmlFor="login-email">Email address</FieldLabel>
-                <Input
-                  id="login-email"
-                  type="email"
-                  autoComplete="username"
-                  placeholder="name@grc.test"
-                  aria-invalid={Boolean(errors.email)}
-                  aria-describedby={
-                    errors.email ? "login-email-error" : undefined
-                  }
-                  disabled={isSubmitting}
-                  {...register("email")}
-                />
-                <FieldError id="login-email-error">
-                  {errors.email?.message}
-                </FieldError>
-              </Field>
+                <Button
+                  className="login-submit"
+                  type="submit"
+                  size="lg"
+                  disabled={otpSubmitting}
+                >
+                  {otpSubmitting ? "Verifying…" : "Verify and sign in"}
+                </Button>
+                <span className="sr-only" role="status" aria-live="polite">
+                  {otpSubmitting ? "Checking verification code." : ""}
+                </span>
+              </form>
 
-              <Field data-invalid={Boolean(errors.password)}>
-                <FieldLabel htmlFor="login-password">Password</FieldLabel>
-                <div className="login-password-row">
-                  <Input
-                    id="login-password"
-                    type={passwordVisible ? "text" : "password"}
-                    autoComplete="current-password"
-                    aria-invalid={Boolean(errors.password)}
-                    aria-describedby={
-                      errors.password ? "login-password-error" : undefined
+              <div className="rounded-lg border border-border/60 bg-muted/30 p-4 text-center text-sm space-y-2">
+                <p className="text-muted-foreground">
+                  Didn&apos;t get the code?
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={resendStatus === "sending"}
+                  onClick={() => void handleResendOtp()}
+                >
+                  {resendStatus === "sending" ? "Sending…" : "Resend code"}
+                </Button>
+                {resendMessage && (
+                  <p
+                    className={
+                      resendStatus === "sent"
+                        ? "text-xs font-medium text-success"
+                        : "text-xs text-destructive"
                     }
-                    disabled={isSubmitting}
-                    {...register("password")}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label={
-                      passwordVisible ? "Hide password" : "Show password"
-                    }
-                    disabled={isSubmitting}
-                    onClick={() => setPasswordVisible((visible) => !visible)}
+                    role="status"
                   >
-                    {passwordVisible ? (
-                      <EyeOff aria-hidden="true" />
-                    ) : (
-                      <Eye aria-hidden="true" />
-                    )}
-                  </Button>
+                    {resendMessage}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleBackToCredentials}
+              >
+                <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+                Use a different account
+              </Button>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="eyebrow">{copy.eyebrow}</p>
+                <h1 id="login-title">Sign in to your portal</h1>
+                <p className="login-form-intro">{copy.formIntro}</p>
+              </div>
+
+              {hasErrors && (
+                <div
+                  ref={errorSummaryRef}
+                  className="login-error-summary"
+                  role="alert"
+                  aria-label="Sign-in errors"
+                  tabIndex={-1}
+                >
+                  <strong>Check the sign-in details.</strong>
+                  <ul>
+                    {errorMessages.map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                  {errors.root?.credentials?.message ===
+                    queueKioskSurfaceMessage && (
+                    <Link href="/queue">Open Queue Kiosk</Link>
+                  )}
                 </div>
-                <FieldError id="login-password-error">
-                  {errors.password?.message}
-                </FieldError>
-              </Field>
-            </FieldGroup>
+              )}
 
-            <Button
-              className="login-submit"
-              type="submit"
-              size="lg"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Signing in…" : "Sign in"}
-            </Button>
-            <span className="sr-only" role="status" aria-live="polite">
-              {isSubmitting ? "Checking credentials." : ""}
-            </span>
-          </form>
+              <form
+                noValidate
+                onSubmit={(event) => void handleSubmit(submitLogin)(event)}
+              >
+                <FieldGroup>
+                  <Field data-invalid={Boolean(errors.email)}>
+                    <FieldLabel htmlFor="login-email">
+                      Email address
+                    </FieldLabel>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      autoComplete="username"
+                      placeholder="name@grc.test"
+                      aria-invalid={Boolean(errors.email)}
+                      aria-describedby={
+                        errors.email ? "login-email-error" : undefined
+                      }
+                      disabled={isSubmitting}
+                      {...register("email")}
+                    />
+                    <FieldError id="login-email-error">
+                      {errors.email?.message}
+                    </FieldError>
+                  </Field>
 
-          <div className="login-guide-note">
-            <FieldDescription>{copy.guideDescription}</FieldDescription>
-            <code>{copy.guidePath}</code>
-          </div>
+                  <Field data-invalid={Boolean(errors.password)}>
+                    <div className="login-password-label-row">
+                      <FieldLabel htmlFor="login-password">
+                        Password
+                      </FieldLabel>
+                      <Link
+                        className="login-forgot-password"
+                        href="/forgot-password"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <div className="login-password-row">
+                      <Input
+                        id="login-password"
+                        type={passwordVisible ? "text" : "password"}
+                        autoComplete="current-password"
+                        aria-invalid={Boolean(errors.password)}
+                        aria-describedby={
+                          errors.password ? "login-password-error" : undefined
+                        }
+                        disabled={isSubmitting}
+                        {...register("password")}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label={
+                          passwordVisible ? "Hide password" : "Show password"
+                        }
+                        disabled={isSubmitting}
+                        onClick={() =>
+                          setPasswordVisible((visible) => !visible)
+                        }
+                      >
+                        {passwordVisible ? (
+                          <EyeOff aria-hidden="true" />
+                        ) : (
+                          <Eye aria-hidden="true" />
+                        )}
+                      </Button>
+                    </div>
+                    <FieldError id="login-password-error">
+                      {errors.password?.message}
+                    </FieldError>
+                  </Field>
+                </FieldGroup>
 
-          <Button asChild variant="ghost">
-            <Link href="/">
-              <ArrowLeft data-icon="inline-start" aria-hidden="true" />
-              Return to the landing page
-            </Link>
-          </Button>
+                <Button
+                  className="login-submit"
+                  type="submit"
+                  size="lg"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Signing in…" : "Sign in"}
+                </Button>
+                <span className="sr-only" role="status" aria-live="polite">
+                  {isSubmitting ? "Checking credentials." : ""}
+                </span>
+              </form>
+
+              <div className="login-divider" role="separator" aria-label="or">
+                <span>or</span>
+              </div>
+
+              <GoogleSignInButton onSignedIn={handleGoogleSignedIn} />
+
+              <div className="login-guide-note">
+                <FieldDescription>{copy.guideDescription}</FieldDescription>
+                <code>{copy.guidePath}</code>
+              </div>
+
+              <Button asChild variant="ghost">
+                <Link href="/">
+                  <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+                  Return to the landing page
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
       </section>
     </main>

@@ -59,7 +59,7 @@ final class SubmitEnrollmentCapacityTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -86,7 +86,7 @@ final class SubmitEnrollmentCapacityTest extends TestCase
 
         $makeFaculty = fn (string $email): int => User::create([
             'name' => 'Prof', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ])->id;
 
         $tightSubject = Subject::create(['code' => 'CS101', 'title' => 'CS101 Title', 'units' => 3, 'status' => SubjectStatus::Active]);

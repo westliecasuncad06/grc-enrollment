@@ -1,5 +1,7 @@
 export type AuthErrorCode =
-  "INVALID_CREDENTIALS" | "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL"
+  | "INVALID_CREDENTIALS"
+  | "QUEUE_KIOSK_REQUIRES_DEVICE_PORTAL"
+  | "GOOGLE_ACCOUNT_NOT_FOUND"
 
 export class AuthError extends Error {
   readonly code: AuthErrorCode

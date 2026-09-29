@@ -280,6 +280,7 @@ final class CurriculumSubjectAuthoringEndpointTest extends TestCase
             'role' => UserRole::ProgramChair,
             'college' => $college,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

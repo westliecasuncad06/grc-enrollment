@@ -57,7 +57,7 @@ final class ClassRostersEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -104,7 +104,7 @@ final class ClassRostersEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -137,12 +137,12 @@ final class ClassRostersEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
-        $ownProfessor = User::create(['name' => 'Owner', 'email' => 'prof.ownroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $ownProfessor = User::create(['name' => 'Owner', 'email' => 'prof.ownroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $ownSection = $this->makeSection($term, $this->makeSubject('CS101'), $ownProfessor);
         $student = $this->makeStudent($curriculum);
         $this->makeRosterEntry($student, $term, $ownSection);
 
-        $otherProfessor = User::create(['name' => 'Other', 'email' => 'prof.otherroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $otherProfessor = User::create(['name' => 'Other', 'email' => 'prof.otherroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $otherSection = $this->makeSection($term, $this->makeSubject('CS102'), $otherProfessor);
         $otherStudent = $this->makeStudent($curriculum, 'other.student.roster@grc.test', '2026-0002');
         $this->makeRosterEntry($otherStudent, $term, $otherSection);
@@ -162,12 +162,12 @@ final class ClassRostersEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
-        $professorA = User::create(['name' => 'A', 'email' => 'prof.a.roster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professorA = User::create(['name' => 'A', 'email' => 'prof.a.roster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionA = $this->makeSection($term, $this->makeSubject('CS101'), $professorA);
         $studentA = $this->makeStudent($curriculum);
         $this->makeRosterEntry($studentA, $term, $sectionA);
 
-        $professorB = User::create(['name' => 'B', 'email' => 'prof.b.roster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professorB = User::create(['name' => 'B', 'email' => 'prof.b.roster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionB = $this->makeSection($term, $this->makeSubject('CS102'), $professorB);
         $studentB = $this->makeStudent($curriculum, 'student.b.roster@grc.test', '2026-0002');
         $this->makeRosterEntry($studentB, $term, $sectionB);
@@ -181,12 +181,12 @@ final class ClassRostersEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
-        $professorA = User::create(['name' => 'A', 'email' => 'prof.a.headroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professorA = User::create(['name' => 'A', 'email' => 'prof.a.headroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionA = $this->makeSection($term, $this->makeSubject('CS101'), $professorA);
         $studentA = $this->makeStudent($curriculum);
         $this->makeRosterEntry($studentA, $term, $sectionA);
 
-        $professorB = User::create(['name' => 'B', 'email' => 'prof.b.headroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professorB = User::create(['name' => 'B', 'email' => 'prof.b.headroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionB = $this->makeSection($term, $this->makeSubject('CS102'), $professorB);
         $studentB = $this->makeStudent($curriculum, 'student.b.headroster@grc.test', '2026-0002');
         $this->makeRosterEntry($studentB, $term, $sectionB);
@@ -200,7 +200,7 @@ final class ClassRostersEndpointTest extends TestCase
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.filterroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.filterroster@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionA = $this->makeSection($term, $this->makeSubject('CS101'), $professor, 'A');
         $sectionB = $this->makeSection($term, $this->makeSubject('CS102'), $professor, 'B');
         $studentA = $this->makeStudent($curriculum);

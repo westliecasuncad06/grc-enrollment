@@ -511,6 +511,12 @@ function renderWorkspaceWithClient(
         college: "ccs",
         signedInAt: "2026-07-29T12:00:00Z",
       }),
+    verifyLoginOtp: () =>
+      Promise.reject(new Error("verifyLoginOtp: not implemented in stub")),
+    resendLoginOtp: () =>
+      Promise.reject(new Error("resendLoginOtp: not implemented in stub")),
+    signInWithGoogle: () =>
+      Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
     signOut: () => undefined,
     status: "authenticated",
     storageAvailable: true,

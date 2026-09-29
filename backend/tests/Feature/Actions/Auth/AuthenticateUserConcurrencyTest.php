@@ -57,6 +57,7 @@ final class AuthenticateUserConcurrencyTest extends TestCase
         $input->write(json_encode([
             'email' => $kiosk->email,
             'password' => $oldPassword,
+            'request_id' => 'observed-login-'.$suffix,
         ], JSON_THROW_ON_ERROR)."\n");
         $process = new Process([
             PHP_BINARY,
@@ -90,6 +91,7 @@ final class AuthenticateUserConcurrencyTest extends TestCase
                 $process->stop(0);
             }
             AuditLog::query()->where('request_id', 'concurrency-'.$suffix)->delete();
+            AuditLog::query()->where('request_id', 'observed-login-'.$suffix)->delete();
             $kiosk->tokens()->delete();
             $credential->delete();
             $kiosk->delete();

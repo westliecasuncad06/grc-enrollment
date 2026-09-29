@@ -7,6 +7,8 @@ use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Enrollment\QueueTicketPriority;
+use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -26,6 +28,8 @@ use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Program;
+use App\Models\QueueCycle;
+use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
@@ -60,7 +64,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => 'student.payment@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -99,7 +103,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -168,7 +172,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
         self::assertSame('250.00', $tuition->refresh()->unit_amount);
         self::assertSame('750.00', $tuition->amount);
         self::assertSame('300.00', $registration->refresh()->amount);
-        self::assertSame(AuditAction::ASSESSMENT_ADJUSTED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ASSESSMENT_ADJUSTED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
         $this->assertDatabaseCount('payments', 0);
         $this->assertDatabaseCount('enrollment_documents', 0);
     }
@@ -229,7 +233,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
             'Certificate of Registration',
             EnrollmentDocument::query()->sole()->snapshot['document_title'],
         );
-        self::assertSame(AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ENROLLMENT_PAYMENT_CONFIRMED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
         self::assertSame(NotificationType::EnrollmentPaymentConfirmed, Notification::query()->sole()->type);
     }
 
@@ -287,7 +291,7 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $second->assertJsonPath('data.payment.promissory_note_on_file', true);
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseCount('enrollment_documents', 1);
-        $this->assertDatabaseCount('audit_logs', 1);
+        self::assertSame(1, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
         $this->assertDatabaseCount('notifications', 1);
         self::assertSame(Payment::query()->sole()->external_reference, 'OR-000123');
         self::assertTrue(Payment::query()->sole()->promissory_note_on_file);
@@ -440,22 +444,22 @@ final class PaymentConfirmationEndpointTest extends TestCase
         $curriculum = $this->makeCurriculum();
         $student = $this->makeStudent($curriculum);
         $enrollment = $this->makeEnrollment($student, $term);
-        $cycle = \App\Models\QueueCycle::create(['opened_on' => '2026-08-01', 'last_ticket_sequence' => 1]);
-        $ticket = \App\Models\QueueTicket::create([
+        $cycle = QueueCycle::create(['opened_on' => '2026-08-01', 'last_ticket_sequence' => 1]);
+        $ticket = QueueTicket::create([
             'enrollment_id' => $enrollment->id,
             'queue_cycle_id' => $cycle->id,
             'ticket_sequence' => 1,
             'ticket_number' => 'Q001',
             'queue_date' => '2026-08-01',
-            'status' => \App\Domain\Enrollment\QueueTicketStatus::Waiting,
-            'priority' => \App\Domain\Enrollment\QueueTicketPriority::Regular,
+            'status' => QueueTicketStatus::Waiting,
+            'priority' => QueueTicketPriority::Regular,
         ]);
         $token = $this->tokenForNewUser(UserRole::AccountingStaff, 'accounting.queueremove@grc.test');
 
         $response = $this->withToken($token)->postJson("/api/v1/enrollments/{$enrollment->id}/payment", []);
         $response->assertCreated();
 
-        self::assertSame(\App\Domain\Enrollment\QueueTicketStatus::Served, $ticket->refresh()->status);
+        self::assertSame(QueueTicketStatus::Served, $ticket->refresh()->status);
         self::assertNotNull($ticket->served_at);
 
         $listResponse = $this->withToken($token)->getJson('/api/v1/queue-tickets?status=waiting');

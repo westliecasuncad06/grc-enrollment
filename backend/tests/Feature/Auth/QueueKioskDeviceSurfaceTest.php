@@ -21,6 +21,7 @@ final class QueueKioskDeviceSurfaceTest extends TestCase
             'password' => 'correct-horse-battery-staple',
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         $abilities = $role === UserRole::QueueKiosk

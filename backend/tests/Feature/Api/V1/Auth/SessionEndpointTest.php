@@ -25,6 +25,7 @@ final class SessionEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::RegistrarHead,
             'status' => $status,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

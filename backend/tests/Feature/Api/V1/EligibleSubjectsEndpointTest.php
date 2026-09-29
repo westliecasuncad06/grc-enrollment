@@ -60,7 +60,7 @@ final class EligibleSubjectsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => 'student.eligible@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -120,7 +120,7 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $term = $this->makeTerm();
         User::create([
             'name' => 'Faculty', 'email' => 'faculty.eligible@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => 'faculty.eligible@grc.test', 'password' => self::PASSWORD,
@@ -669,7 +669,7 @@ final class EligibleSubjectsEndpointTest extends TestCase
         $student->forceFill(['year_level' => 2, 'enrollment_category' => 'regular'])->save();
         $encoder = User::create([
             'name' => 'Encoder', 'email' => 'encoder.backsubject@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         AcademicGrade::create([
             'student_id' => $student->id, 'subject_id' => $ethics->id, 'academic_term_id' => $priorTerm->id,

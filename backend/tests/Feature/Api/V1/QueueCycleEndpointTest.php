@@ -59,7 +59,7 @@ final class QueueCycleEndpointTest extends TestCase
         $this->withToken($token)->postJson('/api/v1/queue-cycle/cut-off')
             ->assertOk()
             ->assertJsonPath('data.status', 'cut_off');
-        self::assertSame(AuditAction::QUEUE_CYCLE_CUT_OFF, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::QUEUE_CYCLE_CUT_OFF, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_cutting_off_returns_a_serving_ticket_to_waiting_without_requeuing(): void
@@ -150,7 +150,7 @@ final class QueueCycleEndpointTest extends TestCase
         ]);
         $user = User::create([
             'name' => 'Cycle Ticket Student', 'email' => 'cycleticket.'.uniqid().'@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $student = StudentProfile::create([
             'user_id' => $user->id, 'student_number' => '2026-08-'.random_int(10000, 99999),
@@ -177,7 +177,7 @@ final class QueueCycleEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

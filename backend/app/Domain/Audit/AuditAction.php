@@ -248,6 +248,22 @@ final class AuditAction
 
     public const QUEUE_KIOSK_PASSWORD_CHANGED = 'queue_kiosk.password_changed';
 
+    public const LOGIN_SUCCEEDED = 'login.succeeded';
+
+    public const LOGIN_FAILED = 'login.failed';
+
+    public const PASSWORD_RESET_CODE_SENT = 'password_reset.code_sent';
+
+    public const PASSWORD_RESET_CODE_SEND_FAILED = 'password_reset.code_send_failed';
+
+    public const PASSWORD_RESET_COMPLETED = 'password_reset.completed';
+
+    public const LOGIN_OTP_CHALLENGE_ISSUED = 'login_otp.challenge_issued';
+
+    public const LOGIN_OTP_CHALLENGE_SEND_FAILED = 'login_otp.challenge_send_failed';
+
+    public const LOGIN_OTP_FAILED = 'login_otp.failed';
+
     /**
      * @return list<string>
      */
@@ -368,6 +384,14 @@ final class AuditAction
             self::QUEUE_CYCLE_CLOSED,
             self::QUEUE_KIOSK_CREDENTIAL_VIEWED,
             self::QUEUE_KIOSK_PASSWORD_CHANGED,
+            self::LOGIN_SUCCEEDED,
+            self::LOGIN_FAILED,
+            self::PASSWORD_RESET_CODE_SENT,
+            self::PASSWORD_RESET_CODE_SEND_FAILED,
+            self::PASSWORD_RESET_COMPLETED,
+            self::LOGIN_OTP_CHALLENGE_ISSUED,
+            self::LOGIN_OTP_CHALLENGE_SEND_FAILED,
+            self::LOGIN_OTP_FAILED,
             self::FACULTY_ACCOUNT_SETUP_INVITATION_SENT,
             self::FACULTY_ACCOUNT_SETUP_INVITATION_FAILED,
             self::FACULTY_ACCOUNT_ACTIVATED,

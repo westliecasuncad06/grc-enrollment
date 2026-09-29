@@ -230,6 +230,7 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Student,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
         $student = StudentProfile::create([
             'user_id' => $studentUser->id,
@@ -276,6 +277,7 @@ final class CashierPaymentCandidateEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [

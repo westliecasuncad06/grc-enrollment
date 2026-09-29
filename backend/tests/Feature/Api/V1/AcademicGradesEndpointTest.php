@@ -67,7 +67,7 @@ final class AcademicGradesEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -97,7 +97,7 @@ final class AcademicGradesEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -159,7 +159,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.create@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.create@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->enroll($student, $term, $section);
@@ -177,7 +177,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $response->assertCreated()->assertJsonPath('data.status', 'draft')->assertJsonPath('data.mark', '1.50')
             ->assertJsonPath('data.mark_label', 'with Distinction');
         self::assertSame('1.50', AcademicGrade::query()->sole()->final_grade);
-        self::assertSame(AuditAction::ACADEMIC_GRADE_CREATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ACADEMIC_GRADE_CREATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_leadership_subject_rejects_a_numeric_mark(): void
@@ -185,7 +185,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject('LEAD 1');
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.lead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.lead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->enroll($student, $term, $section);
@@ -208,7 +208,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject('LEAD 1');
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.leadok@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.leadok@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->enroll($student, $term, $section);
@@ -231,7 +231,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.nonlead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.nonlead@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $token = $this->tokenFor($professor);
@@ -253,7 +253,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $owningProfessor = User::create(['name' => 'Owner', 'email' => 'prof.owner@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $owningProfessor = User::create(['name' => 'Owner', 'email' => 'prof.owner@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $owningProfessor);
         $student = $this->makeStudent($curriculum);
         $otherToken = $this->tokenForNewUser(UserRole::Faculty, 'prof.other@grc.test');
@@ -275,7 +275,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.dup@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.dup@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->makeGrade($student, $subject, $section, $term, $professor);
@@ -297,7 +297,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.edit@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.edit@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->enroll($student, $term, $section);
@@ -313,7 +313,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $response->assertOk();
         self::assertSame('3.00', $grade->refresh()->final_grade);
         self::assertSame('3.00', $grade->mark->value);
-        self::assertSame(AuditAction::ACADEMIC_GRADE_UPDATED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ACADEMIC_GRADE_UPDATED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_a_faculty_member_cannot_edit_a_grade_once_submitted(): void
@@ -321,7 +321,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.locked@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.locked@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $grade = $this->makeGrade($student, $subject, $section, $term, $professor, GradeStatus::Submitted);
@@ -339,7 +339,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $owningProfessor = User::create(['name' => 'Owner', 'email' => 'prof.owns@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $owningProfessor = User::create(['name' => 'Owner', 'email' => 'prof.owns@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $owningProfessor);
         $student = $this->makeStudent($curriculum);
         $grade = $this->makeGrade($student, $subject, $section, $term, $owningProfessor);
@@ -357,7 +357,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.submit@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.submit@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->enroll($student, $term, $section);
@@ -369,7 +369,7 @@ final class AcademicGradesEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.status', 'submitted');
         self::assertNotNull($grade->refresh()->submitted_at);
-        self::assertSame(AuditAction::ACADEMIC_GRADE_SUBMITTED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::ACADEMIC_GRADE_SUBMITTED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
         $this->assertDatabaseCount('notifications', 0);
     }
 
@@ -378,7 +378,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $owningProfessor = User::create(['name' => 'Owner', 'email' => 'prof.submitowner@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $owningProfessor = User::create(['name' => 'Owner', 'email' => 'prof.submitowner@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $owningProfessor);
         $student = $this->makeStudent($curriculum);
         $grade = $this->makeGrade($student, $subject, $section, $term, $owningProfessor);
@@ -395,7 +395,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.lock@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.lock@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $grade = $this->makeGrade($student, $subject, $section, $term, $professor, GradeStatus::Submitted);
@@ -426,7 +426,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.nolock@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.nolock@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $grade = $this->makeGrade($student, $subject, $section, $term, $professor, GradeStatus::Submitted);
@@ -443,7 +443,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.studentview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.studentview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum);
         $this->makeGrade($student, $subject, $section, $term, $professor);
@@ -464,12 +464,12 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $ownProfessor = User::create(['name' => 'Owner', 'email' => 'prof.ownview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $ownProfessor = User::create(['name' => 'Owner', 'email' => 'prof.ownview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $ownSection = $this->makeSection($term, $subject, $ownProfessor);
         $student = $this->makeStudent($curriculum);
         $this->makeGrade($student, $subject, $ownSection, $term, $ownProfessor);
 
-        $otherProfessor = User::create(['name' => 'Other', 'email' => 'prof.otherview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $otherProfessor = User::create(['name' => 'Other', 'email' => 'prof.otherview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $otherSection = $this->makeSection($term, $this->makeSubject('CS102'), $otherProfessor);
         $otherStudent = $this->makeStudent($curriculum, 'other.faculty.grade@grc.test', '2026-0003');
         $this->makeGrade($otherStudent, $otherSection->subject, $otherSection, $term, $otherProfessor);
@@ -487,7 +487,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.registrarview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.registrarview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $studentA = $this->makeStudent($curriculum);
         $this->makeGrade($studentA, $subject, $section, $term, $professor);
@@ -536,7 +536,7 @@ final class AcademicGradesEndpointTest extends TestCase
             $subject = $this->makeSubject('QC'.(100 + $i));
             $professor = User::create([
                 'name' => 'Prof '.$i, 'email' => "prof.querycount{$i}@grc.test",
-                'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active,
+                'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
             ]);
             $section = $this->makeSection($term, $subject, $professor);
             $student = $this->makeStudent($curriculum, "student.querycount{$i}@grc.test", sprintf('2026-9%03d', $i));
@@ -571,7 +571,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof', 'email' => 'prof.staffview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof', 'email' => 'prof.staffview@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $studentA = $this->makeStudent($curriculum);
         $this->makeGrade($studentA, $subject, $section, $term, $professor);
@@ -597,7 +597,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $curriculumCbae = Curriculum::create(['program_id' => $programCbae->id, 'name' => 'BSBA Curriculum', 'effective_school_year' => '2026-2027', 'status' => CurriculumStatus::Active]);
         $subjectCbae = Subject::create(['code' => 'BA101', 'title' => 'BA101 Title', 'college' => CollegeCode::Cbae, 'units' => 3.0, 'status' => SubjectStatus::Active]);
 
-        $professor = User::create(['name' => 'Prof Multi', 'email' => 'prof.multi@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof Multi', 'email' => 'prof.multi@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionCcs = $this->makeSection($term, $subjectCcs, $professor);
         $sectionCbae = $this->makeSection($term, $subjectCbae, $professor);
 
@@ -635,7 +635,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof INC', 'email' => 'prof.inc@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof INC', 'email' => 'prof.inc@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student = $this->makeStudent($curriculum, 'student.inc@grc.test', '2026-9001');
 
@@ -681,7 +681,7 @@ final class AcademicGradesEndpointTest extends TestCase
 
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof Expired', 'email' => 'prof.expired@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof Expired', 'email' => 'prof.expired@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($oldTerm, $subject, $professor);
         $student = $this->makeStudent($curriculum, 'student.expired@grc.test', '2024-9001');
 
@@ -712,7 +712,7 @@ final class AcademicGradesEndpointTest extends TestCase
     public function test_non_registrar_head_cannot_lock_all_grades(): void
     {
         $term = $this->makeTerm();
-        $professor = User::create(['name' => 'Prof Unauthorized', 'email' => 'prof.unauth@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof Unauthorized', 'email' => 'prof.unauth@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $token = $this->tokenFor($professor);
 
         $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
@@ -727,7 +727,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
         $subject = $this->makeSubject();
-        $professor = User::create(['name' => 'Prof LockAll', 'email' => 'prof.lockall@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof LockAll', 'email' => 'prof.lockall@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $subject, $professor);
         $student1 = $this->makeStudent($curriculum, 'student.lockall1@grc.test', '2026-8001');
         $student2 = $this->makeStudent($curriculum, 'student.lockall2@grc.test', '2026-8002');
@@ -749,7 +749,7 @@ final class AcademicGradesEndpointTest extends TestCase
             'encoded_by' => $professor->id,
         ]);
 
-        $registrarHead = User::create(['name' => 'Reg Head', 'email' => 'reg.head.lockall@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $registrarHead = User::create(['name' => 'Reg Head', 'email' => 'reg.head.lockall@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $token = $this->tokenFor($registrarHead);
 
         $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [
@@ -795,7 +795,7 @@ final class AcademicGradesEndpointTest extends TestCase
                 'year_level' => 1, 'semester' => $semester, 'is_required' => true,
             ]);
         }
-        $professor = User::create(['name' => 'Prof Promote', 'email' => "prof.{$emailKey}@grc.test", 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof Promote', 'email' => "prof.{$emailKey}@grc.test", 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $section = $this->makeSection($term, $open, $professor);
         $student = $this->makeStudent($curriculum, "student.{$emailKey}@grc.test", '2026-'.random_int(9000, 9999));
 
@@ -810,7 +810,7 @@ final class AcademicGradesEndpointTest extends TestCase
             'encoded_by' => $professor->id, 'submitted_at' => now(),
         ]);
 
-        $registrarHead = User::create(['name' => 'Reg Head', 'email' => "reg.{$emailKey}@grc.test", 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $registrarHead = User::create(['name' => 'Reg Head', 'email' => "reg.{$emailKey}@grc.test", 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
 
         return [
             'term' => $term, 'student' => $student, 'subject' => $open,
@@ -874,7 +874,7 @@ final class AcademicGradesEndpointTest extends TestCase
         $subjectCoe = $this->makeSubject('ENG101');
         $subjectCoe->update(['college' => 'coe']);
 
-        $professor = User::create(['name' => 'Prof Split', 'email' => 'prof.split@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active]);
+        $professor = User::create(['name' => 'Prof Split', 'email' => 'prof.split@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $sectionCcs = $this->makeSection($term, $subjectCcs, $professor);
         $sectionCoe = $this->makeSection($term, $subjectCoe, $professor);
         $student1 = $this->makeStudent($curriculum, 'student.split1@grc.test', '2026-8004');
@@ -891,7 +891,7 @@ final class AcademicGradesEndpointTest extends TestCase
             'encoded_by' => $professor->id, 'submitted_at' => now(),
         ]);
 
-        $registrarHead = User::create(['name' => 'Reg Head Split', 'email' => 'reg.head.split@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $registrarHead = User::create(['name' => 'Reg Head Split', 'email' => 'reg.head.split@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $token = $this->tokenFor($registrarHead);
 
         // Lock CCS only
@@ -910,7 +910,7 @@ final class AcademicGradesEndpointTest extends TestCase
     public function test_lock_all_returns_zero_count_when_no_submitted_grades_awaiting_lock(): void
     {
         $term = $this->makeTerm();
-        $registrarHead = User::create(['name' => 'Reg Head Empty', 'email' => 'reg.head.empty@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active]);
+        $registrarHead = User::create(['name' => 'Reg Head Empty', 'email' => 'reg.head.empty@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
         $token = $this->tokenFor($registrarHead);
 
         $response = $this->withToken($token)->postJson('/api/v1/academic-grades/lock-all', [

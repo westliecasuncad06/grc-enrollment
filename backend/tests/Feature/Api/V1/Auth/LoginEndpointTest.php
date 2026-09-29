@@ -2,11 +2,16 @@
 
 namespace Tests\Feature\Api\V1\Auth;
 
+use App\Domain\Audit\AuditAction;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Mail\LoginOtpMail;
+use App\Models\AuditLog;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
@@ -24,10 +29,17 @@ final class LoginEndpointTest extends TestCase
         RateLimiter::clear('login|student.seed@grc.test|127.0.0.1');
     }
 
+    /**
+     * `$lastOtpVerifiedAt` defaults to "just now" so every test in this file
+     * that predates the login-OTP slice keeps exercising the no-challenge
+     * password-login contract unchanged. Pass `null` to exercise the
+     * OTP-required path instead (see `LoginOtpEndpointTest`-style cases below).
+     */
     private function seedUser(
         UserStatus $status = UserStatus::Active,
         string $email = 'student.seed@grc.test',
         UserRole $role = UserRole::Student,
+        ?CarbonImmutable $lastOtpVerifiedAt = new CarbonImmutable,
     ): User {
         return User::create([
             'name' => 'Seed Student',
@@ -35,6 +47,7 @@ final class LoginEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => $status,
+            'last_otp_verified_at' => $lastOtpVerifiedAt,
         ]);
     }
 
@@ -277,5 +290,132 @@ final class LoginEndpointTest extends TestCase
         $response->assertStatus(429);
         $response->assertJsonPath('error.code', 'THROTTLED');
         $response->assertHeader('Retry-After');
+        // ApiExceptionRenderer substitutes one fixed, already non-enumerating
+        // message for every 429 in the app — confirm it stays that way here.
+        $this->assertSame(
+            'Too many requests. Please retry later.',
+            $response->json('error.message'),
+        );
+    }
+
+    public function test_a_wrong_password_against_a_known_account_records_a_login_failed_audit_row(): void
+    {
+        $user = $this->seedUser();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => 'wrong-password',
+        ])->assertStatus(401);
+
+        $log = AuditLog::query()->where('action', AuditAction::LOGIN_FAILED)->sole();
+        self::assertSame($user->id, $log->actor_user_id);
+        self::assertSame($user->id, $log->auditable_id);
+    }
+
+    public function test_an_unknown_email_records_no_login_failed_audit_row(): void
+    {
+        $this->seedUser();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'nobody@grc.test',
+            'password' => self::PASSWORD,
+        ])->assertStatus(401);
+
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
+    }
+
+    public function test_a_disabled_account_records_a_login_failed_audit_row_too(): void
+    {
+        $user = $this->seedUser(UserStatus::Disabled);
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ])->assertStatus(401);
+
+        $log = AuditLog::query()->where('action', AuditAction::LOGIN_FAILED)->sole();
+        self::assertSame($user->id, $log->auditable_id);
+    }
+
+    public function test_a_successful_login_records_a_login_succeeded_audit_row_with_the_password_method(): void
+    {
+        $user = $this->seedUser();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ])->assertOk();
+
+        $log = AuditLog::query()->where('action', AuditAction::LOGIN_SUCCEEDED)->sole();
+        self::assertSame($user->id, $log->actor_user_id);
+        self::assertSame($user->id, $log->auditable_id);
+        self::assertSame('password', $log->after_values['method'] ?? null);
+    }
+
+    public function test_an_account_that_has_never_verified_an_otp_gets_a_challenge_instead_of_a_token(): void
+    {
+        Mail::fake();
+        $this->seedUser(lastOtpVerifiedAt: null);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ]);
+
+        $response->assertOk();
+        $response->assertHeader('Cache-Control', 'no-store, private');
+        $response->assertJsonPath('data.type', 'login-otp-challenge');
+        $response->assertJsonPath('data.otp_required', true);
+        $response->assertJsonPath('data.email', 'student.seed@grc.test');
+        $this->assertNotEmpty($response->json('data.challenge_token'));
+        $this->assertArrayNotHasKey('token', $response->json('data'));
+
+        Mail::assertSent(LoginOtpMail::class);
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_a_stale_otp_verification_re_requires_a_fresh_challenge(): void
+    {
+        Mail::fake();
+        $this->seedUser(lastOtpVerifiedAt: CarbonImmutable::now()->subMinutes(31));
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ]);
+
+        $response->assertJsonPath('data.type', 'login-otp-challenge');
+    }
+
+    public function test_a_recent_otp_verification_skips_the_challenge(): void
+    {
+        Mail::fake();
+        $this->seedUser(lastOtpVerifiedAt: CarbonImmutable::now()->subMinutes(29));
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ]);
+
+        $response->assertJsonPath('data.type', 'auth-session');
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_queue_kiosk_account_never_gets_a_challenge_regardless_of_otp_history(): void
+    {
+        Mail::fake();
+        $this->seedUser(
+            email: 'queue-kiosk.otp.seed@grc.test',
+            role: UserRole::QueueKiosk,
+            lastOtpVerifiedAt: null,
+        );
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'queue-kiosk.otp.seed@grc.test',
+            'password' => self::PASSWORD,
+        ]);
+
+        $response->assertJsonPath('data.type', 'auth-session');
+        Mail::assertNothingSent();
     }
 }

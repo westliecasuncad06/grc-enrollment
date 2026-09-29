@@ -12,11 +12,16 @@ use App\Http\Controllers\Api\V1\AuditActorController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\AccountSetupController;
 use App\Http\Controllers\Api\V1\Auth\FacultyAccountSetupController;
+use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
+use App\Http\Controllers\Api\V1\Auth\GoogleLoginController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\MeController;
+use App\Http\Controllers\Api\V1\Auth\ResendLoginOtpController;
 use App\Http\Controllers\Api\V1\Auth\ResendStudentAccountSetupController;
+use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\Auth\StaffAccountSetupController;
+use App\Http\Controllers\Api\V1\Auth\VerifyLoginOtpController;
 use App\Http\Controllers\Api\V1\Billing\FeeScheduleController;
 use App\Http\Controllers\Api\V1\CashierPaymentCandidateController;
 use App\Http\Controllers\Api\V1\CashierStudentLookupController;
@@ -119,6 +124,37 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('/login', LoginController::class)
             ->middleware('throttle:30,1')
             ->name('login');
+
+        // Public, always the identical generic response (no account
+        // enumeration) — same risk profile as resend-student-account-setup.
+        Route::post('/forgot-password', ForgotPasswordController::class)
+            ->middleware('throttle:5,1')
+            ->name('forgot-password');
+
+        // Public, validates a guessable 6-digit code — same risk profile as
+        // account-setup.
+        Route::post('/reset-password', ResetPasswordController::class)
+            ->middleware('throttle:10,1')
+            ->name('reset-password');
+
+        // Public — the challenge token is the only "identity" either of these
+        // carries, and it is opaque and single-use. Same risk profile as
+        // account-setup for verify; resend gets resend-student-account-setup's
+        // tighter limit since it can be pressed repeatedly by a stalled user.
+        Route::post('/login/verify-otp', VerifyLoginOtpController::class)
+            ->middleware('throttle:10,1')
+            ->name('login.verify-otp');
+
+        Route::post('/login/resend-otp', ResendLoginOtpController::class)
+            ->middleware('throttle:5,1')
+            ->name('login.resend-otp');
+
+        // Public — the credential is a Google-signed ID token, not a
+        // brute-forceable secret, so no per-account RateLimiter is needed
+        // here; this coarse limiter is only a flood guard.
+        Route::post('/google', GoogleLoginController::class)
+            ->middleware('throttle:20,1')
+            ->name('google');
 
         Route::middleware(['auth:sanctum', EnsureUserIsActive::class, EnsureQueueKioskUsesDeviceSurface::class])->group(function (): void {
             Route::post('/logout', LogoutController::class)->name('logout');

@@ -54,7 +54,7 @@ final class QueueTicketsEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Test Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -72,7 +72,7 @@ final class QueueTicketsEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return (string) $this->postJson('/api/v1/auth/login', [
@@ -197,7 +197,7 @@ final class QueueTicketsEndpointTest extends TestCase
         $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'serve']);
 
         $response->assertOk()->assertJsonPath('data.status', 'serving');
-        self::assertSame(AuditAction::QUEUE_TICKET_SERVING_STARTED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::QUEUE_TICKET_SERVING_STARTED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_serve_cannot_be_performed_from_serving(): void
@@ -211,7 +211,7 @@ final class QueueTicketsEndpointTest extends TestCase
         $response = $this->withToken($token)->patchJson("/api/v1/queue-tickets/{$ticket->id}", ['action' => 'serve']);
 
         $response->assertUnprocessable();
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_complete_transitions_a_serving_ticket_to_served(): void
@@ -226,7 +226,7 @@ final class QueueTicketsEndpointTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.status', 'served');
         self::assertNotNull($ticket->refresh()->served_at);
-        self::assertSame(AuditAction::QUEUE_TICKET_SERVED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::QUEUE_TICKET_SERVED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_announce_counts_each_call_out_of_a_serving_ticket_without_changing_it(): void
@@ -246,7 +246,7 @@ final class QueueTicketsEndpointTest extends TestCase
         self::assertSame(2, $ticket->refresh()->announce_count);
         self::assertSame(QueueTicketStatus::Serving, $ticket->status);
         // A repeatable operational ping, not a state change: nothing to audit.
-        $this->assertDatabaseCount('audit_logs', 0);
+        self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
 
     public function test_announce_requires_the_ticket_to_be_serving(): void
@@ -306,7 +306,7 @@ final class QueueTicketsEndpointTest extends TestCase
         $ticket->refresh();
         self::assertSame('waiting', $ticket->status->value);
         self::assertNotNull($ticket->requeued_at);
-        self::assertSame(AuditAction::QUEUE_TICKET_SKIPPED, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::QUEUE_TICKET_SKIPPED, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_skip_requeues_a_serving_ticket_to_the_back_of_line(): void
@@ -470,7 +470,7 @@ final class QueueTicketsEndpointTest extends TestCase
         $ticket = $this->makeTicket($student, $term, 'Q000001');
         $accounting = User::create([
             'name' => 'Cashier One', 'email' => 'accounting.servedby@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::AccountingStaff, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::AccountingStaff, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $token = (string) $this->postJson('/api/v1/auth/login', [
             'email' => 'accounting.servedby@grc.test', 'password' => self::PASSWORD,
@@ -494,7 +494,7 @@ final class QueueTicketsEndpointTest extends TestCase
         $response->assertOk()->assertJsonPath('data.priority', 'priority');
         // Not a status transition — the ticket stays waiting.
         $response->assertJsonPath('data.status', 'waiting');
-        self::assertSame(AuditAction::QUEUE_TICKET_MARKED_PRIORITY, AuditLog::query()->sole()->action);
+        self::assertSame(AuditAction::QUEUE_TICKET_MARKED_PRIORITY, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->sole()->action);
     }
 
     public function test_mark_priority_cannot_be_performed_once_serving(): void

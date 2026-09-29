@@ -39,6 +39,7 @@ final class DashboardEndpointsTest extends TestCase
             'password' => self::PASSWORD,
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 
@@ -70,7 +71,7 @@ final class DashboardEndpointsTest extends TestCase
     {
         $user = User::create([
             'name' => 'Student '.$number, 'email' => strtolower($number).'@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -298,7 +299,7 @@ final class DashboardEndpointsTest extends TestCase
     public function test_institution_summary_filters_status_counts_by_academic_term(): void
     {
         $term1 = $this->makeActiveTerm();
-        $term2 = \App\Models\AcademicTerm::create([
+        $term2 = AcademicTerm::create([
             'school_year' => '2025-2026',
             'semester' => '2nd',
             'status' => 'semester_closed',

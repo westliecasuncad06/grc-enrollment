@@ -91,7 +91,7 @@ final class SubjectWaiversEndpointTest extends TestCase
     {
         $user = User::create([
             'name' => 'Waiver Student', 'email' => $email,
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return StudentProfile::create([
@@ -106,7 +106,7 @@ final class SubjectWaiversEndpointTest extends TestCase
     {
         User::create([
             'name' => 'Test '.$role->value, 'email' => $email,
-            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => $role, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
 
         return $this->login($email);
@@ -124,7 +124,7 @@ final class SubjectWaiversEndpointTest extends TestCase
         $head = User::query()->where('role', UserRole::RegistrarHead)->first()
             ?? User::create([
                 'name' => 'Head', 'email' => 'head.fixture@grc.test', 'password' => self::PASSWORD,
-                'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active,
+                'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
             ]);
 
         return EnrollmentSubjectWaiver::create([

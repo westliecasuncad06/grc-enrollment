@@ -83,7 +83,7 @@ final class CurriculumMigrationEndpointTest extends TestCase
         $chair = User::create([
             'name' => 'CCS Program Chair', 'email' => 'chair.migration@grc.test',
             'password' => self::PASSWORD, 'role' => UserRole::ProgramChair,
-            'college' => CollegeCode::Ccs, 'status' => UserStatus::Active,
+            'college' => CollegeCode::Ccs, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $source = Curriculum::create([
             'program_id' => $program->id, 'name' => 'BSCS 2021 Curriculum',
@@ -104,7 +104,7 @@ final class CurriculumMigrationEndpointTest extends TestCase
         ]);
         $studentUser = User::create([
             'name' => 'Migration Student', 'email' => 'student.migration@grc.test',
-            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => self::PASSWORD, 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $student = StudentProfile::create([
             'user_id' => $studentUser->id, 'student_number' => '2021-0001',

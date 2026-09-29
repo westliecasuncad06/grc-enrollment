@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Auth;
 
+use App\Support\Auth\PasswordPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class AccountSetupRequest extends FormRequest
@@ -17,7 +18,7 @@ final class AccountSetupRequest extends FormRequest
         return [
             'email' => ['required', 'email', 'max:255'],
             'code' => ['required', 'digits:6'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => [...PasswordPolicy::rules(), 'confirmed'],
         ];
     }
 }

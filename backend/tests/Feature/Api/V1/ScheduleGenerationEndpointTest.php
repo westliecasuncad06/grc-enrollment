@@ -76,7 +76,7 @@ final class ScheduleGenerationEndpointTest extends TestCase
 
     private function tokenFor(UserRole $role, string $email, ?CollegeCode $college = null): string
     {
-        $user = User::create(['name' => 'Test User', 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'college' => $college, 'status' => UserStatus::Active]);
+        $user = User::create(['name' => 'Test User', 'email' => $email, 'password' => self::PASSWORD, 'role' => $role, 'college' => $college, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
 
         return (string) $this->postJson('/api/v1/auth/login', ['email' => $user->email, 'password' => self::PASSWORD])->json('data.token');
     }

@@ -23,18 +23,51 @@ const userSchema = z
   })
   .strict()
 
-/** Mirrors backend AuthResource exactly. */
+/** Mirrors backend AuthResource exactly — a completed sign-in either way,
+ * whether reached directly (no OTP required) or via the OTP verify step. */
+const authSessionDataSchema = z
+  .object({
+    type: z.literal("auth-session"),
+    token: z.string().min(1),
+    token_type: z.literal("Bearer"),
+    expires_at: z.string().min(1).nullable(),
+    user: userSchema,
+  })
+  .strict()
+
+/** Mirrors backend LoginOtpChallengeResource exactly — no token exists yet. */
+const loginOtpChallengeDataSchema = z
+  .object({
+    type: z.literal("login-otp-challenge"),
+    otp_required: z.literal(true),
+    challenge_token: z.string().min(1),
+    email: z.string().min(1),
+    expires_at: z.string().min(1),
+  })
+  .strict()
+
 export const authEnvelopeSchema = z
   .object({
-    data: z
-      .object({
-        type: z.literal("auth-session"),
-        token: z.string().min(1),
-        token_type: z.literal("Bearer"),
-        expires_at: z.string().min(1).nullable(),
-        user: userSchema,
-      })
-      .strict(),
+    data: authSessionDataSchema,
+  })
+  .strict()
+
+/**
+ * `POST /auth/login` returns one of these two shapes depending on whether
+ * `LoginOtpPolicy` required a fresh challenge for this account.
+ */
+export const loginResponseEnvelopeSchema = z
+  .object({
+    data: z.discriminatedUnion("type", [
+      authSessionDataSchema,
+      loginOtpChallengeDataSchema,
+    ]),
+  })
+  .strict()
+
+export const loginOtpChallengeEnvelopeSchema = z
+  .object({
+    data: loginOtpChallengeDataSchema,
   })
   .strict()
 

@@ -24,7 +24,7 @@ final class PersonalAccessTokenTouchThrottleTest extends TestCase
     {
         $user = User::create([
             'name' => 'Throttle Student', 'email' => 'throttle@grc.test',
-            'password' => 'correct-horse-battery-staple', 'role' => UserRole::Student, 'status' => UserStatus::Active,
+            'password' => 'correct-horse-battery-staple', 'role' => UserRole::Student, 'status' => UserStatus::Active, 'last_otp_verified_at' => now(),
         ]);
         $newToken = $user->createToken('throttle-test');
 

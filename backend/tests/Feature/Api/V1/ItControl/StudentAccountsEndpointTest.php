@@ -161,6 +161,7 @@ final class StudentAccountsEndpointTest extends TestCase
             'password' => 'password',
             'role' => $role,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
         ]);
     }
 

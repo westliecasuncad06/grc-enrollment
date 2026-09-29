@@ -30,6 +30,7 @@ final class FacultyPreferenceCatalogEndpointTest extends TestCase
             'password' => self::PASSWORD,
             'role' => UserRole::Faculty,
             'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
             'college' => CollegeCode::Ccs,
         ]);
 

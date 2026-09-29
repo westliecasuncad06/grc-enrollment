@@ -17,10 +17,10 @@ function urlOf(input: RequestInfo | URL): string {
 async function completeForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Email address"), "student@grc.test")
   await user.type(screen.getByLabelText("One-time setup code"), "123456")
-  await user.type(screen.getByLabelText("New password"), "secure-password")
+  await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
   await user.type(
     screen.getByLabelText("Confirm new password"),
-    "secure-password",
+    "New-Secure-Password1!",
   )
 }
 
@@ -55,8 +55,8 @@ describe("AccountSetupPage", () => {
     expect(body).toEqual({
       email: "student@grc.test",
       code: "123456",
-      password: "secure-password",
-      password_confirmation: "secure-password",
+      password: "New-Secure-Password1!",
+      password_confirmation: "New-Secure-Password1!",
     })
     const requestUrl = fetchMock.mock.calls[0]?.[0]
     expect(requestUrl ? urlOf(requestUrl) : "").not.toContain("123456")
@@ -133,10 +133,10 @@ describe("AccountSetupPage", () => {
 
     await user.type(screen.getByLabelText("Email address"), "student@grc.test")
     await user.type(codeInput, "12345")
-    await user.type(screen.getByLabelText("New password"), "secure-password")
+    await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
     await user.type(
       screen.getByLabelText("Confirm new password"),
-      "secure-password",
+      "New-Secure-Password1!",
     )
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
@@ -145,6 +145,29 @@ describe("AccountSetupPage", () => {
     expect(
       await screen.findByText("Enter the 6-digit code from your email."),
     ).toBeInTheDocument()
+  })
+
+  it("rejects a weak password before ever calling the API", async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal("fetch", fetchMock)
+    const user = userEvent.setup()
+    renderWithAuthProvider(<AccountSetupPage />, { route: "/account-setup" })
+
+    await user.type(screen.getByLabelText("Email address"), "student@grc.test")
+    await user.type(screen.getByLabelText("One-time setup code"), "123456")
+    await user.type(screen.getByLabelText("New password"), "alllowercase1!")
+    await user.type(
+      screen.getByLabelText("Confirm new password"),
+      "alllowercase1!",
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Create password and activate" }),
+    )
+
+    expect(
+      await screen.findByText("Include an uppercase letter."),
+    ).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("allows requesting a new setup email if the code expired", async () => {
@@ -180,7 +203,7 @@ describe("AccountSetupPage", () => {
     expect(requestUrl ? urlOf(requestUrl) : "").toContain(
       "/api/v1/auth/resend-student-account-setup",
     )
-    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)
+    const body: unknown = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)
     expect(body).toEqual({ email: "student@grc.test" })
   })
 
@@ -206,10 +229,10 @@ describe("AccountSetupPage", () => {
     )
     await user.type(screen.getByLabelText("One-time setup code"), "123456")
     await user.type(screen.getByLabelText("Full name"), "Prof. Juan Dela Cruz")
-    await user.type(screen.getByLabelText("New password"), "secure-password")
+    await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
     await user.type(
       screen.getByLabelText("Confirm new password"),
-      "secure-password",
+      "New-Secure-Password1!",
     )
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
@@ -231,8 +254,8 @@ describe("AccountSetupPage", () => {
       email: "professor@grc.test",
       code: "123456",
       name: "Prof. Juan Dela Cruz",
-      password: "secure-password",
-      password_confirmation: "secure-password",
+      password: "New-Secure-Password1!",
+      password_confirmation: "New-Secure-Password1!",
     })
   })
 
@@ -255,10 +278,10 @@ describe("AccountSetupPage", () => {
     await user.type(screen.getByLabelText("Email address"), "dean@grc.test")
     await user.type(screen.getByLabelText("One-time setup code"), "123456")
     await user.type(screen.getByLabelText("Full name"), "Aurora Dean Santos")
-    await user.type(screen.getByLabelText("New password"), "secure-password")
+    await user.type(screen.getByLabelText("New password"), "New-Secure-Password1!")
     await user.type(
       screen.getByLabelText("Confirm new password"),
-      "secure-password",
+      "New-Secure-Password1!",
     )
     await user.click(
       screen.getByRole("button", { name: "Create password and activate" }),
@@ -280,8 +303,8 @@ describe("AccountSetupPage", () => {
       email: "dean@grc.test",
       code: "123456",
       name: "Aurora Dean Santos",
-      password: "secure-password",
-      password_confirmation: "secure-password",
+      password: "New-Secure-Password1!",
+      password_confirmation: "New-Secure-Password1!",
     })
   })
 })
