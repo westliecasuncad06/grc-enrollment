@@ -50,7 +50,14 @@ const genericErrorMessage =
  */
 export function GoogleSignInButton({ onSignedIn }: GoogleSignInButtonProps) {
   const { signInWithGoogle } = useAuth()
-  const [scriptLoaded, setScriptLoaded] = useState(false)
+  // Lazily true if a previous mount already loaded the script (e.g. after
+  // client-side navigation away from and back to this page) — next/script
+  // dedupes the tag by `src` and does not reliably re-fire `onLoad` for
+  // every remount that reuses it, which otherwise left the button
+  // permanently missing until a hard refresh.
+  const [scriptLoaded, setScriptLoaded] = useState(
+    () => typeof window !== "undefined" && Boolean(window.google?.accounts?.id),
+  )
   const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -73,6 +80,22 @@ export function GoogleSignInButton({ onSignedIn }: GoogleSignInButtonProps) {
     },
     [signInWithGoogle, onSignedIn],
   )
+
+  // Defensive fallback for the same remount scenario: keeps checking for the
+  // global directly rather than trusting `onLoad` alone, so a missed load
+  // event self-heals within a fraction of a second instead of needing a
+  // manual page refresh.
+  useEffect(() => {
+    if (scriptLoaded) return
+
+    const interval = window.setInterval(() => {
+      if (window.google?.accounts?.id) {
+        setScriptLoaded(true)
+      }
+    }, 200)
+
+    return () => window.clearInterval(interval)
+  }, [scriptLoaded])
 
   useEffect(() => {
     if (

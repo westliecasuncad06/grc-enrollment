@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -72,6 +72,9 @@ const queueKioskSurfaceMessage =
 const expiredOtpSessionMessage =
   "Your sign-in session expired. Please sign in again."
 
+/** Fallback when the API's 429 carries no Retry-After header for some reason. */
+const defaultLockoutSeconds = 60
+
 const copy = {
   eyebrow: "Enrollment portal",
   formIntro: "Sign in with your institutional GRC account.",
@@ -107,6 +110,9 @@ export function LoginPage() {
     "idle" | "sending" | "sent" | "error"
   >("idle")
   const [resendMessage, setResendMessage] = useState("")
+  const [lockoutSecondsRemaining, setLockoutSecondsRemaining] = useState<
+    number | null
+  >(null)
   const errorSummaryRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -193,6 +199,22 @@ export function LoginPage() {
     { scope: formPanelRef, dependencies: [reducedMotion] },
   )
 
+  // Ticks the post-lockout countdown down once a second and re-enables the
+  // form the moment it reaches zero, without waiting for another submit.
+  useEffect(() => {
+    if (lockoutSecondsRemaining === null || lockoutSecondsRemaining <= 0) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setLockoutSecondsRemaining((seconds) =>
+        seconds !== null && seconds > 1 ? seconds - 1 : null,
+      )
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+  }, [lockoutSecondsRemaining])
+
   const submitLogin = async (values: LoginValues) => {
     try {
       await signIn(values)
@@ -202,6 +224,17 @@ export function LoginPage() {
         resetOtpForm()
         setResendStatus("idle")
         setResendMessage("")
+
+        return
+      }
+
+      // Too many wrong attempts in a row (server-side rate limit, keyed per
+      // account+IP) — the form locks visibly instead of silently rejecting
+      // every further attempt with the same generic credential message.
+      if (isApiClientError(cause) && cause.status === 429) {
+        setLockoutSecondsRemaining(
+          cause.retryAfterSeconds ?? defaultLockoutSeconds,
+        )
 
         return
       }
@@ -275,9 +308,12 @@ export function LoginPage() {
     }
   }
 
-  const handleGoogleSignedIn = () => {
+  // Stable reference: without it, every re-render (e.g. the lockout
+  // countdown ticking once a second) hands GoogleSignInButton a new
+  // `onSignedIn` identity, needlessly re-running its own init effect.
+  const handleGoogleSignedIn = useCallback(() => {
     router.replace(getSafeReturnPath(searchParams.get("returnTo")))
-  }
+  }, [router, searchParams])
 
   const handleBackToCredentials = () => {
     setChallenge(null)
@@ -285,6 +321,9 @@ export function LoginPage() {
     setResendStatus("idle")
     setResendMessage("")
   }
+
+  const lockoutActive =
+    lockoutSecondsRemaining !== null && lockoutSecondsRemaining > 0
 
   const errorMessages = [
     errors.email?.message,
@@ -336,8 +375,12 @@ export function LoginPage() {
 
         <div className="login-purpose">
           <p className="eyebrow">{copy.eyebrow}</p>
-          <h2 id="login-purpose-title">
-            One identity. The right work in view.
+          <h2 id="login-purpose-title" className="login-motto">
+            Touching Hearts,
+            <br />
+            Renewing Minds,
+            <br />
+            Transforming Lives
           </h2>
           <p>{copy.purposeDescription}</p>
         </div>
@@ -461,25 +504,42 @@ export function LoginPage() {
                 <p className="login-form-intro">{copy.formIntro}</p>
               </div>
 
-              {hasErrors && (
+              {lockoutActive ? (
                 <div
-                  ref={errorSummaryRef}
                   className="login-error-summary"
                   role="alert"
-                  aria-label="Sign-in errors"
-                  tabIndex={-1}
+                  aria-label="Too many sign-in attempts"
                 >
-                  <strong>Check the sign-in details.</strong>
-                  <ul>
-                    {errorMessages.map((message) => (
-                      <li key={message}>{message}</li>
-                    ))}
-                  </ul>
-                  {errors.root?.credentials?.message ===
-                    queueKioskSurfaceMessage && (
-                    <Link href="/queue">Open Queue Kiosk</Link>
-                  )}
+                  <strong>Too many attempts.</strong>
+                  <p>
+                    Please wait{" "}
+                    <span aria-live="polite">
+                      {lockoutSecondsRemaining}s
+                    </span>{" "}
+                    before trying again.
+                  </p>
                 </div>
+              ) : (
+                hasErrors && (
+                  <div
+                    ref={errorSummaryRef}
+                    className="login-error-summary"
+                    role="alert"
+                    aria-label="Sign-in errors"
+                    tabIndex={-1}
+                  >
+                    <strong>Check the sign-in details.</strong>
+                    <ul>
+                      {errorMessages.map((message) => (
+                        <li key={message}>{message}</li>
+                      ))}
+                    </ul>
+                    {errors.root?.credentials?.message ===
+                      queueKioskSurfaceMessage && (
+                      <Link href="/queue">Open Queue Kiosk</Link>
+                    )}
+                  </div>
+                )
               )}
 
               <form
@@ -500,7 +560,7 @@ export function LoginPage() {
                       aria-describedby={
                         errors.email ? "login-email-error" : undefined
                       }
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || lockoutActive}
                       {...register("email")}
                     />
                     <FieldError id="login-email-error">
@@ -529,7 +589,7 @@ export function LoginPage() {
                         aria-describedby={
                           errors.password ? "login-password-error" : undefined
                         }
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || lockoutActive}
                         {...register("password")}
                       />
                       <Button
@@ -539,7 +599,7 @@ export function LoginPage() {
                         aria-label={
                           passwordVisible ? "Hide password" : "Show password"
                         }
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || lockoutActive}
                         onClick={() =>
                           setPasswordVisible((visible) => !visible)
                         }
@@ -561,9 +621,13 @@ export function LoginPage() {
                   className="login-submit"
                   type="submit"
                   size="lg"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || lockoutActive}
                 >
-                  {isSubmitting ? "Signing in…" : "Sign in"}
+                  {lockoutActive
+                    ? `Try again in ${lockoutSecondsRemaining}s`
+                    : isSubmitting
+                      ? "Signing in…"
+                      : "Sign in"}
                 </Button>
                 <span className="sr-only" role="status" aria-live="polite">
                   {isSubmitting ? "Checking credentials." : ""}

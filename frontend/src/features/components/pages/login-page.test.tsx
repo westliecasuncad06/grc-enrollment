@@ -158,6 +158,39 @@ describe("LoginPage", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("locks the form and shows a countdown after a rate-limit response", async () => {
+    const user = userEvent.setup()
+    renderLogin(
+      "/login",
+      createStubGateway({
+        signIn: () =>
+          Promise.reject(
+            new ApiClientError({
+              kind: "http",
+              message: "Too many requests. Please retry later.",
+              status: 429,
+              retryAfterSeconds: 45,
+            }),
+          ),
+      }),
+    )
+    await enterCredentials(user)
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+    expect(await screen.findByText("Too many attempts.")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Try again in 45s" }),
+    ).toBeDisabled()
+    expect(screen.getByLabelText("Email address")).toBeDisabled()
+    expect(screen.getByLabelText("Password")).toBeDisabled()
+    expect(
+      screen.queryByText(
+        "The email or password you entered was not recognized.",
+      ),
+    ).not.toBeInTheDocument()
+  })
+
   it("reports an unexpected failure with the same generic message", async () => {
     const user = userEvent.setup()
     renderLogin(

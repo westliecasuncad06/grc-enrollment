@@ -897,6 +897,22 @@
   line-height: 0.9;
 }
 
+/* The sign-in page's headline is the institution's own three-part motto
+   rather than the short editorial line the base rule above is tuned for —
+   its own size/rhythm, scoped so account-setup/forgot-password/reset-password
+   keep their existing (shorter) headline treatment untouched. Uppercase is
+   applied here rather than typed into the copy, so the source content stays
+   normal-case for screen readers. One clause per line mirrors the motto's
+   own three-part structure instead of an arbitrary character-width wrap. */
+.login-purpose h2.login-motto {
+  max-width: none;
+  font-size: clamp(1.85rem, 3.1vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .login-purpose > p:last-child {
   max-width: 33rem;
   margin: 0;
@@ -1820,6 +1836,10 @@
 
   .login-purpose h2 {
     font-size: clamp(3rem, 14vw, 4.8rem);
+  }
+
+  .login-purpose h2.login-motto {
+    font-size: clamp(1.55rem, 7.5vw, 2.1rem);
   }
 
   .login-form-panel {

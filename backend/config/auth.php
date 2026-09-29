@@ -147,12 +147,22 @@ return [
     | 2026-09-29, owner-delegated trade-off). `queue_kiosk` accounts never
     | require it.
     |
+    | `enforced_after`: owner-confirmed transitional gap — the same rollout
+    | allowance already applied to the new password-complexity rule extends
+    | to login OTP too. Any account created *before* this moment is
+    | permanently exempt from OTP; only accounts created from this point
+    | forward are subject to it. This is a TEMPORARY allowance for a smooth
+    | rollout, not a permanent decision — revisit and remove before real
+    | production go-live (see PROGRESS.md's "Known transitional gap" note).
+    | The default below is the exact moment this exemption was introduced.
+    |
     */
 
     'login_otp' => [
         'grace_minutes' => (int) env('LOGIN_OTP_GRACE_MINUTES', 30),
         'max_attempts' => (int) env('LOGIN_OTP_MAX_ATTEMPTS', 5),
         'challenge_ttl_minutes' => (int) env('LOGIN_OTP_CHALLENGE_TTL_MINUTES', 10),
+        'enforced_after' => env('LOGIN_OTP_ENFORCED_AFTER', '2026-09-29 11:47:46'),
     ],
 
     /*

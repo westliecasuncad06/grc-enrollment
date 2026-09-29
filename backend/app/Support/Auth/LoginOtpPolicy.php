@@ -24,12 +24,22 @@ use Carbon\CarbonImmutable;
  * for ticket claims, that the request carries a live, ability-scoped
  * `X-Queue-Kiosk-Token` — physical possession of that token is itself a
  * strong contextual signal, not a client-trusted flag.
+ *
+ * Also not required for any account created before `auth.login_otp.
+ * enforced_after` — an owner-confirmed transitional gap mirroring the one
+ * already applied to the password-complexity rule: existing accounts are not
+ * retroactively subjected to the new security, only accounts created from
+ * that point forward are. Temporary by design; see PROGRESS.md.
  */
 final class LoginOtpPolicy
 {
     public function isRequired(User $user, bool $viaVerifiedKioskDevice = false): bool
     {
         if ($user->role === UserRole::QueueKiosk || $viaVerifiedKioskDevice) {
+            return false;
+        }
+
+        if ($this->isGrandfatheredIn($user)) {
             return false;
         }
 
@@ -45,5 +55,20 @@ final class LoginOtpPolicy
     private function graceMinutes(): int
     {
         return max(0, (int) config('auth.login_otp.grace_minutes', 30));
+    }
+
+    private function isGrandfatheredIn(User $user): bool
+    {
+        $cutoff = config('auth.login_otp.enforced_after');
+
+        if (! is_string($cutoff) || trim($cutoff) === '' || $user->created_at === null) {
+            return false;
+        }
+
+        // `created_at` is a plain (mutable) Carbon\Carbon, not the
+        // CarbonImmutable this class casts its own OTP-specific columns to —
+        // Eloquent's own timestamp columns are never cast to the immutable
+        // variant in this codebase. `lt()` works identically either way.
+        return $user->created_at->lt(CarbonImmutable::parse($cutoff));
     }
 }

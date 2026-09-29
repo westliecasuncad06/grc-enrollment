@@ -418,4 +418,39 @@ final class LoginEndpointTest extends TestCase
         $response->assertJsonPath('data.type', 'auth-session');
         Mail::assertNothingSent();
     }
+
+    /**
+     * Owner-confirmed transitional gap: an account that already existed
+     * before the OTP feature's rollout cutoff is permanently exempt, even
+     * with a null `last_otp_verified_at` — the same allowance already
+     * applied to the password-complexity rule, extended to login OTP.
+     */
+    public function test_an_account_created_before_the_enforcement_cutoff_is_grandfathered_in(): void
+    {
+        Mail::fake();
+        config(['auth.login_otp.enforced_after' => now()->addMinute()->toDateTimeString()]);
+        $this->seedUser(lastOtpVerifiedAt: null);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ]);
+
+        $response->assertJsonPath('data.type', 'auth-session');
+        Mail::assertNothingSent();
+    }
+
+    public function test_an_account_created_after_the_enforcement_cutoff_still_requires_otp(): void
+    {
+        Mail::fake();
+        config(['auth.login_otp.enforced_after' => now()->subMinute()->toDateTimeString()]);
+        $this->seedUser(lastOtpVerifiedAt: null);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'student.seed@grc.test',
+            'password' => self::PASSWORD,
+        ]);
+
+        $response->assertJsonPath('data.type', 'login-otp-challenge');
+    }
 }
