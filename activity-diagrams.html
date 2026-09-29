@@ -353,6 +353,62 @@
       font-weight: 700;
     }
 
+    /* SECTION 3.6 NARRATIVE PANEL */
+    .narrative-container {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border-color);
+      padding: 1.5rem 1.75rem;
+    }
+
+    .narrative-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px dashed var(--border-color);
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .narrative-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .narrative-badge {
+      background: var(--primary);
+      color: #ffffff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+    }
+
+    .narrative-header h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .narrative-content {
+      font-size: 0.925rem;
+      line-height: 1.75;
+      color: var(--text-main);
+    }
+
+    .narrative-content p {
+      margin-bottom: 1rem;
+      text-align: justify;
+    }
+
+    .narrative-content p:last-child {
+      margin-bottom: 0;
+    }
+
     .code-box-display {
       background: #0f172a;
       color: #f8fafc;
@@ -424,46 +480,46 @@
       </div>
 
       <nav class="diagram-list">
-        <button class="diagram-item-btn active" onclick="loadDiagram('fig1')">
-          <span class="fig-num">Figure 1</span>
+        <button class="diagram-item-btn active" onclick="loadDiagram('fig10')">
+          <span class="fig-num">Figure 10</span>
           <span class="fig-title">Master Activity Diagram: End-to-End Proposed Enrollment System</span>
           <span class="fig-actors">Student • Proposed System • Staff</span>
         </button>
 
-        <button class="diagram-item-btn" onclick="loadDiagram('fig2')">
-          <span class="fig-num">Figure 2 (Process 1.0)</span>
+        <button class="diagram-item-btn" onclick="loadDiagram('fig11')">
+          <span class="fig-num">Figure 11 (Process 1.0)</span>
           <span class="fig-title">Activity Diagram for Program Chair - Pre-Enrollment & AI Scheduling</span>
           <span class="fig-actors">Program Chair • Proposed System • Dean & ED</span>
         </button>
 
-        <button class="diagram-item-btn" onclick="loadDiagram('fig3')">
-          <span class="fig-num">Figure 3 (Process 2.0)</span>
+        <button class="diagram-item-btn" onclick="loadDiagram('fig12')">
+          <span class="fig-num">Figure 12 (Process 2.0)</span>
           <span class="fig-title">Activity Diagram for Student - Digital Advising & Prerequisite Check</span>
           <span class="fig-actors">Student • Proposed System</span>
         </button>
 
-        <button class="diagram-item-btn" onclick="loadDiagram('fig4')">
-          <span class="fig-num">Figure 4 (Process 3.0)</span>
+        <button class="diagram-item-btn" onclick="loadDiagram('fig13')">
+          <span class="fig-num">Figure 13 (Process 3.0)</span>
           <span class="fig-title">Activity Diagram for Program Chair & Registrar - Enrollment Approval</span>
           <span class="fig-actors">Student • Program Chair • Registrar</span>
         </button>
 
-        <button class="diagram-item-btn" onclick="loadDiagram('fig5')">
-          <span class="fig-num">Figure 5 (Process 3.4 - 3.5)</span>
+        <button class="diagram-item-btn" onclick="loadDiagram('fig14')">
+          <span class="fig-num">Figure 14 (Process 3.4 - 3.5)</span>
           <span class="fig-title">Activity Diagram for Cashier & Student - Payment Queue & COM Release</span>
           <span class="fig-actors">Student • Proposed System • Cashier</span>
         </button>
 
-        <button class="diagram-item-btn" onclick="loadDiagram('fig6')">
-          <span class="fig-num">Figure 6 (Process 4.0)</span>
+        <button class="diagram-item-btn" onclick="loadDiagram('fig15')">
+          <span class="fig-num">Figure 15 (Process 4.0)</span>
           <span class="fig-title">Activity Diagram for Registrar - Closed-Loop Analytics & CHED Reports</span>
           <span class="fig-actors">Registrar Head • Proposed System (ML Core)</span>
         </button>
 
-        <button class="diagram-item-btn" onclick="loadDiagram('fig7')">
-          <span class="fig-num">Figure 7 (Baseline)</span>
-          <span class="fig-title">Process Flowchart of Existing Manual Enrollment System</span>
-          <span class="fig-actors">Figure 9 from Manuscript (6-11 Steps)</span>
+        <button class="diagram-item-btn" onclick="loadDiagram('fig16')">
+          <span class="fig-num">Figure 16 (Baseline)</span>
+          <span class="fig-title">Activity Diagram of Existing Enrollment System</span>
+          <span class="fig-actors">Manual Multi-Floor Process (6-11 Steps)</span>
         </button>
       </nav>
     </aside>
@@ -473,7 +529,7 @@
       <div class="figure-card">
         <div class="figure-header">
           <div class="figure-title-box">
-            <h3 id="currentFigTitle">Figure 1. Master Activity Diagram for Proposed Enrollment System</h3>
+            <h3 id="currentFigTitle">Figure 10. Master Activity Diagram for Proposed Enrollment System</h3>
             <p id="currentFigSubtitle">Standard UML Swimlane format with precise orthogonal cross-swimlane arrows showing actor-system transitions.</p>
           </div>
 
@@ -493,8 +549,22 @@
 
         <!-- CAPTION -->
         <div class="figure-caption-box">
-          <span id="figureCaptionText"><span class="caption-bold">Figure 1.</span> Master Activity Diagram for Proposed Enrollment System</span>
+          <span id="figureCaptionText"><span class="caption-bold">Figure 10.</span> Master Activity Diagram for Proposed Enrollment System</span>
           <button class="btn" onclick="copyCurrentMermaid()">📋 Copy Mermaid Code</button>
+        </div>
+
+        <!-- SECTION 3.6 NARRATIVE PANEL -->
+        <div class="narrative-container">
+          <div class="narrative-header">
+            <div class="narrative-title-wrap">
+              <span class="narrative-badge">Thesis Chapter III</span>
+              <h4 id="narrativeHeading">Section 3.6 Activity Diagram Description & Workflow Rules</h4>
+            </div>
+            <button class="btn" onclick="copyNarrativeText()">📋 Copy Section 3.6 Text</button>
+          </div>
+          <div class="narrative-content" id="narrativeContent">
+            <!-- Dynamic narrative text rendered via JS -->
+          </div>
         </div>
       </div>
     </main>
@@ -505,10 +575,14 @@
   <script>
     // DATA DICTIONARY WITH VECTOR SVG (Precise orthogonal arrows connecting across columns)
     const DIAGRAMS = {
-      fig1: {
-        number: "Figure 1",
+      fig10: {
+        number: "Figure 10",
         title: "Master Activity Diagram for Proposed Enrollment System",
         subtitle: "Models end-to-end interactions with orthogonal cross-swimlane arrows across Student, Proposed System, Registrar, and Cashier.",
+        narrative: [
+          "Figure 10 depicts the macro-level end-to-end operational workflow of the proposed web-based enrollment management system across four primary functional swimlanes: the Student, the Proposed System Core, the Program Chair & Registrar, and the Cashier Staff. The process initiates when the student authenticates into the centralized portal via secure Laravel Sanctum bearer tokens. Upon authentication, the system dynamically queries the normalized 3NF MySQL datastore to cross-reference academic histories and prerequisite completions, immediately provisioning a real-time, conflict-free pool of eligible subjects and block offerings. The student selects their preferred courses and submits a digital enrollment application, which is automatically routed into the administrative evaluation pipeline.",
+          "Academic categorization governs the subsequent verification path: regular students bypass departmental advising and transition directly to the Registrar for digital Pre-Enrollment Form (PEF) verification, whereas irregular students are routed to the Program Chair for curricular evaluation and prerequisite validation. Once the Registrar executes the digital approval lock, the system triggers the automated fee calculation engine, populating the cashiering dashboard with an itemized statement of accounts and concurrently dispatching a digital queue ticket to the student's mobile portal. At the cashier window, the staff retrieves the pre-computed ledger, accepts physical payment, and confirms the transaction. This idempotently transitions the student's status to officially 'Enrolled' in the database and instantly generates a cryptographically authenticated, downloadable Certificate of Matriculation (COM), concluding the life cycle without manual paperwork."
+        ],
         mermaid: `flowchart TB
   Init((●)) --> S_Start
 
@@ -533,8 +607,8 @@
 
   subgraph Col3["Program Chair & Registrar"]
     Reg_Check{"Is Student Irregular?"}
-    PC_Endorse["Program Chair: Endorse Irregular Study Plan"]
-    Reg_Approve["Registrar: Digital PEF Approval & Prerequisite Lock"]
+    PC_Endorse["Endorse Irregular Study Plan"]
+    Reg_Approve["Verify Digital PEF & Lock Approval"]
   end
 
   subgraph Col4["Cashier Staff"]
@@ -672,10 +746,10 @@
             <text x="622" y="342" font-family="Arial" font-size="10" font-weight="bold" fill="#000000">Yes</text>
             <path d="M 612 330 L 612 352" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <!-- BOX 8: Program Chair Endorse (Col 3) -->
+            <!-- BOX 8: Endorse Irregular Study Plan (Col 3) -->
             <rect x="515" y="354" width="195" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
-            <text x="612" y="371" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Program Chair: Endorse</text>
-            <text x="612" y="385" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Irregular Study Plan</text>
+            <text x="612" y="371" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Endorse Irregular</text>
+            <text x="612" y="385" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Study Plan</text>
 
             <!-- Line 8 -> Box 9 -->
             <path d="M 612 392 L 612 414" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
@@ -684,10 +758,10 @@
             <text x="680" y="300" font-family="Arial" font-size="9.5" font-weight="bold" fill="#000000">No (Regular)</text>
             <path d="M 670 305 L 722 305 L 722 433 L 712 433" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <!-- BOX 9: Registrar Approval (Col 3) -->
+            <!-- BOX 9: Digital PEF Approval (Col 3) -->
             <rect x="515" y="416" width="195" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
-            <text x="612" y="433" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Registrar: Digital PEF</text>
-            <text x="612" y="448" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Approval & Prerequisite Lock</text>
+            <text x="612" y="433" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Verify Digital PEF &</text>
+            <text x="612" y="448" font-family="Arial" font-size="11" text-anchor="middle" fill="#000000">Lock Approval</text>
 
             <!-- ARROW: Registrar Box 9 -> Proposed System Box 10 (CROSS-COLUMN RETURN) -->
             <path d="M 515 437 L 480 437 L 480 495 L 467 495" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
@@ -767,10 +841,14 @@
         `
       },
 
-      fig2: {
-        number: "Figure 2",
+      fig11: {
+        number: "Figure 11",
         title: "Activity Diagram for Program Chair - Pre-Enrollment & AI Scheduling",
         subtitle: "Models Process 1.0 (Pre-Enrollment) integrating Process 4.0 closed-loop demand forecasts with orthogonal cross-swimlane arrows.",
+        narrative: [
+          "Figure 11 illustrates the pre-enrollment schedule generation workflow executed by the Program Chair prior to the formal opening of the academic term. The procedure initiates when the Program Chair invokes the AI-driven section demand forecast module within the administrative dashboard. The system core (Process 4.0) ingests historical enrollment velocity, historical grade distributions, and student curriculum progressions, generating projected section demands alongside automated alerts for faculty load thresholds and classroom constraints. Armed with these predictive insights, the Program Chair configures class section quotas while strictly enforcing the institutional minimum threshold of twenty-five (25) students per section.",
+          "Upon finalization of section schedules, the Program Chair submits the master schedule package to the Dean and Executive Director through an automated multi-tier approval hierarchy. If the Dean disapproves the proposed offerings due to faculty loading imbalances, a 'No (Returned)' decision event routes the schedule back to the Program Chair with embedded administrative remarks for section adjustments. Similarly, should the Executive Director decline the schedule lock, the package returns to the revision phase. Only upon consecutive 'Yes' affirmations is the master schedule idempotently locked within the central repository and published to the student portal, thereby formally opening the academic term enrollment window."
+        ],
         mermaid: `flowchart TB
   Init((●)) --> PC_Start
 
@@ -906,9 +984,13 @@
             <polygon points="683,432 743,456 683,480 623,456" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
             <text x="683" y="460" font-family="Arial" font-size="9.5" font-weight="bold" text-anchor="middle">Exec. Director Lock?</text>
 
-            <!-- Return loop on Rejection -->
-            <text x="750" y="365" font-family="Arial" font-size="9" font-weight="bold">No (Return)</text>
-            <path d="M 743 372 L 785 372 L 785 410 L 250 410 L 250 310 L 244 310" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+            <!-- Return loop on Rejection (Dean) -->
+            <text x="750" y="365" font-family="Arial" font-size="9" font-weight="bold" fill="#dc2626">No (Returned)</text>
+            <path d="M 743 372 L 785 372 L 785 305 L 244 305" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+            <!-- Return loop on Rejection (Exec Director) -->
+            <text x="750" y="450" font-family="Arial" font-size="9" font-weight="bold" fill="#dc2626">No (Returned)</text>
+            <path d="M 743 456 L 805 456 L 805 315 L 244 315" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
 
             <!-- Approved Exec Director -> Lock System -->
             <text x="692" y="496" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
@@ -928,10 +1010,14 @@
         `
       },
 
-      fig3: {
-        number: "Figure 3",
+      fig12: {
+        number: "Figure 12",
         title: "Activity Diagram for Student - Digital Advising & Prerequisite Validation",
         subtitle: "Models Process 2.0 with orthogonal cross-swimlane arrows between Student and Proposed System.",
+        narrative: [
+          "Figure 12 delineates the self-service digital advising and prerequisite validation sequence (Process 2.0) conducted between the Student and the Proposed System Core. The workflow begins when the student authenticates into the responsive client portal. The backend authentication layer validates the user's bearer token context and immediately triggers automated stored-procedure checks against the student's historical transcripts. By programmatically evaluating pre-requisite, co-requisite, and standing constraints against the academic curriculum catalog, the system eliminates human advising oversights and prevents unauthorized course enrolments prior to user interaction.",
+          "The portal renders a personalized, conflict-free course catalog tailored to the student's specific academic classification. Regular students are presented with pre-allocated block sections, while irregular students receive a curated pool of eligible open sections that do not present timetable schedule conflicts. Once the student confirms their subject selections and clicks 'Submit Pre-Enrollment', the system executes atomic concurrency checks to verify real-time classroom seat quotas. Upon successful reservation, the system generates a digital Pre-Enrollment Form (PEF) tagged with 'Draft Submitted' status and places the record in the departmental approval queue."
+        ],
         mermaid: `flowchart TB
   Init((●)) --> S_Start
 
@@ -1053,17 +1139,24 @@
         `
       },
 
-      fig4: {
-        number: "Figure 4",
+      fig13: {
+        number: "Figure 13",
         title: "Activity Diagram for Program Chair & Registrar - Enrollment Approval",
-        subtitle: "Models Process 3.3 and ADR 0030: Irregular endorsement followed by Registrar verification with orthogonal cross-swimlane arrows.",
+        subtitle: "Models Process 3.0 and ADR 0030: Irregular endorsement and Registrar verification with explicit rejection/revision return branches.",
+        narrative: [
+          "Figure 13 models the multi-tier academic evaluation and prerequisite verification workflow (Process 3.0) governing irregular and transferee student enrollments. The activity commences as the student submits their draft pre-enrollment petition. For irregular students, the request first arrives at the Program Chair's digital advising console. The Program Chair evaluates proposed subject loads, prerequisite waivers, and credited course equivalencies against departmental curricula. If the proposed study plan exhibits schedule collisions, unfulfilled prerequisites, or credit overloads, the Program Chair triggers a 'No (Revision Required)' decision, which dispatches an immediate revision notification with actionable advisory notes directly to the student portal, allowing the student to adjust their course lineup.",
+          "Conversely, when the Program Chair issues an endorsement ('Yes'), the digital PEF transitions seamlessly to the Registrar's verification workbench. The Registrar executes institutional compliance checks, inspecting academic standing, residency limits, and document prerequisites. Should the Registrar identify administrative discrepancies, a 'No (Disapproved / Hold)' decision is enacted, notifying the student and placing the request on hold. Upon positive confirmation ('Yes'), the Registrar executes the final digital PEF approval and transaction lock, automatically updating the student's status to 'Pending Payment' and routing the approved payload to the automated cashiering billing subsystem."
+        ],
         mermaid: `flowchart TB
   Init((●)) --> S_Start
 
   subgraph Col1["Student"]
     S_Start["Start: Submit Draft Request"]
-    S_Wait["Wait for Evaluation"]
+    S_Revise["Receive Revision Remarks & Modify Selection"]
+    S_Hold["Receive Hold Notice & Advising Call"]
     S_Approved["Receive Status: Pending Payment"]
+    ExitHold(((⦿)))
+    S_End(((⦿)))
   end
 
   subgraph Col2["Program Chair (Irregulars)"]
@@ -1072,22 +1165,24 @@
   end
 
   subgraph Col3["Registrar Staff & Head"]
-    Reg_Review["Verify Digital PEF & Prerequisites"]
+    Reg_Review["Verify Digital PEF & Academic Constraints"]
     Reg_Dec{"Final Approval?"}
-    Reg_Lock["Digital PEF Approval & Lock"]
+    Reg_Lock["Digital PEF Approval & Lock Transaction"]
   end
 
   S_Start --> PC_Review
   PC_Review --> PC_Dec
   PC_Dec -- "Yes (Endorsed)" --> Reg_Review
-  PC_Dec -- "No (Rejected)" --> S_Wait
+  PC_Dec -- "No (Revision Required)" --> S_Revise
+  S_Revise --> S_Start
   Reg_Review --> Reg_Dec
   Reg_Dec -- "Yes" --> Reg_Lock
-  Reg_Dec -- "No" --> S_Wait
+  Reg_Dec -- "No (Disapproved / Hold)" --> S_Hold
+  S_Hold --> ExitHold
   Reg_Lock --> S_Approved
-  S_Approved --> EndNode(((⦿)))`,
+  S_Approved --> S_End`,
         svgHtml: `
-          <svg class="abr-uml-svg" width="820" height="620" viewBox="0 0 820 620" xmlns="http://www.w3.org/2000/svg">
+          <svg class="abr-uml-svg" width="820" height="680" viewBox="0 0 820 680" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" />
@@ -1098,9 +1193,9 @@
             </defs>
 
             <rect x="0" y="0" width="820" height="34" fill="#ffffff" stroke="#000000" stroke-width="2" />
-            <line x1="273" y1="0" x2="273" y2="620" stroke="#000000" stroke-width="2" />
-            <line x1="546" y1="0" x2="546" y2="620" stroke="#000000" stroke-width="2" />
-            <rect x="0" y="0" width="820" height="620" fill="none" stroke="#000000" stroke-width="2" />
+            <line x1="273" y1="0" x2="273" y2="680" stroke="#000000" stroke-width="2" />
+            <line x1="546" y1="0" x2="546" y2="680" stroke="#000000" stroke-width="2" />
+            <rect x="0" y="0" width="820" height="680" fill="none" stroke="#000000" stroke-width="2" />
 
             <g font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="#000000">
               <rect x="8" y="9" width="14" height="14" fill="#ffffff" stroke="#000000" stroke-width="1"/>
@@ -1116,9 +1211,11 @@
               <text x="683" y="22" text-anchor="middle">Registrar (Staff & Head)</text>
             </g>
 
+            <!-- Initial Node -->
             <circle cx="136" cy="62" r="11" fill="#000000" stroke="#d90429" stroke-width="2"/>
             <line x1="136" y1="73" x2="136" y2="92" stroke="#d90429" stroke-width="1.8" marker-end="url(#red-arrow)"/>
 
+            <!-- Student Box 1: Submit Draft -->
             <rect x="35" y="94" width="202" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
             <text x="136" y="111" font-family="Arial" font-size="11" text-anchor="middle">Submit Draft Pre-Enrollment</text>
             <text x="136" y="125" font-family="Arial" font-size="11" text-anchor="middle">Request</text>
@@ -1126,57 +1223,93 @@
             <!-- Cross arrow -> Program Chair -->
             <path d="M 237 115 L 298 115" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
+            <!-- Program Chair Box 2 -->
             <rect x="300" y="94" width="218" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
             <text x="409" y="111" font-family="Arial" font-size="11" text-anchor="middle">Inspect Irregular Plan &</text>
             <text x="409" y="125" font-family="Arial" font-size="11" text-anchor="middle">Transferee Credit Mappings</text>
 
-            <path d="M 409 136 L 409 160" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+            <path d="M 409 136 L 409 162" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <!-- PC Decision -->
+            <!-- PC Decision: Endorse Plan? -->
             <polygon points="409,162 469,186 409,210 349,186" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
             <text x="409" y="190" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Endorse Plan?</text>
 
+            <!-- Branch Yes -> Registrar -->
             <text x="478" y="180" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
-            <!-- Cross arrow -> Registrar -->
             <path d="M 469 186 L 570 186" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
+            <!-- Branch No (Revision Required) -> Student Column -->
+            <text x="256" y="178" font-family="Arial" font-size="9" font-weight="bold" fill="#dc2626">No (Revision)</text>
+            <path d="M 349 186 L 239 186" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+            <!-- Student Revision Action Box -->
+            <rect x="35" y="165" width="202" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="182" font-family="Arial" font-size="10.5" text-anchor="middle">Receive Revision Remarks &</text>
+            <text x="136" y="196" font-family="Arial" font-size="10.5" text-anchor="middle">Modify Subject Selection</text>
+
+            <!-- Upward Loop: Revision -> Submit Draft -->
+            <path d="M 136 165 L 136 138" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Registrar Box 3 -->
             <rect x="572" y="165" width="222" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
             <text x="683" y="182" font-family="Arial" font-size="11" text-anchor="middle">Verify Digital PEF & Validate</text>
             <text x="683" y="196" font-family="Arial" font-size="11" text-anchor="middle">Academic Constraints</text>
 
-            <path d="M 683 207 L 683 235" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+            <path d="M 683 207 L 683 238" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <!-- Registrar Decision -->
-            <polygon points="683,237 743,261 683,285 623,261" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
-            <text x="683" y="265" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Final Approval?</text>
+            <!-- Registrar Decision: Final Approval? -->
+            <polygon points="683,238 743,262 683,286 623,262" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+            <text x="683" y="266" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle">Final Approval?</text>
 
+            <!-- Branch No (Disapproved / Hold) -> Student Column -->
+            <text x="548" y="254" font-family="Arial" font-size="9" font-weight="bold" fill="#dc2626">No (Hold / Disapproved)</text>
+            <path d="M 623 262 L 239 262" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+            <!-- Student Disapproval / Hold Action Box -->
+            <rect x="35" y="241" width="202" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="258" font-family="Arial" font-size="10.5" text-anchor="middle">Receive Hold / Disapproval Notice</text>
+            <text x="136" y="272" font-family="Arial" font-size="10.5" text-anchor="middle">(Advising Referral Required)</text>
+
+            <!-- Downward line to Exit (Hold) -->
+            <path d="M 136 283 L 136 308" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Exit On Hold Node -->
+            <circle cx="136" cy="324" r="11" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="136" cy="324" r="6" fill="#000000"/>
+            <text x="136" y="348" font-family="Arial" font-size="9.5" font-weight="bold" text-anchor="middle">EXIT (On Hold)</text>
+
+            <!-- Branch Yes -> Execute Digital PEF Approval -->
             <text x="692" y="302" font-family="Arial" font-size="10" font-weight="bold">Yes</text>
-            <path d="M 683 285 L 683 318" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+            <path d="M 683 286 L 683 388" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <rect x="572" y="320" width="222" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
-            <text x="683" y="337" font-family="Arial" font-size="11" text-anchor="middle">Execute Digital PEF</text>
-            <text x="683" y="351" font-family="Arial" font-size="11" text-anchor="middle">Approval & Lock Transaction</text>
+            <rect x="572" y="390" width="222" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="683" y="407" font-family="Arial" font-size="11" text-anchor="middle">Execute Digital PEF</text>
+            <text x="683" y="421" font-family="Arial" font-size="11" text-anchor="middle">Approval & Lock Transaction</text>
 
             <!-- Cross arrow -> Student Approved -->
-            <path d="M 572 340 L 239 340" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+            <path d="M 572 411 L 239 411" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <rect x="35" y="320" width="202" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
-            <text x="136" y="337" font-family="Arial" font-size="11" text-anchor="middle">Receive Approval Notice:</text>
-            <text x="136" y="351" font-family="Arial" font-size="11" text-anchor="middle">'Status: Pending Payment'</text>
+            <rect x="35" y="390" width="202" height="42" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+            <text x="136" y="407" font-family="Arial" font-size="11" text-anchor="middle">Receive Approval Notice:</text>
+            <text x="136" y="421" font-family="Arial" font-size="11" text-anchor="middle">'Status: Pending Payment'</text>
 
-            <path d="M 136 360 L 136 410" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
+            <path d="M 136 432 L 136 476" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" />
 
-            <circle cx="136" cy="430" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
-            <circle cx="136" cy="430" r="8" fill="#000000"/>
-            <text x="136" y="460" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
+            <circle cx="136" cy="494" r="13" fill="#ffffff" stroke="#d90429" stroke-width="2"/>
+            <circle cx="136" cy="494" r="8" fill="#000000"/>
+            <text x="136" y="524" font-family="Arial" font-size="11.5" font-weight="bold" text-anchor="middle">END</text>
           </svg>
         `
       },
 
-      fig5: {
-        number: "Figure 5",
+      fig14: {
+        number: "Figure 14",
         title: "Activity Diagram for Cashier & Student - Payment Queue & COM Release",
         subtitle: "Models Process 3.4 (Pre-assessed Queue) and Process 3.5 (Digital Certificate of Matriculation) with orthogonal cross-swimlane arrows.",
+        narrative: [
+          "Figure 14 models the synchronized financial clearance, queue management, and credential provisioning workflow (Processes 3.4 and 3.5). The sequence begins autonomously as soon as the Registrar approves the student's pre-enrollment form. The system's assessment engine computes tuition fees, laboratory fees, and miscellaneous institutional dues directly from the certified institutional fee matrix without requiring human arithmetic. Simultaneously, the system assigns a sequential queue number to the student's mobile portal and broadcasts the live waiting roster to the cashiering display terminal.",
+          "When the cashier summons the student's serving number, the student presents their student identification number and settles the required physical downpayment. The cashier accesses the student's pre-assessed financial profile on their terminal, verifies the cash or check amount against the ledger, and clicks 'Confirm Payment.' This triggers an atomic database transaction that idempotently transitions the student's status from 'Pending Payment' to officially 'Enrolled.' Within milliseconds, the system provisions an official, cryptographically verifiable Digital Certificate of Matriculation (COM) PDF into the student's portal for instant local download or printing, completely eliminating paper-based queuing lines and multi-office stamp runs."
+        ],
         mermaid: `flowchart TB
   Init((●)) --> Sys_Assess
 
@@ -1325,10 +1458,14 @@
         `
       },
 
-      fig6: {
-        number: "Figure 6",
+      fig15: {
+        number: "Figure 15",
         title: "Activity Diagram for Registrar - Closed-Loop Analytics & CHED Reports",
         subtitle: "Models Process 4.0: Machine learning models generating attrition metrics and compliance exports with orthogonal cross-swimlane arrows.",
+        narrative: [
+          "Figure 15 depicts the business intelligence, closed-loop machine learning analytics, and government regulatory compliance reporting workflow (Process 4.0) utilized by the Registrar Head and College Deans. The process begins when the administrative official opens the executive analytics dashboard. The proposed system core aggregates locked, normalized enrollment transaction logs from the MySQL datastore and pipes the sanitized feature vectors into the integrated scikit-learn predictive service. The supervised machine learning model computes attrition risk scores and identifies students exhibiting high dropout probabilities based on attendance patterns, academic delinquency, and unit completion ratios.",
+          "Concurrently, the analytics pipeline calculates cumulative grade point averages (GPA) across collegiate departments, automatically filtering eligible candidates for the Dean's Honor List and Latin Honor distinctions in accordance with institutional scholarship guidelines. Finally, the Registrar Head can invoke the automated one-click regulatory export function. The system formats and streams official, standardized Commission on Higher Education (CHED) enrollment summary sheets in PDF and XLSX formats, eliminating the days of manual clerical compilation historically required at the conclusion of each enrollment cycle."
+        ],
         mermaid: `flowchart TB
   Init((●)) --> Reg_Start
 
@@ -1352,7 +1489,7 @@
   Sys_Agg --> Sys_CalcHn
   Sys_CalcHn --> Reg_ViewHn
   Reg_Export --> Sys_Rep
-  Sys_Rep --> EndFig6(((⦿)))`,
+  Sys_Rep --> EndFig15(((⦿)))`,
         svgHtml: `
           <svg class="abr-uml-svg" width="760" height="600" viewBox="0 0 760 600" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -1430,10 +1567,14 @@
         `
       },
 
-      fig7: {
-        number: "Figure 7",
-        title: "Process Flowchart of the Existing Enrollment System (Baseline)",
-        subtitle: "Direct reconstruction of Figure 9 (Page 58) of the Capstone Manuscript with orthogonal cross-swimlane arrows.",
+      fig16: {
+        number: "Figure 16",
+        title: "Activity Diagram of Existing Enrollment System",
+        subtitle: "Direct reconstruction of Figure 9 (Page 58) of the Capstone Manuscript formatted to UML activity diagram standards.",
+        narrative: [
+          "Figure 16 illustrates the baseline operational flowchart and swimlane activity of the existing manual enrollment system at Global Reciprocal Colleges (reconstructed from Figure 9 of the institutional capstone manuscript). The legacy process is characterized by fragmented, paper-reliant procedures spanning multiple physical floors and administrative offices. The pre-enrollment phase relies entirely on manual schedule plotting by Program Chairs based on subjective guesswork, requiring sequential physical paper sign-offs from the Dean and Executive Director before enrollment forms can even be distributed.",
+          "During actual enrollment, new applicants and transferees must physically queue at the ground floor Cashier to pay a ₱200 entrance examination fee (Step A1), proceed to the Guidance Office for paper testing (Step A2), and submit physical chest X-rays at the Clinic (Step A3). Continuing students must climb to the third floor (Rooms 3H/3I) for manual face-to-face advising (Step BC1), descend to the second-floor computer laboratory for faculty encoding (Steps BC2–BC3), physically visit the Library and Registrar for ink stamping and clearance signatures (Steps BC4–BC5), and return to the ground floor Cashier where staff manually re-calculates tuition on paper calculators (Step BC6). This cumbersome 6-to-11-step ordeal forces students to endure 2 to 5 full days of queues, severe hallway congestion, and rampant clerical errors."
+        ],
         mermaid: `flowchart TB
   InitCurrent((●)) --> C_Plot
 
@@ -1603,7 +1744,7 @@
       }
     };
 
-    let currentDiagramId = 'fig1';
+    let currentDiagramId = 'fig10';
     let currentDisplayMode = 'uml';
 
     // INITIALIZE MERMAID
@@ -1631,6 +1772,16 @@
       document.getElementById('currentFigTitle').innerText = `${data.number}. ${data.title}`;
       document.getElementById('currentFigSubtitle').innerText = data.subtitle;
       document.getElementById('figureCaptionText').innerHTML = `<span class="caption-bold">${data.number}.</span> ${data.title}`;
+
+      // Populate Section 3.6 Narrative Text
+      const narrativeHeading = document.getElementById('narrativeHeading');
+      if (narrativeHeading) {
+        narrativeHeading.innerText = `Section 3.6 — ${data.number} Description & System Workflow`;
+      }
+      const narrativeContainer = document.getElementById('narrativeContent');
+      if (narrativeContainer && data.narrative) {
+        narrativeContainer.innerHTML = data.narrative.map(p => `<p>${p}</p>`).join('');
+      }
 
       renderCurrentDiagram();
     }
@@ -1675,6 +1826,15 @@
       });
     }
 
+    function copyNarrativeText() {
+      const data = DIAGRAMS[currentDiagramId];
+      if (!data || !data.narrative) return;
+      const textToCopy = `${data.number}. ${data.title}\n\n` + data.narrative.join('\n\n');
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast("Section 3.6 text copied to clipboard!");
+      });
+    }
+
     function showToast(msg) {
       const toast = document.getElementById('toastMsg');
       toast.innerText = msg;
@@ -1697,7 +1857,7 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-      loadDiagram('fig1');
+      loadDiagram('fig10');
     });
   </script>
 </body>
