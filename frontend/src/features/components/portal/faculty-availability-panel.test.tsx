@@ -103,6 +103,9 @@ describe("FacultyAvailabilityPanel", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit availability" }),
     )
+    expect(
+      screen.getByRole("dialog", { name: "Edit availability window" }),
+    ).toBeInTheDocument()
     await user.clear(screen.getByLabelText("Start time"))
     await user.type(screen.getByLabelText("Start time"), "0900")
     await user.click(

@@ -127,7 +127,7 @@ export function StudentCreditMappingDialog() {
           Request Credit Mapping
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <School className="size-5 text-primary" />

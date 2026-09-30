@@ -41,6 +41,31 @@ function PublicNavigation({ mobile = false }: { mobile?: boolean }) {
 export function PublicHeader() {
   return (
     <header className="site-masthead public-masthead">
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button
+            className="public-mobile-trigger"
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Open public navigation"
+          >
+            <Menu aria-hidden="true" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="public-mobile-sheet">
+          <SheetHeader>
+            <SheetTitle>Explore GRC</SheetTitle>
+            <SheetDescription>
+              Learn more about Global Reciprocal Colleges and access the enrollment portal.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="public-mobile-sheet__body">
+            <PublicNavigation mobile />
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <Link
         className="institutional-identity rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
         href="/"
@@ -51,30 +76,6 @@ export function PublicHeader() {
       <PublicNavigation />
 
       <div className="public-masthead__actions">
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button
-              className="public-mobile-trigger"
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="Open public navigation"
-            >
-              <Menu aria-hidden="true" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="public-mobile-sheet">
-            <SheetHeader>
-              <SheetTitle>Explore GRC</SheetTitle>
-              <SheetDescription>
-                Learn more about Global Reciprocal Colleges and access the enrollment portal.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="public-mobile-sheet__body">
-              <PublicNavigation mobile />
-            </div>
-          </SheetContent>
-        </Sheet>
         <Button asChild>
           <Link href="/login">
             Sign in to portal

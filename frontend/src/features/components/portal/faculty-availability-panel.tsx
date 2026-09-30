@@ -27,6 +27,13 @@ import {
   CardTitle,
 } from "@/features/components/ui/card"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/features/components/ui/dialog"
+import {
   Field,
   FieldError,
   FieldGroup,
@@ -146,6 +153,90 @@ export function FacultyAvailabilityPanel() {
     }
   }
 
+  const cancelEdit = () => {
+    setEditing(null)
+    form.reset(emptyAvailability)
+  }
+
+  const formFields = (
+    <FieldGroup>
+      <Field data-invalid={Boolean(form.formState.errors.day_of_week)}>
+        <FieldLabel htmlFor="availability-day">Day</FieldLabel>
+        <Controller
+          control={form.control}
+          name="day_of_week"
+          render={({ field }) => (
+            <Select
+              value={String(field.value)}
+              onValueChange={(value) => field.onChange(Number(value))}
+              disabled={isSaving}
+            >
+              <SelectTrigger id="availability-day" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {weekdays.map(([value, label]) => (
+                  <SelectItem key={value} value={String(value)}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+        <FieldError>{form.formState.errors.day_of_week?.message}</FieldError>
+      </Field>
+      <Field data-invalid={Boolean(form.formState.errors.starts_at_time)}>
+        <FieldLabel htmlFor="availability-start">Start time</FieldLabel>
+        <Controller
+          control={form.control}
+          name="starts_at_time"
+          render={({ field }) => (
+            <Input
+              id="availability-start"
+              type="time"
+              disabled={isSaving}
+              value={forTimeInput(field.value)}
+              onChange={(event) => field.onChange(asTime(event.target.value))}
+              onBlur={field.onBlur}
+            />
+          )}
+        />
+        <FieldError>
+          {form.formState.errors.starts_at_time?.message}
+        </FieldError>
+      </Field>
+      <Field data-invalid={Boolean(form.formState.errors.ends_at_time)}>
+        <FieldLabel htmlFor="availability-end">End time</FieldLabel>
+        <Controller
+          control={form.control}
+          name="ends_at_time"
+          render={({ field }) => (
+            <Input
+              id="availability-end"
+              type="time"
+              disabled={isSaving}
+              value={forTimeInput(field.value)}
+              onChange={(event) => field.onChange(asTime(event.target.value))}
+              onBlur={field.onBlur}
+            />
+          )}
+        />
+        <FieldError>{form.formState.errors.ends_at_time?.message}</FieldError>
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={isSaving}>
+          {editing ? "Update availability" : "Save availability"}
+        </Button>
+        {editing && (
+          <Button type="button" variant="outline" onClick={cancelEdit}>
+            Cancel edit
+          </Button>
+        )}
+      </div>
+    </FieldGroup>
+  )
+
   return (
     <Card>
       <CardHeader>
@@ -163,102 +254,14 @@ export function FacultyAvailabilityPanel() {
             </AlertDescription>
           </Alert>
         )}
-        <form
-          noValidate
-          onSubmit={(event) => void form.handleSubmit(save)(event)}
-        >
-          <FieldGroup>
-            <Field data-invalid={Boolean(form.formState.errors.day_of_week)}>
-              <FieldLabel htmlFor="availability-day">Day</FieldLabel>
-              <Controller
-                control={form.control}
-                name="day_of_week"
-                render={({ field }) => (
-                  <Select
-                    value={String(field.value)}
-                    onValueChange={(value) => field.onChange(Number(value))}
-                    disabled={isSaving}
-                  >
-                    <SelectTrigger id="availability-day" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {weekdays.map(([value, label]) => (
-                        <SelectItem key={value} value={String(value)}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              <FieldError>
-                {form.formState.errors.day_of_week?.message}
-              </FieldError>
-            </Field>
-            <Field data-invalid={Boolean(form.formState.errors.starts_at_time)}>
-              <FieldLabel htmlFor="availability-start">Start time</FieldLabel>
-              <Controller
-                control={form.control}
-                name="starts_at_time"
-                render={({ field }) => (
-                  <Input
-                    id="availability-start"
-                    type="time"
-                    disabled={isSaving}
-                    value={forTimeInput(field.value)}
-                    onChange={(event) =>
-                      field.onChange(asTime(event.target.value))
-                    }
-                    onBlur={field.onBlur}
-                  />
-                )}
-              />
-              <FieldError>
-                {form.formState.errors.starts_at_time?.message}
-              </FieldError>
-            </Field>
-            <Field data-invalid={Boolean(form.formState.errors.ends_at_time)}>
-              <FieldLabel htmlFor="availability-end">End time</FieldLabel>
-              <Controller
-                control={form.control}
-                name="ends_at_time"
-                render={({ field }) => (
-                  <Input
-                    id="availability-end"
-                    type="time"
-                    disabled={isSaving}
-                    value={forTimeInput(field.value)}
-                    onChange={(event) =>
-                      field.onChange(asTime(event.target.value))
-                    }
-                    onBlur={field.onBlur}
-                  />
-                )}
-              />
-              <FieldError>
-                {form.formState.errors.ends_at_time?.message}
-              </FieldError>
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={isSaving}>
-                {editing ? "Update availability" : "Save availability"}
-              </Button>
-              {editing && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditing(null)
-                    form.reset(emptyAvailability)
-                  }}
-                >
-                  Cancel edit
-                </Button>
-              )}
-            </div>
-          </FieldGroup>
-        </form>
+        {editing === null && (
+          <form
+            noValidate
+            onSubmit={(event) => void form.handleSubmit(save)(event)}
+          >
+            {formFields}
+          </form>
+        )}
         <AsyncBoundary
           query={availabilitiesQuery}
           isEmpty={(rows) => rows.length === 0}
@@ -320,6 +323,25 @@ export function FacultyAvailabilityPanel() {
           )}
         </AsyncBoundary>
       </CardContent>
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(open) => !open && cancelEdit()}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit availability window</DialogTitle>
+            <DialogDescription>
+              Update the day and time range for this window.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            noValidate
+            onSubmit={(event) => void form.handleSubmit(save)(event)}
+          >
+            {formFields}
+          </form>
+        </DialogContent>
+      </Dialog>
       <AlertDialog
         open={removal !== null}
         onOpenChange={(open) => !open && setRemoval(null)}

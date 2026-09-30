@@ -882,7 +882,7 @@ export function EligibleSubjectTable({
           }
         }}
       >
-        <DialogContent className="max-h-[90dvh] max-w-3xl overflow-hidden p-0">
+        <DialogContent className="max-h-[90dvh] max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
           <DialogHeader className="border-b p-4 sm:p-6 pb-4">
             <div className="flex items-center gap-2">
               <DialogTitle className="text-lg font-bold">

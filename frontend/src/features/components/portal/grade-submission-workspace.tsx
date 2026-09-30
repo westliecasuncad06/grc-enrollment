@@ -934,7 +934,7 @@ export function GradeSubmissionWorkspace() {
           if (!open) setSectionId(null)
         }}
       >
-        <DialogContent className="max-h-[92dvh] max-w-6xl overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-h-[92dvh] max-w-6xl overflow-y-auto p-4 sm:max-w-6xl sm:p-6">
           <DialogHeader className="sr-only">
             <DialogTitle>Section Grade Sheet</DialogTitle>
             <DialogDescription>

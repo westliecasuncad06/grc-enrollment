@@ -467,7 +467,7 @@ export function TeachingScheduleWorkspace() {
               open={activeDetailRow !== null}
               onOpenChange={(open) => !open && setActiveDetailRow(null)}
             >
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-md sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <DoorOpen className="size-5 text-primary" aria-hidden="true" />

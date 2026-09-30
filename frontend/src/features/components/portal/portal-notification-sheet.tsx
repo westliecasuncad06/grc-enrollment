@@ -362,7 +362,7 @@ export function PortalNotificationSheet() {
       </SheetContent>
 
       <Dialog open={corDialogOpen} onOpenChange={setCorDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Certificate of Registration (COR)</DialogTitle>
           </DialogHeader>

@@ -153,7 +153,7 @@ export function CreditReviewDialog({
         if (!open && !busy) onClose()
       }}
     >
-      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Review credit request</DialogTitle>
           <DialogDescription>

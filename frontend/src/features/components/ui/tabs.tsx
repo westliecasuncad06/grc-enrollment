@@ -25,7 +25,12 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit max-w-full items-center justify-start overflow-x-auto rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:min-h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  // `overflow-x-auto` alone still computes `overflow-y` as `auto`, not
+  // `visible` (CSS Overflow spec's "not visible unless both are" rule) — a
+  // stray sub-pixel height rounding was enough to trigger a real vertical
+  // scrollbar on every tab bar in the app. `overflow-y-hidden` keeps
+  // scrolling to the horizontal axis this is actually meant for.
+  "group/tabs-list inline-flex w-fit max-w-full items-center justify-start overflow-x-auto overflow-y-hidden rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:min-h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
