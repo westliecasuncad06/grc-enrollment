@@ -16,6 +16,10 @@
      - **Database:** Migrations `add_acting_context_to_personal_access_tokens_table` and `add_acting_context_to_audit_logs_table` confirmed active on production MySQL.
      - **Backend API:** Production backend container (`grc-backend-womfnq`) rebuilt and verified serving the latest commit, including Super Admin acting-context endpoints (`/api/v1/super-admin/acting-context`, `/api/v1/super-admin/users`).
      - **Frontend (Vercel):** Production site (`https://www.grc-enrollment.tech`) deployed and responsive with `SuperAdminSwitcher`, `portal-shell` acting-context header, and Super Admin account management workspace.
+  4. **Password Reset URL Wildcard Fix:**
+     - Fixed `SendPasswordResetCode.php`: Added validation so if `FRONTEND_APP_URL` or Origin header is `*` or invalid, it safely falls back to `https://www.grc-enrollment.tech` in production.
+     - Updated Docker Swarm service environment on VPS: `FRONTEND_APP_URL=https://www.grc-enrollment.tech` and `SUPER_ADMIN_EMAIL=westliecasuncad06@gmail.com`.
+     - Verified new reset email generated: properly targets `https://www.grc-enrollment.tech/reset-password` without invalid wildcard redirect.
 
 
 - **Owner Request:**

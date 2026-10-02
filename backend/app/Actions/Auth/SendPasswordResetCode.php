@@ -79,8 +79,15 @@ final class SendPasswordResetCode
             $baseUrl = $this->originFrom($referer);
         }
 
-        if ($baseUrl === null) {
-            $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
+        if ($baseUrl === null || ! filter_var($baseUrl, FILTER_VALIDATE_URL) || str_contains($baseUrl, '*')) {
+            $configured = (string) config('app.frontend_url', '');
+            if (filter_var($configured, FILTER_VALIDATE_URL) && ! str_contains($configured, '*')) {
+                $baseUrl = rtrim($configured, '/');
+            } else {
+                $baseUrl = app()->isProduction()
+                    ? 'https://www.grc-enrollment.tech'
+                    : 'http://localhost:3000';
+            }
         }
 
         return rtrim($baseUrl, '/').'/reset-password';
