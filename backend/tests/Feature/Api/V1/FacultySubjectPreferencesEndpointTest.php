@@ -15,11 +15,13 @@ use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\CurriculumSubject;
 use App\Models\FacultyCurriculumSubjectPreference;
+use App\Models\FacultySpecialization;
 use App\Models\FacultySubjectPreference;
 use App\Models\Program;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 final class FacultySubjectPreferencesEndpointTest extends TestCase
@@ -272,5 +274,75 @@ final class FacultySubjectPreferencesEndpointTest extends TestCase
             'rank' => 4,
             'origin' => 'declared',
         ]);
+    }
+
+    public function test_deleting_a_preference_also_removes_the_declared_specialization_for_that_subject(): void
+    {
+        [$curriculum, $subjects] = $this->curriculumWithSubjects(['CS401', 'CS402']);
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.cascade@grc.test');
+        $professor->update(['college' => CollegeCode::Ccs]);
+
+        $preferences = $subjects->map(function (Subject $subject, int $index) use ($professor, $curriculum): FacultyCurriculumSubjectPreference {
+            FacultySpecialization::create([
+                'professor_id' => $professor->id, 'subject_id' => $subject->id,
+                'proficiency' => 'primary', 'source' => $index === 0 ? 'declared' : 'workbook_seeded',
+            ]);
+
+            return FacultyCurriculumSubjectPreference::create([
+                'professor_id' => $professor->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
+                'semester' => '1st', 'rank' => $index + 1, 'origin' => 'declared',
+            ]);
+        });
+
+        $this->withToken($token)->deleteJson("/api/v1/faculty-curriculum-subject-preferences/{$preferences[0]->id}")->assertNoContent();
+        $this->withToken($token)->deleteJson("/api/v1/faculty-curriculum-subject-preferences/{$preferences[1]->id}")->assertNoContent();
+
+        // The declared specialization went with its preference...
+        $this->assertDatabaseMissing('faculty_specializations', ['professor_id' => $professor->id, 'subject_id' => $subjects[0]->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => AuditAction::FACULTY_SPECIALIZATION_DELETED]);
+        // ...a seeded (workbook) one is evidence and stays.
+        $this->assertDatabaseHas('faculty_specializations', ['professor_id' => $professor->id, 'subject_id' => $subjects[1]->id]);
+    }
+
+    public function test_deleting_a_preference_keeps_the_specialization_while_another_preference_still_names_the_subject(): void
+    {
+        [$curriculum, $subjects] = $this->curriculumWithSubjects(['CS403']);
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.cascade-keep@grc.test');
+        $professor->update(['college' => CollegeCode::Ccs]);
+        FacultySpecialization::create(['professor_id' => $professor->id, 'subject_id' => $subjects[0]->id, 'proficiency' => 'secondary', 'source' => 'declared']);
+        $first = FacultyCurriculumSubjectPreference::create([
+            'professor_id' => $professor->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subjects[0]->id,
+            'semester' => '1st', 'rank' => 1, 'origin' => 'declared',
+        ]);
+        FacultyCurriculumSubjectPreference::create([
+            'professor_id' => $professor->id, 'curriculum_id' => $curriculum->id, 'subject_id' => $subjects[0]->id,
+            'semester' => '2nd', 'rank' => 1, 'origin' => 'declared',
+        ]);
+
+        $this->withToken($token)->deleteJson("/api/v1/faculty-curriculum-subject-preferences/{$first->id}")->assertNoContent();
+
+        $this->assertDatabaseHas('faculty_specializations', ['professor_id' => $professor->id, 'subject_id' => $subjects[0]->id]);
+    }
+
+    /**
+     * @param  list<string>  $codes
+     * @return array{0: Curriculum, 1: Collection<int, Subject>}
+     */
+    private function curriculumWithSubjects(array $codes): array
+    {
+        $program = Program::create([
+            'code' => 'BSIT', 'name' => 'Information Technology', 'college' => CollegeCode::Ccs, 'status' => ProgramStatus::Active,
+        ]);
+        $curriculum = Curriculum::create([
+            'program_id' => $program->id, 'name' => '2024–2029', 'effective_school_year' => '2024-2029',
+            'effective_start_year' => 2024, 'effective_end_year' => 2029, 'status' => CurriculumStatus::Active,
+        ]);
+        $subjects = collect($codes)->map(fn (string $code): Subject => $this->makeSubject($code));
+        $subjects->each(fn (Subject $subject) => CurriculumSubject::create([
+            'curriculum_id' => $curriculum->id, 'subject_id' => $subject->id,
+            'year_level' => 3, 'semester' => '1st', 'is_required' => true,
+        ]));
+
+        return [$curriculum, $subjects];
     }
 }

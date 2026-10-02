@@ -45,9 +45,10 @@ const emptyPreference: FacultyCurriculumSubjectPreferenceInput = {
   subject_id: 0,
 }
 
-type Removal =
-  | { kind: "preference"; row: FacultyCurriculumSubjectPreference }
-  | { kind: "specialization"; row: FacultySpecialization }
+interface Removal {
+  kind: "specialization"
+  row: FacultySpecialization
+}
 
 export function FacultySubjectPreferencePanel() {
   const { session } = useAuth()
@@ -150,19 +151,11 @@ export function FacultySubjectPreferencePanel() {
   })
   const removalMutation = useMutation({
     mutationFn: (target: Removal) =>
-      target.kind === "preference"
-        ? deleteFacultyCurriculumSubjectPreference(target.row.id)
-        : deleteFacultySpecialization(target.row.id),
-    onSuccess: async (_result, target) => {
-      await (target.kind === "preference"
-        ? invalidatePreferences()
-        : invalidateSpecializations())
+      deleteFacultySpecialization(target.row.id),
+    onSuccess: async () => {
+      await invalidateSpecializations()
       setRemoval(null)
-      toast.success(
-        target.kind === "preference"
-          ? "Subject preference removed."
-          : "Specialization removed.",
-      )
+      toast.success("Specialization removed.")
     },
     onError: () =>
       setRequestError(
@@ -262,7 +255,9 @@ export function FacultySubjectPreferencePanel() {
       await Promise.all(
         ids.map((id) => deleteFacultyCurriculumSubjectPreference(id)),
       )
-      await invalidatePreferences()
+      // The server also removes the declared specialization of each subject
+      // that no preference names any more, so refresh both lists.
+      await Promise.all([invalidatePreferences(), invalidateSpecializations()])
       toast.success("Selected subject preferences deleted successfully.")
     } catch {
       toast.error("Failed to delete selected subject preferences. Try again.")
@@ -354,18 +349,6 @@ export function FacultySubjectPreferencePanel() {
             subjectsById={subjectsById}
             specializationsBySubject={specializationsBySubject}
             subjectOptions={subjectOptions}
-            onEditPreference={(row) => {
-              setEditing(row)
-              form.reset({
-                curriculum_id: row.curriculum_id,
-                semester: row.semester,
-                subject_id: row.subject_id,
-                rank: row.rank,
-              })
-            }}
-            onRemovePreference={(row) =>
-              setRemoval({ kind: "preference", row })
-            }
             onRemoveSpecialization={(row) =>
               setRemoval({ kind: "specialization", row })
             }

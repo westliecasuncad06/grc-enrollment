@@ -536,7 +536,26 @@ describe("FacultySubjectPreferencePanel", () => {
 
     // Initially "Edit" button is present
     const editToggle = await screen.findByRole("button", { name: "Edit" })
+
+    // The saved table has no per-row Actions column: editing and removing go
+    // through the Edit toggle above it.
+    const savedTable = await screen.findByRole("table", {
+      name: "Saved curriculum subject preferences",
+    })
+    expect(
+      within(savedTable).queryByRole("columnheader", { name: "Actions" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Edit subject preference" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Remove subject preference" }),
+    ).not.toBeInTheDocument()
+
     await user.click(editToggle)
+    const specializationReadsBeforeDelete = fetchMock.mock.calls.filter(
+      ([input]) => url(input).includes("/faculty-specializations"),
+    ).length
 
     // Now in edit mode, toggle changes to "Done"
     expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument()
@@ -570,6 +589,15 @@ describe("FacultySubjectPreferencePanel", () => {
       expect(toast.success).toHaveBeenCalledWith(
         "Selected subject preferences deleted successfully.",
       )
+    })
+    // The server drops the declared specialization along with the preference,
+    // so the specializations list is read again.
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          url(input).includes("/faculty-specializations"),
+        ).length,
+      ).toBeGreaterThan(specializationReadsBeforeDelete)
     })
   })
 

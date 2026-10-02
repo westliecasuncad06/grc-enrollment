@@ -66,8 +66,6 @@ interface FacultySpecializationListProps {
   subjectsById: ReadonlyMap<number, SubjectLabel>
   specializationsBySubject: ReadonlyMap<number, FacultySpecialization>
   subjectOptions?: readonly { value: string; label: string }[]
-  onEditPreference: (row: FacultyCurriculumSubjectPreference) => void
-  onRemovePreference: (row: FacultyCurriculumSubjectPreference) => void
   onRemoveSpecialization: (row: FacultySpecialization) => void
   onBatchDeletePreferences?: (ids: number[]) => Promise<void>
   onReplacePreference?: (
@@ -95,8 +93,6 @@ export function FacultySpecializationList({
   subjectsById,
   specializationsBySubject,
   subjectOptions,
-  onEditPreference,
-  onRemovePreference,
   onRemoveSpecialization,
   onBatchDeletePreferences,
   onReplacePreference,
@@ -238,7 +234,6 @@ export function FacultySpecializationList({
                   <TableHead>Subject</TableHead>
                   <TableHead>Proficiency</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -291,27 +286,6 @@ export function FacultySpecializationList({
                         <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">
                           {sourceLabel(row.origin)}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          aria-label="Edit subject preference"
-                          onClick={() => onEditPreference(row)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="ml-2"
-                          aria-label="Remove subject preference"
-                          onClick={() => onRemovePreference(row)}
-                        >
-                          Remove
-                        </Button>
                       </TableCell>
                     </TableRow>
                   )

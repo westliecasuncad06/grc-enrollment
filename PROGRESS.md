@@ -1,5 +1,12 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Professor subject preferences: per-row Edit/Remove removed, deleting a preference removes its specialization (DONE, uncommitted)
+
+- **Request:** on the professor's Subject preferences list, drop the per-row Actions column (Edit / Remove) because the Edit toggle above the table already does batch delete and click-to-replace; and deleting a preference must also delete the specialization (proficiency) that was saved with it.
+- **Frontend:** `faculty-specialization-list.tsx` lost the Actions column and its Edit/Remove buttons (and the `onEditPreference`/`onRemovePreference` props); `faculty-subject-preference-panel.tsx` no longer wires them, the single-preference removal branch was pruned (the "Declared specializations" table keeps its own Remove), and batch delete now refreshes the specializations list as well. The form's "editing" mode is now unreachable from the list (left in place, not removed).
+- **Backend:** `DeleteFacultyCurriculumSubjectPreference` now also deletes the professor's `declared` specialization for that subject, through `DeleteFacultySpecialization` (audited, same transaction), but only when no other preference of theirs still names the subject. Seeded/workbook specializations are left alone. Replace-subject (swap in edit mode) does not remove the old subject's specialization — not changed.
+- **Verification:** backend `FacultySubjectPreferencesEndpointTest` 11/11 (2 new: cascade + seeded kept, and kept while another preference names the subject); Pint clean. Frontend `faculty-subject-preference-panel` + `faculty-input-workspace` 12/12; the extended batch-delete test was confirmed to fail without each change (Actions column, specializations refetch). eslint on both files and `tsc --noEmit` clean. Not re-checked in a real browser.
+
 ## 2026-10-02 — LEC/LAB adjacency in the student's enrollment section (block) views (DONE, uncommitted)
 
 - **Report:** Doc 18 item again — a lecture and its laboratory must sit together, lecture first (e.g. ITP1 then ITP1L), in the student's prospectus/subject view during enrollment.
