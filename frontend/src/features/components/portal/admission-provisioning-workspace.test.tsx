@@ -111,6 +111,36 @@ const changeRequest = {
   decided_at: null,
 } as const
 
+// What the Create Account form lists for a Year 1 (Freshman) student.
+const intakeRequirements = {
+  data: {
+    type: "admission_requirement_selection",
+    student_type: "freshman",
+    student_type_label: "Freshman",
+    categories: [
+      {
+        category: "freshman",
+        label: "Freshman requirements",
+        items: [
+          { requirement_type_id: 1, name: "Form 137", is_system: true },
+          { requirement_type_id: 2, name: "Form 138", is_system: true },
+        ],
+      },
+      {
+        category: "additional",
+        label: "Additional requirements",
+        items: [
+          {
+            requirement_type_id: 7,
+            name: "Original Birth Certificate (PSA)",
+            is_system: true,
+          },
+        ],
+      },
+    ],
+  },
+} as const
+
 function urlOf(input: RequestInfo | URL): string {
   return typeof input === "string"
     ? input
@@ -145,6 +175,9 @@ describe("Student Records workspace", () => {
       const url = urlOf(input)
       if (url.includes("/api/v1/programs")) {
         return Promise.resolve(new Response(JSON.stringify(programs)))
+      }
+      if (url.includes("/api/v1/admission-requirement-types")) {
+        return Promise.resolve(new Response(JSON.stringify(intakeRequirements)))
       }
       if (url.includes("/api/v1/student-profiles") && init?.method === "POST") {
         return Promise.resolve(
@@ -207,7 +240,7 @@ describe("Student Records workspace", () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it("uses one three-part workspace and creates an account only after requirements confirmation", async () => {
+  it("uses one three-part workspace and creates an account only after every requirement is checked", async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -249,16 +282,40 @@ describe("Student Records workspace", () => {
     const submit = screen.getByRole("button", {
       name: "Create account and email setup",
     })
+    // The single "verified" box is gone: the requirements are listed, one checkbox each.
+    expect(
+      screen.queryByLabelText("Requirements submitted and verified"),
+    ).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole("checkbox", { name: "Form 137" }),
+    ).not.toBeChecked()
+    expect(screen.getByText("0 of 3 checked")).toBeInTheDocument()
+
     await user.click(submit)
     expect(
-      await screen.findByText(
-        "Confirm that Admission received the student's requirements.",
-      ),
+      await screen.findByText("Check every requirement the student handed in."),
     ).toBeInTheDocument()
 
+    // Ticking all but one is still not enough.
+    await user.click(screen.getByRole("checkbox", { name: "Form 137" }))
+    await user.click(screen.getByRole("checkbox", { name: "Form 138" }))
+    expect(screen.getByText("2 of 3 checked")).toBeInTheDocument()
+    await user.click(submit)
+    expect(
+      await screen.findByText("Check every requirement the student handed in."),
+    ).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          urlOf(input).endsWith("/api/v1/student-profiles") &&
+          init?.method === "POST",
+      ),
+    ).toBe(false)
+
     await user.click(
-      screen.getByLabelText("Requirements submitted and verified"),
+      screen.getByRole("checkbox", { name: "Original Birth Certificate (PSA)" }),
     )
+    expect(screen.getByText("3 of 3 checked")).toBeInTheDocument()
     await user.click(submit)
 
     expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
@@ -278,9 +335,11 @@ describe("Student Records workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Admission requirements" }),
     ).toBeInTheDocument()
+    // One "Form 137" is the new student's saved checklist, the other is the (reset) intake list
+    // ready for the next account.
     expect(
-      await screen.findByRole("checkbox", { name: "Form 137" }),
-    ).toBeInTheDocument()
+      await screen.findAllByRole("checkbox", { name: "Form 137" }),
+    ).toHaveLength(2)
     await user.click(resendBtn)
     await waitFor(() => {
       expect(
@@ -303,6 +362,7 @@ describe("Student Records workspace", () => {
       first_name: profile.first_name,
       last_name: profile.last_name,
       address: profile.address,
+      requirement_type_ids: [1, 2, 7],
       requirements_verified: true,
     })
     expect(body).not.toHaveProperty("password")
@@ -380,6 +440,9 @@ describe("Student Records workspace", () => {
       const url = urlOf(input)
       if (url.includes("/api/v1/programs")) {
         return Promise.resolve(new Response(JSON.stringify(programs)))
+      }
+      if (url.includes("/api/v1/admission-requirement-types")) {
+        return Promise.resolve(new Response(JSON.stringify(intakeRequirements)))
       }
       if (
         url.includes(`/api/v1/student-profiles/${enrolledProfile.id}`) &&
@@ -489,6 +552,9 @@ describe("Student Records workspace", () => {
       const url = urlOf(input)
       if (url.includes("/api/v1/programs")) {
         return Promise.resolve(new Response(JSON.stringify(programs)))
+      }
+      if (url.includes("/api/v1/admission-requirement-types")) {
+        return Promise.resolve(new Response(JSON.stringify(intakeRequirements)))
       }
       if (url.endsWith("/decision") && init?.method === "PATCH") {
         return Promise.resolve(

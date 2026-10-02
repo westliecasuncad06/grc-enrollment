@@ -44,8 +44,8 @@ const cor = {
     total_units: "3.00",
     admission_certification:
       "This is to certify that Test Student is cleared and enrolled.",
-    // Still present in the snapshot (other consumers like Statement of
-    // Account may read it later); the COR itself must never render it.
+    // The COR prints the assessment (the bill: tuition, other fees, discount, grand
+    // total) but never what was paid or the balance; those stay in the Statement of Account.
     fees: {
       currency: "PHP",
       tuition: [
@@ -92,7 +92,7 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(screen.getByText("COR000009")).toBeInTheDocument()
   })
 
-  it("never shows fees, payment, or balance — that belongs to the Statement of Account (stakeholder Doc 16)", () => {
+  it("shows the assessment of fees but never what was paid, the balance or the payment status", () => {
     const withPayment = {
       ...cor,
       snapshot: {
@@ -108,9 +108,13 @@ describe("CertificateOfRegistrationDocument", () => {
     }
     render(<CertificateOfRegistrationDocument cor={withPayment} />)
 
-    expect(screen.queryByText("ASSESSMENT OF FEES")).not.toBeInTheDocument()
-    expect(screen.queryByText("GRAND TOTAL")).not.toBeInTheDocument()
-    expect(screen.queryByText("Registration")).not.toBeInTheDocument()
+    expect(screen.getByText("ASSESSMENT OF FEES")).toBeInTheDocument()
+    expect(screen.getByText("Tuition fee")).toBeInTheDocument()
+    expect(screen.getByText("Registration")).toBeInTheDocument()
+    expect(screen.getByText("GRAND TOTAL")).toBeInTheDocument()
+    expect(screen.getAllByText("₱2,900.00").length).toBeGreaterThan(0)
+    expect(screen.queryByText(/1,000\.00/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/1,900\.00/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Amount Paid/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Remaining Balance/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Payment Status|PAID IN FULL/i)).not.toBeInTheDocument()

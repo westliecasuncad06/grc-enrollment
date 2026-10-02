@@ -123,6 +123,13 @@ export const auditLogSchema = z
     actor_name: z.string().min(1),
     actor_role: z.enum(userRoles),
     actor_role_label: z.string().min(1),
+    // Set only when a Super Admin acted through the department switcher (ADR 0038): the role
+    // (and college) they were acting as. Null for everyone else. Plain strings, and optional,
+    // so a role added later (or an older backend that lacks the keys) cannot fail the whole list
+    // the way the missing keys did under `.strict()`.
+    acting_role: z.string().nullable().optional(),
+    acting_role_label: z.string().nullable().optional(),
+    acting_college: z.string().nullable().optional(),
     // Deliberately not `auditActionSchema`/`auditableTypeSchema`: those
     // enums back the filter dropdowns, but the resource itself must accept
     // any backend action/type value so one unrecognized entry does not fail

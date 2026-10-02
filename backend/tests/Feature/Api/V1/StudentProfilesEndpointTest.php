@@ -10,9 +10,11 @@ use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Mail\StudentAccountSetupMail;
 use App\Models\AcademicTerm;
+use App\Models\AdmissionRequirementType;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Program;
+use App\Models\StudentAdmissionRequirement;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -128,6 +130,95 @@ final class StudentProfilesEndpointTest extends TestCase
         $invitationAudit = AuditLog::query()->where('action', AuditAction::STUDENT_ACCOUNT_SETUP_INVITATION_SENT)->sole();
         $invitationPayload = json_encode([$invitationAudit->before_values, $invitationAudit->after_values], JSON_THROW_ON_ERROR);
         self::assertStringNotContainsString('new.student@grc.test', $invitationPayload);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function applicableRequirementIds(string $studentCategory): array
+    {
+        return AdmissionRequirementType::query()
+            ->where('is_active', true)
+            ->whereIn('category', [$studentCategory, 'additional'])
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * @param  list<int>  $requirementTypeIds
+     * @return array<string, mixed>
+     */
+    private function provisionPayload(Program $program, string $email, array $requirementTypeIds, int $yearLevel = 1): array
+    {
+        return [
+            'first_name' => 'Checklist',
+            'last_name' => 'Student',
+            'email' => $email,
+            'address' => '123 Test Street, Caloocan City',
+            'student_number' => '2027-08-'.str_pad((string) random_int(10000, 99999), 5, '0', STR_PAD_LEFT),
+            'program_id' => $program->id,
+            'year_level' => $yearLevel,
+            'requirement_type_ids' => $requirementTypeIds,
+        ];
+    }
+
+    public function test_provisioning_with_the_requirements_checklist_records_every_requirement_as_submitted(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist@grc.test');
+        Mail::fake();
+        $ids = $this->applicableRequirementIds('freshman');
+
+        $response = $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'checklist.student@grc.test', $ids),
+        );
+
+        $response->assertCreated();
+        $profileId = (int) $response->json('data.id');
+        self::assertSame(
+            count($ids),
+            StudentAdmissionRequirement::query()->where('student_profile_id', $profileId)->where('is_submitted', true)->count(),
+        );
+        // The same rows the checklist screen reads: nothing is left missing for the new student.
+        $this->withToken($token)->getJson("/api/v1/student-profiles/{$profileId}/admission-requirements")
+            ->assertOk()
+            ->assertJsonPath('data.summary.complete', true)
+            ->assertJsonPath('data.summary.missing_count', 0);
+    }
+
+    public function test_provisioning_is_refused_while_a_requirement_on_the_list_is_not_ticked(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.missing@grc.test');
+        $ids = $this->applicableRequirementIds('freshman');
+        array_pop($ids);
+
+        $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'checklist.missing@grc.test', $ids),
+        )->assertUnprocessable()->assertJsonPath('error.errors.requirement_type_ids.0', 'Every requirement must be submitted before the account is created.');
+
+        $this->assertDatabaseMissing('users', ['email' => 'checklist.missing@grc.test']);
+    }
+
+    public function test_provisioning_refuses_a_requirement_that_does_not_apply_to_the_student_type(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.checklist.wrongtype@grc.test');
+        // Year 1 is a Freshman; a Transferee requirement is not theirs to hand in.
+        $ids = [...$this->applicableRequirementIds('freshman'), ...$this->applicableRequirementIds('transferee')];
+
+        $this->withToken($token)->postJson(
+            '/api/v1/student-profiles',
+            $this->provisionPayload($program, 'checklist.wrongtype@grc.test', array_values(array_unique($ids))),
+        )->assertUnprocessable()->assertJsonPath('error.errors.requirement_type_ids.0', 'One of the checked requirements does not apply to this student.');
+
+        $this->assertDatabaseMissing('users', ['email' => 'checklist.wrongtype@grc.test']);
     }
 
     public function test_provisioning_normalizes_name_casing_regardless_of_how_admission_typed_it(): void

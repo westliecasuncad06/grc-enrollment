@@ -104,6 +104,35 @@
             letter-spacing: 0.08em;
         }
 
+        /* Assessment Box: the bill only (fees and grand total). What was paid, and what is still
+           owed, is not shown on the COR. */
+        .assessment-box {
+            border: 0.75pt solid #222;
+            padding: 3.5pt 5pt;
+            margin-top: 4pt;
+        }
+        .fee-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 6.7pt;
+        }
+        .fee-table td {
+            padding: 0.8pt 1.5pt;
+        }
+        .fee-subtotal {
+            border-top: 0.75pt solid #000;
+            font-weight: bold;
+            font-size: 7pt;
+        }
+        .grand-total {
+            border-top: 1.5pt solid #000;
+            border-bottom: 2.5pt double #000;
+            font-weight: bold;
+            font-size: 8.2pt;
+            padding: 2pt 0;
+            margin-top: 3pt;
+        }
+
         /* Page 2: Reference Bar */
         .reference-bar {
             width: 100%;
@@ -236,9 +265,74 @@
                 <div>{{ \App\Domain\Enrollment\CorDisplay::sentence($snapshot['admission_certification']) }}</div>
             </div>
         @endif
+
+        <div class="assessment-box avoid-break">
+            <div class="text-center font-bold uppercase" style="font-size: 7.2pt; border-bottom: 0.5pt solid #999; padding-bottom: 2pt; margin-bottom: 3pt;">
+                Assessment of Fees
+            </div>
+            <table width="100%" style="border-collapse: collapse;">
+                <tr>
+                    <td width="48%" style="vertical-align: top;">
+                        <div class="font-bold uppercase" style="font-size: 6.8pt; border-bottom: 0.5pt solid #ccc; margin-bottom: 2pt; padding-bottom: 1pt;">Tuition Fees</div>
+                        <table class="fee-table">
+                            @foreach ($snapshot['fees']['tuition'] as $fee)
+                                <tr>
+                                    <td>
+                                        {{ $fee['label'] }}
+                                        @if (!empty($fee['quantity']) && !empty($fee['unit_amount']) && (float)$fee['unit_amount'] > 0)
+                                            <span style="color: #555;">({{ $fee['quantity'] }} units @ &#8369;{{ number_format((float)$fee['unit_amount'], 2) }})</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-right">&#8369;{{ number_format((float) $fee['amount'], 2) }}</td>
+                                </tr>
+                            @endforeach
+                            <tr class="fee-subtotal">
+                                <td>Total Tuition Fees:</td>
+                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['total_tuition'], 2) }}</td>
+                            </tr>
+                        </table>
+                    </td>
+                    <td width="4%"></td>
+                    <td width="48%" style="vertical-align: top;">
+                        <div class="font-bold uppercase" style="font-size: 6.8pt; border-bottom: 0.5pt solid #ccc; margin-bottom: 2pt; padding-bottom: 1pt;">Other / Misc Fees</div>
+                        <table class="fee-table">
+                            @foreach ($snapshot['fees']['other_fees'] as $fee)
+                                <tr>
+                                    <td>{{ $fee['label'] }}</td>
+                                    <td class="text-right">&#8369;{{ number_format((float) $fee['amount'], 2) }}</td>
+                                </tr>
+                            @endforeach
+                            <tr class="fee-subtotal">
+                                <td>Total Other Fees:</td>
+                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['total_other_fees'], 2) }}</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+
+            <table width="100%" style="margin-top: 3pt;">
+                <tr>
+                    <td width="55%"></td>
+                    <td width="45%">
+                        <table class="fee-table grand-total">
+                            @foreach (($snapshot['fees']['scholarship_discount'] ?? []) as $discount)
+                            <tr style="color: #047857;">
+                                <td>{{ $discount['label'] }}:</td>
+                                <td class="text-right">-&#8369;{{ number_format(abs((float) $discount['amount']), 2) }}</td>
+                            </tr>
+                            @endforeach
+                            <tr>
+                                <td>GRAND TOTAL:</td>
+                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['grand_total'], 2) }}</td>
+                            </tr>
+                            {{-- The COR is the bill only. What was paid and what is still owed belongs to the Statement of Account. --}}
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </div>
     </div>
-    {{-- Fees, payments, and balance are deliberately not on the COR (stakeholder Doc 16) —
-         they live in the Statement of Account. --}}
 
     {{-- ======================== PAGE 2: TERMS AND SIGNATURES ======================== --}}
     <div class="page">

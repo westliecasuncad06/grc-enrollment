@@ -15,6 +15,7 @@ use App\Domain\Identity\UserStatus;
 use App\Domain\Organization\AcademicTermStatus;
 use App\Models\AcademicTerm;
 use App\Models\Curriculum;
+use App\Models\StudentAdmissionRequirement;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
@@ -33,7 +34,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, year_level: int, financial_status?: ?string}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, year_level: int, financial_status?: ?string, requirement_type_ids?: list<int>}  $data
      */
     public function handle(
         array $data,
@@ -104,6 +105,19 @@ final class ProvisionStudent
                 'requirements_verified_by' => $actor->id,
             ]);
             $profile->refresh();
+
+            // The requirements Admission ticked off on the Create Account form are recorded as
+            // handed in: the same rows the student's own checklist reads (ADR 0037).
+            $submittedAt = now();
+            foreach (array_unique(array_map('intval', $data['requirement_type_ids'] ?? [])) as $requirementTypeId) {
+                StudentAdmissionRequirement::create([
+                    'student_profile_id' => $profile->id,
+                    'requirement_type_id' => $requirementTypeId,
+                    'is_submitted' => true,
+                    'submitted_at' => $submittedAt,
+                    'recorded_by' => $actor->id,
+                ]);
+            }
 
             $this->auditRecorder->record(
                 $actor,

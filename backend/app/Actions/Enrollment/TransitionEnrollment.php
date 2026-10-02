@@ -84,7 +84,12 @@ final class TransitionEnrollment
         'program_head_approve' => [EnrollmentStatus::PendingProgramHeadApproval],
         'program_head_reject' => [EnrollmentStatus::PendingProgramHeadApproval],
         'registrar_approve' => [EnrollmentStatus::PendingRegistrarApproval],
-        'registrar_reject' => [EnrollmentStatus::PendingRegistrarApproval],
+        // The Registrar can also reject an already-approved enrollment that has not been paid
+        // yet (`pending_payment`): the approvals page offers Reject there instead of Void.
+        'registrar_reject' => [
+            EnrollmentStatus::PendingRegistrarApproval,
+            EnrollmentStatus::PendingPayment,
+        ],
         // Before payment, at any approval stage. Once enrolled it is a withdrawal.
         'void' => [
             EnrollmentStatus::PendingProgramHeadApproval,
@@ -204,7 +209,9 @@ final class TransitionEnrollment
             $releasedSectionIds = $lockedEnrollment->status->isTerminal()
                 ? $this->releaseSeats($lockedEnrollment)
                 : [];
-            if ($action === 'void') {
+            // A rejection of an approved (pending payment) enrollment may follow a queue claim, so
+            // it cancels the waiting ticket like a void does; before approval there is no ticket.
+            if ($action === 'void' || $action === 'registrar_reject') {
                 $this->cancelWaitingTicket($lockedEnrollment);
             }
 

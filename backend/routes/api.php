@@ -520,6 +520,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             // The Admission requirements checklist (ADR 0037).
             Route::get('/student-profiles/{studentProfile}/admission-requirements', [AdmissionRequirementController::class, 'show'])->whereNumber('studentProfile')->name('student-profiles.admission-requirements.show');
             Route::put('/student-profiles/{studentProfile}/admission-requirements/{requirementType}', [AdmissionRequirementController::class, 'update'])->whereNumber(['studentProfile', 'requirementType'])->name('student-profiles.admission-requirements.update');
+            Route::get('/admission-requirement-types', [AdmissionRequirementController::class, 'indexTypes'])->name('admission-requirement-types.index');
             Route::post('/admission-requirement-types', [AdmissionRequirementController::class, 'storeType'])->name('admission-requirement-types.store');
         });
 

@@ -71,6 +71,43 @@ final class AdmissionRequirementsEndpointTest extends TestCase
         return (int) AdmissionRequirementType::query()->where('category', $category)->where('name', $name)->value('id');
     }
 
+    public function test_admission_staff_can_list_the_requirements_that_apply_to_a_year_level(): void
+    {
+        $token = $this->token($this->user(UserRole::AdmissionStaff));
+
+        $first = $this->withToken($token)->getJson('/api/v1/admission-requirement-types?year_level=1')
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertJsonPath('data.type', 'admission_requirement_selection')
+            ->assertJsonPath('data.student_type', 'freshman');
+        self::assertSame(['freshman', 'additional'], array_column($first->json('data.categories'), 'category'));
+        self::assertSame(
+            ['Form 137', 'Form 138', 'Good Moral Character', 'Certificate of Ratings'],
+            array_column($first->json('data.categories.0.items'), 'name'),
+        );
+        self::assertCount(6, $first->json('data.categories.1.items'));
+
+        $later = $this->withToken($token)->getJson('/api/v1/admission-requirement-types?year_level=3')
+            ->assertOk()
+            ->assertJsonPath('data.student_type', 'transferee');
+        self::assertSame(['transferee', 'additional'], array_column($later->json('data.categories'), 'category'));
+    }
+
+    public function test_the_requirement_list_for_a_year_level_is_for_admission_staff_only_and_needs_a_valid_year(): void
+    {
+        $this->getJson('/api/v1/admission-requirement-types?year_level=1')->assertUnauthorized();
+        $studentToken = $this->token($this->user(UserRole::Student));
+        $staffToken = $this->token($this->user(UserRole::AdmissionStaff));
+        $this->withToken($studentToken)
+            ->getJson('/api/v1/admission-requirement-types?year_level=1')
+            ->assertForbidden();
+        // Sanctum caches the user per test; a second user needs the guard reset.
+        app('auth')->forgetGuards();
+        $this->withToken($staffToken)
+            ->getJson('/api/v1/admission-requirement-types?year_level=9')
+            ->assertUnprocessable();
+    }
+
     public function test_the_stakeholders_list_is_seeded_exactly(): void
     {
         $seeded = AdmissionRequirementType::query()->orderBy('category')->orderBy('sort_order')->get()

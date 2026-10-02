@@ -9,6 +9,7 @@ use App\Domain\Curriculum\SubjectStatus;
 use App\Domain\Enrollment\EnrollmentAudience;
 use App\Domain\Enrollment\EnrollmentStatus;
 use App\Domain\Enrollment\EnrollmentSubjectStatus;
+use App\Domain\Enrollment\QueueTicketStatus;
 use App\Domain\Identity\AcademicStanding;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\UserRole;
@@ -29,6 +30,8 @@ use App\Models\Enrollment;
 use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Program;
+use App\Models\QueueCycle;
+use App\Models\QueueTicket;
 use App\Models\Section;
 use App\Models\StudentProfile;
 use App\Models\Subject;
@@ -1467,6 +1470,45 @@ final class EnrollmentsEndpointTest extends TestCase
         ])->assertOk()->assertJsonPath('data.status', 'rejected');
 
         self::assertSame(0, $section->refresh()->enrolled_count);
+    }
+
+    public function test_a_registrar_can_reject_an_approved_enrollment_before_payment_and_release_its_seat_and_ticket(): void
+    {
+        [$enrollment, $section] = $this->enrollmentHoldingASeat(EnrollmentStatus::PendingPayment);
+        $enrollmentId = $enrollment->id;
+        $cycle = QueueCycle::create(['opened_on' => '2026-08-22', 'last_ticket_sequence' => 1, 'last_claimed_on' => '2026-08-22']);
+        $ticket = QueueTicket::create([
+            'enrollment_id' => $enrollmentId, 'queue_cycle_id' => $cycle->id, 'ticket_sequence' => 1,
+            'ticket_number' => 'Q001', 'queue_date' => '2026-08-22', 'status' => QueueTicketStatus::Waiting,
+        ]);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarHead, 'registrar.head.reject.approved@grc.test');
+
+        $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollmentId}", [
+            'action' => 'registrar_reject',
+            'reason' => 'Requirements were found incomplete after approval.',
+        ])->assertOk()->assertJsonPath('data.status', 'rejected');
+
+        self::assertSame(0, $section->refresh()->enrolled_count);
+        self::assertSame(QueueTicketStatus::Cancelled, $ticket->refresh()->status);
+        self::assertSame(
+            'Requirements were found incomplete after approval.',
+            AuditLog::query()->where('action', AuditAction::ENROLLMENT_REGISTRAR_REJECTED)->sole()->reason,
+        );
+    }
+
+    public function test_a_registrar_cannot_reject_an_enrollment_that_is_already_enrolled(): void
+    {
+        $term = $this->makeTerm();
+        $student = $this->makeStudent($this->makeCurriculum());
+        $enrollment = $this->makeEnrollment($student, $term, EnrollmentStatus::Enrolled);
+        $registrarToken = $this->tokenForNewStaff(UserRole::RegistrarStaff, 'registrar.staff.reject.enrolled@grc.test');
+
+        $this->withToken($registrarToken)->patchJson("/api/v1/enrollments/{$enrollment->id}", [
+            'action' => 'registrar_reject',
+            'reason' => 'Too late.',
+        ])->assertUnprocessable();
+
+        self::assertSame('enrolled', $enrollment->refresh()->status->value);
     }
 
     public function test_a_non_registrar_staff_role_cannot_perform_registrar_approve(): void

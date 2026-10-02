@@ -337,72 +337,11 @@ describe("RegistrarEnrollmentWorkspace", () => {
       within(table).getByRole("button", { name: "Reject" }),
     ).toBeInTheDocument()
     expect(
-      within(table).getByRole("button", { name: "Void" }),
-    ).toBeInTheDocument()
+      within(table).queryByRole("button", { name: "Void" }),
+    ).not.toBeInTheDocument()
   })
 
-  it("voids a pending enrollment at the student's request and sends the flag", async () => {
-    const user = userEvent.setup()
-    const bodies: unknown[] = []
-    fetchMock.mockImplementation((_input, init) => {
-      if (init?.method === "PATCH") {
-        bodies.push(
-          JSON.parse(typeof init.body === "string" ? init.body : "{}"),
-        )
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              data: {
-                ...pendingApprovalEnrollment,
-                status: "cancelled",
-                status_label: "Cancelled",
-              },
-            }),
-          ),
-        )
-      }
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            data: [pendingApprovalEnrollment],
-            links: paginationLinks,
-            meta: paginationMeta,
-          }),
-        ),
-      )
-    })
-    renderWithSession(
-      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
-      { session: registrarStaffSession },
-    )
-
-    const table = await screen.findByRole("table", { name: "Enrollment queue" })
-    await user.click(within(table).getByRole("button", { name: "Void" }))
-
-    const dialog = await screen.findByRole("alertdialog")
-    const confirm = within(dialog).getByRole("button", {
-      name: "Confirm decision",
-    })
-    expect(confirm).toBeDisabled()
-    await user.type(
-      within(dialog).getByLabelText("Reason"),
-      "Student asked to change section.",
-    )
-    await user.click(
-      within(dialog).getByLabelText("The student asked for this to be voided."),
-    )
-    await user.click(confirm)
-
-    await waitFor(() =>
-      expect(bodies[0]).toMatchObject({
-        action: "void",
-        reason: "Student asked to change section.",
-        requested_by_student: true,
-      }),
-    )
-  })
-
-  it("offers only Void on an enrollment still with the Program Head", async () => {
+  it("offers no action on an enrollment still with the Program Head (view only)", async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -425,12 +364,118 @@ describe("RegistrarEnrollmentWorkspace", () => {
 
     const table = await screen.findByRole("table", { name: "Enrollment queue" })
     expect(
-      within(table).getByRole("button", { name: "Void" }),
-    ).toBeInTheDocument()
+      within(table).queryByRole("button", { name: "Void" }),
+    ).not.toBeInTheDocument()
     expect(
       within(table).queryByRole("button", { name: "Approve" }),
     ).not.toBeInTheDocument()
   })
+  it("offers only Reject on an approved enrollment that is not paid yet, and sends registrar_reject", async () => {
+    const user = userEvent.setup()
+    const approvedEnrollment = {
+      ...pendingApprovalEnrollment,
+      status: "pending_payment",
+      status_label: "Pending Payment",
+    }
+    const bodies: unknown[] = []
+    fetchMock.mockImplementation((_input, init) => {
+      if (init?.method === "PATCH") {
+        bodies.push(
+          JSON.parse(typeof init.body === "string" ? init.body : "{}"),
+        )
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...approvedEnrollment,
+                status: "rejected",
+                status_label: "Rejected",
+              },
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [approvedEnrollment],
+            links: paginationLinks,
+            meta: paginationMeta,
+          }),
+        ),
+      )
+    })
+    renderWithSession(
+      <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+      { session: registrarStaffSession },
+    )
+
+    const table = await screen.findByRole("table", { name: "Enrollment queue" })
+    expect(
+      within(table).queryByRole("button", { name: "Void" }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(table).queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument()
+    await user.click(within(table).getByRole("button", { name: "Reject" }))
+
+    const dialog = await screen.findByRole("alertdialog")
+    expect(
+      within(dialog).getByText(/already approved and is waiting for payment/i),
+    ).toBeInTheDocument()
+    const confirm = within(dialog).getByRole("button", {
+      name: "Confirm decision",
+    })
+    expect(confirm).toBeDisabled()
+    await user.type(
+      within(dialog).getByLabelText("Reason"),
+      "Requirements were incomplete.",
+    )
+    await user.click(confirm)
+
+    await waitFor(() =>
+      expect(bodies[0]).toMatchObject({
+        action: "registrar_reject",
+        reason: "Requirements were incomplete.",
+      }),
+    )
+  })
+
+  it("re-reads the queue every 5 seconds so new submissions show up live", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      fetchMock.mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [pendingApprovalEnrollment],
+              links: paginationLinks,
+              meta: paginationMeta,
+            }),
+          ),
+        ),
+      )
+      renderWithSession(
+        <RegistrarEnrollmentWorkspace initialModuleId="enrollment-approvals" />,
+        { session: registrarStaffSession },
+      )
+      await screen.findByRole("table", { name: "Enrollment queue" })
+      const listCalls = () =>
+        fetchMock.mock.calls.filter(([input]) =>
+          url(input).includes("/enrollments"),
+        ).length
+      const before = listCalls()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_500)
+      })
+
+      expect(listCalls()).toBeGreaterThan(before)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("shows the student's financial status as a badge when set", async () => {
     fetchMock.mockResolvedValue(
       new Response(

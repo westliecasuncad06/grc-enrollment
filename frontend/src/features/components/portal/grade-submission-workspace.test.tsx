@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { toast } from "sonner"
 import { axe } from "vitest-axe"
 
 import {
@@ -14,6 +15,11 @@ import type {
   SectionGradeSheet,
 } from "@/features/schemas/section-grade-schema"
 import { renderWithSession } from "@/tests/render-app"
+import { buildXlsx } from "@/tests/xlsx-fixture"
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input
@@ -654,7 +660,7 @@ describe("GradeSubmissionWorkspace", () => {
     expect(await axe(container)).toHaveNoViolations()
   })
 
-  it("renders Download CSV Template and Upload Grades CSV buttons on editable grade sheets", async () => {
+  it("renders Download CSV Template and Upload Grades (Excel or CSV) buttons on editable grade sheets", async () => {
     stubSectionGradeRoutes(fetchMock)
     const user = userEvent.setup()
     renderWithSession(<GradeSubmissionWorkspace />, {
@@ -666,8 +672,158 @@ describe("GradeSubmissionWorkspace", () => {
       screen.getByRole("button", { name: /Download CSV Template/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: /Upload Grades \(CSV\)/i }),
+      screen.getByRole("button", { name: /Upload Grades \(Excel or CSV\)/i }),
     ).toBeInTheDocument()
+  })
+
+  describe("uploading a grade sheet", () => {
+    const XLSX_TYPE =
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    beforeEach(() => {
+      vi.mocked(toast.success).mockClear()
+      vi.mocked(toast.error).mockClear()
+      vi.mocked(toast.warning).mockClear()
+    })
+
+    it("fills the grades from an Excel grading sheet and warns about marks it had to skip", async () => {
+      stubSectionGradeRoutes(fetchMock)
+      const user = userEvent.setup()
+      renderWithSession(<GradeSubmissionWorkspace />, {
+        session: facultySession,
+      })
+      const table = await openClass(user)
+
+      // The school's Grading Sheet layout: header lines, the header row, then the students.
+      const workbook = buildXlsx([
+        ["GRADING SHEET"],
+        ["SCHEDULE ID: 44 08:00 AM-09:30 AM MWF"],
+        [],
+        ["StudentID", "Student Name", "Grade", "Numeric Grade", "Semester Numeric Grade"],
+        ["2026-0001", "LOVELACE, ADA", "", "", 1.25],
+        ["2026-0002", "HOPPER, GRACE", "", "", "Drop"],
+      ])
+      await user.upload(
+        screen.getByLabelText("Upload grade sheet (Excel or CSV)"),
+        new File([workbook], "GradingSheet_2026-2027_001_296_CS101_44_37411.xlsx", {
+          type: XLSX_TYPE,
+        }),
+      )
+
+      await waitFor(() =>
+        expect(
+          within(table).getByLabelText("Grade for Ada Lovelace"),
+        ).toHaveTextContent(/1\.25/),
+      )
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining("Imported grades for 1 student(s)"),
+      )
+      expect(toast.warning).toHaveBeenCalledWith(
+        expect.stringContaining("1 grade(s) had invalid marks"),
+      )
+      // Nothing is sent to the server by an upload: the professor still saves or submits.
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "PUT" || init?.method === "POST"),
+      ).toBe(false)
+    })
+
+    it("warns when the sheet was made for a different schedule", async () => {
+      stubSectionGradeRoutes(fetchMock)
+      const user = userEvent.setup()
+      renderWithSession(<GradeSubmissionWorkspace />, {
+        session: facultySession,
+      })
+      await openClass(user)
+
+      const workbook = buildXlsx([
+        ["SCHEDULE ID: 99999 08:00 AM-09:30 AM MWF"],
+        [],
+        ["StudentID", "Student Name", "Semester Numeric Grade"],
+        ["2026-0001", "LOVELACE, ADA", 2],
+      ])
+      await user.upload(
+        screen.getByLabelText("Upload grade sheet (Excel or CSV)"),
+        new File([workbook], "sheet.xlsx", { type: XLSX_TYPE }),
+      )
+
+      await waitFor(() =>
+        expect(toast.warning).toHaveBeenCalledWith(
+          expect.stringContaining("Schedule ID 99999"),
+        ),
+      )
+    })
+
+    it("still reads the simple CSV template", async () => {
+      stubSectionGradeRoutes(fetchMock)
+      const user = userEvent.setup()
+      renderWithSession(<GradeSubmissionWorkspace />, {
+        session: facultySession,
+      })
+      const table = await openClass(user)
+
+      await user.upload(
+        screen.getByLabelText("Upload grade sheet (Excel or CSV)"),
+        new File(
+          ["Student Number,Student Name,Grade,Remarks\n2026-0002,Grace Hopper,2.00,\n"],
+          "grades.csv",
+          { type: "text/csv" },
+        ),
+      )
+
+      await waitFor(() =>
+        expect(
+          within(table).getByLabelText("Grade for Grace Hopper"),
+        ).toHaveTextContent(/2\.00/),
+      )
+    })
+
+    it("tells the professor to re-save an old .xls file instead of failing silently", async () => {
+      stubSectionGradeRoutes(fetchMock)
+      const user = userEvent.setup({ applyAccept: false })
+      renderWithSession(<GradeSubmissionWorkspace />, {
+        session: facultySession,
+      })
+      await openClass(user)
+
+      await user.upload(
+        screen.getByLabelText("Upload grade sheet (Excel or CSV)"),
+        new File(["not read"], "old-sheet.xls", {
+          type: "application/vnd.ms-excel",
+        }),
+      )
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("old .xls file"),
+        ),
+      )
+    })
+
+    it("says so when a grading sheet has no final grades yet", async () => {
+      stubSectionGradeRoutes(fetchMock)
+      const user = userEvent.setup()
+      renderWithSession(<GradeSubmissionWorkspace />, {
+        session: facultySession,
+      })
+      await openClass(user)
+
+      const workbook = buildXlsx([
+        ["SCHEDULE ID: 44 08:00 AM-09:30 AM MWF"],
+        [],
+        ["StudentID", "Student Name", "Numeric Grade", "Semester Numeric Grade"],
+        ["2026-0001", "LOVELACE, ADA", "", ""],
+      ])
+      await user.upload(
+        screen.getByLabelText("Upload grade sheet (Excel or CSV)"),
+        new File([workbook], "sheet.xlsx", { type: XLSX_TYPE }),
+      )
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining("No final grades were found"),
+        ),
+      )
+    })
   })
 
   it("parses CSV grades accurately, normalizes marks, and excludes invalid marks such as DRP", () => {

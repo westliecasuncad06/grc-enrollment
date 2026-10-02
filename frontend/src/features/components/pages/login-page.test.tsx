@@ -60,6 +60,18 @@ describe("LoginPage", () => {
     expect(
       screen.getByRole("link", { name: /forgot password/i }),
     ).toHaveAttribute("href", "/forgot-password")
+    // It sits underneath the password field (and above Sign in), not beside its label.
+    const forgot = screen.getByRole("link", { name: /forgot password/i })
+    expect(
+      screen
+        .getByLabelText("Password")
+        .compareDocumentPosition(forgot) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      forgot.compareDocumentPosition(
+        screen.getByRole("button", { name: "Sign in" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     expect(
       screen.queryByText(/register|create account/i),
     ).not.toBeInTheDocument()

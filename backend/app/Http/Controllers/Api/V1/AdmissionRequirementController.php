@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Identity\BuildAdmissionChecklist;
 use App\Actions\Identity\CreateAdmissionRequirementType;
+use App\Actions\Identity\ListApplicableAdmissionRequirements;
 use App\Actions\Identity\SetAdmissionRequirementSubmitted;
 use App\Domain\Identity\AdmissionRequirementCategory;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\StudentProfile\IndexAdmissionRequirementTypesRequest;
 use App\Http\Requests\Api\V1\StudentProfile\SetAdmissionRequirementRequest;
 use App\Http\Requests\Api\V1\StudentProfile\StoreAdmissionRequirementTypeRequest;
 use App\Models\AdmissionRequirementType;
@@ -74,6 +76,29 @@ final class AdmissionRequirementController extends Controller
         );
 
         return $this->json($build->execute($studentProfile->load('user')));
+    }
+
+    /**
+     * The requirements that apply to a new student of a year level, for the Create Account checklist.
+     *
+     * @throws AuthenticationException
+     */
+    public function indexTypes(
+        IndexAdmissionRequirementTypesRequest $request,
+        ListApplicableAdmissionRequirements $list,
+    ): JsonResponse {
+        $this->authenticatedUser($request);
+        $this->authorize('viewAny', AdmissionRequirementType::class);
+
+        $response = response()->json([
+            'data' => [
+                'type' => 'admission_requirement_selection',
+                ...$list->execute((int) $request->validated('year_level')),
+            ],
+        ]);
+        $response->headers->set('Cache-Control', 'no-store, private');
+
+        return $response;
     }
 
     /**

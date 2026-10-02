@@ -33,9 +33,18 @@ const auditActors = {
       entries_count: 1,
       last_activity_at: "2026-07-28T12:00:00Z",
     },
+    {
+      type: "audit_actor",
+      actor_user_id: 11,
+      actor_name: "Sam Super",
+      actor_role: "super_admin",
+      actor_role_label: "Super Admin",
+      entries_count: 3,
+      last_activity_at: "2026-07-27T12:00:00Z",
+    },
   ],
   links,
-  meta: { current_page: 1, last_page: 1, per_page: 20, total: 2 },
+  meta: { current_page: 1, last_page: 1, per_page: 20, total: 3 },
 }
 
 const deanEntries = {
@@ -47,6 +56,11 @@ const deanEntries = {
       actor_name: "Dana Dean",
       actor_role: "dean",
       actor_role_label: "Dean",
+      // The API always sends the acting-context keys; they are null unless a Super Admin acted
+      // through the department switcher (the old fixture omitted them, which hid a strict-schema bug).
+      acting_role: null,
+      acting_role_label: null,
+      acting_college: null,
       action: "section.updated",
       auditable_type: "section",
       auditable_id: 3,
@@ -78,6 +92,24 @@ const deanEntries = {
   meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 },
 }
 
+const superAdminEntries = {
+  data: [
+    {
+      ...deanEntries.data[0],
+      id: 2,
+      actor_user_id: 11,
+      actor_name: "Sam Super",
+      actor_role: "super_admin",
+      actor_role_label: "Super Admin",
+      acting_role: "dean",
+      acting_role_label: "Dean",
+      acting_college: "ccs",
+    },
+  ],
+  links,
+  meta: { current_page: 1, last_page: 1, per_page: 10, total: 1 },
+}
+
 function url(input: RequestInfo | URL) {
   return typeof input === "string"
     ? input
@@ -91,6 +123,7 @@ function respond(input: RequestInfo | URL) {
   if (target.includes("schedule-proposals")) return { data: [] }
   if (target.includes("/audit-logs/actors")) return auditActors
   if (target.includes("actor_user_id=7")) return deanEntries
+  if (target.includes("actor_user_id=11")) return superAdminEntries
   return { data: [], links, meta: { ...deanEntries.meta, total: 0 } }
 }
 
@@ -124,6 +157,16 @@ describe("AuditLogsWorkspace", () => {
       expect.stringContaining("actor_user_id="),
       expect.anything(),
     )
+  })
+
+  it("shows which role and college a Super Admin was acting as on their records", async () => {
+    const user = userEvent.setup()
+    renderWithSession(<AuditLogsWorkspace />, { session: registrarHead })
+
+    await user.click(await screen.findByRole("button", { name: /Sam Super/ }))
+
+    expect(await screen.findByText("Section updated")).toBeInTheDocument()
+    expect(screen.getByText("Acting as Dean · CCS")).toBeInTheDocument()
   })
 
   it("loads a person's records when their card opens and compares old with new", async () => {

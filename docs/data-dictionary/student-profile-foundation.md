@@ -72,6 +72,26 @@ Laravel password-broker storage is also used for initial Student account setup.
 | `decided_at` | `TIMESTAMP` | nullable | Approval, rejection, or cancellation | Workflow completion time. |
 | `created_at`, `updated_at` | `TIMESTAMP` | nullable | Laravel timestamps | `created_at` is indexed with `status`. |
 
+## Regular and possible-Irregular outlook — 2026-2027 · 1st Semester
+
+**Not a stored value.** `student_profiles.enrollment_category` holds only `regular`, `irregular`, or `NULL` (not yet classified). It is term-scoped and written by `ReclassifyStudentEnrollmentCategory` from `ClassifyEnrollmentStanding`. "Possible Irregular" is a planning label used in this outlook and in the roster fixture; there is no column, enum case, or API field for it, and it never denies or blocks an enrollment (predictive output is advisory, PRD §4).
+
+**Rule behind the label (ADR 0028).** A student is Irregular for a term when a required subject placed earlier than their current position is not credited and was last graded with a mark that `GradeMark::blocksRegularStanding()` (Failed `5.00`, `NC`, `INC`, `DRP`) in a **prior** term. A mark recorded in the current term does not change standing until the next term. So a `5.00` or `DRP` earned in 2025-2026 · 2nd Semester counts as a back subject when 2026-2027 · 1st Semester is classified, and the student moves from Regular to Irregular. A failed subject does not hold back year-level promotion; the student moves up with the subject left behind.
+
+**Snapshot — local development database, read-only, 2026-10-03.** Pool: students currently classed Regular with an `enrolled` enrollment in 2025-2026 · 2nd Semester (the 67 `withdrawn` enrollments are excluded). "Possible Irregular" is the subset with a `5.00` or `DRP` mark in that term. Year level is the current one, before the next promotion. This is development data, not production, and it is a point-in-time count: grade locking and promotion will change it.
+
+| College | Year 2 Regular / possible | Year 3 Regular / possible | Year 4 Regular / possible | Total Regular / possible |
+|---|---|---|---|---|
+| CBAE | 248 / 12 | 122 / 3 | 132 / 7 | 502 / 22 |
+| CCS | 198 / 11 | 144 / 7 | 122 / 7 | 464 / 25 |
+| COA | 75 / 4 | 61 / 3 | 53 / 3 | 189 / 10 |
+| COE | 200 / 10 | 66 / 3 | 72 / 4 | 338 / 17 |
+| **All** | | | | **1,493 / 74** |
+
+Outside this pool: 96 students are already `irregular`, 3,336 have no category yet (`NULL`), and the 2026 entrants (Year 1) have no enrollment or grades, so none can be a back-subject case. The marks present in the term are `5.00` and `DRP` only; no `NC` or `INC` rows exist, so none are counted.
+
+**Roster fixture.** `backend/tests/fixtures/students-profile-irregular-sample.md` carries a 70-row sample of the same outlook (30 BSBA-FM Year 2, 30 BSA Year 3, 10 BSIT Year 1). Its `Category` column reads `Regular` or `Possible Irregular` and is for human scanning only: `StudentRosterReader` ignores it and `StudentRosterSeeder` derives its own irregular cohort (every 10th eligible Year 2-4 student), which the three Possible Irregular rows in each of the two eligible blocks line up with. It is a sample, not the roster of 1,493.
+
 ## API ownership and serialization
 
 - `GET /api/v1/student-profile` and Student change-request operations resolve ownership from the Sanctum bearer identity; Students cannot supply another Student ID.

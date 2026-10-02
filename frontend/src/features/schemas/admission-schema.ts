@@ -50,8 +50,12 @@ export const provisionStudentSchema = z
     // them outright if sent (Stakeholder Doc 17).
     year_level: z.number().int().min(1).max(4),
     financial_status: financialStatusSchema.nullable().optional(),
+    // The requirements Admission ticked off for this student (stakeholder Doc 20). The server
+    // requires every requirement that applies to the student type to be in this list.
+    requirement_type_ids: z.array(z.number().int().positive()).optional(),
+    // True only when every listed requirement is ticked; the form sets it from the checklist.
     requirements_verified: z.literal(true, {
-      error: "Confirm that Admission received the student's requirements.",
+      error: "Check every requirement the student handed in.",
     }),
   })
   .strict()

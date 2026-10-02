@@ -11,6 +11,12 @@ use App\Models\User;
  */
 final class AdmissionRequirementTypePolicy
 {
+    /** The Create Account checklist lists the catalogue before a student exists. */
+    public function viewAny(User $user): bool
+    {
+        return $user->role === UserRole::AdmissionStaff;
+    }
+
     public function create(User $user): bool
     {
         return $user->role === UserRole::AdmissionStaff;

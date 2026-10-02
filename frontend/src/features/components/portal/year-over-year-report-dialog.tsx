@@ -70,7 +70,7 @@ export function YearOverYearReportDialog({
               type="button"
               variant="outline"
               size="sm"
-              onClick={print}
+              onClick={() => print()}
               disabled={isPrinting}
               className="gap-1.5"
             >

@@ -57,6 +57,7 @@ final class StudentProfileController extends Controller
             'enrollment_category' => $request->validated('enrollment_category'),
             'student_type' => $request->validated('student_type'),
             'financial_status' => $request->validated('financial_status'),
+            'requirement_type_ids' => $request->validated('requirement_type_ids') ?? [],
         ], $actor, $contextFactory->fromRequest($request));
 
         $sendInvitation->handle($profile, $actor, $contextFactory->fromRequest($request));

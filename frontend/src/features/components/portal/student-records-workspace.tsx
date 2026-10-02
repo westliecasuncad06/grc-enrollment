@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { CheckCircle2, MailWarning, Search, UserRoundPlus } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
+import { AdmissionIntakeRequirements } from "@/features/components/portal/admission-intake-requirements"
 import { AdmissionRequirementsChecklist } from "@/features/components/portal/admission-requirements-checklist"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { DataTable, type DataTableColumn } from "@/features/components/portal/data-table"
@@ -63,6 +64,7 @@ import {
   TabsTrigger,
 } from "@/features/components/ui/tabs"
 import { Textarea } from "@/features/components/ui/textarea"
+import { useAdmissionRequirementSelectionQuery } from "@/features/hooks/use-admission-requirements"
 import {
   useDecideProfileChangeRequestMutation,
   useProfileChangeRequestsQuery,
@@ -110,7 +112,7 @@ function CreateAccountPanel() {
   const [initialStudentNumber] = useState(generateStudentNumber)
   const {
     control,
-    formState: { errors },
+    formState: { errors, isSubmitted },
     handleSubmit,
     register,
     reset,
@@ -130,10 +132,39 @@ function CreateAccountPanel() {
       program_id: 0,
       year_level: 1,
       financial_status: null,
+      requirement_type_ids: [],
       requirements_verified: false as true,
     },
   })
   const yearLevel = watch("year_level")
+  const checkedIds = watch("requirement_type_ids")
+  const requirementsQuery = useAdmissionRequirementSelectionQuery(yearLevel)
+  const applicableIds = useMemo(
+    () =>
+      (requirementsQuery.data?.categories ?? []).flatMap((group) =>
+        group.items.map((item) => item.requirement_type_id),
+      ),
+    [requirementsQuery.data],
+  )
+  const requirementsComplete =
+    requirementsQuery.isSuccess &&
+    applicableIds.every((id) => (checkedIds ?? []).includes(id))
+
+  // The checklist, not a separate box, decides whether Admission has everything: the form's
+  // confirmation follows it, and a year level change drops ticks that no longer apply.
+  useEffect(() => {
+    setValue("requirements_verified", requirementsComplete as true, {
+      shouldValidate: isSubmitted,
+    })
+  }, [requirementsComplete, isSubmitted, setValue])
+  useEffect(() => {
+    if (!requirementsQuery.isSuccess) return
+    const current = checkedIds ?? []
+    const stillApplicable = current.filter((id) => applicableIds.includes(id))
+    if (stillApplicable.length !== current.length) {
+      setValue("requirement_type_ids", stillApplicable)
+    }
+  }, [applicableIds, checkedIds, requirementsQuery.isSuccess, setValue])
 
   const submit = async (values: CreateValues) => {
     try {
@@ -151,6 +182,7 @@ function CreateAccountPanel() {
         email: "",
         address: "",
         student_number: generateStudentNumber(),
+        requirement_type_ids: [],
         requirements_verified: false as true,
       })
     } catch (error) {
@@ -349,30 +381,23 @@ function CreateAccountPanel() {
                   className="md:col-span-2"
                   data-invalid={Boolean(errors.requirements_verified)}
                 >
-                  <div className="flex items-start gap-3 rounded-md border p-4">
-                    <Controller
-                      control={control}
-                      name="requirements_verified"
-                      render={({ field }) => (
-                        <Checkbox
-                          id="requirements-verified"
-                          checked={field.value}
-                          onCheckedChange={(checked) =>
-                            field.onChange(checked === true)
-                          }
-                        />
-                      )}
-                    />
-                    <div>
-                      <FieldLabel htmlFor="requirements-verified">
-                        Requirements submitted and verified
-                      </FieldLabel>
-                      <FieldDescription>
-                        I confirm that Admission received the student&apos;s
-                        requirements.
-                      </FieldDescription>
-                    </div>
-                  </div>
+                  <AdmissionIntakeRequirements
+                    state={
+                      requirementsQuery.isError
+                        ? "error"
+                        : requirementsQuery.isSuccess
+                          ? "ready"
+                          : "loading"
+                    }
+                    selection={requirementsQuery.data}
+                    checkedIds={checkedIds ?? []}
+                    onChange={(ids) =>
+                      setValue("requirement_type_ids", ids, {
+                        shouldDirty: true,
+                      })
+                    }
+                    disabled={mutation.isPending}
+                  />
                   <FieldError>
                     {errors.requirements_verified?.message}
                   </FieldError>

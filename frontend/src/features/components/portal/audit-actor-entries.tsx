@@ -65,6 +65,14 @@ export function AuditActorEntries({
                   <span className="text-sm font-medium">
                     {humanizeAuditTarget(log.auditable_type, log.auditable_id)}
                   </span>
+                  {log.acting_role_label && (
+                    <Badge variant="outline">
+                      Acting as {log.acting_role_label}
+                      {log.acting_college
+                        ? ` · ${log.acting_college.toUpperCase()}`
+                        : ""}
+                    </Badge>
+                  )}
                   <span className="ml-auto text-xs text-muted-foreground">
                     {formatAuditTimestamp(log.created_at)}
                   </span>

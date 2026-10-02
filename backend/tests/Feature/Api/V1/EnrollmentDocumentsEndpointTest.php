@@ -444,7 +444,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $this->assertStringContainsString("font-family: 'DejaVu Sans', sans-serif;", $html);
     }
 
-    public function test_the_printed_cor_has_no_fees_payment_or_balance(): void
+    public function test_the_printed_cor_lists_the_fees_but_not_what_was_paid_or_the_balance(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -455,18 +455,23 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             ->getJson("/api/v1/enrollment-documents/{$document->id}")
             ->assertOk()
             ->json('data.snapshot');
-        // A snapshot that does carry fee/payment figures must still not print them.
-        $snapshot['fees']['amount_paid'] = '1000.00';
-        $snapshot['fees']['remaining_balance'] = '500.00';
+        // A snapshot that does carry payment figures must still not print them.
+        $snapshot['fees']['amount_paid'] = '7777.77';
+        $snapshot['fees']['remaining_balance'] = '3333.33';
 
         $html = view('pdf.certificate-of-registration', ['document' => $document, 'snapshot' => $snapshot])->render();
 
-        // The COR is enrollment/schedule only (stakeholder Doc 16); fees live in the
-        // Statement of Account, not on this document at all.
-        $this->assertStringNotContainsString('Assessment of Fees', $html);
-        $this->assertStringNotContainsString('GRAND TOTAL', $html);
+        // The COR is the bill: the list of fees and the grand total are on it (the same lines the
+        // Accounting fee settings produce). What was paid and what is still owed is not; that
+        // lives in the Statement of Account.
+        $this->assertStringContainsString('Assessment of Fees', $html);
+        $this->assertStringContainsString('Total Tuition Fees', $html);
+        $this->assertStringContainsString('Total Other Fees', $html);
+        $this->assertStringContainsString('GRAND TOTAL', $html);
         $this->assertStringNotContainsString('AMOUNT PAID', $html);
         $this->assertStringNotContainsString('REMAINING BALANCE', $html);
+        $this->assertStringNotContainsString('7,777.77', $html);
+        $this->assertStringNotContainsString('3,333.33', $html);
     }
 
     public function test_cashier_student_and_registrar_sign_in_one_flat_row(): void

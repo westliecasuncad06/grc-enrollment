@@ -83,6 +83,42 @@ export const admissionRequirementTypeEnvelopeSchema = z
   })
   .strict()
 
+/**
+ * The requirements that apply to a new student of a year level, listed before any student record
+ * exists (the Create Account checklist). Mirrors `ListApplicableAdmissionRequirements`.
+ */
+export const admissionRequirementSelectionSchema = z
+  .object({
+    type: z.literal("admission_requirement_selection"),
+    student_type: z.string().min(1),
+    student_type_label: z.string().min(1),
+    categories: z.array(
+      z
+        .object({
+          category: admissionRequirementCategorySchema,
+          label: z.string().min(1),
+          items: z.array(
+            z
+              .object({
+                requirement_type_id: z.number().int().positive(),
+                name: z.string().min(1),
+                is_system: z.boolean(),
+              })
+              .strict(),
+          ),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+
+export const admissionRequirementSelectionEnvelopeSchema = z
+  .object({ data: admissionRequirementSelectionSchema })
+  .strict()
+
+export type AdmissionRequirementSelection = z.infer<
+  typeof admissionRequirementSelectionSchema
+>
 export type AdmissionChecklist = z.infer<typeof admissionChecklistSchema>
 export type AdmissionRequirementCategory = z.infer<
   typeof admissionRequirementCategorySchema

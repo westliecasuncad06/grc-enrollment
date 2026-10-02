@@ -130,10 +130,16 @@ export const enrollmentsListQueryKey = (
  * window focus. TanStack Query pauses polling in hidden tabs by default
  * (`refetchIntervalInBackground` is not set), so this costs nothing when
  * nobody is looking at the page.
+ *
+ * ADR 0029 set the shared default to 15s; the Registrar's Enrollment
+ * Approvals page, which is worked live, passes `refetchIntervalMs: 5_000`.
  */
 export function useEnrollmentsListQuery(
   filters: EnrollmentFilters,
-  { enabled = true }: { enabled?: boolean } = {},
+  {
+    enabled = true,
+    refetchIntervalMs = 15_000,
+  }: { enabled?: boolean; refetchIntervalMs?: number } = {},
 ) {
   const { session } = useAuth()
 
@@ -142,7 +148,7 @@ export function useEnrollmentsListQuery(
     queryFn: ({ signal }) => listEnrollments(filters, signal),
     placeholderData: keepPreviousForSameUser(session?.userId ?? null),
     enabled: enabled && session !== null,
-    refetchInterval: 15_000,
+    refetchInterval: refetchIntervalMs,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
   })

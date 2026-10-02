@@ -1,9 +1,11 @@
 import {
   admissionChecklistEnvelopeSchema,
+  admissionRequirementSelectionEnvelopeSchema,
   admissionRequirementTypeEnvelopeSchema,
   createAdmissionRequirementTypeSchema,
   setAdmissionRequirementSchema,
   type AdmissionChecklist,
+  type AdmissionRequirementSelection,
   type CreateAdmissionRequirementTypeInput,
 } from "@/features/schemas/admission-requirements-schema"
 import {
@@ -55,6 +57,27 @@ export async function setAdmissionRequirementSubmitted(
       body,
     ),
   )
+}
+
+/** The requirements that apply to a new student of `yearLevel`: Freshman for Year 1, Transferee for 2-4, plus Additional. */
+export async function getAdmissionRequirementSelection(
+  yearLevel: number,
+  signal?: AbortSignal,
+): Promise<AdmissionRequirementSelection> {
+  const result = admissionRequirementSelectionEnvelopeSchema.safeParse(
+    await getAuthenticatedJson(
+      `/api/v1/admission-requirement-types?year_level=${yearLevel}`,
+      signal,
+    ),
+  )
+  if (result.success) return result.data.data
+
+  throw new ApiClientError({
+    kind: "contract",
+    message:
+      "The API responded, but its Admission requirement list did not match the published v1 contract.",
+    cause: result.error,
+  })
 }
 
 export async function createAdmissionRequirementType(

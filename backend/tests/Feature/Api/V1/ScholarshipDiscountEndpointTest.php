@@ -317,7 +317,7 @@ final class ScholarshipDiscountEndpointTest extends TestCase
         self::assertSame('0.00', $fees['total_scholarship_discount']);
     }
 
-    public function test_the_cor_snapshot_records_the_scholarship_discount_while_the_printed_cor_omits_fees(): void
+    public function test_the_cor_snapshot_records_the_scholarship_discount_and_the_printed_cor_lists_it_without_any_payment(): void
     {
         $this->actAs(UserRole::AccountingStaff);
         $this->putJson($this->url(), ['percentage' => 40])->assertOk();
@@ -334,8 +334,13 @@ final class ScholarshipDiscountEndpointTest extends TestCase
             'snapshot' => $document->snapshot,
         ])->render();
 
-        // The COR is enrollment/schedule only (stakeholder Doc 16); fees live in the Statement of Account.
-        self::assertStringNotContainsString('Assessment of Fees', $html);
+        // The printed COR is the bill: the fee list and the discount line are on it (stakeholder Doc 20),
+        // but never what was paid or the balance.
+        self::assertStringContainsString('Assessment of Fees', $html);
+        self::assertStringContainsString('Scholarship discount (40%)', $html);
+        self::assertStringContainsString('-&#8369;420.00', $html);
+        self::assertStringNotContainsString('AMOUNT PAID', $html);
+        self::assertStringNotContainsString('REMAINING BALANCE', $html);
     }
 
     // --- Adjust fees keeps the discount consistent -----------------------------

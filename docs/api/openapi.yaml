@@ -3328,7 +3328,10 @@ paths:
         `program_head_reject` (the Program Head's first step for an irregular
         or overload enrollment, own college only), `registrar_approve` and
         `registrar_reject` (the Registrar Staff / Registrar Head checkpoint
-        for every enrollment, ADR 0030) and `void` (a
+        for every enrollment, ADR 0030; allowed from
+        `pending_registrar_approval` and, since 2026-10-03, from an approved
+        but unpaid `pending_payment` enrollment, where it releases the seats
+        and cancels a waiting queue ticket) and `void` (a
         later, distinct checkpoint: cancelling an already-approved but unpaid
         enrollment) are each resolved by EnrollmentPolicy per request (see
         ADR 0011). `reason` is required exactly for `registrar_reject` and
@@ -5529,6 +5532,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
   /api/v1/admission-requirement-types:
+    get:
+      operationId: listAdmissionRequirementTypes
+      summary: The Admission requirements that apply to a new student of a year level
+      description: >
+        Admission Staff only. Feeds the Create Account checklist (stakeholder Doc 20) before a
+        student record exists. The student type is derived from the year level the way
+        provisioning derives it: Year 1 is a Freshman, Years 2-4 are Transferees; the Additional
+        list applies to everyone. Only active requirements are listed.
+      security:
+        - bearerAuth: []
+      tags:
+        - Student Records
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - name: year_level
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4
+      responses:
+        "200":
+          description: The requirement lists for that year level.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      type: { type: string, const: admission_requirement_selection }
+                      student_type: { type: string, enum: [freshman, transferee] }
+                      student_type_label: { type: string }
+                      categories:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            category: { type: string, enum: [freshman, transferee, additional] }
+                            label: { type: string }
+                            items:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  requirement_type_id: { type: integer }
+                                  name: { type: string }
+                                  is_system: { type: boolean }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       operationId: createAdmissionRequirementType
       summary: Add a requirement to the shared Admission list
@@ -10251,6 +10314,20 @@ components:
         requirements_verified:
           type: boolean
           const: true
+          description: >
+            The older single confirmation. Required only when `requirement_type_ids` is not sent;
+            ignored when it is.
+        requirement_type_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+          description: >
+            The Admission requirements ticked off for the new student (stakeholder Doc 20). It must
+            contain every active requirement that applies to the student type derived from
+            `year_level` (see `GET /admission-requirement-types`) and nothing else, otherwise the
+            request is refused with 422 on `requirement_type_ids`. Each id is recorded as submitted
+            on the new student's checklist.
         student_number:
           type: string
           maxLength: 255

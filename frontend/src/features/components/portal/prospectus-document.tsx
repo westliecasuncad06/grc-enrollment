@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { ChevronRight } from "lucide-react"
 
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -29,7 +29,10 @@ import {
 } from "@/features/lib/grade-presentation"
 import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import { cn } from "@/features/lib/utils"
-import type { ProspectusSemester } from "@/features/schemas/academic-record-schema"
+import type {
+  Prospectus,
+  ProspectusSemester,
+} from "@/features/schemas/academic-record-schema"
 
 /**
  * A student's full curriculum, year 1 semester 1 through year 4 semester 2:
@@ -144,76 +147,7 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
             </div>
           )}
 
-          {(() => {
-            const semestersByYear = new Map<number, ProspectusSemester[]>()
-            for (const sem of prospectus.semesters) {
-              const list = semestersByYear.get(sem.year_level) ?? []
-              list.push(sem)
-              semestersByYear.set(sem.year_level, list)
-            }
-
-            const years = [...semestersByYear.entries()].sort(
-              ([a], [b]) => a - b,
-            )
-            // On a phone only the year the student is working on starts open:
-            // the first with any subject not yet passed, else the last one.
-            const focusYear =
-              years.find(([, sems]) =>
-                sems.some((sem) =>
-                  sem.entries.some(
-                    (entry) => markTone(entry.mark) !== "passed",
-                  ),
-                ),
-              )?.[0] ?? years.at(-1)?.[0]
-
-            return years.map(([yearLevel, sems]) => {
-              const yearUnits = sems.reduce(
-                (sum, s) =>
-                  sum + s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
-                0,
-              )
-              const completedEntries = sems.reduce(
-                (sum, s) =>
-                  sum + s.entries.filter((e) => e.mark !== null).length,
-                0,
-              )
-              const totalEntries = sems.reduce(
-                (sum, s) => sum + s.entries.length,
-                0,
-              )
-
-              return (
-                <details
-                  key={yearLevel}
-                  open={!isPhone || yearLevel === focusYear}
-                  className="group mb-4 rounded-xl border bg-card overflow-hidden print:border-none print:shadow-none print:mb-2"
-                >
-                  <summary className="flex cursor-pointer select-none items-center justify-between p-3.5 bg-muted/25 hover:bg-muted/40 border-b transition-colors print:hidden">
-                    <div className="flex items-center gap-2 font-semibold text-sm">
-                      <span>{formatYearLevel(yearLevel)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {completedEntries} / {totalEntries} completed
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {yearUnits} units
-                      </Badge>
-                    </div>
-                  </summary>
-                  <div className="p-3">
-                    {sems.map((semester) => (
-                      <SemesterTable
-                        key={`${semester.year_level}-${semester.semester}`}
-                        semester={semester}
-                        isPhone={isPhone}
-                      />
-                    ))}
-                  </div>
-                </details>
-              )
-            })
-          })()}
+          <ProspectusYears prospectus={prospectus} isPhone={isPhone} />
 
           {prospectus.unplaced_entries.length > 0 && (
             <div className="mt-4">
@@ -246,6 +180,159 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
       )}
     </AsyncBoundary>
   )
+}
+
+/** How long the collapsed overview stays on screen before the student's own year opens. */
+const OPEN_CURRENT_YEAR_DELAY_MS = 450
+
+function groupSemestersByYear(
+  semesters: readonly ProspectusSemester[],
+): [number, ProspectusSemester[]][] {
+  const byYear = new Map<number, ProspectusSemester[]>()
+  for (const semester of semesters) {
+    const list = byYear.get(semester.year_level) ?? []
+    list.push(semester)
+    byYear.set(semester.year_level, list)
+  }
+  return [...byYear.entries()].sort(([a], [b]) => a - b)
+}
+
+/**
+ * The year to open for the student: the year level they are in now when the curriculum has it,
+ * otherwise the first year with a subject not yet passed, otherwise the last year.
+ */
+function currentYearOf(
+  years: readonly [number, ProspectusSemester[]][],
+  studentYearLevel: number,
+): number | undefined {
+  if (years.some(([yearLevel]) => yearLevel === studentYearLevel)) {
+    return studentYearLevel
+  }
+  return (
+    years.find(([, semesters]) =>
+      semesters.some((semester) =>
+        semester.entries.some((entry) => markTone(entry.mark) !== "passed"),
+      ),
+    )?.[0] ?? years.at(-1)?.[0]
+  )
+}
+
+/**
+ * One collapsible card per year. Everything starts collapsed, so the student first sees the
+ * whole curriculum at a glance, then the year they are in opens with a short animation. Every
+ * year stays one click away. The panels are always in the DOM (collapsed ones are `inert`), so
+ * printing, which expands them all, prints the full prospectus.
+ */
+function ProspectusYears({
+  prospectus,
+  isPhone,
+}: {
+  prospectus: Prospectus
+  isPhone: boolean
+}) {
+  const idPrefix = useId()
+  const years = useMemo(
+    () => groupSemestersByYear(prospectus.semesters),
+    [prospectus.semesters],
+  )
+  const currentYear = currentYearOf(years, prospectus.year_level)
+  const [openYears, setOpenYears] = useState<ReadonlySet<number>>(new Set())
+
+  useEffect(() => {
+    if (currentYear === undefined) return
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const timer = window.setTimeout(
+      () => setOpenYears((current) => new Set(current).add(currentYear)),
+      reduceMotion ? 0 : OPEN_CURRENT_YEAR_DELAY_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [currentYear])
+
+  const toggle = (yearLevel: number) =>
+    setOpenYears((current) => {
+      const next = new Set(current)
+      if (next.has(yearLevel)) {
+        next.delete(yearLevel)
+      } else {
+        next.add(yearLevel)
+      }
+      return next
+    })
+
+  return years.map(([yearLevel, semesters]) => {
+    const yearUnits = semesters.reduce(
+      (sum, s) =>
+        sum + s.entries.reduce((eSum, e) => eSum + (e.units ?? 0), 0),
+      0,
+    )
+    const completedEntries = semesters.reduce(
+      (sum, s) => sum + s.entries.filter((e) => e.mark !== null).length,
+      0,
+    )
+    const totalEntries = semesters.reduce((sum, s) => sum + s.entries.length, 0)
+    const isOpen = openYears.has(yearLevel)
+    const buttonId = `${idPrefix}-year-${yearLevel}-button`
+    const panelId = `${idPrefix}-year-${yearLevel}-panel`
+
+    return (
+      <section
+        key={yearLevel}
+        className="mb-4 overflow-hidden rounded-xl border bg-card print:mb-2 print:border-none print:shadow-none"
+      >
+        <button
+          type="button"
+          id={buttonId}
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onClick={() => toggle(yearLevel)}
+          className="flex w-full cursor-pointer select-none items-center justify-between gap-2 border-b bg-muted/25 p-3.5 text-left transition-colors hover:bg-muted/40 print:hidden"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <ChevronRight
+              aria-hidden="true"
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform duration-500 motion-reduce:transition-none",
+                isOpen && "rotate-90",
+              )}
+            />
+            {formatYearLevel(yearLevel)}
+          </span>
+          <span className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">
+              {completedEntries} / {totalEntries} completed
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {yearUnits} units
+            </Badge>
+          </span>
+        </button>
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={buttonId}
+          inert={!isOpen}
+          className={cn(
+            "grid transition-[grid-template-rows] duration-500 ease-out motion-reduce:transition-none print:grid-rows-[1fr]",
+            isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden print:overflow-visible">
+            <div className="p-3">
+              {semesters.map((semester) => (
+                <SemesterTable
+                  key={`${semester.year_level}-${semester.semester}`}
+                  semester={semester}
+                  isPhone={isPhone}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  })
 }
 
 function SemesterTable({

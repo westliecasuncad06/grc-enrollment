@@ -28,7 +28,10 @@ final class UpdateEnrollmentRequest extends FormRequest
         'program_head_approve' => [EnrollmentStatus::PendingProgramHeadApproval],
         'program_head_reject' => [EnrollmentStatus::PendingProgramHeadApproval],
         'registrar_approve' => [EnrollmentStatus::PendingRegistrarApproval],
-        'registrar_reject' => [EnrollmentStatus::PendingRegistrarApproval],
+        'registrar_reject' => [
+            EnrollmentStatus::PendingRegistrarApproval,
+            EnrollmentStatus::PendingPayment,
+        ],
         'void' => [
             EnrollmentStatus::PendingProgramHeadApproval,
             EnrollmentStatus::PendingStudentReview,

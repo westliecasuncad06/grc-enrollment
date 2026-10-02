@@ -17,6 +17,104 @@ function ordinalizeYearLevels(sentence: string): string {
 }
 
 type RenderableCor = CertificateOfRegistration & { snapshot: CorSnapshot }
+type CorFeeItem = CorSnapshot["fees"]["other_fees"][number]
+
+const otherFeeLabels = [
+  "Registration",
+  "Guidance and Counseling and Student Affair",
+  "Medical and Dental",
+  "Student Information System Fee",
+  "Energy/Water/Communication Fees",
+  "Community Extension Fee",
+  "Research & Publication",
+  "Computer Lab Fee 1 (All Students)",
+  "Student I.D.",
+  "Development Fee",
+  "Postal",
+  "Computer Lab Fee 2 (BSIT)",
+  "Sports Development Fee",
+  "Hand Book",
+  "Library Fee",
+] as const
+
+function canonicalOtherFeeLabel(label: string): string | null {
+  const normalized = label.toLowerCase().replace(/[^a-z0-9]/g, "")
+  const aliases: Record<string, (typeof otherFeeLabels)[number]> = {
+    registration: "Registration",
+    guidanceandcounselingandstudentaffair:
+      "Guidance and Counseling and Student Affair",
+    guidanceandcounsellingandstudentaffair:
+      "Guidance and Counseling and Student Affair",
+    medicalanddental: "Medical and Dental",
+    studentinformationsystemfee: "Student Information System Fee",
+    sisfee: "Student Information System Fee",
+    energywatercommunicationfees: "Energy/Water/Communication Fees",
+    energywatercommunicationfee: "Energy/Water/Communication Fees",
+    communityextensionfee: "Community Extension Fee",
+    researchpublication: "Research & Publication",
+    researchandpublication: "Research & Publication",
+    computerlabfee1allstudents: "Computer Lab Fee 1 (All Students)",
+    computerlabfee1: "Computer Lab Fee 1 (All Students)",
+    laboratory: "Computer Lab Fee 1 (All Students)",
+    studentid: "Student I.D.",
+    studentidentification: "Student I.D.",
+    developmentfee: "Development Fee",
+    postal: "Postal",
+    computerlabfee2bsit: "Computer Lab Fee 2 (BSIT)",
+    computerlabfee2: "Computer Lab Fee 2 (BSIT)",
+    sportsdevelopmentfee: "Sports Development Fee",
+    handbook: "Hand Book",
+    library: "Library Fee",
+    libraryfee: "Library Fee",
+  }
+  return aliases[normalized] ?? null
+}
+
+/** Maintains the reference COR's complete fee schedule for older snapshots. */
+function otherFeesForDisplay(items: readonly CorFeeItem[]): CorFeeItem[] {
+  const remaining = [...items]
+  const scheduled = otherFeeLabels.map((label) => {
+    const index = remaining.findIndex(
+      (item) => canonicalOtherFeeLabel(item.label) === label,
+    )
+    if (index === -1) {
+      return { label, quantity: null, unit_amount: null, amount: "0.00" }
+    }
+    const [item] = remaining.splice(index, 1)
+    return { ...item, label }
+  })
+  return [...scheduled, ...remaining]
+}
+
+function money(amount: string, currency: string): string {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(Number(amount))
+}
+
+function FeeRows({
+  items,
+  currency,
+}: {
+  items: readonly CorSnapshot["fees"]["tuition"][number][]
+  currency: string
+}) {
+  return items.map((item) => (
+    <div key={`${item.label}-${item.amount}`} className="cor-document__fee-row">
+      <span>
+        {item.label}
+        {item.quantity && item.unit_amount && Number(item.unit_amount) > 0 ? (
+          <small className="ml-1 opacity-80">
+            ({item.quantity} units @ {money(item.unit_amount, currency)})
+          </small>
+        ) : null}
+      </span>
+      <span>{money(item.amount, currency)}</span>
+    </div>
+  ))
+}
 
 /** Official immutable record rendered solely from the payment-time COR snapshot. */
 export function CertificateOfRegistrationDocument({
@@ -28,7 +126,9 @@ export function CertificateOfRegistrationDocument({
   watermark?: string
 }) {
   const { snapshot } = cor
-  const { student, institution, term } = snapshot
+  const { student, institution, term, fees } = snapshot
+  const displayedOtherFees = otherFeesForDisplay(fees.other_fees)
+  const scholarshipDiscount = fees.scholarship_discount ?? []
 
   return (
     <article
@@ -112,8 +212,40 @@ export function CertificateOfRegistrationDocument({
           <h2>ADMISSION FORM</h2>
           <p>{ordinalizeYearLevels(snapshot.admission_certification)}</p>
         </section>
-        {/* Fees, payments, and balance are deliberately not on the COR (stakeholder
-            Doc 16) — they live in the Statement of Account. */}
+
+        <section className="cor-document__assessment">
+          <h2>ASSESSMENT OF FEES</h2>
+          <div className="cor-document__assessment-grid">
+            <div>
+              <h3>Tuition fees</h3>
+              <FeeRows items={fees.tuition} currency={fees.currency} />
+              <div className="cor-document__fee-total">
+                <span>Total tuition fees</span>
+                <strong>{money(fees.total_tuition, fees.currency)}</strong>
+              </div>
+            </div>
+            <div>
+              <h3>Other fees</h3>
+              <FeeRows items={displayedOtherFees} currency={fees.currency} />
+              <div className="cor-document__fee-total">
+                <span>Total other fees</span>
+                <strong>{money(fees.total_other_fees, fees.currency)}</strong>
+              </div>
+            </div>
+          </div>
+          {scholarshipDiscount.length > 0 && (
+            <div
+              className="cor-document__fee-total"
+              aria-label="Scholarship discount"
+            >
+              <FeeRows items={scholarshipDiscount} currency={fees.currency} />
+            </div>
+          )}
+          <div className="cor-document__grand-total">
+            <span>GRAND TOTAL</span>
+            <strong>{money(fees.grand_total, fees.currency)}</strong>
+          </div>
+        </section>
       </section>
 
       <section className="cor-document__page cor-document__page--terms">

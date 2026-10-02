@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
 import { YearOverYearReportDialog } from "@/features/components/portal/year-over-year-report-dialog"
+import { printRegion } from "@/features/lib/print-region"
 import { renderWithSession } from "@/tests/render-app"
+
+vi.mock("@/features/lib/print-region", () => ({
+  printRegion: vi.fn().mockResolvedValue(undefined),
+  removePrintFrames: vi.fn(),
+}))
 
 const sampleYoy = [
   { school_year: "2024-2025", enrollment_count: 100 },
@@ -15,6 +21,7 @@ const sampleYoy = [
 describe("YearOverYearReportDialog", () => {
   beforeEach(() => {
     vi.stubGlobal("print", vi.fn())
+    vi.mocked(printRegion).mockClear()
   })
 
   afterEach(() => {
@@ -57,10 +64,10 @@ describe("YearOverYearReportDialog", () => {
     expect(within(table).getByText("100.0%")).toBeInTheDocument()
   })
 
-  it("calls print when Print report button is clicked", async () => {
+  it("prints just the report region (in an isolated frame) when Print report is clicked", async () => {
     const user = userEvent.setup()
-    const printSpy = vi.fn()
-    vi.stubGlobal("print", printSpy)
+    const pagePrint = vi.fn()
+    vi.stubGlobal("print", pagePrint)
 
     renderWithSession(
       <YearOverYearReportDialog
@@ -74,10 +81,14 @@ describe("YearOverYearReportDialog", () => {
     expect(printBtn).toBeInTheDocument()
     await user.click(printBtn)
 
-    // requestAnimationFrame triggers print
     await vi.waitFor(() => {
-      expect(printSpy).toHaveBeenCalled()
+      expect(printRegion).toHaveBeenCalledTimes(1)
     })
+    const [region, title] = vi.mocked(printRegion).mock.calls[0]
+    expect(region).toHaveAttribute("data-print-region")
+    expect(title).toBe("Year-over-Year Enrollment Report")
+    // The whole portal page is never printed when a region exists.
+    expect(pagePrint).not.toHaveBeenCalled()
   })
 
   it("has no detectable accessibility violations once rendered", async () => {

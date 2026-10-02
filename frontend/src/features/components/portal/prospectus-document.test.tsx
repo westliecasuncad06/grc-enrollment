@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -310,7 +310,7 @@ describe("ProspectusDocument", () => {
     expect(await axe(container)).toHaveNoViolations()
   })
 
-  describe("progressive disclosure on a phone (stakeholder Doc 13)", () => {
+  describe("year accordion and phone disclosure (stakeholder Doc 13, Doc 20)", () => {
     const multiYear = () =>
       prospectusFixture({
         semesters: [
@@ -335,13 +335,15 @@ describe("ProspectusDocument", () => {
         ],
       })
 
-    function stubViewport(isPhone: boolean) {
+    function stubViewport(isPhone: boolean, reduceMotion = true) {
       vi.spyOn(window, "matchMedia").mockImplementation(
         (query: string) =>
           ({
             matches: query.includes("max-width: 47.99rem")
               ? isPhone
-              : query.includes("prefers-reduced-motion"),
+              : query.includes("prefers-reduced-motion")
+                ? reduceMotion
+                : false,
             media: query,
             onchange: null,
             addListener: () => undefined,
@@ -355,31 +357,118 @@ describe("ProspectusDocument", () => {
 
     afterEach(() => vi.restoreAllMocks())
 
-    it("opens only the first year that still has unfinished subjects", async () => {
-      stubViewport(true)
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(multiYear())))
+    const yearButtons = (container: HTMLElement) => [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        "button[aria-expanded][aria-controls]",
+      ),
+    ]
+
+    it("starts with every year collapsed, then opens the year the student is in", async () => {
+      stubViewport(false, false)
+      const fixture = multiYear()
+      fixture.data.year_level = 2
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fixture)))
 
       const { container } = renderWithSession(<ProspectusDocument />)
       await screen.findByText(/BS Information Technology/)
 
-      const years = [...container.querySelectorAll("details")]
-      expect(years).toHaveLength(3)
-      // Year 1 is finished, year 2 is where the student is, year 3 is ahead.
-      expect(years.map((year) => year.open)).toEqual([false, true, false])
-      // Every year is still one tap away.
-      expect(years[0].querySelector("summary")).toHaveTextContent("1st Year")
+      const buttons = yearButtons(container)
+      expect(buttons).toHaveLength(3)
+      expect(buttons[0]).toHaveTextContent("1st Year")
+      // The overview comes first: nothing is open yet.
+      expect(buttons.map((b) => b.getAttribute("aria-expanded"))).toEqual([
+        "false",
+        "false",
+        "false",
+      ])
+
+      await waitFor(() =>
+        expect(buttons.map((b) => b.getAttribute("aria-expanded"))).toEqual([
+          "false",
+          "true",
+          "false",
+        ]),
+      )
     })
 
-    it("keeps every year open on a wide screen", async () => {
-      stubViewport(false)
+    it("opens the student's year at once when the user prefers reduced motion", async () => {
+      stubViewport(true, true)
+      const fixture = multiYear()
+      fixture.data.year_level = 3
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fixture)))
+
+      const { container } = renderWithSession(<ProspectusDocument />)
+      await screen.findByText(/BS Information Technology/)
+
+      await waitFor(() =>
+        expect(
+          yearButtons(container).map((b) => b.getAttribute("aria-expanded")),
+        ).toEqual(["false", "false", "true"]),
+      )
+    })
+
+    it("falls back to the first year with unfinished subjects when the student's year is not in the curriculum", async () => {
+      stubViewport(false, true)
+      const fixture = multiYear()
+      fixture.data.year_level = 4
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fixture)))
+
+      const { container } = renderWithSession(<ProspectusDocument />)
+      await screen.findByText(/BS Information Technology/)
+
+      // Year 1 is finished, year 2 is the first with something left.
+      await waitFor(() =>
+        expect(
+          yearButtons(container).map((b) => b.getAttribute("aria-expanded")),
+        ).toEqual(["false", "true", "false"]),
+      )
+    })
+
+    it("lets the user open and close any year, and keeps collapsed years out of reach", async () => {
+      stubViewport(false, true)
+      const user = userEvent.setup()
+      const fixture = multiYear()
+      fixture.data.year_level = 2
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(fixture)))
+
+      const { container } = renderWithSession(<ProspectusDocument />)
+      await screen.findByText(/BS Information Technology/)
+      const buttons = yearButtons(container)
+      await waitFor(() =>
+        expect(buttons[1]).toHaveAttribute("aria-expanded", "true"),
+      )
+      const panel = (index: number) =>
+        document.getElementById(
+          buttons[index].getAttribute("aria-controls")!,
+        )!
+
+      expect(panel(0)).toHaveAttribute("inert")
+      expect(panel(1)).not.toHaveAttribute("inert")
+
+      await user.click(buttons[0])
+      expect(buttons[0]).toHaveAttribute("aria-expanded", "true")
+      expect(panel(0)).not.toHaveAttribute("inert")
+
+      await user.click(buttons[1])
+      expect(buttons[1]).toHaveAttribute("aria-expanded", "false")
+      expect(panel(1)).toHaveAttribute("inert")
+    })
+
+    it("keeps every year's table in the page so printing can include all of them", async () => {
+      stubViewport(false, true)
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(multiYear())))
 
       const { container } = renderWithSession(<ProspectusDocument />)
       await screen.findByText(/BS Information Technology/)
 
-      expect(
-        [...container.querySelectorAll("details")].map((year) => year.open),
-      ).toEqual([true, true, true])
+      expect(container.querySelectorAll("table")).toHaveLength(3)
+      for (const button of yearButtons(container)) {
+        const panel = document.getElementById(
+          button.getAttribute("aria-controls")!,
+        )!
+        // Collapsed or not, the panel expands to full height on paper.
+        expect(panel.className).toContain("print:grid-rows-[1fr]")
+      }
     })
 
     it("labels each stacked cell so a row still reads without its column heading", async () => {

@@ -76,6 +76,12 @@ import {
   gradeMarkLabel,
   type GradeMarkValue,
 } from "@/features/lib/grade-presentation"
+import {
+  csvToRows,
+  parseGradesRows,
+  type ParsedGradesImport,
+} from "@/features/lib/grades-import"
+import { readXlsxRows, XlsxReadError } from "@/features/lib/read-xlsx"
 import { cn } from "@/features/lib/utils"
 import { gradeMarkValues } from "@/features/schemas/academic-grade-schema"
 import type {
@@ -121,62 +127,8 @@ const stateLabel: Record<GradeSectionSummary["state"], string> = {
   locked: "Locked",
 }
 
-function cleanCsvValue(val: string): string {
-  let cleaned = val.trim()
-  if (cleaned.startsWith('"') && cleaned.endsWith('"') && cleaned.length >= 2) {
-    cleaned = cleaned.slice(1, -1).replace(/""/g, '"')
-  }
-  return cleaned.trim()
-}
-
-function parseCsvLine(line: string): string[] {
-  const result: string[] = []
-  let current = ""
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if (char === "," && !inQuotes) {
-      result.push(cleanCsvValue(current))
-      current = ""
-    } else {
-      current += char
-    }
-  }
-  result.push(cleanCsvValue(current))
-  return result
-}
-
-function normalizeMark(val: string): string {
-  const cleaned = val.trim().toUpperCase()
-  if (cleaned === "1" || cleaned === "1.0") return "1.00"
-  if (cleaned === "1.2" || cleaned === "1.25") return "1.25"
-  if (cleaned === "1.5" || cleaned === "1.50") return "1.50"
-  if (cleaned === "1.7" || cleaned === "1.75") return "1.75"
-  if (cleaned === "2" || cleaned === "2.0") return "2.00"
-  if (cleaned === "2.2" || cleaned === "2.25") return "2.25"
-  if (cleaned === "2.5" || cleaned === "2.50") return "2.50"
-  if (cleaned === "2.7" || cleaned === "2.75") return "2.75"
-  if (cleaned === "3" || cleaned === "3.0" || cleaned === "3.00") return "3.00"
-  if (cleaned === "5" || cleaned === "5.0" || cleaned === "5.00") return "5.00"
-  if (cleaned === "INC") return "INC"
-  if (cleaned === "C") return "C"
-  return cleaned
-}
-
-export interface ParsedCsvGradesResult {
-  drafts: Record<number, DraftGrade>
-  matchedCount: number
-  invalidCount: number
-  unmatchedCount: number
-}
+/** What the older CSV-only importer returned; the shared importer returns the same fields and more. */
+export type ParsedCsvGradesResult = ParsedGradesImport
 
 export function parseGradesCsv(
   csvText: string,
@@ -184,90 +136,7 @@ export function parseGradesCsv(
   allowedMarks: readonly GradeMarkValue[],
   existingDrafts: Record<number, DraftGrade> = {},
 ): ParsedCsvGradesResult {
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0)
-  if (lines.length < 2) {
-    return {
-      drafts: existingDrafts,
-      matchedCount: 0,
-      invalidCount: 0,
-      unmatchedCount: 0,
-    }
-  }
-
-  const headerRow = parseCsvLine(lines[0] ?? "").map((h) => h.toLowerCase())
-  let studentNumIdx = headerRow.findIndex(
-    (h) =>
-      h.includes("student number") ||
-      h.includes("student_number") ||
-      h.includes("student id"),
-  )
-  let gradeIdx = headerRow.findIndex(
-    (h) => h.includes("grade") || h.includes("mark"),
-  )
-  let remarksIdx = headerRow.findIndex((h) => h.includes("remark"))
-
-  if (studentNumIdx === -1) studentNumIdx = 0
-  if (gradeIdx === -1) gradeIdx = 2
-  if (remarksIdx === -1) remarksIdx = 3
-
-  let matchedCount = 0
-  let invalidCount = 0
-  let unmatchedCount = 0
-  const resultDrafts = { ...existingDrafts }
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]?.trim()
-    if (!line) continue
-    const cols = parseCsvLine(line)
-    const rawStudentNum = cols[studentNumIdx]?.trim()
-    if (!rawStudentNum) continue
-
-    const matchingRow = sheet.rows.find(
-      (r) => r.student_number.toLowerCase() === rawStudentNum.toLowerCase(),
-    )
-    if (!matchingRow) {
-      unmatchedCount++
-      continue
-    }
-
-    const rawGrade = cols[gradeIdx]?.trim() ?? ""
-    const rawRemarks = cols[remarksIdx]?.trim() ?? ""
-
-    if (!rawGrade) {
-      if (rawRemarks) {
-        resultDrafts[matchingRow.student_id] = {
-          mark:
-            resultDrafts[matchingRow.student_id]?.mark ??
-            matchingRow.mark ??
-            "",
-          remarks: rawRemarks,
-        }
-      }
-      continue
-    }
-
-    const normalized = normalizeMark(rawGrade)
-    if (allowedMarks.includes(normalized as GradeMarkValue)) {
-      resultDrafts[matchingRow.student_id] = {
-        mark: normalized,
-        remarks:
-          rawRemarks ||
-          (resultDrafts[matchingRow.student_id]?.remarks ??
-            matchingRow.remarks ??
-            ""),
-      }
-      matchedCount++
-    } else {
-      invalidCount++
-    }
-  }
-
-  return {
-    drafts: resultDrafts,
-    matchedCount,
-    invalidCount,
-    unmatchedCount,
-  }
+  return parseGradesRows(csvToRows(csvText), sheet, allowedMarks, existingDrafts)
 }
 
 export function downloadCsvTemplate(
@@ -428,7 +297,48 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleUploadCsv = (
+  const importRows = (rows: string[][], loadedSheet: SectionGradeSheet) => {
+    const result = parseGradesRows(rows, loadedSheet, allowedMarks, drafts)
+    if (result.matchedCount > 0) {
+      setDrafts(result.drafts)
+      toast.success(
+        `Imported grades for ${result.matchedCount} student(s). Click "Save draft" or "Submit final grades" when ready.`,
+      )
+    } else {
+      toast.error(
+        result.isGradingSheet
+          ? "No final grades were found in this grading sheet. Fill in its Semester Numeric Grade (or Numeric Grade) column, and check that it is this class's sheet."
+          : "No valid student grades could be matched from the file.",
+      )
+    }
+
+    if (result.invalidCount > 0) {
+      toast.warning(
+        `${result.invalidCount} grade(s) had invalid marks (a Drop or DRP, a percentage, or a typo) and were skipped.`,
+      )
+    }
+    if (result.unmatchedCount > 0) {
+      toast.warning(
+        `${result.unmatchedCount} row(s) are not in this class list and were skipped${
+          result.unmatchedNames.length > 0
+            ? `: ${result.unmatchedNames.join(", ")}${result.unmatchedCount > result.unmatchedNames.length ? "…" : ""}`
+            : ""
+        }.`,
+      )
+    }
+    if (result.matchedByNameCount > 0) {
+      toast.warning(
+        `${result.matchedByNameCount} student(s) were matched by name because their ID did not match. Check them before you submit.`,
+      )
+    }
+    if (result.sheetScheduleId !== null && result.sheetScheduleId !== sectionId) {
+      toast.warning(
+        `This sheet says Schedule ID ${result.sheetScheduleId}, but you opened section ${sectionId}. Make sure it is the right class.`,
+      )
+    }
+  }
+
+  const handleUploadGrades = (
     event: React.ChangeEvent<HTMLInputElement>,
     loadedSheet: SectionGradeSheet,
   ) => {
@@ -436,28 +346,38 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
     if (!file) return
     event.target.value = ""
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const text = e.target?.result as string
-      if (!text) return
-
-      const result = parseGradesCsv(text, loadedSheet, allowedMarks, drafts)
-      if (result.matchedCount > 0) {
-        setDrafts(result.drafts)
-        toast.success(
-          `Imported grades for ${result.matchedCount} student(s). Click "Save draft" or "Submit final grades" when ready.`,
-        )
-      } else {
-        toast.error("No valid student grades could be matched from the CSV.")
-      }
-
-      if (result.invalidCount > 0) {
-        toast.warning(
-          `${result.invalidCount} grade(s) had invalid marks (e.g. DRP is not permitted) and were skipped.`,
-        )
-      }
+    const name = file.name.toLowerCase()
+    if (name.endsWith(".xls")) {
+      toast.error(
+        "That is an old .xls file. Save it as Excel Workbook (.xlsx) or CSV, then upload it again.",
+      )
+      return
     }
-    reader.readAsText(file)
+
+    const reader = new FileReader()
+    if (name.endsWith(".xlsx") || file.type.includes("spreadsheetml")) {
+      reader.onload = (e) => {
+        const buffer = e.target?.result
+        if (!buffer || typeof buffer === "string") return
+        readXlsxRows(buffer)
+          .then((rows) => importRows(rows, loadedSheet))
+          .catch((error: unknown) =>
+            toast.error(
+              error instanceof XlsxReadError
+                ? error.message
+                : "The Excel file could not be read. Save the sheet as CSV and try again.",
+            ),
+          )
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      reader.onload = (e) => {
+        const text = e.target?.result
+        if (typeof text !== "string" || !text) return
+        importRows(csvToRows(text), loadedSheet)
+      }
+      reader.readAsText(file)
+    }
   }
 
   const sheet = sheetQuery.data
@@ -689,15 +609,15 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <Upload className="size-3.5" aria-hidden />
-                        Upload Grades (CSV)
+                        Upload Grades (Excel or CSV)
                       </Button>
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".csv,text/csv"
+                        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         className="hidden"
-                        aria-label="Upload grade sheet CSV"
-                        onChange={(e) => handleUploadCsv(e, loadedSheet)}
+                        aria-label="Upload grade sheet (Excel or CSV)"
+                        onChange={(e) => handleUploadGrades(e, loadedSheet)}
                       />
                     </>
                   )}

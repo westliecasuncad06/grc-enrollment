@@ -48,25 +48,25 @@ const workspaceDescriptions: Record<string, string> = {
     "Give the final approval to every submitted enrollment, regular or irregular. Irregular submissions arrive here after the Program Head has approved them. An approved student then claims a queue number at the Cashier kiosk.",
 }
 
-type RegistrarAction = "registrar_approve" | "registrar_reject" | "void"
+type RegistrarAction = "registrar_approve" | "registrar_reject"
 
 const actionLabel: Record<RegistrarAction, string> = {
   registrar_approve: "Approve",
   registrar_reject: "Reject",
-  void: "Void",
 }
 
 function requiresReason(action: RegistrarAction) {
-  return action === "registrar_reject" || action === "void"
+  return action === "registrar_reject"
 }
 
 /**
  * Which actions a row offers depends on the enrollment's status. Registrar
  * Staff and the Registrar Head own the approval checkpoint for every
  * enrollment (ADR 0030); an irregular one only reaches it after the Program
- * Head has approved, and until then it is shown here view-only (it can still
- * be voided, which cancels it at the student's request). Void is offered
- * everywhere before payment; a paid enrollment is a withdrawal instead.
+ * Head has approved, and until then it is shown here view-only. The Registrar
+ * can only approve or reject here; there is no Void button (removed on request).
+ * An approved enrollment that is still unpaid (`pending_payment`) can be
+ * rejected instead of voided.
  */
 function availableActions(
   enrollment: Enrollment,
@@ -74,15 +74,9 @@ function availableActions(
 ): readonly RegistrarAction[] {
   if (moduleId !== "enrollment-approvals") return []
   if (enrollment.status === "pending_registrar_approval") {
-    return ["registrar_approve", "registrar_reject", "void"]
+    return ["registrar_approve", "registrar_reject"]
   }
-  if (
-    enrollment.status === "pending_program_head_approval" ||
-    enrollment.status === "pending_student_review" ||
-    enrollment.status === "pending_payment"
-  ) {
-    return ["void"]
-  }
+  if (enrollment.status === "pending_payment") return ["registrar_reject"]
   return []
 }
 
@@ -192,8 +186,6 @@ export function RegistrarEnrollmentWorkspace({
     useState<Enrollment | null>(null)
   const [reason, setReason] = useState("")
   const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
-  // Only for a void: the Registrar is acting on the student's request.
-  const [requestedByStudent, setRequestedByStudent] = useState(false)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search, 300)
@@ -221,7 +213,8 @@ export function RegistrarEnrollmentWorkspace({
       page,
       per_page: 20,
     },
-    { enabled: authorized },
+    // Worked live by the Registrar: poll every 5s (the shared default is 15s, ADR 0029).
+    { enabled: authorized, refetchIntervalMs: 5_000 },
   )
   const mutation = useUpdateEnrollmentMutation()
   const reasonRequired =
@@ -243,17 +236,15 @@ export function RegistrarEnrollmentWorkspace({
         overload_acknowledged: pending.enrollment.requires_overload_approval
           ? overloadAcknowledged
           : undefined,
-        requested_by_student:
-          pending.action === "void" ? requestedByStudent : undefined,
       })
       setPending(null)
       setReason("")
       setOverloadAcknowledged(false)
-      setRequestedByStudent(false)
     } catch {
       setError(
-        "The enrollment decision could not be saved. Check the connection and try again.",
+        "The enrollment decision could not be saved. It may already have been decided by someone else, or the connection dropped. The list was refreshed; check it and try again.",
       )
+      void enrollmentsQuery.refetch()
     }
   }
 
@@ -402,7 +393,6 @@ export function RegistrarEnrollmentWorkspace({
                       setPending({ enrollment: target, action })
                       setReason("")
                       setOverloadAcknowledged(false)
-                      setRequestedByStudent(false)
                       setError("")
                     }}
                   />
@@ -516,7 +506,6 @@ export function RegistrarEnrollmentWorkspace({
                                 setPending({ enrollment, action })
                                 setReason("")
                                 setOverloadAcknowledged(false)
-                                setRequestedByStudent(false)
                                 setError("")
                               }}
                             >
@@ -588,24 +577,21 @@ export function RegistrarEnrollmentWorkspace({
                   id="registrar-decision-reason-error"
                   className="text-sm text-destructive"
                 >
-                  A reason is required to reject or void this enrollment.
+                  A reason is required to reject this enrollment.
                 </p>
               )}
             </Field>
           )}
-          {pending?.action === "void" && (
-            <label className="flex items-center gap-2 text-sm font-normal">
-              <input
-                type="checkbox"
-                checked={requestedByStudent}
-                onChange={(event) =>
-                  setRequestedByStudent(event.target.checked)
-                }
-                disabled={mutation.isPending}
-              />
-              <span>The student asked for this to be voided.</span>
-            </label>
-          )}
+          {pending?.action === "registrar_reject" &&
+            pending.enrollment.status === "pending_payment" && (
+              <Alert>
+                <AlertDescription>
+                  This enrollment was already approved and is waiting for
+                  payment. Rejecting it releases the student&apos;s seats and
+                  cancels their waiting queue number.
+                </AlertDescription>
+              </Alert>
+            )}
           {pending?.action === "registrar_approve" &&
             pending.enrollment.requires_overload_approval && (
               <Alert variant="destructive">

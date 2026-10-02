@@ -567,17 +567,7 @@ export function LoginPage() {
                   </Field>
 
                   <Field data-invalid={Boolean(errors.password)}>
-                    <div className="login-password-label-row">
-                      <FieldLabel htmlFor="login-password">
-                        Password
-                      </FieldLabel>
-                      <Link
-                        className="login-forgot-password"
-                        href="/forgot-password"
-                      >
-                        Forgot password?
-                      </Link>
-                    </div>
+                    <FieldLabel htmlFor="login-password">Password</FieldLabel>
                     <PasswordInput
                       id="login-password"
                       wrapperClassName="login-password-row"
@@ -592,6 +582,12 @@ export function LoginPage() {
                     <FieldError id="login-password-error">
                       {errors.password?.message}
                     </FieldError>
+                    <Link
+                      className="login-forgot-password"
+                      href="/forgot-password"
+                    >
+                      Forgot password?
+                    </Link>
                   </Field>
                 </FieldGroup>
 

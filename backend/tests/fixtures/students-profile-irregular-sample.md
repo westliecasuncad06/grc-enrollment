@@ -1,22 +1,46 @@
 # Students Profile (Irregular Derivation Fixture)
 
-Dedicated local test roster for Task 4 (irregular-student derivation) -- deliberately larger than
-students-profile-sample.md so the ~10% assertion window in
+Local test roster for the irregular-student derivation tests (Task 4), refreshed on 2026-10-03 with
+students from the seed roster, outlook for **2026-2027 · 1st Semester**. It is still
+deliberately larger than students-profile-sample.md so the ~10% assertion window in
 test_roughly_a_tenth_of_students_are_derived_as_irregular() has enough population to be
-mathematically satisfiable, and deliberately keeps its year-2/year-3 cohorts on the same sparse
-two-subject curriculum students-profile-sample.md's fixtures already register (FM101S/FM201S,
-ACC101S/ACC301S) rather than BSIT's dense per-term curriculum.
+mathematically satisfiable, and it keeps its year-2/year-3 cohorts on the same sparse two-subject
+curriculum students-profile-sample.md's fixtures already register (FM101S/FM201S, ACC101S/ACC301S)
+rather than BSIT's dense per-term curriculum.
 
-**Post Task-3/4 crosscut fix:** `StudentRosterSeeder::gradeMarkFor()`'s baseline grade
-distribution is now clean/passing-only (see that method's docblock) -- the only failing marks
-anywhere in this fixture come from Task 4's own deliberate `IRREGULAR_SELECTION_STRIDE`-based
-selection (every 10th eligible year-2/3/4 student). With 60 eligible students (30 FM201 year-2 +
-30 ACC301 year-3), exactly 6 are forced irregular (indices 0, 10, 20, 30, 40, 50). The IT101
+**How to read the columns.** `Year` is the student's year level at the end of 2025-2026 · 2nd
+Semester (the seeder reads it as the student's year level); the Year-1 rows are the incoming 2026
+entrants, who have no enrollment yet and open 2026-2027 · 1st Semester as first-year students.
+`Category` is the outlook for the next school year, 2026-2027 · 1st Semester, using the rule in
+`ClassifyEnrollmentStanding` (ADR 0028):
+
+- **Regular** -- enrolled in 2025-2026 · 2nd Semester, classed Regular, and no failing mark
+  (5.00 or DRP) in that term. Expected to stay Regular.
+- **Possible Irregular** -- classed Regular today but carrying a 5.00 or DRP in 2025-2026 · 2nd
+  Semester; a failed or dropped subject becomes a back subject, so the student may be Irregular
+  once the next enrollment opens. It is only an outlook: the Program Chair and Registrar still
+  decide, and nothing here denies an enrollment.
+
+`Category` is for human scanning only. `StudentRosterReader` ignores it and the seeder derives its
+own irregular cohort, so it is not authoritative grade evidence.
+
+**Seeder selection.** `StudentRosterSeeder::selectIrregularCandidates()` forces every
+`IRREGULAR_SELECTION_STRIDE`-based (10th) eligible year-2/3/4 student irregular. With 60 eligible
+students (30 FM201 year-2 + 30 ACC301 year-3), exactly 6 are forced irregular (indices 0, 10, 20,
+30, 40, 50). The rows marked Possible Irregular below sit on exactly those positions (the 1st, 11th
+and 21st row of each block), so, on a fresh seed (ids follow file order), the fixture and the
+seeder agree on who the 6 are. The IT101
 year-1 block is only here so test_no_first_year_student_is_irregular() has a population to assert
-zero against; it is intentionally small (10 rows, not the pre-fix 100) so it merely pads the
-denominator rather than needing to dilute away organic noise that no longer exists -- 6 irregular
+zero against; it is intentionally small (10 rows) so it merely pads the denominator -- 6 irregular
 out of 70 total (8.57%) lands inside the (0.07T, 0.13T) = (4, 9) window with real margin on both
-sides. See the Task 4 report (and its appended crosscut-fix addendum) for the exact math.
+sides. The Year-1 entrants have no grades at all, so all 10 are Regular.
+
+**Source and limits.** 70 of the roughly 2,947 Regular students of the development database --
+a sample, not the whole roster. They are the same seed students already listed in
+`Subject And Prerequisuite/Students-Profile.md`, taken in Student No. order within each program and
+year, with the Possible Irregular ones placed on the stride positions. The Possible Irregular
+flags come from a read-only count of 5.00 / DRP marks in 2025-2026 · 2nd Semester on 2026-10-03;
+they will drift as grades are locked and students are promoted.
 
 ## College of Business Administration and Entrepreneurship
 
@@ -26,36 +50,36 @@ sides. See the Task 4 report (and its appended crosscut-fix addendum) for the ex
 
 | Student No. | Name | Email | Program | Section | Year | Category |
 |---|---|---|---|---|---|---|
-| 2025-06-02101 | Test Student 02101 | s2502101@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02102 | Test Student 02102 | s2502102@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02103 | Test Student 02103 | s2502103@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02104 | Test Student 02104 | s2502104@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02105 | Test Student 02105 | s2502105@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02106 | Test Student 02106 | s2502106@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02107 | Test Student 02107 | s2502107@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02108 | Test Student 02108 | s2502108@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02109 | Test Student 02109 | s2502109@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02110 | Test Student 02110 | s2502110@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02111 | Test Student 02111 | s2502111@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02112 | Test Student 02112 | s2502112@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02113 | Test Student 02113 | s2502113@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02114 | Test Student 02114 | s2502114@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02115 | Test Student 02115 | s2502115@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02116 | Test Student 02116 | s2502116@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02117 | Test Student 02117 | s2502117@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02118 | Test Student 02118 | s2502118@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02119 | Test Student 02119 | s2502119@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02120 | Test Student 02120 | s2502120@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02121 | Test Student 02121 | s2502121@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02122 | Test Student 02122 | s2502122@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02123 | Test Student 02123 | s2502123@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02124 | Test Student 02124 | s2502124@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02125 | Test Student 02125 | s2502125@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02126 | Test Student 02126 | s2502126@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02127 | Test Student 02127 | s2502127@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02128 | Test Student 02128 | s2502128@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02129 | Test Student 02129 | s2502129@grc.test | BSBA-FM | FM201 | 2 | Regular |
-| 2025-06-02130 | Test Student 02130 | s2502130@grc.test | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01280 | Eduardo X. Matias | eduardo.matias@grc.com | BSBA-FM | FM201 | 2 | Possible Irregular |
+| 2025-06-01271 | Janine H. Serrano | janine.serrano@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01272 | Delia A. Roxas | delia.roxas@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01274 | Jonathan D. Macaspac | jonathan.macaspac@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01275 | Bernadette U. Matias | bernadette.matias@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01276 | Isagani O. Antonio | isagani.antonio@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01278 | Charmaine B. Silangan | charmaine.silangan@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01279 | Jocelyn C. Ilagan | jocelyn.ilagan@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01281 | Ruben B. Mendoza | ruben.mendoza@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01282 | Gerardo A. Manlapaz | gerardo.manlapaz@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01298 | Justin Y. Villegas | justin.villegas@grc.com | BSBA-FM | FM201 | 2 | Possible Irregular |
+| 2025-06-01283 | Marcelo L. Padua | marcelo.padua@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01285 | Jeffrey K. Vera | jeffrey.devera@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01286 | Ariel N. Scott | ariel.scott@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01287 | Janine L. Magsino | janine.magsino@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01289 | Minerva D. Cruz | minerva.cruz@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01291 | Imelda R. Mariano | imelda.mariano@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01292 | Princess L. Rosario | princess.delrosario@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01293 | Purita I. Ordonez | purita.ordonez@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01296 | Elvis X. Gaw | elvis.gaw@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01326 | Nathaniel L. Manlapaz | nathaniel.manlapaz@grc.com | BSBA-FM | FM201 | 2 | Possible Irregular |
+| 2025-06-01297 | Julio L. Liwanag | julio.liwanag@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01299 | Rachelle J. Olalia | rachelle.olalia@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01300 | Bayani Y. Pena | bayani.pena@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01301 | Glenn W. Mariano | glenn.mariano@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01302 | Divine K. Sia | divine.sia@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01303 | Dolores X. Dumlao | dolores.dumlao@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01304 | Evangeline R. Dalisay | evangeline.dalisay@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01305 | Reynante D. Baltazar | reynante.baltazar@grc.com | BSBA-FM | FM201 | 2 | Regular |
+| 2025-06-01306 | Dianne N. Vega | dianne.vega@grc.com | BSBA-FM | FM201 | 2 | Regular |
 
 ## College of Accountancy
 
@@ -65,36 +89,36 @@ sides. See the Task 4 report (and its appended crosscut-fix addendum) for the ex
 
 | Student No. | Name | Email | Program | Section | Year | Category |
 |---|---|---|---|---|---|---|
-| 2024-06-02201 | Test Student 02201 | s2402201@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02202 | Test Student 02202 | s2402202@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02203 | Test Student 02203 | s2402203@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02204 | Test Student 02204 | s2402204@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02205 | Test Student 02205 | s2402205@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02206 | Test Student 02206 | s2402206@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02207 | Test Student 02207 | s2402207@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02208 | Test Student 02208 | s2402208@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02209 | Test Student 02209 | s2402209@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02210 | Test Student 02210 | s2402210@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02211 | Test Student 02211 | s2402211@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02212 | Test Student 02212 | s2402212@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02213 | Test Student 02213 | s2402213@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02214 | Test Student 02214 | s2402214@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02215 | Test Student 02215 | s2402215@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02216 | Test Student 02216 | s2402216@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02217 | Test Student 02217 | s2402217@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02218 | Test Student 02218 | s2402218@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02219 | Test Student 02219 | s2402219@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02220 | Test Student 02220 | s2402220@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02221 | Test Student 02221 | s2402221@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02222 | Test Student 02222 | s2402222@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02223 | Test Student 02223 | s2402223@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02224 | Test Student 02224 | s2402224@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02225 | Test Student 02225 | s2402225@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02226 | Test Student 02226 | s2402226@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02227 | Test Student 02227 | s2402227@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02228 | Test Student 02228 | s2402228@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02229 | Test Student 02229 | s2402229@grc.test | BSA | ACC301 | 3 | Regular |
-| 2024-06-02230 | Test Student 02230 | s2402230@grc.test | BSA | ACC301 | 3 | Regular |
+| 2024-06-01465 | Guadalupe R. Salonga | guadalupe.salonga@grc.com | BSA | ACC301 | 3 | Possible Irregular |
+| 2024-06-01453 | Cecilia A. Santos | cecilia.santos2@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01457 | Josephine U. Ramirez | josephine.ramirez@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01458 | Sharon C. Calungsod | sharon.calungsod@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01460 | Emmanuel I. Ortega | emmanuel.ortega@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01461 | Kevin I. Taylor | kevin.taylor@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01463 | Andres U. Uy | andres.uy@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01464 | Mark C. Yap | mark.yap@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01466 | Yolanda R. Kalaw | yolanda.kalaw@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01467 | Melinda U. King | melinda.king@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01482 | Salud P. Chiong | salud.chiong@grc.com | BSA | ACC301 | 3 | Possible Irregular |
+| 2024-06-01468 | Consuelo U. Ortega | consuelo.ortega@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01470 | Leopoldo L. Zamora | leopoldo.zamora@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01472 | Cecilia P. Go | cecilia.go@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01473 | Bonifacio R. Guiao | bonifacio.guiao@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01474 | Bea H. Villanueva | bea.villanueva@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01477 | Trinidad P. Guerrero | trinidad.guerrero@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01480 | Melchor U. Cariaso | melchor.cariaso@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01481 | Purita E. Danao | purita.danao2@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01483 | Ignacio R. Magsino | ignacio.magsino@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01530 | Rosa Z. Malig | rosa.malig@grc.com | BSA | ACC301 | 3 | Possible Irregular |
+| 2024-06-01484 | Grace N. Peralta | grace.peralta@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01485 | Ernesto O. Rosario | ernesto.rosario@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01486 | Juana A. Macabulos | juana.macabulos@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01487 | Aida P. Madrigal | aida.madrigal@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01488 | Mario S. Yap | mario.yap@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01489 | Jomel D. Sagun | jomel.sagun@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01490 | Socorro B. Ong | socorro.ong@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01493 | Liwayway G. Batac | liwayway.batac@grc.com | BSA | ACC301 | 3 | Regular |
+| 2024-06-01494 | Gil W. Angeles | gil.angeles@grc.com | BSA | ACC301 | 3 | Regular |
 
 ## College of Computer Studies
 
@@ -104,22 +128,22 @@ sides. See the Task 4 report (and its appended crosscut-fix addendum) for the ex
 
 | Student No. | Name | Email | Program | Section | Year | Category |
 |---|---|---|---|---|---|---|
-| 2026-06-02001 | Test Student 02001 | s2602001@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02002 | Test Student 02002 | s2602002@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02003 | Test Student 02003 | s2602003@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02004 | Test Student 02004 | s2602004@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02005 | Test Student 02005 | s2602005@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02006 | Test Student 02006 | s2602006@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02007 | Test Student 02007 | s2602007@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02008 | Test Student 02008 | s2602008@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02009 | Test Student 02009 | s2602009@grc.test | BSIT | IT101 | 1 | Regular |
-| 2026-06-02010 | Test Student 02010 | s2602010@grc.test | BSIT | IT101 | 1 | Regular |
+| 2026-06-01661 | Michael S. Batungbakal | michael.batungbakal@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01662 | Erlinda C. Robles | erlinda.robles2@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01663 | Reynaldo A. Reid | reynaldo.reid@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01664 | Consuelo Y. Wright | consuelo.wright@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01665 | Rosario B. Dalisay | rosario.dalisay@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01667 | Mario S. Concepcion | mario.concepcion@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01668 | Vivian R. Calderon | vivian.calderon@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01669 | Alfredo F. Bagsic | alfredo.bagsic@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01670 | Editha M. Katindig | editha.katindig@grc.com | BSIT | IT101 | 1 | Regular |
+| 2026-06-01671 | Noel P. Ignacio | noel.ignacio@grc.com | BSIT | IT101 | 1 | Regular |
 
 ## Footer
 
 **Total sections:** 3
 **Total students:** 70
+**Possible Irregular (2026-2027 · 1st Semester):** 6 (3 in FM201, 3 in ACC301)
 
-Regenerated by a one-off script for Task 4 -- see StudentRosterSeederTest for how it is consumed.
-Category above is always Regular at generation time; it exists for human scanning only and
-is not authoritative grade evidence.
+Regenerated on 2026-10-03 from the development database (read-only) -- see StudentRosterSeederTest
+for how it is consumed.

@@ -7,6 +7,7 @@ import type { CreateAdmissionRequirementTypeInput } from "@/features/schemas/adm
 import {
   createAdmissionRequirementType,
   getAdmissionChecklist,
+  getAdmissionRequirementSelection,
   setAdmissionRequirementSubmitted,
 } from "@/features/services/admission-requirements-service"
 
@@ -26,6 +27,22 @@ export function useAdmissionChecklistQuery(studentId: number | null) {
       studentId === null
         ? session?.role === "student"
         : session?.role === "admission_staff",
+  })
+}
+
+/** The Create Account checklist: what applies to a new student of this year level. */
+export function useAdmissionRequirementSelectionQuery(yearLevel: number) {
+  const { session } = useAuth()
+
+  return useQuery({
+    queryKey: [
+      "admission-requirements",
+      session?.userId ?? null,
+      "selection",
+      yearLevel,
+    ] as const,
+    queryFn: ({ signal }) => getAdmissionRequirementSelection(yearLevel, signal),
+    enabled: session?.role === "admission_staff",
   })
 }
 

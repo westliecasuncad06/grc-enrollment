@@ -3,7 +3,10 @@ import { Download, Printer } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/features/components/ui/button"
-import { usePrintDocument } from "@/features/hooks/use-print-document"
+import {
+  findPrintRegion,
+  usePrintDocument,
+} from "@/features/hooks/use-print-document"
 import { downloadEnrollmentDocumentPdf } from "@/features/services/enrollment-document-service"
 import { cn } from "@/features/lib/utils"
 
@@ -12,6 +15,9 @@ import { cn } from "@/features/lib/utils"
  * hooks `globals.css`'s `@media print` rules key on. `actions` (e.g. a
  * `PrintButton` and `DownloadPdfButton`) renders above the document and is hidden from print via
  * `print:hidden` — same convention as everywhere else in the portal.
+ *
+ * `PrintButton` prints only this region, in an isolated iframe (`printRegion`), so the page
+ * around it never reaches the paper.
  */
 export function PrintDocument({
   title,
@@ -25,14 +31,18 @@ export function PrintDocument({
   className?: string
 }) {
   return (
-    <div className="grid min-w-0 gap-3">
+    <div data-print-scope className="grid min-w-0 gap-3">
       {actions && (
         <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
           <h2 className="text-lg font-semibold">{title}</h2>
           <div className="flex items-center gap-2">{actions}</div>
         </div>
       )}
-      <div data-print-region className={cn("print-document min-w-0 overflow-x-auto", className)}>
+      <div
+        data-print-region
+        data-print-title={title}
+        className={cn("print-document min-w-0 overflow-x-auto", className)}
+      >
         {children}
       </div>
     </div>
@@ -47,7 +57,12 @@ export function PrintButton({
   const { print, isPrinting } = usePrintDocument()
 
   return (
-    <Button type="button" variant="outline" onClick={print} disabled={isPrinting}>
+    <Button
+      type="button"
+      variant="outline"
+      onClick={(event) => print(findPrintRegion(event.currentTarget))}
+      disabled={isPrinting}
+    >
       <Printer className="mr-1.5 size-4" />
       {label}
     </Button>
