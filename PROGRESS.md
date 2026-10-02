@@ -1,6 +1,22 @@
 # GRC Enrollment System — Development Progress
 
-## 2026-10-02 — Production Presentation Database Reset & Hostinger VPS Deployment (DONE)
+## 2026-10-02 — Super Admin Provisioning & Deployment Verification (DONE)
+
+- **Owner Request:**
+  - Set the Super Admin email to `westliecasuncad06@gmail.com` and enable self-service password setup via the "Forgot Password" flow.
+  - Verify whether Super Admin features are deployed and active on production (Hostinger VPS & Vercel).
+- **Execution & Technical Details:**
+  1. **Super Admin Configuration:**
+     - Updated `backend/config/super_admin.php` with fallback default `'email' => env('SUPER_ADMIN_EMAIL', 'westliecasuncad06@gmail.com')`.
+     - Provisioned active Super Admin account (`UserRole::SuperAdmin`, `UserStatus::Active`, `account_setup_completed_at = now()`) for `westliecasuncad06@gmail.com` on both local MariaDB and Hostinger Dokploy MySQL.
+  2. **Self-Service Forgot Password Verification:**
+     - Triggered password reset request for `westliecasuncad06@gmail.com` via production API (`POST https://api.grc-enrollment.tech/api/v1/auth/forgot-password`).
+     - Verified Gmail SMTP dispatch: Audit log recorded `password_reset.code_sent` with `delivery_status: sent`, and `password_reset_codes` recorded the 6-digit challenge code expiring in 60 minutes.
+  3. **Super Admin Deployment Verification:**
+     - **Database:** Migrations `add_acting_context_to_personal_access_tokens_table` and `add_acting_context_to_audit_logs_table` confirmed active on production MySQL.
+     - **Backend API:** Production backend container (`grc-backend-womfnq`) rebuilt and verified serving the latest commit, including Super Admin acting-context endpoints (`/api/v1/super-admin/acting-context`, `/api/v1/super-admin/users`).
+     - **Frontend (Vercel):** Production site (`https://www.grc-enrollment.tech`) deployed and responsive with `SuperAdminSwitcher`, `portal-shell` acting-context header, and Super Admin account management workspace.
+
 
 - **Owner Request:**
   - Set **2025–2026 · 2nd Semester** (Academic Term ID: 6) as the **Current Active Semester** (`semester_ongoing`, `archived_at = NULL`, `closed_at = NULL`).
