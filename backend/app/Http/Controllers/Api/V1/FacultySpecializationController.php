@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Faculty\CreateFacultySpecialization;
 use App\Actions\Faculty\DecideFacultySpecialization;
 use App\Actions\Faculty\DeleteFacultySpecialization;
+use App\Actions\Faculty\UpdateFacultySpecializationProficiency;
+use App\Domain\Faculty\SpecializationProficiency;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\FacultySpecialization\DecideFacultySpecializationRequest;
 use App\Http\Requests\Api\V1\FacultySpecialization\StoreFacultySpecializationRequest;
+use App\Http\Requests\Api\V1\FacultySpecialization\UpdateFacultySpecializationProficiencyRequest;
 use App\Http\Resources\Api\V1\FacultySpecializationResource;
 use App\Models\FacultySpecialization;
 use App\Models\User;
@@ -65,6 +68,25 @@ final class FacultySpecializationController extends Controller
             $request->validated('action'),
             $user,
             $request->validated('reason'),
+            $contextFactory->fromRequest($request),
+        );
+
+        return $this->privateResponse(FacultySpecializationResource::make($specialization)->response($request));
+    }
+
+    public function updateProficiency(
+        UpdateFacultySpecializationProficiencyRequest $request,
+        FacultySpecialization $facultySpecialization,
+        UpdateFacultySpecializationProficiency $action,
+        AuditRequestContextFactory $contextFactory,
+    ): JsonResponse {
+        $user = $this->authenticatedUser($request);
+        $this->authorize('updateProficiency', $facultySpecialization);
+
+        $specialization = $action->execute(
+            $user,
+            $facultySpecialization,
+            SpecializationProficiency::from($request->validated('proficiency')),
             $contextFactory->fromRequest($request),
         );
 

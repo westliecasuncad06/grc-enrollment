@@ -143,11 +143,6 @@ describe("FacultySubjectPreferencePanel", () => {
     expect(
       screen.getByRole("combobox", { name: "Proficiency" }),
     ).toBeInTheDocument()
-    expect(
-      within(
-        screen.getByRole("table", { name: "Declared specializations" }),
-      ).getByText("Primary"),
-    ).toBeInTheDocument()
   })
 
   it("appends a preference without a rank and records its specialization", async () => {
@@ -359,31 +354,138 @@ describe("FacultySubjectPreferencePanel", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("shows the approval status of a declared specialization", async () => {
-    const user = userEvent.setup()
-    fetchMock.mockImplementation((input) => {
+  const savedPreference = (id: number, subjectId: number, rank: number) => ({
+    type: "faculty_curriculum_subject_preference",
+    id,
+    professor_id: 5,
+    curriculum_id: 11,
+    semester: "1st",
+    subject_id: subjectId,
+    rank,
+    origin: "declared",
+  })
+
+  function mockSavedPreferences(
+    preferences: unknown[],
+    specializations: unknown[],
+    catalogBody: unknown = pairedCatalog,
+  ) {
+    fetchMock.mockImplementation((input, init) => {
       const requestUrl = url(input)
       if (requestUrl.endsWith("/faculty-preference-catalog"))
-        return Promise.resolve(new Response(JSON.stringify(catalog)))
-      if (requestUrl.endsWith("/faculty-specializations"))
+        return Promise.resolve(new Response(JSON.stringify(catalogBody)))
+      if (requestUrl.endsWith("/faculty-curriculum-subject-preferences"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: preferences })),
+        )
+      if (
+        requestUrl.endsWith("/faculty-specializations") &&
+        init?.method === "POST"
+      )
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: [{ ...specialization, status: "pending", status_label: "Pending" }],
+              data: { ...specialization, id: 77, subject_id: 503 },
+            }),
+            { status: 201 },
+          ),
+        )
+      if (requestUrl.endsWith("/faculty-specializations"))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: specializations })),
+        )
+      if (requestUrl.endsWith("/proficiency") && init?.method === "PATCH")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...specialization,
+                proficiency: "secondary",
+                proficiency_label: "Secondary",
+                status: "pending",
+                status_label: "Pending",
+              },
             }),
           ),
         )
+
       return Promise.resolve(new Response(JSON.stringify({ data: [] })))
     })
+  }
+
+  it("shows one table: no separate Declared specializations table, and the proficiency is a dropdown", async () => {
+    const user = userEvent.setup()
+    mockSavedPreferences([savedPreference(101, 501, 1)], [specialization])
     renderWithSession(<FacultyInputWorkspace />, { session })
 
     await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
 
+    const saved = await screen.findByRole("table", {
+      name: "Saved curriculum subject preferences",
+    })
     expect(
-      within(
-        screen.getByRole("table", { name: "Declared specializations" }),
-      ).getByText("Pending"),
-    ).toBeInTheDocument()
+      screen.queryByRole("table", { name: "Declared specializations" }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Declared specializations")).not.toBeInTheDocument()
+    expect(
+      await within(saved).findByRole("combobox", {
+        name: "Proficiency for ITC",
+      }),
+    ).toHaveTextContent("Primary")
+  })
+
+  it("changes the proficiency of a declared specialization from the table dropdown", async () => {
+    const user = userEvent.setup()
+    mockSavedPreferences([savedPreference(101, 501, 1)], [specialization])
+    renderWithSession(<FacultyInputWorkspace />, { session })
+
+    await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
+    await user.click(
+      await screen.findByRole("combobox", { name: "Proficiency for ITC" }),
+    )
+    await user.click(await screen.findByRole("option", { name: "Secondary" }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-specializations/9/proficiency"),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ proficiency: "secondary" }),
+        }),
+      )
+      expect(toast.success).toHaveBeenCalledWith("Proficiency updated.")
+    })
+  })
+
+  it("lets a subject with no proficiency yet be given one, and leaves a seeded proficiency read-only", async () => {
+    const user = userEvent.setup()
+    mockSavedPreferences(
+      [savedPreference(101, 501, 1), savedPreference(103, 503, 2)],
+      [{ ...specialization, source: "seeded" }],
+    )
+    renderWithSession(<FacultyInputWorkspace />, { session })
+
+    await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
+    // ITC's proficiency is seeded: plain text, no dropdown.
+    await screen.findByRole("combobox", { name: "Proficiency for PROG 1" })
+    expect(
+      screen.queryByRole("combobox", { name: "Proficiency for ITC" }),
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Proficiency for PROG 1" }),
+    )
+    await user.click(await screen.findByRole("option", { name: "Primary" }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-specializations"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ subject_id: 503, proficiency: "primary" }),
+        }),
+      )
+    })
   })
 
   it("automatically includes and saves paired laboratory subject with sequential rank and matching proficiency", async () => {

@@ -34,6 +34,17 @@ final class FacultySpecializationPolicy
         return $user->role === UserRole::Faculty && $specialization->professor_id === $user->id;
     }
 
+    /**
+     * A professor may change the proficiency of a specialization they declared
+     * themselves; seeded (workbook) and Program Chair-assigned ones are not theirs to edit.
+     */
+    public function updateProficiency(User $user, FacultySpecialization $specialization): bool
+    {
+        return $user->role === UserRole::Faculty
+            && $specialization->professor_id === $user->id
+            && $specialization->source === 'declared';
+    }
+
     public function decide(User $user, FacultySpecialization $specialization): bool
     {
         return $user->role === UserRole::ProgramChair

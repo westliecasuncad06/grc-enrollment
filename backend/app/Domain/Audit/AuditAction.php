@@ -42,6 +42,8 @@ final class AuditAction
 
     public const FACULTY_SPECIALIZATION_DELETED = 'faculty_specialization.deleted';
 
+    public const FACULTY_SPECIALIZATION_UPDATED = 'faculty_specialization.updated';
+
     public const FACULTY_SPECIALIZATION_APPROVED = 'faculty_specialization.approved';
 
     public const FACULTY_SPECIALIZATION_REJECTED = 'faculty_specialization.rejected';
@@ -313,6 +315,7 @@ final class AuditAction
             self::FACULTY_CURRICULUM_SUBJECT_PREFERENCE_DELETED,
             self::FACULTY_SPECIALIZATION_CREATED,
             self::FACULTY_SPECIALIZATION_DELETED,
+            self::FACULTY_SPECIALIZATION_UPDATED,
             self::FACULTY_SPECIALIZATION_APPROVED,
             self::FACULTY_SPECIALIZATION_REJECTED,
             self::SECTION_CREATED,

@@ -35,19 +35,14 @@ import {
   createFacultyCurriculumSubjectPreference,
   createFacultySpecialization,
   deleteFacultyCurriculumSubjectPreference,
-  deleteFacultySpecialization,
   updateFacultyCurriculumSubjectPreference,
+  updateFacultySpecializationProficiency,
 } from "@/features/services/faculty-service"
 
 const emptyPreference: FacultyCurriculumSubjectPreferenceInput = {
   curriculum_id: 0,
   semester: "1st",
   subject_id: 0,
-}
-
-interface Removal {
-  kind: "specialization"
-  row: FacultySpecialization
 }
 
 export function FacultySubjectPreferencePanel() {
@@ -58,7 +53,6 @@ export function FacultySubjectPreferencePanel() {
   const specializationsQuery = useFacultySpecializationsQuery()
   const [editing, setEditing] =
     useState<FacultyCurriculumSubjectPreference | null>(null)
-  const [removal, setRemoval] = useState<Removal | null>(null)
   const [proficiency, setProficiency] = useState<"primary" | "secondary">(
     "secondary",
   )
@@ -149,23 +143,8 @@ export function FacultySubjectPreferencePanel() {
     mutationFn: createFacultySpecialization,
     onSuccess: invalidateSpecializations,
   })
-  const removalMutation = useMutation({
-    mutationFn: (target: Removal) =>
-      deleteFacultySpecialization(target.row.id),
-    onSuccess: async () => {
-      await invalidateSpecializations()
-      setRemoval(null)
-      toast.success("Specialization removed.")
-    },
-    onError: () =>
-      setRequestError(
-        "The saved faculty input could not be removed. Try again.",
-      ),
-  })
   const isSaving =
-    preferenceMutation.isPending ||
-    specializationMutation.isPending ||
-    removalMutation.isPending
+    preferenceMutation.isPending || specializationMutation.isPending
 
   const save = async (input: FacultyCurriculumSubjectPreferenceInput) => {
     setRequestError("")
@@ -264,6 +243,30 @@ export function FacultySubjectPreferencePanel() {
     }
   }
 
+  const handleChangeProficiency = async (
+    row: FacultyCurriculumSubjectPreference,
+    specialization: FacultySpecialization | undefined,
+    newProficiency: FacultySpecialization["proficiency"],
+  ) => {
+    try {
+      if (specialization) {
+        await updateFacultySpecializationProficiency(
+          specialization.id,
+          newProficiency,
+        )
+      } else {
+        await createFacultySpecialization({
+          subject_id: row.subject_id,
+          proficiency: newProficiency,
+        })
+      }
+      await invalidateSpecializations()
+      toast.success("Proficiency updated.")
+    } catch {
+      toast.error("Failed to update the proficiency. Try again.")
+    }
+  }
+
   const handleReplacePreference = async (
     row: FacultyCurriculumSubjectPreference,
     newSubjectId: number,
@@ -338,7 +341,6 @@ export function FacultySubjectPreferencePanel() {
           />
           <FacultySpecializationList
             preferencesQuery={preferencesQuery}
-            specializationsQuery={specializationsQuery}
             curriculumId={selectedCurriculumId}
             semester={selectedSemester}
             contextLabel={
@@ -349,17 +351,9 @@ export function FacultySubjectPreferencePanel() {
             subjectsById={subjectsById}
             specializationsBySubject={specializationsBySubject}
             subjectOptions={subjectOptions}
-            onRemoveSpecialization={(row) =>
-              setRemoval({ kind: "specialization", row })
-            }
+            onChangeProficiency={handleChangeProficiency}
             onBatchDeletePreferences={handleBatchDeletePreferences}
             onReplacePreference={handleReplacePreference}
-            removalKind={removal?.kind ?? null}
-            isRemoving={removalMutation.isPending}
-            onDismissRemoval={() => setRemoval(null)}
-            onConfirmRemoval={() =>
-              removal && void removalMutation.mutateAsync(removal)
-            }
           />
         </CardContent>
       </Card>

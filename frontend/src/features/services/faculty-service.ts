@@ -342,6 +342,23 @@ export async function decideFacultySpecialization(
   ).data
 }
 
+/** A professor changing the proficiency of a specialization they declared. */
+export async function updateFacultySpecializationProficiency(
+  id: number,
+  proficiency: FacultySpecializationInput["proficiency"],
+): Promise<FacultySpecialization> {
+  const payload = await patchAuthenticatedJson(
+    `${FACULTY_SPECIALIZATIONS_PATH}/${id}/proficiency`,
+    { proficiency },
+  )
+
+  return parseContract(
+    facultySpecializationEnvelopeSchema,
+    payload,
+    "updated faculty specialization",
+  ).data
+}
+
 export async function deleteFacultySpecialization(id: number): Promise<void> {
   await deleteAuthenticatedJson(`${FACULTY_SPECIALIZATIONS_PATH}/${id}`)
 }

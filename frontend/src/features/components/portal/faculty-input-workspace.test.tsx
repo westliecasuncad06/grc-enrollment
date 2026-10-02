@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -143,7 +143,7 @@ describe("FacultyInputWorkspace", () => {
     expect(screen.queryByLabelText(/^Day$/)).not.toBeInTheDocument()
   })
 
-  it("lists declared specializations inside the subject preferences tab", async () => {
+  it("shows each saved proficiency inside the single subject preferences table", async () => {
     const user = userEvent.setup()
     stubData(fetchMock)
     renderWithSession(<FacultyInputWorkspace />, { session: facultySession })
@@ -153,13 +153,14 @@ describe("FacultyInputWorkspace", () => {
     )
 
     expect(
-      await screen.findByText("Declared specializations"),
+      await screen.findByRole("table", {
+        name: "Saved curriculum subject preferences",
+      }),
     ).toBeInTheDocument()
+    expect(screen.queryByText("Declared specializations")).not.toBeInTheDocument()
     expect(
-      within(
-        screen.getByRole("table", { name: "Declared specializations" }),
-      ).getByText("Primary"),
-    ).toBeInTheDocument()
+      await screen.findByRole("combobox", { name: /^Proficiency for / }),
+    ).toHaveTextContent("Primary")
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/faculty-specializations"),
       expect.objectContaining({ method: "GET" }),

@@ -1,5 +1,13 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Professor preferences: single table, proficiency dropdown (DONE)
+
+- **Request:** remove the "Declared specializations" card so the professor view has one table, and make the Proficiency cell a clickable Primary/Secondary dropdown.
+- **Frontend:** `faculty-specialization-list.tsx` no longer renders the Declared specializations card or its remove dialog; each Proficiency cell is a Select (`ProficiencyCell`). A declared specialization is changed in place; a subject with no proficiency yet can be given one (creates it); seeded / Program Chair-assigned proficiencies stay read-only text. `faculty-subject-preference-panel.tsx` has the new `handleChangeProficiency`, the old specialization-removal state/mutation was pruned, and `faculty-service.ts` gained `updateFacultySpecializationProficiency`.
+- **Backend:** new `PATCH /api/v1/faculty-specializations/{id}/proficiency` (`UpdateFacultySpecializationProficiency` action, `UpdateFacultySpecializationProficiencyRequest`, policy `updateProficiency`: Faculty, own record, source `declared` only; faculty-role route group; audit action `faculty_specialization.updated`). **Decision to confirm with the owner:** a real change resets an approved/rejected specialization to `pending` (clears decided_by/at/reason) so the Program Chair reviews the new level; saving the same value is a no-op. Not an institutional rule from the PRD — an assumption, easy to relax.
+- **Side effect:** with the Declared specializations table gone, the Pending/Approved status is no longer visible to the professor on this page.
+- **Verification:** backend `FacultySubjectPreferencesEndpointTest` 13/13 (2 new) and `ApiSurfaceTest` (route lists updated) passed; Pint clean. Frontend `faculty-subject-preference-panel` + `faculty-input-workspace` 14/14 (3 new, 2 old Declared-table assertions replaced); `tsc --noEmit` clean; eslint clean on source files (the panel test file's 18 lint errors predate this change). Not re-checked in a real browser.
+
 ## 2026-10-02 — Professor subject preferences: per-row Edit/Remove removed, deleting a preference removes its specialization (DONE, uncommitted)
 
 - **Request:** on the professor's Subject preferences list, drop the per-row Actions column (Edit / Remove) because the Edit toggle above the table already does batch delete and click-to-replace; and deleting a preference must also delete the specialization (proficiency) that was saved with it.

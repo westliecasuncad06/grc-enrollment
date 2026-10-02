@@ -304,6 +304,63 @@ final class FacultySubjectPreferencesEndpointTest extends TestCase
         $this->assertDatabaseHas('faculty_specializations', ['professor_id' => $professor->id, 'subject_id' => $subjects[1]->id]);
     }
 
+    public function test_a_professor_can_change_the_proficiency_of_their_declared_specialization(): void
+    {
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.proficiency@grc.test');
+        $subject = $this->makeSubject('CS501');
+        $specialization = FacultySpecialization::create([
+            'professor_id' => $professor->id, 'subject_id' => $subject->id, 'proficiency' => 'secondary',
+            'source' => 'declared', 'status' => 'approved', 'decided_by' => $professor->id, 'decided_at' => now(),
+        ]);
+
+        $this->withToken($token)
+            ->patchJson("/api/v1/faculty-specializations/{$specialization->id}/proficiency", ['proficiency' => 'primary'])
+            ->assertOk()
+            ->assertJsonPath('data.proficiency', 'primary')
+            ->assertJsonPath('data.status', 'pending');
+
+        $this->assertDatabaseHas('faculty_specializations', ['id' => $specialization->id, 'proficiency' => 'primary', 'status' => 'pending', 'decided_by' => null]);
+        $this->assertDatabaseHas('audit_logs', ['action' => AuditAction::FACULTY_SPECIALIZATION_UPDATED, 'auditable_id' => $specialization->id]);
+
+        // Saving the same value again changes nothing (stays pending, no extra audit row).
+        $this->withToken($token)
+            ->patchJson("/api/v1/faculty-specializations/{$specialization->id}/proficiency", ['proficiency' => 'primary'])
+            ->assertOk();
+        $this->assertSame(1, AuditLog::query()->where('action', AuditAction::FACULTY_SPECIALIZATION_UPDATED)->count());
+    }
+
+    public function test_proficiency_cannot_be_changed_for_another_professors_or_a_non_declared_specialization(): void
+    {
+        [$professor, $token] = $this->tokenFor(UserRole::Faculty, 'professor.proficiency-own@grc.test');
+        [$other] = $this->tokenFor(UserRole::Faculty, 'professor.proficiency-other@grc.test');
+        $subject = $this->makeSubject('CS502');
+        $seededSubject = $this->makeSubject('CS503');
+        $others = FacultySpecialization::create([
+            'professor_id' => $other->id, 'subject_id' => $subject->id, 'proficiency' => 'secondary', 'source' => 'declared',
+        ]);
+        $seeded = FacultySpecialization::create([
+            'professor_id' => $professor->id, 'subject_id' => $seededSubject->id, 'proficiency' => 'secondary', 'source' => 'workbook_seeded',
+        ]);
+
+        $this->withToken($token)
+            ->patchJson("/api/v1/faculty-specializations/{$others->id}/proficiency", ['proficiency' => 'primary'])
+            ->assertForbidden();
+        $this->withToken($token)
+            ->patchJson("/api/v1/faculty-specializations/{$seeded->id}/proficiency", ['proficiency' => 'primary'])
+            ->assertForbidden();
+
+        $mine = FacultySpecialization::create([
+            'professor_id' => $professor->id, 'subject_id' => $this->makeSubject('CS504')->id, 'proficiency' => 'secondary', 'source' => 'declared',
+        ]);
+        $this->withToken($token)
+            ->patchJson("/api/v1/faculty-specializations/{$mine->id}/proficiency", ['proficiency' => 'expert'])
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('faculty_specializations', ['id' => $mine->id, 'proficiency' => 'secondary']);
+        $this->assertDatabaseHas('faculty_specializations', ['id' => $others->id, 'proficiency' => 'secondary']);
+        $this->assertDatabaseHas('faculty_specializations', ['id' => $seeded->id, 'proficiency' => 'secondary']);
+    }
+
     public function test_deleting_a_preference_keeps_the_specialization_while_another_preference_still_names_the_subject(): void
     {
         [$curriculum, $subjects] = $this->curriculumWithSubjects(['CS403']);

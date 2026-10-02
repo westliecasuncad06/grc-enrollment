@@ -15,13 +15,6 @@ import {
   AlertDialogTitle,
 } from "@/features/components/ui/alert-dialog"
 import { Button } from "@/features/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/features/components/ui/card"
 import { Checkbox } from "@/features/components/ui/checkbox"
 import {
   Dialog,
@@ -34,6 +27,13 @@ import {
 import { Input } from "@/features/components/ui/input"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/components/ui/select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -41,10 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/features/components/ui/table"
-import {
-  useFacultyCurriculumSubjectPreferencesQuery,
-  useFacultySpecializationsQuery,
-} from "@/features/hooks/use-faculty-input"
+import { useFacultyCurriculumSubjectPreferencesQuery } from "@/features/hooks/use-faculty-input"
 import type {
   FacultyCurriculumSubjectPreference,
   FacultySpecialization,
@@ -59,23 +56,72 @@ interface FacultySpecializationListProps {
   preferencesQuery: ReturnType<
     typeof useFacultyCurriculumSubjectPreferencesQuery
   >
-  specializationsQuery: ReturnType<typeof useFacultySpecializationsQuery>
   curriculumId: number
   semester: "1st" | "2nd"
   contextLabel: string
   subjectsById: ReadonlyMap<number, SubjectLabel>
   specializationsBySubject: ReadonlyMap<number, FacultySpecialization>
   subjectOptions?: readonly { value: string; label: string }[]
-  onRemoveSpecialization: (row: FacultySpecialization) => void
+  onChangeProficiency?: (
+    row: FacultyCurriculumSubjectPreference,
+    specialization: FacultySpecialization | undefined,
+    proficiency: Proficiency,
+  ) => Promise<void>
   onBatchDeletePreferences?: (ids: number[]) => Promise<void>
   onReplacePreference?: (
     row: FacultyCurriculumSubjectPreference,
     newSubjectId: number,
   ) => Promise<void>
-  removalKind: "preference" | "specialization" | null
-  isRemoving: boolean
-  onDismissRemoval: () => void
-  onConfirmRemoval: () => void
+}
+
+type Proficiency = FacultySpecialization["proficiency"]
+
+/**
+ * The proficiency a professor declared is a dropdown they can change in place
+ * (a subject with none yet can be given one). Seeded and Program Chair-assigned
+ * proficiencies are not theirs to edit, so those stay plain text.
+ */
+function ProficiencyCell({
+  specialization,
+  subjectLabel,
+  onChange,
+}: {
+  specialization: FacultySpecialization | undefined
+  subjectLabel: string
+  onChange: ((proficiency: Proficiency) => Promise<void>) | undefined
+}) {
+  const [isSaving, setIsSaving] = useState(false)
+
+  if (
+    !onChange ||
+    (specialization !== undefined && specialization.source !== "declared")
+  ) {
+    return <>{specialization?.proficiency_label ?? "—"}</>
+  }
+
+  return (
+    <Select
+      value={specialization?.proficiency ?? ""}
+      onValueChange={(value) => {
+        setIsSaving(true)
+        void onChange(value === "primary" ? "primary" : "secondary").finally(
+          () => setIsSaving(false),
+        )
+      }}
+      disabled={isSaving}
+    >
+      <SelectTrigger
+        className="w-36"
+        aria-label={`Proficiency for ${subjectLabel}`}
+      >
+        <SelectValue placeholder="Set proficiency" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="primary">Primary</SelectItem>
+        <SelectItem value="secondary">Secondary</SelectItem>
+      </SelectContent>
+    </Select>
+  )
 }
 
 function sourceLabel(source: "declared" | "workbook_seeded" | "seeded") {
@@ -86,20 +132,15 @@ function sourceLabel(source: "declared" | "workbook_seeded" | "seeded") {
 
 export function FacultySpecializationList({
   preferencesQuery,
-  specializationsQuery,
   curriculumId,
   semester,
   contextLabel,
   subjectsById,
   specializationsBySubject,
   subjectOptions,
-  onRemoveSpecialization,
+  onChangeProficiency,
   onBatchDeletePreferences,
   onReplacePreference,
-  removalKind,
-  isRemoving,
-  onDismissRemoval,
-  onConfirmRemoval,
 }: FacultySpecializationListProps) {
   const [search, setSearch] = useState("")
   const [isEditMode, setIsEditMode] = useState(false)
@@ -280,7 +321,20 @@ export function FacultySpecializationList({
                         )}
                       </TableCell>
                       <TableCell>
-                        {specialization?.proficiency_label ?? "—"}
+                        <ProficiencyCell
+                          specialization={specialization}
+                          subjectLabel={subject?.code ?? `Subject #${row.subject_id}`}
+                          onChange={
+                            onChangeProficiency
+                              ? (proficiency) =>
+                                  onChangeProficiency(
+                                    row,
+                                    specialization,
+                                    proficiency,
+                                  )
+                              : undefined
+                          }
+                        />
                       </TableCell>
                       <TableCell>
                         <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">
@@ -295,97 +349,6 @@ export function FacultySpecializationList({
           </div>
         )}
       </AsyncBoundary>
-      <Card>
-        <CardHeader>
-          <CardTitle level={3}>Declared specializations</CardTitle>
-          <CardDescription>
-            Specializations are advisory signals used when schedule
-            recommendations rank qualified faculty.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AsyncBoundary
-            query={specializationsQuery}
-            isEmpty={(rows) =>
-              rows.filter((row) => row.source === "declared").length === 0
-            }
-            emptyMessage="No declared specializations yet."
-            loadingLabel="Loading your declared specializations…"
-          >
-            {(rows) => (
-              <div className="overflow-x-auto rounded-md border">
-                <Table aria-label="Declared specializations">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Subject</TableHead>
-                      <TableHead>Proficiency</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows
-                      .filter((row) => row.source === "declared")
-                      .map((row) => {
-                        const subject = subjectsById.get(row.subject_id)
-
-                        return (
-                          <TableRow key={row.id}>
-                            <TableCell>
-                              {subject
-                                ? `${subject.code} — ${subject.title}`
-                                : `Subject #${row.subject_id}`}
-                            </TableCell>
-                            <TableCell>{row.proficiency_label}</TableCell>
-                            <TableCell>{row.status_label}</TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                aria-label="Remove specialization"
-                                onClick={() => onRemoveSpecialization(row)}
-                              >
-                                Remove
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </AsyncBoundary>
-        </CardContent>
-      </Card>
-      <AlertDialog
-        open={removalKind !== null}
-        onOpenChange={(open) => !open && onDismissRemoval()}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Remove{" "}
-              {removalKind === "specialization"
-                ? "specialization"
-                : "subject preference"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the saved faculty input. Historical workbook evidence
-              remains unchanged.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRemoving}>
-              Keep item
-            </AlertDialogCancel>
-            <AlertDialogAction disabled={isRemoving} onClick={onConfirmRemoval}>
-              Confirm removal
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog
         open={isBatchDeleteModalOpen}
         onOpenChange={(open) => !open && setIsBatchDeleteModalOpen(false)}

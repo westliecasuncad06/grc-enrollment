@@ -485,6 +485,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::patch('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'update'])->name('faculty-availabilities.update');
             Route::delete('/faculty-availabilities/{facultyAvailability}', [FacultyAvailabilityController::class, 'destroy'])->name('faculty-availabilities.destroy');
 
+            Route::patch('/faculty-specializations/{facultySpecialization}/proficiency', [FacultySpecializationController::class, 'updateProficiency'])->name('faculty-specializations.update-proficiency');
             Route::delete('/faculty-specializations/{facultySpecialization}', [FacultySpecializationController::class, 'destroy'])->name('faculty-specializations.destroy');
 
             Route::post('/faculty-subject-preferences', [FacultySubjectPreferenceController::class, 'store'])->name('faculty-subject-preferences.store');
