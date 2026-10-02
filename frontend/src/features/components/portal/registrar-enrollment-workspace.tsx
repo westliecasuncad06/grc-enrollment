@@ -78,6 +78,7 @@ function availableActions(
   }
   if (
     enrollment.status === "pending_program_head_approval" ||
+    enrollment.status === "pending_student_review" ||
     enrollment.status === "pending_payment"
   ) {
     return ["void"]
@@ -469,6 +470,10 @@ export function RegistrarEnrollmentWorkspace({
                         "pending_program_head_approval" ? (
                           <Badge variant="secondary" className="text-xs">
                             Awaiting Program Head · View only
+                          </Badge>
+                        ) : enrollment.status === "pending_student_review" ? (
+                          <Badge variant="secondary" className="text-xs">
+                            Awaiting Student · View only
                           </Badge>
                         ) : enrollment.is_irregular ||
                           enrollment.student_enrollment_category ===

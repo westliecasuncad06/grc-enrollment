@@ -11,6 +11,7 @@ use App\Domain\Enrollment\OverloadEvaluator;
 use App\Domain\Enrollment\OverloadVerdict;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Enrollment;
+use App\Models\EnrollmentRevision;
 use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Section;
@@ -41,6 +42,15 @@ use Illuminate\Validation\ValidationException;
  * transition. The hard overload ceiling still applies: a Program Head can
  * expand a student's load, but not past the curriculum's own maximum — the
  * same rule `SubmitEnrollment` enforces on the student's own submission.
+ *
+ * Changing a student's subjects is not a decision the student is bypassed on
+ * (ADR 0040): saving a revision records the Program Chair's `$note` (why the
+ * subjects were changed) and what was added and removed as an
+ * `EnrollmentRevision`, and moves the enrollment to `pending_student_review`
+ * so the student can accept (it goes straight to the Registrar) or decline with
+ * a reason (it comes back to the Program Chair). Because the Chair does not
+ * press Approve on this path, a load that needs overload approval is
+ * acknowledged here (FR-ENR-004), the same acknowledgement Approve asks for.
  */
 final readonly class ReviseEnrollmentSubjects
 {
@@ -56,8 +66,18 @@ final readonly class ReviseEnrollmentSubjects
         array $sectionIds,
         User $actor,
         AuditRequestContext $context,
+        string $note,
+        bool $overloadAcknowledged = false,
     ): Enrollment {
-        return DB::transaction(function () use ($enrollment, $sectionIds, $actor, $context): Enrollment {
+        $note = trim($note);
+
+        if ($note === '') {
+            throw ValidationException::withMessages([
+                'note' => 'Tell the student why you are changing their subjects.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($enrollment, $sectionIds, $actor, $context, $note, $overloadAcknowledged): Enrollment {
             $lockedEnrollment = Enrollment::query()
                 ->whereKey($enrollment->id)
                 ->lockForUpdate()
@@ -90,6 +110,12 @@ final readonly class ReviseEnrollmentSubjects
             $keptIds = array_values(array_intersect($activeExistingSectionIds, $sectionIds));
             $addedIds = array_values(array_diff($sectionIds, $activeExistingSectionIds));
             $removedIds = array_values(array_diff($activeExistingSectionIds, $sectionIds));
+
+            if ($addedIds === [] && $removedIds === []) {
+                throw ValidationException::withMessages([
+                    'section_ids' => 'Add or remove at least one subject before sending changes to the student.',
+                ]);
+            }
 
             // Every section this revision touches, locked in one deterministic
             // order — the same lock-order discipline `SubmitEnrollment` follows,
@@ -126,6 +152,19 @@ final readonly class ReviseEnrollmentSubjects
                 ->filter(fn (EnrollmentSubject $s): bool => $s->status->occupiesSeat())
                 ->map(fn (EnrollmentSubject $s): string => $s->section->subject->code ?? (string) $s->section_id)
                 ->all();
+
+            $removedSnapshots = array_values(array_filter(array_map(
+                function (int $sectionId) use ($existingSubjects): ?array {
+                    $existing = $existingSubjects->first(fn (EnrollmentSubject $s): bool => $s->section_id === $sectionId);
+
+                    return $existing === null ? null : self::subjectSnapshot($existing->section);
+                },
+                $removedIds,
+            )));
+            $addedSnapshots = array_values(array_filter(array_map(
+                fn (int $sectionId): ?array => ($section = $sections->get($sectionId)) === null ? null : self::subjectSnapshot($section),
+                $addedIds,
+            )));
 
             foreach ($removedIds as $sectionId) {
                 $subject = $existingSubjects->first(fn (EnrollmentSubject $s): bool => $s->section_id === $sectionId);
@@ -171,11 +210,31 @@ final readonly class ReviseEnrollmentSubjects
                 ]);
             }
 
+            // The Chair does not press Approve on this path, so the overload
+            // acknowledgement Approve would ask for is asked for here.
+            if ($verdict === OverloadVerdict::RequiresApproval && ! $overloadAcknowledged) {
+                throw ValidationException::withMessages([
+                    'overload_acknowledged' => 'This schedule exceeds the regular unit load and requires explicit overload acknowledgement before it is sent to the student.',
+                ]);
+            }
+
             $lockedEnrollment->update([
                 'total_units' => $totalUnits,
                 'requires_overload_approval' => $verdict === OverloadVerdict::RequiresApproval,
+                'status' => EnrollmentStatus::PendingStudentReview,
             ]);
             $lockedEnrollment->refresh();
+
+            EnrollmentRevision::create([
+                'enrollment_id' => $lockedEnrollment->id,
+                'proposed_by' => $actor->id,
+                'note' => $note,
+                'added_subjects' => $addedSnapshots,
+                'removed_subjects' => $removedSnapshots,
+                'units_before' => $beforeTotalUnits,
+                'units_after' => $totalUnits,
+                'status' => EnrollmentRevision::STATUS_PENDING,
+            ]);
 
             $afterSubjectCodes = Section::query()->whereIn('id', [...$keptIds, ...$addedIds])->with('subject')->get()
                 ->map(fn (Section $s): string => $s->subject->code ?? (string) $s->id)->all();
@@ -186,23 +245,37 @@ final readonly class ReviseEnrollmentSubjects
                 AuditableType::ENROLLMENT,
                 $lockedEnrollment->id,
                 ['subjects' => $beforeSubjectCodes, 'total_units' => $beforeTotalUnits],
-                ['subjects' => $afterSubjectCodes, 'total_units' => $totalUnits],
-                null,
+                ['subjects' => $afterSubjectCodes, 'total_units' => $totalUnits, 'status' => EnrollmentStatus::PendingStudentReview->value],
+                $note,
                 $context,
             );
 
-            if ($addedIds !== [] || $removedIds !== []) {
-                Notification::create([
-                    'user_id' => $student->user_id,
-                    'type' => NotificationType::EnrollmentProgramHeadSubjectsRevised,
-                    'message' => 'Your Program Head made changes to your enrollment\'s subjects while reviewing it. Please check your Enrollment page for the updated schedule.',
-                ]);
-            }
+            Notification::create([
+                'user_id' => $student->user_id,
+                'type' => NotificationType::EnrollmentProgramHeadSubjectsRevised,
+                'message' => "Your Program Chair changed the subjects in your enrollment. Reason: {$note} Open your Enrollment page to accept the changes or tell your Program Chair why you cannot.",
+            ]);
 
             return $lockedEnrollment->refresh()->load([
-                'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items',
+                'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions',
             ]);
         });
+    }
+
+    /**
+     * What a history entry keeps of a subject, so it still reads correctly if the section changes later.
+     *
+     * @return array{section_id: int, section_code: ?string, subject_code: string, subject_title: string, units: float}
+     */
+    private static function subjectSnapshot(Section $section): array
+    {
+        return [
+            'section_id' => $section->id,
+            'section_code' => $section->section_code,
+            'subject_code' => $section->subject->code,
+            'subject_title' => $section->subject->title,
+            'units' => (float) $section->subject->units,
+        ];
     }
 
     private static function numericConfigValue(string $key): ?float

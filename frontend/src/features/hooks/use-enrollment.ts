@@ -210,6 +210,8 @@ export function useUpdateEnrollmentMutation() {
         | "registrar_reject"
         | "void"
         | "student_cancel"
+        | "student_accept_revision"
+        | "student_decline_revision"
       reason?: string
       overload_acknowledged?: boolean
       requested_by_student?: boolean
@@ -234,8 +236,22 @@ export function useReviseEnrollmentSubjectsMutation() {
   const invalidate = useInvalidateEnrollmentQueries()
 
   return useMutation({
-    mutationFn: ({ id, sectionIds }: { id: number; sectionIds: number[] }) =>
-      reviseEnrollmentSubjects(id, { section_ids: sectionIds }),
+    mutationFn: ({
+      id,
+      sectionIds,
+      note,
+      overloadAcknowledged,
+    }: {
+      id: number
+      sectionIds: number[]
+      note: string
+      overloadAcknowledged?: boolean
+    }) =>
+      reviseEnrollmentSubjects(id, {
+        section_ids: sectionIds,
+        note,
+        overload_acknowledged: overloadAcknowledged,
+      }),
     onSuccess: () => invalidate(),
   })
 }

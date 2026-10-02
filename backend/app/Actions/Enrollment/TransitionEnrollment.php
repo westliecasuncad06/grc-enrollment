@@ -13,12 +13,14 @@ use App\Domain\Identity\UserRole;
 use App\Domain\Notifications\NotificationType;
 use App\Models\Assessment;
 use App\Models\Enrollment;
+use App\Models\EnrollmentRevision;
 use App\Models\EnrollmentSubject;
 use App\Models\Notification;
 use App\Models\Section;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use App\Support\Notifications\NotificationRecorder;
+use App\Support\Notifications\ProgramChairRecipients;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -69,6 +71,10 @@ final class TransitionEnrollment
         'registrar_reject' => EnrollmentStatus::Rejected,
         'void' => EnrollmentStatus::Cancelled,
         'student_cancel' => EnrollmentStatus::Cancelled,
+        // ADR 0040: the student's answer to the Program Chair's changes. Accepting
+        // sends it straight to the Registrar; declining sends it back to the Chair.
+        'student_accept_revision' => EnrollmentStatus::PendingRegistrarApproval,
+        'student_decline_revision' => EnrollmentStatus::PendingProgramHeadApproval,
     ];
 
     /**
@@ -82,14 +88,18 @@ final class TransitionEnrollment
         // Before payment, at any approval stage. Once enrolled it is a withdrawal.
         'void' => [
             EnrollmentStatus::PendingProgramHeadApproval,
+            EnrollmentStatus::PendingStudentReview,
             EnrollmentStatus::PendingRegistrarApproval,
             EnrollmentStatus::PendingPayment,
         ],
         // The student may undo their own choice only until the Registrar approves.
         'student_cancel' => [
             EnrollmentStatus::PendingProgramHeadApproval,
+            EnrollmentStatus::PendingStudentReview,
             EnrollmentStatus::PendingRegistrarApproval,
         ],
+        'student_accept_revision' => [EnrollmentStatus::PendingStudentReview],
+        'student_decline_revision' => [EnrollmentStatus::PendingStudentReview],
     ];
 
     /**
@@ -102,6 +112,8 @@ final class TransitionEnrollment
         'registrar_reject' => AuditAction::ENROLLMENT_REGISTRAR_REJECTED,
         'void' => AuditAction::ENROLLMENT_VOIDED,
         'student_cancel' => AuditAction::ENROLLMENT_CANCELLED_BY_STUDENT,
+        'student_accept_revision' => AuditAction::ENROLLMENT_STUDENT_ACCEPTED_REVISION,
+        'student_decline_revision' => AuditAction::ENROLLMENT_STUDENT_DECLINED_REVISION,
     ];
 
     /**
@@ -118,7 +130,7 @@ final class TransitionEnrollment
         'void' => NotificationType::EnrollmentVoided,
     ];
 
-    private const REASON_REQUIRED_ACTIONS = ['program_head_reject', 'registrar_reject', 'void', 'student_cancel'];
+    private const REASON_REQUIRED_ACTIONS = ['program_head_reject', 'registrar_reject', 'void', 'student_cancel', 'student_decline_revision'];
 
     public function __construct(
         private readonly AuditRecorder $auditRecorder,
@@ -169,10 +181,14 @@ final class TransitionEnrollment
             // The Program Head's decision and the Registrar's are separate
             // moments; `void` is a Registrar-side decision too.
             // The student's own cancellation is a decision by nobody else, so it
-            // stamps neither.
+            // stamps neither. A student accepting the Program Chair's changes
+            // completes the Program Head stage (the Chair proposed them), so that
+            // moment is stamped; declining leaves the stage open.
             $attributes = ['status' => self::TARGET_STATUS[$action]];
-            if ($action !== 'student_cancel') {
-                $attributes[str_starts_with($action, 'program_head_') ? 'program_head_decided_at' : 'registrar_decided_at'] = now();
+            if (str_starts_with($action, 'program_head_') || $action === 'student_accept_revision') {
+                $attributes['program_head_decided_at'] = now();
+            } elseif (! in_array($action, ['student_cancel', 'student_decline_revision'], true)) {
+                $attributes['registrar_decided_at'] = now();
             }
             if (str_starts_with($action, 'program_head_') && $programHeadComment !== null && trim($programHeadComment) !== '') {
                 $attributes['program_head_comment'] = trim($programHeadComment);
@@ -180,6 +196,10 @@ final class TransitionEnrollment
 
             $lockedEnrollment->update($attributes);
             $lockedEnrollment->refresh();
+
+            if ($action === 'student_accept_revision' || $action === 'student_decline_revision') {
+                $this->answerRevision($lockedEnrollment, $action === 'student_accept_revision', $reason);
+            }
 
             $releasedSectionIds = $lockedEnrollment->status->isTerminal()
                 ? $this->releaseSeats($lockedEnrollment)
@@ -223,6 +243,32 @@ final class TransitionEnrollment
                 ]);
             }
 
+            if ($action === 'student_accept_revision') {
+                $student = $lockedEnrollment->student;
+                $this->notificationRecorder->recordMany(
+                    ProgramChairRecipients::forStudent($student),
+                    NotificationType::EnrollmentRevisionAccepted,
+                    sprintf('Student %s accepted your changes to their subjects. The enrollment now goes to the Registrar.', $student->student_number),
+                );
+                $this->notificationRecorder->recordManyForRoles(
+                    [UserRole::RegistrarStaff, UserRole::RegistrarHead],
+                    NotificationType::EnrollmentProgramHeadApproved,
+                    sprintf(
+                        "Student %s accepted the Program Chair's changes to their subjects; the enrollment now awaits Registrar approval.",
+                        $student->student_number,
+                    ),
+                );
+            }
+
+            if ($action === 'student_decline_revision') {
+                $student = $lockedEnrollment->student;
+                $this->notificationRecorder->recordMany(
+                    ProgramChairRecipients::forStudent($student),
+                    NotificationType::EnrollmentRevisionDeclined,
+                    sprintf('Student %s did not accept your changes to their subjects. Reason: %s', $student->student_number, trim((string) $reason)),
+                );
+            }
+
             // The Program Head stage is done, so the enrollment now waits on the Registrar.
             if ($action === 'program_head_approve') {
                 $this->notificationRecorder->recordManyForRoles(
@@ -236,9 +282,29 @@ final class TransitionEnrollment
             }
 
             return $lockedEnrollment->refresh()->load([
-                'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items',
+                'student', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions',
             ]);
         });
+    }
+
+    /**
+     * Records the student's answer on the Program Chair's latest open proposal
+     * (ADR 0040): accepted, or declined with the student's reason.
+     */
+    private function answerRevision(Enrollment $enrollment, bool $accepted, ?string $reason): void
+    {
+        $revision = EnrollmentRevision::query()
+            ->where('enrollment_id', $enrollment->id)
+            ->where('status', EnrollmentRevision::STATUS_PENDING)
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+
+        $revision?->update([
+            'status' => $accepted ? EnrollmentRevision::STATUS_ACCEPTED : EnrollmentRevision::STATUS_DECLINED,
+            'student_reason' => $accepted ? null : trim((string) $reason),
+            'responded_at' => now(),
+        ]);
     }
 
     /**

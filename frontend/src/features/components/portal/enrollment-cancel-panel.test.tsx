@@ -35,6 +35,7 @@ function enrollmentWith(status: Enrollment["status"]): Enrollment {
     payment_confirmed_at: null,
     enrolled_at: null,
     subjects: [],
+    revisions: [],
     queue_ticket: null,
     assessment: null,
   }

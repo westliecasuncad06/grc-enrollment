@@ -5,6 +5,7 @@ namespace App\Http\Resources\Api\V1;
 use App\Domain\Identity\UserRole;
 use App\Models\AssessmentItem;
 use App\Models\Enrollment;
+use App\Models\EnrollmentRevision;
 use App\Models\EnrollmentSubject;
 use App\Models\User;
 use App\Support\Http\ProfessorDisclosure;
@@ -73,6 +74,7 @@ final class EnrollmentResource extends JsonResource
      *         status: string,
      *         status_label: string
      *     }>,
+     *     revisions: list<array{id: int, note: string, added_subjects: list<array<string, mixed>>, removed_subjects: list<array<string, mixed>>, units_before: float, units_after: float, status: string, student_reason: ?string, proposed_at: ?string, responded_at: ?string}>,
      *     queue_ticket: ?array{ticket_number: string, queue_date: string, status: string, status_label: string, priority: string, priority_label: string, position: ?int},
      *     assessment: ?array{
      *         total_amount: ?string,
@@ -143,6 +145,22 @@ final class EnrollmentResource extends JsonResource
                     ])
                     ->all(),
             ),
+            // The Program Chair's change proposals, oldest first. Empty when the relation was not
+            // loaded (the listing and the action responses load it), so no caller lazy-loads.
+            'revisions' => $this->resource->relationLoaded('revisions')
+                ? array_values($this->resource->revisions->map(fn (EnrollmentRevision $revision): array => [
+                    'id' => $revision->id,
+                    'note' => $revision->note,
+                    'added_subjects' => $revision->added_subjects,
+                    'removed_subjects' => $revision->removed_subjects,
+                    'units_before' => $revision->units_before,
+                    'units_after' => $revision->units_after,
+                    'status' => $revision->status,
+                    'student_reason' => $revision->student_reason,
+                    'proposed_at' => $revision->created_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+                    'responded_at' => $revision->responded_at?->utc()->format('Y-m-d\TH:i:s\Z'),
+                ])->all())
+                : [],
             'queue_ticket' => $queueTicket === null ? null : [
                 'ticket_number' => $queueTicket->ticket_number,
                 'queue_date' => $queueTicket->queue_date->toDateString(),

@@ -57,6 +57,7 @@ final class BuildAttritionReport
             ->whereIn('status', array_map(fn (EnrollmentStatus $status): string => $status->value, [
                 EnrollmentStatus::Draft,
                 EnrollmentStatus::PendingProgramHeadApproval,
+                EnrollmentStatus::PendingStudentReview,
                 EnrollmentStatus::PendingRegistrarApproval,
                 EnrollmentStatus::PendingPayment,
             ]))

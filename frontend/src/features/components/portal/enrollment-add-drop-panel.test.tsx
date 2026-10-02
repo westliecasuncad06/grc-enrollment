@@ -56,6 +56,7 @@ const enrolledEnrollment: Enrollment = {
       status_label: "Selected",
     },
   ],
+  revisions: [],
   queue_ticket: {
     ticket_number: "Q000009",
     queue_date: "2026-07-30",

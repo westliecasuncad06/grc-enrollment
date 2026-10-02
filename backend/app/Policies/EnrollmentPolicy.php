@@ -82,6 +82,18 @@ final class EnrollmentPolicy
     }
 
     /**
+     * Covers `student_accept_revision` and `student_decline_revision`: the owning
+     * Student answering the Program Chair's changes to their subjects (ADR 0040).
+     * The status window (`pending_student_review`) is enforced by
+     * `UpdateEnrollmentRequest` and `TransitionEnrollment`.
+     */
+    public function respondToRevision(User $user, Enrollment $enrollment): bool
+    {
+        return $user->role === UserRole::Student
+            && $enrollment->student->user_id === $user->id;
+    }
+
+    /**
      * Covers `void`: cancelling an enrollment at the Registrar's end, at any
      * point before payment, usually because the student asked. Registrar Staff
      * and the Registrar Head may both do it (stakeholder Doc 14, ADR 0030); once

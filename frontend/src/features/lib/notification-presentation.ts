@@ -70,6 +70,16 @@ const PRESENTATION_BY_TYPE: Record<string, NotificationPresentation> = {
     tone: "warning",
     icon: FileCheck,
   },
+  enrollment_revision_accepted: {
+    label: "Student accepted the changes",
+    tone: "success",
+    icon: BadgeCheck,
+  },
+  enrollment_revision_declined: {
+    label: "Student did not accept the changes",
+    tone: "destructive",
+    icon: Ban,
+  },
   enrollment_registrar_approved: {
     label: "Enrollment approved",
     tone: "success",
@@ -304,6 +314,10 @@ export function notificationDestinationPath(
       if (role === "registrar_staff" || role === "registrar_head")
         return "/portal/enrollment-approvals"
       return role === "student" ? "/portal/enrollment" : null
+    case "enrollment_revision_accepted":
+    case "enrollment_revision_declined":
+      // The Chair's answer from the student lands where the Chair works on irregular students.
+      return role === "program_chair" ? "/portal/irregular-enrollments" : null
     case "enrollment_program_head_rejected":
     case "enrollment_program_head_subjects_revised":
     case "enrollment_registrar_approved":

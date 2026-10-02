@@ -12,7 +12,7 @@ use App\Domain\Enrollment\EnrollmentStatus;
  *
  *   enrolled      — the student's current enrollment is `enrolled`.
  *   in_progress   — `draft`, `pending_program_head_approval`,
- *                   `pending_registrar_approval` or `pending_payment`.
+ *                   `pending_student_review`, `pending_registrar_approval` or `pending_payment`.
  *   not_enrolled  — the student started but ended without enrolling:
  *                   `rejected`, `cancelled` or `withdrawn`.
  *   not_yet_done  — an eligible student with no enrollment row this term.
@@ -47,6 +47,7 @@ enum EnrollmentStatusGroup: string
             self::InProgress => [
                 EnrollmentStatus::Draft,
                 EnrollmentStatus::PendingProgramHeadApproval,
+                EnrollmentStatus::PendingStudentReview,
                 EnrollmentStatus::PendingRegistrarApproval,
                 EnrollmentStatus::PendingPayment,
             ],

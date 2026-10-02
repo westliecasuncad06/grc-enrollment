@@ -95,6 +95,7 @@ const enrollment = {
       status_label: "Selected",
     },
   ],
+  revisions: [],
   queue_ticket: {
     ticket_number: "Q000009",
     queue_date: "2026-07-30",
@@ -124,6 +125,24 @@ describe("enrollment-service", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
       "/eligible-subjects?academic_term_id=2",
     )
+  })
+
+  it("still parses an enrollment from a backend that predates the Program Chair's change history", async () => {
+    const withoutRevisions: Record<string, unknown> = { ...enrollment }
+    delete withoutRevisions.revisions
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [withoutRevisions],
+          links: paginationLinks,
+          meta: paginationMeta,
+        }),
+      ),
+    )
+
+    const result = await getEnrollments()
+
+    expect(result[0]?.revisions).toEqual([])
   })
 
   it("fetches the authenticated student's enrollments", async () => {

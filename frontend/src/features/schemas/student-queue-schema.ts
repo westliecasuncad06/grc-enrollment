@@ -3,6 +3,7 @@ import { z } from "zod"
 const studentQueueStageValues = [
   "no_active_enrollment",
   "pending_program_head_approval",
+  "pending_student_review",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",

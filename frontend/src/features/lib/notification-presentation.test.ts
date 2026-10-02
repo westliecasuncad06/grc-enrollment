@@ -45,6 +45,22 @@ describe("notificationDestinationPath", () => {
     },
   )
 
+  it.each([
+    ["enrollment_revision_accepted", "program_chair", "/portal/irregular-enrollments"],
+    ["enrollment_revision_declined", "program_chair", "/portal/irregular-enrollments"],
+    ["enrollment_program_head_subjects_revised", "student", "/portal/enrollment"],
+  ] as const)(
+    "sends %s to %s at %s (the student answers in Enrollment, the Chair reads it in Irregular Advising)",
+    (type, role, path) => {
+      expect(notificationDestinationPath(type, role)).toBe(path)
+    },
+  )
+
+  it("shows the student's answer to the Program Chair's changes with its own label", () => {
+    expect(notificationPresentation("enrollment_revision_accepted").tone).toBe("success")
+    expect(notificationPresentation("enrollment_revision_declined").tone).toBe("destructive")
+  })
+
   it("keeps the student on Enrollment for their own enrollment, request and withdrawal updates", () => {
     for (const type of [
       "enrollment_program_head_approved",

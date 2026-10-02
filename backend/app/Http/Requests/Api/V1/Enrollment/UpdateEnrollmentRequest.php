@@ -31,16 +31,21 @@ final class UpdateEnrollmentRequest extends FormRequest
         'registrar_reject' => [EnrollmentStatus::PendingRegistrarApproval],
         'void' => [
             EnrollmentStatus::PendingProgramHeadApproval,
+            EnrollmentStatus::PendingStudentReview,
             EnrollmentStatus::PendingRegistrarApproval,
             EnrollmentStatus::PendingPayment,
         ],
         'student_cancel' => [
             EnrollmentStatus::PendingProgramHeadApproval,
+            EnrollmentStatus::PendingStudentReview,
             EnrollmentStatus::PendingRegistrarApproval,
         ],
+        // The student's answer to the Program Chair's changes (ADR 0040).
+        'student_accept_revision' => [EnrollmentStatus::PendingStudentReview],
+        'student_decline_revision' => [EnrollmentStatus::PendingStudentReview],
     ];
 
-    private const REASON_REQUIRED_ACTIONS = ['program_head_reject', 'registrar_reject', 'void', 'student_cancel'];
+    private const REASON_REQUIRED_ACTIONS = ['program_head_reject', 'registrar_reject', 'void', 'student_cancel', 'student_decline_revision'];
 
     public function authorize(): bool
     {

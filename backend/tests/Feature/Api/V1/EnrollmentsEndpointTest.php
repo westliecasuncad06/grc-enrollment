@@ -304,7 +304,7 @@ final class EnrollmentsEndpointTest extends TestCase
                 'student_enrollment_category', 'is_irregular', 'is_late_enrollee', 'academic_term_id',
                 'status', 'status_label', 'total_units', 'requires_overload_approval', 'program_head_comment',
                 'submitted_at', 'program_head_decided_at', 'registrar_decided_at', 'payment_confirmed_at', 'enrolled_at',
-                'subjects', 'queue_ticket', 'assessment',
+                'subjects', 'revisions', 'queue_ticket', 'assessment',
             ],
             array_keys($response->json('data')),
         );

@@ -28,6 +28,20 @@ final class ReviseEnrollmentSubjectsRequest extends FormRequest
         return [
             'section_ids' => ['required', 'array', 'min:1'],
             'section_ids.*' => ['integer', 'distinct', 'exists:sections,id'],
+            // Why the subjects were changed. The student reads this before accepting (ADR 0040).
+            'note' => ['required', 'string', 'max:2000'],
+            // Required in effect (checked by the Action) only when the new load needs overload approval.
+            'overload_acknowledged' => ['sometimes', 'boolean'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'note.required' => 'Tell the student why you are changing their subjects.',
         ];
     }
 

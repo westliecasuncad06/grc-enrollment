@@ -3197,6 +3197,7 @@ paths:
             enum:
               - draft
               - pending_program_head_approval
+              - pending_student_review
               - pending_registrar_approval
               - pending_payment
               - enrolled
@@ -8213,6 +8214,7 @@ components:
           enum:
             - draft
             - pending_program_head_approval
+            - pending_student_review
             - pending_registrar_approval
             - pending_payment
             - enrolled
@@ -8250,6 +8252,57 @@ components:
         enrolled_at:
           type: ["string", "null"]
           format: date-time
+        revisions:
+          type: array
+          description: >
+            The Program Chair's changes to the student's subjects, oldest first
+            (ADR 0040): the Chair's reason, what was added and removed, and the
+            student's answer. Empty when no response loaded the relation.
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - id
+              - note
+              - added_subjects
+              - removed_subjects
+              - units_before
+              - units_after
+              - status
+              - student_reason
+              - proposed_at
+              - responded_at
+            properties:
+              id:
+                type: integer
+              note:
+                type: string
+              added_subjects:
+                type: array
+                items:
+                  type: object
+              removed_subjects:
+                type: array
+                items:
+                  type: object
+              units_before:
+                type: number
+              units_after:
+                type: number
+              status:
+                type: string
+                enum:
+                  - pending
+                  - accepted
+                  - declined
+              student_reason:
+                type: ["string", "null"]
+              proposed_at:
+                type: ["string", "null"]
+                format: date-time
+              responded_at:
+                type: ["string", "null"]
+                format: date-time
         subjects:
           type: array
           items:
@@ -8436,6 +8489,8 @@ components:
             - registrar_reject
             - void
             - student_cancel
+            - student_accept_revision
+            - student_decline_revision
         requested_by_student:
           type: boolean
           description: >
@@ -8445,8 +8500,11 @@ components:
           type: ["string", "null"]
           description: >
             Required exactly when action is program_head_reject,
-            registrar_reject, void or student_cancel (the owning student's own
-            cancellation, allowed until the Registrar approves).
+            registrar_reject, void, student_cancel (the owning student's own
+            cancellation, allowed until the Registrar approves) or
+            student_decline_revision (the student's reason for not accepting
+            the Program Chair's changes to their subjects, ADR 0040).
+            student_accept_revision takes none.
         overload_acknowledged:
           type: boolean
           description: >
@@ -9154,6 +9212,7 @@ components:
           enum:
             - no_active_enrollment
             - pending_program_head_approval
+            - pending_student_review
             - pending_registrar_approval
             - pending_payment
             - enrolled

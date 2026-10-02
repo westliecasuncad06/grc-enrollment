@@ -10,6 +10,7 @@ import { DataTable } from "@/features/components/portal/data-table"
 import { EligibleSubjectTable } from "@/features/components/portal/eligible-subject-table"
 import { EnrollmentAddDropPanel } from "@/features/components/portal/enrollment-add-drop-panel"
 import { EnrollmentCancelPanel } from "@/features/components/portal/enrollment-cancel-panel"
+import { EnrollmentRevisionReviewCard } from "@/features/components/portal/enrollment-revision-review-card"
 import { EnrollmentAvailabilityBanner } from "@/features/components/portal/enrollment-availability-banner"
 import { EnrollmentCategoryExplanation } from "@/features/components/portal/enrollment-category-explanation"
 import { EnrollmentQueuePaymentPanel } from "@/features/components/portal/enrollment-queue-payment-panel"
@@ -238,14 +239,27 @@ function overallStages(
   }
 
   // Irregular or overload: the Program Head checks the schedule first, then
-  // the Registrar approves (ADR 0030).
+  // the Registrar approves (ADR 0030). When the Program Chair changes the
+  // subjects, the student reviews the changes before it goes on (ADR 0040).
+  const hasRevisions = (enrollment?.revisions.length ?? 0) > 0
+  const inStudentReview = enrollment?.status === "pending_student_review"
+
   return [
     { label: selectionLabel, done: submitted, current: !submitted },
     {
       label: "Submitted",
       done: submitted,
-      current: submitted && !programHeadApproved,
+      current: submitted && !programHeadApproved && !inStudentReview,
     },
+    ...(hasRevisions
+      ? [
+          {
+            label: "Your review of the changes",
+            done: programHeadApproved,
+            current: inStudentReview,
+          },
+        ]
+      : []),
     {
       label: "Program Head approved",
       done: programHeadApproved,
@@ -1129,6 +1143,10 @@ export function EnrollmentWorkspace() {
       {/* Sections start open only for the step the student is on: the queue
           ticket while the enrollment is in progress, the timetable once it is
           confirmed. Everything else starts collapsed and can be opened. */}
+      {activeEnrollment && (
+        <EnrollmentRevisionReviewCard enrollment={activeEnrollment} />
+      )}
+
       {activeEnrollment && (
         <EnrollmentCancelPanel enrollment={activeEnrollment} />
       )}

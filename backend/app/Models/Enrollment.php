@@ -154,6 +154,17 @@ final class Enrollment extends Model
     }
 
     /**
+     * The Program Chair's change proposals to this enrollment, oldest first
+     * (ADR 0040).
+     *
+     * @return HasMany<EnrollmentRevision, $this>
+     */
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(EnrollmentRevision::class)->orderBy('id');
+    }
+
+    /**
      * @return HasOne<QueueTicket, $this>
      */
     public function queueTicket(): HasOne

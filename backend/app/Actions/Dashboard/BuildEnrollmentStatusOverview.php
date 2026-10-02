@@ -21,6 +21,7 @@ final readonly class BuildEnrollmentStatusOverview
     private const STEPS = [
         EnrollmentStatus::Draft,
         EnrollmentStatus::PendingProgramHeadApproval,
+        EnrollmentStatus::PendingStudentReview,
         EnrollmentStatus::PendingRegistrarApproval,
         EnrollmentStatus::PendingPayment,
         EnrollmentStatus::Enrolled,

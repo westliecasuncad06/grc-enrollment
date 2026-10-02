@@ -35,6 +35,7 @@ function statusBadgeVariant(
   if (status === "enrolled") return "default"
   if (
     status === "pending_program_head_approval" ||
+    status === "pending_student_review" ||
     status === "pending_registrar_approval" ||
     status === "pending_payment"
   )

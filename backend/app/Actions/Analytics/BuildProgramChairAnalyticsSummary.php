@@ -136,6 +136,7 @@ final readonly class BuildProgramChairAnalyticsSummary
                         ->whereIn('next_pending.status', [
                             EnrollmentStatus::Draft->value,
                             EnrollmentStatus::PendingProgramHeadApproval->value,
+                            EnrollmentStatus::PendingStudentReview->value,
                             EnrollmentStatus::PendingRegistrarApproval->value,
                             EnrollmentStatus::PendingPayment->value,
                         ]);

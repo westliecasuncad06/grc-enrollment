@@ -65,6 +65,7 @@ export const ENROLLMENT_GROUPS = enrollmentStatusGroupValues
 export const ENROLLMENT_STEPS = [
   "draft",
   "pending_program_head_approval",
+  "pending_student_review",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",
@@ -76,6 +77,7 @@ export const ENROLLMENT_STEP_LABELS: Record<
 > = {
   draft: "Draft",
   pending_program_head_approval: "Pending Program Head Approval",
+  pending_student_review: "Awaiting Student Review",
   pending_registrar_approval: "Pending Registrar Approval",
   pending_payment: "Pending Payment",
   enrolled: "Enrolled",

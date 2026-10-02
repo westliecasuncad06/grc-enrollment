@@ -29,7 +29,7 @@ final readonly class ListEnrollments
 
         $enrollments = Enrollment::query()
             ->visibleTo($actor)
-            ->with(['student.user', 'academicTerm.enrollmentWindows', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items'])
+            ->with(['student.user', 'academicTerm.enrollmentWindows', 'enrollmentSubjects.section.subject', 'enrollmentSubjects.section.professor', 'queueTicket', 'assessment.items', 'revisions'])
             ->when($status !== null, fn ($query) => $query->where('status', $status))
             ->when($academicTermId !== null, fn ($query) => $query->where('academic_term_id', $academicTermId))
             ->when($search !== null && $search !== '', function ($query) use ($search) {

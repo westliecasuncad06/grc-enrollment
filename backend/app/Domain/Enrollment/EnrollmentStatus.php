@@ -13,7 +13,10 @@ namespace App\Domain\Enrollment;
  * An irregular or overload submission first waits at
  * `pending_program_head_approval` and only then joins the Registrar's queue
  * (ADR 0030, stakeholder Doc 14); a regular submission goes straight to
- * `pending_registrar_approval`.
+ * `pending_registrar_approval`. When the Program Chair changes the subjects the
+ * student chose, the enrollment waits at `pending_student_review` until the
+ * student accepts (it then goes straight to the Registrar) or declines with a
+ * reason (it returns to the Program Chair), ADR 0040.
  * Treat this enum as authoritative and change it only when the PRD changes.
  *
  * The `enrollments.active_academic_term_id` generated column repeats the
@@ -25,6 +28,7 @@ enum EnrollmentStatus: string
 {
     case Draft = 'draft';
     case PendingProgramHeadApproval = 'pending_program_head_approval';
+    case PendingStudentReview = 'pending_student_review';
     case PendingRegistrarApproval = 'pending_registrar_approval';
     case PendingPayment = 'pending_payment';
     case Enrolled = 'enrolled';
@@ -37,6 +41,7 @@ enum EnrollmentStatus: string
         return match ($this) {
             self::Draft => 'Draft',
             self::PendingProgramHeadApproval => 'Pending Program Head Approval',
+            self::PendingStudentReview => 'Awaiting Student Review',
             self::PendingRegistrarApproval => 'Pending Registrar Approval',
             self::PendingPayment => 'Pending Payment',
             self::Enrolled => 'Enrolled',
@@ -57,6 +62,7 @@ enum EnrollmentStatus: string
             self::Rejected, self::Cancelled, self::Withdrawn => true,
             self::Draft,
             self::PendingProgramHeadApproval,
+            self::PendingStudentReview,
             self::PendingRegistrarApproval,
             self::PendingPayment,
             self::Enrolled => false,

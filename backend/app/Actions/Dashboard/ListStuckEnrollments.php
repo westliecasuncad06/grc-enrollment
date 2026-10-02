@@ -35,6 +35,7 @@ final readonly class ListStuckEnrollments
     private const IN_PROGRESS_STATUSES = [
         EnrollmentStatus::Draft,
         EnrollmentStatus::PendingProgramHeadApproval,
+        EnrollmentStatus::PendingStudentReview,
         EnrollmentStatus::PendingRegistrarApproval,
         EnrollmentStatus::PendingPayment,
     ];
@@ -57,6 +58,8 @@ final readonly class ListStuckEnrollments
                 $statedSince = match ($enrollment->status) {
                     EnrollmentStatus::PendingPayment => $enrollment->registrar_decided_at,
                     EnrollmentStatus::PendingRegistrarApproval => $enrollment->program_head_decided_at ?? $enrollment->submitted_at,
+                    // Waiting on the student since the Program Chair last sent changes (the row was last touched then).
+                    EnrollmentStatus::PendingStudentReview => $enrollment->updated_at,
                     EnrollmentStatus::PendingProgramHeadApproval, EnrollmentStatus::Draft => $enrollment->submitted_at,
                     default => $enrollment->submitted_at,
                 } ?? $enrollment->submitted_at ?? $now;

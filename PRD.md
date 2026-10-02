@@ -270,6 +270,12 @@ An irregular or overload submission first passes the Program Head:
 
 `draft → pending_program_head_approval → pending_registrar_approval → pending_payment → enrolled`
 
+If the Program Head changes the subjects of that submission, it goes back to the student first:
+
+`pending_program_head_approval → pending_student_review → pending_registrar_approval` (the student accepts)
+
+or `pending_student_review → pending_program_head_approval` (the student does not accept, giving a reason) (ADR 0040).
+
 Alternative terminal or exception states:
 
 - `rejected`
@@ -282,7 +288,10 @@ Rules:
 2. Submission performs authoritative validation and creates `pending_registrar_approval`,
    or `pending_program_head_approval` for an irregular or overload submission, which
    the Program Head of the student's college approves or rejects (with a reason) before
-   it joins the Registrar's queue (ADR 0030).
+   it joins the Registrar's queue (ADR 0030). If the Program Head changes the subjects, the
+   enrollment waits at `pending_student_review` with the Program Head's reason until the student
+   accepts (it then joins the Registrar's queue) or declines with a reason (it returns to the
+   Program Head) (ADR 0040).
 3. The system does not issue a queue ticket until Registrar approval has made
    the enrollment `pending_payment`; the Student then claims one at the
    Cashier kiosk, or Accounting Staff may issue one on the Student's behalf.

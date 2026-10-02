@@ -5,15 +5,13 @@ namespace App\Actions\Academic;
 use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
-use App\Domain\Identity\UserRole;
-use App\Domain\Identity\UserStatus;
 use App\Domain\Notifications\NotificationType;
 use App\Models\StudentProfile;
 use App\Models\StudentTorDocument;
 use App\Models\User;
 use App\Support\Audit\AuditRecorder;
 use App\Support\Notifications\NotificationRecorder;
-use Illuminate\Database\Eloquent\Builder;
+use App\Support\Notifications\ProgramChairRecipients;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -99,7 +97,7 @@ final readonly class UploadTorDocument
                 );
 
                 $this->notificationRecorder->recordMany(
-                    $this->programChairIds($student),
+                    ProgramChairRecipients::forStudent($student),
                     NotificationType::TransfereeCreditRequested,
                     "Student {$student->student_number} uploaded a Transcript of Records for credit mapping.",
                 );
@@ -114,30 +112,5 @@ final readonly class UploadTorDocument
 
             throw $e;
         }
-    }
-
-    /**
-     * The Program Chairs who can see this student: those of their college, and
-     * any chair without an assigned college (who is unscoped).
-     *
-     * @return list<int>
-     */
-    private function programChairIds(StudentProfile $student): array
-    {
-        $college = $student->program->college;
-
-        return array_values(User::query()
-            ->where('role', UserRole::ProgramChair->value)
-            ->where('status', UserStatus::Active->value)
-            ->where(function (Builder $query) use ($college): void {
-                $query->whereNull('college');
-
-                if ($college !== null) {
-                    $query->orWhere('college', $college->value);
-                }
-            })
-            ->pluck('id')
-            ->map(static fn (mixed $id): int => (int) $id)
-            ->all());
     }
 }

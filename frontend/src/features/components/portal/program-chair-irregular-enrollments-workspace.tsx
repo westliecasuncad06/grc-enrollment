@@ -62,6 +62,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<
     | "pending_program_head_approval"
+    | "pending_student_review"
     | "pending_registrar_approval"
     | "pending_payment"
     | "enrolled"
@@ -210,11 +211,30 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
     {
       key: "status",
       header: "Status",
-      render: (enrollment) => (
-        <Badge variant={statusBadgeVariant(enrollment.status)}>
-          {enrollment.status_label}
-        </Badge>
-      ),
+      render: (enrollment) => {
+        // After a decline the enrollment is back with the Chair; say why, so the
+        // reason is not buried inside the review dialog.
+        const lastRevision = enrollment.revisions[enrollment.revisions.length - 1]
+        const declined =
+          enrollment.status === "pending_program_head_approval" &&
+          lastRevision?.status === "declined"
+
+        return (
+          <div className="grid gap-1">
+            <Badge variant={statusBadgeVariant(enrollment.status)}>
+              {enrollment.status_label}
+            </Badge>
+            {declined && (
+              <p className="max-w-64 text-xs text-destructive">
+                The student did not accept your changes
+                {lastRevision.student_reason
+                  ? `: ${lastRevision.student_reason}`
+                  : "."}
+              </p>
+            )}
+          </div>
+        )
+      },
     },
     {
       key: "units",
@@ -305,7 +325,7 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
   return (
     <WorkspacePage
       title="Irregular Student Advising & Approvals"
-      description="Check submitted schedules for irregular students, verify their curriculum prospectus, and approve or reject submissions. Approved submissions go on to the Registrar."
+      description="Check submitted schedules for irregular students, verify their curriculum prospectus, and approve or reject submissions. If you change a student's subjects, they go back to the student to accept first. Approved submissions go on to the Registrar."
     >
       {error && (
         <Alert variant="destructive">
@@ -337,6 +357,21 @@ export function ProgramChairIrregularEnrollmentsWorkspace() {
               }}
             >
               Pending Review
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={
+                statusFilter === "pending_student_review"
+                  ? "default"
+                  : "outline"
+              }
+              onClick={() => {
+                setStatusFilter("pending_student_review")
+                setPage(1)
+              }}
+            >
+              Waiting for Student
             </Button>
             <Button
               type="button"

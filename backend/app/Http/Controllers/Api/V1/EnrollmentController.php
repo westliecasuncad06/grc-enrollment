@@ -48,6 +48,8 @@ final class EnrollmentController extends Controller
         'registrar_reject' => 'decideApproval',
         'void' => 'void',
         'student_cancel' => 'cancel',
+        'student_accept_revision' => 'respondToRevision',
+        'student_decline_revision' => 'respondToRevision',
     ];
 
     /**
@@ -118,7 +120,7 @@ final class EnrollmentController extends Controller
         // Registrar-side abilities are role-level.
         $this->authorize(
             $ability,
-            in_array($ability, ['decideProgramHeadApproval', 'cancel'], true) ? $enrollment : Enrollment::class,
+            in_array($ability, ['decideProgramHeadApproval', 'cancel', 'respondToRevision'], true) ? $enrollment : Enrollment::class,
         );
 
         $enrollment = $transitioner->execute(
@@ -157,6 +159,8 @@ final class EnrollmentController extends Controller
             $request->resolvedSectionIds(),
             $actor,
             $contextFactory->fromRequest($request),
+            (string) $request->validated('note'),
+            $request->boolean('overload_acknowledged'),
         );
 
         return $this->cachePrivateResponse(EnrollmentResource::make($updated)->response($request));

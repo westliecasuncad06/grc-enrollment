@@ -50,6 +50,8 @@ function getStageGuidance(queue: StudentQueueView): string {
       return "You do not have an active enrollment for the current term."
     case "pending_program_head_approval":
       return "Program Head approval, then Registrar approval, is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk."
+    case "pending_student_review":
+      return "Your Program Chair changed your subjects. Open Enrollment to accept or decline the changes; once you accept, the Registrar can approve your enrollment and a queue number can be issued."
     case "pending_registrar_approval":
       return "Registrar approval is required before a queue number can be issued. Once approved, claim your queuing ticket in person at the school Cashier kiosk."
     case "pending_payment":
@@ -132,11 +134,14 @@ function QueueLivePanelView({
     isStudentSurface &&
     ticket === null &&
     (queue.stage === "pending_program_head_approval" ||
+      queue.stage === "pending_student_review" ||
       queue.stage === "pending_registrar_approval")
   const awaitingApprovalLabel =
     queue.stage === "pending_program_head_approval"
       ? "Waiting for Program Head approval"
-      : "Waiting for Registrar approval"
+      : queue.stage === "pending_student_review"
+        ? "Waiting for your answer on the Program Chair's changes"
+        : "Waiting for Registrar approval"
 
   return (
     <Card

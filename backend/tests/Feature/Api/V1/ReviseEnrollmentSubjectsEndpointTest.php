@@ -145,10 +145,18 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $response = $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
             'section_ids' => [$sectionB->id],
+            'note' => 'The original section clashes with your other classes.',
         ]);
 
-        $response->assertOk();
+        $response->assertOk()
+            ->assertJsonPath('data.status', 'pending_student_review')
+            ->assertJsonCount(1, 'data.revisions')
+            ->assertJsonPath('data.revisions.0.note', 'The original section clashes with your other classes.')
+            ->assertJsonPath('data.revisions.0.status', 'pending')
+            ->assertJsonPath('data.revisions.0.removed_subjects.0.subject_code', 'CS101')
+            ->assertJsonPath('data.revisions.0.added_subjects.0.subject_code', 'CS102');
         $enrollment->refresh();
+        self::assertSame(EnrollmentStatus::PendingStudentReview, $enrollment->status);
         self::assertSame(3.0, $enrollment->total_units);
         self::assertSame([$sectionB->id], $enrollment->enrollmentSubjects()->where('status', EnrollmentSubjectStatus::Selected)->pluck('section_id')->all());
         self::assertSame(0, $sectionA->refresh()->enrolled_count);
@@ -173,6 +181,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
             'section_ids' => [$sectionA->id, $sectionB->id],
+            'note' => 'The original section clashes with your other classes.',
         ])->assertOk();
 
         self::assertSame(5.0, $enrollment->refresh()->total_units);
@@ -193,6 +202,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $response = $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
             'section_ids' => [$sectionA->id, $sectionB->id],
+            'note' => 'The original section clashes with your other classes.',
         ]);
 
         $response->assertUnprocessable();
@@ -215,6 +225,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $response = $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
             'section_ids' => [$sectionA->id, $sectionHuge->id],
+            'note' => 'The original section clashes with your other classes.',
         ]);
 
         $response->assertUnprocessable();
@@ -233,6 +244,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
             'section_ids' => [$sectionA->id],
+            'note' => 'The original section clashes with your other classes.',
         ])->assertForbidden();
     }
 
@@ -249,6 +261,7 @@ final class ReviseEnrollmentSubjectsEndpointTest extends TestCase
 
         $this->withToken($token)->patchJson("/api/v1/enrollments/{$enrollment->id}/subjects", [
             'section_ids' => [$sectionA->id],
+            'note' => 'The original section clashes with your other classes.',
         ])->assertUnprocessable();
     }
 

@@ -15,6 +15,7 @@ import {
   DataTable,
   type DataTableColumn,
 } from "@/features/components/portal/data-table"
+import { EnrollmentRevisionHistory } from "@/features/components/portal/enrollment-revision-history"
 import { ProspectusDocument } from "@/features/components/portal/prospectus-document"
 import {
   SectionScheduleCalendar,
@@ -23,6 +24,7 @@ import {
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
 import { Button } from "@/features/components/ui/button"
+import { Checkbox } from "@/features/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -32,6 +34,7 @@ import {
 } from "@/features/components/ui/dialog"
 import { SearchableCombobox } from "@/features/components/ui/searchable-combobox"
 import { Skeleton } from "@/features/components/ui/skeleton"
+import { Textarea } from "@/features/components/ui/textarea"
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -166,14 +169,19 @@ export function EnrollmentReviewDialog({
     null,
   )
   const [initializedFor, setInitializedFor] = useState<number | null>(null)
+  const [revisionNote, setRevisionNote] = useState("")
+  const [overloadAcknowledged, setOverloadAcknowledged] = useState(false)
   if (enrollment && initializedFor !== enrollment.id) {
     setInitializedFor(enrollment.id)
     setPendingSectionIds(null)
+    setRevisionNote("")
+    setOverloadAcknowledged(false)
   }
   const currentSectionIds = pendingSectionIds ?? originalSectionIds
 
   const reviseMutation = useReviseEnrollmentSubjectsMutation()
   const [reviseError, setReviseError] = useState<string | null>(null)
+  const [overloadRequired, setOverloadRequired] = useState(false)
 
   const rows: EnrollmentReviewRow[] = useMemo(() => {
     if (!enrollment) return []
@@ -243,17 +251,37 @@ export function EnrollmentReviewDialog({
     setReviseError(null)
   }
 
+  // A load that needs overload approval is acknowledged here, because sending
+  // the changes to the student replaces the Approve step that used to ask.
+  const showOverloadAcknowledgement =
+    Boolean(enrollment?.requires_overload_approval) || overloadRequired
+
   function handleSaveRevision() {
     if (!enrollment) return
+    if (revisionNote.trim() === "") {
+      setReviseError("Tell the student why you are changing their subjects.")
+      return
+    }
     setReviseError(null)
     reviseMutation.mutate(
-      { id: enrollment.id, sectionIds: currentSectionIds },
+      {
+        id: enrollment.id,
+        sectionIds: currentSectionIds,
+        note: revisionNote.trim(),
+        overloadAcknowledged,
+      },
       {
         onSuccess: (updated) => {
           setPendingSectionIds(null)
+          setRevisionNote("")
+          setOverloadAcknowledged(false)
+          setOverloadRequired(false)
           onRevised?.(updated)
         },
         onError: (err: unknown) => {
+          if (isApiClientError(err) && err.fieldErrors?.overload_acknowledged) {
+            setOverloadRequired(true)
+          }
           const fieldErrors = isApiClientError(err)
             ? Object.values(err.fieldErrors ?? {}).flat()
             : []
@@ -300,6 +328,9 @@ export function EnrollmentReviewDialog({
           if (!open) {
             setPendingSectionIds(null)
             setReviseError(null)
+            setRevisionNote("")
+            setOverloadAcknowledged(false)
+            setOverloadRequired(false)
           }
           onOpenChange(open)
         }}
@@ -403,6 +434,22 @@ export function EnrollmentReviewDialog({
             </div>
           </div>
 
+          {enrollment?.status === "pending_student_review" && (
+            <Alert>
+              <AlertDescription>
+                Waiting for the student to accept or decline your changes. You
+                can decide on this enrollment once they answer.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {enrollment && enrollment.revisions.length > 0 && (
+            <EnrollmentRevisionHistory
+              revisions={enrollment.revisions}
+              audience="staff"
+            />
+          )}
+
           {editable && (
             <div className="grid gap-3 rounded-lg border bg-muted/10 p-3">
               {reviseError && (
@@ -410,6 +457,11 @@ export function EnrollmentReviewDialog({
                   <AlertDescription>{reviseError}</AlertDescription>
                 </Alert>
               )}
+              <p className="text-xs text-muted-foreground">
+                If you change the subjects, they go back to the student to
+                accept first. Once the student accepts, the enrollment goes
+                straight to the Registrar.
+              </p>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-[16rem] flex-1">
                   <SearchableCombobox
@@ -422,8 +474,42 @@ export function EnrollmentReviewDialog({
                     emptyMessage="No other open sections in this term."
                   />
                 </div>
-                {hasPendingChanges && (
-                  <>
+              </div>
+              {hasPendingChanges && (
+                <div className="grid gap-3">
+                  <div className="grid gap-1.5">
+                    <label
+                      htmlFor="revision-note"
+                      className="text-sm font-medium"
+                    >
+                      Why are you changing these subjects?
+                    </label>
+                    <Textarea
+                      id="revision-note"
+                      value={revisionNote}
+                      onChange={(event) => setRevisionNote(event.target.value)}
+                      placeholder="The student reads this before accepting, e.g. CS101 clashes with another class, so CS102 replaces it."
+                      maxLength={2000}
+                      disabled={reviseMutation.isPending}
+                    />
+                  </div>
+                  {showOverloadAcknowledgement && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        id="revision-overload-ack"
+                        checked={overloadAcknowledged}
+                        onCheckedChange={(checked) =>
+                          setOverloadAcknowledged(checked === true)
+                        }
+                        disabled={reviseMutation.isPending}
+                      />
+                      <label htmlFor="revision-overload-ack">
+                        I acknowledge this schedule exceeds the regular unit
+                        load.
+                      </label>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -431,6 +517,7 @@ export function EnrollmentReviewDialog({
                       onClick={() => {
                         setPendingSectionIds(null)
                         setReviseError(null)
+                        setRevisionNote("")
                       }}
                     >
                       Discard changes
@@ -443,12 +530,12 @@ export function EnrollmentReviewDialog({
                     >
                       <Plus className="size-4" aria-hidden="true" />
                       {reviseMutation.isPending
-                        ? "Saving changes…"
-                        : "Save subject changes"}
+                        ? "Sending to the student…"
+                        : "Send changes to the student"}
                     </Button>
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

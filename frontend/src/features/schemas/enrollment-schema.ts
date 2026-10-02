@@ -117,6 +117,7 @@ const assessmentSchema = z
 const enrollmentStatusValues = [
   "draft",
   "pending_program_head_approval",
+  "pending_student_review",
   "pending_registrar_approval",
   "pending_payment",
   "enrolled",
@@ -124,6 +125,37 @@ const enrollmentStatusValues = [
   "cancelled",
   "withdrawn",
 ] as const
+
+/** A subject as the Program Chair's change history keeps it. */
+const revisionSubjectSchema = z
+  .object({
+    section_id: z.number().int().positive(),
+    section_code: z.string().nullable(),
+    subject_code: z.string().min(1),
+    subject_title: z.string().min(1),
+    units: z.number().nonnegative(),
+  })
+  .strict()
+
+/**
+ * One round of the Program Chair changing a student's subjects (ADR 0040):
+ * what was added and removed, the Chair's reason, and the student's answer
+ * (with the student's reason when they declined).
+ */
+export const enrollmentRevisionSchema = z
+  .object({
+    id: z.number().int().positive(),
+    note: z.string().min(1),
+    added_subjects: z.array(revisionSubjectSchema),
+    removed_subjects: z.array(revisionSubjectSchema),
+    units_before: z.number().nonnegative(),
+    units_after: z.number().nonnegative(),
+    status: z.enum(["pending", "accepted", "declined"]),
+    student_reason: z.string().nullable(),
+    proposed_at: z.iso.datetime().nullable(),
+    responded_at: z.iso.datetime().nullable(),
+  })
+  .strict()
 
 export const enrollmentSchema = z
   .object({
@@ -150,6 +182,8 @@ export const enrollmentSchema = z
     payment_confirmed_at: z.iso.datetime().nullable(),
     enrolled_at: z.iso.datetime().nullable(),
     subjects: z.array(enrollmentSubjectSchema),
+    // Defaults to none so a response from a backend that predates ADR 0040 still parses.
+    revisions: z.array(enrollmentRevisionSchema).default([]),
     queue_ticket: queueTicketSchema.nullable(),
     assessment: assessmentSchema.nullable(),
   })
@@ -226,6 +260,9 @@ export const updateEnrollmentInputSchema = z
       "registrar_reject",
       "void",
       "student_cancel",
+      // The student's answer to the Program Chair's changes (ADR 0040).
+      "student_accept_revision",
+      "student_decline_revision",
     ]),
     reason: z.string().min(1).optional(),
     // Only for `void`: the Registrar is acting on the student's request.
@@ -246,6 +283,9 @@ export const updateEnrollmentInputSchema = z
 export const reviseEnrollmentSubjectsInputSchema = z
   .object({
     section_ids: z.array(z.number().int().positive()).min(1),
+    // Why the subjects were changed; the student reads it before answering.
+    note: z.string().trim().min(1, "Tell the student why.").max(2000),
+    overload_acknowledged: z.boolean().optional(),
   })
   .strict()
 

@@ -29,6 +29,7 @@ import { isApiClientError } from "@/features/services/api-client"
 /** The statuses a student may still cancel from: before the Registrar approves. */
 const CANCELLABLE_STATUSES: readonly Enrollment["status"][] = [
   "pending_program_head_approval",
+  "pending_student_review",
   "pending_registrar_approval",
 ]
 
