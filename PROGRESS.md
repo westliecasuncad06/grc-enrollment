@@ -1,6 +1,31 @@
 # GRC Enrollment System — Development Progress
 
-## 2026-10-02 — Professor preferences: single table, proficiency dropdown (DONE)
+## 2026-10-02 — Hostinger VPS Database Re-Synchronization & Presentation State Reset (DONE)
+
+- **Owner Request:**
+  - Re-apply the clean presentation state to the Hostinger VPS database after manual archive testing:
+    - Set **2025–2026 · 2nd Semester** (Academic Term ID: 6) as the **Current Active Semester** (`semester_ongoing`, `archived_at = NULL`, `closed_at = NULL`).
+    - Publish college schedules for **CCS, COE, COA, CBAE** (`schedule_proposals` with `status = 'published'`, workflows at `for_dean_approval`).
+    - Close enrollment with dates set in May/June 2026 (`enrollment_opens_at = '2026-01-15 08:00:00'`, `enrollment_closes_at = '2026-05-31 17:00:00'`, windows closing on `2026-05-31`).
+    - Ensure all grades for Term 6 are in **`submitted`** status (`status = 'submitted'`, `submitted_at = '2026-06-25 10:00:00'`, `locked_at = NULL`) so the Registrar Head can demonstrate reviewing and locking grades live in the UI.
+    - Keep all real student data intact (2,156 enrollments, 757 published sections, 26,023 real grades).
+    - Purge all ahead/test records produced during the test archive: Purged Term 38 and child records (2 test enrollments, 306 sections, 69 forecasts, etc.) and test candidate accounts (Denmar Curtivo).
+    - Maintain the active Super Admin account (`westliecasuncad06@gmail.com`).
+- **Execution & Technical Details:**
+  1. **Upload & Restore on Hostinger VPS:**
+     - Uploaded latest `DATABASE/grc_enrollment.sql.gz` to VPS via SCP.
+     - Stream restored into Dokploy MySQL 8 container (`grc-enrollment-thmpcd`).
+     - Executed mandatory config and route re-cache inside Dokploy backend container (`grc-backend-womfnq`): `php artisan config:cache && php artisan route:cache`.
+  2. **Production Verification on VPS:**
+     - Production Health check: `GET https://api.grc-enrollment.tech/api/v1/health` returned `200 OK`.
+     - Active term: Term 6 (`2025-2026 · 2nd`, `semester_ongoing`, `archived_at: null`, `closed_at: null`, `enrollment_closes_at: 2026-05-31 17:00:00`).
+     - Current slot: Row 1 points to `academic_term_id = 6`.
+     - Schedule proposals: CCS, COE, COA, CBAE all confirmed `published`.
+     - Academic grades: Exactly 26,023 grades confirmed in `submitted` status (`locked_at = NULL`).
+     - Enrollments & Sections: 2,156 real student enrollments and 757 sections intact.
+     - Purged records: Term 37 count = 0, Term 38 count = 0, test accounts = 0.
+     - Super Admin: `westliecasuncad06@gmail.com` confirmed active (`id = 7108`, `role = 'super_admin'`).
+
 
 - **Request:** remove the "Declared specializations" card so the professor view has one table, and make the Proficiency cell a clickable Primary/Secondary dropdown.
 - **Frontend:** `faculty-specialization-list.tsx` no longer renders the Declared specializations card or its remove dialog; each Proficiency cell is a Select (`ProficiencyCell`). A declared specialization is changed in place; a subject with no proficiency yet can be given one (creates it); seeded / Program Chair-assigned proficiencies stay read-only text. `faculty-subject-preference-panel.tsx` has the new `handleChangeProficiency`, the old specialization-removal state/mutation was pruned, and `faculty-service.ts` gained `updateFacultySpecializationProficiency`.
