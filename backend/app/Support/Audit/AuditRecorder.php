@@ -52,6 +52,54 @@ final class AuditRecorder
         ]);
     }
 
+    /**
+     * Bulk twin of `record()` for one action/type across many rows: the same
+     * validation and payload checks, but one INSERT per call instead of one
+     * per row. Use it for batch actions that touch thousands of records.
+     *
+     * @param  list<array{id: ?int, before: ?array<string, mixed>, after: ?array<string, mixed>}>  $entries
+     */
+    public function recordMany(
+        User $actor,
+        string $action,
+        string $auditableType,
+        array $entries,
+        AuditRequestContext $context,
+    ): void {
+        if ($entries === []) {
+            return;
+        }
+
+        $this->validate($action, $auditableType, null, $context);
+
+        $actingContext = $actor->actingContext();
+        $now = now();
+        $rows = [];
+
+        foreach ($entries as $entry) {
+            $this->assertSafePayload($entry['before']);
+            $this->assertSafePayload($entry['after']);
+
+            $rows[] = [
+                'actor_user_id' => $actor->id,
+                'acting_role' => $actingContext?->role->value,
+                'acting_college' => $actingContext?->college?->value,
+                'action' => $action,
+                'auditable_type' => $auditableType,
+                'auditable_id' => $entry['id'],
+                'before_values' => $entry['before'] === null ? null : json_encode($entry['before'], JSON_THROW_ON_ERROR),
+                'after_values' => $entry['after'] === null ? null : json_encode($entry['after'], JSON_THROW_ON_ERROR),
+                'reason' => null,
+                'request_id' => $context->requestId,
+                'ip_address' => $context->ipAddress,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        AuditLog::query()->insert($rows);
+    }
+
     private function validate(string $action, string $auditableType, ?string $reason, AuditRequestContext $context): void
     {
         if (trim($action) === '' || ! in_array($action, AuditAction::values(), true)) {

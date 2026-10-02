@@ -172,6 +172,15 @@ export function GradeApprovalsDrilldown({
               ),
             },
             {
+              key: "grade",
+              header: "Grade",
+              render: (grade) => (
+                <span className="font-semibold tabular-nums">
+                  {grade.final_grade ?? grade.mark ?? "—"}
+                </span>
+              ),
+            },
+            {
               key: "mark",
               header: "Mark",
               render: (grade) => grade.mark_label ?? grade.mark ?? "—",

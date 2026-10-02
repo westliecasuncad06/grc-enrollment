@@ -124,6 +124,8 @@ export const prospectusEnvelopeSchema = z
 export const gradeSlipRowSchema = z
   .object({
     academic_grade_id: z.number().int().positive(),
+    subject_id: z.number().int().positive().optional(),
+    paired_subject_id: z.number().int().positive().nullable().optional(),
     code: z.string().min(1),
     title: z.string().min(1),
     units: z.number().nonnegative(),

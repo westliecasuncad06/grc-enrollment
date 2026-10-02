@@ -1,5 +1,12 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Grade approvals: transcript contract fix, bulk "Lock all", Grade column (DONE)
+
+- **Transcript "Unexpected API response":** `GradeSlipResource::rowToArray` now sends `subject_id` and `paired_subject_id` (LEC/LAB pairing, Doc 17); the strict `gradeSlipRowSchema` rejected every academic record. Added both as optional fields in `frontend/src/features/schemas/academic-record-schema.ts`. Verified by validating the real backend response for one student against the schema; related vitest files and `tsc --noEmit` passed.
+- **"Lock all" stuck on "Locking all…":** `LockAllAcademicGrades` did update + refresh + audit insert + notification insert per grade inside one transaction; 26,023 submitted grades hit `Maximum execution time of 60 seconds exceeded` (laravel.log), rolled back, nothing locked. Now chunked (1,000) with bulk update/insert; new `AuditRecorder::recordMany` (same validation as `record`); `set_time_limit(0)` for the lock-all request. `AcademicGradesEndpointTest` 30/30 passed.
+- **Not verified:** full lock-all on the real 26k-grade dev data was NOT run (permanent action); per-student promotion/reclassification is still row-by-row (~2,665 students), so wall time is unmeasured. No multi-chunk (>1,000) test added yet.
+- **Grade column:** `grade-approvals-drilldown.tsx` student table now shows the numeric grade (`final_grade ?? mark`) before the Mark label; `registrar-grades-workspace` tests 9/9 passed.
+
 ## 2026-10-02 — Super Admin Provisioning & Deployment Verification (DONE)
 
 - **Owner Request:**

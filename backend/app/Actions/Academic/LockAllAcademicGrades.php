@@ -32,6 +32,8 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class LockAllAcademicGrades
 {
+    private const CHUNK_SIZE = 1000;
+
     public function __construct(
         private AuditRecorder $auditRecorder,
         private ReclassifyStudentEnrollmentCategory $reclassifier,
@@ -69,44 +71,66 @@ final readonly class LockAllAcademicGrades
                     });
                 });
 
-            /** @var Collection<int, AcademicGrade> $grades */
-            $grades = $query->with(['student.user', 'subject'])->lockForUpdate()->get();
+            $lockedAt = now()->startOfSecond();
+            $lockedAtIso = $lockedAt->utc()->format('Y-m-d\TH:i:s\Z');
+            $lockedCount = 0;
 
-            if ($grades->isEmpty()) {
+            /** @var array<int, true> $studentIds */
+            $studentIds = [];
+
+            // Chunked and bulk-written: a term-wide lock is tens of thousands of
+            // grades, which a row-by-row loop cannot finish inside a request.
+            $query
+                ->with(['student:id,user_id', 'subject:id,code'])
+                ->lockForUpdate()
+                ->chunkById(self::CHUNK_SIZE, function (Collection $grades) use ($actor, $context, $lockedAt, $lockedAtIso, &$lockedCount, &$studentIds): void {
+                    $auditEntries = [];
+                    $notifications = [];
+                    $now = now();
+
+                    foreach ($grades as $grade) {
+                        $before = self::snapshot($grade);
+
+                        $auditEntries[] = [
+                            'id' => $grade->id,
+                            'before' => $before,
+                            'after' => [...$before, 'status' => GradeStatus::Locked->value, 'locked_at' => $lockedAtIso],
+                        ];
+
+                        $notifications[] = [
+                            'user_id' => $grade->student->user_id,
+                            'type' => NotificationType::AcademicGradeLocked->value,
+                            'message' => "Your grade for {$grade->subject->code} has been finalized.",
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+
+                        $studentIds[$grade->student_id] = true;
+                    }
+
+                    AcademicGrade::query()
+                        ->whereIn('id', $grades->modelKeys())
+                        ->update(['status' => GradeStatus::Locked, 'locked_at' => $lockedAt, 'updated_at' => $now]);
+
+                    $this->auditRecorder->recordMany(
+                        $actor,
+                        AuditAction::ACADEMIC_GRADE_LOCKED,
+                        AuditableType::ACADEMIC_GRADE,
+                        $auditEntries,
+                        $context,
+                    );
+
+                    Notification::query()->insert($notifications);
+
+                    $lockedCount += $grades->count();
+                });
+
+            if ($lockedCount === 0) {
                 return ['locked_count' => 0];
             }
 
-            $lockedAt = now();
-
-            foreach ($grades as $grade) {
-                $beforeValues = self::snapshot($grade);
-
-                $grade->update([
-                    'status' => GradeStatus::Locked,
-                    'locked_at' => $lockedAt,
-                ]);
-                $grade->refresh();
-
-                $this->auditRecorder->record(
-                    $actor,
-                    AuditAction::ACADEMIC_GRADE_LOCKED,
-                    AuditableType::ACADEMIC_GRADE,
-                    $grade->id,
-                    $beforeValues,
-                    self::snapshot($grade),
-                    null,
-                    $context,
-                );
-
-                Notification::create([
-                    'user_id' => $grade->student->user_id,
-                    'type' => NotificationType::AcademicGradeLocked,
-                    'message' => "Your grade for {$grade->subject->code} has been finalized.",
-                ]);
-            }
-
             /** @var Collection<int, StudentProfile> $students */
-            $students = new Collection($grades->pluck('student')->unique('id')->filter()->values()->all());
+            $students = StudentProfile::query()->whereIn('id', array_keys($studentIds))->get();
 
             // A batch lock can finish a year for many students at once. Promote them
             // first (ADR 0028) so the reclassification below groups them by their NEW
@@ -128,7 +152,7 @@ final readonly class LockAllAcademicGrades
                 $this->reclassifier->executeMany($students, $currentTerm, $actor, $context);
             }
 
-            return ['locked_count' => $grades->count()];
+            return ['locked_count' => $lockedCount];
         });
     }
 

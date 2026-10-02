@@ -119,6 +119,11 @@ final class AcademicGradeController extends Controller
         $actor = $this->authenticatedUser($request);
         $this->authorize('lockAll', AcademicGrade::class);
 
+        // A term-wide lock touches tens of thousands of grades (plus promotion and
+        // reclassification); it is one atomic transaction, so it must not be cut
+        // off mid-way by the default PHP request limit.
+        set_time_limit(0);
+
         $result = $locker->execute(
             $request->validated(),
             $actor,
