@@ -62,7 +62,9 @@ desktop.ini
 /.superpowers/
 /frontend/test-output.txt
 *.sql
+*.sql.gz
 /backend/database/backups/
 /frontend/scripts/*.json
 CLAUDE_PROMPT.md
 CLAUDE_HANDOFF.md
+/scratch/

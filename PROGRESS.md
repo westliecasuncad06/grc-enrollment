@@ -1,5 +1,82 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Production Presentation Database Reset & Hostinger VPS Deployment (DONE)
+
+- **Owner Request:**
+  - Set **2025–2026 · 2nd Semester** (Academic Term ID: 6) as the **Current Active Semester** (`semester_ongoing`, `archived_at = NULL`, `closed_at = NULL`).
+  - Publish college schedules for **CCS, COE, COA, CBAE** (`schedule_proposals` with `status = 'published'`, workflows at `for_dean_approval`).
+  - Ensure enrollment is closed with dates set in May/June 2026 (`enrollment_opens_at = '2026-01-15 08:00:00'`, `enrollment_closes_at = '2026-05-31 17:00:00'`, windows closing on `2026-05-31`).
+  - Ensure all grades for Term 6 are in **`submitted`** status (`status = 'submitted'`, `submitted_at = '2026-06-25 10:00:00'`, `locked_at = NULL`) so the Registrar Head can demonstrate reviewing and locking grades live in the UI.
+  - Keep all real student data intact (2,156 enrollments, 757 published sections, 26,023 real grades).
+  - Purge all future/ahead records: Completely deleted Term 37 (2026–2027 1st) and all child records (85 test enrollments, 1,163 grades, 306 sections, 138 forecasts, etc.), plus the 7 test candidate accounts created on Oct 1–2 (users 7099–7105: Danhil Baluyot, Denmar Curtivo, Mharc Angelo Cardenas, Mark Frederick Boado, Westlie Casuncad).
+  - Deploy and synchronize the pristine presentation database to Hostinger VPS.
+- **Execution & Technical Details:**
+  1. **Local MariaDB Cleanup & Reset:**
+     - Executed transactional cleanup (`scratch/apply_production_db_state.php`):
+       - Purged Term 37 and 10 child tables in strict FK dependency order.
+       - Purged test accounts 7099–7105 and student profiles 6399–6405 with all tokens, notifications, and audit logs.
+       - Updated Term 6 status to `semester_ongoing`, enrollment window closing `2026-05-31 17:00:00`, `closed_at = NULL`, `archived_at = NULL`.
+       - Pointed `academic_term_current_slots` row 1 to `academic_term_id = 6`.
+       - Created published `schedule_proposals` for CCS, COE, COA, CBAE with Dean approval.
+       - Updated all 26,023 grades in Term 6 to `status = 'submitted'` with `locked_at = NULL`.
+  2. **Database Export & MySQL 8 Compatibility:**
+     - Ran `node scratch/export_database.js`:
+       - Handled stored generated columns (`enrollments.active_academic_term_id` and `queue_cycles.open_marker`) via `DEFAULT NULL` in `CREATE TABLE` and `ALTER TABLE` at the end to prevent MySQL 8 `ERROR 3105`.
+       - Generated `DATABASE/grc_enrollment.sql` (136.45 MB) and `DATABASE/grc_enrollment.sql.gz` (6.65 MB).
+  3. **Hostinger VPS Deployment:**
+     - Uploaded `grc_enrollment.sql.gz` to VPS via passwordless SSH/SCP.
+     - Stream restored into Dokploy MySQL 8 container (`grc-enrollment-thmpcd.1.iogr2sflzydwfeuq6auornazx`).
+     - Executed mandatory config and route re-cache inside Dokploy backend container (`grc-backend-womfnq.1.ttyd8j577no1sgd0eh2kj6ld4`): `php artisan config:cache && php artisan route:cache`.
+  4. **Production Verification on VPS:**
+     - Production Health check: `GET https://api.grc-enrollment.tech/api/v1/health` returned `200 OK`.
+     - Active term: Term 6 (`2025-2026 · 2nd`, `semester_ongoing`, `archived_at: null`, `closed_at: null`, `enrollment_closes_at: 2026-05-31`).
+     - Current slot: Row 1 points to `academic_term_id = 6`.
+     - Schedule proposals: CCS, COE, COA, CBAE all confirmed `published`.
+     - Academic grades: Exactly 26,023 grades confirmed in `submitted` status (`locked_at = NULL`).
+     - Enrollments & Sections: 2,156 real student enrollments and 757 sections intact.
+     - Term 37 & test accounts: Count verified 0 (completely purged).
+  5. **Code Suite Verification:**
+     - Frontend typecheck (`tsc --noEmit`): 0 errors.
+     - Frontend portal shell tests (`portal-shell.test.tsx`): 39/39 passing.
+     - Backend unit tests (`EvaluateCreditMappingStatusTest`): 7/7 passing (22 assertions).
+
+
+
+- **Owner Request:** Safely bring the live production database schema up to date with `backend/database/migrations/` without touching or mutating live student enrollment data. Specifically ensure the two Super Admin migrations (`add_acting_context_to_personal_access_tokens_table` and `add_acting_context_to_audit_logs_table`) are applied.
+- **Pre-execution Verification:**
+  - Verified backend container (`grc-backend-womfnq`) was rebuilt from latest `origin/main` commit (`bc11ef1`).
+  - Read both migration files to verify strictly additive changes (`Schema::table` with `nullable()` string columns `acting_role` and `acting_college`).
+  - Verified `migrate:status` on production: exactly 2 pending migrations identified out of 101 total.
+  - Recorded pre-migration row counts across 9 key tables: `enrollments` (23,107), `users` (7,048), `student_profiles` (6,386), `sections` (8,652), `academic_grades` (244,015), `payments` (2,172), `enrollment_documents` (7,953), `personal_access_tokens` (203), `audit_logs` (19,309).
+- **Execution & Post-execution Verification:**
+  - Ran `php artisan migrate --force` inside the production backend container. Both migrations applied cleanly in ~1.3s.
+  - Immediately re-cached configs and routes (`php artisan config:cache && php artisan route:cache`) per CLAUDE_PROMPT.md section 4.
+  - Verified `migrate:status`: all 101 migrations now show `Ran`.
+  - Verified health check: `GET /api/v1/health` returns `200 OK`.
+  - Verified CORS preflight: `OPTIONS /api/v1/auth/login` returns `204 No Content` with `x-acting-context` in `Access-Control-Allow-Headers`.
+  - Verified zero data mutation: post-migration row counts on all 9 tables matched the pre-migration counts exactly.
+
+## 2026-10-02 — Portal Sidebar: Collapsed Navigation Scroll, Footer Overlap Prevention & Hover Icon Fix (DONE)
+
+- **Issue Reported by User:**
+  1. Collapsed sidebar navigation items overlapped the footer profile avatar (`SR`) and spilled below the red sidebar container because `overflow: visible` was previously forcing the navigation to overflow without vertical scrolling.
+  2. On hover in collapsed mode, the maroon hover pill obscured the navigation icon/logo, making the icon disappear.
+- **Implementation & Layout Fixes:**
+  - In `frontend/src/app/globals.css`:
+    - Constrained `.portal-sidebar` with `max-height: 100svh; overflow: hidden;` and set its header and footer to `flex-shrink: 0;`.
+    - Made `.portal-navigation` scrollable with `flex: 1 1 0%; min-height: 0; overflow-y: auto; overflow-x: hidden;`.
+    - In collapsed state (`.portal-app[data-sidebar="collapsed"] .portal-navigation`), removed the breaking `overflow: visible` override and applied `flex: 1 1 0%; min-height: 0; overflow-y: auto; overflow-x: hidden; width: 100%;` so roles with 12–17 items (e.g. Registrar Head, Super Admin) can cleanly scroll vertically inside the sidebar without spilling or overlapping the user footer avatar.
+    - Attached `.portal-sidebar__footer` to the bottom with `margin-top: auto; flex-shrink: 0; width: 100%;`.
+    - Defined `.portal-collapsed-pill`, `.portal-collapsed-pill__icon`, and `.portal-collapsed-pill__label` with the wipe-open animation (`clip-path: inset(...)`), brand `#870615` background, and high z-index (`100`).
+  - In `frontend/src/features/components/layouts/portal-shell.tsx`:
+    - Updated `NavigationLink` to measure bounding rect on mouse enter/focus and portaled the hover pill to `document.body` via `createPortal`.
+    - Rendered the navigation icon inside the pill container (`portal-collapsed-pill__icon`) with exact link width matching, ensuring the icon remains clearly visible and aligned when hovered, side-by-side with the label and any status badge.
+    - Added global capturing scroll listener to automatically dismiss the pill on scroll.
+- **Verification:**
+  - `npm run typecheck`: Passed with 0 errors.
+  - `npm test -- portal-shell.test.tsx`: 39/39 tests passed.
+  - No excess testing executed per owner's preference ("Do'nt do too much testing ako mag sasabi kung okay yung desig").
+
 ## 2026-10-02 — Portal sidebar: restored the collapsed rail's hover-reveal pill, with its real bug fixed (DONE)
 
 - **Owner report:** the collapsed desktop sidebar used to show a label on hover; it "seems to have disappeared." Several rounds of clarification (detailed below) eventually converged on: restore the *exact* design that shipped 2026-09-29 (commit `68f34d3`) and was removed the very next day by stakeholder Doc 15 — a same-element `clip-path` wipe-open pill, not a separate tooltip — but fix whatever actually broke it instead of avoiding the pattern.

@@ -10,7 +10,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, usePathname, useRouter } from "next/navigation"
-import { startTransition, useRef, type ReactNode } from "react"
+import { startTransition, useEffect, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { Breadcrumb } from "@/features/components/common/breadcrumb"
@@ -59,21 +60,60 @@ interface PortalNavigationProps {
 
 function NavigationLink({
   children,
+  icon,
+  label,
+  badge,
   href,
   mobile = false,
   attention = false,
+  collapsed = false,
 }: {
   children: ReactNode
+  icon?: ReactNode
+  label?: string
+  badge?: ReactNode
   href: string
   mobile?: boolean
   /** Shows a dot on the icon while the labels are folded away (a returned
       schedule would otherwise lose its "Returned" badge). */
   attention?: boolean
+  collapsed?: boolean
 }) {
   const pathname = usePathname()
   // react-router's NavLink used `end` only for "/portal"; module routes have no
   // children, so an exact comparison reproduces both cases.
   const isActive = pathname === href
+  const linkRef = useRef<HTMLAnchorElement>(null)
+  const [hoverRect, setHoverRect] = useState<{
+    top: number
+    left: number
+    width: number
+    height: number
+  } | null>(null)
+
+  function handleOpenPill() {
+    if (!collapsed || mobile || !linkRef.current) return
+    const rect = linkRef.current.getBoundingClientRect()
+    setHoverRect({
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+    })
+  }
+
+  function handleClosePill() {
+    setHoverRect(null)
+  }
+
+  useEffect(() => {
+    if (!hoverRect) return
+    function handleScroll() {
+      setHoverRect(null)
+    }
+    window.addEventListener("scroll", handleScroll, true)
+    return () => window.removeEventListener("scroll", handleScroll, true)
+  }, [hoverRect])
 
   // No `title` attribute: the CSS wipe-reveal pill (see globals.css) is the
   // only hover hint now. A native title tooltip would layer its own
@@ -81,24 +121,62 @@ function NavigationLink({
   // duplicating the pill with a second, differently-styled popup.
   const link = (
     <Link
+      ref={linkRef}
       href={href}
       data-attention={attention ? "true" : undefined}
       aria-current={isActive ? "page" : undefined}
       className={cn("portal-nav-link", isActive && "portal-nav-link--active")}
+      onMouseEnter={handleOpenPill}
+      onMouseLeave={handleClosePill}
+      onFocus={handleOpenPill}
+      onBlur={handleClosePill}
     >
       {children}
     </Link>
   )
 
-  return mobile ? <SheetClose asChild>{link}</SheetClose> : link
+  const portalPill =
+    collapsed && !mobile && hoverRect && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="portal-collapsed-pill"
+            style={{
+              top: hoverRect.top,
+              left: hoverRect.left,
+              height: hoverRect.height,
+            }}
+          >
+            <span
+              className="portal-collapsed-pill__icon"
+              style={{ width: hoverRect.width }}
+            >
+              {icon}
+            </span>
+            <span className="portal-collapsed-pill__label">
+              <span>{label}</span>
+              {badge}
+            </span>
+          </div>,
+          document.body,
+        )
+      : null
+
+  return (
+    <>
+      {mobile ? <SheetClose asChild>{link}</SheetClose> : link}
+      {portalPill}
+    </>
+  )
 }
 
 function PortalNavigation({
   definition,
   mobile = false,
   hasReturnedSchedule = false,
+  collapsed = false,
 }: PortalNavigationProps & {
   hasReturnedSchedule?: boolean
+  collapsed?: boolean
 }) {
   return (
     <nav
@@ -107,7 +185,13 @@ function PortalNavigation({
         mobile ? "Mobile role portal navigation" : "Role portal navigation"
       }
     >
-      <NavigationLink href="/portal" mobile={mobile}>
+      <NavigationLink
+        href="/portal"
+        mobile={mobile}
+        collapsed={collapsed}
+        label="GRC Connect"
+        icon={<LayoutDashboard data-icon="inline-start" aria-hidden="true" />}
+      >
         <LayoutDashboard data-icon="inline-start" aria-hidden="true" />
         <span>GRC Connect</span>
       </NavigationLink>
@@ -115,25 +199,34 @@ function PortalNavigation({
         .filter((module) => isConnectedModuleId(module.id))
         .map((module) => {
           const Icon = module.icon
+          const isReturned =
+            hasReturnedSchedule && module.id === "program-chair-enrollment"
 
           return (
             <NavigationLink
               key={module.id}
               href={`/portal/${module.id}`}
               mobile={mobile}
-              attention={
-                hasReturnedSchedule && module.id === "program-chair-enrollment"
+              collapsed={collapsed}
+              label={module.label}
+              icon={<Icon data-icon="inline-start" aria-hidden="true" />}
+              badge={
+                isReturned ? (
+                  <Badge variant="destructive" className="shrink-0">
+                    Returned
+                  </Badge>
+                ) : undefined
               }
+              attention={isReturned}
             >
               <Icon data-icon="inline-start" aria-hidden="true" />
               <span className="flex min-w-0 items-center justify-between gap-2">
                 {module.label}
-                {hasReturnedSchedule &&
-                  module.id === "program-chair-enrollment" && (
-                    <Badge variant="destructive" className="shrink-0">
-                      Returned
-                    </Badge>
-                  )}
+                {isReturned && (
+                  <Badge variant="destructive" className="shrink-0">
+                    Returned
+                  </Badge>
+                )}
               </span>
             </NavigationLink>
           )
@@ -273,6 +366,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         <PortalNavigation
           definition={definition}
           hasReturnedSchedule={hasReturnedSchedule}
+          collapsed={sidebarCollapsed}
         />
 
         <div className="portal-sidebar__footer">

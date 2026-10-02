@@ -1135,6 +1135,7 @@
   z-index: 15;
   display: flex;
   height: 100svh;
+  max-height: 100svh;
   flex-direction: column;
   gap: 2rem;
   padding: 1.5rem 1.25rem;
@@ -1144,6 +1145,7 @@
     var(--sidebar)
   );
   border-right: 1px solid var(--sidebar-border);
+  overflow: hidden;
 }
 
 .portal-sidebar > div:first-child,
@@ -1152,6 +1154,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 1rem;
+  flex-shrink: 0;
 }
 
 .portal-brand {
@@ -1191,10 +1194,11 @@
 .portal-navigation {
   display: flex;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 0%;
   flex-direction: column;
   gap: 0.3rem;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .portal-nav-link {
@@ -1245,6 +1249,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 .portal-sidebar__footer > p {
@@ -3204,10 +3210,13 @@
   .portal-app[data-sidebar="collapsed"] .portal-sidebar {
     align-items: center;
     padding-inline: 0.6rem;
+    gap: 1.25rem;
+    overflow: hidden;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-sidebar > div:first-child {
     align-items: center;
+    flex-shrink: 0;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-sidebar__toolbar {
@@ -3220,37 +3229,25 @@
 
   .portal-app[data-sidebar="collapsed"] .portal-navigation {
     width: 100%;
-    /* `overflow-y: auto` (set unconditionally above) forces the computed
-       `overflow-x` to `auto` too, per the CSS Overflow spec's "not visible
-       unless both are" rule — without this override the hover-reveal pill
-       below is clipped to the rail's own width instead of extending past
-       it. Collapsed role menus are short enough that losing the vertical
-       scrollbar here in exchange is an easy trade. */
-    overflow: visible;
+    min-height: 0;
+    flex: 1 1 0%;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
-  /* Labels stay in the DOM (accessible names). Visually, on hover/focus the
-     icon grows a pill that wipes open left-to-right to reveal the name —
-     the icon itself stays put and on top (z-index), the pill is an overlay
-     anchored at the icon's own position, clipped to zero width and revealed
-     with `clip-path` rather than a separate floating tooltip. This exact
-     mechanism previously shipped (2026-09-29) and was removed the next day
-     (stakeholder Doc 15) for spilling past the rail onto page content —
-     restored by owner request, this time with `.portal-sidebar` itself
-     given an explicit baseline z-index (see its own rule) so the pill can't
-     lose a stacking fight to something elsewhere on the page the way it
-     apparently sometimes did before. */
   .portal-app[data-sidebar="collapsed"] .portal-nav-link {
     position: relative;
     grid-template-columns: 1fr;
     justify-items: center;
     gap: 0;
     padding-inline: 0;
+    width: 100%;
+    flex-shrink: 0;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-nav-link:hover,
   .portal-app[data-sidebar="collapsed"] .portal-nav-link:focus-visible {
-    z-index: 40;
+    z-index: 10;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-nav-link svg {
@@ -3260,45 +3257,11 @@
 
   .portal-app[data-sidebar="collapsed"] .portal-nav-link > span {
     position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1;
-    display: flex;
-    height: 100%;
-    width: max-content;
-    max-width: 16rem;
-    align-items: center;
-    padding-left: 2.5rem;
-    padding-right: 0.9rem;
-    /* Opaque, not a translucent tint: this pill overflows past the maroon
-       rail onto whatever the main content underneath happens to be (often
-       the page's light background), so a semi-transparent white fill reads
-       fine over the rail but goes invisible-on-white the moment it crosses
-       the edge — white text on white. A solid brand maroon (matching the
-       rail's own gradient stop) plus a shadow for lift reads correctly no
-       matter what it's floating over. */
-    background: #870615;
-    border-radius: var(--radius);
-    color: #ffffff;
-    box-shadow: 0 8px 20px -6px rgb(0 0 0 / 35%);
-    font-size: 0.72rem;
-    font-weight: 620;
-    line-height: 1.2;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
+    width: 1px;
+    height: 1px;
     overflow: hidden;
-    clip-path: inset(0 100% 0 0 round var(--radius));
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      clip-path 220ms cubic-bezier(0.16, 1, 0.3, 1),
-      opacity 120ms ease;
-  }
-
-  .portal-app[data-sidebar="collapsed"] .portal-nav-link:hover > span,
-  .portal-app[data-sidebar="collapsed"] .portal-nav-link:focus-visible > span {
-    clip-path: inset(0 0 0 0 round var(--radius));
-    opacity: 1;
+    white-space: nowrap;
+    clip-path: inset(50%);
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-nav-link[data-attention]::after {
@@ -3314,6 +3277,9 @@
 
   .portal-app[data-sidebar="collapsed"] .portal-sidebar__footer {
     align-items: center;
+    flex-shrink: 0;
+    margin-top: auto;
+    width: 100%;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-sidebar__footer > p,
@@ -3324,6 +3290,67 @@
 
   .portal-app[data-sidebar="collapsed"] .portal-profile {
     grid-template-columns: auto;
+  }
+}
+
+.portal-collapsed-pill {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: 18rem;
+  padding: 0;
+  background: #870615;
+  border-radius: var(--radius);
+  color: #ffffff;
+  box-shadow: 0 8px 20px -6px rgb(0 0 0 / 35%);
+  font-size: 0.72rem;
+  font-weight: 620;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: portalPillWipeOpen 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.portal-collapsed-pill__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.portal-collapsed-pill__icon svg {
+  width: 1rem;
+  height: 1rem;
+  color: #ffffff;
+}
+
+.portal-collapsed-pill__label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.9rem;
+}
+
+@keyframes portalPillWipeOpen {
+  from {
+    clip-path: inset(0 100% 0 0 round var(--radius));
+    opacity: 0;
+  }
+  to {
+    clip-path: inset(0 0 0 0 round var(--radius));
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-collapsed-pill {
+    animation: none;
+    clip-path: inset(0 0 0 0 round var(--radius));
+    opacity: 1;
   }
 }
 
