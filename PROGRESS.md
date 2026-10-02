@@ -1,6 +1,20 @@
 # GRC Enrollment System — Development Progress
 
-## 2026-10-02 — Grade approvals: transcript contract fix, bulk "Lock all", Grade column (DONE)
+## 2026-10-02 — Presentation Database Sync (grc_enrollment.sql.gz) & Super Admin Inclusion (DONE)
+
+- **Owner Request:**
+  - Commit and push pending changes to GitHub including the updated presentation database.
+- **Execution & Technical Details:**
+  1. **Database Export:**
+     - Re-exported the local database with `node scratch/export_database.js` to ensure the newly provisioned Super Admin account (`westliecasuncad06@gmail.com`) is included in the dump.
+     - Generated `DATABASE/grc_enrollment.sql` (136.46 MB) and compressed `DATABASE/grc_enrollment.sql.gz` (6.65 MB).
+  2. **Git Repository Management:**
+     - Configured `.gitignore` to allow tracking of `DATABASE/grc_enrollment.sql.gz` (`!DATABASE/grc_enrollment.sql.gz`) while continuing to ignore uncompressed `*.sql` files so that commits stay well below GitHub's 100MB file size limit.
+     - Updated `DATABASE/prompt.md` login directory to document the Super Admin account (`westliecasuncad06@gmail.com`).
+  3. **Verification:**
+     - Verified `westliecasuncad06@gmail.com` exists in the compressed dump.
+     - Verified `git status` shows clean tracking of `.gitignore`, `DATABASE/prompt.md`, `DATABASE/grc_enrollment.sql.gz`, and `PROGRESS.md`.
+
 
 - **Transcript "Unexpected API response":** `GradeSlipResource::rowToArray` now sends `subject_id` and `paired_subject_id` (LEC/LAB pairing, Doc 17); the strict `gradeSlipRowSchema` rejected every academic record. Added both as optional fields in `frontend/src/features/schemas/academic-record-schema.ts`. Verified by validating the real backend response for one student against the schema; related vitest files and `tsc --noEmit` passed.
 - **"Lock all" stuck on "Locking all…":** `LockAllAcademicGrades` did update + refresh + audit insert + notification insert per grade inside one transaction; 26,023 submitted grades hit `Maximum execution time of 60 seconds exceeded` (laravel.log), rolled back, nothing locked. Now chunked (1,000) with bulk update/insert; new `AuditRecorder::recordMany` (same validation as `record`); `set_time_limit(0)` for the lock-all request. `AcademicGradesEndpointTest` 30/30 passed.

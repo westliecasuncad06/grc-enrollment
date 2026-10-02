@@ -63,6 +63,7 @@ desktop.ini
 /frontend/test-output.txt
 *.sql
 *.sql.gz
+!DATABASE/grc_enrollment.sql.gz
 /backend/database/backups/
 /frontend/scripts/*.json
 CLAUDE_PROMPT.md

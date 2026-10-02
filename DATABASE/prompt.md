@@ -85,6 +85,7 @@ Lahat ng accounts ay may unified development password:
 ### Administrative & Faculty Accounts
 | Department / Role | Pangalan | Email Address | Password |
 | :--- | :--- | :--- | :---: |
+| **Super Admin** | Westlie Casuncad | `westliecasuncad06@gmail.com` | *(Setup via Forgot Password / OTP)* |
 | **Program Chair (CCS)** | Mary Joy Dy | `chair.ccs@grc.test` | `password` |
 | **Program Chair (COA)** | Seed Program Chair COA | `chair.coa@grc.test` | `password` |
 | **Program Chair (CBAE)** | Seed Program Chair CBAE | `chair.cbae@grc.test` | `password` |
