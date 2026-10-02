@@ -206,6 +206,10 @@ final class AuditAction
 
     public const TRANSFEREE_CREDIT_REJECTED = 'transferee_credit.rejected';
 
+    public const TOR_DOCUMENT_UPLOADED = 'tor_document.uploaded';
+
+    public const TOR_DOCUMENT_DELETED = 'tor_document.deleted';
+
     public const ACADEMIC_TERM_CREATED = 'academic_term.created';
 
     public const ACADEMIC_TERM_DRAFT_IDENTITY_UPDATED = 'academic_term.draft_identity_updated';
@@ -389,6 +393,8 @@ final class AuditAction
             self::TRANSFEREE_CREDIT_ENDORSED,
             self::TRANSFEREE_CREDIT_APPROVED,
             self::TRANSFEREE_CREDIT_REJECTED,
+            self::TOR_DOCUMENT_UPLOADED,
+            self::TOR_DOCUMENT_DELETED,
             self::ACADEMIC_TERM_CREATED,
             self::ACADEMIC_TERM_DRAFT_IDENTITY_UPDATED,
             self::SUBJECT_OFFERINGS_REPLACED,

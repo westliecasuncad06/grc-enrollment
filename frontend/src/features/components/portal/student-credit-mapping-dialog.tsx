@@ -17,6 +17,7 @@ import {
 } from "@/features/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { StudentTorUpload } from "@/features/components/portal/tor-documents-panel"
 import {
   useCreateTransfereeCreditMutation,
   useTransfereeCreditsQuery,
@@ -152,6 +153,8 @@ export function StudentCreditMappingDialog() {
             <AlertDescription>{successMessage}</AlertDescription>
           </Alert>
         )}
+
+        <StudentTorUpload enabled={open} />
 
         <form onSubmit={(event) => void handleSubmit(event)} className="grid gap-4 py-2">
           <FieldGroup className="grid gap-3 sm:grid-cols-2">

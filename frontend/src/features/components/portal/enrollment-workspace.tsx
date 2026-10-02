@@ -864,7 +864,13 @@ export function EnrollmentWorkspace() {
               </span>{" "}
               student, your credit mapping must be completed and approved by the Program Chair and Registrar before you can select subjects and enroll. This ensures that completed subjects and prerequisites from your previous school are officially credited.
             </p>
-            {isTransferee && (
+            <p>
+              Upload your Transcript of Records (TOR) and list the subjects you
+              took in your previous school. Your Program Chair reads the TOR,
+              maps each subject to your curriculum, and the Registrar approves it.
+              Once that is done you can enroll.
+            </p>
+            {(isTransferee || isReturnee) && (
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <StudentCreditMappingDialog />
                 <Button variant="outline" size="sm" asChild>

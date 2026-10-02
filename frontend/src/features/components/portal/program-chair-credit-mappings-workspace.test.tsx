@@ -114,12 +114,21 @@ interface Recorded {
 
 function mockRoutes(
   recorded: Recorded,
-  overrides: { patchResponse?: () => Response; pending?: unknown[] } = {},
+  overrides: {
+    patchResponse?: () => Response
+    pending?: unknown[]
+    tors?: unknown[]
+  } = {},
 ) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const url = requestUrl(input)
     const method = init?.method ?? "GET"
 
+    if (url.includes("/tor-documents")) {
+      return Promise.resolve(
+        new Response(JSON.stringify(paginated(overrides.tors ?? []))),
+      )
+    }
     if (url.includes("/suggestions")) {
       return Promise.resolve(
         new Response(JSON.stringify({ data: suggestions })),
@@ -472,6 +481,55 @@ describe("ProgramChairCreditMappingsWorkspace", () => {
     expect(
       await screen.findByText(/Recorded for Maria Santos/),
     ).toBeInTheDocument()
+  })
+
+  it("starts recording credits for a student from their uploaded TOR, with the TOR beside the form", async () => {
+    const tor = {
+      type: "tor_document",
+      id: 5,
+      student_id: 30,
+      student_number: "2026-0002",
+      student_name: "Maria Santos",
+      original_name: "maria-tor.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 100_000,
+      uploaded_at: "2026-10-01T04:00:00Z",
+    }
+    fetchMock.mockImplementation(mockRoutes(recorded, { tors: [tor] }))
+    const user = userEvent.setup()
+    renderWithSession(<ProgramChairCreditMappingsWorkspace />, {
+      session: chairSession,
+    })
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Record credits for Maria Santos",
+      }),
+    )
+
+    // The form already has the student, and shows their TOR to read while typing.
+    expect(screen.queryByLabelText(/Find student/i)).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Change student" }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("list", { name: "Uploaded TOR files" }),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("Previous school"), "FEU Tech")
+    await user.type(screen.getByLabelText("Subject title"), "Programming 1")
+    await user.click(screen.getByRole("button", { name: "Record credit" }))
+
+    await waitFor(() =>
+      expect(recorded.posts).toEqual([
+        {
+          student_id: 30,
+          source_institution: "FEU Tech",
+          source_subject_title: "Programming 1",
+          credited_units: 3,
+        },
+      ]),
+    )
   })
 
   it("has no detectable accessibility violations once loaded", async () => {

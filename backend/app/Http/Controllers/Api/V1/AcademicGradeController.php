@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Academic\ListAcademicGrades;
+use App\Actions\Academic\ListGradeApprovalProfessors;
+use App\Actions\Academic\ListGradeApprovalSections;
 use App\Actions\Academic\LockAllAcademicGrades;
 use App\Actions\Academic\RecordAcademicGrade;
 use App\Actions\Academic\SubmitSectionGrades;
 use App\Actions\Academic\UpdateAcademicGrade;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\AcademicGrade\ApprovalProfessorsRequest;
+use App\Http\Requests\Api\V1\AcademicGrade\ApprovalSectionsRequest;
 use App\Http\Requests\Api\V1\AcademicGrade\IndexAcademicGradeRequest;
 use App\Http\Requests\Api\V1\AcademicGrade\LockAllAcademicGradesRequest;
 use App\Http\Requests\Api\V1\AcademicGrade\StoreAcademicGradeRequest;
@@ -46,6 +50,63 @@ final class AcademicGradeController extends Controller
         $grades = $listAcademicGrades->execute($actor, $request->validated());
 
         $response = AcademicGradeResource::collection($grades)->response($request);
+
+        return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * The Registrar Head's grade approvals, one row per professor with their real totals.
+     *
+     * @throws AuthenticationException
+     */
+    public function approvalProfessors(ApprovalProfessorsRequest $request, ListGradeApprovalProfessors $list): JsonResponse
+    {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('lockAll', AcademicGrade::class);
+
+        $result = $list->execute($actor, $request->validated());
+        $paginator = $result['paginator'];
+
+        $response = response()->json([
+            'data' => collect($paginator->items())->map(static fn (\stdClass $row): array => [
+                'professor_id' => $row->professor_id !== null ? (int) $row->professor_id : null,
+                'professor_name' => $row->professor_name,
+                'college' => $row->college,
+                'subject_count' => (int) $row->subject_count,
+                'grade_count' => (int) $row->grade_count,
+            ])->values(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'total_grades' => $result['total_grades'],
+            ],
+        ]);
+
+        return $this->cachePrivateResponse($response);
+    }
+
+    /**
+     * One professor's sections with grades awaiting lock, with the count in each.
+     *
+     * @throws AuthenticationException
+     */
+    public function approvalSections(ApprovalSectionsRequest $request, ListGradeApprovalSections $list): JsonResponse
+    {
+        $actor = $this->authenticatedUser($request);
+        $this->authorize('lockAll', AcademicGrade::class);
+
+        $response = response()->json([
+            'data' => $list->execute($actor, $request->validated())->map(static fn (\stdClass $row): array => [
+                'section_id' => $row->section_id !== null ? (int) $row->section_id : null,
+                'subject_id' => (int) $row->subject_id,
+                'subject_code' => $row->subject_code,
+                'subject_title' => $row->subject_title,
+                'section_code' => $row->section_code,
+                'grade_count' => (int) $row->grade_count,
+            ])->values(),
+        ]);
 
         return $this->cachePrivateResponse($response);
     }

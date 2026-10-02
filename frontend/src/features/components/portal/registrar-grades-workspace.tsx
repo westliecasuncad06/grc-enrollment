@@ -46,6 +46,7 @@ import {
 } from "@/features/components/ui/tabs"
 import {
   useAcademicGradesQuery,
+  useGradeApprovalProfessorsQuery,
   useLockAllAcademicGradesMutation,
   useUpdateAcademicGradeMutation,
 } from "@/features/hooks/use-academic-grades"
@@ -116,15 +117,17 @@ export function RegistrarGradesWorkspace({
     useState<AcademicRecordStudentLookup | null>(null)
   const [isSearching, setIsSearching] = useState(false)
 
-  const approvalsQuery = useAcademicGradesQuery(
+  // One row per professor with their real totals, paged over professors (the
+  // lower levels of the drill-down load their own data).
+  const approvalsQuery = useGradeApprovalProfessorsQuery(
     {
-      status: "submitted",
       college: approvalsDepartment === "all" ? undefined : approvalsDepartment,
       page: approvalsPage,
-      per_page: 250,
+      per_page: 12,
     },
     { enabled: showApprovals && activeTab === "approvals" },
   )
+  const pendingGradeCount = approvalsQuery.data?.meta.total_grades
 
   const historyQuery = useAcademicGradesQuery(
     {
@@ -307,12 +310,12 @@ export function RegistrarGradesWorkspace({
             >
               <Clock3 className="size-4" aria-hidden />
               Pending approvals
-              {approvalsQuery.data?.meta.total !== undefined && (
+              {pendingGradeCount !== undefined && (
                 <Badge
                   variant={activeTab === "approvals" ? "secondary" : "outline"}
                   className="ml-1 px-1.5 py-0 text-[10px]"
                 >
-                  {approvalsQuery.data.meta.total}
+                  {pendingGradeCount}
                 </Badge>
               )}
             </Button>
@@ -367,8 +370,8 @@ export function RegistrarGradesWorkspace({
                     ))}
                   </div>
 
-                  {approvalsQuery.data?.meta.total !== undefined &&
-                    approvalsQuery.data.meta.total > 0 && (
+                  {pendingGradeCount !== undefined &&
+                    pendingGradeCount > 0 && (
                       <Button
                         type="button"
                         variant="destructive"
@@ -389,13 +392,18 @@ export function RegistrarGradesWorkspace({
                     ...approvalsQuery,
                     data: approvalsQuery.data?.data,
                   }}
-                  isEmpty={(rows) => rows.length === 0}
+                  isEmpty={(rows) => rows.length === 0 && approvalsPage === 1}
                   emptyMessage="No submitted grades are awaiting lock."
                   loadingLabel="Loading submitted grades…"
                 >
-                  {(grades) => (
+                  {(professors) => (
                     <GradeApprovalsDrilldown
-                      grades={grades}
+                      key={approvalsDepartment}
+                      professors={professors}
+                      page={approvalsQuery.data?.meta.current_page ?? 1}
+                      lastPage={approvalsQuery.data?.meta.last_page ?? 1}
+                      onPageChange={setApprovalsPage}
+                      department={approvalsDepartment}
                       lockingGradeId={
                         lockMutation.isPending ? (lockTarget?.id ?? null) : null
                       }
@@ -406,13 +414,6 @@ export function RegistrarGradesWorkspace({
                     />
                   )}
                 </AsyncBoundary>
-                <div className="mt-4">
-                  <Paginator
-                    currentPage={approvalsQuery.data?.meta.current_page ?? 1}
-                    lastPage={approvalsQuery.data?.meta.last_page ?? 1}
-                    onPageChange={setApprovalsPage}
-                  />
-                </div>
               </CardContent>
             </Card>
           )}
@@ -889,7 +890,7 @@ export function RegistrarGradesWorkspace({
               <span>
                 Locking all submitted grades is permanent — they can never be
                 unlocked, edited, or re-submitted. This will finalize{" "}
-                <strong>{approvalsQuery.data?.meta.total ?? 0}</strong>{" "}
+                <strong>{pendingGradeCount ?? 0}</strong>{" "}
                 submitted grade(s), notify all affected students, and reclassify
                 their enrollment category (Regular / Irregular).
               </span>

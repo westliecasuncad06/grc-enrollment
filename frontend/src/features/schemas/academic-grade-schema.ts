@@ -100,6 +100,8 @@ export const academicGradeFiltersSchema = z
   .object({
     student_id: z.number().int().positive().optional(),
     subject_id: z.number().int().positive().optional(),
+    professor_id: z.number().int().positive().optional(),
+    section_id: z.number().int().positive().optional(),
     academic_term_id: z.number().int().positive().optional(),
     status: z.enum(gradeStatusValues).optional(),
     search: z.string().optional(),
@@ -107,6 +109,59 @@ export const academicGradeFiltersSchema = z
     page: z.number().int().positive().default(1),
     per_page: z.number().int().min(1).max(500).default(20),
   })
+  .strict()
+
+/** One professor with grades awaiting lock: a row of the Registrar Head's approvals. */
+export const gradeApprovalProfessorSchema = z
+  .object({
+    professor_id: z.number().int().positive(),
+    professor_name: z.string().nullable(),
+    college: z.string().nullable(),
+    subject_count: z.number().int().nonnegative(),
+    grade_count: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export const paginatedGradeApprovalProfessorsSchema = z
+  .object({
+    data: z.array(gradeApprovalProfessorSchema),
+    meta: z
+      .object({
+        current_page: z.number().int().positive(),
+        last_page: z.number().int().positive(),
+        per_page: z.number().int().min(1).max(500),
+        total: z.number().int().nonnegative(),
+        /** Every grade awaiting lock under the current filter, over all professors. */
+        total_grades: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const gradeApprovalProfessorFiltersSchema = z
+  .object({
+    academic_term_id: z.number().int().positive().optional(),
+    college: z.string().optional(),
+    search: z.string().optional(),
+    page: z.number().int().positive().default(1),
+    per_page: z.number().int().min(1).max(100).default(12),
+  })
+  .strict()
+
+/** One section (a subject taught in a section) a professor has grades awaiting lock in. */
+export const gradeApprovalSectionSchema = z
+  .object({
+    section_id: z.number().int().positive().nullable(),
+    subject_id: z.number().int().positive(),
+    subject_code: z.string().min(1),
+    subject_title: z.string().nullable(),
+    section_code: z.string().nullable(),
+    grade_count: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export const gradeApprovalSectionsEnvelopeSchema = z
+  .object({ data: z.array(gradeApprovalSectionSchema) })
   .strict()
 
 export const storeAcademicGradeInputSchema = z
@@ -158,6 +213,16 @@ export const lockAllAcademicGradesEnvelopeSchema = z
 
 export type AcademicGrade = z.infer<typeof academicGradeSchema>
 export type AcademicGradeFilters = z.input<typeof academicGradeFiltersSchema>
+export type GradeApprovalProfessor = z.infer<
+  typeof gradeApprovalProfessorSchema
+>
+export type PaginatedGradeApprovalProfessors = z.infer<
+  typeof paginatedGradeApprovalProfessorsSchema
+>
+export type GradeApprovalProfessorFilters = z.input<
+  typeof gradeApprovalProfessorFiltersSchema
+>
+export type GradeApprovalSection = z.infer<typeof gradeApprovalSectionSchema>
 export type StoreAcademicGradeInput = z.infer<
   typeof storeAcademicGradeInputSchema
 >

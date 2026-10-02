@@ -740,6 +740,12 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
                 rows={loadedSheet.rows}
                 rowKey={(row) => row.enrollment_subject_id}
                 columns={columns}
+                renderCard={(row) => (
+                  <GradeSheetCard
+                    row={row}
+                    cell={(key) => columns.find((column) => column.key === key)?.render(row)}
+                  />
+                )}
                 emptyMessage="No enrolled students are in this section yet."
               />
             </CardContent>
@@ -1199,5 +1205,47 @@ export function GradeSubmissionWorkspace() {
         </DialogContent>
       </Dialog>
     </WorkspacePage>
+  )
+}
+
+/**
+ * One student's row on a phone. The default narrow layout puts each label and
+ * its value side by side in two cramped columns, which squeezes the grade
+ * dropdown and the remarks box (the text no longer lines up while a professor
+ * is entering grades). Here the student comes first and every field sits under
+ * its own label at the full width of the card.
+ */
+function GradeSheetCard({
+  row,
+  cell,
+}: {
+  row: SectionGradeRow
+  cell: (key: string) => React.ReactNode
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle level={3} className="text-base">
+          {row.student_name}
+        </CardTitle>
+        <p className="font-mono text-xs text-muted-foreground">
+          {row.student_number}
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="grid min-w-0 gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Grade</span>
+          <div className="min-w-0 text-sm">{cell("mark")}</div>
+        </div>
+        <div className="grid min-w-0 gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Remarks</span>
+          <div className="min-w-0 text-sm">{cell("remarks")}</div>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Status</span>
+          {cell("status")}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -223,7 +223,11 @@ async function request(
     Accept: "application/json",
   }
 
-  if (body !== undefined) {
+  // A FormData body (a file upload) carries its own multipart Content-Type with the
+  // boundary; setting one here would break it.
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData
+
+  if (body !== undefined && !isForm) {
     headers["Content-Type"] = "application/json"
   }
 
@@ -246,7 +250,12 @@ async function request(
     response = await fetch(buildApiUrl(path), {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined
+          ? undefined
+          : isForm
+            ? body
+            : JSON.stringify(body),
       credentials: "omit",
       cache: "no-store",
       signal,
@@ -349,6 +358,22 @@ export function postAuthenticatedJson(
     authenticated: true,
     authenticatedOptions: options,
     body: body ?? {},
+    method: "POST",
+    signal,
+  })
+}
+
+/** A multipart upload (a file) to an authenticated endpoint. */
+export function postAuthenticatedForm(
+  path: string,
+  form: FormData,
+  signal?: AbortSignal,
+  options?: AuthenticatedRequestOptions,
+): Promise<unknown> {
+  return request(path, {
+    authenticated: true,
+    authenticatedOptions: options,
+    body: form,
     method: "POST",
     signal,
   })

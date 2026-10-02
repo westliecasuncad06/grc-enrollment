@@ -315,6 +315,30 @@ describe("GradeSubmissionWorkspace", () => {
     expect(within(table).getByText("2026-0002")).toBeInTheDocument()
   })
 
+  it("on a phone shows each student as a card with Grade and Remarks stacked under their own labels", async () => {
+    stubSectionGradeRoutes(fetchMock)
+    const user = userEvent.setup()
+    renderWithSession(<GradeSubmissionWorkspace />, { session: facultySession })
+    await openClass(user)
+
+    // The card list (the narrow-viewport half of the grade sheet) has one card per student,
+    // each with the student first, then Grade and Remarks as labelled full-width fields.
+    const card = screen
+      .getByRole("heading", { level: 3, name: "Ada Lovelace" })
+      .closest("div[data-slot='card']") as HTMLElement
+    expect(card).not.toBeNull()
+    expect(within(card).getByText("2026-0001")).toBeInTheDocument()
+    expect(within(card).getByText("Grade")).toBeInTheDocument()
+    expect(within(card).getByText("Remarks")).toBeInTheDocument()
+    expect(within(card).getByLabelText("Grade for Ada Lovelace")).toBeInTheDocument()
+    expect(within(card).getByLabelText("Remarks for Ada Lovelace")).toBeInTheDocument()
+
+    // It is the real, editable control: choosing a grade works from the card.
+    await user.click(within(card).getByLabelText("Grade for Ada Lovelace"))
+    await user.click(screen.getByRole("option", { name: /1.75/ }))
+    expect(within(card).getByLabelText("Grade for Ada Lovelace")).toHaveTextContent(/1.75/)
+  })
+
   it("offers ordinary marks without completion-only choices", async () => {
     stubSectionGradeRoutes(fetchMock)
     const user = userEvent.setup()

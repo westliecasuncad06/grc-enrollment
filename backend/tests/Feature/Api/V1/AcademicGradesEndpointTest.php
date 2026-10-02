@@ -709,6 +709,131 @@ final class AcademicGradesEndpointTest extends TestCase
         self::assertArrayHasKey('mark', $response->json('error.errors'));
     }
 
+    /**
+     * Two professors; Prof A has two sections (3 submitted grades), Prof B one (1 submitted
+     * and 1 draft grade, the draft must not count).
+     *
+     * @return array{term: AcademicTerm, a: User, b: User, aGrades: list<AcademicGrade>}
+     */
+    private function twoProfessorsWithSubmittedGrades(): array
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $a = User::create(['name' => 'Prof Alpha', 'email' => 'prof.alpha@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $b = User::create(['name' => 'Prof Beta', 'email' => 'prof.beta@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::Faculty, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $subjectOne = $this->makeSubject('CS101');
+        $subjectTwo = $this->makeSubject('CS102');
+        $subjectThree = $this->makeSubject('CS103');
+        $sectionA1 = $this->makeSection($term, $subjectOne, $a);
+        $sectionA2 = $this->makeSection($term, $subjectTwo, $a);
+        $sectionB = $this->makeSection($term, $subjectThree, $b);
+        $students = [
+            $this->makeStudent($curriculum, 'student.ap1@grc.test', '2026-9101'),
+            $this->makeStudent($curriculum, 'student.ap2@grc.test', '2026-9102'),
+            $this->makeStudent($curriculum, 'student.ap3@grc.test', '2026-9103'),
+        ];
+
+        $aGrades = [
+            $this->makeGrade($students[0], $subjectOne, $sectionA1, $term, $a, GradeStatus::Submitted),
+            $this->makeGrade($students[1], $subjectOne, $sectionA1, $term, $a, GradeStatus::Submitted),
+            $this->makeGrade($students[0], $subjectTwo, $sectionA2, $term, $a, GradeStatus::Submitted),
+        ];
+        $this->makeGrade($students[2], $subjectThree, $sectionB, $term, $b, GradeStatus::Submitted);
+        $this->makeGrade($students[1], $subjectThree, $sectionB, $term, $b, GradeStatus::Draft);
+
+        return ['term' => $term, 'a' => $a, 'b' => $b, 'aGrades' => $aGrades];
+    }
+
+    public function test_approval_professors_groups_the_submitted_grades_one_row_per_professor(): void
+    {
+        ['a' => $a, 'b' => $b] = $this->twoProfessorsWithSubmittedGrades();
+        $head = User::create(['name' => 'Reg Head', 'email' => 'reg.head.approvals@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $token = $this->tokenFor($head);
+
+        $response = $this->withToken($token)->getJson('/api/v1/academic-grades/approval-professors');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.professor_id', $a->id)
+            ->assertJsonPath('data.0.professor_name', 'Prof Alpha')
+            ->assertJsonPath('data.0.grade_count', 3)
+            ->assertJsonPath('data.0.subject_count', 2)
+            ->assertJsonPath('data.1.professor_id', $b->id)
+            ->assertJsonPath('data.1.grade_count', 1)
+            ->assertJsonPath('data.1.subject_count', 1)
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('meta.total_grades', 4);
+    }
+
+    public function test_approval_professors_pages_over_professors_not_over_grades(): void
+    {
+        $this->twoProfessorsWithSubmittedGrades();
+        $head = User::create(['name' => 'Reg Head', 'email' => 'reg.head.approvals2@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $token = $this->tokenFor($head);
+
+        // One professor per page: Prof Alpha (3 grades) is never split across pages and
+        // appears exactly once, with all of their grades counted.
+        $first = $this->withToken($token)->getJson('/api/v1/academic-grades/approval-professors?per_page=1&page=1');
+        $second = $this->withToken($token)->getJson('/api/v1/academic-grades/approval-professors?per_page=1&page=2');
+
+        $first->assertOk()->assertJsonPath('data.0.professor_name', 'Prof Alpha')->assertJsonPath('data.0.grade_count', 3)
+            ->assertJsonPath('meta.last_page', 2)->assertJsonPath('meta.total', 2);
+        $second->assertOk()->assertJsonPath('data.0.professor_name', 'Prof Beta')->assertJsonPath('data.0.grade_count', 1);
+    }
+
+    public function test_approval_professors_is_for_the_registrar_head_only(): void
+    {
+        ['a' => $a] = $this->twoProfessorsWithSubmittedGrades();
+
+        $this->withToken($this->tokenFor($a))->getJson('/api/v1/academic-grades/approval-professors')->assertForbidden();
+        $staff = User::create(['name' => 'Reg Staff', 'email' => 'reg.staff.approvals@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarStaff, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $this->withToken($this->tokenFor($staff))->getJson('/api/v1/academic-grades/approval-professors')->assertForbidden();
+    }
+
+    public function test_the_grade_list_can_be_limited_to_one_professors_grades(): void
+    {
+        ['a' => $a, 'b' => $b] = $this->twoProfessorsWithSubmittedGrades();
+        $head = User::create(['name' => 'Reg Head', 'email' => 'reg.head.approvals3@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $token = $this->tokenFor($head);
+
+        $this->withToken($token)->getJson("/api/v1/academic-grades?status=submitted&professor_id={$a->id}")
+            ->assertOk()->assertJsonPath('meta.total', 3);
+        $this->withToken($token)->getJson("/api/v1/academic-grades?status=submitted&professor_id={$b->id}")
+            ->assertOk()->assertJsonPath('meta.total', 1);
+    }
+
+    public function test_approval_sections_lists_one_professors_sections_with_their_counts(): void
+    {
+        ['a' => $a, 'b' => $b, 'aGrades' => $aGrades] = $this->twoProfessorsWithSubmittedGrades();
+        $head = User::create(['name' => 'Reg Head', 'email' => 'reg.head.approvals4@grc.test', 'password' => self::PASSWORD, 'role' => UserRole::RegistrarHead, 'status' => UserStatus::Active, 'last_otp_verified_at' => now()]);
+        $token = $this->tokenFor($head);
+
+        $response = $this->withToken($token)->getJson("/api/v1/academic-grades/approval-sections?professor_id={$a->id}");
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.subject_code', 'CS101')
+            ->assertJsonPath('data.0.grade_count', 2)
+            ->assertJsonPath('data.1.subject_code', 'CS102')
+            ->assertJsonPath('data.1.grade_count', 1);
+        $this->withToken($token)->getJson("/api/v1/academic-grades/approval-sections?professor_id={$b->id}")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.subject_code', 'CS103');
+        $this->withToken($token)->getJson('/api/v1/academic-grades/approval-sections')->assertUnprocessable();
+
+        // The section the row names is the filter the next level uses to list its grades.
+        $sectionId = $response->json('data.0.section_id');
+        $this->withToken($token)->getJson("/api/v1/academic-grades?status=submitted&section_id={$sectionId}")
+            ->assertOk()->assertJsonPath('meta.total', 2);
+        $this->assertSame($sectionId, $aGrades[0]->section_id);
+    }
+
+    public function test_approval_sections_is_for_the_registrar_head_only(): void
+    {
+        ['a' => $a] = $this->twoProfessorsWithSubmittedGrades();
+
+        $this->withToken($this->tokenFor($a))->getJson("/api/v1/academic-grades/approval-sections?professor_id={$a->id}")->assertForbidden();
+    }
+
     public function test_non_registrar_head_cannot_lock_all_grades(): void
     {
         $term = $this->makeTerm();

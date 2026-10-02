@@ -4,6 +4,7 @@ import {
   deleteAuthenticatedJson,
   getJson,
   patchAuthenticatedJson,
+  postAuthenticatedForm,
   setAuthTokenProvider,
   setUnauthorizedHandler,
 } from "@/features/services/api-client"
@@ -187,5 +188,35 @@ describe("getJson", () => {
     ).rejects.toMatchObject({ status: 401 })
 
     expect(onUnauthorized).toHaveBeenCalledOnce()
+  })
+})
+
+describe("postAuthenticatedForm", () => {
+  const fetchMock = vi.fn<typeof fetch>()
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock)
+    setAuthTokenProvider(() => "1|token")
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("sends a FormData body as-is, leaving the multipart Content-Type to the browser", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: { ok: true } }), { status: 201 }),
+    )
+    const form = new FormData()
+    form.append("file", new File(["%PDF"], "tor.pdf", { type: "application/pdf" }))
+
+    await postAuthenticatedForm("/api/v1/tor-documents", form)
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.method).toBe("POST")
+    expect(init?.body).toBe(form)
+    const headers = init?.headers as Record<string, string>
+    expect(headers["Content-Type"]).toBeUndefined()
+    expect(headers.Authorization).toBe("Bearer 1|token")
   })
 })

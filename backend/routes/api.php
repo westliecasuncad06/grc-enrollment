@@ -93,6 +93,7 @@ use App\Http\Controllers\Api\V1\SubjectWaiverController;
 use App\Http\Controllers\Api\V1\SuperAdmin\ActingContextController;
 use App\Http\Controllers\Api\V1\SuperAdmin\UserAccountController;
 use App\Http\Middleware\EnsureSuperAdminIsNotActing;
+use App\Http\Controllers\Api\V1\TorDocumentController;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
 use App\Http\Controllers\Api\V1\WithdrawalRequestController;
 use App\Http\Middleware\ApplySuperAdminActingContext;
@@ -380,6 +381,15 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::patch('/transferee-credits/{transfereeCredit}', [TransfereeCreditController::class, 'update'])->name('transferee-credits.update');
         Route::get('/transferee-credits/{transfereeCredit}/suggestions', [TransfereeCreditController::class, 'suggestions'])->name('transferee-credits.suggestions');
 
+        // A transferee's / returnee's Transcript of Records, uploaded for credit
+        // mapping (ADR 0026): the Student uploads, lists and removes their own;
+        // the Program Chair (their college) and Registrar Staff / Head read.
+        // No `role:` middleware — StudentTorDocumentPolicy resolves each ability.
+        Route::get('/tor-documents', [TorDocumentController::class, 'index'])->name('tor-documents.index');
+        Route::post('/tor-documents', [TorDocumentController::class, 'store'])->name('tor-documents.store');
+        Route::get('/tor-documents/{torDocument}/file', [TorDocumentController::class, 'file'])->name('tor-documents.file');
+        Route::delete('/tor-documents/{torDocument}', [TorDocumentController::class, 'destroy'])->name('tor-documents.destroy');
+
         // PRD §3.2 "View assigned teaching schedules and class rosters" —
         // Faculty own sections, Registrar Staff/Head all
         // (EnrollmentSubject::scopeVisibleTo). No `role:` middleware —
@@ -395,6 +405,8 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // EnrollmentController resolves registrar_approve/registrar_reject/
         // void. See ADR 0011.
         Route::get('/academic-grades', [AcademicGradeController::class, 'index'])->name('academic-grades.index');
+        Route::get('/academic-grades/approval-professors', [AcademicGradeController::class, 'approvalProfessors'])->middleware('role:registrar_head')->name('academic-grades.approval-professors');
+        Route::get('/academic-grades/approval-sections', [AcademicGradeController::class, 'approvalSections'])->middleware('role:registrar_head')->name('academic-grades.approval-sections');
         Route::post('/academic-grades', [AcademicGradeController::class, 'store'])->name('academic-grades.store');
         Route::post('/academic-grades/lock-all', [AcademicGradeController::class, 'lockAll'])->middleware('role:registrar_head')->name('academic-grades.lock-all');
         Route::patch('/academic-grades/{academicGrade}', [AcademicGradeController::class, 'update'])->name('academic-grades.update');

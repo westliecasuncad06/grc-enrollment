@@ -88,6 +88,11 @@ describe("StudentCreditMappingDialog", () => {
     expect(screen.getByLabelText(/Previous School/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Previous Subject Code/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Subject Title/i)).toBeInTheDocument()
+    // The TOR upload sits above the subject form (the evidence the Program Head checks them against).
+    expect(
+      screen.getByRole("heading", { name: /Your Transcript of Records/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Upload TOR" })).toBeInTheDocument()
     expect(await screen.findByText(/Your Credited & Pending Subjects/i)).toBeInTheDocument()
     expect(await screen.findByText(/CS101 — Computer Concepts/i)).toBeInTheDocument()
   })

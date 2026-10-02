@@ -50,6 +50,8 @@ final class AuditableType
 
     public const TRANSFEREE_CREDIT = 'transferee_credit';
 
+    public const TOR_DOCUMENT = 'tor_document';
+
     public const ACADEMIC_TERM = 'academic_term';
 
     public const SUBJECT_OFFERING = 'subject_offering';
@@ -118,6 +120,7 @@ final class AuditableType
             self::QUEUE_TICKET,
             self::WITHDRAWAL_REQUEST,
             self::TRANSFEREE_CREDIT,
+            self::TOR_DOCUMENT,
             self::ACADEMIC_TERM,
             self::SUBJECT_OFFERING,
             self::ACADEMIC_TERM_WORKFLOW,

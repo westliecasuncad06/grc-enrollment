@@ -45,6 +45,57 @@ const submittedGrade = {
   locked_at: null,
 } as const
 
+const approvalProfessor = {
+  professor_id: 20,
+  professor_name: "Prof. Reyes",
+  college: "ccs",
+  subject_count: 1,
+  grade_count: 1,
+} as const
+
+const approvalSection = {
+  section_id: 5,
+  subject_id: 7,
+  subject_code: "CS101",
+  subject_title: null,
+  section_code: null,
+  grade_count: 1,
+} as const
+
+function professorsPage(
+  rows: readonly { grade_count: number }[],
+  meta: Partial<{ current_page: number; last_page: number }> = {},
+) {
+  return {
+    data: rows,
+    meta: {
+      current_page: 1,
+      last_page: 1,
+      per_page: 12,
+      total: rows.length,
+      total_grades: rows.reduce((total, row) => total + row.grade_count, 0),
+      ...meta,
+    },
+  }
+}
+
+/**
+ * The approvals read three things: professors (one row each, paged), one
+ * professor's sections, and one section's grades. Returns the response for the
+ * first two (the grade list is mocked by each test), or null for anything else.
+ */
+function approvalsResponse(
+  target: string,
+  professors: readonly { grade_count: number }[] = [approvalProfessor],
+  sections: readonly unknown[] = [approvalSection],
+): Response | null {
+  if (target.includes("/academic-grades/approval-professors"))
+    return new Response(JSON.stringify(professorsPage(professors)))
+  if (target.includes("/academic-grades/approval-sections"))
+    return new Response(JSON.stringify({ data: sections }))
+  return null
+}
+
 const registrarHeadSession = {
   userId: "9",
   displayName: "Registrar Head",
@@ -135,6 +186,8 @@ describe("RegistrarGradesWorkspace", () => {
           ),
         )
       }
+      const approvals = approvalsResponse(target)
+      if (approvals) return Promise.resolve(approvals)
       if (target.includes("/academic-grades"))
         return Promise.resolve(
           new Response(
@@ -216,6 +269,8 @@ describe("RegistrarGradesWorkspace", () => {
           ),
         )
       }
+      const approvals = approvalsResponse(target)
+      if (approvals) return Promise.resolve(approvals)
       if (target.includes("/academic-grades"))
         return Promise.resolve(
           new Response(
@@ -430,26 +485,71 @@ describe("RegistrarGradesWorkspace", () => {
       college: "ccs",
     }
 
+    const coeProfessor = {
+      professor_id: 425,
+      professor_name: "Henry Nieva Corrales",
+      college: "coe",
+      subject_count: 1,
+      grade_count: 1,
+    }
+    const ccsProfessor = {
+      professor_id: 430,
+      professor_name: "Maria Delos Santos",
+      college: "ccs",
+      subject_count: 1,
+      grade_count: 1,
+    }
+    const coeSection = {
+      section_id: 50,
+      subject_id: 7,
+      subject_code: "ACC101",
+      subject_title: "Accounting 1",
+      section_code: "ACC101-A",
+      grade_count: 1,
+    }
+    const ccsSection = {
+      section_id: 51,
+      subject_id: 8,
+      subject_code: "CS201",
+      subject_title: "Object-Oriented Programming",
+      section_code: "CS201-A",
+      grade_count: 1,
+    }
+
     fetchMock.mockImplementation((input) => {
       const target = url(input)
-      if (target.includes("/academic-grades")) {
-        if (target.includes("college=ccs")) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                data: [ccsGrade],
-                links: paginationLinks,
-                meta: { ...paginationMeta, total: 1 },
-              }),
+      if (target.includes("/academic-grades/approval-professors")) {
+        // The department filter is applied by the server.
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              professorsPage(
+                target.includes("college=ccs")
+                  ? [ccsProfessor]
+                  : [coeProfessor, ccsProfessor],
+              ),
             ),
-          )
-        }
+          ),
+        )
+      }
+      if (target.includes("/academic-grades/approval-sections")) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              data: [coeGrade, ccsGrade],
+              data: target.includes("professor_id=425")
+                ? [coeSection]
+                : [ccsSection],
+            }),
+          ),
+        )
+      }
+      if (target.includes("/academic-grades")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: target.includes("section_id=50") ? [coeGrade] : [ccsGrade],
               links: paginationLinks,
-              meta: { ...paginationMeta, total: 2 },
+              meta: { ...paginationMeta, total: 1 },
             }),
           ),
         )
@@ -547,6 +647,50 @@ describe("RegistrarGradesWorkspace", () => {
       await screen.findByRole("button", { name: /Maria Delos Santos/ }),
     ).toBeInTheDocument()
   })
+  it("pages over professors, each shown once with their real grade total", async () => {
+    const user = userEvent.setup()
+    const alpha = { ...approvalProfessor, professor_id: 31, professor_name: "Prof. Alpha", subject_count: 7, grade_count: 175 }
+    const beta = { ...approvalProfessor, professor_id: 32, professor_name: "Prof. Beta", subject_count: 1, grade_count: 24 }
+    fetchMock.mockImplementation((input) => {
+      const target = url(input)
+      if (target.includes("/academic-grades/approval-professors"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              target.includes("page=2")
+                ? professorsPage([beta], { current_page: 2, last_page: 2 })
+                : professorsPage([alpha], { current_page: 1, last_page: 2 }),
+            ),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(
+      <RegistrarGradesWorkspace initialModuleId="grade-approvals" />,
+      { session: registrarHeadSession },
+    )
+
+    // The whole 175, not the part of it that happened to fall on one page of grades.
+    expect(
+      await screen.findByRole("button", { name: /Prof\. Alpha.*175 grade\(s\) awaiting lock/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Next page" }))
+
+    expect(
+      await screen.findByRole("button", { name: /Prof\. Beta.*24 grade\(s\) awaiting lock/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Prof\. Alpha/ })).not.toBeInTheDocument()
+    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        url(input).includes("/academic-grades/approval-professors?") && url(input).includes("page=2"),
+      ),
+    ).toBe(true)
+  })
+
   it("switches to Grade History tab and searches historical locked records", async () => {
     const user = userEvent.setup()
     const historicalGrade = {
@@ -638,6 +782,8 @@ describe("RegistrarGradesWorkspace", () => {
   it("has no detectable accessibility violations on the grade-approvals list", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)
+      const approvals = approvalsResponse(target)
+      if (approvals) return Promise.resolve(approvals)
       if (target.includes("/academic-grades"))
         return Promise.resolve(
           new Response(

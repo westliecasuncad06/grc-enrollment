@@ -670,6 +670,71 @@ describe("EnrollmentWorkspace", () => {
     ).toBeInTheDocument()
   })
 
+  it.each([
+    ["transferee", "Transferee"],
+    ["returnee", "Returnee"],
+  ])(
+    "holds a %s from enrolling until credit mapping is done, and offers the TOR upload and credit request",
+    async (studentType, label) => {
+      fetchMock.mockImplementation((input, init) => {
+        const target = url(input)
+        if (target.endsWith("/student-profile"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  ...ownProfile(30),
+                  student_type: studentType,
+                  student_type_label: label,
+                },
+              }),
+            ),
+          )
+        if (target.includes("/eligible-subjects"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [
+                  {
+                    ...eligibleSubject,
+                    is_eligible: false,
+                    reasons: [
+                      {
+                        code: "credit_mapping_pending",
+                        message: "Credit mapping is not complete yet.",
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ),
+          )
+        return mockRoutes()(input, init)
+      })
+      renderWithSession(<EnrollmentWorkspace />, {
+        session: {
+          userId: "1",
+          displayName: "Student",
+          role: "student",
+          signedInAt: "2026-07-30T00:00:00Z",
+        },
+      })
+
+      expect(
+        await screen.findByText("Credit Mapping Required Before Enrollment"),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/Upload your Transcript of Records/)).toBeInTheDocument()
+      // Both kinds of student can request credit mapping and upload their TOR.
+      expect(
+        screen.getByRole("button", { name: /Request Credit Mapping/ }),
+      ).toBeInTheDocument()
+      // And nothing can be submitted while it is open.
+      expect(
+        screen.queryByRole("button", { name: "Submit enrollment" }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
   it("keeps the selected section after navigating away and back", async () => {
     const user = userEvent.setup()
     fetchMock.mockImplementation(mockRoutes())

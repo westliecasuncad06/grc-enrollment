@@ -1,16 +1,22 @@
 import {
   academicGradeEnvelopeSchema,
   academicGradeFiltersSchema,
+  gradeApprovalProfessorFiltersSchema,
+  gradeApprovalSectionsEnvelopeSchema,
   lockAllAcademicGradesEnvelopeSchema,
   lockAllAcademicGradesInputSchema,
   paginatedAcademicGradesSchema,
+  paginatedGradeApprovalProfessorsSchema,
   storeAcademicGradeInputSchema,
   updateAcademicGradeInputSchema,
   type AcademicGrade,
   type AcademicGradeFilters,
+  type GradeApprovalProfessorFilters,
+  type GradeApprovalSection,
   type LockAllAcademicGradesInput,
   type LockAllAcademicGradesResult,
   type Paginated,
+  type PaginatedGradeApprovalProfessors,
   type StoreAcademicGradeInput,
   type UpdateAcademicGradeInput,
 } from "@/features/schemas/academic-grade-schema"
@@ -58,6 +64,49 @@ export async function listAcademicGrades(
     ),
     "grade list",
   )
+}
+
+/** The Registrar Head's approvals, one row per professor (real totals, paged over professors). */
+export async function listGradeApprovalProfessors(
+  filters: GradeApprovalProfessorFilters,
+  signal?: AbortSignal,
+): Promise<PaginatedGradeApprovalProfessors> {
+  const parsed = parse(
+    gradeApprovalProfessorFiltersSchema,
+    filters,
+    "grade approval filter",
+  )
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(parsed)) {
+    if (value !== undefined) query.set(key, String(value))
+  }
+  return parse(
+    paginatedGradeApprovalProfessorsSchema,
+    await getAuthenticatedJson(
+      `${ACADEMIC_GRADES_PATH}/approval-professors?${query.toString()}`,
+      signal,
+    ),
+    "grade approval professor list",
+  )
+}
+
+/** The sections one professor has grades awaiting lock in. */
+export async function listGradeApprovalSections(
+  filters: { professor_id: number; college?: string },
+  signal?: AbortSignal,
+): Promise<readonly GradeApprovalSection[]> {
+  const query = new URLSearchParams({
+    professor_id: String(filters.professor_id),
+  })
+  if (filters.college) query.set("college", filters.college)
+  return parse(
+    gradeApprovalSectionsEnvelopeSchema,
+    await getAuthenticatedJson(
+      `${ACADEMIC_GRADES_PATH}/approval-sections?${query.toString()}`,
+      signal,
+    ),
+    "grade approval section list",
+  ).data
 }
 
 export async function createAcademicGrade(

@@ -7,6 +7,11 @@ import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import { CreditReviewDialog } from "@/features/components/portal/credit-review-dialog"
 import { DataTable } from "@/features/components/portal/data-table"
 import { Paginator } from "@/features/components/portal/paginator"
+import {
+  StudentTorFiles,
+  TorUploadsCard,
+  type TorStudent,
+} from "@/features/components/portal/tor-documents-panel"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Alert, AlertDescription } from "@/features/components/ui/alert"
 import { Badge } from "@/features/components/ui/badge"
@@ -63,12 +68,20 @@ function takenAt(credit: TransfereeCredit): string {
  * be recorded here too. A returnee from an old curriculum is not handled here:
  * the Curriculum Editor's migration already does that.
  */
+/** The part of a student the "record a credit" form needs. */
+type CreditStudent = Pick<
+  AcademicRecordStudentLookup,
+  "student_id" | "name" | "student_number"
+>
+
 export function ProgramChairCreditMappingsWorkspace() {
   const { session } = useAuth()
   const authorized = session?.role === "program_chair"
 
   const [pendingPage, setPendingPage] = useState(1)
   const [reviewing, setReviewing] = useState<TransfereeCredit | null>(null)
+  // The student whose credits the chair is about to record, picked from a TOR upload.
+  const [recordFor, setRecordFor] = useState<TorStudent | null>(null)
 
   const pendingQuery = useTransfereeCreditsQuery(
     { status: "pending", page: pendingPage, per_page: 20 },
@@ -218,7 +231,12 @@ export function ProgramChairCreditMappingsWorkspace() {
         </CardContent>
       </Card>
 
-      <RecordCreditCard />
+      <TorUploadsCard onRecordCredit={setRecordFor} />
+
+      <RecordCreditCard
+        key={recordFor?.student_id ?? "search"}
+        presetStudent={recordFor}
+      />
 
       {reviewing && (
         <CreditReviewDialog
@@ -236,10 +254,21 @@ export function ProgramChairCreditMappingsWorkspace() {
  * find the student (own college only), enter what they took, and it joins the
  * review list above to be mapped and endorsed like any other request.
  */
-function RecordCreditCard() {
+function RecordCreditCard({
+  presetStudent = null,
+}: {
+  /** A student already chosen (from a TOR upload); the chair can still change it. */
+  presetStudent?: TorStudent | null
+}) {
   const [search, setSearch] = useState("")
-  const [student, setStudent] = useState<AcademicRecordStudentLookup | null>(
-    null,
+  const [student, setStudent] = useState<CreditStudent | null>(
+    presetStudent === null
+      ? null
+      : {
+          student_id: presetStudent.student_id,
+          name: presetStudent.student_name,
+          student_number: presetStudent.student_number,
+        },
   )
   const [institution, setInstitution] = useState("")
   const [code, setCode] = useState("")
@@ -390,6 +419,7 @@ function RecordCreditCard() {
               </Button>
             </div>
           )}
+          {student !== null && <StudentTorFiles studentId={student.student_id} />}
           <Field>
             <FieldLabel htmlFor="credit-source-institution">
               Previous school
