@@ -1826,6 +1826,44 @@ describe("EnrollmentWorkspace", () => {
     ).toBeEnabled()
   })
 
+  it("updates a section's open-seat badge on its own when another student takes seats", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let seatsRemaining = 7
+    fetchMock.mockImplementation((input, init) => {
+      if (url(input).includes("/enrollment-blocks"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [{ ...enrollmentBlock, seats_remaining: seatsRemaining }],
+            }),
+          ),
+        )
+      return mockRegularRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    const section = await screen.findByRole("article", { name: "IT201 section" })
+    expect(within(section).getByText("7 of 40 seats left")).toBeInTheDocument()
+
+    // The last seats go (a student submits / registrar-held reservation); the
+    // block list is polled every 10s, so the badge follows without a reload.
+    seatsRemaining = 0
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+
+    const refreshed = await screen.findByRole("article", { name: "IT201 section" })
+    expect(within(refreshed).getByText("Full")).toBeInTheDocument()
+    expect(screen.queryByText("7 of 40 seats left")).not.toBeInTheDocument()
+  })
+
   it("keeps the confirm dialog honest when the chosen section disappears before submitting", async () => {
     const user = userEvent.setup()
     let blockReads = 0

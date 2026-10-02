@@ -94,10 +94,20 @@ function SectionSchedule({ block }: { block: EnrollmentBlock }) {
   )
 }
 
+/**
+ * The seats still open, not the section's total capacity: the block list is
+ * re-read every few seconds (see `useEnrollmentBlocksQuery`), so this badge is
+ * what shows another student's choice taking a seat — or a rejection giving
+ * one back — without anyone reloading.
+ */
 function seatLabel(block: EnrollmentBlock) {
+  if (block.seats_remaining <= 0) return "Full"
+
+  const left = `${block.seats_remaining} seat${block.seats_remaining === 1 ? "" : "s"} left`
+
   return block.capacity === null
-    ? `${block.seats_remaining} seat${block.seats_remaining === 1 ? "" : "s"} available`
-    : `${block.capacity} seats`
+    ? left
+    : `${block.seats_remaining} of ${block.capacity} seats left`
 }
 
 /**

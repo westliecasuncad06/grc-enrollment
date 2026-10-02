@@ -1,5 +1,12 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Enrollment section cards: live open-seat count (DONE)
+
+- **Request:** the "40 seats" badge on the IT101/IT102 section cards (GRC Connect / Enrollment) should update on its own when seats are taken, without other students refreshing. Suggested WebSockets / real-time sync.
+- **Finding:** the block list was already polled (every 15s), but `seatLabel()` showed the section's total **capacity** ("40 seats") whenever every subject had the same capacity, so the polled `seats_remaining` never reached the screen. Seats are already reserved at submission (`SubmitEnrollment` increments `enrolled_count`; rejection/void/withdrawal give them back), i.e. earlier than registrar approval — backend left unchanged (changing when a seat is taken would be a rule change).
+- **Fix (frontend only):** the badge now shows the seats still open — "7 of 40 seats left", "1 seat left", or "Full". `useEnrollmentBlocksQuery` polls every 10s (was 15s) and refetches on returning to the tab/app. **No WebSocket/SSE was added:** the stack deliberately uses short polling (see `useEnrollmentsQuery`); push would need new infrastructure on Dokploy/Vercel — owner decision if wanted.
+- **Verification:** `enrollment-section-table` + `enrollment-workspace` vitest 89/89 (a new workspace test advances 10s and sees "7 of 40 seats left" become "Full"); eslint on the changed source files and `tsc --noEmit` clean. Not re-checked on a phone.
+
 ## 2026-10-02 — Account setup email: link not tappable in iOS Gmail (DONE, root cause not reproduced)
 
 - **Report:** on iPhone (Gmail app) the "Open the account setup page" button in the student account-setup email could not be tapped.

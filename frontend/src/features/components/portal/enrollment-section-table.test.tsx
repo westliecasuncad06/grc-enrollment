@@ -113,7 +113,8 @@ describe("EnrollmentSectionTable", () => {
     expect(
       screen.getByRole("article", { name: "IT303 section" }),
     ).toBeInTheDocument()
-    expect(within(section).getByText("40 seats")).toBeInTheDocument()
+    // Seats still open (7 of the 40), not the section's capacity.
+    expect(within(section).getByText("7 of 40 seats left")).toBeInTheDocument()
     expect(within(section).getByText("6 units")).toBeInTheDocument()
     expect(within(section).getByText("2 subjects")).toBeInTheDocument()
     expect(

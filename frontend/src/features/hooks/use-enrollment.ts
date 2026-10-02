@@ -54,8 +54,14 @@ export const enrollmentBlocksQueryKey = (
   academicTermId: number | null,
 ) => ["enrollment-blocks", userId, academicTermId] as const
 
-/** Same 15s seat-scarcity tier as `useEligibleSubjectsQuery` above, for the
- * regular-student block picker. */
+/**
+ * The regular-student block picker. A student's submission reserves its seats
+ * immediately (and a rejection or void releases them), so the open-seat badge
+ * must follow that quickly: polled every 10s, and re-read on returning to the
+ * tab/app (a phone browser that was in the background). There is no
+ * WebSocket/SSE push in this stack — short polling is the deliberate stand-in
+ * (see `useEnrollmentsQuery`).
+ */
 export function useEnrollmentBlocksQuery(academicTermId: number | null) {
   const { session } = useAuth()
 
@@ -63,8 +69,9 @@ export function useEnrollmentBlocksQuery(academicTermId: number | null) {
     queryKey: enrollmentBlocksQueryKey(session?.userId ?? null, academicTermId),
     queryFn: ({ signal }) => getEnrollmentBlocks(academicTermId!, signal),
     enabled: session !== null && academicTermId !== null,
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: "always",
   })
 }
 
