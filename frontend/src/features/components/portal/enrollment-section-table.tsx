@@ -26,6 +26,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
 import { formatTimeRange } from "@/features/lib/format-time"
 import { formatYearLevel } from "@/features/lib/format-year-level"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
@@ -77,7 +78,11 @@ function scheduleColumns(): DataTableColumn<
 
 /** Monday's earliest class first, then Tuesday, … through Saturday — always sorted, no toggle needed since a block's own schedule never changes underneath the student. */
 function SectionSchedule({ block }: { block: EnrollmentBlock }) {
-  const subjects = [...block.subjects].sort(compareBySchedule)
+  // Earliest class first, but a lecture and its laboratory always stay together
+  // with the lecture on top (Doc 18).
+  const subjects = groupPairedSubjects(
+    [...block.subjects].sort(compareBySchedule),
+  )
 
   return (
     <DataTable

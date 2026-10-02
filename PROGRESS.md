@@ -1,5 +1,13 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — LEC/LAB adjacency in the student's enrollment section (block) views (DONE, uncommitted)
+
+- **Report:** Doc 18 item again — a lecture and its laboratory must sit together, lecture first (e.g. ITP1 then ITP1L), in the student's prospectus/subject view during enrollment.
+- **Checked first:** the Prospectus (150 random dev students: 0 non-adjacent pairs, 0 split across semesters), Grade Slip and the dev data (68 paired subjects, none one-way, no unpaired `...L` with a base) were already correct.
+- **Real gap found:** the Regular student's section/block views — `enrollment-section-table.tsx` (sorted by schedule only, so a Mon LEC and Fri LAB were separated) and the table in `enrollment-block-detail-dialog.tsx` (raw order). Both now call `groupPairedSubjects()` (schedule order is kept otherwise). `EnrollmentBlockResource` now sends `paired_subject_id` per subject and `enrollment-block-schema.ts` accepts it (optional); the helper's code fallback (`X` / `XL`) covers rows without it.
+- **Verification:** new test in `enrollment-section-table.test.tsx` (LEC Mon / other Tue / LAB Fri) — confirmed it FAILS without the fix and passes with it; vitest `enrollment-section-table` + `enrollment-block-detail-dialog` + `group-paired-subjects` 23/23, `tsc --noEmit` clean, backend `EnrollmentBlocksEndpointTest` 14/14.
+- **Not changed / not verified:** COR subject order is by subject code (a lab follows its lecture unless another code sorts between them, e.g. `ITP1A`); not changed. Not re-checked in a real browser.
+
 ## 2026-10-02 — Presentation Database Sync (grc_enrollment.sql.gz) & Super Admin Inclusion (DONE)
 
 - **Owner Request:**

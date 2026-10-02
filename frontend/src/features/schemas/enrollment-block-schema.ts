@@ -18,6 +18,7 @@ const enrollmentBlockSubjectSchema = z
   .object({
     section_id: z.number().int().positive(),
     subject_id: z.number().int().positive(),
+    paired_subject_id: z.number().int().positive().nullable().optional(),
     code: z.string().min(1),
     title: z.string().min(1),
     units: z.number().positive(),

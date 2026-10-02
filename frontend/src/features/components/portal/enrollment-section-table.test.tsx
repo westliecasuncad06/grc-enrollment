@@ -253,6 +253,58 @@ describe("EnrollmentSectionTable", () => {
     expect(text.indexOf("MONSUBJ")).toBeLessThan(text.indexOf("FRISUBJ"))
   })
 
+  it("keeps a lecture and its laboratory together, lecture first, even when their days are far apart", () => {
+    const subject = (
+      id: number,
+      code: string,
+      title: string,
+      days: string,
+      pair: number | null,
+    ): EnrollmentBlock["subjects"][number] => ({
+      section_id: id,
+      subject_id: id,
+      paired_subject_id: pair,
+      code,
+      title,
+      units: 1,
+      schedule_days: days,
+      starts_at_time: "08:00:00",
+      ends_at_time: "09:00:00",
+      room: "R101",
+      modality: "f2f",
+      professor_name: "Dr. Cruz",
+      capacity: 40,
+      enrolled_count: 0,
+      remaining_seats: 40,
+    })
+    const paired = block({
+      block_code: "IT305",
+      subjects: [
+        // Schedule order alone would be ITP1 (Mon), ETHICS (Tue), ITP1L (Fri).
+        subject(31, "ITP1L", "Fundamentals of Programming LAB", "F", 30),
+        subject(32, "ETHICS", "Ethics", "T", null),
+        subject(30, "ITP1", "Fundamentals of Programming LEC", "M", 31),
+      ],
+    })
+    render(
+      <EnrollmentSectionTable
+        blocks={[paired]}
+        selectedBlockCode="IT305"
+        onChoose={vi.fn()}
+        onChangeSection={vi.fn()}
+        renderSelectedFooter={() => <span>Selected section actions</span>}
+      />,
+    )
+
+    const text = document.body.textContent ?? ""
+    const lecture = text.indexOf("Fundamentals of Programming LEC")
+    const lab = text.indexOf("Fundamentals of Programming LAB")
+    const ethics = text.indexOf("Ethics")
+    expect(lecture).toBeGreaterThanOrEqual(0)
+    expect(lecture).toBeLessThan(lab)
+    expect(ethics).toBeGreaterThan(lab)
+  })
+
   it("has no detectable accessibility violations", async () => {
     const { container } = renderTable()
 

@@ -21,6 +21,7 @@ import {
 } from "@/features/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/features/components/ui/toggle-group"
 import { formatYearLevel } from "@/features/lib/format-year-level"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 
 const MODALITY_LABEL: Record<string, string> = {
@@ -144,7 +145,7 @@ export function EnrollmentBlockDetailDialog({
                 <DataTable
                   caption={`${block.block_code} weekly schedule`}
                   rowKey={(subject) => subject.section_id}
-                  rows={block.subjects}
+                  rows={groupPairedSubjects(block.subjects)}
                   columns={[
                     {
                       key: "subject",

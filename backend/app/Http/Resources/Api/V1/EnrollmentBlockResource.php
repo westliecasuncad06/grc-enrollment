@@ -70,6 +70,7 @@ final class EnrollmentBlockResource extends JsonResource
             'subjects' => array_map(fn (Section $section): array => [
                 'section_id' => $section->id,
                 'subject_id' => $section->subject_id,
+                'paired_subject_id' => $section->subject->paired_subject_id,
                 'code' => $section->subject->code,
                 'title' => $section->subject->title,
                 'units' => (float) $section->subject->units,
