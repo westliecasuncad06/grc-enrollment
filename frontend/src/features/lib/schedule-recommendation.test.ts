@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { generateScheduleRecommendation } from "@/features/lib/schedule-recommendation"
+import {
+  evaluateScheduleFit,
+  generateScheduleRecommendation,
+} from "@/features/lib/schedule-recommendation"
 import type { EligibleSubject } from "@/features/schemas/enrollment-schema"
 
 function makeSection(
@@ -251,6 +254,67 @@ describe("schedule-recommendation", () => {
     expect(resultMorning.matchedSubjects).toBeGreaterThan(0)
     expect(resultAfternoon.matchedSubjects).toBeGreaterThan(0)
     expect(elapsed).toBeLessThan(100)
+  })
+})
+
+describe("evaluateScheduleFit", () => {
+  it("flags a set spanning more than the day limit", () => {
+    const sections = [
+      makeSection({ id: 1, schedule_days: "MON", starts_at_time: "08:00:00", ends_at_time: "10:00:00" }),
+      makeSection({ id: 2, schedule_days: "WED", starts_at_time: "08:00:00", ends_at_time: "10:00:00" }),
+      makeSection({ id: 3, schedule_days: "FRI", starts_at_time: "08:00:00", ends_at_time: "10:00:00" }),
+    ]
+
+    const result = evaluateScheduleFit(sections, 2)
+
+    expect(result.distinctDays).toHaveLength(3)
+    expect(result.exceedsDayLimit).toBe(true)
+    expect(result.violatesFit).toBe(true)
+  })
+
+  it("flags a set that mixes a morning section with an afternoon/evening one", () => {
+    const sections = [
+      makeSection({
+        id: 1,
+        schedule_days: "MON",
+        starts_at_time: "08:00:00",
+        ends_at_time: "10:00:00",
+      }),
+      makeSection({
+        id: 2,
+        schedule_days: "MON",
+        starts_at_time: "14:00:00",
+        ends_at_time: "17:00:00",
+      }),
+    ]
+
+    const result = evaluateScheduleFit(sections, 2)
+
+    expect(result.mixesTimeBlocks).toBe(true)
+    expect(result.violatesFit).toBe(true)
+  })
+
+  it("does not flag a compliant 1-day, morning-only set", () => {
+    const sections = [
+      makeSection({
+        id: 1,
+        schedule_days: "MON",
+        starts_at_time: "08:00:00",
+        ends_at_time: "10:00:00",
+      }),
+      makeSection({
+        id: 2,
+        schedule_days: "MON",
+        starts_at_time: "10:00:00",
+        ends_at_time: "12:00:00",
+      }),
+    ]
+
+    const result = evaluateScheduleFit(sections, 2)
+
+    expect(result.exceedsDayLimit).toBe(false)
+    expect(result.mixesTimeBlocks).toBe(false)
+    expect(result.violatesFit).toBe(false)
   })
 })
 

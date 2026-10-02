@@ -49,4 +49,36 @@ final class CorDisplayTest extends TestCase
 
         $this->assertSame($text, CorDisplay::sentence($text));
     }
+
+    public function test_generated_at_converts_stored_utc_to_asia_manila(): void
+    {
+        $this->assertSame(
+            '10/01/2026, 11:29:28 AM',
+            CorDisplay::generatedAt('2026-10-01 03:29:28'),
+        );
+    }
+
+    public function test_generated_at_accepts_a_datetime_instance(): void
+    {
+        $this->assertSame(
+            '10/01/2026, 11:29:28 AM',
+            CorDisplay::generatedAt(new \DateTimeImmutable('2026-10-01 03:29:28', new \DateTimeZone('UTC'))),
+        );
+    }
+
+    public function test_download_filename_slugs_the_student_name_and_uses_the_manila_date(): void
+    {
+        $this->assertSame(
+            'COR_West_Apay_Ragma_2026-10-01.pdf',
+            CorDisplay::downloadFilename('West Apay. Ragma', '2026-10-01 03:29:28'),
+        );
+    }
+
+    public function test_download_filename_collapses_punctuation_and_repeated_separators(): void
+    {
+        $this->assertSame(
+            'COR_Dela_Cruz_Jr_2026-01-05.pdf',
+            CorDisplay::downloadFilename('  Dela--Cruz, Jr.  ', '2026-01-05 00:00:00'),
+        );
+    }
 }

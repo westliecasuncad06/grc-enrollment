@@ -18,7 +18,7 @@ final class EnrollmentStatusOverviewResource extends JsonResource
      *     total_students: int,
      *     groups: array<string, int>,
      *     steps: array<string, int>,
-     *     departments: list<array{department: ?string, label: string, total: int, groups: array<string, int>}>
+     *     departments: list<array{department: ?string, label: string, total: int, groups: array<string, int>, steps?: array<string, int>}>
      * }
      */
     public function toArray(Request $request): array

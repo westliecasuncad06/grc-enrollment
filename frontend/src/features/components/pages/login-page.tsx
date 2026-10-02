@@ -4,8 +4,6 @@ import { useGSAP } from "@gsap/react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
   ArrowLeft,
-  Eye,
-  EyeOff,
   LockKeyhole,
   ShieldCheck,
   UsersRound,
@@ -29,6 +27,7 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { PasswordInput } from "@/features/components/ui/password-input"
 import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { gsap } from "@/features/lib/gsap"
@@ -104,7 +103,6 @@ const trustStatements = [
 
 export function LoginPage() {
   const { signIn, verifyLoginOtp, resendLoginOtp } = useAuth()
-  const [passwordVisible, setPasswordVisible] = useState(false)
   const [challenge, setChallenge] = useState<OtpChallengeState | null>(null)
   const [resendStatus, setResendStatus] = useState<
     "idle" | "sending" | "sent" | "error"
@@ -580,37 +578,17 @@ export function LoginPage() {
                         Forgot password?
                       </Link>
                     </div>
-                    <div className="login-password-row">
-                      <Input
-                        id="login-password"
-                        type={passwordVisible ? "text" : "password"}
-                        autoComplete="current-password"
-                        aria-invalid={Boolean(errors.password)}
-                        aria-describedby={
-                          errors.password ? "login-password-error" : undefined
-                        }
-                        disabled={isSubmitting || lockoutActive}
-                        {...register("password")}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        aria-label={
-                          passwordVisible ? "Hide password" : "Show password"
-                        }
-                        disabled={isSubmitting || lockoutActive}
-                        onClick={() =>
-                          setPasswordVisible((visible) => !visible)
-                        }
-                      >
-                        {passwordVisible ? (
-                          <EyeOff aria-hidden="true" />
-                        ) : (
-                          <Eye aria-hidden="true" />
-                        )}
-                      </Button>
-                    </div>
+                    <PasswordInput
+                      id="login-password"
+                      wrapperClassName="login-password-row"
+                      autoComplete="current-password"
+                      aria-invalid={Boolean(errors.password)}
+                      aria-describedby={
+                        errors.password ? "login-password-error" : undefined
+                      }
+                      disabled={isSubmitting || lockoutActive}
+                      {...register("password")}
+                    />
                     <FieldError id="login-password-error">
                       {errors.password?.message}
                     </FieldError>

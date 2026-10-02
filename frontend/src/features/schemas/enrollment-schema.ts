@@ -32,6 +32,7 @@ export const eligibleSubjectReasonSchema = z
       "no_sections_available",
       "block_restricted",
       "block_other_year",
+      "credit_mapping_pending",
     ]),
     message: z.string().min(1),
   })
@@ -64,7 +65,9 @@ const enrollmentSubjectSchema = z
   .object({
     section_id: z.number().int().positive(),
     section_code: z.string().optional(),
+    subject_id: z.number().int().positive(),
     subject_code: z.string().min(1),
+    paired_subject_id: z.number().int().positive().nullable(),
     subject_title: z.string().min(1),
     units: z.number().nullable().optional(),
     schedule_days: z.string().nullable().optional(),

@@ -21,6 +21,7 @@ final class UserRoleTest extends TestCase
             'accounting_staff',
             'it_admin',
             'queue_kiosk',
+            'super_admin',
         ], array_column(UserRole::cases(), 'value'));
     }
 
@@ -29,7 +30,42 @@ final class UserRoleTest extends TestCase
         $this->assertContains('it_admin', array_column(UserRole::cases(), 'value'));
         $this->assertSame('IT Control', UserRole::ItAdmin->label());
         $this->assertFalse(UserRole::ItAdmin->isLearnerScoped());
-        $this->assertCount(11, UserRole::cases());
+        $this->assertCount(12, UserRole::cases());
+    }
+
+    public function test_the_role_catalog_includes_super_admin(): void
+    {
+        $this->assertContains('super_admin', array_column(UserRole::cases(), 'value'));
+        $this->assertSame('Super Admin', UserRole::SuperAdmin->label());
+        $this->assertFalse(UserRole::SuperAdmin->isLearnerScoped());
+        $this->assertCount(12, UserRole::cases());
+    }
+
+    public function test_seedable_cases_exclude_super_admin(): void
+    {
+        $this->assertNotContains(UserRole::SuperAdmin, UserRole::seedableCases());
+        $this->assertContains(UserRole::SuperAdmin, UserRole::humanCases());
+    }
+
+    public function test_super_admin_switchable_cases(): void
+    {
+        $this->assertCount(8, UserRole::superAdminSwitchableCases());
+        $this->assertNotContains(UserRole::Faculty, UserRole::superAdminSwitchableCases());
+        $this->assertNotContains(UserRole::Student, UserRole::superAdminSwitchableCases());
+    }
+
+    public function test_super_admin_invitable_cases_adds_admission_staff(): void
+    {
+        $this->assertCount(9, UserRole::superAdminInvitableCases());
+        $this->assertContains(UserRole::AdmissionStaff, UserRole::superAdminInvitableCases());
+    }
+
+    public function test_college_required_when_acting(): void
+    {
+        $this->assertTrue(UserRole::collegeRequiredWhenActing(UserRole::ProgramChair));
+        $this->assertTrue(UserRole::collegeRequiredWhenActing(UserRole::Dean));
+        $this->assertFalse(UserRole::collegeRequiredWhenActing(UserRole::RegistrarHead));
+        $this->assertFalse(UserRole::collegeRequiredWhenActing(UserRole::AdmissionStaff));
     }
 
     public function test_queue_kiosk_is_a_device_role_outside_the_human_role_catalog(): void
@@ -38,8 +74,8 @@ final class UserRoleTest extends TestCase
         self::assertSame('Queue Kiosk', UserRole::QueueKiosk->label());
         self::assertTrue(UserRole::QueueKiosk->isDevice());
         self::assertFalse(UserRole::QueueKiosk->isLearnerScoped());
-        self::assertCount(11, UserRole::cases());
-        self::assertCount(10, UserRole::humanCases());
+        self::assertCount(12, UserRole::cases());
+        self::assertCount(11, UserRole::humanCases());
         self::assertNotContains(UserRole::QueueKiosk, UserRole::humanCases());
     }
 

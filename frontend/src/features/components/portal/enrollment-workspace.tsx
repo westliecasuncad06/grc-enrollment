@@ -19,7 +19,8 @@ import {
   StatusStepper,
   type StatusStepperStage,
 } from "@/features/components/portal/status-stepper"
-import { CalendarDays, ListIcon } from "lucide-react"
+import Link from "next/link"
+import { AlertCircle, CalendarDays, ListIcon } from "lucide-react"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   SectionScheduleCalendar,
@@ -31,7 +32,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/features/components/ui/accordion"
-import { Alert, AlertDescription } from "@/features/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/features/components/ui/alert"
+import { StudentCreditMappingDialog } from "@/features/components/portal/student-credit-mapping-dialog"
+import { useTransfereeCreditsQuery } from "@/features/hooks/use-transferee-credits"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -68,6 +71,8 @@ import {
 import { useOwnStudentAccountQuery } from "@/features/hooks/use-student-account"
 import { useOwnStudentProfileQuery } from "@/features/hooks/use-student-records"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
+import { compareBySchedule } from "@/features/lib/schedule-order"
 import type { EnrollmentBlock } from "@/features/schemas/enrollment-block-schema"
 import type {
   Enrollment,
@@ -328,6 +333,17 @@ export function EnrollmentWorkspace() {
   const [receipt, setReceipt] = useState(false)
 
   const userId = session?.userId ?? null
+
+  const studentType = studentProfileQuery.data?.student_type ?? null
+  const isTransferee = studentType === "transferee"
+  const isReturnee = studentType === "returnee"
+  const requiresCreditMapping = isTransferee || isReturnee
+
+  const transfereeCreditsQuery = useTransfereeCreditsQuery(
+    { page: 1, per_page: 50 },
+    { enabled: isTransferee },
+  )
+
   // Stable empty-array fallbacks (`useMemo`, not `?? []` inline) so the
   // `effectiveSelections`/`effectiveSelectedBlockCode` memos below don't see
   // a new dependency reference — and re-derive for no reason — on every
@@ -336,6 +352,30 @@ export function EnrollmentWorkspace() {
     () => eligibleSubjectsQuery.data ?? [],
     [eligibleSubjectsQuery.data],
   )
+
+  const creditMappingIncomplete = useMemo(() => {
+    if (!isTransferee) return false
+    if (!transfereeCreditsQuery.isSuccess) return false
+    const credits = transfereeCreditsQuery.data?.data ?? []
+    if (credits.length === 0) return true
+    return credits.some(
+      (c) => c.status === "pending" || c.status === "endorsed",
+    )
+  }, [isTransferee, transfereeCreditsQuery.isSuccess, transfereeCreditsQuery.data])
+
+  const creditMappingBlocked = useMemo(() => {
+    if (requiresCreditMapping && creditMappingIncomplete) return true
+    if (
+      subjects.length > 0 &&
+      subjects.every((s) =>
+        s.reasons.some((r) => r.code === "credit_mapping_pending"),
+      )
+    ) {
+      return true
+    }
+    return false
+  }, [requiresCreditMapping, creditMappingIncomplete, subjects])
+
   const selectableSubjects = subjects.filter(
     (subject) => subject.is_eligible && subject.available_sections.length > 0,
   )
@@ -440,6 +480,25 @@ export function EnrollmentWorkspace() {
       ends_at_time: subj.ends_at_time ?? null,
       modality: subj.modality ?? null,
     }))
+  }, [activeEnrollment])
+
+  const sortedActiveEnrollmentSubjects = useMemo(() => {
+    if (!activeEnrollment) return []
+    const sorted = [...activeEnrollment.subjects].sort((a, b) =>
+      compareBySchedule(
+        {
+          schedule_days: a.schedule_days ?? null,
+          starts_at_time: a.starts_at_time ?? null,
+          ends_at_time: a.ends_at_time ?? null,
+        },
+        {
+          schedule_days: b.schedule_days ?? null,
+          starts_at_time: b.starts_at_time ?? null,
+          ends_at_time: b.ends_at_time ?? null,
+        },
+      ),
+    )
+    return groupPairedSubjects(sorted)
   }, [activeEnrollment])
 
   // Plain derived values — the React Compiler memoizes them. Manual
@@ -575,6 +634,13 @@ export function EnrollmentWorkspace() {
     setSubmitError("")
     setFieldErrors([])
 
+    if (creditMappingBlocked) {
+      setFieldErrors([
+        "Credit mapping must be completed and approved by the Program Chair and Registrar before you can submit your enrollment.",
+      ])
+      return
+    }
+
     if (validationError) {
       setFieldErrors([validationError])
       return
@@ -704,7 +770,8 @@ export function EnrollmentWorkspace() {
       totalUnitsValue === 0 ||
       isExceeded ||
       scheduleConflict !== null ||
-      unpairedComponent !== null
+      unpairedComponent !== null ||
+      creditMappingBlocked
 
     return (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
@@ -746,7 +813,11 @@ export function EnrollmentWorkspace() {
           }}
           disabled={mutation.isPending || enrollmentWindowClosed || hasBlocker}
         >
-          {mutation.isPending ? "Submitting enrollment" : "Submit enrollment"}
+          {mutation.isPending
+            ? "Submitting enrollment"
+            : creditMappingBlocked
+              ? "Credit mapping required"
+              : "Submit enrollment"}
         </Button>
       </div>
     )
@@ -777,6 +848,35 @@ export function EnrollmentWorkspace() {
 
       <EnrollmentAvailabilityBanner viewer={viewer} />
       <EnrollmentCategoryExplanation viewer={viewer} />
+
+      {creditMappingBlocked && (
+        <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="font-semibold text-amber-900 dark:text-amber-200">
+            Credit Mapping Required Before Enrollment
+          </AlertTitle>
+          <AlertDescription className="mt-1 flex flex-col gap-3 text-sm text-amber-800 dark:text-amber-300">
+            <p>
+              As a{" "}
+              <span className="font-medium">
+                {studentProfileQuery.data?.student_type_label ??
+                  (isReturnee ? "Returnee" : "Transferee")}
+              </span>{" "}
+              student, your credit mapping must be completed and approved by the Program Chair and Registrar before you can select subjects and enroll. This ensures that completed subjects and prerequisites from your previous school are officially credited.
+            </p>
+            {isTransferee && (
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <StudentCreditMappingDialog />
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/portal/academic-records">
+                    View Academic Records
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* While the confirm dialog is open its errors render inside it. */}
       {!confirmOpen && banner}
@@ -1118,7 +1218,7 @@ export function EnrollmentWorkspace() {
                     <DataTable
                       caption="Enrolled subjects schedule"
                       rowKey={(subj) => subj.section_id}
-                      rows={activeEnrollment.subjects}
+                      rows={sortedActiveEnrollmentSubjects}
                       columns={[
                         {
                           key: "code",

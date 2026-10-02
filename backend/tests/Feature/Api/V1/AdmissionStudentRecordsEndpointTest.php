@@ -16,9 +16,9 @@ use App\Models\Enrollment;
 use App\Models\Program;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Support\Auth\AccountSetupCodes;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
-use App\Support\Auth\AccountSetupCodes;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -120,11 +120,17 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'name' => 'Bachelor of Science in Computer Science',
             'status' => ProgramStatus::Active,
         ]);
+        // Covers the student's existing entry_year (2026, set by the
+        // student() helper) rather than 2027: entry_year is immutable after
+        // creation (Stakeholder Doc 17 — it is derived once from the
+        // ongoing term at intake, never client-supplied), so a program
+        // change must resolve a curriculum against the year the student
+        // already has, not a year this request could once override.
         $newCurriculum = Curriculum::create([
             'program_id' => $newProgram->id,
-            'name' => 'BSCS 2027 Curriculum',
-            'effective_school_year' => '2027-2028',
-            'effective_start_year' => 2027,
+            'name' => 'BSCS 2026 Curriculum',
+            'effective_school_year' => '2026-2027',
+            'effective_start_year' => 2026,
             'effective_end_year' => 2031,
             'status' => CurriculumStatus::Active,
         ]);
@@ -137,10 +143,7 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'address' => 'Corrected Complete Address, Caloocan City',
             'student_number' => '2027-08-01088',
             'program_id' => $newProgram->id,
-            'entry_year' => 2027,
             'year_level' => 2,
-            'enrollment_category' => 'irregular',
-            'student_type' => 'transferee',
             'financial_status' => 'payee',
             'admission_status' => 'admitted',
             'reason' => 'Corrected after reviewing the submitted admission documents.',
@@ -148,7 +151,11 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.name', 'Corrected Student')
             ->assertJsonPath('data.program_id', $newProgram->id)
-            ->assertJsonPath('data.curriculum_id', $newCurriculum->id);
+            ->assertJsonPath('data.curriculum_id', $newCurriculum->id)
+            // Year Level 2 => Irregular/Transferee, derived automatically
+            // (Stakeholder Doc 17) — not sent in the request above.
+            ->assertJsonPath('data.enrollment_category', 'irregular')
+            ->assertJsonPath('data.student_type', 'transferee');
 
         $this->assertDatabaseHas('users', [
             'id' => $student->user_id,
@@ -161,10 +168,11 @@ final class AdmissionStudentRecordsEndpointTest extends TestCase
             'address' => 'Corrected Complete Address, Caloocan City',
             'program_id' => $newProgram->id,
             'curriculum_id' => $newCurriculum->id,
-            'entry_year' => 2027,
+            'entry_year' => 2026,
             'year_level' => 2,
             'enrollment_category' => 'irregular',
             'student_type' => 'transferee',
+            'enrollment_category_derived_at' => null,
         ]);
 
         $audit = AuditLog::query()->where('action', AuditAction::STUDENT_PROFILE_UPDATED)->sole();

@@ -9,7 +9,13 @@ use App\Models\StudentSchedulePreference;
  * Rates how well a candidate enrollment option's sections fit a student's
  * saved `StudentSchedulePreference` — used to annotate (never filter,
  * reorder, or gate) an `EnrollmentBlock` or `EligibleSubjectEntry` with a
- * `preference_score`/`preference_reasons` pair. Pure and persistence-free:
+ * `preference_score`/`preference_reasons` pair. This class itself never
+ * gates; a single narrow, explicit exception lives in the frontend instead
+ * (Stakeholder Doc 17, `eligible-subject-table.tsx`'s `evaluateScheduleFit`
+ * check), which disables an irregular student's manual section choice when
+ * it would exceed a 1-2 day / single time-block schedule — but only when a
+ * same-subject alternative that fits still exists, so a student is never
+ * left with zero way to complete their schedule. Pure and persistence-free:
  * the caller resolves both arguments before calling, the same shape as
  * `SectionConflictDetector`/`PrerequisiteCycleDetector`.
  *

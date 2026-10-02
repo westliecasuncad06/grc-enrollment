@@ -8,6 +8,7 @@ use App\Domain\Academic\SubjectGwaExclusionRule;
 use App\Models\AcademicGrade;
 use App\Models\CurriculumSubject;
 use App\Models\Enrollment;
+use App\Models\EnrollmentDocument;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Carbon;
@@ -60,11 +61,12 @@ final class GradeSlipResource extends JsonResource
         $enrollmentCategory = $student->enrollment_category;
 
         if ($enrollment !== null) {
-            $cor = $enrollment->documents->first(fn ($d) => (is_string($d->type) ? $d->type : $d->type?->value) === 'cor');
-            if ($cor !== null && isset($cor->content['student']['year_level'])) {
-                $yearLevel = (int) $cor->content['student']['year_level'];
+            /** @var EnrollmentDocument|null $cor */
+            $cor = $enrollment->documents->first();
+            if ($cor !== null && isset($cor->snapshot['student']['year_level'])) {
+                $yearLevel = (int) $cor->snapshot['student']['year_level'];
             }
-            if ($enrollment->block_code !== null) {
+            if ($enrollment->getAttribute('block_code') !== null) {
                 $enrollmentCategory = 'regular';
             } else {
                 $hasPriorDeficiency = AcademicGrade::query()
@@ -110,9 +112,7 @@ final class GradeSlipResource extends JsonResource
             'program_name' => $student->program->name,
             'year_level' => $yearLevel,
             'enrollment_category' => $enrollmentCategory,
-            'enrollment_category_label' => $enrollmentCategory !== null
-                ? ucfirst($enrollmentCategory)
-                : null,
+            'enrollment_category_label' => ucfirst($enrollmentCategory),
             'academic_term_id' => $term->id,
             'school_year' => $term->school_year,
             'semester' => $term->semester,
@@ -135,6 +135,8 @@ final class GradeSlipResource extends JsonResource
      *
      * @return array{
      *     academic_grade_id: int,
+     *     subject_id: int,
+     *     paired_subject_id: ?int,
      *     code: string,
      *     title: string,
      *     units: float,
@@ -154,6 +156,8 @@ final class GradeSlipResource extends JsonResource
 
         return [
             'academic_grade_id' => $grade->id,
+            'subject_id' => $grade->subject_id,
+            'paired_subject_id' => $grade->subject->paired_subject_id,
             'code' => $grade->subject->code,
             'title' => $grade->subject->title,
             'units' => $grade->subject->units,

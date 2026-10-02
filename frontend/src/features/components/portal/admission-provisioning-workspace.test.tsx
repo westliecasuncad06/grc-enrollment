@@ -1,9 +1,12 @@
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { toast } from "sonner"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AdmissionProvisioningWorkspace } from "@/features/components/portal/admission-provisioning-workspace"
 import { renderWithSession } from "@/tests/render-app"
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const profile = {
   type: "student_profile",
@@ -148,6 +151,46 @@ describe("Student Records workspace", () => {
           new Response(JSON.stringify({ data: profile }), { status: 201 }),
         )
       }
+      if (url.includes(`/api/v1/student-profiles/${profile.id}/admission-requirements`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "admission_requirements",
+                student: {
+                  student_profile_id: profile.id,
+                  student_number: profile.student_number,
+                  name: profile.name,
+                  student_type: "freshman",
+                  student_type_label: "Freshman",
+                  admission_status: "admitted",
+                },
+                categories: [
+                  {
+                    category: "freshman",
+                    label: "Freshman requirements",
+                    items: [
+                      {
+                        requirement_type_id: 1,
+                        name: "Form 137",
+                        is_system: true,
+                        is_submitted: false,
+                        submitted_at: null,
+                      },
+                    ],
+                  },
+                ],
+                summary: {
+                  required_count: 1,
+                  submitted_count: 0,
+                  missing_count: 1,
+                  complete: false,
+                },
+              },
+            }),
+          ),
+        )
+      }
       if (url.includes("/api/v1/student-profiles")) {
         return Promise.resolve(
           new Response(JSON.stringify({ data: [profile], ...pagination })),
@@ -178,18 +221,24 @@ describe("Student Records workspace", () => {
     ])
     expect(screen.queryByLabelText("Curriculum")).not.toBeInTheDocument()
     expect(screen.queryByText(/temporary credential/i)).not.toBeInTheDocument()
+    // Entry year, Enrollment category, and Student type are no longer
+    // separate inputs — the server derives all three (Stakeholder Doc 17).
+    expect(screen.queryByLabelText("Entry year")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("combobox", { name: "Enrollment category" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("combobox", { name: "Student type" }),
+    ).not.toBeInTheDocument()
 
     await user.type(screen.getByLabelText("First name"), profile.first_name)
     await user.type(screen.getByLabelText("Last name"), profile.last_name)
     await user.type(screen.getByLabelText("Email address"), profile.email)
     await user.type(screen.getByLabelText("Complete address"), profile.address)
-    await user.clear(screen.getByLabelText("Student number"))
-    await user.type(
-      screen.getByLabelText("Student number"),
-      profile.student_number,
-    )
-    await user.clear(screen.getByLabelText("Entry year"))
-    await user.type(screen.getByLabelText("Entry year"), "2027")
+    const studentNumberField = screen.getByLabelText("Student number")
+    expect(studentNumberField).toHaveAttribute("readonly")
+    await user.type(studentNumberField, "0000-00-00000")
+    expect(studentNumberField).not.toHaveValue("0000-00-00000")
     await user.click(screen.getByLabelText("Program"))
     await user.click(
       await screen.findByRole("option", {
@@ -213,10 +262,25 @@ describe("Student Records workspace", () => {
     await user.click(submit)
 
     expect(await screen.findByText("Awaiting setup")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        `Account created and setup email sent to ${profile.email}.`,
+      ),
+    )
     const resendBtn = screen.getByRole("button", {
       name: "Resend setup email",
     })
     expect(resendBtn).toBeInTheDocument()
+
+    // The itemized Admission checklist appears immediately after the account
+    // is created, so staff never have to separately search the student back
+    // up in the directory to find it (stakeholder Doc 16).
+    expect(
+      await screen.findByRole("heading", { name: "Admission requirements" }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("checkbox", { name: "Form 137" }),
+    ).toBeInTheDocument()
     await user.click(resendBtn)
     await waitFor(() => {
       expect(
@@ -240,11 +304,28 @@ describe("Student Records workspace", () => {
       last_name: profile.last_name,
       address: profile.address,
       requirements_verified: true,
-      entry_year: 2027,
-      student_type: "freshman",
     })
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
+    expect(body).not.toHaveProperty("entry_year")
+    expect(body).not.toHaveProperty("enrollment_category")
+    expect(body).not.toHaveProperty("student_type")
+  })
+
+  it("derives Enrollment Category and Student Type from Year Level, live, with no manual selector", async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(screen.getByText("Regular")).toBeInTheDocument()
+    expect(screen.getByText("Freshman")).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText("Year level"))
+    await user.click(await screen.findByRole("option", { name: "2nd Year" }))
+
+    expect(screen.getByText("Irregular")).toBeInTheDocument()
+    expect(screen.getByText("Transferee")).toBeInTheDocument()
+    expect(screen.queryByText("Regular")).not.toBeInTheDocument()
+    expect(screen.queryByText("Freshman")).not.toBeInTheDocument()
   })
 
   it("searches by name and opens the full student profile editor", async () => {
@@ -255,15 +336,34 @@ describe("Student Records workspace", () => {
     await user.type(screen.getByLabelText("Search student records"), "Amina")
     await user.click(screen.getByRole("button", { name: "Search" }))
 
+    // The directory now renders through the shared DataTable (Stakeholder
+    // Doc 17), which doubles every row into a real table (desktop) and a
+    // card list (phone) — queries below are scoped to the table to avoid
+    // matching both.
+    const table = await screen.findByRole("table", {
+      name: "Student directory",
+    })
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: profile.name }),
+        within(table).getByRole("button", { name: profile.name }),
       ).toBeInTheDocument(),
     )
     expect(
-      screen.getByRole("button", { name: "Resend email" }),
+      within(table).getByRole("button", { name: "Resend email" }),
     ).toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: profile.name }))
+    // The student number/email line must be allowed to wrap on a narrow
+    // phone screen instead of forcing horizontal scroll (Stakeholder Doc 17).
+    expect(
+      within(table).getByText(
+        `${profile.student_number} · ${profile.email}`,
+      ),
+    ).toHaveClass("whitespace-normal")
+    // The phone card list must carry the same student-number/email text too
+    // — it is its own, separate rendering, not just a CSS-hidden duplicate.
+    expect(
+      screen.getAllByText(`${profile.student_number} · ${profile.email}`),
+    ).toHaveLength(2)
+    await user.click(within(table).getByRole("button", { name: profile.name }))
 
     expect(
       screen.getByRole("dialog", { name: profile.name }),
@@ -316,8 +416,13 @@ describe("Student Records workspace", () => {
       enrolledProfile.name,
     )
     await user.click(screen.getByRole("button", { name: "Search" }))
+    const directoryTable = await screen.findByRole("table", {
+      name: "Student directory",
+    })
     await user.click(
-      await screen.findByRole("button", { name: enrolledProfile.name }),
+      await within(directoryTable).findByRole("button", {
+        name: enrolledProfile.name,
+      }),
     )
 
     expect(
@@ -325,7 +430,7 @@ describe("Student Records workspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        "Student number, program, entry year, year level, category, student type, and admission status are locked because this student already has an enrollment.",
+        "Student number, program, year level, and admission status are locked because this student already has an enrollment. Entry year, enrollment category, and student type are always set automatically and are never directly editable.",
       ),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText("Student number")).not.toBeInTheDocument()

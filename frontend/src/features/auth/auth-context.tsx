@@ -12,11 +12,14 @@ import {
   AuthContext,
   type AuthContextValue,
 } from "@/features/auth/auth-context-value"
+import { toSession } from "@/features/auth/api-auth-gateway"
+import { browserActingContextStore } from "@/features/auth/acting-context-store"
 import type {
   AuthGateway,
   AuthSession,
   Credentials,
 } from "@/features/auth/auth-types"
+import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
 import { setUnauthorizedHandler } from "@/features/services/api-client"
 
 interface AuthProviderProps {
@@ -42,11 +45,18 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
           return
         }
 
+        if (restored?.superAdmin !== undefined) {
+          browserActingContextStore.set(restored.superAdmin.actingContext)
+        } else {
+          browserActingContextStore.clear()
+        }
+
         setSession(restored)
         setStatus(restored ? "authenticated" : "anonymous")
       },
       () => {
         if (active) {
+          browserActingContextStore.clear()
           setSession(null)
           setStatus("anonymous")
         }
@@ -66,6 +76,7 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
     // cleared token.
     setUnauthorizedHandler(() => {
       gateway.clearSession()
+      browserActingContextStore.clear()
       setSession(null)
       setStatus("anonymous")
     })
@@ -74,6 +85,12 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
   const signIn = useCallback(
     async (credentials: Credentials) => {
       const authenticatedSession = await gateway.signIn(credentials)
+
+      if (authenticatedSession.superAdmin !== undefined) {
+        browserActingContextStore.set(authenticatedSession.superAdmin.actingContext)
+      } else {
+        browserActingContextStore.clear()
+      }
 
       setStorageAvailable(gateway.persistenceAvailable())
       setSession(authenticatedSession)
@@ -90,6 +107,12 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
         challengeToken,
         code,
       )
+
+      if (authenticatedSession.superAdmin !== undefined) {
+        browserActingContextStore.set(authenticatedSession.superAdmin.actingContext)
+      } else {
+        browserActingContextStore.clear()
+      }
 
       setStorageAvailable(gateway.persistenceAvailable())
       setSession(authenticatedSession)
@@ -109,6 +132,12 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
     async (credential: string) => {
       const authenticatedSession = await gateway.signInWithGoogle(credential)
 
+      if (authenticatedSession.superAdmin !== undefined) {
+        browserActingContextStore.set(authenticatedSession.superAdmin.actingContext)
+      } else {
+        browserActingContextStore.clear()
+      }
+
       setStorageAvailable(gateway.persistenceAvailable())
       setSession(authenticatedSession)
       setStatus("authenticated")
@@ -119,6 +148,7 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
   )
 
   const signOut = useCallback(() => {
+    browserActingContextStore.clear()
     // Revoke server-side, but clear locally without waiting: a failed or slow
     // revoke must never leave the user stuck in a signed-in UI. The rejection
     // is swallowed deliberately — without it a failed revoke surfaces as an
@@ -129,6 +159,21 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
     setStatus("anonymous")
   }, [gateway])
 
+  const replaceSession = useCallback(
+    (user: AuthenticatedUser) => {
+      const nextSession = toSession(user, session?.signedInAt)
+      if (nextSession.superAdmin !== undefined) {
+        browserActingContextStore.set(nextSession.superAdmin.actingContext)
+      } else {
+        browserActingContextStore.clear()
+      }
+
+      setSession(nextSession)
+      setStatus("authenticated")
+    },
+    [session?.signedInAt],
+  )
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -137,6 +182,7 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
       resendLoginOtp,
       signInWithGoogle,
       signOut,
+      replaceSession,
       status,
       storageAvailable,
     }),
@@ -147,6 +193,7 @@ export function AuthProvider({ children, gateway }: AuthProviderProps) {
       resendLoginOtp,
       signInWithGoogle,
       signOut,
+      replaceSession,
       status,
       storageAvailable,
     ],

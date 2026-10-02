@@ -46,6 +46,7 @@ import { useEnrollmentsQuery } from "@/features/hooks/use-enrollment"
 import { useAcademicTermsQuery } from "@/features/hooks/use-reference-data"
 import { useTermSelection } from "@/features/hooks/use-term-selection"
 import { formatTimeRange } from "@/features/lib/format-time"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import { compareBySchedule } from "@/features/lib/schedule-order"
 import { formatAcademicTerm } from "@/features/services/reference-data-service"
 
@@ -89,7 +90,7 @@ export function StudentScheduleWorkspace() {
   )
 
   const sortedSubjects = useMemo(() => {
-    return [...subjects].sort((a, b) => {
+    const sorted = [...subjects].sort((a, b) => {
       const aSched = {
         schedule_days: a.schedule_days ?? null,
         starts_at_time: a.starts_at_time ?? null,
@@ -102,6 +103,7 @@ export function StudentScheduleWorkspace() {
       }
       return compareBySchedule(aSched, bSched)
     })
+    return groupPairedSubjects(sorted)
   }, [subjects])
 
   const calendarItems: SectionScheduleItem[] = useMemo(() => {

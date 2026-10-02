@@ -342,4 +342,48 @@ final class ScheduleProposalsEndpointTest extends TestCase
         self::assertSame('dean_approved', $proposal->refresh()->status->value);
         self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
     }
+
+    public function test_returning_a_proposal_as_acting_dean_emits_dean_in_returned_by_role_and_decision_history(): void
+    {
+        $term = $this->makeTerm();
+        $chair = User::create([
+            'name' => 'Chair',
+            'email' => 'chair.acting-dean@grc.test',
+            'password' => self::PASSWORD,
+            'role' => UserRole::ProgramChair,
+            'college' => CollegeCode::Ccs,
+            'status' => UserStatus::Active,
+            'last_otp_verified_at' => now(),
+        ]);
+        $proposal = ScheduleProposal::create([
+            'academic_term_id' => $term->id,
+            'college' => 'ccs',
+            'submitted_by' => $chair->id,
+            'status' => ScheduleProposalStatus::Draft,
+        ]);
+
+        $superAdminToken = $this->tokenFor(UserRole::SuperAdmin, 'superadmin.acting-dean@grc.test');
+
+        // Switch to dean CCS
+        $this->withToken($superAdminToken)
+            ->putJson('/api/v1/super-admin/acting-context', [
+                'role' => 'dean',
+                'college' => 'ccs',
+            ])
+            ->assertOk();
+
+        auth()->forgetGuards();
+
+        $response = $this->withToken($superAdminToken)
+            ->patchJson("/api/v1/schedule-proposals/{$proposal->id}", [
+                'action' => 'dean_return',
+                'decision_reason' => 'Need revisions.',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.status', 'draft')
+            ->assertJsonPath('data.returned_by_role', 'dean')
+            ->assertJsonPath('data.decision_history.0.actor_role', 'dean');
+    }
 }
+

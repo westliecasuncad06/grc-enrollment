@@ -97,6 +97,7 @@ const expectedModuleIds = {
     "it-control-enrollment-override",
   ],
   queue_kiosk: [],
+  super_admin: ["super-admin-accounts", "audit-logs"],
 } as const
 
 describe("rolePortalDefinitions", () => {

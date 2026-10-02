@@ -453,7 +453,10 @@ describe("PortalShell", () => {
         "collapsed",
       )
       // Labels leave the layout but never the DOM, so links keep their names
-      // and show a hover title while only icons are visible.
+      // while only icons are visible — the hover hint itself is a pure-CSS
+      // wipe-reveal of that same label (see globals.css), not a native
+      // `title` attribute (that would pop its own OS-styled tooltip on top
+      // of the CSS pill, a real duplicate the owner flagged live).
       expect(
         within(navigation)
           .getAllByRole("link")
@@ -461,7 +464,7 @@ describe("PortalShell", () => {
       ).toEqual(namesBefore)
       expect(
         within(navigation).getByRole("link", { name: "GRC Connect" }),
-      ).toHaveAttribute("title", "GRC Connect")
+      ).not.toHaveAttribute("title")
       expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe(
         "1",
       )

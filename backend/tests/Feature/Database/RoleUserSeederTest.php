@@ -24,7 +24,7 @@ final class RoleUserSeederTest extends TestCase
 
         $this->assertSame(10, User::count());
 
-        foreach (UserRole::humanCases() as $role) {
+        foreach (UserRole::seedableCases() as $role) {
             $user = User::where('role', $role->value)->first();
 
             $this->assertNotNull($user, "Missing seeded user for role {$role->value}.");
@@ -32,6 +32,13 @@ final class RoleUserSeederTest extends TestCase
         }
 
         $this->assertDatabaseMissing('users', ['role' => UserRole::QueueKiosk->value]);
+        $this->assertDatabaseMissing('users', ['role' => UserRole::SuperAdmin->value]);
+    }
+
+    public function test_it_never_seeds_a_super_admin(): void
+    {
+        $this->seed(RoleUserSeeder::class);
+        $this->assertDatabaseMissing('users', ['role' => UserRole::SuperAdmin->value]);
     }
 
     public function test_seeded_emails_are_unique_and_use_the_reserved_test_domain(): void

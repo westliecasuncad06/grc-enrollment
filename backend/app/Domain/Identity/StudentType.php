@@ -17,12 +17,14 @@ enum StudentType: string
 {
     case Freshman = 'freshman';
     case Transferee = 'transferee';
+    case Returnee = 'returnee';
 
     public function label(): string
     {
         return match ($this) {
             self::Freshman => 'Freshman',
             self::Transferee => 'Transferee',
+            self::Returnee => 'Returnee',
         };
     }
 }

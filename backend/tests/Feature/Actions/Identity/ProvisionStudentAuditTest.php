@@ -7,7 +7,9 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
+use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Program;
@@ -26,6 +28,7 @@ final class ProvisionStudentAuditTest extends TestCase
     public function test_provisioning_records_only_the_exact_safe_student_profile_audit(): void
     {
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         [$actor, $token] = $this->tokenFor(
             UserRole::AdmissionStaff,
             'provision.audit.admission@grc.test',
@@ -41,9 +44,7 @@ final class ProvisionStudentAuditTest extends TestCase
                 'address' => '1 Sensitive Street, Caloocan City',
                 'student_number' => '2027-08-30001',
                 'program_id' => $program->id,
-                'entry_year' => 2027,
                 'year_level' => 2,
-                'student_type' => 'freshman',
                 'requirements_verified' => true,
             ]);
 
@@ -65,10 +66,11 @@ final class ProvisionStudentAuditTest extends TestCase
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2027,
             'year_level' => 2,
-            // The request omitted it, so ProvisionStudent defaults it —
-            // every provisioned student has an explicit category.
-            'enrollment_category' => 'regular',
-            'student_type' => 'freshman',
+            // The request sent neither field — Year Level 2 derives to
+            // Irregular/Transferee (Stakeholder Doc 17,
+            // App\Domain\Identity\AdmissionIntakeDefaults).
+            'enrollment_category' => 'irregular',
+            'student_type' => 'transferee',
             'admission_status' => 'admitted',
             'academic_standing' => 'good',
             'financial_status' => null,
@@ -134,6 +136,7 @@ final class ProvisionStudentAuditTest extends TestCase
     public function test_audit_failure_rolls_back_both_user_and_student_profile(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         [, $token] = $this->tokenFor(UserRole::AdmissionStaff, 'provision.audit.rollback@grc.test');
 
         AuditLog::creating(static function (): never {
@@ -151,9 +154,7 @@ final class ProvisionStudentAuditTest extends TestCase
                     'address' => '2 Rollback Street, Caloocan City',
                     'student_number' => '2027-08-30002',
                     'program_id' => $program->id,
-                    'entry_year' => 2027,
                     'year_level' => 3,
-                    'student_type' => 'freshman',
                     'requirements_verified' => true,
                 ]);
         } catch (RuntimeException $exception) {
@@ -168,6 +169,15 @@ final class ProvisionStudentAuditTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'rollback.student@grc.test']);
         $this->assertDatabaseMissing('student_profiles', ['student_number' => '2027-08-30002']);
         self::assertSame(0, AuditLog::query()->where('action', '!=', AuditAction::LOGIN_SUCCEEDED)->count());
+    }
+
+    private function setCurrentTerm(string $schoolYear): AcademicTerm
+    {
+        return AcademicTerm::create([
+            'school_year' => $schoolYear,
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
     }
 
     /** @return array{User, string} */

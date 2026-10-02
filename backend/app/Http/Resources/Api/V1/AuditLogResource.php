@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Domain\Identity\UserRole;
 use App\Models\AuditLog;
 use App\Support\Audit\AuditChangeFormatter;
 use Illuminate\Http\Request;
@@ -25,6 +26,9 @@ final class AuditLogResource extends JsonResource
      *     actor_name: string,
      *     actor_role: string,
      *     actor_role_label: string,
+     *     acting_role: ?string,
+     *     acting_role_label: ?string,
+     *     acting_college: ?string,
      *     action: string,
      *     auditable_type: string,
      *     auditable_id: ?int,
@@ -46,6 +50,11 @@ final class AuditLogResource extends JsonResource
             'actor_name' => $this->resource->actor->name,
             'actor_role' => $this->resource->actor->role->value,
             'actor_role_label' => $this->resource->actor->role->label(),
+            'acting_role' => $this->resource->acting_role,
+            'acting_role_label' => $this->resource->acting_role !== null
+                ? UserRole::from($this->resource->acting_role)->label()
+                : null,
+            'acting_college' => $this->resource->acting_college,
             'action' => $this->resource->action,
             'auditable_type' => $this->resource->auditable_type,
             'auditable_id' => $this->resource->auditable_id,

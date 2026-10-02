@@ -1,6 +1,7 @@
 "use client"
 
 import { EnrollmentGroupBar } from "@/features/components/portal/enrollment-group-bar"
+import { Badge } from "@/features/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -25,6 +26,9 @@ interface EnrollmentStatusOverviewPanelProps {
   onOpenGroup: (group: EnrollmentStatusGroup) => void
   /** Open one department, optionally already narrowed to a group. */
   onOpenDepartment: (department: string, group?: EnrollmentStatusGroup) => void
+  /** Filter or view queue for one department. */
+  onSelectDepartmentQueue?: (department: string) => void
+  selectedDepartment?: string
 }
 
 /**
@@ -36,18 +40,39 @@ export function EnrollmentStatusOverviewPanel({
   overview,
   onOpenGroup,
   onOpenDepartment,
+  onSelectDepartmentQueue,
+  selectedDepartment = "all",
 }: EnrollmentStatusOverviewPanelProps) {
   const total = overview.total_students
+  const selectedDeptObj =
+    selectedDepartment !== "all"
+      ? overview.departments.find(
+          (d) =>
+            d.department?.toLowerCase() === selectedDepartment.toLowerCase(),
+        )
+      : null
 
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle level={2}>Enrollment status</CardTitle>
-          <CardDescription>
-            Every eligible student, by where they are in enrolling this term.
-            Select a group to see the departments, sections and students in it.
-          </CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <CardTitle level={2}>Enrollment status</CardTitle>
+                {selectedDeptObj && (
+                  <Badge variant="secondary" className="font-medium">
+                    {selectedDeptObj.label}
+                  </Badge>
+                )}
+              </div>
+              <CardDescription>
+                {selectedDeptObj
+                  ? `Showing enrollment status and queue for ${selectedDeptObj.label}.`
+                  : "Every eligible student, by where they are in enrolling this term. Select a group to see the departments, sections and students in it."}
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-5">
           <div>
@@ -175,6 +200,18 @@ export function EnrollmentStatusOverviewPanel({
                     )
                   })}
                 </ul>
+                {drillable && onSelectDepartmentQueue && (
+                  <div className="flex items-center justify-between border-t pt-2 mt-0.5">
+                    <span className="text-xs text-muted-foreground">Department queue</span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectDepartmentQueue(code)}
+                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      View Queue →
+                    </button>
+                  </div>
+                )}
               </section>
             )
           })}

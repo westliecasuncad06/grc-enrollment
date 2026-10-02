@@ -1,11 +1,19 @@
 import type { UserRole } from "@/features/auth/roles"
 
+export interface SuperAdminSessionState {
+  actingContext: {
+    role: UserRole
+    college?: "ccs" | "coe" | "coa" | "cbae" | null
+  } | null
+}
+
 export interface AuthSession {
   userId: string
   displayName: string
   role: UserRole
   college?: "ccs" | "coe" | "coa" | "cbae" | null
   signedInAt: string
+  superAdmin?: SuperAdminSessionState
 }
 
 export interface Credentials {

@@ -72,13 +72,65 @@ final readonly class BuildStudentProspectus
                     continue;
                 }
 
-                $semesters[] = new ProspectusSemester($year, $slot, $entries);
+                $semesters[] = new ProspectusSemester($year, $slot, self::groupPairedEntries($entries));
             }
         }
 
         $unplaced = array_values($grades->whereNotIn('subject_id', $placedSubjectIds)->all());
 
         return new Prospectus($student, $semesters, $unplaced);
+    }
+
+    /**
+     * Orders entries so that a Lecture subject and its paired Laboratory
+     * subject always appear adjacent, with Lecture first (Stakeholder Doc 18).
+     *
+     * @param  list<ProspectusEntry>  $entries
+     * @return list<ProspectusEntry>
+     */
+    private static function groupPairedEntries(array $entries): array
+    {
+        /** @var array<int, ProspectusEntry> $bySubjectId */
+        $bySubjectId = [];
+        foreach ($entries as $entry) {
+            $bySubjectId[$entry->placement->subject_id] = $entry;
+        }
+
+        $placed = [];
+        $grouped = [];
+
+        foreach ($entries as $entry) {
+            $subjectId = $entry->placement->subject_id;
+            if (isset($placed[$subjectId])) {
+                continue;
+            }
+
+            $pairedId = $entry->placement->subject->paired_subject_id;
+            $partner = $pairedId !== null ? ($bySubjectId[$pairedId] ?? null) : null;
+
+            if ($partner !== null && ! isset($placed[$partner->placement->subject_id])) {
+                $isLab = ! $entry->placement->subject->isLectureComponent();
+
+                if ($isLab) {
+                    $grouped[] = $partner;
+                    $placed[$partner->placement->subject_id] = true;
+                    $grouped[] = $entry;
+                    $placed[$subjectId] = true;
+                } else {
+                    $grouped[] = $entry;
+                    $placed[$subjectId] = true;
+                    $grouped[] = $partner;
+                    $placed[$partner->placement->subject_id] = true;
+                }
+
+                continue;
+            }
+
+            $grouped[] = $entry;
+            $placed[$subjectId] = true;
+        }
+
+        return $grouped;
     }
 
     /**

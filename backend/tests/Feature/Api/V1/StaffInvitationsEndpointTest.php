@@ -38,6 +38,21 @@ final class StaffInvitationsEndpointTest extends TestCase
         $this->postJson('/api/v1/staff-invitations', [])->assertUnauthorized();
     }
 
+    public function test_staff_account_setup_email_includes_the_email_and_code_in_its_link(): void
+    {
+        $mail = new StaffAccountSetupMail(
+            UserRole::Dean,
+            'http://localhost:3000/staff-account-setup',
+            '123456',
+            'invited.dean@grc.test',
+        );
+
+        $html = $mail->render();
+
+        self::assertStringContainsString('email=invited.dean%40grc.test', $html);
+        self::assertStringContainsString('code=123456', $html);
+    }
+
     public function test_a_non_registrar_head_role_cannot_invite_staff(): void
     {
         $token = $this->tokenFor(UserRole::RegistrarStaff, 'registrar.staff@grc.test');
@@ -177,7 +192,8 @@ final class StaffInvitationsEndpointTest extends TestCase
         Mail::assertSent(StaffAccountSetupMail::class, function (StaffAccountSetupMail $mail) use (&$setupCode): bool {
             $setupCode = $mail->setupCode;
 
-            return $mail->setupUrl === 'http://192.168.1.101:3000/staff-account-setup';
+            return $mail->setupUrl === 'http://192.168.1.101:3000/staff-account-setup'
+                && $mail->staffEmail === 'pending.dean@grc.test';
         });
         self::assertIsString($setupCode);
 

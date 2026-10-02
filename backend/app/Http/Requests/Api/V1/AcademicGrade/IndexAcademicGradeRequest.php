@@ -28,7 +28,7 @@ final class IndexAcademicGradeRequest extends FormRequest
             ))],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'college' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:500'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];
     }

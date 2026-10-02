@@ -19,7 +19,7 @@ import {
 } from "@/features/services/auth-service"
 import { loginWithGoogleCredential } from "@/features/services/google-login-service"
 
-function toSession(
+export function toSession(
   user: AuthenticatedUser,
   signedInAt: string = new Date().toISOString(),
 ): AuthSession {
@@ -29,6 +29,12 @@ function toSession(
     role: user.role,
     college: user.college,
     signedInAt,
+    superAdmin:
+      user.role === "super_admin" || user.acting_context !== undefined
+        ? {
+            actingContext: user.acting_context ?? null,
+          }
+        : undefined,
   }
 }
 

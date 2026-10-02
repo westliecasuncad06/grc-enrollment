@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
+import { toast } from "sonner"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { FacultySubjectPreferenceForm } from "@/features/components/portal/faculty-subject-preference-form"
@@ -70,6 +71,10 @@ export function FacultySubjectPreferencePanel() {
     name: "curriculum_id",
   })
   const selectedSemester = useWatch({ control: form.control, name: "semester" })
+  const watchedSubjectId = useWatch({
+    control: form.control,
+    name: "subject_id",
+  })
 
   useEffect(() => {
     if (selectedCurriculumId === 0 && catalogQuery.data?.[0]) {
@@ -99,6 +104,14 @@ export function FacultySubjectPreferencePanel() {
       ),
     [catalogQuery.data],
   )
+  const selectedSubject = subjectsById.get(watchedSubjectId)
+  const pairedSubject = selectedSubject?.paired_subject_id
+    ? (subjectsById.get(selectedSubject.paired_subject_id) ?? null)
+    : null
+  const pairedSubjectInfo = pairedSubject
+    ? { code: pairedSubject.code, title: pairedSubject.title }
+    : null
+
   const specializationsBySubject = useMemo(
     () =>
       new Map(
@@ -145,6 +158,11 @@ export function FacultySubjectPreferencePanel() {
         ? invalidatePreferences()
         : invalidateSpecializations())
       setRemoval(null)
+      toast.success(
+        target.kind === "preference"
+          ? "Subject preference removed."
+          : "Specialization removed.",
+      )
     },
     onError: () =>
       setRequestError(
@@ -166,6 +184,41 @@ export function FacultySubjectPreferencePanel() {
           "Subject preference could not be saved. Check the connection and try again.",
         )
       return
+    }
+
+    let pairedSaved = false
+    if (!editing && pairedSubject) {
+      const alreadySaved = (preferencesQuery.data ?? []).some(
+        (p) =>
+          p.curriculum_id === input.curriculum_id &&
+          p.semester === input.semester &&
+          p.subject_id === pairedSubject.id,
+      )
+      if (!alreadySaved) {
+        try {
+          await preferenceMutation.mutateAsync({
+            input: {
+              curriculum_id: input.curriculum_id,
+              semester: input.semester,
+              subject_id: pairedSubject.id,
+              rank: input.rank !== undefined ? input.rank + 1 : undefined,
+            },
+          })
+          pairedSaved = true
+          if (!specializationsBySubject.has(pairedSubject.id)) {
+            try {
+              await specializationMutation.mutateAsync({
+                subject_id: pairedSubject.id,
+                proficiency,
+              })
+            } catch {
+              // Advisory
+            }
+          }
+        } catch {
+          // Primary preference already succeeded
+        }
+      }
     }
 
     // The preference write succeeded regardless of what happens next, so its
@@ -191,6 +244,56 @@ export function FacultySubjectPreferencePanel() {
           "Preference saved, but the proficiency could not be recorded. Try setting it again.",
         )
       }
+    }
+
+    if (editing) {
+      toast.success("Subject preference updated successfully.")
+    } else if (pairedSaved) {
+      toast.success(
+        "Subject preferences saved successfully (Lecture & Laboratory paired).",
+      )
+    } else {
+      toast.success("Subject preference saved successfully.")
+    }
+  }
+
+  const handleBatchDeletePreferences = async (ids: number[]) => {
+    try {
+      await Promise.all(
+        ids.map((id) => deleteFacultyCurriculumSubjectPreference(id)),
+      )
+      await invalidatePreferences()
+      toast.success("Selected subject preferences deleted successfully.")
+    } catch {
+      toast.error("Failed to delete selected subject preferences. Try again.")
+    }
+  }
+
+  const handleReplacePreference = async (
+    row: FacultyCurriculumSubjectPreference,
+    newSubjectId: number,
+  ) => {
+    try {
+      await updateFacultyCurriculumSubjectPreference(row.id, {
+        curriculum_id: row.curriculum_id,
+        semester: row.semester,
+        subject_id: newSubjectId,
+        rank: row.rank,
+      })
+      await invalidatePreferences()
+      if (!specializationsBySubject.has(newSubjectId)) {
+        try {
+          await specializationMutation.mutateAsync({
+            subject_id: newSubjectId,
+            proficiency,
+          })
+        } catch {
+          // Advisory
+        }
+      }
+      toast.success("Subject preference replaced successfully.")
+    } catch {
+      toast.error("Failed to replace subject preference. Try again.")
     }
   }
 
@@ -226,6 +329,7 @@ export function FacultySubjectPreferencePanel() {
             isSaving={isSaving}
             editing={editing}
             proficiency={proficiency}
+            pairedSubjectInfo={pairedSubjectInfo}
             onProficiencyChange={setProficiency}
             onCancelEdit={() => {
               setEditing(null)
@@ -249,6 +353,7 @@ export function FacultySubjectPreferencePanel() {
             }
             subjectsById={subjectsById}
             specializationsBySubject={specializationsBySubject}
+            subjectOptions={subjectOptions}
             onEditPreference={(row) => {
               setEditing(row)
               form.reset({
@@ -264,6 +369,8 @@ export function FacultySubjectPreferencePanel() {
             onRemoveSpecialization={(row) =>
               setRemoval({ kind: "specialization", row })
             }
+            onBatchDeletePreferences={handleBatchDeletePreferences}
+            onReplacePreference={handleReplacePreference}
             removalKind={removal?.kind ?? null}
             isRemoving={removalMutation.isPending}
             onDismissRemoval={() => setRemoval(null)}

@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
-use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\FinancialStatus;
-use App\Domain\Identity\StudentType;
 use App\Models\StudentProfile;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -33,10 +31,15 @@ final class UpdateStudentProfileRequest extends FormRequest
             'address' => ['sometimes', 'string', 'max:1000'],
             'student_number' => ['sometimes', 'string', 'max:255', 'regex:/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/', Rule::unique('student_profiles', 'student_number')->ignore($profileId)],
             'program_id' => ['sometimes', 'integer', Rule::exists('programs', 'id')],
-            'entry_year' => ['sometimes', 'integer', 'digits:4'],
+            // Derived from the current ongoing academic term — see
+            // StoreStudentProfileRequest and App\Actions\Identity\UpdateStudentProfile.
+            'entry_year' => ['prohibited'],
             'year_level' => ['sometimes', 'integer', 'between:1,4'],
-            'enrollment_category' => ['sometimes', Rule::enum(EnrollmentCategory::class)],
-            'student_type' => ['sometimes', Rule::enum(StudentType::class)],
+            // Derived from year_level (Stakeholder Doc 17,
+            // App\Domain\Identity\AdmissionIntakeDefaults) — must never be
+            // client-supplied.
+            'enrollment_category' => ['prohibited'],
+            'student_type' => ['prohibited'],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
             'admission_status' => ['sometimes', Rule::enum(AdmissionStatus::class)],
             'curriculum_id' => ['prohibited'],

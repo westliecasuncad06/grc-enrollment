@@ -95,6 +95,7 @@ export function renderWithSession(
     signInWithGoogle = () =>
       Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
     signOut = () => undefined,
+    replaceSession = () => undefined,
     status = "authenticated",
     storageAvailable = true,
   }: RenderOptions & Partial<AuthContextValue> = {},
@@ -109,6 +110,7 @@ export function renderWithSession(
     resendLoginOtp,
     signInWithGoogle,
     signOut,
+    replaceSession,
     status,
     storageAvailable,
   }

@@ -24,6 +24,7 @@ return [
         'Accept',
         'Authorization',
         'Content-Type',
+        'X-Acting-Context',
         'X-Queue-Kiosk-Token',
         'X-Request-ID',
     ],

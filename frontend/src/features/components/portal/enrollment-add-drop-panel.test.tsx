@@ -48,7 +48,9 @@ const enrolledEnrollment: Enrollment = {
   subjects: [
     {
       section_id: 5,
+      subject_id: 50,
       subject_code: "CS101",
+      paired_subject_id: null,
       subject_title: "Programming 1",
       status: "selected",
       status_label: "Selected",

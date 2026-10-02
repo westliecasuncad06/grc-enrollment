@@ -6,8 +6,10 @@ use App\Domain\Audit\AuditAction;
 use App\Domain\Curriculum\CurriculumStatus;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
 use App\Domain\Organization\ProgramStatus;
 use App\Mail\StudentAccountSetupMail;
+use App\Models\AcademicTerm;
 use App\Models\AuditLog;
 use App\Models\Curriculum;
 use App\Models\Program;
@@ -42,6 +44,21 @@ final class StudentProfilesEndpointTest extends TestCase
         ])->json('data.token');
     }
 
+    /**
+     * `ProvisionStudent`/`UpdateStudentProfile` derive `entry_year` from the
+     * current ongoing academic term (Stakeholder Doc 17) instead of trusting
+     * the client — every test that expects provisioning to actually succeed
+     * needs one of these set up first.
+     */
+    private function setCurrentTerm(string $schoolYear): AcademicTerm
+    {
+        return AcademicTerm::create([
+            'school_year' => $schoolYear,
+            'semester' => '1st',
+            'status' => AcademicTermStatus::SemesterOngoing,
+        ]);
+    }
+
     /** @return array{0: Program, 1: Curriculum} */
     private function makeProgramAndCurriculum(): array
     {
@@ -64,6 +81,7 @@ final class StudentProfilesEndpointTest extends TestCase
     public function test_admission_staff_can_provision_a_student(): void
     {
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.provision@grc.test');
         Mail::fake();
 
@@ -74,15 +92,16 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '123 Test Street, Caloocan City',
             'student_number' => '2027-08-10001',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
         $response->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
         $response->assertJsonPath('data.student_number', '2027-08-10001');
         $response->assertJsonPath('data.address', '123 Test Street, Caloocan City');
+        $response->assertJsonPath('data.entry_year', 2027);
+        $response->assertJsonPath('data.enrollment_category', 'regular');
+        $response->assertJsonPath('data.student_type', 'freshman');
         $response->assertJsonPath('data.admission_status', 'admitted');
         $response->assertJsonPath('data.account_setup_status', 'pending');
         $response->assertJsonPath('data.invitation_delivery_status', 'sent');
@@ -114,6 +133,7 @@ final class StudentProfilesEndpointTest extends TestCase
     public function test_provisioning_normalizes_name_casing_regardless_of_how_admission_typed_it(): void
     {
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.casing@grc.test');
         Mail::fake();
 
@@ -126,9 +146,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '1 Casing Street, Caloocan City',
             'student_number' => '2027-08-10009',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -160,9 +178,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'email' => 'incomplete.applicant@grc.test',
             'student_number' => '2027-08-10009',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => false,
         ]);
 
@@ -174,7 +190,7 @@ final class StudentProfilesEndpointTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'incomplete.applicant@grc.test']);
     }
 
-    public function test_provisioning_rejects_a_client_password_and_curriculum_override(): void
+    public function test_provisioning_rejects_client_overrides_of_server_controlled_fields(): void
     {
         [$program, $curriculum] = $this->makeProgramAndCurriculum();
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.contract@grc.test');
@@ -190,13 +206,14 @@ final class StudentProfilesEndpointTest extends TestCase
             'curriculum_id' => $curriculum->id,
             'entry_year' => 2027,
             'year_level' => 1,
+            'enrollment_category' => 'irregular',
             'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
         $response->assertUnprocessable()
             ->assertJsonStructure([
-                'error' => ['errors' => ['password', 'curriculum_id']],
+                'error' => ['errors' => ['password', 'curriculum_id', 'entry_year', 'enrollment_category', 'student_type']],
             ]);
         $this->assertDatabaseMissing('users', ['email' => 'unsafe.contract@grc.test']);
     }
@@ -205,6 +222,7 @@ final class StudentProfilesEndpointTest extends TestCase
     {
         config(['app.frontend_url' => 'http://localhost:3000']);
         [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.activation@grc.test');
         Mail::fake();
 
@@ -215,9 +233,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '456 Setup Avenue, Caloocan City',
             'student_number' => '2027-08-10010',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ])->assertCreated();
 
@@ -270,6 +286,7 @@ final class StudentProfilesEndpointTest extends TestCase
     public function test_an_expired_or_invalid_setup_code_cannot_activate_the_account(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.expiry@grc.test');
         Mail::fake();
 
@@ -280,9 +297,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '60 Minute Avenue, Caloocan City',
             'student_number' => '2027-08-10012',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ])->assertCreated();
 
@@ -316,6 +331,7 @@ final class StudentProfilesEndpointTest extends TestCase
     public function test_mail_failure_keeps_one_pending_account_and_exposes_a_resendable_delivery_state(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.mail-failure@grc.test');
         Mail::shouldReceive('to')->once()->andReturnSelf();
         Mail::shouldReceive('send')->once()->andThrow(new RuntimeException('Simulated mail transport failure.'));
@@ -327,9 +343,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => 'Retry Street, Caloocan City',
             'student_number' => '2027-08-10013',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -357,9 +371,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '100 Invalid Format Road, Caloocan City',
             'student_number' => 'STU-2027-0001',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -370,6 +382,7 @@ final class StudentProfilesEndpointTest extends TestCase
     public function test_financial_status_is_accepted_and_defaults_to_null(): void
     {
         [$program] = $this->makeProgramAndCurriculum();
+        $this->setCurrentTerm('2027-2028');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.financial@grc.test');
         Mail::fake();
 
@@ -380,10 +393,8 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '101 Scholar Avenue, Caloocan City',
             'student_number' => '2027-08-10002',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
             'financial_status' => 'scholar',
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
         $scholar->assertCreated();
@@ -397,9 +408,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '102 Default Avenue, Caloocan City',
             'student_number' => '2027-08-10003',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
         $unset->assertCreated();
@@ -407,42 +416,57 @@ final class StudentProfilesEndpointTest extends TestCase
         $unset->assertJsonPath('data.financial_status_label', null);
     }
 
-    public function test_student_type_is_required_and_exposed_with_its_label(): void
+    /**
+     * Stakeholder Doc 17: Admission no longer picks Enrollment Category or
+     * Student Type directly — both are derived from Year Level at intake
+     * (1 => Regular/Freshman, 2-4 => Irregular/Transferee) and the client
+     * can't override them (see test_provisioning_rejects_client_overrides_of_server_controlled_fields).
+     * `enrollment_category_derived_at` must stay NULL: this is a
+     * provisioning default, not ADR 0021's grade-based re-derivation.
+     */
+    public function test_enrollment_category_and_student_type_are_derived_from_year_level(): void
     {
-        [$program] = $this->makeProgramAndCurriculum();
-        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.studenttype@grc.test');
+        $program = Program::create(['code' => 'BSUNI', 'name' => 'BS Universal', 'status' => ProgramStatus::Active]);
+        Curriculum::create([
+            'program_id' => $program->id, 'name' => 'BSUNI Curriculum',
+            'effective_school_year' => '2000-2001', 'effective_start_year' => 2000,
+            'effective_end_year' => null, 'status' => CurriculumStatus::Active,
+        ]);
+        $this->setCurrentTerm('2027-2028');
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.yearlevel@grc.test');
         Mail::fake();
 
-        $missing = $this->withToken($token)->postJson('/api/v1/student-profiles', [
-            'first_name' => 'No',
-            'last_name' => 'Type',
-            'email' => 'no.type.student@grc.test',
-            'address' => '107 No Type Road, Caloocan City',
-            'student_number' => '2027-08-10014',
-            'program_id' => $program->id,
-            'entry_year' => 2027,
-            'year_level' => 1,
-            'requirements_verified' => true,
-        ]);
-        $missing->assertUnprocessable()
-            ->assertJsonStructure(['error' => ['errors' => ['student_type']]]);
-        $this->assertDatabaseMissing('users', ['email' => 'no.type.student@grc.test']);
+        $expectations = [
+            1 => ['regular', 'freshman'],
+            2 => ['irregular', 'transferee'],
+            3 => ['irregular', 'transferee'],
+            4 => ['irregular', 'transferee'],
+        ];
 
-        $transferee = $this->withToken($token)->postJson('/api/v1/student-profiles', [
-            'first_name' => 'Trans',
-            'last_name' => 'Feree',
-            'email' => 'transferee.student@grc.test',
-            'address' => '108 Transferee Avenue, Caloocan City',
-            'student_number' => '2027-08-10015',
-            'program_id' => $program->id,
-            'entry_year' => 2027,
-            'year_level' => 1,
-            'student_type' => 'transferee',
-            'requirements_verified' => true,
-        ]);
-        $transferee->assertCreated();
-        $transferee->assertJsonPath('data.student_type', 'transferee');
-        $transferee->assertJsonPath('data.student_type_label', 'Transferee');
+        foreach ($expectations as $yearLevel => [$expectedCategory, $expectedType]) {
+            $email = "year-level-{$yearLevel}@grc.test";
+            $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+                'first_name' => 'Year',
+                'last_name' => "Level {$yearLevel}",
+                'email' => $email,
+                'address' => "{$yearLevel} Derivation Road, Caloocan City",
+                'student_number' => "2027-08-200{$yearLevel}0",
+                'program_id' => $program->id,
+                'year_level' => $yearLevel,
+                'requirements_verified' => true,
+            ]);
+
+            $response->assertCreated();
+            $response->assertJsonPath('data.enrollment_category', $expectedCategory);
+            $response->assertJsonPath('data.student_type', $expectedType);
+            $response->assertJsonPath('data.student_type_label', ucfirst($expectedType));
+            $this->assertDatabaseHas('student_profiles', [
+                'user_id' => User::query()->where('email', $email)->value('id'),
+                'enrollment_category' => $expectedCategory,
+                'student_type' => $expectedType,
+                'enrollment_category_derived_at' => null,
+            ]);
+        }
     }
 
     public function test_a_non_admission_staff_role_cannot_provision_a_student(): void
@@ -475,6 +499,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'name' => 'Program Without Curriculum',
             'status' => ProgramStatus::Active,
         ]);
+        $this->setCurrentTerm('2035-2036');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.mismatch@grc.test');
 
         $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
@@ -484,9 +509,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '104 Missing Curriculum Road, Caloocan City',
             'student_number' => '2035-08-10005',
             'program_id' => $program->id,
-            'entry_year' => 2035,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -494,7 +517,7 @@ final class StudentProfilesEndpointTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'mismatch.student@grc.test']);
     }
 
-    public function test_provisioning_resolves_the_curriculum_from_entry_year_instead_of_a_request_override(): void
+    public function test_provisioning_resolves_the_curriculum_from_the_current_terms_entry_year(): void
     {
         $program = Program::create(['code' => 'BSIT', 'name' => 'BS Information Technology', 'status' => ProgramStatus::Active]);
         $oldCurriculum = Curriculum::create([
@@ -505,7 +528,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'effective_end_year' => 2023,
             'status' => CurriculumStatus::Archived,
         ]);
-        $currentCurriculum = Curriculum::create([
+        Curriculum::create([
             'program_id' => $program->id,
             'name' => 'BSIT 2024 Curriculum',
             'effective_school_year' => '2024-2025',
@@ -513,6 +536,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'effective_end_year' => 2029,
             'status' => CurriculumStatus::Active,
         ]);
+        $this->setCurrentTerm('2023-2024');
         $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.automatic-curriculum@grc.test');
 
         $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
@@ -522,9 +546,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '105 Automatic Curriculum Road, Caloocan City',
             'student_number' => '2023-08-10007',
             'program_id' => $program->id,
-            'entry_year' => 2023,
             'year_level' => 4,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 
@@ -533,6 +555,26 @@ final class StudentProfilesEndpointTest extends TestCase
             ->assertJsonPath('data.entry_year', 2023)
             ->assertJsonPath('data.curriculum_name', 'BSIT 2018 Curriculum')
             ->assertJsonPath('data.curriculum_effective_school_year', '2018-2019');
+    }
+
+    public function test_provisioning_fails_cleanly_when_no_academic_term_is_ongoing(): void
+    {
+        [$program] = $this->makeProgramAndCurriculum();
+        $token = $this->tokenFor(UserRole::AdmissionStaff, 'admission.noterm@grc.test');
+
+        $response = $this->withToken($token)->postJson('/api/v1/student-profiles', [
+            'first_name' => 'No',
+            'last_name' => 'Term',
+            'email' => 'no.term.student@grc.test',
+            'address' => '110 No Term Road, Caloocan City',
+            'student_number' => '2027-08-10016',
+            'program_id' => $program->id,
+            'year_level' => 1,
+            'requirements_verified' => true,
+        ]);
+
+        $response->assertUnprocessable()->assertJsonPath('error.code', 'VALIDATION_FAILED');
+        $this->assertDatabaseMissing('users', ['email' => 'no.term.student@grc.test']);
     }
 
     public function test_duplicate_email_is_rejected(): void
@@ -548,9 +590,7 @@ final class StudentProfilesEndpointTest extends TestCase
             'address' => '106 Duplicate Road, Caloocan City',
             'student_number' => '2027-08-10006',
             'program_id' => $program->id,
-            'entry_year' => 2027,
             'year_level' => 1,
-            'student_type' => 'freshman',
             'requirements_verified' => true,
         ]);
 

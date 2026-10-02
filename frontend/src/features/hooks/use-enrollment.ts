@@ -27,6 +27,16 @@ export const eligibleSubjectsQueryKey = (
   academicTermId: number | null,
 ) => ["eligible-subjects", userId, academicTermId] as const
 
+/**
+ * Polls every 15s (Stakeholder Doc 17) so a seat another student just took
+ * (or a slot that opened up after a cancellation) shows up while a student
+ * is actively choosing sections, without them having to reload. Scarcity
+ * here is time-sensitive enough to warrant the same tier as the role-scoped
+ * staff queues (`useEnrollmentsListQuery`), but it is read-heavy browsing
+ * rather than an alert, so it does not need the 3-5s alert tier used for
+ * queue-call sounds. Paused in background tabs by default
+ * (`refetchIntervalInBackground` is not set).
+ */
 export function useEligibleSubjectsQuery(academicTermId: number | null) {
   const { session } = useAuth()
 
@@ -34,6 +44,8 @@ export function useEligibleSubjectsQuery(academicTermId: number | null) {
     queryKey: eligibleSubjectsQueryKey(session?.userId ?? null, academicTermId),
     queryFn: ({ signal }) => getEligibleSubjects(academicTermId!, signal),
     enabled: session !== null && academicTermId !== null,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -42,6 +54,8 @@ export const enrollmentBlocksQueryKey = (
   academicTermId: number | null,
 ) => ["enrollment-blocks", userId, academicTermId] as const
 
+/** Same 15s seat-scarcity tier as `useEligibleSubjectsQuery` above, for the
+ * regular-student block picker. */
 export function useEnrollmentBlocksQuery(academicTermId: number | null) {
   const { session } = useAuth()
 
@@ -49,6 +63,8 @@ export function useEnrollmentBlocksQuery(academicTermId: number | null) {
     queryKey: enrollmentBlocksQueryKey(session?.userId ?? null, academicTermId),
     queryFn: ({ signal }) => getEnrollmentBlocks(academicTermId!, signal),
     enabled: session !== null && academicTermId !== null,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 }
 

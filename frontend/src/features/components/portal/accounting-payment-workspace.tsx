@@ -85,6 +85,7 @@ import { isApiClientError } from "@/features/services/api-client"
 import type { QueueTicket } from "@/features/schemas/queue-ticket-schema"
 import { playQueueAlert } from "@/features/lib/queue-announcement"
 import { formatYearLevel } from "@/features/lib/format-year-level"
+import { formatGeneratedAt } from "@/features/lib/format-generated-at"
 
 /**
  * Priority tickets always precede regular ones; within a tier, ordered by
@@ -544,15 +545,20 @@ export function AccountingPaymentWorkspace() {
                 <p className="text-sm text-muted-foreground">
                   Generated{" "}
                   {lastConfirmation.document.generated_at
-                    ? new Date(
-                        lastConfirmation.document.generated_at,
-                      ).toLocaleString()
+                    ? formatGeneratedAt(lastConfirmation.document.generated_at)
                     : "—"}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 pt-2">
                   <DownloadPdfButton
                     documentId={lastConfirmation.document.id ?? 1}
-                    documentNumber={lastConfirmation.document.document_number}
+                    studentName={
+                      lastConfirmation.enrollment.student_name ??
+                      lastConfirmation.enrollment.student_number
+                    }
+                    generatedAt={
+                      lastConfirmation.document.generated_at ??
+                      new Date().toISOString()
+                    }
                     label="Print / download"
                   />
                   {lastConfirmation.document.id && (
@@ -1319,7 +1325,8 @@ export function AccountingPaymentWorkspace() {
                       <PrintButton label="Print COR" />
                       <DownloadPdfButton
                         documentId={cor.id}
-                        documentNumber={cor.document_number}
+                        studentName={cor.snapshot.student.name}
+                        generatedAt={cor.generated_at}
                         label="Download PDF"
                       />
                     </div>

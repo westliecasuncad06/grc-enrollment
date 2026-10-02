@@ -15,6 +15,7 @@ use App\Policies\ItControlPolicy;
 use App\Policies\SectionPolicy;
 use App\Policies\StuckEnrollmentPolicy;
 use App\Policies\StudentProfilePolicy;
+use App\Policies\UserAccountPolicy;
 use App\Support\Auth\GoogleIdTokenVerifier;
 use App\Support\Auth\JwksGoogleIdTokenVerifier;
 use Illuminate\Database\Eloquent\Model;
@@ -76,6 +77,14 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-honors-report', [HonorsReportPolicy::class, 'view']);
         Gate::define('view-graduates', [GraduatePolicy::class, 'viewAny']);
         Gate::define('view-section-grade-submission', [SectionPolicy::class, 'viewGradeSubmission']);
+        Gate::define('view-any-user-account', [UserAccountPolicy::class, 'viewAny']);
+        Gate::define('invite-user-account', [UserAccountPolicy::class, 'invite']);
+        Gate::define('change-user-account-role', [UserAccountPolicy::class, 'changeRole']);
+        Gate::define('update-user-account-status', [UserAccountPolicy::class, 'updateStatus']);
+        Gate::define('resend-user-account-invitation', [UserAccountPolicy::class, 'resendInvitation']);
+        Gate::define('reset-user-account-password', [UserAccountPolicy::class, 'resetPassword']);
+        Gate::define('revoke-user-account-sessions', [UserAccountPolicy::class, 'revokeSessions']);
+        Gate::define('delete-user-account', [UserAccountPolicy::class, 'delete']);
     }
 
     /**

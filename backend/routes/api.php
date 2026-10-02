@@ -90,8 +90,12 @@ use App\Http\Controllers\Api\V1\StudentSchedulePreferenceController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\SubjectOfferingController;
 use App\Http\Controllers\Api\V1\SubjectWaiverController;
+use App\Http\Controllers\Api\V1\SuperAdmin\ActingContextController;
+use App\Http\Controllers\Api\V1\SuperAdmin\UserAccountController;
+use App\Http\Middleware\EnsureSuperAdminIsNotActing;
 use App\Http\Controllers\Api\V1\TransfereeCreditController;
 use App\Http\Controllers\Api\V1\WithdrawalRequestController;
+use App\Http\Middleware\ApplySuperAdminActingContext;
 use App\Http\Middleware\EnsureQueueKioskUsesDeviceSurface;
 use App\Http\Middleware\EnsureStudentQueueClaimUsesKiosk;
 use App\Http\Middleware\EnsureUserIsActive;
@@ -156,7 +160,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             ->middleware('throttle:20,1')
             ->name('google');
 
-        Route::middleware(['auth:sanctum', EnsureUserIsActive::class, EnsureQueueKioskUsesDeviceSurface::class])->group(function (): void {
+        Route::middleware(['auth:sanctum', EnsureUserIsActive::class, ApplySuperAdminActingContext::class, EnsureQueueKioskUsesDeviceSurface::class])->group(function (): void {
             Route::post('/logout', LogoutController::class)->name('logout');
             Route::get('/me', MeController::class)->name('me');
         });
@@ -164,7 +168,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
 
     // Readable by every role; ProgramPolicy/AcademicTermPolicy plus each
     // model's visibleTo() scope decide which rows a given role receives.
-    Route::middleware(['auth:sanctum', EnsureUserIsActive::class, EnsureQueueKioskUsesDeviceSurface::class, 'throttle:60,1'])->group(function (): void {
+    Route::middleware(['auth:sanctum', EnsureUserIsActive::class, ApplySuperAdminActingContext::class, EnsureQueueKioskUsesDeviceSurface::class, 'throttle:60,1'])->group(function (): void {
         Route::get('/programs', ProgramController::class)->name('programs');
         Route::get('/academic-terms', [AcademicTermController::class, 'index'])->name('academic-terms.index');
         Route::patch('/academic-terms/{academicTerm}', [AcademicTermController::class, 'update'])->name('academic-terms.update');
@@ -570,11 +574,6 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
                 ->name('subject-waivers.destroy');
             Route::get('/analytics/attrition', AttritionReportController::class)
                 ->name('analytics.attrition');
-            Route::get('/audit-logs', AuditLogController::class)
-                ->name('audit-logs.index');
-            // The audit screen's per-user first level (stakeholder Doc 14).
-            Route::get('/audit-logs/actors', AuditActorController::class)
-                ->name('audit-logs.actors');
             Route::get('/dashboards/policy-settings', PolicySettingsController::class)
                 ->name('dashboards.policy-settings');
 
@@ -597,12 +596,34 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
             Route::post('/staff-invitations/{user}/resend', [StaffInvitationController::class, 'resend'])->name('staff-invitations.resend');
         });
 
+        Route::middleware('role:registrar_head,super_admin')->group(function (): void {
+            Route::get('/audit-logs', AuditLogController::class)->name('audit-logs.index');
+            // The audit screen's per-user first level (stakeholder Doc 14).
+            Route::get('/audit-logs/actors', AuditActorController::class)->name('audit-logs.actors');
+        });
+
         Route::prefix('it-control')->name('it-control.')->middleware('role:it_admin')->group(function (): void {
             Route::get('/students', ItControlStudentAccountController::class)->name('students.index');
             Route::get('/faculty', FacultyAccountController::class)->name('faculty.index');
             Route::get('/automation-runs', [AutomationRunController::class, 'index'])->name('automation-runs.index');
             Route::post('/automation-runs', [AutomationRunController::class, 'store'])->name('automation-runs.store');
             Route::get('/automation-runs/{run}', [AutomationRunController::class, 'show'])->name('automation-runs.show');
+        });
+
+        Route::prefix('super-admin')->name('super-admin.')->middleware('super_admin')->group(function (): void {
+            Route::put('/acting-context', [ActingContextController::class, 'update'])->name('acting-context.update');
+            Route::delete('/acting-context', [ActingContextController::class, 'destroy'])->name('acting-context.destroy');
+
+            Route::middleware(EnsureSuperAdminIsNotActing::class)->group(function (): void {
+                Route::get('/users', [UserAccountController::class, 'index'])->name('users.index');
+                Route::post('/users/invite', [UserAccountController::class, 'invite'])->name('users.invite');
+                Route::patch('/users/{user}/role', [UserAccountController::class, 'changeRole'])->name('users.change-role');
+                Route::patch('/users/{user}/status', [UserAccountController::class, 'updateStatus'])->name('users.update-status');
+                Route::post('/users/{user}/setup-invitation', [UserAccountController::class, 'resendSetupInvitation'])->name('users.resend-setup-invitation');
+                Route::post('/users/{user}/password-reset', [UserAccountController::class, 'sendPasswordReset'])->name('users.send-password-reset');
+                Route::delete('/users/{user}/sessions', [UserAccountController::class, 'revokeSessions'])->name('users.revoke-sessions');
+                Route::delete('/users/{user}', [UserAccountController::class, 'destroy'])->name('users.destroy');
+            });
         });
 
         // Phase 7c: aggregate-only counts, never row-level enrollment data,

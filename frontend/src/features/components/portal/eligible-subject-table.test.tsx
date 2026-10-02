@@ -504,6 +504,89 @@ describe("EligibleSubjectTable", () => {
     ).not.toHaveAttribute("aria-disabled", "true")
   })
 
+  it("disables a section that would push the schedule beyond 2 days when a same-subject alternative still fits", async () => {
+    const user = userEvent.setup()
+    const cs101 = subject({
+      subject_id: 1,
+      code: "CS101",
+      available_sections: [section({ id: 1, schedule_days: "M" })],
+    })
+    const phys101 = subject({
+      subject_id: 2,
+      code: "PHYS101",
+      available_sections: [
+        section({ id: 2, subject_id: 2, section_code: "A", schedule_days: "W" }),
+      ],
+    })
+    const math101 = subject({
+      subject_id: 3,
+      code: "MATH101",
+      available_sections: [
+        section({
+          id: 10,
+          subject_id: 3,
+          section_code: "B",
+          schedule_days: "F",
+          starts_at_time: "10:00:00",
+          ends_at_time: "11:00:00",
+        }),
+        section({
+          id: 11,
+          subject_id: 3,
+          section_code: "C",
+          schedule_days: "M",
+          starts_at_time: "10:00:00",
+          ends_at_time: "11:00:00",
+        }),
+      ],
+    })
+    renderTable({
+      subjects: [cs101, phys101, math101],
+      selections: { 1: 1, 2: 2 },
+    })
+
+    await user.click(screen.getAllByLabelText("MATH101 section")[0])
+
+    const thirdDayOption = await screen.findByRole("option", {
+      name: /Section B.*Outside a 1–2 day/,
+    })
+    expect(thirdDayOption).toHaveAttribute("aria-disabled", "true")
+    expect(
+      screen.getByRole("option", { name: /Section C/ }),
+    ).not.toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("leaves a section enabled with a warning, never disabled, when it is the only option for that subject", async () => {
+    const user = userEvent.setup()
+    const cs101 = subject({
+      subject_id: 1,
+      code: "CS101",
+      available_sections: [section({ id: 1, schedule_days: "MW" })],
+    })
+    const math101 = subject({
+      subject_id: 2,
+      code: "MATH101",
+      available_sections: [
+        section({
+          id: 10,
+          subject_id: 2,
+          section_code: "B",
+          schedule_days: "F",
+          starts_at_time: "10:00:00",
+          ends_at_time: "11:00:00",
+        }),
+      ],
+    })
+    renderTable({ subjects: [cs101, math101], selections: { 1: 1 } })
+
+    await user.click(screen.getAllByLabelText("MATH101 section")[0])
+
+    const onlyOption = await screen.findByRole("option", {
+      name: /Section B.*Only option available/,
+    })
+    expect(onlyOption).not.toHaveAttribute("aria-disabled", "true")
+  })
+
   it("arranges rows by schedule, sinking not-yet-picked subjects to the bottom", async () => {
     const user = userEvent.setup()
     const afternoon = subject({

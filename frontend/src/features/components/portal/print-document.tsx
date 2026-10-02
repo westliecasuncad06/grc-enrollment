@@ -56,11 +56,13 @@ export function PrintButton({
 
 export function DownloadPdfButton({
   documentId,
-  documentNumber,
+  studentName,
+  generatedAt,
   label = "Download PDF",
 }: {
   documentId: number
-  documentNumber: string
+  studentName: string
+  generatedAt: string
   label?: string
 }) {
   const [downloading, setDownloading] = useState(false)
@@ -68,7 +70,7 @@ export function DownloadPdfButton({
   const handleDownload = async () => {
     try {
       setDownloading(true)
-      await downloadEnrollmentDocumentPdf(documentId, documentNumber)
+      await downloadEnrollmentDocumentPdf(documentId, studentName, generatedAt)
     } catch (error) {
       const message =
         error instanceof Error

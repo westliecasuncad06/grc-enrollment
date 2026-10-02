@@ -1,9 +1,17 @@
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { toast } from "sonner"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { FacultyInputWorkspace } from "@/features/components/portal/faculty-input-workspace"
 import { renderWithSession } from "@/tests/render-app"
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}))
 
 const session = {
   userId: "5",
@@ -31,6 +39,49 @@ const catalog = {
               code: "LEAD 1",
               title: "Leadership Seminar 1",
               units: 1.5,
+            },
+          ],
+        },
+        { semester: "2nd", subjects: [] },
+      ],
+    },
+  ],
+} as const
+
+const pairedCatalog = {
+  data: [
+    {
+      curriculum_id: 11,
+      program_id: 2,
+      program_code: "BSIT",
+      program_name: "Information Technology",
+      curriculum_name: "2024–2029",
+      effective_school_year: "2024-2029",
+      version_label: "new",
+      semesters: [
+        {
+          semester: "1st",
+          subjects: [
+            {
+              id: 501,
+              code: "ITC",
+              title: "Intro to Computing",
+              units: 2,
+              paired_subject_id: 502,
+            },
+            {
+              id: 502,
+              code: "ITCL",
+              title: "Intro to Computing Lab",
+              units: 1,
+              paired_subject_id: 501,
+            },
+            {
+              id: 503,
+              code: "PROG 1",
+              title: "Programming 1",
+              units: 3,
+              paired_subject_id: null,
             },
           ],
         },
@@ -333,5 +384,274 @@ describe("FacultySubjectPreferencePanel", () => {
         screen.getByRole("table", { name: "Declared specializations" }),
       ).getByText("Pending"),
     ).toBeInTheDocument()
+  })
+
+  it("automatically includes and saves paired laboratory subject with sequential rank and matching proficiency", async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input, init) => {
+      const requestUrl = url(input)
+      if (requestUrl.endsWith("/faculty-preference-catalog"))
+        return Promise.resolve(new Response(JSON.stringify(pairedCatalog)))
+      if (
+        requestUrl.endsWith("/faculty-curriculum-subject-preferences") &&
+        init?.method === "POST"
+      ) {
+        const body = JSON.parse(String(init.body))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                type: "faculty_curriculum_subject_preference",
+                id: body.subject_id === 501 ? 101 : 102,
+                professor_id: 5,
+                curriculum_id: body.curriculum_id,
+                semester: body.semester,
+                subject_id: body.subject_id,
+                rank: body.rank ?? 1,
+                origin: "declared",
+              },
+            }),
+          ),
+        )
+      }
+      if (
+        requestUrl.endsWith("/faculty-specializations") &&
+        init?.method === "POST"
+      ) {
+        const body = JSON.parse(String(init.body))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...specialization,
+                id: body.subject_id === 501 ? 201 : 202,
+                subject_id: body.subject_id,
+                proficiency: body.proficiency,
+              },
+            }),
+          ),
+        )
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(<FacultyInputWorkspace />, { session })
+    await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
+
+    // Select ITC (paired with ITCL)
+    await user.click(await screen.findByLabelText("Preferred subject"))
+    await user.click(await screen.findByText("ITC — Intro to Computing"))
+
+    // Banner indicates auto-joint pairing
+    expect(
+      await screen.findByText(/ITCL — Intro to Computing Lab will automatically be included\./),
+    ).toBeInTheDocument()
+
+    // Save
+    await user.click(screen.getByRole("button", { name: "Save subject preference" }))
+
+    await waitFor(() => {
+      // Primary ITC preference
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-curriculum-subject-preferences"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ curriculum_id: 11, semester: "1st", subject_id: 501 }),
+        }),
+      )
+      // Paired ITCL preference
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-curriculum-subject-preferences"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ curriculum_id: 11, semester: "1st", subject_id: 502 }),
+        }),
+      )
+      // Both specializations created with matching proficiency
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-specializations"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ subject_id: 501, proficiency: "secondary" }),
+        }),
+      )
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-specializations"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ subject_id: 502, proficiency: "secondary" }),
+        }),
+      )
+      expect(toast.success).toHaveBeenCalledWith(
+        "Subject preferences saved successfully (Lecture & Laboratory paired).",
+      )
+    })
+  })
+
+  it("supports edit mode, selecting multiple preferences, and batch deleting with confirmation modal", async () => {
+    const user = userEvent.setup()
+    const savedPreferences = [
+      {
+        type: "faculty_curriculum_subject_preference",
+        id: 101,
+        professor_id: 5,
+        curriculum_id: 11,
+        semester: "1st",
+        subject_id: 501,
+        rank: 1,
+        origin: "declared",
+      },
+      {
+        type: "faculty_curriculum_subject_preference",
+        id: 102,
+        professor_id: 5,
+        curriculum_id: 11,
+        semester: "1st",
+        subject_id: 502,
+        rank: 2,
+        origin: "declared",
+      },
+    ]
+
+    fetchMock.mockImplementation((input, init) => {
+      const requestUrl = url(input)
+      if (requestUrl.endsWith("/faculty-preference-catalog"))
+        return Promise.resolve(new Response(JSON.stringify(pairedCatalog)))
+      if (
+        requestUrl.endsWith("/faculty-curriculum-subject-preferences") &&
+        (!init || init.method === "GET")
+      )
+        return Promise.resolve(new Response(JSON.stringify({ data: savedPreferences })))
+      if (
+        requestUrl.includes("/faculty-curriculum-subject-preferences/") &&
+        init?.method === "DELETE"
+      )
+        return Promise.resolve(new Response(null, { status: 204 }))
+
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(<FacultyInputWorkspace />, { session })
+    await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
+
+    // Initially "Edit" button is present
+    const editToggle = await screen.findByRole("button", { name: "Edit" })
+    await user.click(editToggle)
+
+    // Now in edit mode, toggle changes to "Done"
+    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument()
+
+    // Select row checkboxes
+    const checkboxes = screen.getAllByRole("checkbox")
+    expect(checkboxes.length).toBeGreaterThanOrEqual(2)
+    await user.click(checkboxes[1]) // first row checkbox
+
+    // "Delete Selected (1)" button should appear
+    const deleteSelectedBtn = await screen.findByRole("button", { name: /Delete Selected \(1\)/ })
+    expect(deleteSelectedBtn).toBeInTheDocument()
+
+    // Click delete selected
+    await user.click(deleteSelectedBtn)
+
+    // Modal with Filipino text should appear
+    expect(
+      await screen.findByText("Sigurado ka bang gusto mong idelete ang mga napiling subject?"),
+    ).toBeInTheDocument()
+
+    // Click confirmation delete
+    const confirmDeleteBtn = screen.getByRole("button", { name: "Delete" })
+    await user.click(confirmDeleteBtn)
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-curriculum-subject-preferences/101"),
+        expect.objectContaining({ method: "DELETE" }),
+      )
+      expect(toast.success).toHaveBeenCalledWith(
+        "Selected subject preferences deleted successfully.",
+      )
+    })
+  })
+
+  it("supports inline subject replacement in edit mode", async () => {
+    const user = userEvent.setup()
+    const savedPreferences = [
+      {
+        type: "faculty_curriculum_subject_preference",
+        id: 101,
+        professor_id: 5,
+        curriculum_id: 11,
+        semester: "1st",
+        subject_id: 501,
+        rank: 1,
+        origin: "declared",
+      },
+    ]
+
+    fetchMock.mockImplementation((input, init) => {
+      const requestUrl = url(input)
+      if (requestUrl.endsWith("/faculty-preference-catalog"))
+        return Promise.resolve(new Response(JSON.stringify(pairedCatalog)))
+      if (
+        requestUrl.endsWith("/faculty-curriculum-subject-preferences") &&
+        (!init || init.method === "GET")
+      )
+        return Promise.resolve(new Response(JSON.stringify({ data: savedPreferences })))
+      if (
+        requestUrl.includes("/faculty-curriculum-subject-preferences/101") &&
+        init?.method === "PATCH"
+      )
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...savedPreferences[0],
+                subject_id: 503,
+              },
+            }),
+          ),
+        )
+
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+
+    renderWithSession(<FacultyInputWorkspace />, { session })
+    await user.click(await screen.findByRole("tab", { name: "Subject preferences" }))
+
+    // Enter edit mode
+    await user.click(await screen.findByRole("button", { name: "Edit" }))
+
+    // Click on the subject to replace
+    const replaceSubjectBtn = await screen.findByTitle("Click to replace subject")
+    await user.click(replaceSubjectBtn)
+
+    // Replacement dialog opens
+    expect(await screen.findByText("Replace Subject Preference")).toBeInTheDocument()
+
+    // Pick PROG 1
+    const picker = screen.getByLabelText("Replacement Subject")
+    await user.click(picker)
+    await user.click(await screen.findByText("PROG 1 — Programming 1"))
+
+    // Confirm
+    await user.click(screen.getByRole("button", { name: "Confirm Replacement" }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/faculty-curriculum-subject-preferences/101"),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            curriculum_id: 11,
+            semester: "1st",
+            subject_id: 503,
+            rank: 1,
+          }),
+        }),
+      )
+      expect(toast.success).toHaveBeenCalledWith(
+        "Subject preference replaced successfully.",
+      )
+    })
   })
 })

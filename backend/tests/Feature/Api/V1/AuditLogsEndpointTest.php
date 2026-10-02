@@ -58,10 +58,28 @@ final class AuditLogsEndpointTest extends TestCase
     public static function nonRegistrarRoleProvider(): iterable
     {
         foreach (UserRole::cases() as $role) {
-            if ($role !== UserRole::RegistrarHead) {
+            if ($role !== UserRole::RegistrarHead && $role !== UserRole::SuperAdmin) {
                 yield $role->value => [$role];
             }
         }
+    }
+
+    public function test_super_admin_receives_ok_response_for_audit_logs_and_actors(): void
+    {
+        $superAdmin = $this->makeUser('super-admin-reader', UserRole::SuperAdmin);
+        $token = $this->tokenFor($superAdmin);
+
+        $response = $this
+            ->withToken($token)
+            ->getJson('/api/v1/audit-logs');
+
+        $response->assertOk();
+
+        $actorsResponse = $this
+            ->withToken($token)
+            ->getJson('/api/v1/audit-logs/actors');
+
+        $actorsResponse->assertOk();
     }
 
     public function test_registrar_head_receives_the_exact_resource_pagination_and_private_response_shape(): void
@@ -146,6 +164,9 @@ final class AuditLogsEndpointTest extends TestCase
             'actor_name',
             'actor_role',
             'actor_role_label',
+            'acting_role',
+            'acting_role_label',
+            'acting_college',
             'action',
             'auditable_type',
             'auditable_id',
@@ -500,5 +521,40 @@ final class AuditLogsEndpointTest extends TestCase
         ]);
 
         return AuditLog::query()->findOrFail($id);
+    }
+
+    public function test_audit_log_captures_acting_context_when_action_taken_by_super_admin(): void
+    {
+        $superAdmin = $this->makeUser('super-admin-actor', UserRole::SuperAdmin);
+        $token = $this->tokenFor($superAdmin);
+
+        // Switch to dean with college ccs
+        $this->withToken($token)
+            ->putJson('/api/v1/super-admin/acting-context', [
+                'role' => 'dean',
+                'college' => 'ccs',
+            ])
+            ->assertOk();
+
+        auth()->forgetGuards();
+
+        // Perform an exit action while acting as Dean CCS
+        $this->withToken($token)
+            ->deleteJson('/api/v1/super-admin/acting-context')
+            ->assertOk();
+
+        auth()->forgetGuards();
+
+        // Query audit logs as super admin
+        $response = $this->withToken($token)
+            ->getJson('/api/v1/audit-logs');
+
+        $response->assertOk();
+
+        // The most recent log (exit) was executed while acting as Dean (CCS)
+        $response->assertJsonPath('data.0.actor_role', 'super_admin')
+            ->assertJsonPath('data.0.acting_role', 'dean')
+            ->assertJsonPath('data.0.acting_role_label', 'Dean')
+            ->assertJsonPath('data.0.acting_college', 'ccs');
     }
 }

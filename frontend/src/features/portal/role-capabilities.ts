@@ -539,6 +539,24 @@ export const rolePortalDefinitions: Record<UserRole, RolePortalDefinition> = {
       "This device identity is available only through the dedicated Queue Kiosk.",
     modules: [],
   },
+  super_admin: {
+    roleLabel: "Super Admin",
+    welcomeHeading: "Admin Console",
+    modules: [
+      portalModule(
+        "super-admin-accounts",
+        "Accounts & Access",
+        "Manage institutional user accounts, roles, access statuses, and active sessions.",
+        Users,
+      ),
+      portalModule(
+        "audit-logs",
+        "Audit Logs",
+        "Review traceable activity records within authorized controls.",
+        FileText,
+      ),
+    ],
+  },
 }
 
 export function getRoleModule(

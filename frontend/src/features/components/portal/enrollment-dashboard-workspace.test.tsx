@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
@@ -106,12 +106,24 @@ const overview = {
         label: "College of Computer Studies",
         total: 12,
         groups: groups(8, 1, 3, 0),
+        steps: {
+          draft: 0,
+          pending_registrar_approval: 0,
+          pending_payment: 0,
+          enrolled: 8,
+        },
       },
       {
         department: "coe",
         label: "College of Education",
         total: 8,
         groups: groups(3, 0, 3, 2),
+        steps: {
+          draft: 0,
+          pending_registrar_approval: 1,
+          pending_payment: 0,
+          enrolled: 3,
+        },
       },
     ],
   },
@@ -241,7 +253,10 @@ const dean = {
 describe("EnrollmentDashboardWorkspace", () => {
   const fetchMock = vi.fn<typeof fetch>()
   beforeEach(() => vi.stubGlobal("fetch", fetchMock))
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it("withholds the dashboard from an unauthorized role", () => {
     renderWithSession(<EnrollmentDashboardWorkspace />, {
@@ -281,6 +296,79 @@ describe("EnrollmentDashboardWorkspace", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole("region", { name: "College of Education" }),
+    ).toBeInTheDocument()
+  })
+
+  it("refreshes the counts on its own after a newly-submitted enrollment, without a reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let enrolledCount = 11
+    fetchMock.mockImplementation((input) => {
+      const requestUrl = url(input)
+      if (requestUrl.includes("academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (requestUrl.includes("enrollment-status"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...overview.data,
+                groups: groups(enrolledCount, 1, 6, 2),
+              },
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify(summary)))
+    })
+    renderWithSession(<EnrollmentDashboardWorkspace />, {
+      session: registrarHead,
+    })
+
+    await screen.findByRole("button", { name: /Enrolled: 11 students/ })
+
+    enrolledCount = 12
+    // The dashboard polls every 30s (Stakeholder Doc 17) — a passive
+    // staff-monitoring view, so it matches the notification-bell tier
+    // rather than a transactional queue's faster one.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+
+    expect(
+      await screen.findByRole("button", { name: /Enrolled: 12 students/ }),
+    ).toBeInTheDocument()
+  })
+
+  it("lets staff force an immediate refresh instead of waiting for the next poll", async () => {
+    const user = userEvent.setup()
+    let enrolledCount = 11
+    fetchMock.mockImplementation((input) => {
+      const requestUrl = url(input)
+      if (requestUrl.includes("academic-terms"))
+        return Promise.resolve(new Response(JSON.stringify(terms)))
+      if (requestUrl.includes("enrollment-status"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...overview.data,
+                groups: groups(enrolledCount, 1, 6, 2),
+              },
+            }),
+          ),
+        )
+      return Promise.resolve(new Response(JSON.stringify(summary)))
+    })
+    renderWithSession(<EnrollmentDashboardWorkspace />, {
+      session: registrarHead,
+    })
+
+    await screen.findByRole("button", { name: /Enrolled: 11 students/ })
+
+    enrolledCount = 20
+    await user.click(screen.getByRole("button", { name: "Refresh" }))
+
+    expect(
+      await screen.findByRole("button", { name: /Enrolled: 20 students/ }),
     ).toBeInTheDocument()
   })
 
@@ -489,9 +577,49 @@ describe("EnrollmentDashboardWorkspace", () => {
       ),
       expect.anything(),
     )
-    // Only a Registrar Head is offered the COR Records link.
     expect(
       within(dialog).queryByRole("link", { name: "Open COR Records" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("filters enrollment dashboard and queue by specific department and through View Queue button", async () => {
+    const user = userEvent.setup()
+    mockDashboardFetch(fetchMock)
+    renderWithSession(<EnrollmentDashboardWorkspace />, { session: dean })
+
+    // Verify department filter buttons exist
+    const allDeptsBtn = await screen.findByRole("button", {
+      name: "All Departments",
+    })
+    const ccsBtn = screen.getByRole("button", { name: "CCS" })
+    const coeBtn = screen.getByRole("button", { name: "COE" })
+    expect(allDeptsBtn).toBeInTheDocument()
+    expect(ccsBtn).toBeInTheDocument()
+    expect(coeBtn).toBeInTheDocument()
+
+    // Initially shows all 20 students
+    expect(screen.getAllByText("20").length).toBeGreaterThan(0)
+
+    // Click CCS button to view CCS specific department queue
+    await user.click(ccsBtn)
+    expect(screen.getAllByText("12").length).toBeGreaterThan(0)
+    expect(
+      screen.getByText("Showing enrollment status and queue for College of Computer Studies."),
+    ).toBeInTheDocument()
+
+    // Click "View Queue →" on the College of Education card
+    const viewQueueButtons = screen.getAllByRole("button", {
+      name: /View Queue →/i,
+    })
+    // Second button is for COE
+    await user.click(viewQueueButtons[1]!)
+    expect(screen.getAllByText("8").length).toBeGreaterThan(0)
+    expect(
+      screen.getByText("Showing enrollment status and queue for College of Education."),
+    ).toBeInTheDocument()
+
+    // Switch back to All Departments
+    await user.click(allDeptsBtn)
+    expect(screen.getAllByText("20").length).toBeGreaterThan(0)
   })
 })

@@ -2,6 +2,7 @@
 
 namespace App\Support\Http;
 
+use App\Domain\Identity\Exceptions\ActingContextChangedException;
 use App\Domain\Identity\Exceptions\GoogleAccountNotFoundException;
 use App\Domain\Identity\Exceptions\InvalidCredentialsException;
 use App\Domain\Identity\Exceptions\InvalidGoogleCredentialException;
@@ -75,6 +76,15 @@ final class ApiExceptionRenderer
             );
         }
 
+        if ($exception instanceof ActingContextChangedException) {
+            return ApiErrorResponse::make(
+                $request,
+                ApiErrorCode::ActingContextChanged,
+                $exception->getMessage(),
+                409,
+            );
+        }
+
         if ($exception instanceof AuthenticationException) {
             return ApiErrorResponse::make(
                 $request,
@@ -138,6 +148,17 @@ final class ApiExceptionRenderer
             429 => [ApiErrorCode::TooManyRequests, 'Too many requests. Please retry later.'],
             default => [ApiErrorCode::ServerError, 'An unexpected server error occurred.'],
         };
+
+        // For 429 (Too Many Requests), always use the fixed non-enumerating text
+        // regardless of what the exception's own message says — the LoginEndpointTest
+        // documents this contract explicitly: "ApiExceptionRenderer substitutes one
+        // fixed, already non-enumerating message for every 429 in the app".
+        // For other statuses, pass through a non-empty exception message (e.g. the
+        // 409 "Deactivate instead — this account has history." message from
+        // DeleteUnusedUserAccount or the 409 from SetUserAccountStatus).
+        if ($exception->getMessage() !== '' && $exception->getStatusCode() !== 429) {
+            $message = $exception->getMessage();
+        }
 
         $safeStatuses = [400, 401, 403, 404, 409, 422, 429];
         $status = in_array($exception->getStatusCode(), $safeStatuses, true)

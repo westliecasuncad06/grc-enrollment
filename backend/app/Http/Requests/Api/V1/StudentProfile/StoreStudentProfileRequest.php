@@ -2,9 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\StudentProfile;
 
-use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\FinancialStatus;
-use App\Domain\Identity\StudentType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -45,12 +43,19 @@ final class StoreStudentProfileRequest extends FormRequest
             // automatic from program + entry year and must never be
             // overridable by the client.
             'curriculum_id' => ['prohibited'],
-            'entry_year' => ['required', 'integer', 'digits:4'],
+            // Derived from the current ongoing academic term
+            // (Stakeholder Doc 17) — must never be client-supplied, so a
+            // stale or fabricated year can't be used to pick a curriculum
+            // or seed the student number. See App\Actions\Identity\ProvisionStudent.
+            'entry_year' => ['prohibited'],
             // `EnrollmentAudience::fromYearLevel()` only knows 1–4, and a
             // year level outside that range has no enrollment window at all.
             'year_level' => ['required', 'integer', 'between:1,4'],
-            'enrollment_category' => ['sometimes', 'nullable', Rule::enum(EnrollmentCategory::class)],
-            'student_type' => ['required', Rule::enum(StudentType::class)],
+            // Derived from year_level (Stakeholder Doc 17,
+            // App\Domain\Identity\AdmissionIntakeDefaults) — must never be
+            // client-supplied.
+            'enrollment_category' => ['prohibited'],
+            'student_type' => ['prohibited'],
             'financial_status' => ['sometimes', 'nullable', Rule::enum(FinancialStatus::class)],
         ];
     }

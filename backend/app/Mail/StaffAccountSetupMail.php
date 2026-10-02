@@ -18,6 +18,7 @@ final class StaffAccountSetupMail extends Mailable
         public readonly UserRole $role,
         public readonly string $setupUrl,
         public readonly string $setupCode,
+        public readonly string $staffEmail = '',
     ) {}
 
     public function envelope(): Envelope

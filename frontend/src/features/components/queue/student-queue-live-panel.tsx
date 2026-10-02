@@ -219,22 +219,35 @@ function QueueLivePanelView({
           <div
             className={cn(
               "queue-live-panel__serving",
-              !queue.now_serving_ticket_number &&
+              (!queue.now_serving_ticket_number || queue.cut_off_today) &&
                 isStudentSurface &&
                 "queue-live-panel__serving--unavailable",
             )}
           >
             <p className="queue-live-panel__label">Now serving</p>
-            <p
-              className={cn(
-                "queue-live-panel__serving-number",
-                !queue.now_serving_ticket_number &&
-                  "queue-live-panel__serving-number--status",
-              )}
-            >
-              {queue.now_serving_ticket_number ??
-                "No number is currently being served."}
-            </p>
+            {queue.cut_off_today ? (
+              <div className="space-y-1">
+                {queue.now_serving_ticket_number && (
+                  <p className="queue-live-panel__serving-number font-mono">
+                    {queue.now_serving_ticket_number}
+                  </p>
+                )}
+                <p className="queue-live-panel__serving-number--status text-destructive font-semibold">
+                  Today&apos;s cut-off has been reached
+                </p>
+              </div>
+            ) : (
+              <p
+                className={cn(
+                  "queue-live-panel__serving-number",
+                  !queue.now_serving_ticket_number &&
+                    "queue-live-panel__serving-number--status",
+                )}
+              >
+                {queue.now_serving_ticket_number ??
+                  "No number is currently being served."}
+              </p>
+            )}
           </div>
         </div>
 

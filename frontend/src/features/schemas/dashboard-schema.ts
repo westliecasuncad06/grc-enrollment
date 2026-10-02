@@ -156,6 +156,9 @@ export const enrollmentStatusDepartmentSchema = z
     label: z.string().min(1),
     total: nonNegativeInt,
     groups: enrollmentStatusGroupCountsSchema,
+    // Students per enrollment status from draft through enrolled, scoped to
+    // this department — always present (see BuildEnrollmentStatusOverview).
+    steps: z.record(z.string(), nonNegativeInt),
   })
   .strict()
 

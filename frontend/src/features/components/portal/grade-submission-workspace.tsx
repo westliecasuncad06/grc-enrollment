@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   BookOpenText,
@@ -8,13 +8,16 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Download,
   FolderOpen,
   History,
   Save,
   Send,
   ShieldCheck,
+  Upload,
   UsersRound,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { useAuth } from "@/features/auth/use-auth"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
@@ -116,6 +119,188 @@ const stateLabel: Record<GradeSectionSummary["state"], string> = {
   ready: "Ready to submit",
   submitted: "Awaiting Registrar",
   locked: "Locked",
+}
+
+function cleanCsvValue(val: string): string {
+  let cleaned = val.trim()
+  if (cleaned.startsWith('"') && cleaned.endsWith('"') && cleaned.length >= 2) {
+    cleaned = cleaned.slice(1, -1).replace(/""/g, '"')
+  }
+  return cleaned.trim()
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = []
+  let current = ""
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (char === "," && !inQuotes) {
+      result.push(cleanCsvValue(current))
+      current = ""
+    } else {
+      current += char
+    }
+  }
+  result.push(cleanCsvValue(current))
+  return result
+}
+
+function normalizeMark(val: string): string {
+  const cleaned = val.trim().toUpperCase()
+  if (cleaned === "1" || cleaned === "1.0") return "1.00"
+  if (cleaned === "1.2" || cleaned === "1.25") return "1.25"
+  if (cleaned === "1.5" || cleaned === "1.50") return "1.50"
+  if (cleaned === "1.7" || cleaned === "1.75") return "1.75"
+  if (cleaned === "2" || cleaned === "2.0") return "2.00"
+  if (cleaned === "2.2" || cleaned === "2.25") return "2.25"
+  if (cleaned === "2.5" || cleaned === "2.50") return "2.50"
+  if (cleaned === "2.7" || cleaned === "2.75") return "2.75"
+  if (cleaned === "3" || cleaned === "3.0" || cleaned === "3.00") return "3.00"
+  if (cleaned === "5" || cleaned === "5.0" || cleaned === "5.00") return "5.00"
+  if (cleaned === "INC") return "INC"
+  if (cleaned === "C") return "C"
+  return cleaned
+}
+
+export interface ParsedCsvGradesResult {
+  drafts: Record<number, DraftGrade>
+  matchedCount: number
+  invalidCount: number
+  unmatchedCount: number
+}
+
+export function parseGradesCsv(
+  csvText: string,
+  sheet: SectionGradeSheet,
+  allowedMarks: readonly GradeMarkValue[],
+  existingDrafts: Record<number, DraftGrade> = {},
+): ParsedCsvGradesResult {
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0)
+  if (lines.length < 2) {
+    return {
+      drafts: existingDrafts,
+      matchedCount: 0,
+      invalidCount: 0,
+      unmatchedCount: 0,
+    }
+  }
+
+  const headerRow = parseCsvLine(lines[0] ?? "").map((h) => h.toLowerCase())
+  let studentNumIdx = headerRow.findIndex(
+    (h) =>
+      h.includes("student number") ||
+      h.includes("student_number") ||
+      h.includes("student id"),
+  )
+  let gradeIdx = headerRow.findIndex(
+    (h) => h.includes("grade") || h.includes("mark"),
+  )
+  let remarksIdx = headerRow.findIndex((h) => h.includes("remark"))
+
+  if (studentNumIdx === -1) studentNumIdx = 0
+  if (gradeIdx === -1) gradeIdx = 2
+  if (remarksIdx === -1) remarksIdx = 3
+
+  let matchedCount = 0
+  let invalidCount = 0
+  let unmatchedCount = 0
+  const resultDrafts = { ...existingDrafts }
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]?.trim()
+    if (!line) continue
+    const cols = parseCsvLine(line)
+    const rawStudentNum = cols[studentNumIdx]?.trim()
+    if (!rawStudentNum) continue
+
+    const matchingRow = sheet.rows.find(
+      (r) => r.student_number.toLowerCase() === rawStudentNum.toLowerCase(),
+    )
+    if (!matchingRow) {
+      unmatchedCount++
+      continue
+    }
+
+    const rawGrade = cols[gradeIdx]?.trim() ?? ""
+    const rawRemarks = cols[remarksIdx]?.trim() ?? ""
+
+    if (!rawGrade) {
+      if (rawRemarks) {
+        resultDrafts[matchingRow.student_id] = {
+          mark:
+            resultDrafts[matchingRow.student_id]?.mark ??
+            matchingRow.mark ??
+            "",
+          remarks: rawRemarks,
+        }
+      }
+      continue
+    }
+
+    const normalized = normalizeMark(rawGrade)
+    if (allowedMarks.includes(normalized as GradeMarkValue)) {
+      resultDrafts[matchingRow.student_id] = {
+        mark: normalized,
+        remarks:
+          rawRemarks ||
+          (resultDrafts[matchingRow.student_id]?.remarks ??
+            matchingRow.remarks ??
+            ""),
+      }
+      matchedCount++
+    } else {
+      invalidCount++
+    }
+  }
+
+  return {
+    drafts: resultDrafts,
+    matchedCount,
+    invalidCount,
+    unmatchedCount,
+  }
+}
+
+export function downloadCsvTemplate(
+  sheet: SectionGradeSheet,
+  drafts: Record<number, DraftGrade>,
+) {
+  const headers = ["Student Number", "Student Name", "Grade", "Remarks"]
+  const rows = sheet.rows.map((row) => {
+    const draft = drafts[row.student_id]
+    const mark = draft?.mark || row.mark || ""
+    const remarks = draft?.remarks || row.remarks || ""
+    const escapeCsv = (val: string) => `"${val.replace(/"/g, '""')}"`
+    return [
+      escapeCsv(row.student_number),
+      escapeCsv(row.student_name),
+      escapeCsv(mark),
+      escapeCsv(remarks),
+    ].join(",")
+  })
+
+  const csvContent = [headers.join(","), ...rows].join("\r\n")
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.setAttribute("href", url)
+  const filename = `grades_${sheet.section.subject.code}_section_${sheet.section.section_code}.csv`
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, "_")
+  link.setAttribute("download", filename)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 function GradeSectionCard({
@@ -241,6 +426,39 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
   const [drafts, setDrafts] = useState<Record<number, DraftGrade>>({})
   const [error, setError] = useState("")
   const [confirmationOpen, setConfirmationOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUploadCsv = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    loadedSheet: SectionGradeSheet,
+  ) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    event.target.value = ""
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      if (!text) return
+
+      const result = parseGradesCsv(text, loadedSheet, allowedMarks, drafts)
+      if (result.matchedCount > 0) {
+        setDrafts(result.drafts)
+        toast.success(
+          `Imported grades for ${result.matchedCount} student(s). Click "Save draft" or "Submit final grades" when ready.`,
+        )
+      } else {
+        toast.error("No valid student grades could be matched from the CSV.")
+      }
+
+      if (result.invalidCount > 0) {
+        toast.warning(
+          `${result.invalidCount} grade(s) had invalid marks (e.g. DRP is not permitted) and were skipped.`,
+        )
+      }
+    }
+    reader.readAsText(file)
+  }
 
   const sheet = sheetQuery.data
   const readOnly =
@@ -450,15 +668,49 @@ export function SectionGradeSheetPanel({ sectionId }: { sectionId: number }) {
                     {scheduleLabel(loadedSheet.section)}
                   </p>
                 </div>
-                <Badge
-                  variant={
-                    loadedSheet.section.state === "locked"
-                      ? "default"
-                      : "outline"
-                  }
-                >
-                  {stateLabel[loadedSheet.section.state]}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!readOnly && loadedSheet.rows.length > 0 && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => downloadCsvTemplate(loadedSheet, drafts)}
+                      >
+                        <Download className="size-3.5" aria-hidden />
+                        Download CSV Template
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="size-3.5" aria-hidden />
+                        Upload Grades (CSV)
+                      </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        aria-label="Upload grade sheet CSV"
+                        onChange={(e) => handleUploadCsv(e, loadedSheet)}
+                      />
+                    </>
+                  )}
+                  <Badge
+                    variant={
+                      loadedSheet.section.state === "locked"
+                        ? "default"
+                        : "outline"
+                    }
+                  >
+                    {stateLabel[loadedSheet.section.state]}
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="grid gap-4">

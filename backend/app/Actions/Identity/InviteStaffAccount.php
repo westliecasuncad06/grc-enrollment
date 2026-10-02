@@ -30,8 +30,11 @@ final class InviteStaffAccount
         AuditRequestContext $context,
         ?CollegeCode $college = null,
         ?string $mastersDegree = null,
+        ?array $allowedRoles = null,
     ): User {
-        if (! in_array($role, UserRole::registrarInvitableCases(), true)) {
+        $allowed = $allowedRoles ?? UserRole::registrarInvitableCases();
+
+        if (! in_array($role, $allowed, true)) {
             throw ValidationException::withMessages([
                 'role' => 'This role cannot be invited through this form.',
             ]);

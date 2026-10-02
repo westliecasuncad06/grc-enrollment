@@ -314,7 +314,8 @@ export function CashierCorRecordsWorkspace() {
                   actions={
                     <DownloadPdfButton
                       documentId={cor.id}
-                      documentNumber={cor.document_number}
+                      studentName={cor.snapshot.student.name}
+                      generatedAt={cor.generated_at}
                       label="Download COR"
                     />
                   }

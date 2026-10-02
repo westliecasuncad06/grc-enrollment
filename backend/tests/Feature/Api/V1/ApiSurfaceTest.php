@@ -29,6 +29,9 @@ final class ApiSurfaceTest extends TestCase
             'DELETE api/v1/faculty-subject-preferences/{facultySubjectPreference}',
             'DELETE api/v1/student-profile-change-requests/{studentProfileChangeRequest}',
             'DELETE api/v1/subject-waivers/{waiver}',
+            'DELETE api/v1/super-admin/acting-context',
+            'DELETE api/v1/super-admin/users/{user}',
+            'DELETE api/v1/super-admin/users/{user}/sessions',
             'GET|HEAD api/v1/academic-grades',
             'GET|HEAD api/v1/academic-record',
             'GET|HEAD api/v1/academic-record/students',
@@ -122,6 +125,7 @@ final class ApiSurfaceTest extends TestCase
             'GET|HEAD api/v1/students/{student}/statement-of-account/pdf',
             'GET|HEAD api/v1/subject-offerings',
             'GET|HEAD api/v1/subjects',
+            'GET|HEAD api/v1/super-admin/users',
             'GET|HEAD api/v1/transferee-credits',
             'GET|HEAD api/v1/transferee-credits/{transfereeCredit}/suggestions',
             'GET|HEAD api/v1/withdrawal-requests',
@@ -151,6 +155,8 @@ final class ApiSurfaceTest extends TestCase
             'PATCH api/v1/student-profile-change-requests/{studentProfileChangeRequest}',
             'PATCH api/v1/student-profile-change-requests/{studentProfileChangeRequest}/decision',
             'PATCH api/v1/student-profiles/{studentProfile}',
+            'PATCH api/v1/super-admin/users/{user}/role',
+            'PATCH api/v1/super-admin/users/{user}/status',
             'PATCH api/v1/transferee-credits/{transfereeCredit}',
             'PATCH api/v1/withdrawal-requests/{withdrawalRequest}',
             'POST api/v1/academic-grades',
@@ -204,6 +210,9 @@ final class ApiSurfaceTest extends TestCase
             'POST api/v1/students/{studentProfile}/subject-waivers',
             'POST api/v1/students/{student}/account-payments',
             'POST api/v1/subject-offerings',
+            'POST api/v1/super-admin/users/invite',
+            'POST api/v1/super-admin/users/{user}/password-reset',
+            'POST api/v1/super-admin/users/{user}/setup-invitation',
             'POST api/v1/transferee-credits',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-limits/{employmentType}',
             'PUT api/v1/academic-terms/{academicTerm}/faculty-load-overrides/{professor}',
@@ -215,6 +224,7 @@ final class ApiSurfaceTest extends TestCase
             'PUT api/v1/sections/{section}/professor',
             'PUT api/v1/student-profiles/{studentProfile}/admission-requirements/{requirementType}',
             'PUT api/v1/student-schedule-preferences',
+            'PUT api/v1/super-admin/acting-context',
         ], $routes);
     }
 
@@ -536,7 +546,7 @@ final class ApiSurfaceTest extends TestCase
         $auditRoute = Route::getRoutes()->getByName('api.v1.audit-logs.index');
 
         $this->assertNotNull($auditRoute);
-        $this->assertContains('role:registrar_head', $auditRoute->gatherMiddleware());
+        $this->assertContains('role:registrar_head,super_admin', $auditRoute->gatherMiddleware());
 
         foreach ([
             'api.v1.it-control.automation-runs.index',

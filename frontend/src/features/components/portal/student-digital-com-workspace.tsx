@@ -24,6 +24,7 @@ import {
   useCertificateOfRegistrationQuery,
   useEnrollmentDocumentsQuery,
 } from "@/features/hooks/use-enrollment-documents"
+import { formatGeneratedAt } from "@/features/lib/format-generated-at"
 
 /**
  * The student's own Certificate of Registration: the bill only. Payments and the remaining balance
@@ -84,7 +85,7 @@ export function StudentDigitalComWorkspace() {
                     {document.document_number}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Generated {new Date(document.generated_at).toLocaleString()}
+                    Generated {formatGeneratedAt(document.generated_at)}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Button
@@ -97,7 +98,8 @@ export function StudentDigitalComWorkspace() {
                     </Button>
                     <DownloadPdfButton
                       documentId={document.id}
-                      documentNumber={document.document_number}
+                      studentName={session?.displayName ?? document.document_number}
+                      generatedAt={document.generated_at}
                       label="Download COR"
                     />
                   </div>
@@ -124,7 +126,8 @@ export function StudentDigitalComWorkspace() {
                     <PrintButton label="Print COR" />
                     <DownloadPdfButton
                       documentId={cor.id}
-                      documentNumber={cor.document_number}
+                      studentName={cor.snapshot.student.name}
+                      generatedAt={cor.generated_at}
                       label="Download COR (PDF)"
                     />
                   </div>

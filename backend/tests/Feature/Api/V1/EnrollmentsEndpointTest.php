@@ -312,12 +312,45 @@ final class EnrollmentsEndpointTest extends TestCase
         $response->assertJsonPath('data.student_year_level', null);
         self::assertSame(
             [
-                'section_id', 'section_code', 'subject_code', 'subject_title',
+                'section_id', 'section_code', 'subject_id', 'subject_code', 'paired_subject_id', 'subject_title',
                 'units', 'schedule_days', 'starts_at_time', 'ends_at_time',
                 'room', 'modality', 'professor_name', 'status', 'status_label',
             ],
             array_keys($response->json('data.subjects.0')),
         );
+    }
+
+    public function test_a_lecture_and_its_paired_lab_round_trip_their_subject_and_pair_ids(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $lecture = $this->makeSubject('ITP1 LEC', 2.0);
+        $lab = $this->makeSubject('ITP1 LAB', 1.0);
+        $lecture->update(['paired_subject_id' => $lab->id]);
+        $lab->update(['paired_subject_id' => $lecture->id]);
+        $this->placeSubject($curriculum, $lecture);
+        $this->placeSubject($curriculum, $lab);
+        $lectureSection = $this->makeSection($term, $lecture);
+        $labSection = $this->makeSection($term, $lab);
+        $student = $this->makeStudent($curriculum);
+        $token = $this->tokenFor($student);
+
+        $response = $this->withToken($token)->postJson('/api/v1/enrollments', [
+            'academic_term_id' => $term->id,
+            'sections' => [
+                ['section_id' => $lectureSection->id],
+                ['section_id' => $labSection->id],
+            ],
+        ]);
+
+        $response->assertCreated();
+        $subjects = collect($response->json('data.subjects'));
+        $lectureRow = $subjects->firstWhere('subject_code', 'ITP1 LEC');
+        $labRow = $subjects->firstWhere('subject_code', 'ITP1 LAB');
+        self::assertSame($lecture->id, $lectureRow['subject_id']);
+        self::assertSame($lab->id, $lectureRow['paired_subject_id']);
+        self::assertSame($lab->id, $labRow['subject_id']);
+        self::assertSame($lecture->id, $labRow['paired_subject_id']);
     }
 
     public function test_a_block_submission_enrolls_every_subject_in_the_block_atomically(): void

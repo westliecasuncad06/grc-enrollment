@@ -89,7 +89,7 @@ final class ScheduleProposalResource extends JsonResource
             'submitted_by_name' => $this->resource->submitter->name,
             'is_submitted' => $isSubmitted,
             'is_returned' => $isReturned,
-            'returned_by_role' => $lastReturnedAudit?->actor->role->value,
+            'returned_by_role' => $lastReturnedAudit?->effectiveActorRole()->value,
             'status' => $this->resource->status->value,
             'status_label' => $this->resource->status->label(),
             'decided_by' => $this->resource->decided_by,
@@ -103,7 +103,7 @@ final class ScheduleProposalResource extends JsonResource
                     'action' => $presentation['action'],
                     'action_label' => $presentation['label'],
                     'actor_name' => $audit->actor->name,
-                    'actor_role' => $audit->actor->role->value,
+                    'actor_role' => $audit->effectiveActorRole()->value,
                     'decided_at' => $audit->created_at?->utc()->format('Y-m-d\TH:i:s\Z'),
                     'notes' => $audit->reason,
                 ];

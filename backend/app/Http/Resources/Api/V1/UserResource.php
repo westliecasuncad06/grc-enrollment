@@ -29,7 +29,7 @@ final class UserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        return [
+        $data = [
             'type' => 'user',
             'id' => $this->resource->id,
             'name' => $this->resource->name,
@@ -39,6 +39,18 @@ final class UserResource extends JsonResource
             'college' => $this->resource->college?->value,
             'status' => $this->resource->status->value,
         ];
+
+        if ($this->resource->isSuperAdmin()) {
+            $context = $this->resource->actingContext();
+            $data['acting_context'] = $context !== null
+                ? [
+                    'role' => $context->role->value,
+                    'college' => $context->college?->value,
+                ]
+                : null;
+        }
+
+        return $data;
     }
 
     public function withResponse(Request $request, JsonResponse $response): void

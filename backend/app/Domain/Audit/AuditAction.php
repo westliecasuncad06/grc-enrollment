@@ -268,6 +268,26 @@ final class AuditAction
 
     public const ENROLLMENT_CONFIRMATION_EMAIL_SEND_FAILED = 'enrollment.confirmation_email_send_failed';
 
+    public const SUPER_ADMIN_PROVISIONED = 'super_admin.provisioned';
+
+    public const SUPER_ADMIN_DEACTIVATED = 'super_admin.deactivated';
+
+    public const SUPER_ADMIN_ACTING_CONTEXT_CHANGED = 'super_admin.acting_context_changed';
+
+    public const USER_ACCOUNT_ROLE_CHANGED = 'user_account.role_changed';
+
+    public const USER_ACCOUNT_DEACTIVATED = 'user_account.deactivated';
+
+    public const USER_ACCOUNT_REACTIVATED = 'user_account.reactivated';
+
+    public const USER_ACCOUNT_SESSIONS_REVOKED = 'user_account.sessions_revoked';
+
+    public const USER_ACCOUNT_PASSWORD_RESET_SENT = 'user_account.password_reset_sent';
+
+    public const USER_ACCOUNT_DELETED = 'user_account.deleted';
+
+    public const USER_ACCOUNT_LIST_VIEWED = 'user_account.list_viewed';
+
     /**
      * @return list<string>
      */
@@ -406,6 +426,16 @@ final class AuditAction
             self::STAFF_ACCOUNT_ACTIVATED,
             self::ENROLLMENT_CONFIRMATION_EMAIL_SENT,
             self::ENROLLMENT_CONFIRMATION_EMAIL_SEND_FAILED,
+            self::SUPER_ADMIN_PROVISIONED,
+            self::SUPER_ADMIN_DEACTIVATED,
+            self::SUPER_ADMIN_ACTING_CONTEXT_CHANGED,
+            self::USER_ACCOUNT_ROLE_CHANGED,
+            self::USER_ACCOUNT_DEACTIVATED,
+            self::USER_ACCOUNT_REACTIVATED,
+            self::USER_ACCOUNT_SESSIONS_REVOKED,
+            self::USER_ACCOUNT_PASSWORD_RESET_SENT,
+            self::USER_ACCOUNT_DELETED,
+            self::USER_ACCOUNT_LIST_VIEWED,
         ];
     }
 }

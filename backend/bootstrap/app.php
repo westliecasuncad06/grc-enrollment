@@ -4,6 +4,7 @@ use App\Http\Middleware\ApplySecurityHeaders;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\CompressJsonResponse;
 use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\EnsureUserIsSuperAdmin;
 use App\Support\Http\ApiExceptionRenderer;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -22,7 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(AssignRequestId::class);
         $middleware->append(CompressJsonResponse::class);
         $middleware->append(ApplySecurityHeaders::class);
-        $middleware->alias(['role' => EnsureUserHasRole::class]);
+        $middleware->alias([
+            'role' => EnsureUserHasRole::class,
+            'super_admin' => EnsureUserIsSuperAdmin::class,
+        ]);
 
         // This is a JSON-only API with no `login` named route. Laravel's
         // ApplicationBuilder unconditionally defaults unauthenticated guests

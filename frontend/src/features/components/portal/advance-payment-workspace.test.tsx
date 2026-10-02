@@ -139,7 +139,7 @@ describe("AdvancePaymentWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("enforces ₱1,000 minimum for payee advance payment and confirms successfully", async () => {
+  it("records payee advance payment without minimum amount constraint", async () => {
     let recordedBody: any = null
     fetchMock.mockImplementation((input, init) => {
       const target = url(input)
@@ -189,11 +189,11 @@ describe("AdvancePaymentWorkspace", () => {
       /Advance Payment Amount \(PHP\)/i,
     )
 
-    // Try entering 500 (below 1000 minimum)
+    // Try entering 0 (invalid)
     await user.clear(amountInput)
-    await user.type(amountInput, "500")
+    await user.type(amountInput, "0")
 
-    // Button should be disabled when amount < 1000
+    // Button should be disabled when amount <= 0
     expect(
       within(dialog).getByRole("button", { name: "Confirm Advance Payment" }),
     ).toBeDisabled()
@@ -373,6 +373,10 @@ describe("AdvancePaymentWorkspace", () => {
         await screen.findByRole("button", { name: /Record Payee Advance Payment/i }),
       )
       const dialog = await screen.findByRole("dialog")
+      await user.type(
+        within(dialog).getByLabelText(/Advance Payment Amount/i),
+        "500",
+      )
       await user.click(
         within(dialog).getByRole("button", { name: "Confirm Advance Payment" }),
       )
@@ -382,5 +386,38 @@ describe("AdvancePaymentWorkspace", () => {
     expect(posts).toHaveLength(2)
     expect(posts[0]).toContain("/students/4/account-payments")
     expect(posts[1]).toContain("/students/5/account-payments")
+  })
+
+  it("accepts advance payment amounts below 1000 without minimum requirement", async () => {
+    let capturedBody: any = null
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/cashier-student-lookup")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: [studentRow] })))
+      }
+      if (target.includes("/account-payments") && init?.method === "POST") {
+        capturedBody = JSON.parse(String(init.body))
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: accountData }), { status: 201 }),
+        )
+      }
+      if (target.includes("/students/4/account")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: accountData })))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] })))
+    })
+    const user = userEvent.setup()
+    renderWithSession(<AdvancePaymentWorkspace />, { session: accountingSession })
+
+    await user.type(screen.getByLabelText(/Student number, name, or email/i), "2026-0001")
+    await user.click(screen.getByRole("button", { name: "Find student" }))
+    await user.click(await screen.findByRole("button", { name: /Record Payee Advance Payment/i }))
+
+    const dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText(/Advance Payment Amount/i), "250")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm Advance Payment" }))
+
+    await screen.findByText("Advance Payment Recorded Successfully")
+    expect(capturedBody).toEqual({ amount: 250, financial_status: "payee" })
   })
 })

@@ -7,7 +7,17 @@ import { userRoles } from "@/features/auth/roles"
  * appearing in a response is treated as a contract violation rather than
  * silently ignored.
  */
-const userSchema = z
+export const actingContextSchema = z
+  .object({
+    role: z.enum(userRoles),
+    college: z
+      .enum(["ccs", "coe", "coa", "cbae"])
+      .nullable()
+      .optional(),
+  })
+  .strict()
+
+export const userSchema = z
   .object({
     type: z.literal("user"),
     id: z.number().int().positive(),
@@ -20,6 +30,7 @@ const userSchema = z
       .nullable()
       .optional(),
     status: z.string().min(1),
+    acting_context: actingContextSchema.nullable().optional(),
   })
   .strict()
 

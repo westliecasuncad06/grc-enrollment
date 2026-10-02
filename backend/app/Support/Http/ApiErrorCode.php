@@ -13,4 +13,5 @@ enum ApiErrorCode: string
     case ValidationFailed = 'VALIDATION_FAILED';
     case TooManyRequests = 'THROTTLED';
     case ServerError = 'INTERNAL_ERROR';
+    case ActingContextChanged = 'ACTING_CONTEXT_CHANGED';
 }

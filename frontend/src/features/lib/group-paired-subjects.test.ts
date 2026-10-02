@@ -45,4 +45,42 @@ describe("groupPairedSubjects", () => {
     expect(grouped.map((r) => r.subject_id)).toEqual([1, 2, 3, 4])
     expect(rows.map((r) => r.subject_id)).toEqual(before)
   })
+
+  // Stakeholder Doc 18: unlike the cases above (which carry no code/title and
+  // so can never exercise isLabPartner's real detection rules), this uses
+  // realistic subject codes to prove the Lecture-first guarantee actually
+  // holds when the Laboratory genuinely appears first in the input.
+  it("reorders Lecture first when the Laboratory appears first in the input (by code)", () => {
+    const rows = [
+      { subject_id: 2, paired_subject_id: 1, code: "ITCL", title: "Programming 1 LAB" },
+      { subject_id: 1, paired_subject_id: 2, code: "ITC", title: "Programming 1 LEC" },
+    ]
+
+    expect(groupPairedSubjects(rows).map((r) => r.code)).toEqual([
+      "ITC",
+      "ITCL",
+    ])
+  })
+
+  it("reorders Lecture first when the Laboratory appears first in the input (by room_requirement)", () => {
+    const rows = [
+      {
+        subject_id: 2,
+        paired_subject_id: 1,
+        code: "AVEL",
+        room_requirement: "laboratory" as const,
+      },
+      {
+        subject_id: 1,
+        paired_subject_id: 2,
+        code: "AVE",
+        room_requirement: "lecture" as const,
+      },
+    ]
+
+    expect(groupPairedSubjects(rows).map((r) => r.code)).toEqual([
+      "AVE",
+      "AVEL",
+    ])
+  })
 })

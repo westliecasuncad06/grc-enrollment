@@ -121,7 +121,7 @@ export function RegistrarGradesWorkspace({
       status: "submitted",
       college: approvalsDepartment === "all" ? undefined : approvalsDepartment,
       page: approvalsPage,
-      per_page: 50,
+      per_page: 250,
     },
     { enabled: showApprovals && activeTab === "approvals" },
   )

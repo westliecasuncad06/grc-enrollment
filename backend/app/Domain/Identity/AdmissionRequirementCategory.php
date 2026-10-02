@@ -33,6 +33,7 @@ enum AdmissionRequirementCategory: string
         return match ($type) {
             StudentType::Freshman => [self::Freshman, self::Additional],
             StudentType::Transferee => [self::Transferee, self::Additional],
+            StudentType::Returnee => [self::Additional],
             null => [self::Additional],
         };
     }

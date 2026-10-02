@@ -10,11 +10,11 @@ final class AuditLogPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role === UserRole::RegistrarHead;
+        return in_array($user->role, [UserRole::RegistrarHead, UserRole::SuperAdmin], true);
     }
 
     public function view(User $user, AuditLog $auditLog): bool
     {
-        return $user->role === UserRole::RegistrarHead;
+        return in_array($user->role, [UserRole::RegistrarHead, UserRole::SuperAdmin], true);
     }
 }

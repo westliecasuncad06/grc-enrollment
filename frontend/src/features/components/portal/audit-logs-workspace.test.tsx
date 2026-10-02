@@ -205,6 +205,18 @@ describe("AuditLogsWorkspace", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it("renders audit records when authorized as super_admin", async () => {
+    renderWithSession(<AuditLogsWorkspace />, {
+      session: {
+        userId: "99",
+        displayName: "Super Admin",
+        role: "super_admin",
+        signedInAt: "2026-07-29T12:00:00Z",
+      },
+    })
+    expect(await screen.findByText("Dana Dean")).toBeInTheDocument()
+  })
+
   it("has no detectable accessibility violations once loaded", async () => {
     const { container } = renderWithSession(<AuditLogsWorkspace />, {
       session: registrarHead,

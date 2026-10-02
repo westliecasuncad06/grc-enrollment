@@ -5,12 +5,16 @@
 **Client:** Global Reciprocal Colleges (GRC)  
 **Product Type:** Secure, API-first web application  
 **Architecture:** Next.js + React + TypeScript client application and Laravel REST API  
-**Revision:** v3.2 — Presentation Layer Realigned to Next.js  
+**Revision:** v3.3 — Super Admin Role and Department Switcher  
 **Status:** Implementation specification aligned to the approved capstone manuscript and current project instructions
 
 ---
 
 ## Revision Summary
+
+### v3.3 — Super Admin Role and Department Switcher (2026-10-01)
+
+A new `super_admin` role adds cross-departmental oversight, emergency intervention, and a central Accounts & Access console without being a tenth primary institutional actor (see ADR 0038). The Super Admin is provisioned exclusively via CLI (`php artisan super-admin:provision`) configured by `SUPER_ADMIN_EMAIL` — never via the default seeders. An acting-context mechanism lets the Super Admin temporarily assume any of the nine institutional offices; every action in an acting context carries both the real user ID and the acting role/college in the audit log. A Department Switcher UI (topbar dropdown, mobile Sheet, amber banner) and an Accounts & Access workspace (invite, role change, status toggle, session revocation, permanent deletion for unused accounts) complete the console. Two new column pairs are added: `acting_role`/`acting_college` on `personal_access_tokens` and on `audit_logs`. See `docs/runbooks/super-admin.md` for provisioning and incident-response procedures.
 
 ### v3.2 — Presentation Layer Realigned to Next.js (2026-07-28)
 
@@ -225,6 +229,28 @@ being made at an authenticated kiosk.
 Accounting Staff may view and rotate the shared kiosk credential through its
 authorized workspace. The device itself may validate or end its own session,
 but cannot use ordinary portal APIs.
+
+### Super Admin system role
+
+`super_admin` is a non-primary, system-level administrative role. It is not an
+eleventh external actor and does not renumber the nine primary institutional
+actors above. The Super Admin exists solely to provide cross-departmental
+oversight, emergency intervention, and account lifecycle management for the
+platform itself.
+
+Key boundaries:
+- Provisioned only via `php artisan super-admin:provision <email>` driven by
+  `SUPER_ADMIN_EMAIL`; never created through the default database seeders.
+- Cannot act with ambiguous privileges: when acting on behalf of an office, the
+  active token carries an explicit acting role/college that controls all
+  authorization decisions for that session.
+- Every action in an acting context is attributed to the real Super Admin user
+  and the acting role/college in the immutable `audit_logs`.
+- Account management operations (invite, role change, status toggle, delete) are
+  available only in Console mode (no active acting context).
+
+See ADR 0038 for the full decision record and `docs/runbooks/super-admin.md` for
+provisioning and incident-response procedures.
 
 ---
 
@@ -801,6 +827,17 @@ POST   /api/v1/reports/compliance-exports
 GET    /api/v1/notifications
 PATCH  /api/v1/notifications/{notification}/read
 GET    /api/v1/audit-logs
+
+PUT    /api/v1/super-admin/acting-context
+DELETE /api/v1/super-admin/acting-context
+GET    /api/v1/super-admin/users
+POST   /api/v1/super-admin/users/invite
+PATCH  /api/v1/super-admin/users/{user}/role
+PATCH  /api/v1/super-admin/users/{user}/status
+POST   /api/v1/super-admin/users/{user}/setup-invitation
+POST   /api/v1/super-admin/users/{user}/password-reset
+DELETE /api/v1/super-admin/users/{user}/sessions
+DELETE /api/v1/super-admin/users/{user}
 ```
 
 The final route inventory must be documented in an OpenAPI specification or equivalent API reference.
@@ -835,6 +872,8 @@ not use that header.
 
 Public self-registration is out of scope. Admission Staff provisions student accounts through an authorized endpoint. If an account-creation endpoint returns a first-login token, it must follow the same `AuthResource` and token service controls.
 
+`super_admin` accounts are provisioned exclusively via `php artisan super-admin:provision` on the server, driven by `SUPER_ADMIN_EMAIL` — never through any web endpoint or default seeder. The provisioning command requires prior Google 2-Step Verification to be enabled on the owner's Google account before Google Sign-In is relied upon for access. See `docs/runbooks/super-admin.md`.
+
 ### 9.2 Browser Security
 
 Because bearer tokens are stored in local storage:
@@ -861,6 +900,12 @@ Because bearer tokens are stored in local storage:
 - Sensitive reads, exports, analytics, and overrides require explicit authorization.
 - Grade access is constrained to assigned sections and authorized Registrar roles.
 - Student records are scoped to the authenticated student unless a staff role is authorized.
+- Super Admin acting context: when a `super_admin` token carries `acting_role`/`acting_college`
+  columns, the `ApplySuperAdminActingContext` middleware overlays those values onto the in-memory
+  `User` model so every Policy sees the acting role rather than `super_admin`. The raw database
+  row is never modified; the real `super_admin` role remains on disk. The `EnsureUserIsSuperAdmin`
+  middleware checks the raw value so the switch-endpoint itself remains accessible during acting.
+  See ADR 0038.
 
 ### 9.5 Rate Limiting
 
@@ -1135,6 +1180,11 @@ All names use Laravel/MySQL conventions. The final schema must be represented by
 - `audit_logs`
   - `id`
   - `actor_user_id`
+  - `acting_role` nullable — the institutional role the Super Admin was acting as when the
+    event occurred; null for all non-Super-Admin actors and for Super Admins in Console mode
+    (added by migration `2026_10_01_000002`)
+  - `acting_college` nullable — the college scope of the acting role, if applicable; null
+    when the acting role has no college dimension (added by migration `2026_10_01_000002`)
   - `action`
   - `auditable_type`
   - `auditable_id`

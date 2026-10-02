@@ -20,6 +20,7 @@ import {
   markToneBadgeVariant,
 } from "@/features/lib/grade-presentation"
 import { formatYearLevel } from "@/features/lib/format-year-level"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import type { GradeSlip } from "@/features/schemas/academic-record-schema"
 
 /**
@@ -31,6 +32,8 @@ import type { GradeSlip } from "@/features/schemas/academic-record-schema"
  * the student's own grade slip and the Registrar's transcript lookup.
  */
 export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
+  const rows = groupPairedSubjects(slip.rows)
+
   return (
     <PrintDocument
       title={`Grade slip — ${slip.term_label}`}
@@ -50,8 +53,10 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
         </p>
       </div>
       <div className="w-full min-w-0 overflow-x-auto rounded-lg border">
-        <Table data-stack-mobile>
-          <TableCaption>Grade slip for {slip.term_label}</TableCaption>
+        <Table className="caption-top" data-stack-mobile>
+          <TableCaption className="text-left px-3 py-2 text-xs text-muted-foreground w-full">
+            Grade slip for {slip.term_label}
+          </TableCaption>
           <TableHeader>
             <TableRow>
               <TableHead scope="col" className="whitespace-nowrap">Code</TableHead>
@@ -65,7 +70,7 @@ export function GradeSlipDocument({ slip }: { slip: GradeSlip }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {slip.rows.map((row) => (
+            {rows.map((row) => (
               <TableRow key={row.academic_grade_id}>
                 <TableCell data-stack="full" className="font-mono whitespace-nowrap font-medium">{row.code}</TableCell>
                 <TableCell data-stack="full" className="min-w-[12rem]">{row.title}</TableCell>

@@ -2,5 +2,8 @@
   "statusLine": {
     "type": "command",
     "command": "node .claude/statusline.js"
+  },
+  "worktree": {
+    "bgIsolation": "none"
   }
 }

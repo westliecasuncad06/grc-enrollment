@@ -1123,6 +1123,16 @@
 .portal-sidebar {
   position: sticky;
   top: 0;
+  /* Explicit, not left to DOM-order luck: `position: sticky` alone creates a
+     stacking context, but with no z-index it stacks at `auto`, so a card or
+     any other element in `.portal-main-column` that establishes its own
+     stacking context (its own `position` + a z-index, however small) can
+     still paint over the sidebar — including the collapsed rail's
+     hover-reveal pill, however high *its own* internal z-index is, since a
+     descendant's z-index only ever competes within its own parent's
+     stacking context. Comfortably above the sticky topbar (10); still well
+     below any modal/dialog overlay (50). */
+  z-index: 15;
   display: flex;
   height: 100svh;
   flex-direction: column;
@@ -3210,15 +3220,26 @@
 
   .portal-app[data-sidebar="collapsed"] .portal-navigation {
     width: 100%;
+    /* `overflow-y: auto` (set unconditionally above) forces the computed
+       `overflow-x` to `auto` too, per the CSS Overflow spec's "not visible
+       unless both are" rule — without this override the hover-reveal pill
+       below is clipped to the rail's own width instead of extending past
+       it. Collapsed role menus are short enough that losing the vertical
+       scrollbar here in exchange is an easy trade. */
+    overflow: visible;
   }
 
-  /* Labels stay in the DOM (accessible names) and are exposed on hover/focus
-     through the link's native `title` (see NavigationLink's `title` prop),
-     not a custom overlay — a hover-reveal pill used to sit here but spilled
-     out past the maroon rail onto the page content underneath it, which
-     read as a floating, disconnected element (stakeholder Doc 15). The
-     icon's own background-tint hover (`.portal-nav-link:hover`, shared with
-     the expanded sidebar) is the only hover effect now. */
+  /* Labels stay in the DOM (accessible names). Visually, on hover/focus the
+     icon grows a pill that wipes open left-to-right to reveal the name —
+     the icon itself stays put and on top (z-index), the pill is an overlay
+     anchored at the icon's own position, clipped to zero width and revealed
+     with `clip-path` rather than a separate floating tooltip. This exact
+     mechanism previously shipped (2026-09-29) and was removed the next day
+     (stakeholder Doc 15) for spilling past the rail onto page content —
+     restored by owner request, this time with `.portal-sidebar` itself
+     given an explicit baseline z-index (see its own rule) so the pill can't
+     lose a stacking fight to something elsewhere on the page the way it
+     apparently sometimes did before. */
   .portal-app[data-sidebar="collapsed"] .portal-nav-link {
     position: relative;
     grid-template-columns: 1fr;
@@ -3227,16 +3248,57 @@
     padding-inline: 0;
   }
 
-  /* Visually hidden, not `display:none` — the label stays part of the
-     link's accessible name (screen readers, and the native `title` tooltip
-     already carries it on hover) while the rail shows only the icon. */
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:hover,
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:focus-visible {
+    z-index: 40;
+  }
+
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link svg {
+    position: relative;
+    z-index: 2;
+  }
+
   .portal-app[data-sidebar="collapsed"] .portal-nav-link > span {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    height: 100%;
+    width: max-content;
+    max-width: 16rem;
+    align-items: center;
+    padding-left: 2.5rem;
+    padding-right: 0.9rem;
+    /* Opaque, not a translucent tint: this pill overflows past the maroon
+       rail onto whatever the main content underneath happens to be (often
+       the page's light background), so a semi-transparent white fill reads
+       fine over the rail but goes invisible-on-white the moment it crosses
+       the edge — white text on white. A solid brand maroon (matching the
+       rail's own gradient stop) plus a shadow for lift reads correctly no
+       matter what it's floating over. */
+    background: #870615;
+    border-radius: var(--radius);
+    color: #ffffff;
+    box-shadow: 0 8px 20px -6px rgb(0 0 0 / 35%);
+    font-size: 0.72rem;
+    font-weight: 620;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
     white-space: nowrap;
-    clip-path: inset(50%);
+    overflow: hidden;
+    clip-path: inset(0 100% 0 0 round var(--radius));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      clip-path 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 120ms ease;
+  }
+
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:hover > span,
+  .portal-app[data-sidebar="collapsed"] .portal-nav-link:focus-visible > span {
+    clip-path: inset(0 0 0 0 round var(--radius));
+    opacity: 1;
   }
 
   .portal-app[data-sidebar="collapsed"] .portal-nav-link[data-attention]::after {
@@ -3288,8 +3350,16 @@
 
   table[data-stack-mobile],
   table[data-stack-mobile] tbody,
-  table[data-stack-mobile] tfoot {
+  table[data-stack-mobile] tfoot,
+  table[data-stack-mobile] caption {
     display: block;
+    width: 100%;
+  }
+
+  table[data-stack-mobile] caption {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    white-space: normal;
   }
 
   table[data-stack-mobile] tr {

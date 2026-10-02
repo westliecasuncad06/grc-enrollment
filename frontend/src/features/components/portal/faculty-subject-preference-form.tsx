@@ -34,6 +34,7 @@ interface FacultySubjectPreferenceFormProps {
   isSaving: boolean
   editing: FacultyCurriculumSubjectPreference | null
   proficiency: "primary" | "secondary"
+  pairedSubjectInfo?: { code: string; title: string } | null
   onProficiencyChange: (value: "primary" | "secondary") => void
   onCancelEdit: () => void
   onSave: (input: FacultyCurriculumSubjectPreferenceInput) => Promise<void>
@@ -49,6 +50,7 @@ export function FacultySubjectPreferenceForm({
   isSaving,
   editing,
   proficiency,
+  pairedSubjectInfo,
   onProficiencyChange,
   onCancelEdit,
   onSave,
@@ -141,6 +143,12 @@ export function FacultySubjectPreferenceForm({
               />
             )}
           />
+          {pairedSubjectInfo && (
+            <div className="mt-2 rounded-md border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+              <span className="font-semibold">Auto-Joint LEC/LAB:</span>{" "}
+              {pairedSubjectInfo.code} — {pairedSubjectInfo.title} will automatically be included.
+            </div>
+          )}
           <FieldError>{form.formState.errors.subject_id?.message}</FieldError>
         </Field>
         <Field data-invalid={Boolean(form.formState.errors.rank)}>

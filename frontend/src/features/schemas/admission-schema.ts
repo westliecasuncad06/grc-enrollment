@@ -3,7 +3,7 @@ import { z } from "zod"
 import { strongPasswordSchema } from "@/features/schemas/password-schema"
 
 export const enrollmentCategorySchema = z.enum(["regular", "irregular"])
-export const studentTypeSchema = z.enum(["freshman", "transferee"])
+export const studentTypeSchema = z.enum(["freshman", "transferee", "returnee"])
 export const financialStatusSchema = z.enum(["scholar", "payee"])
 export const admissionStatusSchema = z.enum([
   "pending",
@@ -44,10 +44,11 @@ export const provisionStudentSchema = z
         "Student number must be in YYYY-MM-NNNNN format (e.g. 2026-08-07107).",
       ),
     program_id: z.number().int().positive("Select a program."),
-    entry_year: z.number().int().min(2000).max(2100),
+    // entry_year, enrollment_category, and student_type are deliberately
+    // absent: the server derives all three (entry_year from the current
+    // ongoing academic term, category/type from year_level) and rejects
+    // them outright if sent (Stakeholder Doc 17).
     year_level: z.number().int().min(1).max(4),
-    enrollment_category: enrollmentCategorySchema,
-    student_type: studentTypeSchema,
     financial_status: financialStatusSchema.nullable().optional(),
     requirements_verified: z.literal(true, {
       error: "Confirm that Admission received the student's requirements.",
@@ -143,10 +144,10 @@ export const updateStudentProfileSchema = z
       .regex(/^\d{4}-(0[1-9]|1[0-2])-\d{5}$/)
       .optional(),
     program_id: z.number().int().positive().optional(),
-    entry_year: z.number().int().min(2000).max(2100).optional(),
+    // entry_year, enrollment_category, and student_type are deliberately
+    // absent — see provisionStudentSchema above; the same server-side
+    // derivation and rejection applies to updates.
     year_level: z.number().int().min(1).max(4).optional(),
-    enrollment_category: enrollmentCategorySchema.optional(),
-    student_type: studentTypeSchema.optional(),
     financial_status: financialStatusSchema.nullable().optional(),
     admission_status: admissionStatusSchema.optional(),
     reason: z.string().trim().min(1),

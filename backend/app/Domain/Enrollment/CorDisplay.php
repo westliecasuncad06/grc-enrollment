@@ -2,6 +2,9 @@
 
 namespace App\Domain\Enrollment;
 
+use Carbon\Carbon;
+use DateTimeInterface;
+
 /**
  * Display-only wording for a Certificate of Registration (stakeholder Doc 14).
  *
@@ -14,6 +17,33 @@ namespace App\Domain\Enrollment;
  */
 final class CorDisplay
 {
+    /**
+     * `enrollment_documents.generated_at` is stored UTC like every other
+     * timestamp (`config('app.timezone')` stays UTC app-wide on purpose).
+     * The PDF used to format that raw UTC value directly while the portal's
+     * `toLocaleString()` converted it to the viewer's browser timezone, so a
+     * Philippines-based viewer saw two "Generated" times 8 hours apart on the
+     * same document (stakeholder Doc 16). Both renderers now go through this
+     * single Asia/Manila conversion.
+     */
+    public static function generatedAt(DateTimeInterface|string $value): string
+    {
+        return Carbon::parse($value, 'UTC')->timezone('Asia/Manila')->format('m/d/Y, h:i:s A');
+    }
+
+    /**
+     * `COR_{student name}_{date}.pdf` (stakeholder Doc 16) — the date is the
+     * document's own Asia/Manila generation date, not "today", so the same
+     * immutable COR always downloads under the same name.
+     */
+    public static function downloadFilename(string $studentName, DateTimeInterface|string $generatedAt): string
+    {
+        $slug = trim((string) preg_replace('/[^A-Za-z0-9]+/', '_', trim($studentName)), '_');
+        $date = Carbon::parse($generatedAt, 'UTC')->timezone('Asia/Manila')->format('Y-m-d');
+
+        return sprintf('COR_%s_%s.pdf', $slug, $date);
+    }
+
     /**
      * 1 / "1" / "Year 1" / "1st Year" becomes "1st Year"; empty or
      * non-numeric input is returned unchanged ("—" when empty).

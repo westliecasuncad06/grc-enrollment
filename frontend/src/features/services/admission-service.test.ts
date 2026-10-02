@@ -17,10 +17,7 @@ const input: ProvisionStudentInput = {
   address: "123 Mabini Street, Caloocan City",
   student_number: "2027-08-01001",
   program_id: 11,
-  entry_year: 2027,
   year_level: 1,
-  enrollment_category: "regular",
-  student_type: "freshman",
   requirements_verified: true,
 }
 
@@ -40,7 +37,7 @@ const profile = {
   program_code: "BSIT",
   program_name: "Bachelor of Science in Information Technology",
   curriculum_id: 22,
-  entry_year: input.entry_year,
+  entry_year: 2027,
   curriculum_name: "BSIT 2027 Curriculum",
   curriculum_effective_school_year: "2027-2028",
   year_level: input.year_level,
@@ -93,6 +90,9 @@ describe("admission-service", () => {
     expect(body).toEqual(input)
     expect(body).not.toHaveProperty("password")
     expect(body).not.toHaveProperty("curriculum_id")
+    expect(body).not.toHaveProperty("entry_year")
+    expect(body).not.toHaveProperty("enrollment_category")
+    expect(body).not.toHaveProperty("student_type")
   })
 
   it("searches the Admission directory by name, student number, or email", async () => {

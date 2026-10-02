@@ -1,5 +1,6 @@
 "use client"
 
+import { RefreshCw } from "lucide-react"
 import { useState } from "react"
 
 import { useAuth } from "@/features/auth/use-auth"
@@ -12,6 +13,7 @@ import { EnrollmentStatusOverviewPanel } from "@/features/components/portal/enro
 import { EnrollmentStepsChart } from "@/features/components/portal/enrollment-steps-chart"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import { Badge } from "@/features/components/ui/badge"
+import { Button } from "@/features/components/ui/button"
 import {
   Card,
   CardContent,
@@ -91,6 +93,7 @@ export function EnrollmentDashboardWorkspace() {
     enabled && canViewSummary,
   )
   const [drilldown, setDrilldown] = useState<DrilldownStart | null>(null)
+  const [departmentFilter, setDepartmentFilter] = useState<string>("all")
   const combinedQuery = {
     isPending:
       termsQuery.isPending ||
@@ -129,25 +132,98 @@ export function EnrollmentDashboardWorkspace() {
       }
       unauthorized={!authorized}
       lastUpdated={overviewQuery.dataUpdatedAt}
+      actions={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void combinedQuery.refetch()}
+          disabled={overviewQuery.isFetching || summaryQuery.isFetching}
+        >
+          <RefreshCw aria-hidden="true" />
+          Refresh
+        </Button>
+      }
     >
       <AsyncBoundary
         query={combinedQuery}
         loadingLabel="Loading the enrollment dashboard…"
         emptyMessage="No enrollment term is open right now. The counts appear here once the Registrar opens a term."
       >
-        {({ overview, summary }) => (
-          <>
-            <div className="grid gap-4">
-              <EnrollmentStatusOverviewPanel
-                overview={overview}
-                onOpenGroup={(group) =>
-                  setDrilldown({ group, department: null })
-                }
-                onOpenDepartment={(department, group) =>
-                  setDrilldown({ group: group ?? null, department })
-                }
-              />
-              <EnrollmentStepsChart steps={overview.steps} />
+        {({ overview, summary }) => {
+          const selectedDept =
+            departmentFilter !== "all"
+              ? overview.departments.find(
+                  (d) =>
+                    d.department?.toLowerCase() ===
+                    departmentFilter.toLowerCase(),
+                )
+              : null
+
+          const activeOverview = selectedDept
+            ? {
+                ...overview,
+                total_students: selectedDept.total,
+                groups: selectedDept.groups,
+                steps: selectedDept.steps,
+              }
+            : overview
+
+          return (
+            <>
+              <div className="grid gap-4">
+                {overview.departments.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1">
+                      Department View:
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        departmentFilter === "all" ? "default" : "outline"
+                      }
+                      className="h-8 text-xs"
+                      onClick={() => setDepartmentFilter("all")}
+                    >
+                      All Departments
+                    </Button>
+                    {overview.departments.map((dept) => {
+                      if (!dept.department) return null
+                      const isSelected =
+                        departmentFilter.toLowerCase() ===
+                        dept.department.toLowerCase()
+                      return (
+                        <Button
+                          key={dept.department}
+                          type="button"
+                          size="sm"
+                          variant={isSelected ? "default" : "outline"}
+                          className="h-8 text-xs font-mono"
+                          onClick={() => setDepartmentFilter(dept.department!)}
+                        >
+                          {dept.department.toUpperCase()}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
+                <EnrollmentStatusOverviewPanel
+                  overview={activeOverview}
+                  selectedDepartment={departmentFilter}
+                  onSelectDepartmentQueue={(dept) => setDepartmentFilter(dept)}
+                  onOpenGroup={(group) =>
+                    setDrilldown({
+                      group,
+                      department:
+                        departmentFilter === "all" ? null : departmentFilter,
+                    })
+                  }
+                  onOpenDepartment={(department, group) =>
+                    setDrilldown({ group: group ?? null, department })
+                  }
+                />
+                <EnrollmentStepsChart steps={activeOverview.steps} />
               {summary && (
                 <div className="grid gap-4 lg:grid-cols-2">
                   <Card>
@@ -192,7 +268,8 @@ export function EnrollmentDashboardWorkspace() {
               academicTermId={activeTerm?.id}
             />
           </>
-        )}
+          )
+        }}
       </AsyncBoundary>
     </WorkspacePage>
   )

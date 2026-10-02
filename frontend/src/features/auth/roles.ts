@@ -19,6 +19,7 @@ export const userRoles = [
   "accounting_staff",
   "it_admin",
   "queue_kiosk",
+  "super_admin",
 ] as const
 
 export type UserRole = (typeof userRoles)[number]

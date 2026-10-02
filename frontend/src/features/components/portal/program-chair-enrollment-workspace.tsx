@@ -299,7 +299,11 @@ function BlockSectionCard({
     const u = unitsFor(s.subject_id)
     return sum + (typeof u === "number" ? u : Number(u) || 0)
   }, 0)
-  const capacity = sections[0]?.capacity ?? 40
+  // `sections` only ever contains sections already grouped under this exact
+  // blockCode, so it is never empty in practice — but if it ever were, show
+  // that honestly rather than silently defaulting to a fake capacity of 40
+  // (Stakeholder Doc 17).
+  const capacity = sections[0]?.capacity
 
   const handleOpen = () => {
     setCalendarSection({
@@ -326,9 +330,11 @@ function BlockSectionCard({
 
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           <Badge variant="secondary" className="text-xs">
-            {sections.every((s) => s.capacity === sections[0].capacity)
-              ? `${capacity} seats`
-              : "Mixed seats"}
+            {capacity === undefined
+              ? "Capacity not set"
+              : sections.every((s) => s.capacity === capacity)
+                ? `${capacity} seats`
+                : "Mixed seats"}
           </Badge>
           {totalUnits > 0 && (
             <Badge variant="outline" className="text-xs">
@@ -482,10 +488,33 @@ export function ProgramChairEnrollmentWorkspace({
   const roomsQuery = useRoomOptionsQuery()
   // A hook result is immutable to the React Compiler; a bare helper call is
   // not, and would taint every memo derived from `termId` below.
-  const currentTerm = useMemo(
-    () => getActiveAcademicTerm(termsQuery.data),
-    [termsQuery.data],
-  )
+  const currentTerm = useMemo(() => {
+    // If there is an actionable draft or for_dean_approval term, that takes precedence for planning
+    const planningTerm = termsQuery.data?.find(
+      (t) => t.status === "draft" || t.status === "for_dean_approval",
+    )
+    if (planningTerm) return planningTerm
+
+    const term = getActiveAcademicTerm(termsQuery.data)
+    if (!term) return null
+
+    // If the active term is ongoing or closed and its enrollment window has closed,
+    // display waiting state until Registrar starts the next academic term.
+    if (
+      term.status === "semester_ongoing" ||
+      term.status === "semester_closed"
+    ) {
+      const isEnrollmentPast =
+        Boolean(term.enrollment_closes_at) &&
+        new Date(term.enrollment_closes_at as string).getTime() < Date.now()
+
+      if (isEnrollmentPast) {
+        return null
+      }
+    }
+
+    return term
+  }, [termsQuery.data])
   const proposalsQuery = useScheduleProposalsQuery({
     enabled: currentTerm !== null,
   })

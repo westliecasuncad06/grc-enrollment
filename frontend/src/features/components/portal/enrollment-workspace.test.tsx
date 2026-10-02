@@ -421,7 +421,9 @@ const createdEnrollment = {
     subjects: [
       {
         section_id: 5,
+        subject_id: 50,
         subject_code: "CS101",
+        paired_subject_id: null,
         subject_title: "Programming 1",
         status: "selected",
         status_label: "Selected",
@@ -1227,6 +1229,78 @@ describe("EnrollmentWorkspace", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("keeps a LEC immediately followed by its paired LAB in the Enrolled Class Schedule table", async () => {
+    fetchMock.mockImplementation(
+      mockRoutes({
+        enrollments: {
+          data: [
+            {
+              ...createdEnrollment.data,
+              status: "enrolled",
+              program_head_decided_at: null,
+              registrar_decided_at: "2026-07-31T00:00:00Z",
+              payment_confirmed_at: "2026-08-01T00:00:00Z",
+              enrolled_at: "2026-08-01T00:00:00Z",
+              subjects: [
+                {
+                  section_id: 61,
+                  subject_id: 601,
+                  subject_code: "ITP1 LEC",
+                  paired_subject_id: 602,
+                  subject_title: "Platform Technologies Lecture",
+                  status: "enrolled",
+                  status_label: "Enrolled",
+                },
+                {
+                  section_id: 62,
+                  subject_id: 502,
+                  subject_code: "GE101",
+                  paired_subject_id: null,
+                  subject_title: "Understanding the Self",
+                  status: "enrolled",
+                  status_label: "Enrolled",
+                },
+                {
+                  section_id: 63,
+                  subject_id: 602,
+                  subject_code: "ITP1 LAB",
+                  paired_subject_id: 601,
+                  subject_title: "Platform Technologies Laboratory",
+                  status: "enrolled",
+                  status_label: "Enrolled",
+                },
+              ],
+            },
+          ],
+          links: paginationLinks,
+          meta: { ...paginationMeta, total: 1 },
+        },
+      }),
+    )
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    const table = await screen.findByRole("table", {
+      name: "Enrolled subjects schedule",
+    })
+    const rowLabels = within(table)
+      .getAllByRole("row")
+      .map((row) => row.textContent ?? "")
+    const lecIndex = rowLabels.findIndex((text) => text.includes("ITP1 LEC"))
+    const labIndex = rowLabels.findIndex((text) => text.includes("ITP1 LAB"))
+    const ge101Index = rowLabels.findIndex((text) => text.includes("GE101"))
+
+    expect(lecIndex).toBeGreaterThanOrEqual(0)
+    expect(labIndex).toBe(lecIndex + 1)
+    expect(ge101Index).toBeGreaterThan(labIndex)
+  })
+
   it("shows a closed banner and disables selection and submission when the enrollment window is closed", async () => {
     fetchMock.mockImplementation((input) => {
       const target = url(input)
@@ -1656,6 +1730,55 @@ describe("EnrollmentWorkspace", () => {
     expect(
       screen.getByRole("button", { name: "Submit enrollment" }),
     ).toBeDisabled()
+  })
+
+  it("refreshes the available-seats count without a page reload", async () => {
+    const user = userEvent.setup()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let remainingSeats = 30
+    fetchMock.mockImplementation((input, init) => {
+      const target = url(input)
+      if (target.includes("/eligible-subjects"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  ...eligibleSubject,
+                  available_sections: [
+                    {
+                      ...eligibleSubject.available_sections[0],
+                      remaining_seats: remainingSeats,
+                    },
+                  ],
+                },
+              ],
+            }),
+          ),
+        )
+      return mockRoutes()(input, init)
+    })
+    renderWithSession(<EnrollmentWorkspace />, {
+      session: {
+        userId: "1",
+        displayName: "Student",
+        role: "student",
+        signedInAt: "2026-07-30T00:00:00Z",
+      },
+    })
+
+    await selectOption(user, "CS101 section", /Section A/)
+    expect(screen.getAllByText(/30 seats open/).length).toBeGreaterThan(0)
+
+    remainingSeats = 5
+    // useEligibleSubjectsQuery polls every 15s (Stakeholder Doc 17) so a
+    // seat another student just took is reflected without a manual reload.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    expect(screen.getAllByText(/5 seats open/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/30 seats open/)).not.toBeInTheDocument()
   })
 
   it("reports a rejected submission inside the confirm dialog and lets the student retry", async () => {

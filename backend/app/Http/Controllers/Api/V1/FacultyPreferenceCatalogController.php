@@ -39,7 +39,7 @@ final class FacultyPreferenceCatalogController extends Controller
         $data = $curricula->groupBy('program_id')->flatMap(static function ($versions): array {
             return $versions->values()->map(static function (Curriculum $curriculum, int $index): array {
                 $placements = $curriculum->subjectPlacements
-                    ->filter(static fn ($placement): bool => $placement->subject !== null)
+                    ->filter(static fn ($placement): bool => ! empty($placement->subject_id))
                     ->sortBy(static fn ($placement): string => $placement->subject->code);
 
                 return [
@@ -61,20 +61,89 @@ final class FacultyPreferenceCatalogController extends Controller
         return $this->privateResponse(response()->json(['data' => $data]));
     }
 
-    /** @param Collection<int, CurriculumSubject> $placements @return list<array{id: int, code: string, title: string, units: int}> */
-    private static function subjectsForSemester($placements, string $semester): array
+    /**
+     * @param  Collection<int, CurriculumSubject>  $placements
+     * @return list<array{id: int, code: string, title: string, units: float, paired_subject_id: ?int}>
+     */
+    private static function subjectsForSemester(Collection $placements, string $semester): array
     {
-        return $placements
+        /** @var list<array{id: int, code: string, title: string, units: float, paired_subject_id: ?int, is_lecture: bool}> $raw */
+        $raw = array_values($placements
             ->filter(static fn ($placement): bool => in_array($placement->semester, [$semester, '1st|2nd'], true))
             ->map(static fn ($placement): array => [
                 'id' => $placement->subject->id,
                 'code' => $placement->subject->code,
                 'title' => $placement->subject->title,
-                'units' => $placement->subject->units,
+                'units' => (float) $placement->subject->units,
+                'paired_subject_id' => $placement->subject->paired_subject_id,
+                'is_lecture' => $placement->subject->isLectureComponent(),
             ])
             ->unique('id')
             ->values()
-            ->all();
+            ->all());
+
+        return self::groupPairedCatalogSubjects($raw);
+    }
+
+    /**
+     * @param  list<array{id: int, code: string, title: string, units: float, paired_subject_id: ?int, is_lecture: bool}>  $subjects
+     * @return list<array{id: int, code: string, title: string, units: float, paired_subject_id: ?int}>
+     */
+    private static function groupPairedCatalogSubjects(array $subjects): array
+    {
+        $byId = [];
+        foreach ($subjects as $s) {
+            $byId[$s['id']] = $s;
+        }
+
+        $placed = [];
+        $grouped = [];
+
+        foreach ($subjects as $s) {
+            $id = $s['id'];
+            if (isset($placed[$id])) {
+                continue;
+            }
+
+            $pairedId = $s['paired_subject_id'];
+            $partner = $pairedId !== null ? ($byId[$pairedId] ?? null) : null;
+
+            if ($partner !== null && ! isset($placed[$partner['id']])) {
+                if ($s['is_lecture']) {
+                    $grouped[] = self::stripCatalogSubject($s);
+                    $placed[$id] = true;
+                    $grouped[] = self::stripCatalogSubject($partner);
+                    $placed[$partner['id']] = true;
+                } else {
+                    $grouped[] = self::stripCatalogSubject($partner);
+                    $placed[$partner['id']] = true;
+                    $grouped[] = self::stripCatalogSubject($s);
+                    $placed[$id] = true;
+                }
+
+                continue;
+            }
+
+            $grouped[] = self::stripCatalogSubject($s);
+            $placed[$id] = true;
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * @param  array{id: int, code: string, title: string, units: float, paired_subject_id: ?int, is_lecture: bool}  $subject
+     * @return array{id: int, code: string, title: string, units: float, paired_subject_id: ?int}
+     */
+    private static function stripCatalogSubject(array $subject): array
+    {
+        return [
+            'id' => $subject['id'],
+            'code' => $subject['code'],
+            'title' => $subject['title'],
+            'units' => $subject['units'],
+            'paired_subject_id' => $subject['paired_subject_id'],
+        ];
     }
 
     private function privateResponse(JsonResponse $response): JsonResponse

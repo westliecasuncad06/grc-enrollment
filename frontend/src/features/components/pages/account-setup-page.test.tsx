@@ -1,10 +1,13 @@
 import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { toast } from "sonner"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AccountSetupPage } from "@/features/components/pages/account-setup-page"
 import { routerMock } from "@/tests/navigation-mock"
 import { renderWithAuthProvider } from "@/tests/render-app"
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 function urlOf(input: RequestInfo | URL): string {
   return typeof input === "string"
@@ -25,6 +28,7 @@ async function completeForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("AccountSetupPage", () => {
+  beforeEach(() => vi.clearAllMocks())
   afterEach(() => vi.unstubAllGlobals())
 
   it("submits the separate code and redirects to login after successful activation", async () => {
@@ -47,6 +51,7 @@ describe("AccountSetupPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Your account is active." }),
     ).toBeInTheDocument()
+    expect(toast.success).toHaveBeenCalledWith("Your account is now active.")
     const requestBody = fetchMock.mock.calls[0]?.[1]?.body
     const body: Record<string, unknown> =
       typeof requestBody === "string"
@@ -100,6 +105,33 @@ describe("AccountSetupPage", () => {
     expect(
       screen.getByRole("heading", { name: "Set up your account" }),
     ).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith(
+      "The setup code could not be verified.",
+    )
+  })
+
+  it("lets the student reveal and re-hide both password fields independently", async () => {
+    const user = userEvent.setup()
+    renderWithAuthProvider(<AccountSetupPage />, { route: "/account-setup" })
+
+    const password = screen.getByLabelText("New password")
+    const confirm = screen.getByLabelText("Confirm new password")
+    expect(password).toHaveAttribute("type", "password")
+    expect(confirm).toHaveAttribute("type", "password")
+
+    const [showPassword, showConfirm] = screen.getAllByRole("button", {
+      name: "Show password",
+    })
+    await user.click(showPassword)
+    expect(password).toHaveAttribute("type", "text")
+    expect(confirm).toHaveAttribute("type", "password")
+
+    await user.click(showConfirm)
+    expect(confirm).toHaveAttribute("type", "text")
+
+    await user.click(showPassword)
+    expect(password).toHaveAttribute("type", "password")
+    expect(confirm).toHaveAttribute("type", "text")
   })
 
   it("does not show a Full name field for the default (Student) variant", () => {

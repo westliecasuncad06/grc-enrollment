@@ -47,6 +47,10 @@ import { useReducedMotion } from "@/features/hooks/use-reduced-motion"
 import { useSidebarCollapsed } from "@/features/hooks/use-sidebar-collapsed"
 import { gsap } from "@/features/lib/gsap"
 import { isConnectedModuleId } from "@/features/portal/module-registry"
+import {
+  SuperAdminBanner,
+  SuperAdminSwitcher,
+} from "@/features/components/portal/super-admin-switcher"
 
 interface PortalNavigationProps {
   definition: RolePortalDefinition
@@ -57,14 +61,11 @@ function NavigationLink({
   children,
   href,
   mobile = false,
-  title,
   attention = false,
 }: {
   children: ReactNode
   href: string
   mobile?: boolean
-  /** Hover hint; only set while the desktop sidebar is folded to icons. */
-  title?: string
   /** Shows a dot on the icon while the labels are folded away (a returned
       schedule would otherwise lose its "Returned" badge). */
   attention?: boolean
@@ -74,10 +75,13 @@ function NavigationLink({
   // children, so an exact comparison reproduces both cases.
   const isActive = pathname === href
 
+  // No `title` attribute: the CSS wipe-reveal pill (see globals.css) is the
+  // only hover hint now. A native title tooltip would layer its own
+  // OS-styled gray/black box on top after the browser's own hover delay,
+  // duplicating the pill with a second, differently-styled popup.
   const link = (
     <Link
       href={href}
-      title={title}
       data-attention={attention ? "true" : undefined}
       aria-current={isActive ? "page" : undefined}
       className={cn("portal-nav-link", isActive && "portal-nav-link--active")}
@@ -92,12 +96,8 @@ function NavigationLink({
 function PortalNavigation({
   definition,
   mobile = false,
-  collapsed = false,
   hasReturnedSchedule = false,
 }: PortalNavigationProps & {
-  /** Desktop sidebar folded to an icon rail: labels stay in the DOM for
-      assistive tech and are shown as a hover title. */
-  collapsed?: boolean
   hasReturnedSchedule?: boolean
 }) {
   return (
@@ -107,11 +107,7 @@ function PortalNavigation({
         mobile ? "Mobile role portal navigation" : "Role portal navigation"
       }
     >
-      <NavigationLink
-        href="/portal"
-        mobile={mobile}
-        title={collapsed ? "GRC Connect" : undefined}
-      >
+      <NavigationLink href="/portal" mobile={mobile}>
         <LayoutDashboard data-icon="inline-start" aria-hidden="true" />
         <span>GRC Connect</span>
       </NavigationLink>
@@ -125,7 +121,6 @@ function PortalNavigation({
               key={module.id}
               href={`/portal/${module.id}`}
               mobile={mobile}
-              title={collapsed ? module.label : undefined}
               attention={
                 hasReturnedSchedule && module.id === "program-chair-enrollment"
               }
@@ -277,7 +272,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
         <PortalNavigation
           definition={definition}
-          collapsed={sidebarCollapsed}
           hasReturnedSchedule={hasReturnedSchedule}
         />
 
@@ -327,6 +321,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
                 <div className="portal-mobile-sheet__body">
                   <PortalIdentity />
                   <Badge variant="secondary">GRC Connect</Badge>
+                  <SuperAdminSwitcher />
                   <PortalNavigation
                     definition={definition}
                     mobile
@@ -372,6 +367,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="portal-topbar__actions">
+            <SuperAdminSwitcher />
             <PortalNotificationSheet />
             {/* Desktop only: whenever the hamburger drawer exists (<= 64rem) it
                 carries Sign out at its bottom instead, so the bell alone takes
@@ -393,6 +389,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </Button>
           </div>
         </header>
+
+        <SuperAdminBanner />
 
         {!storageAvailable && (
           <Alert className="portal-storage-alert">

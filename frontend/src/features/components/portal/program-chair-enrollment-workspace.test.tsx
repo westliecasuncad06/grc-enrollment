@@ -518,6 +518,7 @@ function renderWorkspaceWithClient(
     signInWithGoogle: () =>
       Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
     signOut: () => undefined,
+    replaceSession: () => undefined,
     status: "authenticated",
     storageAvailable: true,
   }

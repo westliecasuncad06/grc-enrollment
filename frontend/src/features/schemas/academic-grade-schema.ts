@@ -36,7 +36,6 @@ export const academicMarkValues = [
   "3.00",
   "5.00",
   "INC",
-  "DRP",
 ] as const
 
 export const academicGradeSchema = z
@@ -84,7 +83,7 @@ const paginationMetaSchema = z
   .object({
     current_page: z.number().int().positive(),
     last_page: z.number().int().positive(),
-    per_page: z.number().int().min(1).max(100),
+    per_page: z.number().int().min(1).max(500),
     total: z.number().int().nonnegative(),
   })
   .passthrough()
@@ -106,7 +105,7 @@ export const academicGradeFiltersSchema = z
     search: z.string().optional(),
     college: z.string().optional(),
     page: z.number().int().positive().default(1),
-    per_page: z.number().int().min(1).max(100).default(20),
+    per_page: z.number().int().min(1).max(500).default(20),
   })
   .strict()
 

@@ -28,7 +28,7 @@ final class SendStaffAccountSetupInvitation
         AuditRequestContext $context,
     ): string {
         if (
-            ! in_array($staff->role, UserRole::registrarInvitableCases(), true)
+            ! in_array($staff->role, UserRole::superAdminInvitableCases(), true)
             || $staff->status !== UserStatus::Disabled
             || $staff->account_setup_completed_at !== null
         ) {
@@ -65,6 +65,7 @@ final class SendStaffAccountSetupInvitation
                 $staff->role,
                 rtrim($baseUrl, '/').'/staff-account-setup',
                 $setupCode,
+                $staff->email,
             ));
 
             $staff->forceFill([

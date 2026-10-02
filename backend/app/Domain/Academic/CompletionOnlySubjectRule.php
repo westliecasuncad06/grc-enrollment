@@ -59,7 +59,6 @@ final class CompletionOnlySubjectRule
         return [
             ...GradeMark::numericCases(),
             GradeMark::Incomplete,
-            GradeMark::Dropped,
         ];
     }
 }

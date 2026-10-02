@@ -140,7 +140,11 @@ function ScheduleBlockCard({
     const u = unitsFor(s.subject_id)
     return sum + (typeof u === "number" ? u : Number(u) || 0)
   }, 0)
-  const capacity = sections[0]?.capacity ?? 40
+  // `sections` only ever contains sections already grouped under this exact
+  // blockCode, so it is never empty in practice — but if it ever were, show
+  // that honestly rather than silently defaulting to a fake capacity of 40
+  // (Stakeholder Doc 17).
+  const capacity = sections[0]?.capacity
 
   const handleOpen = () => {
     setCalendarSection({
@@ -167,9 +171,11 @@ function ScheduleBlockCard({
 
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           <Badge variant="secondary" className="text-xs">
-            {sections.every((s) => s.capacity === sections[0].capacity)
-              ? `${capacity} seats`
-              : "Mixed seats"}
+            {capacity === undefined
+              ? "Capacity not set"
+              : sections.every((s) => s.capacity === capacity)
+                ? `${capacity} seats`
+                : "Mixed seats"}
           </Badge>
           {totalUnits > 0 && (
             <Badge variant="outline" className="text-xs">

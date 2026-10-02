@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Enrollment;
 
+use App\Actions\Academic\EvaluateCreditMappingStatus;
 use App\Actions\Enrollment\BuildEligibleSubjectPool;
 use App\Actions\Enrollment\BuildEnrollmentBlockPool;
 use App\Domain\Enrollment\EnrollmentAudience;
@@ -80,6 +81,16 @@ final class StoreEnrollmentRequest extends FormRequest
 
             if ($this->hasActiveEnrollmentThisTerm($student->id, $term->id)) {
                 $validator->errors()->add('academic_term_id', 'You already have an active enrollment for this term.');
+
+                return;
+            }
+
+            $creditMappingStatus = (new EvaluateCreditMappingStatus)->execute($student);
+            if (! $creditMappingStatus->isCompleted) {
+                $validator->errors()->add(
+                    'academic_term_id',
+                    $creditMappingStatus->reason ?? 'Credit mapping must be completed and approved before enrolling.'
+                );
 
                 return;
             }

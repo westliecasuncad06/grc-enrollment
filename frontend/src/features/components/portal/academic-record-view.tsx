@@ -35,6 +35,7 @@ import {
 import { useAcademicRecordQuery } from "@/features/hooks/use-academic-record"
 import { markTone, markToneBadgeVariant, markToneRowClass } from "@/features/lib/grade-presentation"
 import { formatYearLevel } from "@/features/lib/format-year-level"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import { cn } from "@/features/lib/utils"
 import type {
   AcademicRecord,
@@ -290,6 +291,8 @@ function AcademicRecordBody({
 
 /** The Tiles alternative to `GradeSlipDocument`'s table — same data, same print region. */
 function GradeTiles({ slip }: { slip: GradeSlip }) {
+  const rows = groupPairedSubjects(slip.rows)
+
   return (
     <PrintDocument
       title={`Grade slip — ${slip.term_label}`}
@@ -309,7 +312,7 @@ function GradeTiles({ slip }: { slip: GradeSlip }) {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {slip.rows.map((row) => {
+        {rows.map((row) => {
           const tone = markTone(row.mark)
 
           return (

@@ -46,7 +46,7 @@ final class RoleUserSeeder extends Seeder
         $this->guardEnvironment();
 
         DB::transaction(function (): void {
-            foreach (UserRole::humanCases() as $role) {
+            foreach (UserRole::seedableCases() as $role) {
                 $identity = self::IDENTITIES[$role->value]
                     ?? throw new LogicException("Missing development identity for {$role->value}.");
 

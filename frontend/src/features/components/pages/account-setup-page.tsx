@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Controller, useForm, type Resolver } from "react-hook-form"
+import { toast } from "sonner"
 
 import {
   Alert,
@@ -21,6 +22,7 @@ import {
   FieldLabel,
 } from "@/features/components/ui/field"
 import { Input } from "@/features/components/ui/input"
+import { PasswordInput } from "@/features/components/ui/password-input"
 import {
   Select,
   SelectContent,
@@ -217,12 +219,14 @@ export function AccountSetupPage({
         })
       }
       setCompleted(true)
+      toast.success("Your account is now active.")
     } catch (error) {
       if (!applyApiFieldErrors(error, setError)) {
         setRequestError(
           "The setup code could not be verified. It may be invalid, expired, or already used.",
         )
       }
+      toast.error("The setup code could not be verified.")
     }
   }
 
@@ -450,9 +454,8 @@ export function AccountSetupPage({
                     <FieldLabel htmlFor="setup-password">
                       New password
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                       id="setup-password"
-                      type="password"
                       autoComplete="new-password"
                       disabled={isSubmitting}
                       {...register("password")}
@@ -463,9 +466,8 @@ export function AccountSetupPage({
                     <FieldLabel htmlFor="setup-confirm">
                       Confirm new password
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                       id="setup-confirm"
-                      type="password"
                       autoComplete="new-password"
                       disabled={isSubmitting}
                       {...register("password_confirmation")}

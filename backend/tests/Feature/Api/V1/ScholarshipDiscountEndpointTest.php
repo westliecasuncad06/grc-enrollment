@@ -317,20 +317,25 @@ final class ScholarshipDiscountEndpointTest extends TestCase
         self::assertSame('0.00', $fees['total_scholarship_discount']);
     }
 
-    public function test_the_printed_cor_lists_the_scholarship_discount(): void
+    public function test_the_cor_snapshot_records_the_scholarship_discount_while_the_printed_cor_omits_fees(): void
     {
         $this->actAs(UserRole::AccountingStaff);
         $this->putJson($this->url(), ['percentage' => 40])->assertOk();
         $this->postJson("/api/v1/enrollments/{$this->enrollment->id}/payment", [])->assertSuccessful();
         $document = EnrollmentDocument::query()->where('enrollment_id', $this->enrollment->id)->sole();
 
+        $discount = $document->snapshot['fees']['scholarship_discount'][0] ?? null;
+        self::assertNotNull($discount);
+        self::assertSame('Scholarship discount (40%)', $discount['label']);
+        self::assertSame('-420.00', $discount['amount']);
+
         $html = view('pdf.certificate-of-registration', [
             'document' => $document,
             'snapshot' => $document->snapshot,
         ])->render();
 
-        self::assertStringContainsString('Scholarship discount (40%)', $html);
-        self::assertStringContainsString('420.00', $html);
+        // The COR is enrollment/schedule only (stakeholder Doc 16); fees live in the Statement of Account.
+        self::assertStringNotContainsString('Assessment of Fees', $html);
     }
 
     // --- Adjust fees keeps the discount consistent -----------------------------

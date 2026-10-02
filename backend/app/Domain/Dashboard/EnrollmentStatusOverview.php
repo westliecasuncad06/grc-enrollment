@@ -14,7 +14,7 @@ final readonly class EnrollmentStatusOverview
     /**
      * @param  array<string, int>  $groups  EnrollmentStatusGroup value => students
      * @param  array<string, int>  $steps  EnrollmentStatus value => students (draft through enrolled)
-     * @param  list<array{department: ?string, label: string, total: int, groups: array<string, int>}>  $departments
+     * @param  list<array{department: ?string, label: string, total: int, groups: array<string, int>, steps?: array<string, int>}>  $departments
      */
     public function __construct(
         public int $academicTermId,

@@ -5,6 +5,7 @@ import type {
   Credentials,
   LoginOtpChallenge,
 } from "@/features/auth/auth-types"
+import type { AuthenticatedUser } from "@/features/schemas/auth-schema"
 
 export interface AuthContextValue {
   session: AuthSession | null
@@ -15,6 +16,7 @@ export interface AuthContextValue {
   resendLoginOtp: (challengeToken: string) => Promise<LoginOtpChallenge>
   signInWithGoogle: (credential: string) => Promise<AuthSession>
   signOut: () => void
+  replaceSession: (user: AuthenticatedUser) => void
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

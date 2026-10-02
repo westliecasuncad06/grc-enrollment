@@ -9,6 +9,7 @@ import { z } from "zod"
 
 import { AdmissionRequirementsChecklist } from "@/features/components/portal/admission-requirements-checklist"
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
+import { DataTable, type DataTableColumn } from "@/features/components/portal/data-table"
 import { WorkspacePage } from "@/features/components/portal/workspace-page"
 import {
   Alert,
@@ -71,6 +72,10 @@ import {
   useUpdateStudentProfileMutation,
 } from "@/features/hooks/use-student-records"
 import { useProgramsQuery } from "@/features/hooks/use-reference-data"
+import {
+  deriveEnrollmentCategoryFromYearLevel,
+  deriveStudentTypeFromYearLevel,
+} from "@/features/lib/admission-defaults"
 import { applyApiFieldErrors } from "@/features/lib/api-form-errors"
 import { formatYearLevel } from "@/features/lib/format-year-level"
 import { generateStudentNumber } from "@/features/lib/student-number"
@@ -111,6 +116,7 @@ function CreateAccountPanel() {
     reset,
     setError,
     setValue,
+    watch,
   } = useForm<CreateValues>({
     resolver: zodResolver(provisionStudentSchema),
     defaultValues: {
@@ -122,19 +128,20 @@ function CreateAccountPanel() {
       address: "",
       student_number: initialStudentNumber,
       program_id: 0,
-      entry_year: new Date().getFullYear(),
       year_level: 1,
-      enrollment_category: "regular",
-      student_type: "freshman",
       financial_status: null,
       requirements_verified: false as true,
     },
   })
+  const yearLevel = watch("year_level")
 
   const submit = async (values: CreateValues) => {
     try {
       const profile = await mutation.mutateAsync(values)
       setCreated(profile)
+      toast.success(
+        `Account created and setup email sent to ${profile.email}.`,
+      )
       reset({
         ...values,
         first_name: "",
@@ -148,314 +155,329 @@ function CreateAccountPanel() {
       })
     } catch (error) {
       applyApiFieldErrors(error, setError)
+      toast.error("Failed to create the account.")
     }
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-      <Card>
-        <CardHeader>
-          <CardTitle level={2}>Create a student account</CardTitle>
-          <CardDescription>
-            Create one account only after Admission has received the
-            requirements. The curriculum is selected automatically from the
-            program and entry year.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            noValidate
-            onSubmit={(event) => void handleSubmit(submit)(event)}
-          >
-            <FieldGroup className="grid gap-4 md:grid-cols-2">
-              <Field data-invalid={Boolean(errors.first_name)}>
-                <FieldLabel htmlFor="record-first-name">First name</FieldLabel>
-                <Input id="record-first-name" {...register("first_name")} />
-                <FieldError>{errors.first_name?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.last_name)}>
-                <FieldLabel htmlFor="record-last-name">Last name</FieldLabel>
-                <Input id="record-last-name" {...register("last_name")} />
-                <FieldError>{errors.last_name?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.middle_initial)}>
-                <FieldLabel htmlFor="record-middle-initial">
-                  Middle initial
-                </FieldLabel>
-                <Input
-                  id="record-middle-initial"
-                  maxLength={10}
-                  {...register("middle_initial")}
-                />
-                <FieldDescription>Optional.</FieldDescription>
-                <FieldError>{errors.middle_initial?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.suffix)}>
-                <FieldLabel htmlFor="record-suffix">Suffix</FieldLabel>
-                <Input
-                  id="record-suffix"
-                  placeholder="Jr., Sr., III…"
-                  maxLength={20}
-                  {...register("suffix")}
-                />
-                <FieldDescription>Optional.</FieldDescription>
-                <FieldError>{errors.suffix?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.email)}>
-                <FieldLabel htmlFor="record-email">Email address</FieldLabel>
-                <Input id="record-email" type="email" {...register("email")} />
-                <FieldError>{errors.email?.message}</FieldError>
-              </Field>
-              <Field
-                className="md:col-span-2"
-                data-invalid={Boolean(errors.address)}
-              >
-                <FieldLabel htmlFor="record-address">
-                  Complete address
-                </FieldLabel>
-                <Textarea
-                  id="record-address"
-                  rows={3}
-                  {...register("address")}
-                />
-                <FieldDescription>
-                  Use the printable address for future COR records.
-                </FieldDescription>
-                <FieldError>{errors.address?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.student_number)}>
-                <FieldLabel htmlFor="record-number">Student number</FieldLabel>
-                <div className="flex gap-2">
-                  <Input id="record-number" {...register("student_number")} />
+    <div className="grid gap-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle level={2}>Create a student account</CardTitle>
+            <CardDescription>
+              Create one account only after Admission has received the
+              requirements. The curriculum is selected automatically from the
+              program and entry year.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              noValidate
+              onSubmit={(event) => void handleSubmit(submit)(event)}
+            >
+              <FieldGroup className="grid gap-4 md:grid-cols-2">
+                <Field data-invalid={Boolean(errors.first_name)}>
+                  <FieldLabel htmlFor="record-first-name">
+                    First name
+                  </FieldLabel>
+                  <Input id="record-first-name" {...register("first_name")} />
+                  <FieldError>{errors.first_name?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.last_name)}>
+                  <FieldLabel htmlFor="record-last-name">Last name</FieldLabel>
+                  <Input id="record-last-name" {...register("last_name")} />
+                  <FieldError>{errors.last_name?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.middle_initial)}>
+                  <FieldLabel htmlFor="record-middle-initial">
+                    Middle initial
+                  </FieldLabel>
+                  <Input
+                    id="record-middle-initial"
+                    maxLength={10}
+                    {...register("middle_initial")}
+                  />
+                  <FieldDescription>Optional.</FieldDescription>
+                  <FieldError>{errors.middle_initial?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.suffix)}>
+                  <FieldLabel htmlFor="record-suffix">Suffix</FieldLabel>
+                  <Input
+                    id="record-suffix"
+                    placeholder="Jr., Sr., III…"
+                    maxLength={20}
+                    {...register("suffix")}
+                  />
+                  <FieldDescription>Optional.</FieldDescription>
+                  <FieldError>{errors.suffix?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.email)}>
+                  <FieldLabel htmlFor="record-email">Email address</FieldLabel>
+                  <Input
+                    id="record-email"
+                    type="email"
+                    {...register("email")}
+                  />
+                  <FieldError>{errors.email?.message}</FieldError>
+                </Field>
+                <Field
+                  className="md:col-span-2"
+                  data-invalid={Boolean(errors.address)}
+                >
+                  <FieldLabel htmlFor="record-address">
+                    Complete address
+                  </FieldLabel>
+                  <Textarea
+                    id="record-address"
+                    rows={3}
+                    {...register("address")}
+                  />
+                  <FieldDescription>
+                    Use the printable address for future COR records.
+                  </FieldDescription>
+                  <FieldError>{errors.address?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.student_number)}>
+                  <FieldLabel htmlFor="record-number">
+                    Student number
+                  </FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="record-number"
+                      readOnly
+                      {...register("student_number")}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setValue("student_number", generateStudentNumber(), {
+                          shouldValidate: true,
+                        })
+                      }
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                  <FieldDescription>
+                    Generated automatically — it can&apos;t be typed in.
+                  </FieldDescription>
+                  <FieldError>{errors.student_number?.message}</FieldError>
+                </Field>
+                <Field data-invalid={Boolean(errors.program_id)}>
+                  <FieldLabel htmlFor="record-program">Program</FieldLabel>
+                  <Controller
+                    control={control}
+                    name="program_id"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ? String(field.value) : ""}
+                        onValueChange={(value) => field.onChange(Number(value))}
+                      >
+                        <SelectTrigger id="record-program" className="w-full">
+                          <SelectValue placeholder="Select a program" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(programsQuery.data ?? []).map((program) => (
+                            <SelectItem
+                              key={program.id}
+                              value={String(program.id)}
+                            >
+                              {program.code} — {program.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError>{errors.program_id?.message}</FieldError>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="record-year-level">
+                    Year level
+                  </FieldLabel>
+                  <Controller
+                    control={control}
+                    name="year_level"
+                    render={({ field }) => (
+                      <Select
+                        value={String(field.value)}
+                        onValueChange={(v) => field.onChange(Number(v))}
+                      >
+                        <SelectTrigger
+                          id="record-year-level"
+                          className="w-full"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {YEAR_LEVEL_OPTIONS.map((year) => (
+                            <SelectItem key={year} value={String(year)}>
+                              {formatYearLevel(year)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Enrollment category</FieldLabel>
+                  <Badge variant="outline" className="w-fit">
+                    {deriveEnrollmentCategoryFromYearLevel(yearLevel) ===
+                    "regular"
+                      ? "Regular"
+                      : "Irregular"}
+                  </Badge>
+                  <FieldDescription>
+                    Set automatically from year level.
+                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel>Student type</FieldLabel>
+                  <Badge variant="outline" className="w-fit">
+                    {deriveStudentTypeFromYearLevel(yearLevel) === "freshman"
+                      ? "Freshman"
+                      : "Transferee"}
+                  </Badge>
+                  <FieldDescription>
+                    Set automatically from year level.
+                  </FieldDescription>
+                </Field>
+                <Field
+                  className="md:col-span-2"
+                  data-invalid={Boolean(errors.requirements_verified)}
+                >
+                  <div className="flex items-start gap-3 rounded-md border p-4">
+                    <Controller
+                      control={control}
+                      name="requirements_verified"
+                      render={({ field }) => (
+                        <Checkbox
+                          id="requirements-verified"
+                          checked={field.value}
+                          onCheckedChange={(checked) =>
+                            field.onChange(checked === true)
+                          }
+                        />
+                      )}
+                    />
+                    <div>
+                      <FieldLabel htmlFor="requirements-verified">
+                        Requirements submitted and verified
+                      </FieldLabel>
+                      <FieldDescription>
+                        I confirm that Admission received the student&apos;s
+                        requirements.
+                      </FieldDescription>
+                    </div>
+                  </div>
+                  <FieldError>
+                    {errors.requirements_verified?.message}
+                  </FieldError>
+                </Field>
+                {mutation.isError && (
+                  <Alert className="md:col-span-2" variant="destructive">
+                    <AlertTitle>Account not created</AlertTitle>
+                    <AlertDescription>
+                      Review the form details and try again. No duplicate
+                      account was created.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="md:col-span-2">
+                  <Button
+                    type="submit"
+                    disabled={mutation.isPending || programsQuery.isPending}
+                  >
+                    <UserRoundPlus aria-hidden="true" />
+                    {mutation.isPending
+                      ? "Creating account…"
+                      : "Create account and email setup"}
+                  </Button>
+                </div>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle level={2}>Account setup delivery</CardTitle>
+            <CardDescription>
+              No temporary password is displayed. The student receives a
+              one-time code by email.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {created ? (
+              <>
+                <div className="flex items-center gap-2">
+                  {created.invitation_delivery_status === "failed" ? (
+                    <MailWarning
+                      aria-hidden="true"
+                      className="text-destructive"
+                    />
+                  ) : (
+                    <CheckCircle2 aria-hidden="true" className="text-success" />
+                  )}
+                  <strong>{created.name}</strong>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {created.student_number}
+                </p>
+                <InvitationStatus profile={created} />
+                {created.account_setup_status === "pending" && (
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={resend.isPending}
                     onClick={() =>
-                      setValue("student_number", generateStudentNumber(), {
-                        shouldValidate: true,
-                      })
+                      void resend
+                        .mutateAsync(created.id)
+                        .then((updated) => {
+                          setCreated(updated)
+                          toast.success(
+                            `Setup email resent to ${updated.email}`,
+                          )
+                        })
+                        .catch(() => {
+                          toast.error("Failed to resend setup email.")
+                        })
                     }
                   >
-                    Generate
+                    {resend.isPending ? "Resending…" : "Resend setup email"}
                   </Button>
-                </div>
-                <FieldError>{errors.student_number?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.program_id)}>
-                <FieldLabel htmlFor="record-program">Program</FieldLabel>
-                <Controller
-                  control={control}
-                  name="program_id"
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ? String(field.value) : ""}
-                      onValueChange={(value) => field.onChange(Number(value))}
-                    >
-                      <SelectTrigger id="record-program" className="w-full">
-                        <SelectValue placeholder="Select a program" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(programsQuery.data ?? []).map((program) => (
-                          <SelectItem
-                            key={program.id}
-                            value={String(program.id)}
-                          >
-                            {program.code} — {program.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError>{errors.program_id?.message}</FieldError>
-              </Field>
-              <Field data-invalid={Boolean(errors.entry_year)}>
-                <FieldLabel htmlFor="record-entry-year">Entry year</FieldLabel>
-                <Input
-                  id="record-entry-year"
-                  type="number"
-                  {...register("entry_year", { valueAsNumber: true })}
-                />
-                <FieldError>{errors.entry_year?.message}</FieldError>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="record-year-level">Year level</FieldLabel>
-                <Controller
-                  control={control}
-                  name="year_level"
-                  render={({ field }) => (
-                    <Select
-                      value={String(field.value)}
-                      onValueChange={(v) => field.onChange(Number(v))}
-                    >
-                      <SelectTrigger id="record-year-level" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {YEAR_LEVEL_OPTIONS.map((year) => (
-                          <SelectItem key={year} value={String(year)}>
-                            {formatYearLevel(year)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="record-category">
-                  Enrollment category
-                </FieldLabel>
-                <Controller
-                  control={control}
-                  name="enrollment_category"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="record-category" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="regular">Regular</SelectItem>
-                        <SelectItem value="irregular">Irregular</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
-              <Field data-invalid={Boolean(errors.student_type)}>
-                <FieldLabel htmlFor="record-student-type">
-                  Student type
-                </FieldLabel>
-                <Controller
-                  control={control}
-                  name="student_type"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger
-                        id="record-student-type"
-                        className="w-full"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="freshman">Freshman</SelectItem>
-                        <SelectItem value="transferee">Transferee</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError>{errors.student_type?.message}</FieldError>
-              </Field>
-              <Field
-                className="md:col-span-2"
-                data-invalid={Boolean(errors.requirements_verified)}
-              >
-                <div className="flex items-start gap-3 rounded-md border p-4">
-                  <Controller
-                    control={control}
-                    name="requirements_verified"
-                    render={({ field }) => (
-                      <Checkbox
-                        id="requirements-verified"
-                        checked={field.value}
-                        onCheckedChange={(checked) =>
-                          field.onChange(checked === true)
-                        }
-                      />
-                    )}
-                  />
-                  <div>
-                    <FieldLabel htmlFor="requirements-verified">
-                      Requirements submitted and verified
-                    </FieldLabel>
-                    <FieldDescription>
-                      I confirm that Admission received the student&apos;s
-                      requirements.
-                    </FieldDescription>
-                  </div>
-                </div>
-                <FieldError>{errors.requirements_verified?.message}</FieldError>
-              </Field>
-              {mutation.isError && (
-                <Alert className="md:col-span-2" variant="destructive">
-                  <AlertTitle>Account not created</AlertTitle>
-                  <AlertDescription>
-                    Review the form details and try again. No duplicate account
-                    was created.
-                  </AlertDescription>
-                </Alert>
-              )}
-              <div className="md:col-span-2">
-                <Button
-                  type="submit"
-                  disabled={mutation.isPending || programsQuery.isPending}
-                >
-                  <UserRoundPlus aria-hidden="true" />
-                  {mutation.isPending
-                    ? "Creating account…"
-                    : "Create account and email setup"}
-                </Button>
-              </div>
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle level={2}>Account setup delivery</CardTitle>
-          <CardDescription>
-            No temporary password is displayed. The student receives a one-time
-            code by email.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {created ? (
-            <>
-              <div className="flex items-center gap-2">
-                {created.invitation_delivery_status === "failed" ? (
-                  <MailWarning
-                    aria-hidden="true"
-                    className="text-destructive"
-                  />
-                ) : (
-                  <CheckCircle2 aria-hidden="true" className="text-success" />
                 )}
-                <strong>{created.name}</strong>
-              </div>
+              </>
+            ) : (
               <p className="text-sm text-muted-foreground">
-                {created.student_number}
+                The latest account&apos;s invitation and activation state will
+                appear here.
               </p>
-              <InvitationStatus profile={created} />
-              {created.account_setup_status === "pending" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={resend.isPending}
-                  onClick={() =>
-                    void resend
-                      .mutateAsync(created.id)
-                      .then((updated) => {
-                        setCreated(updated)
-                        toast.success(`Setup email resent to ${updated.email}`)
-                      })
-                      .catch(() => {
-                        toast.error("Failed to resend setup email.")
-                      })
-                  }
-                >
-                  {resend.isPending ? "Resending…" : "Resend setup email"}
-                </Button>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              The latest account&apos;s invitation and activation state will
-              appear here.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      {created && (
+        <Card>
+          <CardHeader>
+            <CardTitle level={2}>Admission requirements</CardTitle>
+            <CardDescription>
+              Check off {created.name}&apos;s documents as they come in. This is
+              the same list shown in the student&apos;s own Admission page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdmissionRequirementsChecklist
+              key={created.id}
+              studentId={created.id}
+              editable
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
@@ -473,9 +495,11 @@ function StudentRecordDialog({
   const programsQuery = useProgramsQuery()
   const update = useUpdateStudentProfileMutation()
   const resend = useResendAccountSetupInvitationMutation()
-  const { control, handleSubmit, register, reset } = useForm<EditValues>({
-    resolver: zodResolver(editSchema),
-  })
+  const { control, handleSubmit, register, reset, watch } =
+    useForm<EditValues>({
+      resolver: zodResolver(editSchema),
+    })
+  const yearLevel = watch("year_level") ?? profile?.year_level ?? 1
 
   useEffect(() => {
     if (!profile) return
@@ -490,13 +514,7 @@ function StudentRecordDialog({
         ? {
             student_number: profile.student_number,
             program_id: profile.program_id,
-            entry_year: profile.entry_year ?? new Date().getFullYear(),
             year_level: profile.year_level,
-            enrollment_category: profile.enrollment_category ?? "regular",
-            // Never a silent guess: a null value here means the checklist can only show the
-            // Additional requirements (not knowing Freshman vs Transferee), so the Select must
-            // show that it is genuinely unset rather than defaulting to "Freshman" unnoticed.
-            student_type: profile.student_type ?? undefined,
             admission_status: profile.admission_status,
           }
         : {}),
@@ -575,7 +593,11 @@ function StudentRecordDialog({
                     <FieldLabel htmlFor="edit-number">
                       Student number
                     </FieldLabel>
-                    <Input id="edit-number" {...register("student_number")} />
+                    <Input
+                      id="edit-number"
+                      readOnly
+                      {...register("student_number")}
+                    />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="edit-program">Program</FieldLabel>
@@ -607,14 +629,6 @@ function StudentRecordDialog({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="edit-entry">Entry year</FieldLabel>
-                    <Input
-                      id="edit-entry"
-                      type="number"
-                      {...register("entry_year", { valueAsNumber: true })}
-                    />
-                  </Field>
-                  <Field>
                     <FieldLabel htmlFor="edit-level">Year level</FieldLabel>
                     <Input
                       id="edit-level"
@@ -625,56 +639,27 @@ function StudentRecordDialog({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="edit-category">
-                      Enrollment category
-                    </FieldLabel>
-                    <Controller
-                      control={control}
-                      name="enrollment_category"
-                      render={({ field }) => (
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <SelectTrigger id="edit-category" className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="regular">Regular</SelectItem>
-                            <SelectItem value="irregular">Irregular</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <FieldLabel>Enrollment category</FieldLabel>
+                    <Badge variant="outline" className="w-fit">
+                      {deriveEnrollmentCategoryFromYearLevel(yearLevel) ===
+                      "regular"
+                        ? "Regular"
+                        : "Irregular"}
+                    </Badge>
+                    <FieldDescription>
+                      Set automatically from year level.
+                    </FieldDescription>
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="edit-student-type">
-                      Student type
-                    </FieldLabel>
-                    <Controller
-                      control={control}
-                      name="student_type"
-                      render={({ field }) => (
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <SelectTrigger
-                            id="edit-student-type"
-                            className="w-full"
-                            aria-invalid={field.value === undefined}
-                          >
-                            <SelectValue placeholder="Not yet set — pick one to complete the requirements checklist" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="freshman">Freshman</SelectItem>
-                            <SelectItem value="transferee">
-                              Transferee
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <FieldLabel>Student type</FieldLabel>
+                    <Badge variant="outline" className="w-fit">
+                      {deriveStudentTypeFromYearLevel(yearLevel) === "freshman"
+                        ? "Freshman"
+                        : "Transferee"}
+                    </Badge>
+                    <FieldDescription>
+                      Set automatically from year level.
+                    </FieldDescription>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="edit-admission">
@@ -706,9 +691,11 @@ function StudentRecordDialog({
               ) : (
                 <Alert className="md:col-span-2">
                   <AlertDescription>
-                    Student number, program, entry year, year level, category,
-                    student type, and admission status are locked because this
-                    student already has an enrollment.
+                    Student number, program, year level, and admission status
+                    are locked because this student already has an
+                    enrollment. Entry year, enrollment category, and student
+                    type are always set automatically and are never directly
+                    editable.
                   </AlertDescription>
                 </Alert>
               )}
@@ -801,6 +788,79 @@ function StudentDirectoryPanel() {
   const query = useStudentDirectoryQuery({ search, page: 1, per_page: 50 })
   const resend = useResendAccountSetupInvitationMutation()
 
+  const columns: DataTableColumn<StudentProfile>[] = [
+    {
+      key: "student",
+      header: "Student",
+      render: (profile) => (
+        <div>
+          <button
+            type="button"
+            className="text-left font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => setSelected(profile)}
+          >
+            {profile.name}
+          </button>
+          <div className="whitespace-normal text-xs text-muted-foreground">
+            {profile.student_number} · {profile.email}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "program",
+      header: "Program",
+      render: (profile) => profile.program_code,
+    },
+    {
+      key: "type",
+      header: "Type",
+      render: (profile) => profile.student_type_label ?? "—",
+    },
+    {
+      key: "account",
+      header: "Account",
+      render: (profile) => <InvitationStatus profile={profile} />,
+    },
+    {
+      key: "action",
+      header: "Action",
+      render: (profile) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSelected(profile)}
+          >
+            View / edit
+          </Button>
+          {profile.account_setup_status === "pending" && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={resendingId === profile.id || resend.isPending}
+              onClick={async () => {
+                setResendingId(profile.id)
+                try {
+                  const updated = await resend.mutateAsync(profile.id)
+                  toast.success(`Setup email resent to ${updated.email}`)
+                } catch {
+                  toast.error("Failed to resend setup email.")
+                } finally {
+                  setResendingId(null)
+                }
+              }}
+            >
+              {resendingId === profile.id ? "Resending…" : "Resend email"}
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ]
+
   return (
     <Card>
       <CardHeader>
@@ -834,81 +894,12 @@ function StudentDirectoryPanel() {
           emptyMessage="No student records matched this search."
         >
           {(page) => (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Program</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.data.map((profile) => (
-                  <TableRow key={profile.id}>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="text-left font-medium text-primary underline-offset-4 hover:underline"
-                        onClick={() => setSelected(profile)}
-                      >
-                        {profile.name}
-                      </button>
-                      <div className="text-xs text-muted-foreground">
-                        {profile.student_number} · {profile.email}
-                      </div>
-                    </TableCell>
-                    <TableCell>{profile.program_code}</TableCell>
-                    <TableCell>{profile.student_type_label ?? "—"}</TableCell>
-                    <TableCell>
-                      <InvitationStatus profile={profile} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelected(profile)}
-                        >
-                          View / edit
-                        </Button>
-                        {profile.account_setup_status === "pending" && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={
-                              resendingId === profile.id || resend.isPending
-                            }
-                            onClick={async () => {
-                              setResendingId(profile.id)
-                              try {
-                                const updated = await resend.mutateAsync(
-                                  profile.id,
-                                )
-                                toast.success(
-                                  `Setup email resent to ${updated.email}`,
-                                )
-                              } catch {
-                                toast.error("Failed to resend setup email.")
-                              } finally {
-                                setResendingId(null)
-                              }
-                            }}
-                          >
-                            {resendingId === profile.id
-                              ? "Resending…"
-                              : "Resend email"}
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              caption="Student directory"
+              columns={columns}
+              rows={page.data}
+              rowKey={(profile) => profile.id}
+            />
           )}
         </AsyncBoundary>
         <StudentRecordDialog

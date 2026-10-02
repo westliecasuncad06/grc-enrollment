@@ -35,7 +35,7 @@ final class ActivateStaffAccount
 
         if (
             ! $candidate instanceof User
-            || ! in_array($candidate->role, UserRole::registrarInvitableCases(), true)
+            || ! in_array($candidate->role, UserRole::superAdminInvitableCases(), true)
             || $candidate->status !== UserStatus::Disabled
             || $candidate->account_setup_completed_at !== null
         ) {
@@ -52,7 +52,7 @@ final class ActivateStaffAccount
             $locked = User::query()->whereKey($candidate->id)->lockForUpdate()->firstOrFail();
 
             if (
-                ! in_array($locked->role, UserRole::registrarInvitableCases(), true)
+                ! in_array($locked->role, UserRole::superAdminInvitableCases(), true)
                 || $locked->status !== UserStatus::Disabled
                 || $locked->account_setup_completed_at !== null
                 || ! $this->setupCodes->consume($locked)
@@ -67,7 +67,7 @@ final class ActivateStaffAccount
                 'account_setup_completed_at' => now(),
             ];
 
-            if ($college !== null) {
+            if ($locked->college === null && $college !== null) {
                 $attributes['college'] = $college;
             }
 

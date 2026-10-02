@@ -55,6 +55,7 @@ import {
   hasScheduleConflict,
 } from "@/features/lib/schedule-order"
 import {
+  evaluateScheduleFit,
   generateScheduleRecommendation,
   type RecommendationMode,
 } from "@/features/lib/schedule-recommendation"
@@ -203,6 +204,44 @@ function columns(
           subject.subject_id,
           paired?.subject_id,
         )
+        const othersSections = others.map((o) => o.section)
+
+        const pairedOptionFor = (
+          option: EligibleSection,
+        ): EligibleSection | undefined =>
+          paired?.available_sections.find(
+            (p) => p.section_code === option.section_code,
+          )
+
+        // Stakeholder Doc 17: a manual choice that would spread the
+        // student's schedule beyond 1-2 days, or across more than one
+        // time-of-day block, is disabled with a reason — unless it is the
+        // only remaining option for this subject, in which case it stays
+        // enabled with a non-blocking warning instead, so no student is
+        // ever left with zero way to complete their schedule. This is a
+        // narrow, explicit exception to the advisory-only design described
+        // in SchedulePreferenceScorer.
+        const fitsSchedule = (option: EligibleSection): boolean => {
+          const matchingPaired = pairedOptionFor(option)
+          const combined = matchingPaired
+            ? [...othersSections, option, matchingPaired]
+            : [...othersSections, option]
+          return !evaluateScheduleFit(combined).violatesFit
+        }
+        const nonConflictingOptions = subject.available_sections.filter(
+          (option) => {
+            if (conflictingSubjectCode(option, others) !== null) return false
+            const matchingPaired = pairedOptionFor(option)
+            if (
+              matchingPaired &&
+              conflictingSubjectCode(matchingPaired, others) !== null
+            ) {
+              return false
+            }
+            return true
+          },
+        )
+        const hasFittingAlternative = nonConflictingOptions.some(fitsSchedule)
 
         return (
           <div className="grid gap-2">
@@ -246,11 +285,24 @@ function columns(
                     recommendedSectionId !== undefined &&
                     option.id === recommendedSectionId
 
+                  let fitNote = ""
+                  let disableForFit = false
+                  if (conflictsWith === null && !fitsSchedule(option)) {
+                    if (hasFittingAlternative) {
+                      disableForFit = true
+                      fitNote =
+                        " · Outside a 1–2 day / single time-block schedule"
+                    } else {
+                      fitNote =
+                        " · ⚠ Only option available — outside a 1–2 day / single time-block schedule"
+                    }
+                  }
+
                   return (
                     <SelectItem
                       key={option.id}
                       value={String(option.id)}
-                      disabled={conflictsWith !== null}
+                      disabled={conflictsWith !== null || disableForFit}
                     >
                       {isOptionRecommended ? "★ Recommended · " : ""}
                       Section {option.section_code}
@@ -268,6 +320,7 @@ function columns(
                       {conflictsWith
                         ? ` · Conflicts with ${conflictsWith}`
                         : ""}
+                      {fitNote}
                     </SelectItem>
                   )
                 })}

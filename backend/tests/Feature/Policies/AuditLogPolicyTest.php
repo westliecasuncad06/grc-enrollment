@@ -27,7 +27,7 @@ final class AuditLogPolicyTest extends TestCase
                 'role' => $role,
                 'status' => UserStatus::Active,
             ]);
-            $expected = $role === UserRole::RegistrarHead;
+            $expected = in_array($role, [UserRole::RegistrarHead, UserRole::SuperAdmin], true);
 
             self::assertSame($expected, $policy->viewAny($user), $role->value.' viewAny result');
             self::assertSame($expected, $policy->view($user, $auditLog), $role->value.' view result');

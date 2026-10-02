@@ -9,7 +9,11 @@ import { AuthProvider } from "@/features/auth/auth-context"
 import { createBrowserAuthTokenStore } from "@/features/auth/auth-token"
 import { createAppQueryClient } from "@/features/lib/query-client"
 import { Toaster } from "@/features/components/ui/toaster"
-import { setAuthTokenProvider } from "@/features/services/api-client"
+import { browserActingContextStore } from "@/features/auth/acting-context-store"
+import {
+  setActingContextProvider,
+  setAuthTokenProvider,
+} from "@/features/services/api-client"
 
 /**
  * The application's composition root, replacing Vite's `main.tsx`.
@@ -42,6 +46,7 @@ function PortalAuthProvider({ children }: { children: ReactNode }) {
     // itself (auth-context.tsx), since clearing the token alone would leave a
     // stale authenticated view rendered — it also needs to flip React state.
     setAuthTokenProvider(() => tokenStore.read())
+    setActingContextProvider(() => browserActingContextStore.getHeaderValue())
 
     return createApiAuthGateway(tokenStore)
   })

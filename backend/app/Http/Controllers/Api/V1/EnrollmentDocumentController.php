@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Enrollment\BuildCorSnapshot;
 use App\Actions\Enrollment\ListEnrollmentDocuments;
+use App\Domain\Enrollment\CorDisplay;
 use App\Domain\Enrollment\EnrollmentDocumentType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\EnrollmentDocument\IndexEnrollmentDocumentRequest;
@@ -72,8 +73,10 @@ final class EnrollmentDocumentController extends Controller
             'snapshot' => $enrollmentDocument->snapshot,
         ])->setPaper('a4', 'portrait');
 
-        $documentNumber = $enrollmentDocument->certificateNumber();
-        $fileName = sprintf('COR-%s.pdf', preg_replace('/[^a-zA-Z0-9_-]/', '_', $documentNumber));
+        $fileName = CorDisplay::downloadFilename(
+            $enrollmentDocument->snapshot['student']['name'] ?? 'Student',
+            $enrollmentDocument->generated_at,
+        );
 
         return response($pdf->output(), 200, [
             'Content-Type' => 'application/pdf',

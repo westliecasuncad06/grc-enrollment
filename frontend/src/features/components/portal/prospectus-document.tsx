@@ -1,5 +1,8 @@
 "use client"
 
+import { useState } from "react"
+import { ChevronRight } from "lucide-react"
+
 import { AsyncBoundary } from "@/features/components/portal/async-boundary"
 import {
   PrintButton,
@@ -24,6 +27,7 @@ import {
   markToneBadgeVariant,
   markToneRowClass,
 } from "@/features/lib/grade-presentation"
+import { groupPairedSubjects } from "@/features/lib/group-paired-subjects"
 import { cn } from "@/features/lib/utils"
 import type { ProspectusSemester } from "@/features/schemas/academic-record-schema"
 
@@ -202,6 +206,7 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
                       <SemesterTable
                         key={`${semester.year_level}-${semester.semester}`}
                         semester={semester}
+                        isPhone={isPhone}
                       />
                     ))}
                   </div>
@@ -243,7 +248,21 @@ export function ProspectusDocument({ studentId }: { studentId?: number }) {
   )
 }
 
-function SemesterTable({ semester }: { semester: ProspectusSemester }) {
+function SemesterTable({
+  semester,
+  isPhone,
+}: {
+  semester: ProspectusSemester
+  isPhone: boolean
+}) {
+  // On a phone, a subject's Pre-requisite and Status stay collapsed until
+  // tapped — Code, Title, Units, and Grade are the ones a student actually
+  // scans for at a glance (stakeholder Doc 16). The cells still exist in the
+  // DOM, just empty, so `td:empty { display: none }` in globals.css hides
+  // them without any extra mobile-only CSS.
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
+  const entries = groupPairedSubjects(semester.entries)
+
   return (
     <div className="mb-4">
       <Table className="caption-top" data-stack-mobile>
@@ -261,8 +280,9 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {semester.entries.map((entry) => {
+          {entries.map((entry) => {
             const tone = markTone(entry.mark)
+            const detailsShown = !isPhone || expanded.has(entry.subject_id)
 
             return (
               <TableRow
@@ -270,7 +290,35 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
                 className={cn("print:bg-transparent", markToneRowClass(tone))}
               >
                 <TableCell data-stack="full">
-                  {entry.code}
+                  {isPhone ? (
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-1.5 text-left"
+                      aria-expanded={detailsShown}
+                      onClick={() =>
+                        setExpanded((current) => {
+                          const next = new Set(current)
+                          if (next.has(entry.subject_id)) {
+                            next.delete(entry.subject_id)
+                          } else {
+                            next.add(entry.subject_id)
+                          }
+                          return next
+                        })
+                      }
+                    >
+                      <ChevronRight
+                        aria-hidden="true"
+                        className={cn(
+                          "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                          detailsShown && "rotate-90",
+                        )}
+                      />
+                      {entry.code}
+                    </button>
+                  ) : (
+                    entry.code
+                  )}
                   {entry.offered_either_semester && (
                     <Badge variant="outline" className="ml-2 print:hidden">
                       1st/2nd Sem
@@ -279,16 +327,19 @@ function SemesterTable({ semester }: { semester: ProspectusSemester }) {
                 </TableCell>
                 <TableCell data-stack="full">{entry.title}</TableCell>
                 <TableCell data-label="Pre-requisite">
-                  {entry.prerequisites.length > 0
-                    ? entry.prerequisites.map((p) => p.code).join(", ")
-                    : "—"}
+                  {detailsShown &&
+                    (entry.prerequisites.length > 0
+                      ? entry.prerequisites.map((p) => p.code).join(", ")
+                      : "—")}
                 </TableCell>
                 <TableCell data-label="Units">{entry.units}</TableCell>
                 <TableCell data-label="Grade">{entry.mark ?? "—"}</TableCell>
                 <TableCell data-label="Status">
-                  <Badge variant={markToneBadgeVariant(tone)}>
-                    {entry.status_label ?? "Not taken"}
-                  </Badge>
+                  {detailsShown && (
+                    <Badge variant={markToneBadgeVariant(tone)}>
+                      {entry.status_label ?? "Not taken"}
+                    </Badge>
+                  )}
                 </TableCell>
               </TableRow>
             )

@@ -376,7 +376,26 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('Content-Type'));
-        $this->assertStringContainsString('filename="COR-', (string) $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('filename="COR_', (string) $response->headers->get('Content-Disposition'));
+    }
+
+    public function test_the_downloaded_cor_pdf_filename_carries_the_students_name_and_date(): void
+    {
+        $term = $this->makeTerm();
+        $curriculum = $this->makeCurriculum();
+        $student = $this->makeStudent($curriculum, 'student.pdffilename@grc.test', '2026-0208');
+        $document = $this->makeDocument($student, $term);
+        $document->forceFill(['generated_at' => '2026-10-01 03:29:28'])->save();
+
+        $response = $this->withToken($this->tokenFor($student->user))
+            ->get("/api/v1/enrollment-documents/{$document->id}/pdf");
+
+        $response->assertOk();
+        $expectedSlug = preg_replace('/[^A-Za-z0-9]+/', '_', $student->user->name);
+        $this->assertStringContainsString(
+            "filename=\"COR_{$expectedSlug}_2026-10-01.pdf\"",
+            (string) $response->headers->get('Content-Disposition'),
+        );
     }
 
     public function test_the_cor_pdf_view_uses_the_approved_labels_and_the_ordinal_year_level(): void
@@ -425,7 +444,7 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
         $this->assertStringContainsString("font-family: 'DejaVu Sans', sans-serif;", $html);
     }
 
-    public function test_the_printed_cor_is_the_bill_only_with_no_payment_or_balance(): void
+    public function test_the_printed_cor_has_no_fees_payment_or_balance(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
@@ -436,22 +455,25 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
             ->getJson("/api/v1/enrollment-documents/{$document->id}")
             ->assertOk()
             ->json('data.snapshot');
-        // A snapshot that does carry payment figures must still not print them.
+        // A snapshot that does carry fee/payment figures must still not print them.
         $snapshot['fees']['amount_paid'] = '1000.00';
         $snapshot['fees']['remaining_balance'] = '500.00';
 
         $html = view('pdf.certificate-of-registration', ['document' => $document, 'snapshot' => $snapshot])->render();
 
-        $this->assertStringContainsString('GRAND TOTAL', $html);
+        // The COR is enrollment/schedule only (stakeholder Doc 16); fees live in the
+        // Statement of Account, not on this document at all.
+        $this->assertStringNotContainsString('Assessment of Fees', $html);
+        $this->assertStringNotContainsString('GRAND TOTAL', $html);
         $this->assertStringNotContainsString('AMOUNT PAID', $html);
         $this->assertStringNotContainsString('REMAINING BALANCE', $html);
     }
 
-    public function test_the_student_signs_above_the_cashier_and_registrar_who_sign_level_with_each_other(): void
+    public function test_cashier_student_and_registrar_sign_in_one_flat_row(): void
     {
         $term = $this->makeTerm();
         $curriculum = $this->makeCurriculum();
-        $student = $this->makeStudent($curriculum, 'student.pdftriangle@grc.test', '2026-0207');
+        $student = $this->makeStudent($curriculum, 'student.pdfsignatures@grc.test', '2026-0207');
         $document = $this->makeDocument($student, $term);
         $snapshot = $this->withToken($this->tokenFor($student->user))
             ->getJson("/api/v1/enrollment-documents/{$document->id}")
@@ -460,11 +482,21 @@ final class EnrollmentDocumentsEndpointTest extends TestCase
 
         $html = view('pdf.certificate-of-registration', ['document' => $document, 'snapshot' => $snapshot])->render();
 
-        $studentRow = strpos($html, 'class="signature-student ');
-        $cashierRegistrarRow = strpos($html, 'class="signature-table ');
-        self::assertNotFalse($studentRow);
-        self::assertNotFalse($cashierRegistrarRow);
-        self::assertLessThan($cashierRegistrarRow, $studentRow, 'The student signature block must come before the Cashier/Registrar row.');
+        // Matches the on-screen/browser-print COR exactly: Cashier, Student, and
+        // Registrar sign level with each other in a single row, not a stacked
+        // "student above, Cashier/Registrar below" layout (stakeholder Doc 16).
+        $this->assertStringNotContainsString('signature-student', $html);
+        $signatureRow = strpos($html, 'class="signature-table ');
+        self::assertNotFalse($signatureRow);
+        $cashierPosition = strpos($html, 'Cashier</div>');
+        $studentPosition = strpos($html, "Student's Signature Over Printed Name</div>");
+        $registrarPosition = strpos($html, 'Registrar</div>');
+        self::assertNotFalse($cashierPosition);
+        self::assertNotFalse($studentPosition);
+        self::assertNotFalse($registrarPosition);
+        self::assertGreaterThan($signatureRow, $cashierPosition);
+        self::assertGreaterThan($cashierPosition, $studentPosition, 'Cashier must come before the Student in the signature row.');
+        self::assertGreaterThan($studentPosition, $registrarPosition, 'Student must come before the Registrar in the signature row.');
     }
 
     public function test_a_student_cannot_download_another_students_cor_pdf(): void

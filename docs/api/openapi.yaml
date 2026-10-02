@@ -6765,6 +6765,7 @@ components:
             - accounting_staff
             - it_admin
             - queue_kiosk
+            - super_admin
         role_label:
           type: string
         college:
@@ -7429,6 +7430,9 @@ components:
         - actor_name
         - actor_role
         - actor_role_label
+        - acting_role
+        - acting_role_label
+        - acting_college
         - action
         - auditable_type
         - auditable_id
@@ -7464,8 +7468,22 @@ components:
             - registrar_head
             - registrar_staff
             - accounting_staff
+            - queue_kiosk
+            - super_admin
         actor_role_label:
           type: string
+        acting_role:
+          type:
+            - string
+            - "null"
+        acting_role_label:
+          type:
+            - string
+            - "null"
+        acting_college:
+          type:
+            - string
+            - "null"
         action:
           type: string
         auditable_type:

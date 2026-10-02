@@ -21,6 +21,16 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
 {
     private const TOUCH_INTERVAL_SECONDS = 300;
 
+    /** @var list<string> */
+    protected $fillable = [
+        'name',
+        'token',
+        'abilities',
+        'expires_at',
+        'acting_role',
+        'acting_college',
+    ];
+
     /**
      * @param  array<string, mixed>  $options
      */

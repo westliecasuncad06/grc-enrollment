@@ -6,12 +6,14 @@ use App\Domain\Audit\AuditableType;
 use App\Domain\Audit\AuditAction;
 use App\Domain\Audit\AuditRequestContext;
 use App\Domain\Curriculum\CurriculumVersion;
-use App\Domain\Enrollment\EnrollmentCategory;
 use App\Domain\Identity\AcademicStanding;
+use App\Domain\Identity\AdmissionIntakeDefaults;
 use App\Domain\Identity\AdmissionStatus;
 use App\Domain\Identity\PersonName;
 use App\Domain\Identity\UserRole;
 use App\Domain\Identity\UserStatus;
+use App\Domain\Organization\AcademicTermStatus;
+use App\Models\AcademicTerm;
 use App\Models\Curriculum;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -31,7 +33,7 @@ final class ProvisionStudent
     public function __construct(private readonly AuditRecorder $auditRecorder) {}
 
     /**
-     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, entry_year: int, year_level: int, enrollment_category?: ?string, student_type: string, financial_status?: ?string}  $data
+     * @param  array{first_name: string, middle_initial?: ?string, last_name: string, suffix?: ?string, email: string, address: string, student_number: string, program_id: int, year_level: int, financial_status?: ?string}  $data
      */
     public function handle(
         array $data,
@@ -39,12 +41,23 @@ final class ProvisionStudent
         AuditRequestContext $context,
     ): StudentProfile {
         return DB::transaction(function () use ($data, $actor, $context): StudentProfile {
+            $currentTerm = AcademicTerm::query()
+                ->where('status', AcademicTermStatus::SemesterOngoing)
+                ->first();
+            if ($currentTerm === null) {
+                throw ValidationException::withMessages([
+                    'entry_year' => 'No academic term is currently ongoing; entry year cannot be determined.',
+                ]);
+            }
+            $entryYear = (int) substr($currentTerm->school_year, 0, 4);
+            $yearLevel = (int) $data['year_level'];
+
             $curriculum = CurriculumVersion::resolveForEntryYear(
                 Curriculum::query()
                     ->where('program_id', $data['program_id'])
                     ->orderByDesc('effective_start_year')
                     ->get(),
-                $data['entry_year'],
+                $entryYear,
             );
             if ($curriculum === null) {
                 throw ValidationException::withMessages([
@@ -75,13 +88,14 @@ final class ProvisionStudent
                 'student_number' => $data['student_number'],
                 'program_id' => $data['program_id'],
                 'curriculum_id' => $curriculum->id,
-                'entry_year' => $data['entry_year'],
-                'year_level' => $data['year_level'],
-                // Defaults to regular so a provisioned student always has an
-                // explicit category; only an irregular one takes the
-                // per-subject enrollment path.
-                'enrollment_category' => $data['enrollment_category'] ?? EnrollmentCategory::Regular->value,
-                'student_type' => $data['student_type'],
+                'entry_year' => $entryYear,
+                'year_level' => $yearLevel,
+                // Provisioning defaults only (Stakeholder Doc 17) — never
+                // written to enrollment_category_derived_at, which is
+                // reserved for ADR 0021's separate, later, grade-based
+                // per-term reclassification.
+                'enrollment_category' => AdmissionIntakeDefaults::enrollmentCategoryFor($yearLevel)->value,
+                'student_type' => AdmissionIntakeDefaults::studentTypeFor($yearLevel)->value,
                 'admission_status' => AdmissionStatus::Admitted,
                 'academic_standing' => AcademicStanding::Good,
                 'financial_status' => $data['financial_status'] ?? null,

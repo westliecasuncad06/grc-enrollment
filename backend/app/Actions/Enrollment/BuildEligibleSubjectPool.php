@@ -2,7 +2,9 @@
 
 namespace App\Actions\Enrollment;
 
+use App\Actions\Academic\EvaluateCreditMappingStatus;
 use App\Actions\Academic\ResolveCreditedSubjectIds;
+use App\Domain\Academic\CreditMappingStatusResult;
 use App\Domain\Academic\GradeStatus;
 use App\Domain\Academic\PrerequisiteEvaluator;
 use App\Domain\Academic\PrerequisiteVerdict;
@@ -128,8 +130,12 @@ final readonly class BuildEligibleSubjectPool
             true,
         );
 
+        // Transferee and returnee students must complete credit mapping / curriculum
+        // migration before enrollment can proceed.
+        $creditMappingStatus = (new EvaluateCreditMappingStatus)->execute($student);
+
         return array_values(array_map(
-            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference, $creditedSubjectIds, $waivedSubjectIds),
+            fn (CurriculumSubject $placement): EligibleSubjectEntry => $this->evaluatePlacement($student, $term, $placement, $context, $preference, $creditedSubjectIds, $waivedSubjectIds, $creditMappingStatus),
             $placements->all(),
         ));
     }
@@ -146,10 +152,19 @@ final readonly class BuildEligibleSubjectPool
         ?StudentSchedulePreference $preference,
         array $creditedSubjectIds,
         array $waivedSubjectIds = [],
+        ?CreditMappingStatusResult $creditMappingStatus = null,
     ): EligibleSubjectEntry {
         /** @var list<array{code: string, message: string}> $reasons */
         $reasons = [];
         $excluded = false;
+
+        if ($creditMappingStatus !== null && ! $creditMappingStatus->isCompleted) {
+            $reasons[] = [
+                'code' => 'credit_mapping_pending',
+                'message' => $creditMappingStatus->reason ?? 'Credit mapping must be completed and approved before enrolling.',
+            ];
+            $excluded = true;
+        }
 
         $siblingSubjectIds = $this->siblingSubjectIds($placement->subject);
 

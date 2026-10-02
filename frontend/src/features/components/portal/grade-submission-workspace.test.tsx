@@ -3,10 +3,15 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
-import { GradeSubmissionWorkspace } from "@/features/components/portal/grade-submission-workspace"
+import {
+  GradeSubmissionWorkspace,
+  parseGradesCsv,
+  downloadCsvTemplate,
+} from "@/features/components/portal/grade-submission-workspace"
 import type {
   GradeSectionSummary,
   SectionGradeRow,
+  SectionGradeSheet,
 } from "@/features/schemas/section-grade-schema"
 import { renderWithSession } from "@/tests/render-app"
 
@@ -623,5 +628,71 @@ describe("GradeSubmissionWorkspace", () => {
 
     await openClass(user)
     expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("renders Download CSV Template and Upload Grades CSV buttons on editable grade sheets", async () => {
+    stubSectionGradeRoutes(fetchMock)
+    const user = userEvent.setup()
+    renderWithSession(<GradeSubmissionWorkspace />, {
+      session: facultySession,
+    })
+
+    await openClass(user)
+    expect(
+      screen.getByRole("button", { name: /Download CSV Template/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Upload Grades \(CSV\)/i }),
+    ).toBeInTheDocument()
+  })
+
+  it("parses CSV grades accurately, normalizes marks, and excludes invalid marks such as DRP", () => {
+    const testSheet = gradeSheet() as SectionGradeSheet
+    const allowedMarks = ["1.00", "1.25", "1.50", "1.75", "2.00", "2.25", "2.50", "2.75", "3.00", "5.00", "INC"] as const
+
+    const csvContent = [
+      "Student Number,Student Name,Grade,Remarks",
+      '"2026-0001","Lovelace, Ada",1.25,"Excellent work"',
+      '"2026-0002","Hopper, Grace",DRP,"Dropped"',
+      '"9999-9999","Unknown Student",2.00,"Not in section"',
+    ].join("\n")
+
+    const result = parseGradesCsv(csvContent, testSheet, allowedMarks)
+
+    // Ada Lovelace (student_id: 20) should be matched and set to 1.25
+    expect(result.matchedCount).toBe(1)
+    expect(result.drafts[20]).toEqual({
+      mark: "1.25",
+      remarks: "Excellent work",
+    })
+
+    // Grace Hopper had "DRP" which is not in allowedMarks -> invalidCount
+    expect(result.invalidCount).toBe(1)
+    expect(result.drafts[21]).toBeUndefined()
+
+    // Unknown student -> unmatchedCount
+    expect(result.unmatchedCount).toBe(1)
+  })
+
+  it("generates a downloadable CSV template with enrolled students", () => {
+    const testSheet = gradeSheet() as SectionGradeSheet
+    const createObjectURLMock = vi.fn().mockReturnValue("blob:test")
+    const revokeObjectURLMock = vi.fn()
+    window.URL.createObjectURL = createObjectURLMock
+    window.URL.revokeObjectURL = revokeObjectURLMock
+
+    const clickMock = vi.fn()
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag)
+      if (tag === "a") {
+        el.click = clickMock
+      }
+      return el
+    })
+
+    downloadCsvTemplate(testSheet, {})
+    expect(createObjectURLMock).toHaveBeenCalled()
+    expect(clickMock).toHaveBeenCalled()
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:test")
   })
 })

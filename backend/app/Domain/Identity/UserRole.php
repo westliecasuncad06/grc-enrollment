@@ -15,6 +15,7 @@ enum UserRole: string
     case AccountingStaff = 'accounting_staff';
     case ItAdmin = 'it_admin';
     case QueueKiosk = 'queue_kiosk';
+    case SuperAdmin = 'super_admin';
 
     public function label(): string
     {
@@ -30,6 +31,7 @@ enum UserRole: string
             self::AccountingStaff => 'Accounting Staff',
             self::ItAdmin => 'IT Control',
             self::QueueKiosk => 'Queue Kiosk',
+            self::SuperAdmin => 'Super Admin',
         };
     }
 
@@ -50,7 +52,8 @@ enum UserRole: string
             self::RegistrarHead,
             self::RegistrarStaff,
             self::ItAdmin,
-            self::QueueKiosk => false,
+            self::QueueKiosk,
+            self::SuperAdmin => false,
         };
     }
 
@@ -68,6 +71,62 @@ enum UserRole: string
             self::cases(),
             static fn (self $role): bool => ! $role->isDevice(),
         ));
+    }
+
+    /**
+     * Roles populated with standard seed identities during local development
+     * and automated testing. Excludes SuperAdmin, which is only provisioned
+     * via CLI command.
+     *
+     * @return list<self>
+     */
+    public static function seedableCases(): array
+    {
+        return array_values(array_filter(
+            self::humanCases(),
+            static fn (self $role): bool => $role !== self::SuperAdmin,
+        ));
+    }
+
+    /**
+     * The 8 offices a Super Admin can switch into and act as.
+     *
+     * @return list<self>
+     */
+    public static function superAdminSwitchableCases(): array
+    {
+        return [
+            self::AdmissionStaff,
+            self::ProgramChair,
+            self::Dean,
+            self::ExecutiveDirector,
+            self::RegistrarHead,
+            self::RegistrarStaff,
+            self::AccountingStaff,
+            self::ItAdmin,
+        ];
+    }
+
+    /**
+     * Every role a Super Admin may create an account for through Accounts & Access:
+     * the 8 Registrar-invitable roles plus Admission Staff.
+     *
+     * @return list<self>
+     */
+    public static function superAdminInvitableCases(): array
+    {
+        return [
+            self::AdmissionStaff,
+            ...self::registrarInvitableCases(),
+        ];
+    }
+
+    /**
+     * Determines whether a college is required when acting as the given role.
+     */
+    public static function collegeRequiredWhenActing(self $role): bool
+    {
+        return in_array($role, [self::ProgramChair, self::Dean], true);
     }
 
     /**

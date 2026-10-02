@@ -104,34 +104,6 @@
             letter-spacing: 0.08em;
         }
 
-        /* Assessment Box */
-        .assessment-box {
-            border: 0.75pt solid #222;
-            padding: 3.5pt 5pt;
-            margin-top: 4pt;
-        }
-        .fee-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 6.7pt;
-        }
-        .fee-table td {
-            padding: 0.8pt 1.5pt;
-        }
-        .fee-subtotal {
-            border-top: 0.75pt solid #000;
-            font-weight: bold;
-            font-size: 7pt;
-        }
-        .grand-total {
-            border-top: 1.5pt solid #000;
-            border-bottom: 2.5pt double #000;
-            font-weight: bold;
-            font-size: 8.2pt;
-            padding: 2pt 0;
-            margin-top: 3pt;
-        }
-
         /* Page 2: Reference Bar */
         .reference-bar {
             width: 100%;
@@ -157,30 +129,16 @@
             margin-bottom: 3.5pt;
             text-align: justify;
         }
-        /* Student signs above; Cashier and Registrar sign level with each other below, so the three
-           names read as a triangle with the student at the point, not three names in one flat row.
-           DomPDF's `margin: auto` centering on tables is unreliable, so the student row is centered
-           with two empty flanking cells instead — a plain table width/text-align it always honors. */
-        .signature-student {
-            width: 100%;
-            margin-top: 28pt;
-            border-collapse: collapse;
-        }
-        .signature-student td {
-            width: 30%;
-        }
-        .signature-student td.signature-student-cell {
-            width: 40%;
-            text-align: center;
-        }
+        /* Cashier, Student, and Registrar sign in one flat row — matches the on-screen and
+           browser-print COR exactly (`.cor-document__signatures` in globals.css). */
         .signature-table {
             width: 100%;
-            margin-top: 20pt;
+            margin-top: 28pt;
             text-align: center;
             border-collapse: collapse;
         }
         .signature-table td {
-            width: 50%;
+            width: 33.33%;
             padding: 0 8pt;
             vertical-align: bottom;
         }
@@ -278,74 +236,9 @@
                 <div>{{ \App\Domain\Enrollment\CorDisplay::sentence($snapshot['admission_certification']) }}</div>
             </div>
         @endif
-
-        <div class="assessment-box avoid-break">
-            <div class="text-center font-bold uppercase" style="font-size: 7.2pt; border-bottom: 0.5pt solid #999; padding-bottom: 2pt; margin-bottom: 3pt;">
-                Assessment of Fees
-            </div>
-            <table width="100%" style="border-collapse: collapse;">
-                <tr>
-                    <td width="48%" style="vertical-align: top;">
-                        <div class="font-bold uppercase" style="font-size: 6.8pt; border-bottom: 0.5pt solid #ccc; margin-bottom: 2pt; padding-bottom: 1pt;">Tuition Fees</div>
-                        <table class="fee-table">
-                            @foreach ($snapshot['fees']['tuition'] as $fee)
-                                <tr>
-                                    <td>
-                                        {{ $fee['label'] }}
-                                        @if (!empty($fee['quantity']) && !empty($fee['unit_amount']) && (float)$fee['unit_amount'] > 0)
-                                            <span style="color: #555;">({{ $fee['quantity'] }} units @ &#8369;{{ number_format((float)$fee['unit_amount'], 2) }})</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-right">&#8369;{{ number_format((float) $fee['amount'], 2) }}</td>
-                                </tr>
-                            @endforeach
-                            <tr class="fee-subtotal">
-                                <td>Total Tuition Fees:</td>
-                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['total_tuition'], 2) }}</td>
-                            </tr>
-                        </table>
-                    </td>
-                    <td width="4%"></td>
-                    <td width="48%" style="vertical-align: top;">
-                        <div class="font-bold uppercase" style="font-size: 6.8pt; border-bottom: 0.5pt solid #ccc; margin-bottom: 2pt; padding-bottom: 1pt;">Other / Misc Fees</div>
-                        <table class="fee-table">
-                            @foreach ($snapshot['fees']['other_fees'] as $fee)
-                                <tr>
-                                    <td>{{ $fee['label'] }}</td>
-                                    <td class="text-right">&#8369;{{ number_format((float) $fee['amount'], 2) }}</td>
-                                </tr>
-                            @endforeach
-                            <tr class="fee-subtotal">
-                                <td>Total Other Fees:</td>
-                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['total_other_fees'], 2) }}</td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-
-            <table width="100%" style="margin-top: 3pt;">
-                <tr>
-                    <td width="55%"></td>
-                    <td width="45%">
-                        <table class="fee-table grand-total">
-                            @foreach (($snapshot['fees']['scholarship_discount'] ?? []) as $discount)
-                            <tr style="color: #047857;">
-                                <td>{{ $discount['label'] }}:</td>
-                                <td class="text-right">-&#8369;{{ number_format(abs((float) $discount['amount']), 2) }}</td>
-                            </tr>
-                            @endforeach
-                            <tr>
-                                <td>GRAND TOTAL:</td>
-                                <td class="text-right">&#8369;{{ number_format((float) $snapshot['fees']['grand_total'], 2) }}</td>
-                            </tr>
-                            {{-- The COR is the bill only. What was paid and what is still owed belongs to the Statement of Account. --}}
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </div>
     </div>
+    {{-- Fees, payments, and balance are deliberately not on the COR (stakeholder Doc 16) —
+         they live in the Statement of Account. --}}
 
     {{-- ======================== PAGE 2: TERMS AND SIGNATURES ======================== --}}
     <div class="page">
@@ -375,21 +268,15 @@
             </ol>
         </div>
 
-        <table class="signature-student avoid-break">
-            <tr>
-                <td></td>
-                <td class="signature-student-cell">
-                    <div class="signature-line">{{ $snapshot['student']['name'] }}</div>
-                    <div class="signature-title">Student's Signature Over Printed Name</div>
-                </td>
-                <td></td>
-            </tr>
-        </table>
         <table class="signature-table avoid-break">
             <tr>
                 <td>
                     <div class="signature-line">{{ $snapshot['signatories']['cashier'] ?? 'CASHIER' }}</div>
                     <div class="signature-title">Cashier</div>
+                </td>
+                <td>
+                    <div class="signature-line">{{ $snapshot['student']['name'] }}</div>
+                    <div class="signature-title">Student's Signature Over Printed Name</div>
                 </td>
                 <td>
                     <div class="signature-line">{{ $snapshot['signatories']['registrar'] ?? 'REGISTRAR' }}</div>
@@ -399,7 +286,7 @@
         </table>
 
         <div class="footer-note">
-            Generated {{ \Carbon\Carbon::parse($document->generated_at)->format('m/d/Y, h:i:s A') }} &middot; {{ $document->document_number }}
+            Generated {{ \App\Domain\Enrollment\CorDisplay::generatedAt($document->generated_at) }} &middot; {{ $document->document_number }}
         </div>
     </div>
 

@@ -44,6 +44,8 @@ const cor = {
     total_units: "3.00",
     admission_certification:
       "This is to certify that Test Student is cleared and enrolled.",
+    // Still present in the snapshot (other consumers like Statement of
+    // Account may read it later); the COR itself must never render it.
     fees: {
       currency: "PHP",
       tuition: [
@@ -75,7 +77,7 @@ const cor = {
 } satisfies CertificateOfRegistration & { snapshot: CorSnapshot }
 
 describe("CertificateOfRegistrationDocument", () => {
-  it("renders the official two-page COR record with subjects, assessment, and terms", () => {
+  it("renders the official two-page COR record with subjects and terms", () => {
     render(<CertificateOfRegistrationDocument cor={cor} />)
 
     expect(screen.getAllByText("CERTIFICATE OF REGISTRATION")).toHaveLength(2)
@@ -83,12 +85,6 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(
       screen.queryByRole("columnheader", { name: "Room" }),
     ).not.toBeInTheDocument()
-    expect(screen.getByText("ASSESSMENT OF FEES")).toBeInTheDocument()
-    expect(
-      screen.getByText("Guidance and Counseling and Student Affair"),
-    ).toBeInTheDocument()
-    expect(screen.getByText("Library Fee")).toBeInTheDocument()
-    expect(screen.getByText("GRAND TOTAL")).toBeInTheDocument()
     expect(
       screen.getByText("TERMS AND CONDITIONS GOVERNING WITHDRAWAL"),
     ).toBeInTheDocument()
@@ -96,7 +92,7 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(screen.getByText("COR000009")).toBeInTheDocument()
   })
 
-  it("shows the bill only: no payment, remaining balance or promissory note, even when the snapshot carries them", () => {
+  it("never shows fees, payment, or balance — that belongs to the Statement of Account (stakeholder Doc 16)", () => {
     const withPayment = {
       ...cor,
       snapshot: {
@@ -112,12 +108,23 @@ describe("CertificateOfRegistrationDocument", () => {
     }
     render(<CertificateOfRegistrationDocument cor={withPayment} />)
 
-    expect(screen.getByText("GRAND TOTAL")).toBeInTheDocument()
+    expect(screen.queryByText("ASSESSMENT OF FEES")).not.toBeInTheDocument()
+    expect(screen.queryByText("GRAND TOTAL")).not.toBeInTheDocument()
+    expect(screen.queryByText("Registration")).not.toBeInTheDocument()
     expect(screen.queryByText(/Amount Paid/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Remaining Balance/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Payment Status|PAID IN FULL/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Promissory/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/OR-EP000001/)).not.toBeInTheDocument()
+  })
+
+  it("shows the Generated timestamp in Asia/Manila time regardless of the viewer's own timezone", () => {
+    render(<CertificateOfRegistrationDocument cor={cor} />)
+
+    // 2026-07-30T00:00:00Z is 8:00 AM in Asia/Manila (UTC+8).
+    expect(
+      screen.getByText(/Generated 7\/30\/2026, 8:00:00 AM/),
+    ).toBeInTheDocument()
   })
 
   it("uses the approved labels and the ordinal year level, even for a legacy 'Year N' snapshot", () => {
@@ -150,44 +157,5 @@ describe("CertificateOfRegistrationDocument", () => {
     expect(
       screen.getByText(/BS Information Technology, 4th Year\./),
     ).toBeInTheDocument()
-  })
-
-  it("lists a scholarship discount above the grand total, which is already the net", () => {
-    const discounted = {
-      ...cor,
-      snapshot: {
-        ...cor.snapshot,
-        fees: {
-          ...cor.snapshot.fees,
-          scholarship_discount: [
-            {
-              label: "Scholarship discount (40%)",
-              quantity: "40.0",
-              unit_amount: null,
-              amount: "-1160.00",
-            },
-          ],
-          total_scholarship_discount: "-1160.00",
-          grand_total: "1740.00",
-          payment_amount: "1740.00",
-        },
-      },
-    } satisfies CertificateOfRegistration & { snapshot: CorSnapshot }
-
-    render(<CertificateOfRegistrationDocument cor={discounted} />)
-
-    const discount = screen.getByLabelText("Scholarship discount")
-    expect(discount).toHaveTextContent("Scholarship discount (40%)")
-    expect(discount).toHaveTextContent(/[-\u2212]\s?₱1,160\.00/)
-    expect(screen.getByText("GRAND TOTAL")).toBeInTheDocument()
-    expect(screen.getAllByText("₱1,740.00").length).toBeGreaterThan(0)
-  })
-
-  it("shows no scholarship section for a COR generated without a discount", () => {
-    render(<CertificateOfRegistrationDocument cor={cor} />)
-
-    expect(
-      screen.queryByLabelText("Scholarship discount"),
-    ).not.toBeInTheDocument()
   })
 })

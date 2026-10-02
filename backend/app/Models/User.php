@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Identity\ActingContext;
 use App\Domain\Identity\FacultyEmploymentType;
 use App\Domain\Identity\PersonName;
 use App\Domain\Identity\UserRole;
@@ -138,5 +139,49 @@ final class User extends Authenticatable implements CanResetPasswordContract
     public function studentProfile(): HasOne
     {
         return $this->hasOne(StudentProfile::class);
+    }
+
+    private ?ActingContext $actingContext = null;
+
+    public function isSuperAdmin(): bool
+    {
+        // reads the RAW stored value, bypassing any override below
+        return $this->getRawOriginal('role') === UserRole::SuperAdmin->value;
+    }
+
+    public function actingContext(): ?ActingContext
+    {
+        return $this->actingContext;
+    }
+
+    public function applyActingContext(?ActingContext $context): void
+    {
+        $this->actingContext = $context;
+    }
+
+    public function getAttributeValue($key)
+    {
+        if ($this->actingContext !== null) {
+            if ($key === 'role') {
+                return $this->actingContext->role;
+            }
+            if ($key === 'college') {
+                return $this->actingContext->college;
+            }
+        }
+
+        return parent::getAttributeValue($key);
+    }
+
+    public function attributesToArray()
+    {
+        $attributes = parent::attributesToArray();
+
+        if ($this->actingContext !== null) {
+            $attributes['role'] = $this->actingContext->role->value;
+            $attributes['college'] = $this->actingContext->college?->value;
+        }
+
+        return $attributes;
     }
 }

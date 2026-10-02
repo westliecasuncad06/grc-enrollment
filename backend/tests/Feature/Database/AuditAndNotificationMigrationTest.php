@@ -19,7 +19,7 @@ final class AuditAndNotificationMigrationTest extends TestCase
     {
         $this->assertTrue(Schema::hasTable('audit_logs'));
         $this->assertSame([
-            'id', 'actor_user_id', 'action', 'auditable_type', 'auditable_id',
+            'id', 'actor_user_id', 'acting_role', 'acting_college', 'action', 'auditable_type', 'auditable_id',
             'before_values', 'after_values', 'reason', 'request_id', 'ip_address',
             'created_at', 'updated_at',
         ], Schema::getColumnListing('audit_logs'));

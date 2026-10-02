@@ -111,7 +111,7 @@ export function AdvancePaymentWorkspace() {
   const account = accountQuery.data
 
   const handleOpenPayeeDialog = () => {
-    setPayeeAmount("1000")
+    setPayeeAmount("")
     setPayeeAmountError("")
     setPayeeDialogOpen(true)
   }
@@ -119,8 +119,8 @@ export function AdvancePaymentWorkspace() {
   const handleConfirmPayeePayment = async () => {
     if (!studentId || !student) return
     const numericAmount = Number(payeeAmount)
-    if (isNaN(numericAmount) || numericAmount < 1000) {
-      setPayeeAmountError("Payee advance payment requires a minimum of ₱1,000.00.")
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      setPayeeAmountError("Please enter a valid advance payment amount.")
       return
     }
 
@@ -387,7 +387,6 @@ export function AdvancePaymentWorkspace() {
             <DialogTitle>Record Payee Advance Payment</DialogTitle>
             <DialogDescription>
               Enter the advance payment amount for {student?.student_name}.
-              Advance payment requires an institutional minimum of ₱1,000.00.
             </DialogDescription>
           </DialogHeader>
 
@@ -399,24 +398,24 @@ export function AdvancePaymentWorkspace() {
               <Input
                 id="payee-advance-amount"
                 type="number"
-                min="1000"
+                min="1"
                 step="50"
                 value={payeeAmount}
                 onChange={(e) => {
                   setPayeeAmount(e.target.value)
-                  if (Number(e.target.value) >= 1000) {
+                  if (Number(e.target.value) > 0) {
                     setPayeeAmountError("")
                   }
                 }}
-                placeholder="1000.00"
+                placeholder="0.00"
               />
               <FieldDescription>
-                Minimum deposit: ₱1,000.00. Payments are allocated to outstanding balances first, with any excess credited as Advance Payment.
+                Payments are allocated to outstanding balances first, with any excess credited as Advance Payment.
               </FieldDescription>
               {payeeAmountError && <FieldError>{payeeAmountError}</FieldError>}
             </Field>
 
-            {Number(payeeAmount) >= 1000 && (
+            {Number(payeeAmount) > 0 && (
               <div className="rounded-lg border bg-muted/40 p-3 text-xs space-y-1.5">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Deposit entered:</span>
@@ -440,7 +439,7 @@ export function AdvancePaymentWorkspace() {
             </Button>
             <Button
               type="button"
-              disabled={recordPaymentMutation.isPending || !payeeAmount || Number(payeeAmount) < 1000}
+              disabled={recordPaymentMutation.isPending || !payeeAmount || Number(payeeAmount) <= 0}
               onClick={() => void handleConfirmPayeePayment()}
             >
               {recordPaymentMutation.isPending ? "Recording…" : "Confirm Advance Payment"}

@@ -464,7 +464,9 @@ describe("RegistrarEnrollmentWorkspace", () => {
       subjects: [
         {
           section_id: 55,
+          subject_id: 550,
           subject_code: "CS101",
+          paired_subject_id: null,
           subject_title: "Programming 1",
           status: "selected",
           status_label: "Selected",
@@ -877,7 +879,9 @@ describe("RegistrarEnrollmentWorkspace", () => {
       subjects: [
         {
           section_id: 88,
+          subject_id: 880,
           subject_code: "IT101",
+          paired_subject_id: null,
           subject_title: "Intro to IT",
           status: "selected",
           status_label: "Selected",

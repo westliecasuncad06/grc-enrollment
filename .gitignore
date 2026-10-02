@@ -64,4 +64,5 @@ desktop.ini
 *.sql
 /backend/database/backups/
 /frontend/scripts/*.json
-
+CLAUDE_PROMPT.md
+CLAUDE_HANDOFF.md

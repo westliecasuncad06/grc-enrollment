@@ -65,7 +65,7 @@ final class CompletionOnlySubjectRuleTest extends TestCase
         self::assertSame(['C', 'INC'], array_column($allowed, 'value'));
     }
 
-    public function test_allowed_marks_for_an_academic_subject_is_numeric_plus_inc_and_drp_never_c_or_nc(): void
+    public function test_allowed_marks_for_an_academic_subject_is_numeric_plus_inc_never_drp_c_or_nc(): void
     {
         $allowed = CompletionOnlySubjectRule::allowedMarks('CS101', self::PREFIXES);
         $values = array_column($allowed, 'value');
@@ -73,10 +73,10 @@ final class CompletionOnlySubjectRuleTest extends TestCase
         self::assertContains('1.00', $values);
         self::assertContains('5.00', $values);
         self::assertContains('INC', $values);
-        self::assertContains('DRP', $values);
+        self::assertNotContains('DRP', $values);
         self::assertNotContains('C', $values);
         self::assertNotContains('NC', $values);
-        self::assertCount(12, $allowed);
+        self::assertCount(11, $allowed);
     }
 
     public function test_allowed_marks_come_from_grade_mark_case_sets(): void

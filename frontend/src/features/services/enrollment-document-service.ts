@@ -1,3 +1,4 @@
+import { corDownloadFilename } from "@/features/lib/format-generated-at"
 import {
   enrollmentDocumentFiltersSchema,
   certificateOfRegistrationResponseSchema,
@@ -68,7 +69,8 @@ export async function getCertificateOfRegistration(
 
 export async function downloadEnrollmentDocumentPdf(
   id: number,
-  documentNumber: string,
+  studentName: string,
+  generatedAt: string,
   signal?: AbortSignal,
 ): Promise<void> {
   const blob = await getAuthenticatedBlob(
@@ -78,7 +80,7 @@ export async function downloadEnrollmentDocumentPdf(
   const url = window.URL.createObjectURL(blob)
   const anchor = document.createElement("a")
   anchor.href = url
-  anchor.download = `COR-${documentNumber.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`
+  anchor.download = corDownloadFilename(studentName, generatedAt)
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()

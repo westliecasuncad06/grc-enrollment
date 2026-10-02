@@ -150,6 +150,45 @@ function buildChoiceItems(
   return items
 }
 
+export interface ScheduleFitResult {
+  distinctDays: number[]
+  /** True when the combined set spans more than `maxDays` distinct days. */
+  exceedsDayLimit: boolean
+  /** True when the set has at least one section scoring into the morning
+   * block and at least one scoring into the afternoon/evening block. */
+  mixesTimeBlocks: boolean
+  violatesFit: boolean
+}
+
+/**
+ * Whether a set of sections a student would end up with fits the "1-2 days,
+ * one time-of-day block" shape (Stakeholder Doc 17). Reuses the same
+ * morning/afternoon scoring `generateScheduleRecommendation`'s "morning"/
+ * "afternoon" presets already use, rather than inventing a third
+ * classification the UI doesn't otherwise expose.
+ */
+export function evaluateScheduleFit(
+  sections: readonly EligibleSection[],
+  maxDays = 2,
+): ScheduleFitResult {
+  const distinctDays = [
+    ...new Set(sections.flatMap((section) => computeSectionScores(section).days)),
+  ]
+  const scores = sections.map((section) => computeSectionScores(section))
+  const hasMorning = scores.some((score) => score.morningScore > 0)
+  const hasAfternoon = scores.some((score) => score.afternoonScore > 0)
+
+  const exceedsDayLimit = distinctDays.length > maxDays
+  const mixesTimeBlocks = hasMorning && hasAfternoon
+
+  return {
+    distinctDays,
+    exceedsDayLimit,
+    mixesTimeBlocks,
+    violatesFit: exceedsDayLimit || mixesTimeBlocks,
+  }
+}
+
 /**
  * Generates conflict-free schedule recommendations for irregular students.
  * Supports 3 modes:

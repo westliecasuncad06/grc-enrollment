@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { axe } from "vitest-axe"
 
@@ -394,6 +395,46 @@ describe("ProspectusDocument", () => {
       )
       expect(labelled).toEqual(["Pre-requisite", "Units", "Grade", "Status"])
       expect(row.closest("table")).toHaveAttribute("data-stack-mobile")
+    })
+
+    it("collapses a subject's pre-requisite and status on a phone until tapped", async () => {
+      stubViewport(true)
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify(prospectusFixture())),
+      )
+      const user = userEvent.setup()
+
+      renderWithSession(<ProspectusDocument />)
+
+      const takenRow = (await screen.findByText("CS101")).closest("tr")!
+      const toggle = within(takenRow).getByRole("button", { name: /CS101/ })
+      expect(toggle).toHaveAttribute("aria-expanded", "false")
+      // Units and Grade — the "glanceable" fields — show immediately.
+      expect(within(takenRow).getByText("3")).toBeInTheDocument()
+      expect(within(takenRow).getByText("1.50")).toBeInTheDocument()
+      // Pre-requisite and Status stay collapsed until the row is tapped.
+      expect(within(takenRow).queryByText("CS100")).not.toBeInTheDocument()
+      expect(within(takenRow).queryByText("Locked")).not.toBeInTheDocument()
+
+      await user.click(toggle)
+
+      expect(toggle).toHaveAttribute("aria-expanded", "true")
+      expect(within(takenRow).getByText("CS100")).toBeInTheDocument()
+      expect(within(takenRow).getByText("Locked")).toBeInTheDocument()
+    })
+
+    it("shows every subject field immediately on a wide screen, with no tap needed", async () => {
+      stubViewport(false)
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify(prospectusFixture())),
+      )
+
+      renderWithSession(<ProspectusDocument />)
+
+      const takenRow = (await screen.findByText("CS101")).closest("tr")!
+      expect(within(takenRow).queryByRole("button")).not.toBeInTheDocument()
+      expect(within(takenRow).getByText("CS100")).toBeInTheDocument()
+      expect(within(takenRow).getByText("Locked")).toBeInTheDocument()
     })
   })
 })

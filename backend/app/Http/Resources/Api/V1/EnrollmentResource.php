@@ -59,7 +59,9 @@ final class EnrollmentResource extends JsonResource
      *     subjects: list<array{
      *         section_id: int,
      *         section_code: string,
+     *         subject_id: int,
      *         subject_code: string,
+     *         paired_subject_id: ?int,
      *         subject_title: string,
      *         units: float,
      *         schedule_days: ?string,
@@ -125,7 +127,9 @@ final class EnrollmentResource extends JsonResource
                     ->map(fn (EnrollmentSubject $enrollmentSubject): array => [
                         'section_id' => $enrollmentSubject->section_id,
                         'section_code' => $enrollmentSubject->section->section_code,
+                        'subject_id' => $enrollmentSubject->section->subject_id,
                         'subject_code' => $enrollmentSubject->section->subject->code,
+                        'paired_subject_id' => $enrollmentSubject->section->subject->paired_subject_id,
                         'subject_title' => $enrollmentSubject->section->subject->title,
                         'units' => (float) $enrollmentSubject->section->subject->units,
                         'schedule_days' => $enrollmentSubject->section->schedule_days,

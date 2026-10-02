@@ -35,7 +35,9 @@ const enrolledSubjectsFixture = [
   {
     section_id: 11,
     section_code: "IT101",
+    subject_id: 501,
     subject_code: "CS101",
+    paired_subject_id: null as number | null,
     subject_title: "Introduction to Computing",
     units: 3,
     schedule_days: "MWF",
@@ -50,7 +52,9 @@ const enrolledSubjectsFixture = [
   {
     section_id: 12,
     section_code: "IT101",
+    subject_id: 502,
     subject_code: "GE101",
+    paired_subject_id: null,
     subject_title: "Understanding the Self",
     units: 3,
     schedule_days: "TTh",
@@ -59,6 +63,60 @@ const enrolledSubjectsFixture = [
     room: "R201",
     modality: "f2f" as const,
     professor_name: "Prof. Reyes",
+    status: "enrolled" as const,
+    status_label: "Enrolled",
+  },
+]
+
+const lecLabSubjectsFixture = [
+  {
+    section_id: 21,
+    section_code: "IT201",
+    subject_id: 601,
+    subject_code: "ITP1 LEC",
+    paired_subject_id: 602,
+    subject_title: "Platform Technologies Lecture",
+    units: 2,
+    schedule_days: "M",
+    starts_at_time: "08:00:00",
+    ends_at_time: "09:00:00",
+    room: "R301",
+    modality: "f2f" as const,
+    professor_name: "Dr. Cruz",
+    status: "enrolled" as const,
+    status_label: "Enrolled",
+  },
+  {
+    section_id: 22,
+    section_code: "IT101",
+    subject_id: 502,
+    subject_code: "GE101",
+    paired_subject_id: null,
+    subject_title: "Understanding the Self",
+    units: 3,
+    schedule_days: "TTh",
+    starts_at_time: "10:00:00",
+    ends_at_time: "11:30:00",
+    room: "R201",
+    modality: "f2f" as const,
+    professor_name: "Prof. Reyes",
+    status: "enrolled" as const,
+    status_label: "Enrolled",
+  },
+  {
+    section_id: 23,
+    section_code: "IT201",
+    subject_id: 602,
+    subject_code: "ITP1 LAB",
+    paired_subject_id: 601,
+    subject_title: "Platform Technologies Laboratory",
+    units: 1,
+    schedule_days: "F",
+    starts_at_time: "13:00:00",
+    ends_at_time: "15:00:00",
+    room: "LAB-2",
+    modality: "f2f" as const,
+    professor_name: "Dr. Cruz",
     status: "enrolled" as const,
     status_label: "Enrolled",
   },
@@ -206,5 +264,30 @@ describe("StudentScheduleWorkspace", () => {
     expect(within(table).getByText("Understanding the Self")).toBeInTheDocument()
     expect(within(table).getByText("LAB-1")).toBeInTheDocument()
     expect(within(table).getByText("R201")).toBeInTheDocument()
+  })
+
+  it("keeps a LEC immediately followed by its paired LAB in the table view, regardless of schedule order", async () => {
+    mockFetchRoutes([
+      { ...enrollmentFixture.data[0], subjects: lecLabSubjectsFixture },
+    ])
+    const user = userEvent.setup()
+    renderWithSession(<StudentScheduleWorkspace />, { session: studentSession })
+
+    await screen.findByText("6 units")
+    await user.click(screen.getByRole("radio", { name: "Schedule list" }))
+    const table = await screen.findByRole("table", {
+      name: "Student weekly class schedule",
+    })
+
+    const rowLabels = within(table)
+      .getAllByRole("row")
+      .map((row) => row.textContent ?? "")
+    const lecIndex = rowLabels.findIndex((text) => text.includes("ITP1 LEC"))
+    const labIndex = rowLabels.findIndex((text) => text.includes("ITP1 LAB"))
+    const ge101Index = rowLabels.findIndex((text) => text.includes("GE101"))
+
+    expect(lecIndex).toBeGreaterThanOrEqual(0)
+    expect(labIndex).toBe(lecIndex + 1)
+    expect(ge101Index).toBeGreaterThan(labIndex)
   })
 })

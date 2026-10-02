@@ -30,6 +30,29 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
   handleUnauthorized = handler
 }
 
+/**
+ * Supplies the acting-context header value (e.g. "none" or "dean:ccs") for outgoing requests
+ * when a super admin is signed in. Registered once at startup or during session setup.
+ */
+type ActingContextProvider = () => string | null
+
+let provideActingContext: ActingContextProvider = () => null
+
+/** Invoked when a super admin request receives 409 ACTING_CONTEXT_CHANGED. */
+type ActingContextConflictHandler = () => void
+
+let handleActingContextConflict: ActingContextConflictHandler = () => undefined
+
+export function setActingContextProvider(provider: ActingContextProvider): void {
+  provideActingContext = provider
+}
+
+export function setActingContextConflictHandler(
+  handler: ActingContextConflictHandler,
+): void {
+  handleActingContextConflict = handler
+}
+
 /** Per-request authentication isolation for device and portal token flows. */
 export interface AuthenticatedRequestOptions {
   token?: string
@@ -210,6 +233,11 @@ async function request(
     if (token !== null) {
       headers.Authorization = `Bearer ${token}`
     }
+
+    const actingContext = provideActingContext()
+    if (actingContext !== null && headers["X-Acting-Context"] === undefined) {
+      headers["X-Acting-Context"] = actingContext
+    }
   }
 
   let response: Response
@@ -257,6 +285,13 @@ async function request(
     const retryAfterSeconds = readRetryAfterSeconds(response)
 
     if (parsedError.success) {
+      if (
+        response.status === 409 &&
+        parsedError.data.error.code === "ACTING_CONTEXT_CHANGED"
+      ) {
+        handleActingContextConflict()
+      }
+
       throw new ApiClientError({
         kind: "http",
         message: parsedError.data.error.message,

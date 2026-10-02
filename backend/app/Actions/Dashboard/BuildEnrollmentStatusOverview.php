@@ -44,8 +44,12 @@ final readonly class BuildEnrollmentStatusOverview
             $steps[$step->value] = 0;
         }
 
+        $emptySteps = $steps;
+
         /** @var array<string, array<string, int>> $byDepartment keyed by college value, '' for none */
         $byDepartment = [];
+        /** @var array<string, array<string, int>> $stepsByDepartment keyed by college value, '' for none */
+        $stepsByDepartment = [];
 
         foreach ($rows as $row) {
             $status = $row->enrollment_status === null
@@ -56,11 +60,14 @@ final readonly class BuildEnrollmentStatusOverview
 
             $groups[$group->value] += $count;
 
+            $key = $row->department === null ? '' : (string) $row->department;
+            $stepsByDepartment[$key] ??= $emptySteps;
+
             if ($status !== null && array_key_exists($status->value, $steps)) {
                 $steps[$status->value] += $count;
+                $stepsByDepartment[$key][$status->value] += $count;
             }
 
-            $key = $row->department === null ? '' : (string) $row->department;
             $byDepartment[$key] ??= EnrollmentStatusGroup::emptyCounts();
             $byDepartment[$key][$group->value] += $count;
         }
@@ -73,6 +80,7 @@ final readonly class BuildEnrollmentStatusOverview
                 'label' => $college->label(),
                 'total' => array_sum($departmentGroups),
                 'groups' => $departmentGroups,
+                'steps' => $stepsByDepartment[$college->value] ?? $emptySteps,
             ];
         }
 
@@ -84,6 +92,7 @@ final readonly class BuildEnrollmentStatusOverview
                 'label' => 'No department',
                 'total' => array_sum($byDepartment['']),
                 'groups' => $byDepartment[''],
+                'steps' => $stepsByDepartment[''] ?? $emptySteps,
             ];
         }
 

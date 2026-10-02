@@ -20,6 +20,11 @@ export const enrollmentSummaryQueryKey = (
   academicTermId?: number,
 ) => ["enrollment-summary", userId, academicTermId ?? null] as const
 
+/**
+ * Polls every 30s (Stakeholder Doc 17) — a passive staff-monitoring figure,
+ * so it matches the notification-bell/schedule-proposals tier rather than a
+ * transactional queue's faster one. Paused in background tabs by default.
+ */
 export function useEnrollmentSummaryQuery(
   academicTermId?: number,
   enabled = true,
@@ -32,6 +37,8 @@ export function useEnrollmentSummaryQuery(
     ),
     queryFn: ({ signal }) => getEnrollmentSummary(academicTermId, signal),
     enabled: enabled && session !== null,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -130,6 +137,7 @@ export const enrollmentStatusOverviewQueryKey = (
   academicTermId?: number,
 ) => ["enrollment-status-overview", userId, academicTermId ?? null] as const
 
+/** Same 30s passive-monitoring tier as `useEnrollmentSummaryQuery` above. */
 export function useEnrollmentStatusOverviewQuery(
   academicTermId?: number,
   enabled = true,
@@ -143,6 +151,8 @@ export function useEnrollmentStatusOverviewQuery(
     queryFn: ({ signal }) =>
       getEnrollmentStatusOverview(academicTermId, signal),
     enabled: enabled && session !== null,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 }
 

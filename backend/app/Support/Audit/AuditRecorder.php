@@ -35,8 +35,12 @@ final class AuditRecorder
         $this->assertSafePayload($beforeValues);
         $this->assertSafePayload($afterValues);
 
+        $actingContext = $actor->actingContext();
+
         return AuditLog::create([
             'actor_user_id' => $actor->id,
+            'acting_role' => $actingContext?->role->value,
+            'acting_college' => $actingContext?->college?->value,
             'action' => $action,
             'auditable_type' => $auditableType,
             'auditable_id' => $auditableId,

@@ -40,6 +40,7 @@ function createWrapper(queryClient: QueryClient, session: AuthSession | null) {
             signInWithGoogle: () =>
               Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
             signOut: () => undefined,
+    replaceSession: () => undefined,
             status: session ? "authenticated" : "anonymous",
             storageAvailable: true,
           }}
@@ -200,6 +201,7 @@ describe("useQueueKioskCredential", () => {
             signInWithGoogle: () =>
               Promise.reject(new Error("signInWithGoogle: not implemented in stub")),
             signOut: () => undefined,
+    replaceSession: () => undefined,
             status: "authenticated",
             storageAvailable: true,
           }}

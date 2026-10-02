@@ -47,7 +47,8 @@ const ALL_FILTER_VALUE = "all"
  */
 export function AuditLogsWorkspace() {
   const { session } = useAuth()
-  const authorized = session?.role === "registrar_head"
+  const authorized =
+    session?.role === "registrar_head" || session?.role === "super_admin"
   const [filters, setFilters] = useState<AuditActorFilters>(defaults)
   const [actionFilter, setActionFilter] = useState(ALL_FILTER_VALUE)
   const [entityTypeFilter, setEntityTypeFilter] = useState(ALL_FILTER_VALUE)
