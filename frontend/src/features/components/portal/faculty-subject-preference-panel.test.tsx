@@ -648,6 +648,10 @@ describe("FacultySubjectPreferencePanel", () => {
       within(savedTable).queryByRole("columnheader", { name: "Actions" }),
     ).not.toBeInTheDocument()
     expect(
+      within(savedTable).queryByRole("columnheader", { name: "Source" }),
+    ).not.toBeInTheDocument()
+    expect(within(savedTable).queryByText("Declared")).not.toBeInTheDocument()
+    expect(
       screen.queryByRole("button", { name: "Edit subject preference" }),
     ).not.toBeInTheDocument()
     expect(

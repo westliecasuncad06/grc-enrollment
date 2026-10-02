@@ -1,5 +1,11 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Professor preferences: Source column removed (DONE)
+
+- **Request:** drop the Source column (Seeded / Declared badge) from the saved subject preferences table on `/portal/availability-preferences`, then push so Hostinger/Vercel pick it up.
+- **Change:** `faculty-specialization-list.tsx` no longer renders the Source header/cell (and the unused `sourceLabel` helper); the batch-delete test now also asserts there is no Source column or "Declared" badge. Display-only: the `origin` field still comes from the API and still drives nothing else here.
+- **Verification:** vitest `faculty-subject-preference-panel` + `faculty-input-workspace` 14/14, eslint on the component and `tsc --noEmit` clean. Not re-checked in a real browser; deployment itself (Vercel / Dokploy auto-deploy from `origin/main`) not confirmed from here.
+
 ## 2026-10-02 — Hostinger VPS Database Re-Synchronization & Presentation State Reset (DONE)
 
 - **Owner Request:**

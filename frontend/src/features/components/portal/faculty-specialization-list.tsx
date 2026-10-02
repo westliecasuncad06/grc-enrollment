@@ -124,12 +124,6 @@ function ProficiencyCell({
   )
 }
 
-function sourceLabel(source: "declared" | "workbook_seeded" | "seeded") {
-  return source === "workbook_seeded" || source === "seeded"
-    ? "Seeded"
-    : "Declared"
-}
-
 export function FacultySpecializationList({
   preferencesQuery,
   curriculumId,
@@ -274,7 +268,6 @@ export function FacultySpecializationList({
                   <TableHead>Rank</TableHead>
                   <TableHead>Subject</TableHead>
                   <TableHead>Proficiency</TableHead>
-                  <TableHead>Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -335,11 +328,6 @@ export function FacultySpecializationList({
                               : undefined
                           }
                         />
-                      </TableCell>
-                      <TableCell>
-                        <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">
-                          {sourceLabel(row.origin)}
-                        </span>
                       </TableCell>
                     </TableRow>
                   )
