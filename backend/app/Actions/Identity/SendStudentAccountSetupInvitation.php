@@ -62,7 +62,10 @@ final class SendStudentAccountSetupInvitation
             $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
         }
 
-        $setupUrl = rtrim($baseUrl, '/');
+        // Link straight to the setup page (like the faculty and staff emails) rather than
+        // relying on the landing page to redirect `/?code=` — a bare `https://host?x=y` link is
+        // not reliably tappable in every mail client.
+        $setupUrl = rtrim($baseUrl, '/').'/account-setup';
 
         try {
             Mail::to($student->email)->send(new StudentAccountSetupMail(

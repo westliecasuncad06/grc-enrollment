@@ -59,18 +59,23 @@
                         </td>
                     </tr>
 
+                    @php($link = $setupUrl . (!empty($studentEmail) ? '?email='.urlencode($studentEmail).'&code='.urlencode($setupCode) : '?code='.urlencode($setupCode)))
                     <!-- CTA button -->
                     <tr>
                         <td style="padding:8px 40px 28px 40px;">
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                                 <tr>
-                                    <td style="border-radius:6px; background-color:#c8102e;">
-                                        <a href="{{ $setupUrl }}{{ !empty($studentEmail) ? '?email='.urlencode($studentEmail).'&code='.urlencode($setupCode) : '?code='.urlencode($setupCode) }}" style="display:inline-block; padding:13px 28px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:15px; font-weight:bold; text-decoration:none; border-radius:6px;">
+                                    <td align="center" bgcolor="#c8102e" style="border-radius:6px; background-color:#c8102e;">
+                                        <a href="{{ $link }}" target="_blank" rel="noopener" style="display:block; padding:13px 28px; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:15px; font-weight:bold; text-decoration:none; text-align:center; border-radius:6px;">
                                             Open the account setup page
                                         </a>
                                     </td>
                                 </tr>
                             </table>
+                            <p style="margin:16px 0 0 0; color:#6b7280; font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:1.6;">
+                                If the button does not open, copy and paste this link into your browser:<br>
+                                <a href="{{ $link }}" target="_blank" rel="noopener" style="color:#c8102e; word-break:break-all;">{{ $link }}</a>
+                            </p>
                         </td>
                     </tr>
 

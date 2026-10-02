@@ -1,5 +1,13 @@
 # GRC Enrollment System — Development Progress
 
+## 2026-10-02 — Account setup email: link not tappable in iOS Gmail (DONE, root cause not reproduced)
+
+- **Report:** on iPhone (Gmail app) the "Open the account setup page" button in the student account-setup email could not be tapped.
+- **What was found:** the student email's link was `https://host?email=…&code=…` (no path — `SendStudentAccountSetupInvitation` passed only the origin and relied on the landing page redirecting `/?code=` to `/account-setup`), unlike the faculty/staff emails which link to their setup path. The button was also a shrink-wrapped `display:inline-block` link inside a cell, with no plain-text fallback.
+- **Fix (hardening; I have no iOS device, so the exact cause is NOT confirmed):** the student link is now `{origin}/account-setup?email=…&code=…`; in all four link emails (student / faculty / staff setup, password reset) the button is a `display:block` link filling a `bgcolor` cell with `target="_blank"`, and the same full link is printed below it as a plain, auto-linkable "If the button does not open, copy and paste this link" line. `StudentProfilesEndpointTest` expectation updated to the new `setupUrl`.
+- **Verification:** new `tests/Feature/Mail/AccountLinkEmailsTest.php` renders all four mails (4/4; confirmed it fails on the old templates); with `StudentProfilesEndpointTest`, `ResendStudentAccountSetupTest`, `FacultyInvitationsEndpointTest`, `StaffInvitationsEndpointTest`, `ForgotPasswordEndpointTest` 59/59; Pint clean. Needs a real iPhone check after deploy.
+- **Note:** emails already sent keep their old link; those students can use "resend" or open `/account-setup` and type the code.
+
 ## 2026-10-02 — Professor preferences: Source column removed (DONE)
 
 - **Request:** drop the Source column (Seeded / Declared badge) from the saved subject preferences table on `/portal/availability-preferences`, then push so Hostinger/Vercel pick it up.

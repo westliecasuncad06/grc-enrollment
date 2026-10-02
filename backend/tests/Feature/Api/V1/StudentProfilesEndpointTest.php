@@ -241,7 +241,7 @@ final class StudentProfilesEndpointTest extends TestCase
         Mail::assertSent(StudentAccountSetupMail::class, function (StudentAccountSetupMail $mail) use (&$setupCode): bool {
             $setupCode = $mail->setupCode;
 
-            return $mail->setupUrl === 'http://localhost:3000'
+            return $mail->setupUrl === 'http://localhost:3000/account-setup'
                 && ! str_contains($mail->setupUrl, 'token=');
         });
         self::assertIsString($setupCode);
